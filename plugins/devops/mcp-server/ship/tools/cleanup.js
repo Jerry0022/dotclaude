@@ -131,7 +131,7 @@ export async function handler(params) {
   // advanced but the local ref does NOT move on its own. This MUST run even when
   // we are already on ${base} — otherwise a ship that ends on main leaves local
   // main stale ("ship succeeded but main not updated locally").
-  // See skills/ship/deep-knowledge/cleanup.md §2.
+  // See skills/do-ship/deep-knowledge/cleanup.md §2.
   try {
     gitStrict(`pull --ff-only origin ${base}`, { ...opts, timeout: NETWORK_TIMEOUT });
     cleaned.push(`sync:${base}`);

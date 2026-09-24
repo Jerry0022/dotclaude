@@ -140,10 +140,30 @@ own choice:
      "self update", "update the readme", "visualize this", "guide me
      through" — `PHRASE_DENYLIST` in `hooks/lib/skill-trigger-router.js`
      is the full list),
-   - **slash forms** — typed `/name` of a real skill, PR-2 aliases
-     (`/do-learn`, `/auto-fix`, …; aliases of ship/batch/strict stay with
-     their dedicated hooks), and `triggers:` slash forms that are not a
-     skill name (`/devops-learn`),
+   - **slash forms** — typed `/name` of a real skill, the pre-PR-2 names
+     as aliases (`/fix` → auto-fix, `/claude-learn` → do-learn,
+     `/run-backlog` → do-run mode `backlog`, `/promote` → do-ship mode
+     `promote`; the 1:1 aliases `/ship` and `/claude-batch` stay with their
+     dedicated hooks, which accept old and new names), and `triggers:`
+     slash forms that are not a skill name (`/devops-learn`). One table,
+     `hooks/lib/skill-names.js`, drives the aliases, the "already invoked"
+     check (a session that ran `devops:ship` counts as having run
+     `do-ship`) and the extension fallback.
+     **Reach of an alias (checked 2026-09-24 with the claude-code-guide
+     agent against code.claude.com/docs):** the docs state that a
+     `UserPromptSubmit` hook receives the raw prompt text, and that
+     `user-invocable: false` means "only Claude can invoke the skill". They
+     do NOT say whether a typed `/unknown-name` at the start of a prompt, or
+     a typed `/name` of a `user-invocable: false` skill, is rejected by the
+     harness before any hook runs, and no local check was possible (the
+     standalone CLI is not authenticated in Desktop sessions). So the
+     router only promises what it can see: an old name mentioned inside a
+     prompt ("mach das mit /fix", "und dann /run-backlog") reaches the hook
+     and is routed; a prompt that STARTS with a removed slash name may never
+     reach it. Typed words ("ship", "promote to stable", "arbeite den
+     backlog ab") are plain prompts and unaffected. Texts that tell the
+     USER what to type therefore name the trigger words of a hidden skill
+     ("ask for a polish pass", "extend skill"), not `/auto-…`.
    - a **curated single-word allowlist** (festgefahren, unstuck,
      auditiere/auditieren, Qualitätsaudit, stabilisieren, härten,
      feinschliff). A bare "concept" is NOT on it — only verb-object phrases

@@ -63,8 +63,8 @@ function runHook(dir, { toolName = "Write", filePath, sessionId } = {}) {
   }
 }
 
-function writeOverride(dir, body) {
-  const refDir = path.join(dir, ".claude", "skills", "tune-polish");
+function writeOverride(dir, body, skillDir = "auto-polish") {
+  const refDir = path.join(dir, ".claude", "skills", skillDir);
   fs.mkdirSync(refDir, { recursive: true });
   fs.writeFileSync(path.join(refDir, "reference.md"), `## UI rules\n${body}\n`);
 }
@@ -131,6 +131,29 @@ describe("post.design.remind (hook)", () => {
     expect(res.stdout).not.toContain("R4 every");
     expect(res.stdout).toContain("disabled by project override: R2b, R4");
     expect(res.stdout).toContain("Icon-only buttons in the title bar are exempt from R1 (platform chrome).");
+  });
+
+  test("falls back to the pre-PR-2 tune-polish extension dir", () => {
+    const dir = project();
+    writeOverride(dir, "- disable: R4", "tune-polish");
+    const res = runHook(dir, {
+      filePath: path.join(dir, "src", "App.tsx"),
+      sessionId: nextSid(),
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("disabled by project override: R4");
+  });
+
+  test("the new auto-polish dir wins over the old tune-polish dir", () => {
+    const dir = project();
+    writeOverride(dir, "- disable: R4", "auto-polish");
+    writeOverride(dir, "- disable: R1", "tune-polish");
+    const res = runHook(dir, {
+      filePath: path.join(dir, "src", "App.tsx"),
+      sessionId: nextSid(),
+    });
+    expect(res.stdout).toContain("disabled by project override: R4");
+    expect(res.stdout).not.toContain("disabled by project override: R1");
   });
 
   test("excludes concept pages and plugin source markdown", () => {

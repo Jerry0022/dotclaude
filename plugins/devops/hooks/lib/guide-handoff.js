@@ -4,9 +4,9 @@
  * @description Detection + pending-hint state for stop.guide.handoff —
  *   decides whether the turn's own final answer hands the user a manual,
  *   click-through job on an external website/dashboard instead of invoking
- *   the devops web-guide skill (target name `auto-guide`) to drive it live.
+ *   the devops auto-guide skill (formerly web-guide) to drive it live.
  *
- *   Usage data (1 128 sessions, 14.08.-23.09.2026): web-guide was invoked 0
+ *   Usage data (1 128 sessions, 14.08.-23.09.2026): web-guide (now auto-guide) was invoked 0
  *   times although Claude repeatedly wrote out numbered click-throughs for
  *   Upstash, Discord, Supabase MCP login, … The signal lives in Claude's own
  *   answer, not the user's prompt — stop.guide.handoff passes every
@@ -177,7 +177,7 @@ function detectWebHandoff(lastAssistantText) {
   return null;
 }
 
-/** Skill input naming web-guide or its PR-2 name auto-guide. */
+/** Skill input naming auto-guide or its pre-PR-2 name web-guide. */
 const GUIDE_SKILL_RE = /(?:web|auto)[-_]?guide/i;
 
 function invokesWebGuide(input, name) {
@@ -186,7 +186,7 @@ function invokesWebGuide(input, name) {
 }
 
 /**
- * Did THIS turn already invoke web-guide / auto-guide?
+ * Did THIS turn already invoke auto-guide (or the old name web-guide)?
  * @param {string} transcriptContent
  */
 function webGuideInvokedThisTurn(transcriptContent) {

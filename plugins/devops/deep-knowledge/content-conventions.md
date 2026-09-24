@@ -1,7 +1,7 @@
 # Content Conventions — Sizing & Self-Reference
 
 How to size and structure project-persistent content (CLAUDE.md, skills,
-agents, deep-knowledge). Referenced by `/claude-learn`, `/setup-project`, the
+agents, deep-knowledge). Referenced by `/do-learn`, `/setup-project`, the
 `post.claude.budget` hook, and all skill authoring.
 
 These are **soft caps** — they bias routing decisions, they don't hard-fail.
@@ -159,9 +159,9 @@ duplicate.** Examples:
 
 - "always commit conventionally" → reference
   `deep-knowledge/commit-conventions.md`, do NOT re-document the commit format
-- "always run pre-flight before shipping" → reference `/ship`, do NOT
+- "always run pre-flight before shipping" → reference `/do-ship`, do NOT
   re-list the pipeline steps
-- "open issues with the right labels" → reference `/setup-issue`, do NOT
+- "open issues with the right labels" → reference `/auto-issue`, do NOT
   duplicate the label rules
 - "check branch hygiene before shipping" → reference `/setup-cleanup`,
   do NOT re-document the cleanup steps

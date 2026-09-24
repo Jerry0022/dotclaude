@@ -9,7 +9,7 @@
  *   session makes. A writer that joins `cwd + '.claude'` therefore creates
  *   `plugins/devops/.claude/batch-activity`, `plugins/devops/scripts/.claude/…`
  *   and so on — untracked files the ignore block (anchored at `/.claude/`) does
- *   not cover, which dirty the worktree, fail /ship preflight's clean-tree
+ *   not cover, which dirty the worktree, fail /do-ship preflight's clean-tree
  *   check and block archiving the Desktop session. Observed 2026-09-23.
  *
  *   `projectRoot(cwd)` is the git work-tree root that contains `cwd` — the same

@@ -45,7 +45,7 @@ The result contains a `<functions>` block with one `<function>{...}</function>` 
 
 ## When to do this
 
-- `/ship` skill: mandatory, see `SKILL.md` Step 0.5.
+- `/do-ship` skill: mandatory, see `SKILL.md` Step 0.5.
 - Any skill that calls MCP tools from a non-completion server: load schemas upfront in the Step 0 / setup phase.
 - Guard-hook recovery: if `pre.ship.guard.js` fires and you cannot see ship tools, ToolSearch first — do NOT retry the blocked Bash command.
 
@@ -88,7 +88,7 @@ the cache dirs; `.md`/`.json` survived). The self-heal in `ss.plugin.update` →
    ```
 3. Re-run the initialize probe above until it answers `Server started on stdio`,
    then reconnect the servers (`reconnect_session_connector`, or restart the
-   session). Only after this does `/ship` Step 0.5 have anything to find.
+   session). Only after this does `/do-ship` Step 0.5 have anything to find.
 
 Do NOT hand-edit files into `~/.claude/plugins/cache/**` and do NOT fall back to
 `gh pr create` — the guard still blocks it, and the repaired server is minutes
@@ -104,5 +104,5 @@ away.
 ## Related
 
 - `pre.ship.guard.js` — block message explicitly points here.
-- `skills/ship/SKILL.md` Step 0.5 — enforces this pattern for the ship pipeline.
+- `skills/do-ship/SKILL.md` Step 0.5 — enforces this pattern for the ship pipeline.
 - `plugin-behavior.md` — general MCP-server expectations.

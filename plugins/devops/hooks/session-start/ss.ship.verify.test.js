@@ -119,7 +119,7 @@ describe("findRun — SHA prefix match inside the watcher's window", () => {
   });
 
   test("a promotion-tag run created days later is NOT the ship's CI", () => {
-    // The Release workflow triggers on the bare vX.Y.Z tag that /promote adds
+    // The Release workflow triggers on the bare vX.Y.Z tag that /do-ship promote adds
     // to the SAME commit later. Attributing it to the ship would invent a CI
     // result the watcher never saw.
     const later = run({ createdAt: iso(T0 + 3 * 24 * 60 * MIN) });

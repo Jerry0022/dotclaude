@@ -82,7 +82,7 @@ const EN_WORDS = [
 
 /**
  * Like detectFromPrompt, but returns null when the prompt carries no clear
- * language signal ("ok", "/ship", a pasted path). A cached session locale
+ * language signal ("ok", "/do-ship", a pasted path). A cached session locale
  * only switches on a clear signal, so short acknowledgements never flip it.
  */
 function detectSignal(prompt) {
@@ -124,7 +124,7 @@ function setLocale(sessionId, lang) {
  * First call per session: detect from `prompt` and persist. Later calls
  * follow the language of the latest prompt, but only when it carries a clear
  * signal (detectSignal); otherwise the cached value stands. Locking the
- * locale to the first prompt made a session that opened with "/ship" or an
+ * locale to the first prompt made a session that opened with "/do-ship" or an
  * English sentence answer in English for its whole lifetime.
  * Returns `{ lang, isFresh }` — `isFresh` is true only on the first call
  * per session, so callers can announce the locale to Claude exactly once.

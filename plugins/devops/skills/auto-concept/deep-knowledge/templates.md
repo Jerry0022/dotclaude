@@ -1,0 +1,14656 @@
+# Concept HTML Templates
+
+Three **templates** (layout modes) cover every concept use case. A template is
+picked **per iteration**, not per page — see § Per-Iteration Templates below:
+
+| Template | Layout | When to use |
+|---|---|---|
+| **decision** | Document column + the ☰ overlay panel + the 💬 feedback dock (general note), multi-variant cards | Multi-option evaluation, trade-offs, architecture or tech decisions — the canonical "pick one" flow with bi-state (Verwerfen / Miteinbeziehen) per variant and multiple iterations |
+| **design** | Fullscreen content + overlay decision panel (☰ FAB top-right, collapsed by default) + speech-bubble feedback dock anchored to the 💬 FAB (bottom-right, same 60px circle as ☰, dock collapsed by default) | UI mockups, wireframes, visual design concepts, click-through flows — one artefact that needs maximum screen real estate, plus structured per-screen feedback |
+| **free** | Document column + the ☰ overlay panel + the 💬 feedback dock (general note), freeform body content | Analysis, walkthrough, brainstorm, explainer, timeline — structured content without forced variant framing. Bi-state evaluation is optional (opt-in per section) |
+
+The decision panel itself is the SAME in all three — one ☰ overlay, page
+chrome, never a sidebar and never moving between rounds (§ Panel Chrome (all
+templates)). What the table calls the layout is only what fills the page
+behind it.
+
+`prototype` is the **legacy alias** of `design`. Pages generated before the
+rename keep working — `applyIterationTemplate()` normalises it. Never emit
+`prototype` in new pages.
+
+**Content variants (analysis, plan, concept, comparison, dashboard, creative)
+are sub-structures of the decision template** — they describe how to lay out
+the cards inside a decision page, not separate page templates.
+
+All three templates share the same monitoring backbone (heartbeat, submit
+handler, state persistence, iteration tabs, section TOC, reload polling,
+theme toggle) — see the "Shared Systems" section at the bottom of this file.
+
+**These are recommendations, not mandatory structures.** Claude should adapt
+layout, elements, and design to fit the specific content. Use these as
+starting points and inspiration — deviate freely when the content calls for it.
+
+## UI Locale
+
+**Every user-facing string on the rendered concept page comes from the
+locale table below.** Claude picks the locale from the `[ui-locale: xx]`
+hint injected by the `prompt.knowledge.dispatch` hook at session start,
+which in turn derives the user's language from their profile/chat language.
+
+**How to use:**
+1. Read the locale code from `[ui-locale: xx]` (e.g. `de`, `en`, `fr`, `hi`, `ja`).
+2. Set `<html lang="{locale}">` on the generated page.
+3. Swap every UI string from the matching column of the table below. Never
+   hard-code German/English text — always reference the table.
+4. **If the locale is not in the table yet:** Claude MUST add the missing
+   column inline (translating all keys at generation time) and also persist
+   that column back into this file so future generations have it. Fallback
+   for truly unreachable translations: use the `en` column and document it
+   in a comment.
+
+Do NOT assume "English-only" — users in India, Japan, France, Brazil etc.
+must see their own language. The locale hint is authoritative.
+
+| Key | en | de |
+|---|---|---|
+| `panel.heading`                | Decisions                      | Entscheidungen |
+| `panel.submit`                 | Submit decisions               | Entscheidungen abschicken |
+| `panel.submit_hint`            | Your selection goes straight to Claude. | Deine Auswahl wird direkt an Claude übermittelt. |
+| `panel.submit_iterate`         | Next iteration                 | Zur nächsten Iteration |
+| `panel.submit_iterate_hint`    | Your selection goes to Claude for the next iteration. No code changes. | Deine Auswahl geht an Claude für die nächste Iteration. Es wird kein Code geschrieben. |
+| `panel.submit_implement`       | Implement with feedback       | Mit Feedback implementieren |
+| `panel.submit_implement_hint`  | Claude applies the selection as real changes now. | Claude setzt die Auswahl jetzt in echte Änderungen um. |
+| `panel.submit_implement_confirm` | Implement with feedback now? Claude will write code changes. | Mit Feedback jetzt implementieren? Claude schreibt jetzt Code-Änderungen. |
+| `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
+| `panel.submitted_hint`         | Claude is processing your selection. Switch to the **Claude chat** to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum **Claude Chat** um den Fortschritt zu sehen. |
+| `panel.step_submitted`         | Submitted                      | Übermittelt |
+| `panel.step_received`          | Claude is processing           | Claude verarbeitet |
+| `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
+| `panel.step_implemented_active`| Implementation in progress     | Implementierung läuft |
+| `panel.step_waiting`           | Waiting…                       | Warten… |
+| `panel.step_ready`             | Ready to ship                  | Bereit zum Shippen |
+| `panel.step_reality_check`     | Reality check                  | Realitäts-Check |
+| `panel.step_reality_check_active` | Checking against the default branch… | Prüfe gegen den Default-Branch… |
+| `panel.frozen`                 | Frozen iteration               | Eingefrorene Iteration |
+| `panel.frozen_hint`            | You are reading an earlier round. It is read-only — its decisions were already submitted. | Du liest eine frühere Runde. Sie ist schreibgeschützt — ihre Entscheidungen wurden bereits übermittelt. |
+| `panel.frozen_back`            | Back to the current round      | Zurück zur aktuellen Runde |
+| `frozen.bar_hint`              | · earlier round, read-only     | · frühere Runde, schreibgeschützt |
+| `frozen.bar_back`              | Go to current round            | Zur aktuellen Runde |
+| `panel.connecting_title`       | Claude is connecting           | Claude verbindet sich |
+| `panel.connected_title`        | Claude connected               | Claude verbunden |
+| `panel.disconnected_title`     | Claude not connected           | Claude nicht verbunden |
+| `panel.btn_cache_hint`         | cached — sent on reconnect     | gecached — wird beim Verbinden gesendet |
+| `panel.empty_iterate_confirm`  | Nothing was changed. Submit "Next iteration" anyway? | Du hast nichts geändert. Trotzdem "Zur nächsten Iteration" absenden? |
+| `panel.empty_implement_confirm`| Nothing was changed. Implement with feedback anyway? Claude will still write code. | Du hast nichts geändert. Trotzdem mit Feedback implementieren? Claude schreibt dann Code. |
+| `panel.toggle_open`            | Open decisions                 | Entscheidungen öffnen |
+| `panel.toggle_close`           | Close decisions                | Entscheidungen schliessen |
+| `panel.close`                  | Close                          | Schliessen |
+| `panel.minimize`               | Minimize                       | Minimieren |
+| `theme.to_light`               | Switch to the light theme      | Zum hellen Theme wechseln |
+| `theme.to_dark`                | Switch to the dark theme       | Zum dunklen Theme wechseln |
+| `panel.dim_dismiss`            | Dismiss overlay                | Schimmer entfernen |
+| `panel.status_saved`           | Saved · connected              | Gespeichert · verbunden |
+| `panel.status_saving`          | Saving…                        | Speichert… |
+| `panel.status_connecting`      | Saved · connecting…            | Gespeichert · verbinde… |
+| `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
+| `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
+| `panel.status_frozen`          | read-only                      | nur lesen |
+| `panel.status_detail`          | Progress                       | Fortschritt |
+| `panel.submit_menu`            | More submit options            | Weitere Absende-Optionen |
+| `panel.submit_menu_hint`       | The primary button never writes code. | Kein Code beim Primär-Button. |
+| `panel.here_back`              | back to round                  | zur Runde |
+| `panel.archive_summary`        | previous rounds                | vorherige Runden |
+| `panel.submit_collect_failed`  | Could not collect your decisions — nothing was sent. Reload the page and try again | Entscheidungen konnten nicht eingesammelt werden — nichts wurde gesendet. Seite neu laden und erneut versuchen |
+| `nav.summary_entries`          | entries                        | Einträge |
+| `nav.summary_discarded`        | discarded                      | verworfen |
+| `nav.group_context`            | Context                        | Kontext |
+| `nav.group_variants`           | Variants                       | Varianten |
+| `nav.rounds_chip`              | Previous rounds                | Vorherige Runden |
+| `nav.archived`                 | archived                       | archiviert |
+| `nav.other_variants`           | Other variants                 | Weitere Varianten |
+| `nav.more_entries`             | more                           | weitere |
+| `variant.include`              | Include                        | Miteinbeziehen |
+| `variant.discard`              | Discard                        | Verwerfen |
+| `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
+| `decision.comment_placeholder` | e.g. "only for X", "with variant Y"… | z.B. „nur für X", „mit Variante Y"… |
+| `iteration.label`              | Iterations                     | Iterationen |
+| `iteration.active_suffix`      | · active                       | · aktiv |
+| `iteration.final_tab`          | Final report                   | Abschlussbericht |
+| `iteration.reality_tab`        | Reality check                  | Realitäts-Check |
+| `nav.sections`                 | Sections                       | Abschnitte |
+| `reality.headline`             | The default branch moved while this concept was open | Der Default-Branch hat sich bewegt, während dieses Konzept offen war |
+| `reality.intro`                | These changes landed after this concept was written. Implementing it unchanged would produce wrong, dead or duplicate code — so this round asks you about them first. | Diese Änderungen sind gelandet, nachdem dieses Konzept geschrieben wurde. Unverändert umgesetzt würde das falschen, toten oder doppelten Code erzeugen — deshalb fragt diese Runde sie zuerst ab. |
+| `reality.reassure`             | Your implement order is not lost: submitting this round with "Implement with feedback" implements directly, with no further check. | Dein Implement-Auftrag ist nicht verloren: Wenn du diese Runde mit „Mit Feedback implementieren" abschickst, wird direkt implementiert — ohne erneute Prüfung. |
+| `reality.evidence`             | Landed on the default branch   | Auf dem Default-Branch gelandet |
+| `reality.recommendation`       | Recommendation                 | Empfehlung |
+| `final.open_questions`         | Open questions & TODOs         | Offene Fragen & TODOs |
+| `final.followups_hint`         | Issue = tracked for later. Implement now = built during this close-out, by the devops agents. Drop = it ends with the concept. | Issue = für später festgehalten. Jetzt umsetzen = wird in diesem Abschluss gebaut, von den devops-Agents. Ignorieren = fällt mit dem Concept weg. |
+| `final.followups_none`         | Everything dropped — no issue, no implementation. | Alles ignoriert — kein Issue, keine Umsetzung. |
+| `final.route_issue`            | Issue                          | Issue |
+| `final.route_implement`        | Implement now                  | Jetzt umsetzen |
+| `final.route_ignore`           | Drop                           | Ignorieren |
+| `final.origin_deferred`        | deferred by you                | bewusst vertagt |
+| `final.origin_found`           | found on the way               | unterwegs gefunden |
+| `final.issue_link_prefix`      | Issue                          | Issue |
+| `final.done_prefix`            | implemented                    | umgesetzt |
+| `final.dispose_heading`        | This concept page              | Diese Konzeptseite |
+| `final.dispose_hint`           | Only the page is at stake here — whatever was implemented, shipped or filed stays. | Hier geht es nur um die Seite — alles Umgesetzte, Geshippte und Angelegte bleibt. |
+| `final.dispose_discard`        | Delete the page (default)      | Seite löschen (Standard) |
+| `final.dispose_discard_hint`   | Removes the HTML + its decisions JSON. The implementation is untouched. | Entfernt die HTML + ihr Decisions-JSON. Die Umsetzung bleibt unberührt. |
+| `final.dispose_keep`           | Keep in project                | Im Projekt behalten |
+| `final.dispose_keep_hint`      | Files stay in docs/concepts/ and become git-tracked artefacts. | Files bleiben in docs/concepts/ und sind git-getrackte Artefakte. |
+| `final.dispose_gitignore`      | Local only / .gitignore        | Nur lokal / .gitignore |
+| `final.dispose_gitignore_hint` | Files stay locally, an entry is appended to .gitignore. | Files bleiben lokal, ein Eintrag wird zur .gitignore hinzugefügt. |
+| `final.dispose_move_label`     | Move to (optional):            | Verschieben nach (optional): |
+| `final.dispose_move_placeholder` | e.g. docs/architecture/      | z.B. docs/architecture/ |
+| `final.ship_hint`              | Runs the full ship pipeline (build, version bump, release, merge). | Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge). |
+| `final.view_iterations`        | Review iterations              | Iterationen ansehen |
+| `final.closeout_heading`       | Close-out                      | Abschluss |
+| `final.followups_q`            | Open points                    | Offene Punkte |
+| `final.closeout_ship_q`        | Ship this now?                 | Jetzt shippen? |
+| `final.closeout_ship_yes`      | Yes, run the ship pipeline     | Ja, Ship-Pipeline starten |
+| `final.closeout_ship_no`       | No, leave it unreleased        | Nein, nicht releasen |
+| `final.closeout_ship_no_hint`  | The code stays as committed. You can ship later from the chat. | Der Code bleibt wie committed. Shippen geht später jederzeit im Chat. |
+| `final.closeout_choice_required` | Answer this one — it is the only step that reaches outside the repo. | Beantworte diese eine Frage — sie ist der einzige Schritt, der das Repo verlässt. |
+| `final.closeout_plan_warn`     | One click, all of it — including anything outward-facing. | Ein Klick, alles davon — inklusive allem was nach aussen geht. |
+| `final.closeout_execute`       | Execute                        | Ausführen |
+| `final.closeout_execute_offline` | Execute · will be queued     | Ausführen · wird zwischengespeichert |
+| `final.closeout_next`          | Continue ›                     | Weiter › |
+| `final.closeout_progress`      | {n} of {total} answered        | {n} von {total} beantwortet |
+| `final.closeout_unanswered`    | unanswered                     | unbeantwortet |
+| `final.closeout_steps`         | {n} steps                      | {n} Schritte |
+| `final.closeout_label_files`   | This page                      | Diese Seite |
+| `final.closeout_summary_ship_yes` | ship                        | shippen |
+| `final.closeout_summary_ship_no` | no release                   | nicht releasen |
+| `final.closeout_running`       | Claude is working through it … | Claude arbeitet es ab … |
+| `final.closeout_done`          | Concept closed.                | Concept abgeschlossen. |
+| `final.closeout_stalled`       | Delivered, but Claude stopped answering. Nothing more can be sent from this page — check the chat. | Übermittelt, aber Claude antwortet nicht mehr. Von dieser Seite kann nichts mehr gesendet werden — schau in den Chat. |
+| `final.closeout_stalled_short` | Delivered · Claude stopped answering | Übermittelt · Claude antwortet nicht |
+| `final.handoffs`               | By hand, afterwards            | Danach von Hand |
+| `final.handoffs_hint`          | Claude cannot do these — they stay with you once this is through. | Das kann Claude nicht übernehmen — das bleibt bei dir, sobald das hier durch ist. |
+| `proto.feedback_title`         | Feedback                       | Feedback |
+| `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
+| `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
+| `proto.feedback_general_hint`  | Persists across all screens    | Screen-übergreifend persistent |
+| `proto.feedback_current`       | Current screen                 | Aktueller Screen |
+| `proto.feedback_placeholder`   | Write a note on this screen…   | Notiz zu diesem Screen… |
+| `proto.screen_counter`         | Screen {n} / {total}           | Screen {n} / {total} |
+| `design.feedback_design`       | Notes on this design           | Anmerkungen zu diesem Design |
+| `design.feedback_design_placeholder` | Write a note on this design… | Notiz zu diesem Design… |
+| `design.switch_label`          | Switch design                  | Design wechseln |
+| `design.position_iteration`    | Iteration                      | Iteration |
+| `design.position_page`         | Page                           | Seite |
+| `anno.toggle_show`             | Show annotations                | Anmerkungen einblenden |
+| `anno.toggle_hide`             | Hide annotations                | Anmerkungen ausblenden |
+| `anno.answer_placeholder`      | Your answer…                    | Deine Antwort… |
+| `anno.pin_label`                | Question {n}                    | Frage {n} |
+| `design.nav_views_heading`     | Questions                       | Fragen |
+| `design.feedback_view`         | Notes on this view               | Anmerkungen zu dieser Ansicht |
+| `design.feedback_view_placeholder` | Write a note on this view…  | Notiz zu dieser Ansicht… |
+| `view.compare_favourite`       | Favourite                       | Favorit |
+| `view.compare_no_preference`   | No preference                   | Keine Präferenz |
+| `view.compare_criteria`        | Criteria                        | Kriterien |
+| `panel.maximize`               | Maximize                        | Maximieren |
+| `panel.restore_size`           | Restore size                    | Größe wiederherstellen |
+| `attach.button_title`          | Attach file (or Ctrl+V / drag & drop) | Datei anhängen (oder Strg+V / hierher ziehen) |
+| `attach.not_synced`            | not yet synced                  | noch nicht synchronisiert |
+| `attach.uploading`             | Uploading…                      | Wird hochgeladen… |
+| `attach.remove`                | Remove attachment                | Anhang entfernen |
+| `attach.retry`                 | Retry upload                     | Upload wiederholen |
+| `attach.error_generic`         | Upload failed                    | Upload fehlgeschlagen |
+| `attach.error_too_large`       | File too large for this bridge   | Datei zu groß für diese Bridge |
+| `attach.error_quota_exceeded`  | Storage full on the bridge       | Speicher auf der Bridge voll |
+| `attach.error_disk_full`       | Bridge disk is full               | Bridge-Festplatte ist voll |
+| `attach.error_offline`         | Bridge unreachable — kept locally, will retry on reconnect | Bridge nicht erreichbar — lokal gespeichert, Wiederholung bei Verbindung |
+| `attach.error_empty`           | Empty file — nothing to upload   | Leere Datei — nichts hochzuladen |
+| `attach.error_length_required` | Upload rejected — size unknown (no Content-Length) | Upload abgelehnt — Größe unbekannt (keine Content-Length) |
+| `attach.error_client_aborted`  | Upload interrupted — retry       | Upload abgebrochen — bitte wiederholen |
+| `attach.error_store_write_failed` | Bridge could not write the file — retry | Bridge konnte die Datei nicht schreiben — bitte wiederholen |
+| `attach.error_store_unavailable` | Bridge store unavailable — restart the bridge | Bridge-Speicher nicht verfügbar — Bridge neu starten |
+| `state.persist_failed`         | Could not save your changes locally — storage is full. Free up space or export your work soon. | Deine Änderungen konnten lokal nicht gespeichert werden — der Speicher ist voll. Platz freigeben oder Arbeit bald exportieren. |
+| `state.recovered_found`        | Notes from an earlier version of this page were restored. | Notizen aus einer früheren Fassung dieser Seite wurden wiederhergestellt. |
+| `state.recovered_dismiss`      | Dismiss                          | Ausblenden |
+| `state.draft_local_only`       | Notes are saved in this browser only — the bridge is unreachable. | Notizen liegen nur in diesem Browser — die Bridge ist nicht erreichbar. |
+| `state.dock_submitted`         | Sent to Claude — read-only until the next round. | An Claude gesendet — schreibgeschützt bis zur nächsten Runde. |
+| `design.viewport_switch`       | View                           | Ansicht |
+| `design.viewport_desktop`      | Desktop                        | Desktop |
+| `design.viewport_tablet`       | Tablet                         | Tablet |
+| `design.viewport_phone`        | Phone                          | Handy |
+| `design.orientation_portrait`  | Portrait                       | Hochkant |
+| `design.orientation_landscape` | Landscape                      | Querformat |
+| `map.view_schema`              | Schema                         | Schema |
+| `map.view_matrix`              | Matrix                         | Matrix |
+| `map.tier_first`               | At first glance                | Auf den ersten Blick |
+| `map.tier_after`               | After click                    | Nach Klick |
+| `map.items`                    | Items                          | Einträge |
+| `map.search`                   | Search…                        | Suchen… |
+| `map.filter_all`               | All                            | Alle |
+| `map.filter_unassigned`        | Unassigned                     | Nicht zugeordnet |
+| `map.filter_multiple`          | Multiple                       | Mehrfach |
+| `map.filter_changed`           | Changed                        | Geändert |
+| `map.reset`                    | Reset to proposal              | Auf Vorschlag zurücksetzen |
+| `map.reset_confirm`            | Reset this matrix to the proposal? | Diese Matrix auf Claudes Vorschlag zurücksetzen? |
+| `map.copy`                     | Copy {from} → {to}             | {from} → {to} kopieren |
+| `map.copy_confirm`             | Overwrite {to} with {from}?    | {to} mit {from} überschreiben? |
+| `map.add_item`                 | item                           | Eintrag |
+| `map.add_item_prompt`          | Label of the new item          | Bezeichnung des neuen Eintrags |
+| `map.add_item_duplicate`       | An item with this label already exists | Ein Eintrag mit dieser Bezeichnung existiert bereits |
+| `map.added_group`              | Added by you                   | Von dir ergänzt |
+| `map.armed_item`               | {label}: tap a slot — Esc ends | {label}: Slot antippen — Esc beendet |
+| `map.armed_slot`               | {label}: tap items — Esc ends  | {label}: Einträge antippen — Esc beendet |
+| `map.summary_unassigned`       | {n} unassigned                 | {n} nicht zugeordnet |
+| `map.summary_violations`       | {n} constraint(s) open         | {n} Regel(n) offen |
+| `map.summary_ok`               | all assigned                   | alles zugeordnet |
+| `map.slot_empty_min`           | empty – min. {n}               | leer – mind. {n} |
+| `map.slot_over_max`            | over max {n}                   | über Maximum {n} |
+| `map.item_required`            | required, unassigned           | Pflicht, nicht zugeordnet |
+| `map.remove`                   | Remove                         | Entfernen |
+| `map.slot_note`                | Note for this slot             | Notiz zu diesem Slot |
+| `map.context`                  | Context                        | Kontext |
+| `map.axis`                     | Axis                           | Achse |
+| `map.tab_open`                 | {n} open                       | {n} offen |
+| `map.frozen_missing`           | Submitted state missing — showing the proposal | Übermittelter Stand fehlt — zeigt Claudes Vorschlag |
+| `map.spec_error`               | Mapping spec could not be read: {error} | Mapping-Spezifikation nicht lesbar: {error} |
+
+**`map.*` strings are rendered by the mapping engine** (§ Information
+Mapping (engine)), not authored: Claude substitutes the `{{map.*}}` tokens
+inside the engine's `MAP_LOCALE` table when copying the block. `{n}`,
+`{label}`, `{from}`, `{to}` and `{error}` are runtime placeholders the engine
+fills (`fmt()`) — keep them in every translation. `map.items` doubles as the
+palette title ("Items (40)") and the aria-label of the palette collapse
+button; `map.reset` / `map.add_item` / `map.copy` get their `↺` / `+` / `⧉`
+glyph prefixed by the engine (the button reads "+ item"), so the strings
+carry none. Every `map.*` cell is substituted into a single-quoted JS string
+literal in `MAP_LOCALE`, so **no cell may contain an ASCII apostrophe (`'`),
+a backtick (`` ` ``) or a backslash (`\`)** — any of these would break the
+engine block's `<script>` fence and throw a `SyntaxError` before the page
+renders. Reword around the restriction (e.g. drop possessives) rather than
+escaping the character.
+
+**`design.position_iteration` and `design.position_page` are label words,
+not full sentences** — the numbers (`N`, `total`) are live spans the JS
+updates on every switch, exactly like the pre-existing `active-screen-idx`
+span, so only the word is baked in at generation time. They compose the
+screen indicator (§ Screen indicator, design template) as
+`{position_iteration} {i} · {design-nav-label} · {position_page} {n} /
+{total} · {screen-nav-label}`, with the iteration segment dropped when the
+concept has one iteration and the design segment dropped when the iteration
+has one design — see the indicator JS for the exact assembly.
+
+**Locale tag example on `<html>`:** `<html lang="de">`, `<html lang="en">`,
+`<html lang="fr">`, `<html lang="hi">`, `<html lang="ja">`. Match whatever
+the `[ui-locale: ...]` hint produced.
+
+## Common Structure (all templates)
+
+```html
+<!DOCTYPE html>
+<!-- data-template is a PROJECTION of the ACTIVE iteration, not a page constant.
+     It MUST be written at generation time with the active iteration's
+     data-iteration-template value (normalised), otherwise the page paints the
+     wrong layout for one frame before showIteration() runs. -->
+<html lang="en" data-theme="dark" data-page-version="{generation-timestamp}" data-template="decision">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Concept — {title}</title>
+  <style>/* all CSS inline */</style>
+</head>
+<body>
+  <div class="concept-layout">
+    <!-- Main content -->
+    <div class="concept-content">
+      <header>
+        <!-- HEADER MUST STAY LEAN.
+             Keep to <h1> + ONE short subtitle line (or omit subtitle entirely).
+             Do NOT repeat the iteration title/intro here — that belongs INSIDE
+             the active <section data-iteration="N">. Double-intros (header +
+             iteration-intro) eat vertical space and duplicate context.
+             No controls in here: the theme toggle lives in the ☰ panel's
+             head row (page chrome, every template), not in the reading
+             column. -->
+        <h1>{title}</h1>
+        <p class="subtitle">{optional one-line context — omit if not needed}</p>
+      </header>
+
+      <main>
+        <!-- One <section data-iteration="N"> per iteration. Exactly one has
+             data-active. All others render their controls disabled/readonly
+             and preserve the values the user submitted that round.
+             Each iteration section may open with its own iteration-intro
+             block (title + one paragraph) BEFORE the variant/content cards. -->
+        <!--
+        <section data-iteration="1" data-iteration-template="decision" hidden>...frozen first round...</section>
+        <section data-iteration="2" data-iteration-template="decision" data-active>...current round (active)...</section>
+        -->
+      </main>
+    </div>
+
+    <!-- Decision panel — ONE ☰ overlay in every template (§ Panel Chrome
+         (all templates)). The #panel-toggle FAB and the .panel-backdrop after
+         the aside are part of the same component and are not optional on a
+         decision/free page: without them the panel has no way to open. -->
+    <aside class="concept-decision-panel" id="decision-panel">
+      <!-- Head row — the panel's chrome line, right-aligned: the theme toggle
+           and the ✕. The toggle is page chrome exactly like the panel itself
+           (§ Theme Toggle): one control, the same place in every template,
+           and the reading column stays content-only. It names the NEXT
+           action the way the ☰/💬 FABs do (☀️ while dark) — glyph via CSS,
+           tooltip + aria-label via the data-label-* pair (§ Theme Toggle JS).
+           Both labels come from the locale table, never baked text. -->
+      <!-- The head row IS the "you are here" line: [data-here-round] at the
+           left (mirrors the selected tab's label via showIteration — no
+           "· aktiv"/"· active" suffix on the live round, an {{nav.archived}}
+           marker on a frozen one, "(Variante)" appended by
+           updateHereRoundParenthesis while the reading line sits inside a
+           variant section), then — right-aligned as one group —
+           #panel-here-back (frozen rounds only), the 🕘 rounds chip (count
+           of PREVIOUS rounds, hidden when there are none), the theme toggle
+           and ✕. One row for all of it: the round label used to sit on its
+           own line under the chrome row, which cost a line of the panel's
+           height for nothing (the user's call). -->
+      <div class="panel-head">
+        <span class="panel-here-round" data-here-round></span>
+        <!-- Right end, as a group: the wrapper (not either child) carries
+             margin-left: auto, so the pair stays right-aligned whether or
+             not #panel-here-back is [hidden] (the live round has no back
+             link — the chip must not lose its right alignment then). -->
+        <span class="panel-here-right">
+          <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+          <!-- 🕘 rounds chip — count of PREVIOUS rounds, hidden when there are
+               none (§ Section Navigation, buildRoundsChip). Click toggles
+               #panel-here-rounds-list, a plain non-persisted disclosure that
+               lists every previous round with its generated summary and an
+               "archived" tag; a row click switches to that round via the same
+               showIteration() path as an iteration tab. -->
+          <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
+                  aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
+                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+            <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
+          </button>
+        </span>
+        <button type="button" id="theme-toggle" class="theme-toggle-btn"
+                data-label-light="{{theme.to_light}}"
+                data-label-dark="{{theme.to_dark}}"
+                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+          <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
+          <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
+        </button>
+        <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      </div>
+      <!-- All visible strings are referenced by key in the locale table above.
+           Swap to the `de` column when [ui-locale: de] is active. -->
+
+      <!-- PANEL ANATOMY. Below the .panel-head row (round label · 🕘 chip ·
+           theme toggle · ✕) the aside is a flex column of exactly four
+           children and only the second one scrolls (§ Decision Panel State
+           CSS, "Panel anatomy"):
+             .panel-here        pinned   "› TOC entry" sub-line + the 🕘 rounds list
+             .panel-nav-scroll  flex 1   iteration tabs (hidden) + live TOC
+             .panel-status      pinned   ONE status line (+ progress dots after submit)
+             .panel-cta         pinned   #panel-ready | #panel-submitted | #panel-frozen | #panel-final-report
+           The pin is structural (flex split), never position:sticky inside the
+           scroll box: the call to action is reachable without scrolling the
+           menu, however many rounds or TOC entries the page has, and the foot
+           is the same ≤120px in the smallest and the largest case. -->
+
+      <!-- "You are here", second part: [data-here-section], the "› TOC entry"
+           sub-line (dropped entirely on the final report), and
+           #panel-here-rounds-list (buildRoundsChip), shown only while the 🕘
+           chip in the head row is unfolded. The round label and the chip
+           themselves live in .panel-head above. -->
+      <div class="panel-here" id="panel-here">
+        <span class="panel-here-section" data-here-section hidden></span>
+        <div class="panel-here-rounds-list" id="panel-here-rounds-list" hidden role="list">
+          <!-- auto-populated by buildRoundsChip() -->
+        </div>
+      </div>
+
+      <div class="panel-nav-scroll">
+        <!-- Iteration tabs — live at the TOP of the decision panel (not in the
+             content area). Compact vertical chip list; the active tab shows
+             the current round, older tabs stay clickable but show frozen
+             snapshots when selected. Auto-populated, one entry per
+             <section data-iteration="N">, appended by string edit
+             (iteration-rules.md § Iteration append checklist). -->
+        <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}">
+          <!--
+          <button class="iteration-tab" role="tab" data-iteration="1" aria-selected="false">Iteration 1</button>
+          <button class="iteration-tab" role="tab" data-iteration="2" aria-selected="true">Iteration 2</button>
+          -->
+        </nav>
+
+        <!-- Section TOC — auto-populated from EVERY top-level <section id="..."
+             data-nav-label="..."> inside the active iteration, not just variants.
+             Sections that carry a bi-state radio group (eval-{id}) display their
+             current state label; plain sections (Ist-Zustand, Context, Design-Notes,
+             etc.) just show the label and anchor-scroll on click.
+             buildSectionNav() rebuilds it here — inside the scroll box, on its
+             own — on every load and every switch: it holds ONLY the live
+             round's TOC now, grouped around the selected variant when one is
+             unambiguous (its own sub-sections nested and open, every other
+             variant collapsed into one row) or the old flat/kind-grouped list
+             otherwise (Kompass, § Section Navigation). The other rounds live
+             in the pinned head's 🕘 rounds list, not here. -->
+        <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}">
+          <!-- auto-populated -->
+        </nav>
+      </div>
+
+      <!-- Status line — pinned, ONE line, six mutually exclusive states on
+           .panel-status[data-status] (saved | saving | connecting | local-only |
+           submitted | frozen), rendered by renderPanelStatus() from three
+           inputs: the heartbeat, the draft mirror and the panel state.
+           #connection-status keeps its id and its [data-state] contract
+           (connecting | connected | disconnected, set by checkClaudeConnection
+           in EVERY panel state — it lives OUTSIDE #panel-ready now). The line
+           NEVER overlays or disables the submit buttons and has NO acknowledge
+           button: a disconnected submit is cached and auto-delivered on
+           reconnect (see Offline Submit Queue), so the line + the cache badge
+           on the button are the only signals needed. Starting in "connecting"
+           (never "disconnected") is the fix for the fresh-page
+           connect→disconnect→connect flash. -->
+      <div class="panel-status" id="panel-status" data-status="connecting">
+        <div id="connection-status" class="status-line" data-state="connecting" role="status" aria-live="polite">
+          <span class="status-glyph" aria-hidden="true">◐</span>
+          <span class="conn-label">{{panel.status_connecting}}</span>
+        </div>
+        <!-- Progress after submit. The <ol> is the real list — § Submit
+             Progress Steps writes data-state on its <li>s so the user can see
+             whether the submission has only been sent (step 1), whether
+             Claude's cron has picked it up (step 2), whether the concept is
+             being re-checked against the default branch (step 3) and — for
+             implement-action submissions — whether the code change finished
+             (step 4). Step 4 is hidden for iterate-action submissions;
+             submitWithAction sets its `hidden` from the action. Step 3 stays
+             hidden until the check actually runs and reveals it. The dots in
+             the <summary> are a compact rendering of the same data-state
+             values (renderStatusDots); the list expands under the line.
+             Hidden until submit, never tooltip-only. -->
+        <details class="status-detail" id="status-detail" hidden>
+          <summary class="status-detail-row">
+            <span class="status-dots" id="status-dots" aria-hidden="true"></span>
+            <span class="status-detail-label">{{panel.status_detail}}</span>
+          </summary>
+          <ol class="status-steps" id="status-steps" aria-live="polite">
+            <li data-step="submitted" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_submitted}}</span>
+            </li>
+            <li data-step="received" data-state="active">
+              <span class="step-icon" aria-hidden="true">⏳</span>
+              <span class="step-label">{{panel.step_received}}</span>
+            </li>
+            <li data-step="reality-check" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
+            </li>
+            <li data-step="implemented" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
+            </li>
+          </ol>
+        </details>
+      </div>
+
+      <!-- CTA foot — pinned, hard-capped at 120px. Exactly one of the four
+           blocks inside is visible; showIteration() / submitWithAction() /
+           restorePanelToReady() switch them. -->
+      <div class="panel-cta">
+      <!-- Normal state: decision summary + the split button. The primary
+           action fills the row; the ▾ caret opens #submit-menu, which holds
+           the implement action one level deeper. The misclick barrier is
+           colour + border + the extra click, not distance — there is no
+           .submit-gap in here any more. The two hint lines moved into
+           `title` tooltips; the cache hint stays an inline badge on the
+           primary button and a line inside the menu (both toggled by
+           _setCacheHints while disconnected). -->
+      <div id="panel-ready">
+        <div id="decision-summary">
+          <!-- Auto-populated summary of current selections -->
+        </div>
+
+        <div class="submit-split">
+          <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+            <span class="submit-label">{{panel.submit_iterate}}</span>
+            <span class="hint-cache" data-cache-hint="iterate" hidden>
+              <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+            </span>
+          </button>
+          <button type="button" id="submit-menu-btn" class="submit-menu-btn"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
+                  aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+            <span aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div id="submit-menu" class="submit-menu" role="menu" hidden>
+          <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+            <span class="warn-icon" aria-hidden="true">⚠</span>
+            {{panel.submit_implement}}
+          </button>
+          <p class="hint hint-cache" data-cache-hint="implement" hidden>
+            <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+          </p>
+          <p class="hint submit-menu-hint">{{panel.submit_menu_hint}}</p>
+        </div>
+      </div>
+
+      <!-- Post-submit state: the status line above now reads "Übermittelt ·
+           Claude arbeitet" and carries the progress dots; this block only
+           tells the user where to look next. -->
+      <div id="panel-submitted" style="display: none;">
+        <div class="submitted-indicator">
+          <span class="check-icon">✓</span>
+          <strong>{{panel.submitted}}</strong>
+        </div>
+        <p class="submitted-hint">{{panel.submitted_hint}}</p>
+      </div>
+
+      <!-- Frozen state: shown while the user reviews a PAST iteration tab.
+           showIteration() flips this on for every non-live tab (and sets
+           body.viewing-frozen, which the design template's dock reads to fill
+           its textareas read-only). Without this block the panel simply loses
+           its whole lower half on a frozen tab — no controls, no explanation,
+           just empty space under the TOC, which reads as a broken page rather
+           than as "this is history". The back-link is the only way out that
+           does not require guessing which tab was live. -->
+      <div id="panel-frozen" style="display: none;">
+        <div class="frozen-indicator">
+          <span class="frozen-icon" aria-hidden="true">🕘</span>
+          <strong>{{panel.frozen}}</strong>
+        </div>
+        <p class="hint">{{panel.frozen_hint}}</p>
+        <button type="button" id="back-to-live-btn" class="link-btn">{{panel.frozen_back}}</button>
+      </div>
+
+      <!-- Final-report state: shown when the active section carries
+           data-final-report. No iterate/implement submit, no status line, no
+           pipeline recap — the panel holds ONLY the CLOSE-OUT SHEET: the
+           questions in execution order (open points → ship → this page →
+           hand-offs) as a strictly sequential accordion, and a SINGLE button
+           (action: "finalize") that carries every decision at once and then
+           becomes the status of that submission. Nothing on the sheet
+           commits anything until #closeout-execute reads "⚠ Ausführen" —
+           see § Final Report Panel. -->
+      <div id="panel-final-report" style="display: none;">
+        <!-- Close-out sheet: a SEQUENTIAL ACCORDION of answerable rows plus
+             one button. It replaced, in turn: four buttons at once, a
+             four-step wizard (Weiter/Zurück, counter, review screen), a
+             free-click accordion with a "Gewählt: …" plan line and three
+             status hints under the button, and a status line + pipeline
+             recap above it — every one of those cost the rows region the
+             height it needs, and the plan line only repeated what the rows'
+             own inline summaries already said.
+             Each row collapses to ONE line — ○/●/✓ marker, icon (native
+             title + aria-label), short label, current-answer summary — and
+             exactly one is open at a time (openCloseoutRow()). The order is
+             enforced: the first unanswered row opens by itself, every LATER
+             unanswered row is locked (data-locked, head `disabled`, no
+             summary) and only "Weiter ›" unlocks the next one; an ANSWERED
+             row stays clickable to go back and change the answer
+             (closeoutRowClick()). "Answered" means the row was open when the
+             single #closeout-execute button was clicked
+             (closeoutButtonClick()), never a per-row control: a pre-selected
+             default may stand as-is, confirming just means the user looked.
+             The button reads "Weiter ›" until every visible row is answered,
+             then transforms into the warning-coloured "⚠ Ausführen" (the
+             consequence warning is its native title) that submits
+             `finalize`, and after that click it IS the status: "⏳ Claude
+             arbeitet es ab …", then "✓ Concept abgeschlossen." — never two
+             buttons, never a status paragraph beneath it
+             (setCloseoutButtonState()). The data-label-* attributes carry
+             localised strings into the JS; the JS itself never hard-codes
+             user-facing text. Row-answered state is mirrored to
+             sessionStorage (closeoutStorageKey(), keyed by STORAGE_KEY +
+             iteration) so a reload within the session does not re-ask
+             already-answered rows — never localStorage, which stays reserved
+             for the (data-no-persist) route/ship radios' deliberate reset. -->
+        <div id="closeout-sheet" class="closeout-sheet"
+             data-label-progress="{{final.closeout_progress}}"
+             data-label-unanswered="{{final.closeout_unanswered}}"
+             data-label-ship-yes="{{final.closeout_summary_ship_yes}}"
+             data-label-ship-no="{{final.closeout_summary_ship_no}}"
+             data-label-steps="{{final.closeout_steps}}">
+          <div class="closeout-head">
+            <strong class="closeout-title">{{final.closeout_heading}}</strong>
+            <span class="closeout-progress" id="closeout-progress" aria-live="polite"></span>
+          </div>
+
+          <!-- The rows region — every accordion head plus whichever ONE body
+               is open. `flex: 1 1 auto; min-height: 0` + its own overflow-y
+               (§ CSS) is what keeps #closeout-execute pinned below it: on the
+               close-out sheet's own history a hand-offs row with a full list
+               open pushed the button off a 768px/900px viewport, the exact
+               "viel Scrollen, Button nicht an der gleichen Stelle" complaint
+               this fixes. Every head inside is `position: sticky` on BOTH
+               `top` and `bottom` (offsets set per visible block by
+               layoutCloseoutRowHeads(), § JS) — a fixed pixel/percentage
+               floor on this region either squeezed the pinned foot below the
+               fold or still only fit one head at a time with a body open;
+               sticky-both-edges keeps all four heads visible regardless of
+               how little height the region actually gets. -->
+          <div class="closeout-rows" id="closeout-rows">
+          <!-- Block 1 (conditional) — the still-open points, one row each,
+               three routes per row. Rendered from the [data-open-questions]
+               checkboxes in the report body, which stay the single source of
+               truth for WHICH points are still open: "Ignorieren" unchecks
+               the body box, the other two check it. The route radios are
+               data-no-persist for the same reason the ship radios are: after
+               a reload every row must fall back to the harmless default
+               (Issue — nothing is built), never to a remembered
+               "jetzt umsetzen" the user cannot see. -->
+          <section class="closeout-block" data-closeout-block="followups" hidden>
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.followups_q}}" aria-label="{{final.followups_q}}">📌</span>
+              <span class="closeout-row-label">{{final.followups_q}}</span>
+              <span class="closeout-count" id="closeout-followup-count" aria-live="polite"></span>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <p class="hint">{{final.followups_hint}}</p>
+              <div class="followup-list" id="closeout-followup-list"
+                   data-label-issue="{{final.route_issue}}"
+                   data-label-implement="{{final.route_implement}}"
+                   data-label-ignore="{{final.route_ignore}}"
+                   data-label-origin-deferred="{{final.origin_deferred}}"
+                   data-label-origin-found="{{final.origin_found}}"></div>
+              <p class="hint hint-none" id="closeout-followups-none" hidden>
+                <span aria-hidden="true">⚠</span> {{final.followups_none}}
+              </p>
+            </div>
+          </section>
+
+          <!-- Block 2 — ship or not. Deliberately has NO default, so the row
+               can only be CONFIRMED once a radio is chosen: advanceCloseout()
+               refuses and shows #closeout-ship-required instead — opening and
+               looking at the row is free, answering it is not. -->
+          <section class="closeout-block" data-closeout-block="ship">
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.closeout_ship_q}}" aria-label="{{final.closeout_ship_q}}">🚀</span>
+              <span class="closeout-row-label">{{final.closeout_ship_q}}</span>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <label class="closeout-choice">
+                <input type="radio" name="closeout-ship" value="yes" data-no-persist>
+                <span class="closeout-choice-label">
+                  <strong><span aria-hidden="true">🚀</span> {{final.closeout_ship_yes}}</strong>
+                  <span class="closeout-sub">{{final.ship_hint}}</span>
+                </span>
+              </label>
+              <label class="closeout-choice">
+                <input type="radio" name="closeout-ship" value="no" data-no-persist>
+                <span class="closeout-choice-label">
+                  <strong>{{final.closeout_ship_no}}</strong>
+                  <span class="closeout-sub">{{final.closeout_ship_no_hint}}</span>
+                </span>
+              </label>
+              <p class="hint hint-warn" id="closeout-ship-required" role="alert" aria-live="polite" hidden>
+                <span aria-hidden="true">⚠</span> {{final.closeout_choice_required}}
+              </p>
+            </div>
+          </section>
+
+          <!-- Block 3 — what happens to this page. Drives Step 6 cleanup
+               (discard / keep / gitignore / optional moveTo). Default =
+               discard: the decisions already landed in commits, issues and
+               the implementation, so the HTML rarely needs to live in git.
+               The label says "delete the page", never "discard" — the old
+               wording read as "throw the work away" and collided with the
+               bi-state Verwerfen on every variant card. -->
+          <section class="closeout-block" data-closeout-block="files">
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.closeout_label_files}}" aria-label="{{final.closeout_label_files}}">🗂</span>
+              <span class="closeout-row-label">{{final.closeout_label_files}}</span>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <fieldset id="panel-dispose-concept" class="dispose-fieldset">
+                <legend>{{final.dispose_heading}}</legend>
+                <p class="hint dispose-hint">{{final.dispose_hint}}</p>
+
+                <label class="dispose-option">
+                  <input type="radio" name="dispose-mode" value="discard" checked>
+                  <span class="dispose-label">
+                    <strong>{{final.dispose_discard}}</strong>
+                    <span class="dispose-sub">{{final.dispose_discard_hint}}</span>
+                  </span>
+                </label>
+
+                <label class="dispose-option">
+                  <input type="radio" name="dispose-mode" value="keep">
+                  <span class="dispose-label">
+                    <strong>{{final.dispose_keep}}</strong>
+                    <span class="dispose-sub">{{final.dispose_keep_hint}}</span>
+                  </span>
+                </label>
+
+                <label class="dispose-option">
+                  <input type="radio" name="dispose-mode" value="gitignore">
+                  <span class="dispose-label">
+                    <strong>{{final.dispose_gitignore}}</strong>
+                    <span class="dispose-sub">{{final.dispose_gitignore_hint}}</span>
+                  </span>
+                </label>
+
+                <div class="dispose-move-row">
+                  <label for="dispose-move-to">{{final.dispose_move_label}}</label>
+                  <input id="dispose-move-to"
+                         name="dispose-move-to"
+                         type="text"
+                         autocomplete="off"
+                         spellcheck="false"
+                         placeholder="{{final.dispose_move_placeholder}}">
+                </div>
+              </fieldset>
+            </div>
+          </section>
+
+          <!-- Block 4 (conditional) — what the USER has to do by hand once
+               the close-out is through. Mirrors the report's [data-handoffs]
+               section (renderHandoffs) so the one thing nothing here can
+               automate is the last thing on the sheet — and the only block
+               that stays visible after data-closed (renderCloseout() then
+               hides this row's own head, leaving only its read-only body).
+               Hidden when the report has no such section: the normal case.
+               "Answered" here means opened once — there is nothing to choose. -->
+          <section class="closeout-block closeout-handoffs" data-closeout-block="handoffs" hidden>
+            <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
+              <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
+              <span class="closeout-row-icon" aria-hidden="true" title="{{final.handoffs}}" aria-label="{{final.handoffs}}">⚠</span>
+              <span class="closeout-row-label">{{final.handoffs}}</span>
+              <span class="closeout-count" id="closeout-handoffs-count"></span>
+              <span class="closeout-row-summary" data-closeout-summary></span>
+            </button>
+            <div class="closeout-row-body" data-closeout-row-body hidden>
+              <p class="hint">{{final.handoffs_hint}}</p>
+              <ol class="closeout-handoffs-list" id="closeout-handoffs-list"></ol>
+            </div>
+          </section>
+          </div><!-- /.closeout-rows -->
+
+          <!-- The one button, fixed place, five states on [data-ready] /
+               [data-finalize-state] — see updateCloseoutButton() and
+               setCloseoutButtonState():
+                 next     "Weiter ›"                      accent   (rows unanswered)
+                 execute  "⚠ Ausführen"                   warning  (all answered; title = the
+                          — or "⚠ Ausführen · wird zwischengespeichert" while the bridge
+                          is disconnected, the ONLY place the final report says so)
+                 running  "⏳ Claude arbeitet es ab …"     accent, disabled
+                 done     "✓ Concept abgeschlossen."       success, disabled
+                 stalled  "⚠ Übermittelt · Claude antwortet nicht"  warning, disabled
+                          (+ the one hint below: it carries an instruction)
+               Every label string is baked in at generation time (data-label-*)
+               and swapped at runtime. The icon span is EMPTY in the "next"
+               state — the label string already carries its own "›"
+               (`final.closeout_next` = "Weiter ›"), so an always-visible icon
+               rendered "› Weiter ›". -->
+          <button type="button" id="closeout-execute" class="implement-btn"
+                  data-label-next="{{final.closeout_next}}"
+                  data-label-execute="{{final.closeout_execute}}"
+                  data-label-execute-offline="{{final.closeout_execute_offline}}"
+                  data-label-running="{{final.closeout_running}}"
+                  data-label-done="{{final.closeout_done}}"
+                  data-label-stalled="{{final.closeout_stalled_short}}"
+                  data-title-execute="{{final.closeout_plan_warn}}">
+            <span aria-hidden="true" data-closeout-btn-icon hidden>⚠</span>
+            <span data-closeout-btn-label>{{final.closeout_next}}</span>
+          </button>
+
+          <!-- Shown when the round was delivered but Claude stopped answering
+               (markCloseoutStalled). The sheet stays frozen: the payload IS
+               on the bridge, and a second execute from here would run the
+               whole close-out twice. The one status that keeps a paragraph —
+               it tells the user where to go next. -->
+          <p class="hint hint-warn" data-finalize-state="stalled" hidden>
+            <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
+          </p>
+        </div>
+
+        <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
+      </div>
+      </div><!-- /.panel-cta -->
+    </aside>
+
+    <!-- ☰ FAB + backdrop — page chrome, same markup in every template. -->
+    <button id="panel-toggle" class="panel-fab"
+            aria-label="{{panel.toggle_open}}"
+            title="{{panel.toggle_open}}"
+            aria-expanded="false"
+            data-label-open="{{panel.toggle_open}}"
+            data-label-close="{{panel.toggle_close}}">☰</button>
+    <div class="panel-backdrop" id="panel-backdrop"></div>
+
+    <!-- 💬 FAB + feedback dock — page chrome in EVERY template (§ Panel
+         Chrome (all templates) → Feedback dock). A document round carries
+         exactly this: the header row (maximise · minimise) and the
+         general-notes section with its attachment slot. The design skeleton
+         (§ Layout — Fullscreen single-screen) adds the per-screen /
+         per-design / per-view rows ABOVE the general section; on a page that
+         mixes templates those rows hide by CSS while a document round is on
+         screen. Same ids everywhere: #feedback-toggle, #feedback-dock,
+         #feedback-maximize, #feedback-close, #design-general-feedback.
+         CLOSED by default (data-open="false"); data-size is written by
+         applyDockSize() (§ Panel Chrome JS) — always `compact` on a document
+         round. `data-untouched` drives the one-shot pulse that the JS clears
+         on the first open or the first keystroke. Every label comes from the
+         locale table; never bake English (or "Feedback") in here. -->
+    <button id="feedback-toggle" class="feedback-fab"
+            aria-label="{{proto.feedback_toggle}}"
+            title="{{proto.feedback_toggle}}"
+            aria-expanded="false"
+            data-untouched="true"
+            data-label-open="{{proto.feedback_toggle}}"
+            data-label-close="{{panel.minimize}}">💬</button>
+    <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact" data-user-maximized="false">
+      <div class="feedback-dock-header">
+        <strong>{{proto.feedback_title}}</strong>
+        <!-- Maximise is a distinct control from minimise: minimise CLOSES
+             the dock (data-open toggle), maximise RESIZES it (data-size
+             override) without touching data-open at all. Never merge them. -->
+        <button id="feedback-maximize" class="feedback-maximize-btn" aria-pressed="false"
+                aria-label="{{panel.maximize}}" title="{{panel.maximize}}">⤢</button>
+        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
+      </div>
+      <div class="feedback-section">
+        <label>{{proto.feedback_general}}</label>
+        <textarea id="design-general-feedback" data-comment="general" data-attachable
+                  placeholder="{{proto.feedback_general}}"></textarea>
+        <div class="attach-slot" data-attach-slot="general"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Content dimmer (all templates) — two jobs, one element.
+       (1) Submitted-state focus shifter: after a submit, body.content-dimmed
+       flips this on so the user's focus lands on the decision panel / FAB.
+       (2) Frozen veil: showIteration() re-arms it on EVERY entry into a
+       non-live tab, locking the past round behind the same overlay. In both
+       roles the panel + FABs sit above z-index 50 and stay clickable, and the
+       dimmer is click/Escape-to-dismiss. The submit role auto-clears on the
+       next reload (`content-dimmed` is not persisted); the veil role comes
+       back on the next tab switch, so at most the one past round on screen is
+       ever unlocked. -->
+  <div class="content-dimmer" id="content-dimmer"
+       role="button" tabindex="-1"
+       aria-label="{{panel.dim_dismiss}}"
+       title="{{panel.dim_dismiss}}" hidden></div>
+
+  <!-- Frozen-iteration floating bar (all templates). Page-level chrome, so it
+       lives OUTSIDE section[data-iteration], next to the dimmer. showIteration()
+       unhides it on every non-live tab and fills [data-frozen-bar-title] with
+       that tab's chip label. It exists because the veil is lifted by reflex:
+       once the dimmer is clicked away, nothing on the page says "this is an
+       earlier round" except the small chip highlight in the panel — and the
+       live chip is not always the last one. Its button is the second way back
+       to the live round (#back-to-live-btn in #panel-frozen is the first). -->
+  <div class="frozen-bar" id="frozen-bar" role="status" hidden>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
+  </div>
+
+  <script type="application/json" id="concept-decisions">
+    {"submitted": false, "decisions": [], "comments": {"general": {"text": "", "attachments": []}, "items": []}}
+  </script>
+  <script>/* all JS inline */</script>
+</body>
+</html>
+```
+
+## Panel Chrome (all templates)
+
+**The decision panel is page chrome, not a layout choice.** It is the same
+`<aside class="concept-decision-panel" id="decision-panel">` on every
+page, opened by the same ☰ FAB in the top-right corner, backed by the same
+`.panel-backdrop`, in `decision`, `free` and `design` rounds alike.
+
+This is a contract about the CONCEPT, not about one round. A page mixes
+templates on purpose (a `design` concept that answers a non-visual question in
+a `decision` round, the `free` final report that closes it), and the panel
+used to move with the template: docked into a 20% sidebar for document rounds,
+behind the FAB for design rounds. Reviewers hit that mid-session — the menu
+they had been using for three rounds was suddenly a column in the page, and
+the note fields with it. Where the panel lives must not depend on which round
+is on screen.
+
+**The 💬 feedback dock is page chrome too.** The same `<aside class="feedback-dock"
+id="feedback-dock">` behind the same 💬 FAB in the bottom-right corner, in
+every round of every template (#399). It used to exist only in `design`
+rounds, so a reviewer's general note had a home over a mockup and none over a
+document — and a concept that mixed templates lost the dock mid-session
+together with whatever was typed into it. What differs per round is only what
+the dock CONTAINS:
+
+| Round | What the 💬 dock holds | Where else comments are written |
+|---|---|---|
+| `design` | per-screen / per-design / per-view rows (specific → general, top to bottom), then the general note | annotation bubbles, view notes |
+| `decision`, `free` | the general note only (+ its attachment slot) — the dock is `compact` | inline `textarea[data-comment]` next to the item being judged |
+
+A concept may mix the two freely from round to round — what may never move is
+the ☰ panel or the 💬 dock. The payload is one shape everywhere
+(`comments: { general: { text, attachments }, items: [ … ] }`, § collectDecisions
+(dispatcher)), so no consumer branches on the template to find the general note.
+
+**Required on every generated page, whatever the template:**
+
+```html
+<!-- inside .concept-layout, after the </aside> -->
+<button id="panel-toggle" class="panel-fab"
+        aria-label="{{panel.toggle_open}}"
+        title="{{panel.toggle_open}}"
+        aria-expanded="false"
+        data-label-open="{{panel.toggle_open}}"
+        data-label-close="{{panel.toggle_close}}">☰</button>
+<div class="panel-backdrop" id="panel-backdrop"></div>
+
+<!-- …and the 💬 FAB + dock right after them: header row (#feedback-maximize,
+     #feedback-close) + the general section (#design-general-feedback with
+     data-comment="general" data-attachable + its .attach-slot). Copy them
+     from § Common Structure; a design page copies the design skeleton's
+     dock, which is the same markup plus the three row containers above the
+     general section. -->
+```
+
+plus, inside the aside, the `.panel-head` row (`#theme-toggle` + `#panel-close`,
+§ Theme Toggle) as its first child, and the CSS + JS below. All of it is
+unscoped and required even on a page that never renders a mockup — that is
+the point of this section: a `decision`- or `free`-only page carries its
+panel AND its dock WITHOUT taking § Layout CSS (the design canvas) with it.
+The `html:not([data-template="design"])` hide list in § Layout CSS covers the
+design-only chrome (screen indicator, switchers, device toggle, annotation
+layer) and nothing of the dock; the compact rule at the end of the CSS block
+below is what turns the dock into a general-note-only bubble while a document
+round is on screen. § Layout CSS keeps only the design-side row collapse
+rules (`body[data-single-*]`, the view-mode swap).
+
+```css
+/* Overlay decision panel — PAGE CHROME, unscoped on purpose: the same aside,
+   the same slide-in, the same ☰ FAB in every template.
+   This rule used to be scoped to the design layout, and in a
+   decision/free round the aside docked back into a sidebar grid — so a
+   concept that mixed templates (a reality-check round, a final report)
+   silently moved its panel, and with it the feedback surface, from behind the
+   FAB into the page. */
+.concept-decision-panel {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 360px;
+  max-width: 90vw;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  background: var(--panel-bg, #161b22);
+  border-left: 1px solid var(--border-color, #30363d);
+  z-index: 200;
+  /* The aside never scrolls; .panel-nav-scroll does (§ Decision Panel State
+     CSS "Panel anatomy") so the status line + CTA foot stay pinned. */
+  overflow: hidden;
+  transition: right 0.3s ease;
+}
+.concept-decision-panel.open {
+  right: 0;
+}
+
+/* ── The two FABs are ONE component with two positions ──
+   They are the only floating chrome on a design page, they sit on the same
+   right-hand edge, and the user reads them as a pair — so every property
+   that governs their shape lives in this single rule and NOTHING below may
+   override size, radius, padding or typography. Divergent sizes (the old
+   56px ☰ vs 64px 💬) read as an accident, and per-page tweaks made it worse:
+   across concepts the two ended up visibly different every time.
+   `box-sizing`, `padding: 0`, `line-height: 1` and the flex centring are
+   what keep them perfectly circular with the glyph centred — a bare
+   width/height on a <button> still inherits UA padding and baseline
+   metrics, which is how "round" turns into "slightly egg-shaped". */
+.panel-fab,
+.feedback-fab {
+  position: fixed;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-color, #58a6ff);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 100;
+  transition: transform 0.2s, opacity 0.2s;
+}
+/* ☰ lives top-right (Wave 3). The three top-edge overlays partition the
+   width by construction rather than by hope:
+     screen indicator  1rem … 33vw - 0.5rem   (max-width cap + ellipsis)
+     design switcher   33vw … 67vw            (max-width: 34vw, centred)
+     ☰ FAB             100vw - 92px … 100vw - 2rem   (60px + 2rem margin)
+   Those bands cannot intersect for any viewport width where
+   67vw < 100vw - 92px, i.e. above 279px — below that the layout is out of
+   scope anyway. Measured in Edge at 1280/768/375px: no overlap at any of
+   the three. Before the caps existed the indicator overlapped the switcher
+   by 21px at 768px and completely at 375px, where it also reached the ☰
+   FAB. 💬 lives bottom-right, clear of the top edge entirely.
+
+   #anno-toggle (the optional annotation eye pill) does NOT compete for this
+   horizontal partition at all — it sits on a SEPARATE row, left edge,
+   directly below the screen indicator: `top: 3.75rem; left: 1rem`. That
+   offset is fixed regardless of viewport width because the indicator's own
+   height never changes: `.screen-indicator` is `white-space: nowrap` with a
+   `max-width` + ellipsis (it never wraps to a second line), so its height
+   stays the padding + single-line-box height (~1.9rem) at every viewport,
+   including the narrowest ones this file scopes to (≥279px, see above).
+   `3.75rem` = indicator `top: 1rem` + its ~1.9rem measured height + a
+   0.5rem breathing gap, rounded up. The pill's own content-width (glyph +
+   counter) is small and fixed, so unlike the indicator/switcher it needs no
+   max-width cap — there is nothing else sharing its row. */
+.panel-fab { top: 2rem; right: 2rem; }
+.feedback-fab { bottom: 2rem; right: 2rem; }
+.panel-fab:hover,
+.feedback-fab:hover { transform: scale(1.08); }
+/* Only the ☰ panel FAB hides when its panel opens (the decision panel is
+   a full overlay). The 💬 feedback FAB stays visible while the dock is
+   open so the user can toggle it back closed via the same FAB. */
+.panel-fab.hidden { opacity: 0; pointer-events: none; }
+
+.panel-close-btn,
+.feedback-close-btn {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  color: var(--text-color, #c9d1d9);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+/* ── Panel head row: round label · back link · 🕘 chip · theme toggle · ✕ ──
+   The aside's first child. Right-aligned so the ✕ keeps its top-right
+   corner; the toggle sits to its left on the same line, the 🕘 rounds chip
+   (+ the frozen-round back link) to the left of that, and the round label
+   ("Iteration 8 (Variante)") takes the left end — `margin-right: auto` on
+   it is what keeps the controls flush right. One row instead of chrome row
+   + "you are here" line: the label used to sit on its own line below the ✕,
+   a line of panel height spent on nothing (the user's call, 2026-09-20).
+   The toggle is the quiet one of the pair — greyed and dimmed at rest, full
+   colour only under the pointer or keyboard focus — so the row still reads
+   as "one ✕", not as two controls competing for the corner. Emoji glyphs on
+   purpose (the user's call): the grayscale filter is what keeps the
+   full-colour platform art from clashing with the dark chrome until it is
+   actually wanted. */
+.panel-head {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  min-height: 2rem;
+}
+.panel-head .panel-here-round {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  font-size: 0.85rem;
+}
+.panel-head .panel-here-right { margin-right: 0.25rem; }
+.theme-toggle-btn {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  filter: grayscale(1);
+  transition: opacity 0.2s, filter 0.2s;
+}
+.theme-toggle-btn:hover,
+.theme-toggle-btn:focus-visible { opacity: 1; filter: none; }
+/* One glyph at a time, and it is the theme you would switch TO — the same
+   "name the next action" rule the ☰/💬 FAB labels follow. Keyed on the
+   attribute the click handler and restoreState() both write. */
+.theme-toggle-btn .theme-glyph { display: none; }
+html[data-theme="dark"] .theme-toggle-btn [data-glyph="sun"] { display: inline; }
+html:not([data-theme="dark"]) .theme-toggle-btn [data-glyph="moon"] { display: inline; }
+
+.panel-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 150;
+}
+.panel-backdrop.visible { display: block; }
+/* The open panel is modal: it has a backdrop, and behind that backdrop
+   nothing may scroll. Design mode already locks the body
+   (html[data-template="design"] body { overflow: hidden }); a document round
+   did not, so a wheel over the backdrop scrolled the report underneath —
+   which also drags the scroll spy and rewrites the "you are here" head the
+   user is reading. */
+html:not([data-template="design"]) body.panel-open { overflow: hidden; }
+/* The 💬 FAB sits at z-index 220 — above the panel (200) and its backdrop
+   (150). While the panel is open it is therefore a live control painted on
+   top of a modal, and clicking it would pull the panel out from under the
+   pointer (openDock() closes the panel by design). It hides with the panel
+   open, exactly like the design switcher does. */
+body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
+
+/* The 💬 FAB (60px circle, bottom: 2rem — see .panel-fab/.feedback-fab) floats
+   over the panel's bottom-right corner in EVERY template now, so the pinned
+   foot reserves its row under the call to action everywhere — this used to
+   be a design-scoped rule, back when only a design round had the FAB. */
+.panel-cta { padding-bottom: calc(60px + 2rem); }
+
+/* ── One-shot attention pulse on the 💬 FAB ──
+   The dock is where every note is written, and an unlabelled emoji circle in
+   a corner is genuinely missable — so the FAB announces itself exactly three
+   times, then never again: the JS strips `data-untouched` on the first dock
+   open OR the first keystroke inside the dock, so a returning user is not
+   nagged. It is `animation`, not a class, so it costs nothing once the
+   attribute is gone.
+   Geometry is OFF LIMITS here (gate P13): box-shadow and transform ONLY, no
+   width/height/border-radius/padding — those live in the shared
+   .panel-fab/.feedback-fab rule and the two FABs must stay one component.
+   transform: scale() also composes with the :hover scale rather than
+   fighting it, since both write the same property and hover wins by
+   source order while pointing. */
+@keyframes fabPulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  50%      { transform: scale(1.12); box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 12px rgba(88,166,255,0.18); }
+}
+.feedback-fab[data-untouched="true"] { animation: fabPulse 2.6s ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  /* No substitute cue: the tooltip is the discoverability path that does not
+     move, and it is present either way. */
+  .feedback-fab[data-untouched="true"] { animation: none; }
+}
+
+/* ── Feedback Dock — Speech-Bubble anchored to the 💬 FAB (bottom-right) ──
+   Geometry: ☰ lives top-right, 💬 bottom-right (60px). The dock is anchored
+   to the FAB's corner and has EXACTLY TWO sizes — never a viewport-
+   proportional one, never shrink-to-content:
+     compact  420px wide  — one general note (every document round; a design
+                             round with a single design and a single screen)
+     wide     560px wide  — screen + design + general notes, specific → general
+   Both sizes are deliberate. A dock that spans the page turns every textarea
+   into one 1200px line nobody ever wraps in; a dock sized to its content
+   becomes a box you cannot type three lines into without scrolling. Which
+   size applies is decided in JS by applyDockSize() (§ Panel Chrome JS)
+   from the <html data-template> projection and the same body[data-single-*]
+   flags the design layout sets, so the same round shape always yields the
+   same dock.
+   * right = FAB.right (2rem)             → bubble's right edge aligns with FAB
+   * bottom = FAB.bottom + 60 - 6px       → bubble sits directly above the 60px
+                                            FAB with a hair of overlap so the
+                                            visual connection reads as "the
+                                            bubble grows out of the FAB".
+   The dock no longer reserves padding for the FAB: it now ends above it
+   rather than spanning across it. The FAB keeps its higher z-index so it
+   stays visible and clickable while the dock is open — clicking it toggles
+   the dock.
+   --dock-ceiling: the dock's TOP edge stops just below the ☰ FAB. Both are
+   right-edge overlays in the same column (right: 2rem), and the dock
+   (z-index 180) used to grow straight over the ☰ FAB on a tall viewport:
+   80vh at 1080px is 864px, the ☰ band ends 92px from the top, so the dock
+   covered it and the ☰ was unreachable while the dock was open. The
+   ceiling is viewport − ☰ band (top 2rem + 60px + 0.75rem gap) − the
+   dock's own bottom offset (2rem + 54px). Every max-height below is
+   min(--dock-ceiling, its px cap): the cap still rules on tall viewports,
+   the ceiling only bites when the content would reach the ☰. */
+.feedback-dock {
+  --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px - 6px));
+  position: fixed;
+  left: auto;
+  right: 2rem;
+  bottom: calc(2rem + 60px - 6px);
+  width: min(420px, calc(100vw - 4rem));
+  /* 900px, not 460px: at a ~1080px-tall viewport the compact dock must show
+     screen + design + general at once (§ Feedback behaviour) without
+     scrolling or the user reaching for maximise. The old 460px cap was
+     sized for the single-general-note case only, before the reorder made
+     three sections the compact default's normal load. */
+  max-height: min(var(--dock-ceiling), 900px);
+  padding: 1rem 1.25rem 1.25rem;
+  background: var(--panel-bg, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
+  z-index: 180;
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 0.85rem;
+  transform-origin: 100% 100%; /* anchor: the 💬 FAB it grows out of */
+}
+.feedback-dock[data-size="wide"] {
+  width: min(560px, calc(100vw - 4rem));
+  max-height: min(var(--dock-ceiling), 940px);
+}
+/* Work package B — user-controlled maximise. Deliberately keyed off a
+   SEPARATE attribute (data-user-maximized), not a third data-size value:
+   applyDockSize() (§ Panel Chrome JS) still only ever assigns compact/wide from
+   the round's shape — exactly the same two sizes as before — and this
+   rule composes on top of whichever one is active by appearing later in
+   the stylesheet (same specificity, source-order wins). */
+.feedback-dock[data-size][data-user-maximized="true"] {
+  width: min(1100px, calc(100vw - 4rem));
+  max-height: min(var(--dock-ceiling), 860px);
+}
+.feedback-dock[data-size][data-user-maximized="true"] .feedback-section textarea {
+  min-height: 220px;
+}
+.feedback-dock[data-open="true"] {
+  display: flex;
+  animation: feedback-dock-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes feedback-dock-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Both FABs sit above the dock so they stay visible AND clickable while
+   the dock is open. 💬: the dock's bottom edge overlaps the FAB's top edge
+   by ~6px, so the bubble visually reads as growing out of the FAB. ☰: the
+   --dock-ceiling above already keeps the dock out of its band; the z-index
+   is the second lock, so a page that lost the ceiling (an older max-height
+   rule surviving a re-sync) still leaves the ☰ clickable — and a click on
+   it closes the dock (openPanel() → closeDock(true), § Panel Chrome). The
+   ☰ FAB hides itself (.hidden) once the panel is open, so it never sits
+   above the panel it opened. */
+.feedback-fab { z-index: 220; }
+.panel-fab { z-index: 220; }
+
+.feedback-dock-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.25rem;
+}
+.feedback-dock-header strong { font-size: 1rem; }
+
+/* Minimise button — visual cue is the underscore-low minus, not an ✕,
+   so the user understands their text is preserved (not destroyed). */
+.feedback-close-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary, #8b949e);
+  font-size: 1.6rem; line-height: 1; font-weight: 500;
+  padding: 0 0.4rem 0.2rem; border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-close-btn:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+
+/* Maximise/restore — a DISTINCT control from minimise (above): minimise
+   closes the dock, this one only resizes it. Same visual language so the
+   two read as a pair, but a different icon/meaning entirely. */
+.feedback-maximize-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary, #8b949e);
+  font-size: 1.1rem; line-height: 1;
+  padding: 0.2rem 0.4rem; border-radius: 6px; margin-right: 0.15rem;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-maximize-btn:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+.feedback-maximize-btn[aria-pressed="true"] { color: var(--accent-color); }
+
+.feedback-section { display: flex; flex-direction: column; gap: 0.35rem; }
+.feedback-section label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; }
+.feedback-section label strong { color: var(--accent-color); }
+.feedback-section textarea {
+  width: 100%; padding: 0.65rem 0.7rem;
+  border: 1px solid var(--border-color); border-radius: 10px;
+  background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
+  /* 80px, not 90px: with the reorder the compact dock's normal load is
+     three sections (§ Feedback behaviour), so each textarea gives up a
+     little height to the max-height budget above — 80px still clears
+     ~2-3 visible lines at this line-height/padding, it just no longer
+     eats the margin the dock needed for the two rows beside it. */
+  font-family: inherit; font-size: 0.95rem; line-height: 1.5; resize: vertical; min-height: 80px;
+}
+.feedback-section textarea:focus { outline: none; border-color: var(--accent-color); }
+.feedback-divider { height: 1px; background: var(--border-color); margin: 0.2rem 0; }
+/* The attach bar's own margin-top (§ Attachments CSS) is meant for contexts
+   with no flex-gap parent (decision notes, annotation bubbles). Inside the
+   dock, .feedback-section already applies that same gap between its
+   children (label / textarea / attach-slot), so the bar's margin-top would
+   double it — the bar would sit further from "its" textarea than the
+   textarea sits from its own label. Zeroing it here keeps the rhythm even
+   without touching the shared .attach-bar rule other surfaces still rely on. */
+.feedback-dock .attach-bar { margin-top: 0; }
+
+/* Narrow viewports (≤560px): the two fixed widths stop making sense below
+   the compact size, so the dock spans the viewport with tight margins.
+   Both size variants collapse to the same geometry here. */
+@media (max-width: 560px) {
+  .feedback-dock,
+  .feedback-dock[data-size="wide"],
+  .feedback-dock[data-size][data-user-maximized="true"] {
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    max-height: min(var(--dock-ceiling), 62vh);
+    padding: 1rem;
+    border-radius: 14px;
+  }
+}
+
+/* ── Document rounds: the general note only ──
+   The dock is the same overlay in every round; what a decision / free round
+   shows of it is the header row and the general section. A page copied from
+   § Common Structure carries no other rows, so this rule is a no-op there;
+   on a page that mixes templates (a design concept's reality-check or final
+   report round) it folds the per-screen / per-design / per-view rows and
+   every divider away while a document round is on screen, and they come
+   back untouched on the next design tab — nothing is rebuilt, only hidden.
+   Keyed on the <html data-template> projection (§ Per-Iteration Templates),
+   exactly like the design-only chrome list in § Layout CSS, and with the
+   `html` type selector for the same reason (a bare :not() also matches
+   <body>). The general section is found by its textarea's id so a design
+   page's row order (general LAST) does not matter here. */
+html:not([data-template="design"]) .feedback-dock .feedback-section:not(:has(#design-general-feedback)),
+html:not([data-template="design"]) .feedback-dock .feedback-divider { display: none; }
+```
+
+```javascript
+// --- Panel chrome (all templates) ---
+// Wired at page level, NOT inside the design layout IIFE: a decision- or
+// free-only page never runs that IIFE, and when the panel toggle lived there
+// such a page had a FAB that did nothing (which is why the panel used to be
+// hidden and docked instead).
+(() => {
+  // Deferred until the DOM is parsed. The generated page puts its inline
+  // <script> last in <body>, so this normally runs with everything present —
+  // but this block is now on EVERY page, and a page whose script block ends
+  // up higher (a re-sync, a hand edit) would otherwise log "markup
+  // incomplete" and hand the user an inert ☰ on every template at once.
+  const boot = () => {
+  const panel = document.getElementById('decision-panel');
+  const panelToggle = document.getElementById('panel-toggle');
+  const panelCloseBtn = document.getElementById('panel-close');
+  const backdrop = document.getElementById('panel-backdrop');
+  // These four used to be dereferenced unguarded, and a page missing any one
+  // of them died with a TypeError that took every listener after it down —
+  // silently: no visible error, just a page that ignores every click.
+  const missingPanelParts = [
+    ['decision-panel', panel], ['panel-toggle', panelToggle],
+    ['panel-close', panelCloseBtn], ['panel-backdrop', backdrop],
+  ].filter(([, el]) => !el).map(([id]) => id);
+  if (missingPanelParts.length) {
+    console.error('[concept] decision-panel markup incomplete, panel disabled — missing: '
+      + missingPanelParts.join(', '));
+  }
+  // The design switcher auto-hides while the panel is open (the panel carries
+  // the same navigation) — driven by body.panel-open, see Layout CSS.
+  // The ☰ panel and the 💬 dock are both right-edge overlays and therefore
+  // mutually exclusive: opening one minimises the other, so they can never
+  // sit expanded on top of each other. The reciprocal call belongs in the
+  // OPEN paths only — a close path must never touch the other overlay, or
+  // dismissing one would resurrect the other.
+  // closeDock goes through `window.` and is optional on purpose: it is
+  // exported by the dock block below (same section, every template) once
+  // that has booted, and a page whose dock markup is missing must still be
+  // able to open its panel.
+  window.openPanel = () => {
+    const dock = document.getElementById('feedback-dock');
+    const fromDock = dock?.contains(document.activeElement);
+    window.closeDock?.(true);
+    panel?.classList.add('open');
+    backdrop?.classList.add('visible');
+    panelToggle?.classList.add('hidden');
+    // Tooltip + a11y label name the NEXT action, exactly like the 💬 FAB.
+    // Written inline (no shared helper) because both labels are read off the
+    // button's own dataset — the locale substitution happened once, at
+    // generation time, in the markup.
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', 'true');
+      const lbl = panelToggle.dataset.labelClose;
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+    }
+    document.body.classList.add('panel-open');
+    // Only re-home focus that the dock just lost — never steal it from a
+    // pointer user who was not typing anywhere.
+    if (fromDock) panelCloseBtn?.focus();
+  };
+  window.closePanel = () => {
+    panel?.classList.remove('open');
+    backdrop?.classList.remove('visible');
+    panelToggle?.classList.remove('hidden');
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', 'false');
+      const lbl = panelToggle.dataset.labelOpen;
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+    }
+    document.body.classList.remove('panel-open');
+  };
+  // Bound by reference, exactly as before the extraction: both handlers are
+  // globals (window.openPanel / window.closePanel), so a bare identifier here
+  // resolves to the same function the dock paths call.
+  panelToggle?.addEventListener('click', openPanel);
+  panelCloseBtn?.addEventListener('click', closePanel);
+  backdrop?.addEventListener('click', closePanel);
+
+  // Escape closes it. The panel is a backdropped modal on every page now, and
+  // ✕ plus the backdrop were the only ways out for a keyboard user. The
+  // content dimmer has its own Escape handler and returns early while the
+  // panel is open, so one press never lifts the frozen veil BEHIND the thing
+  // the user is dismissing.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!document.body.classList.contains('panel-open')) return;
+    window.closePanel();
+  });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+```
+
+```javascript
+// --- Feedback dock (all templates) ---
+// The 💬 FAB and its dock are page chrome exactly like the ☰ panel above:
+// the same markup in every template, wired here at page level and NOT
+// inside the design layout IIFE (§ Layout JS), which returns early on a page
+// that never renders a mockup. A decision/free page used to have no dock at
+// all — the general note had nowhere to go but an inline field the author
+// had to remember to add. Now every round has the dock; a document round
+// shows only its general-notes section (§ Panel Chrome CSS compact rule),
+// a design round adds the per-screen / per-design / per-view rows.
+//
+// Everything a design page's Layout JS needs from the dock is exported on
+// `window` — closeDock (also reached from openPanel), applyDockSize (also
+// from restoreState), harvestDockValues + liveIterationId (the dock row
+// builders), stashLiveDockValues + applyDockFreezeState + primeDock (the
+// iteration:changed path), markDockSubmitted / unmarkDockSubmitted (the
+// submit handler + Panel State Reset). Load order: this block precedes
+// § Layout JS in templates.md and in every page copied from it, so its boot
+// (registered first) runs first on DOMContentLoaded.
+(() => {
+  const DOCK_DESIGN_TEMPLATES = new Set(['design', 'prototype']);
+  const boot = () => {
+  const dock = document.getElementById('feedback-dock');
+  const dockToggle = document.getElementById('feedback-toggle');
+  const dockClose = document.getElementById('feedback-close');
+  // Same contract as the panel block's missingPanelParts: name what is
+  // missing ONCE, then degrade. Everything below guards on `dock`, so a page
+  // that shipped without the markup keeps its panel, its submit and its
+  // keyboard shortcuts — only the dock is inert.
+  const missingDockParts = [
+    ['feedback-dock', dock], ['feedback-toggle', dockToggle],
+    ['feedback-close', dockClose],
+  ].filter(([, el]) => !el).map(([id]) => id);
+  if (missingDockParts.length) {
+    console.error('[concept] feedback-dock markup incomplete, dock disabled — missing: '
+      + missingDockParts.join(', '));
+  }
+  // The dock is a Speech-Bubble anchored to the 💬 FAB — the FAB stays
+  // visible and clickable while the dock is open, so clicking it toggles
+  // (open ↔ minimised). The − button is a *minimise*, not a destroy:
+  // closing the dock leaves all textarea content intact (localStorage
+  // persistence is untouched).
+  // Accessibility:
+  //   * aria-expanded reflects open/closed state on the FAB
+  //   * aria-label swaps between data-label-open / data-label-close so
+  //     screen-reader users hear the correct next action
+  //   * on close, focus is restored to the FAB if it was inside the dock
+  //     (the dock disappears via display:none, so leaving focus there
+  //     would orphan it)
+  const LABEL_OPEN = dockToggle?.dataset.labelOpen || dockToggle?.getAttribute('aria-label') || '';
+  const LABEL_CLOSE = dockToggle?.dataset.labelClose || LABEL_OPEN;
+  function openDock() {
+    if (!dock || !dockToggle) return;
+    window.closePanel?.();   // mutually exclusive overlays, see openPanel above
+    dock.dataset.open = 'true';
+    dockToggle.setAttribute('aria-expanded', 'true');
+    dockToggle.setAttribute('aria-label', LABEL_CLOSE);
+    dockToggle.title = LABEL_CLOSE;
+  }
+  // `handOff` = the dock is closing because the panel is taking over. Then
+  // the FAB must NOT be focused: it sits at z-index 220, above the panel
+  // backdrop, so a keyboard user would be left standing on a control that
+  // dismisses the overlay that just opened. openPanel() moves focus into the
+  // panel instead. Every other close still restores the FAB, or focus would
+  // be orphaned inside a display:none dock.
+  function closeDock(handOff) {
+    // Reachable from openPanel() through `window.closeDock?.()`, so it must
+    // survive a page whose dock never existed.
+    if (!dock || !dockToggle) return;
+    const focusWasInside = !handOff && dock.contains(document.activeElement);
+    dock.dataset.open = 'false';
+    dockToggle.setAttribute('aria-expanded', 'false');
+    dockToggle.setAttribute('aria-label', LABEL_OPEN);
+    dockToggle.title = LABEL_OPEN;
+    if (focusWasInside) dockToggle.focus();
+  }
+  window.openDock = openDock;
+  window.closeDock = closeDock;
+  // The one-shot pulse (§ Panel Chrome CSS, fabPulse) ends the moment the
+  // user proves they found the FAB. Two independent proofs, because either
+  // can come first: opening the dock from the FAB, or typing into it (a
+  // restored session can land with the dock already open, and closeDock()
+  // is also reached by the panel hand-off, which proves nothing about the
+  // dock).
+  const stopFabPulse = () => dockToggle?.removeAttribute('data-untouched');
+  dockToggle?.addEventListener('click', () => {
+    stopFabPulse();
+    if (dock?.dataset.open === 'true') closeDock();
+    else openDock();
+  });
+  dock?.addEventListener('input', stopFabPulse);
+  dockClose?.addEventListener('click', closeDock);
+
+  // Maximise/restore (Work package B) — a RESIZE, never a close. Distinct
+  // from minimise above: minimise flips data-open, this flips
+  // data-userMaximized, a SEPARATE attribute from data-size (applyDockSize()
+  // below still only ever computes compact/wide from the round's shape,
+  // unchanged) — the CSS composes the two via
+  // `.feedback-dock[data-size][data-user-maximized="true"]`, which applies on
+  // top of whichever of compact/wide is current. The choice is persisted
+  // (state['dockMaximized'], § State Persistence) and restored on reload via
+  // window.applyDockSize() (see restoreState()) — primeDock() must never
+  // silently clear data-userMaximized on an iteration switch, and it does
+  // not: applyDockSize() only ever writes data-size.
+  const dockMaximize = document.getElementById('feedback-maximize');
+  function syncMaximizeButton() {
+    if (!dockMaximize || !dock) return;
+    const on = dock.dataset.userMaximized === 'true';
+    dockMaximize.setAttribute('aria-pressed', String(on));
+    const label = on ? '{{panel.restore_size}}' : '{{panel.maximize}}';
+    dockMaximize.setAttribute('aria-label', label);
+    dockMaximize.title = label;
+  }
+  dockMaximize?.addEventListener('click', () => {
+    if (!dock) return;
+    dock.dataset.userMaximized = dock.dataset.userMaximized === 'true' ? 'false' : 'true';
+    applyDockSize();
+    if (typeof saveState === 'function') saveState();
+  });
+
+  // ── Closed by default, opened only by the user ──
+  // The dock starts minimised (data-open="false" in markup). It used to open
+  // itself on load and auto-close on the first mockup click, which meant the
+  // first thing a concept showed was three empty textareas over the artefact
+  // the user came to look at. Now the 💬 FAB is the only thing that opens it,
+  // in every iteration state including frozen ones — no auto-open, no
+  // auto-close, nothing to un-learn.
+  //
+  // Size is one of exactly two values. A document round (decision / free —
+  // the projection on <html data-template>, which showIteration() rewrites
+  // before any iteration:changed listener runs) shows only the general
+  // section and is always compact; a design round derives it from the same
+  // body flags the layout already sets. Never size the dock to its content
+  // or to the viewport: content-sizing produces the mini-box nobody can type
+  // in, and viewport-sizing produces the full-width panel whose textareas
+  // never wrap.
+  function applyDockSize() {
+    // Sync the maximise button's a11y state on every call — cheap, and
+    // covers both the click handler's own call and any call site that
+    // re-applies sizing without having touched the button (restoreState(),
+    // an iteration switch via primeDock()).
+    syncMaximizeButton();
+    // The automatic compact/wide computation always runs — still exactly two
+    // sizes. The user's maximise override lives on a SEPARATE attribute
+    // (data-userMaximized) and composes with whichever of these two is
+    // current via CSS (`.feedback-dock[data-size][data-user-maximized="true"]`),
+    // rather than replacing this value — so it also survives an iteration
+    // switch untouched: primeDock() calls this on every switch but never
+    // clears data-userMaximized itself.
+    // Exposed as window.applyDockSize and called from restoreState(), which
+    // runs on every page — including one whose dock markup is missing.
+    if (!dock) return;
+    const designRound = DOCK_DESIGN_TEMPLATES.has(document.documentElement.dataset.template || '');
+    const singleScreen = document.body.dataset.singleScreen === 'true';
+    const singleDesign = document.body.dataset.singleDesign === 'true';
+    dock.dataset.size = (!designRound || (singleScreen && singleDesign)) ? 'compact' : 'wide';
+  }
+  window.applyDockSize = applyDockSize;
+
+  // The dock is one shared overlay, but its content always belongs to
+  // whichever round is live. The rebuild stamp (§ Layout JS buildDesignUI)
+  // and § State Persistence's key namespacing derive from this one answer.
+  function liveIterationId() {
+    const live = document.querySelector('section[data-iteration][data-active]');
+    return live ? String(live.dataset.iteration) : '';
+  }
+  window.liveIterationId = liveIterationId;
+  function visibleIteration() {
+    return document.querySelector('section[data-iteration]:not([hidden])');
+  }
+
+  // Snapshot the dock's current values, keyed by data-comment, so the one
+  // rebuild the design row builders still perform (iteration change) does
+  // not drop text. restoreState() only runs on DOMContentLoaded, so anything
+  // lost here is lost for good — and the next saveState() would delete its
+  // localStorage key too.
+  function harvestDockValues() {
+    // A rebuild caused by a NEW live round must not carry the previous round's
+    // text forward: the ids repeat (`d1-s1`), so it would re-fill — and
+    // re-send — notes belonging to the round before. The stamp is written at
+    // the end of buildDesignUI(), so during a rebuild it still names the round
+    // the values on screen came from.
+    if (dock && dock.dataset.iteration && dock.dataset.iteration !== liveIterationId()) return {};
+    const values = {};
+    document.querySelectorAll('#feedback-dock [data-comment]').forEach(el => {
+      if (el.value) values[el.dataset.comment] = el.value;
+    });
+    return values;
+  }
+  window.harvestDockValues = harvestDockValues;
+
+  // Dock content is per-iteration, but the dock itself is ONE shared overlay
+  // that lives outside section[data-iteration]. Entering a frozen tab
+  // stashes the live iteration's unsent values, shows the frozen
+  // iteration's SUBMITTED values read-only (never `disabled` — see
+  // iteration-rules.md § Freezing Design Iterations), and returning to the
+  // live tab restores the stash. Both directions write EVERY dock field,
+  // empty string included: screen ids repeat across iterations, so leaving a
+  // field untouched would leak the other iteration's text into it.
+  // The frozen payload is the JSON blob the freeze step writes into the
+  // section as a script[type="application/json"][data-frozen-feedback]
+  // element — `general` plus, on a design round, designs / screens / views
+  // (iteration-rules.md § Freezing Design Iterations has the exact markup).
+  // `general` is accepted as the submitted `{ text, attachments }` object OR
+  // as a bare string, so no template needs an adapter to read its note back.
+  // Never write that closing script tag literally inside this JS, not even in
+  // a comment: the HTML parser ends the surrounding script element at it.
+  // Missing blob (older pages) degrades to empty read-only fields rather
+  // than editable ones.
+  let liveDockValues = null;
+  // The outgoing round's unsent text, taken ONCE per frozen visit — the
+  // design layout's iteration:changed handler calls this before it rebuilds
+  // the dock rows, applyDockFreezeState() calls it for every other path.
+  function stashLiveDockValues() {
+    if (liveDockValues === null) liveDockValues = harvestDockValues();
+  }
+  window.stashLiveDockValues = stashLiveDockValues;
+  function frozenFeedback() {
+    const it = visibleIteration();
+    const node = it && it.querySelector('script[type="application/json"][data-frozen-feedback]');
+    if (!node) return null;
+    try { return JSON.parse(node.textContent); } catch (e) { return null; }
+  }
+  function frozenGeneralText(data) {
+    const g = data.general;
+    if (g && typeof g === 'object') return g.text || '';
+    return typeof g === 'string' ? g : '';
+  }
+  function applyDockFreezeState() {
+    if (!dock) return;
+    const frozen = document.body.classList.contains('viewing-frozen');
+    const fields = [...document.querySelectorAll('#feedback-dock textarea')];
+    if (frozen) {
+      stashLiveDockValues();
+      const data = frozenFeedback() || {};
+      fields.forEach(ta => {
+        if (ta.dataset.designComment) ta.value = (data.designs || {})[ta.dataset.designComment] || '';
+        else if (ta.dataset.screenComment) ta.value = (data.screens || {})[ta.dataset.screenComment] || '';
+        // Views (§ Views (optional)) — same treatment as designs/screens
+        // above: the dock lives outside section[data-iteration], so its
+        // view-level textareas need the same frozen blob restore.
+        else if (ta.dataset.viewComment) ta.value = (data.views || {})[ta.dataset.viewComment] || '';
+        else if (ta.dataset.comment === 'general') ta.value = frozenGeneralText(data);
+        ta.readOnly = true;
+      });
+    } else {
+      const stash = liveDockValues;
+      liveDockValues = null;
+      // A submitted round stays read-only on the way back from a frozen tab —
+      // its text is the record of what is currently in flight, not a field to
+      // keep editing. Without this check the return trip silently re-armed
+      // editing on a round whose payload had already left.
+      const submitted = dock.dataset.submitted === 'true';
+      fields.forEach(ta => {
+        ta.readOnly = submitted;
+        if (stash) ta.value = stash[ta.dataset.comment] || '';
+      });
+    }
+  }
+  window.applyDockFreezeState = applyDockFreezeState;
+
+  // Called by the submit handler once the payload is captured. The dock keeps
+  // every character: the round the user just submitted is still the LIVE round
+  // until Claude appends the next section, and those comments are the only
+  // on-screen record of what was sent. Emptying the dock here — which is what
+  // this function used to do — meant a detour into an older tab and back came
+  // home to a blank dock on a round that had not even been answered yet.
+  //
+  // Nothing leaks into the next round any more: its storage keys carry the
+  // round number (§ State Persistence `_iterationPrefix`), and the reload onto
+  // iteration N+1 rebuilds the dock from that empty namespace. Only editing is
+  // taken away, so what is on screen cannot drift from what is in flight.
+  window.markDockSubmitted = function() {
+    if (!dock) return;
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = true; });
+    dock.dataset.submitted = 'true';
+    if (typeof saveState === 'function') saveState();
+    // Push the round's final text to the bridge's durable store immediately,
+    // rather than one debounce later — a reload can land at any moment now.
+    if (typeof flushDraft === 'function') flushDraft();
+  };
+
+  // The exact inverse, for every path that hands control back on a round that
+  // did NOT go through: a 507 from the bridge, or the safety timeout when
+  // Claude stopped answering. The panel returns to ready, so the dock has to
+  // return to editable — a read-only dock under a re-armed submit button means
+  // the user can see their comments and change nothing about them.
+  window.unmarkDockSubmitted = function() {
+    if (!dock) return;
+    if (document.body.classList.contains('viewing-frozen')) return;
+    document.querySelectorAll('#feedback-dock textarea').forEach(ta => { ta.readOnly = false; });
+    delete dock.dataset.submitted;
+  };
+
+  // Runs on load and after every iteration / design / screen switch: keep the
+  // frozen-vs-live field state and the dock size in sync with what is on
+  // screen. It deliberately does NOT open or close the dock — that is the
+  // user's call alone, and a switch must never yank the dock open over the
+  // content they just navigated to.
+  function primeDock() {
+    applyDockFreezeState();
+    applyDockSize();
+  }
+  window.primeDock = primeDock;
+
+  // A page with a design round hands the switch path to § Layout JS, whose
+  // iteration:changed handler orders the stash, the row rebuild, the
+  // restore and primeDock() itself (P14b). A document-only page has no such
+  // handler, so the dock primes itself: once now, and on every tab switch —
+  // showIteration() sets body.viewing-frozen and the <html data-template>
+  // projection BEFORE it dispatches the event, so both reads below are
+  // already about the round being shown. Same guard as wireDesignLayout():
+  // the PAGE, not the current projection.
+  const pageHasDesign = DOCK_DESIGN_TEMPLATES.has(document.documentElement.dataset.template || '')
+    || !!document.querySelector('section[data-iteration][data-iteration-template="design"],'
+                              + 'section[data-iteration][data-iteration-template="prototype"]');
+  if (!pageHasDesign) {
+    primeDock();
+    document.addEventListener('iteration:changed', primeDock);
+  }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+```
+
+## Per-Iteration Templates
+
+The template is chosen **per iteration**. Every `<section data-iteration="N">`
+MUST carry `data-iteration-template="decision|design|free"` — that attribute is
+authoritative:
+
+```html
+<html data-template="decision">              <!-- mirrors the ACTIVE iteration -->
+  <section data-iteration="1" data-iteration-template="decision" data-active>
+  <section data-iteration="2" data-iteration-template="design" hidden>
+  <section data-iteration="3" data-iteration-template="decision" hidden>
+```
+
+`data-template` on `<html>` stays the single source of truth *for CSS selectors
+and JS branches* (`[data-template="design"] …`, `collectDecisions`), but it is a
+**projection** of the currently shown iteration, not a page-level constant.
+`applyIterationTemplate(section)` writes it on every iteration switch (see
+Shared Systems § Tab Switch JS).
+
+Rules:
+
+- Iterations may mix templates freely and in any order — a `decision` round may
+  be followed by a `design` round and another `decision` round.
+- `prototype` is accepted as a **legacy alias** for `design` and normalised on
+  read. Never write it in new pages.
+- A missing `data-iteration-template` falls back to the current
+  `<html data-template>`, so pages generated before the rename keep working
+  unchanged.
+- The `<html data-template>` value written at generation time MUST already
+  equal the active iteration's (normalised) template — otherwise the first
+  paint shows the wrong layout.
+- **A page that started as `decision` or `free` keeps its document header**
+  (`<h1>` + subtitle inside `.concept-content > header`) and
+  its per-iteration `<header class="iteration-intro">` for the rest of its
+  life — a later `design` iteration must never delete them, or switching
+  back to an earlier round loses its own title. Design mode is
+  `position: absolute; inset: 0` and would paint straight over both, so it
+  HIDES them in CSS instead: see § Layout CSS → "Document chrome vs. the
+  fullscreen canvas" and the frozen-opacity exemption next to it. Both rules
+  are mandatory on any page that mixes design with decision/free.
+
+---
+
+# Template: decision
+
+Multi-variant evaluation in a document column, with the ☰ overlay panel over
+it. This is the canonical flow: Claude presents 2+ options, user picks
+bi-state per variant, submits, Claude iterates.
+
+## Layout — Document rounds (decision / free)
+
+The content column fills the page; the decision panel is the **same ☰ overlay
+a design round uses** and is not part of the flow, and the **same 💬 feedback
+dock** sits on the bottom-right FAB — reduced to its general-notes section
+here (#399). There is no docked-sidebar variant any more — see § Panel Chrome
+(all templates) for why both are page chrome rather than a per-template
+layout, and for the markup + CSS + JS every page carries.
+
+```css
+.concept-layout {
+  display: flex;
+  min-height: 100vh;
+}
+.concept-content {
+  flex: 1;
+  /* The panel is position: fixed, so the column no longer competes with a 20%
+     sidebar. Capped for line length instead — a 2000px paragraph is not an
+     improvement over the old split. Design rounds lift the cap (see the
+     design-mode rule in § Fullscreen canvas). */
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem;
+  overflow-y: auto;
+}
+/* The ☰ FAB is fixed at top: 2rem; right: 2rem and would otherwise sit on the
+   header's right edge (a long <h1> or subtitle runs under it — the header
+   carries no controls of its own any more, the theme toggle is in the panel
+   head). 92px = the FAB's 60px circle plus its 2rem margin. */
+.concept-content > header { padding-right: 92px; }
+```
+
+## Bi-State Variant Evaluation
+
+Every variant in a decision page MUST include a **bi-state** selector with
+exactly two options.
+
+| State | Label | Behavior |
+|-------|-------|----------|
+| **Miteinbeziehen** | "Miteinbeziehen" (default) | Claude considers this variant in the next iteration or implementation |
+| **Verwerfen** | "Verwerfen" | Claude discards this variant and excludes it from all further steps |
+
+- Default state for all variants: **Miteinbeziehen**
+- No "Nur diese" / "only" option — the user implicitly picks a single
+  variant by setting all others to "Verwerfen"
+- No "Claude setzt um" / "Feedback" hint labels — the action-vs-feedback
+  distinction is now expressed by the two submit buttons (iterate vs.
+  implement), NOT by the evaluation selector
+- Each variant can ADDITIONALLY have rating, comments, and other controls
+
+### HTML
+
+Every `[data-decision]` group MUST be followed by an adjacent
+`<textarea data-comment="$decisionId-note" data-attachable>` so the user can
+attach a free-form override (e.g. "only for X", "with variant Y") to the
+bi-state choice, and attach a file to it (§ Attachments). Place the textarea
+inside the same row container so the comment is visually anchored to the
+card. The catch-all `collectAllFormFields` picks it up via `data-comment`
+without any collector change.
+
+```html
+<div class="variant-evaluation" data-decision="variant-a" data-label="Variant A">
+  <div class="eval-group">
+    <label class="eval-option">
+      <input type="radio" name="eval-variant-a" value="discard">
+      <span class="eval-label">Verwerfen</span>
+    </label>
+    <label class="eval-option">
+      <input type="radio" name="eval-variant-a" value="include" checked>
+      <span class="eval-label">Miteinbeziehen</span>
+    </label>
+  </div>
+  <div class="field-row decision-comment-row">
+    <label for="variant-a-note">{{decision.comment_label}}</label>
+    <textarea id="variant-a-note"
+              data-comment="variant-a-note"
+              data-attachable
+              placeholder="{{decision.comment_placeholder}}"
+              rows="2"></textarea>
+  </div>
+</div>
+```
+
+Legacy class names `tri-state-group` / `tri-state-option` / `tri-state-label`
+are deprecated but still accepted by the CSS selectors below for backward
+compatibility.
+
+**Backwards compatibility:** older pages that emitted the bi-state group
+without the textarea are upgraded at runtime by `ensureCommentSlots()` (see
+§ Shared Systems → Comment Slot Injection). Generated pages SHOULD still
+emit the textarea inline so the validation gate and `localStorage` restore
+see it immediately, but the JS safety net guarantees the user always has
+the override slot.
+
+### CSS
+
+```css
+/* Bi-state — legacy tri-state-* class names still supported */
+.eval-group, .tri-state-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.eval-option, .tri-state-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  text-align: center;
+  position: relative;
+  border-right: 1px solid var(--border-color, #30363d);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.eval-option:last-child, .tri-state-option:last-child { border-right: none; }
+
+.eval-option:hover, .tri-state-option:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+
+.eval-option input, .tri-state-option input { display: none; }
+
+.eval-option:has(input:checked) .eval-label,
+.tri-state-option:has(input:checked) .tri-state-label {
+  font-weight: 700;
+}
+
+.eval-label, .tri-state-label { font-size: 0.9rem; transition: font-weight 0.15s; }
+
+/* Checkmark badge on the selected option */
+.eval-option:has(input:checked)::after,
+.tri-state-option:has(input:checked)::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Miteinbeziehen (default, accent) */
+.eval-option:has(input[value="include"]:checked),
+.tri-state-option:has(input[value="include"]:checked) {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent-color, #58a6ff);
+}
+.eval-option:has(input[value="include"]:checked)::after,
+.tri-state-option:has(input[value="include"]:checked)::after {
+  background: var(--accent-color, #58a6ff);
+  color: white;
+}
+
+/* Verwerfen (danger) */
+.eval-option:has(input[value="discard"]:checked),
+.tri-state-option:has(input[value="discard"]:checked) {
+  background: color-mix(in srgb, var(--danger-color, #f85149) 12%, transparent);
+  box-shadow: inset 0 0 0 2px var(--danger-color, #f85149);
+}
+.eval-option:has(input[value="discard"]:checked)::after,
+.tri-state-option:has(input[value="discard"]:checked)::after {
+  background: var(--danger-color, #f85149);
+  color: white;
+}
+.eval-option:has(input[value="discard"]:checked) .eval-label,
+.tri-state-option:has(input[value="discard"]:checked) .tri-state-label {
+  color: var(--danger-color, #f85149);
+}
+
+/* Unselected state */
+.eval-option:has(input:not(:checked)),
+.tri-state-option:has(input:not(:checked)) {
+  opacity: 0.7;
+}
+.eval-option:has(input:not(:checked)):hover,
+.tri-state-option:has(input:not(:checked)):hover {
+  opacity: 1;
+}
+
+/* Per-decision comment row — slotted directly under the bi-state group so
+   the override is visually anchored to the variant card. Width tracks the
+   group width via the container; min-height keeps it usable on dense pages. */
+.decision-comment-row {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.decision-comment-row label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #8b949e);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.decision-comment-row textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 80%, transparent);
+  color: var(--text-color, #c9d1d9);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.decision-comment-row textarea:focus {
+  outline: none;
+  border-color: var(--accent-color, #58a6ff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #58a6ff) 30%, transparent);
+}
+.decision-comment-row textarea::placeholder {
+  color: var(--text-muted, #8b949e);
+  opacity: 0.6;
+}
+```
+
+**Behavior:**
+- Default: "Miteinbeziehen" (all variants considered)
+- "Verwerfen": grays out the variant card visually (still accessible)
+- To pick a single variant, set all others to "Verwerfen" manually
+
+### Decision schema
+
+```json
+{
+  "template": "decision",
+  "action": "iterate",
+  "decisions": [
+    { "id": "variant-a", "label": "...", "evaluation": "include", "rating": 4 },
+    { "id": "variant-b", "label": "...", "evaluation": "discard", "rating": 2 },
+    { "id": "variant-c", "label": "...", "evaluation": "include", "rating": 5 }
+  ],
+  "comments": {
+    "general": { "text": "...", "attachments": [] },
+    "items": [
+      { "id": "variant-a-note", "text": "...", "attachments": [] }
+    ]
+  }
+}
+```
+
+`comments` is the one shape every template emits (§ collectDecisions
+(dispatcher)): `general` is the 💬 dock's general note — always present, even
+empty — and `items` lists every inline note of the live round that carries
+text or an attachment.
+
+`evaluation` values: `"discard"` | `"include"`
+`action` values: `"iterate"` | `"implement"` — determined by which submit
+button the user clicked. See § Two-Button Submit below.
+
+## Content Variants (within the decision template)
+
+The decision template has six content sub-variants. They describe the shape
+of the variant cards — not a different page layout.
+
+### Variant: analysis
+
+**Purpose:** Present findings from a data analysis with accept/reject controls.
+
+```
+[Header: Analysis title + date]
+[Summary card: key metrics / TL;DR]
+
+[Finding 1]
+  ├── Description + evidence
+  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
+  ├── [Priority: Hoch / Mittel / Niedrig]
+  └── [Comment field: "Anmerkung..."]
+
+[Finding 2]
+  └── ...
+
+[Submit button]
+```
+
+### Variant: plan
+
+**Purpose:** Present an implementation plan with step approval controls.
+
+```
+[Header: Plan title]
+[Overview card: goal, scope, timeline]
+
+[Phase 1: Name]
+  [Step 1.1]
+    ├── Description + rationale
+    ├── [Checkbox: Einschliessen]
+    ├── [Effort indicator: S / M / L / XL]
+    └── [Comment field]
+
+  [Step 1.2]
+    └── ...
+
+[Submit button]
+```
+
+### Variant: concept
+
+**Purpose:** Present architecture or design variants for evaluation.
+
+```
+[Header: Concept title]
+[Context card: problem statement]
+
+[Variant A: Name]
+  ├── Description + diagram/illustration
+  ├── Pro/Con list
+  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
+  ├── [Rating: 1-5 stars or slider]
+  └── [Comment field (wide, min-height: 80px)]
+
+[Variant B: Name]
+  └── ...
+
+[Decision panel sidebar: summary + submit]
+```
+
+### Variant: comparison
+
+**Purpose:** Side-by-side comparison of options with winner selection.
+
+```
+[Header: Comparison title]
+
+[Criteria table / matrix]
+  ├── Row per criterion
+  ├── Column per option
+  ├── [Weight slider per criterion]
+  └── Auto-calculated weighted scores
+
+[Per-option detail cards]
+  ├── Strengths
+  ├── Weaknesses
+  ├── [Tri-state: Verwerfen / Miteinbeziehen (default) / Nur diese]
+  └── [Comment field (wide)]
+
+[Decision panel sidebar: summary + submit]
+```
+
+Each option in the comparison gets the same **bi-state evaluation** as
+concept variants. Decision schema matches the decision template schema, with
+additional `weight-*` entries for weight sliders.
+
+### Variant: dashboard
+
+**Purpose:** Status overview or metric dashboard with filters.
+
+```
+[Header + date range]
+[KPI cards row: 3-5 key metrics]
+
+[Filter bar: toggles for categories/segments]
+
+[Expandable sections]
+  ├── Section title + summary stat
+  ├── Expanded: detail table or chart
+  └── [Comment field per section]
+
+[Action items section]
+  ├── [Checkbox per item]
+  └── [Comment field]
+
+[Submit button]
+```
+
+### Variant: creative
+
+**Purpose:** Brainstorming, ideation, collecting ideas.
+
+```
+[Header: Topic]
+[Context / constraints]
+
+[Idea cards grid]
+  ├── Idea title + description
+  ├── [Vote: thumbs up/down]
+  ├── [Tag selector: category]
+  └── [Comment field]
+
+[Add new idea button → inline form]
+[Submit button]
+```
+
+---
+
+# Template: design
+
+*(legacy alias: `prototype` — normalised to `design` on read)*
+
+**One visual artefact, one screen at a time, 100 % viewport.** The body shows
+exactly one screen from the flow. The user switches between screens via the
+screen-nav inside the ☰ decision panel, keyboard arrows, OR by clicking
+buttons inside the mockup itself (click-dummy behaviour). The viewport
+has no header bar, no sidebars — just the current screen and two floating
+buttons:
+
+## Rules
+
+- **Click-dummy by default (2+ screens):** buttons/links inside the mockup
+  MUST navigate between screens when clicked. A real "Continue" button on
+  screen 1 takes the user to screen 2; "Back" goes to screen 1; etc. The
+  user can thereby click through the whole flow as if it were a real app.
+- **"Screen" = logical state, not necessarily full page.** A screen is any
+  user-distinguishable state the reviewer should be able to annotate
+  separately:
+  - Full-page transitions (welcome / credentials / success)
+  - Modal / drawer / dialog toggles (main view without modal vs. with
+    modal open)
+  - Tab or accordion selections (tab A content vs. tab B content)
+  - Empty / loading / populated / error states of the same component
+  - Before / after user action (form empty vs. form submitted)
+
+  Each such state becomes its own `<section data-screen>`. The click-dummy
+  wiring with `data-screen-link` handles the transition like any other
+  screen switch.
+- **Single-screen design (exactly one `<section data-screen>`):**
+  - Only THAT design's row collapses in the ☰ panel: its
+    `.screen-nav-group` keeps the heading that switches to it, and just the
+    one redundant screen entry goes. `#screen-nav` itself must NOT be
+    gated on this — it lists every design in the iteration, so hiding the
+    container on the active design's screen count blanks the whole table
+    of contents and strands the user (see § Layout CSS). The container
+    disappears only when the iteration ALSO has a single design, i.e.
+    when there is genuinely nothing left to navigate.
+  - Feedback dock shows ONLY the general-notes textarea (no
+    per-screen section, no "Aktueller Screen" label)
+  - No click-dummy wiring required — nothing to navigate to
+  - The screen-indicator overlay can be hidden or simplified
+  - Two flags, two scopes, deliberately: `updateScreenScope()` sets
+    `document.body.dataset.singleScreen` from the design currently on the
+    canvas — that is the right scope for the DOCK, which always talks about
+    the active screen. `buildDesignUI()` stamps
+    `group.dataset.singleScreen` per design — the right scope for the
+    PANEL, which shows all of them at once and must stay stable when the
+    active design changes. Never drive one from the other's flag.
+- **Single-design iteration (exactly one `<section data-design>`):**
+  degenerates to today's behaviour — no design switcher, no per-design
+  feedback row, `#screen-nav` renders the screens as a flat list (the
+  design heading collapses). A views group, if the iteration has one, still
+  renders WITH its heading — `body[data-single-design]` hides
+  `.screen-nav-design-heading`, not `.screen-nav-views-heading`.
+  `buildDesignUI()` detects `designs.length === 1` and sets
+  `document.body.dataset.singleDesign = 'true'`, the sibling of
+  `data-single-screen` above, so CSS hides the same way. The `data-design`
+  wrapper is still required in the markup even when there's only one — see
+  § Screen-pattern markup.
+- **Do NOT invent artificial screens** to make the template fit. If the
+  artefact has no meaningful secondary state, leave it as a single screen
+  and let the dock collapse to general notes only.
+- **Views are optional, additional top-level items — ≥1 `data-design` stays
+  mandatory.** Alongside the design(s), a `design` iteration MAY hold any
+  number of `section[data-view]` siblings (§ Views (optional) below). Views
+  never stand alone: an iteration that is only questions, with no artefact
+  in front of the user, is a `decision` iteration, not a `design` one with
+  zero designs. The validation gate enforces this — see
+  `deep-knowledge/validation-gate.md`.
+- **Design system alignment:** the mockup MUST use the project's existing
+  design tokens (colors, typography, spacing, component shapes) unless the
+  user explicitly requests a different look. Read `design-tokens.*`,
+  Tailwind config, Figma variables via the design MCP, or the existing UI
+  layer before inventing a style. The example in this file uses the generic
+  GitHub-style palette only because dotclaude has no project-specific
+  tokens — consumer projects will differ.
+- **Annotation layer is optional.** Only pin questions onto a screen when
+  Claude has a concrete, element-level question to ask ("should this list
+  auto-refresh?", "is this the right empty state?") — not as a default
+  decoration on every design iteration. A design with no annotations simply
+  omits `[data-anno-layer]` entirely; nothing degrades. See § Annotation
+  Layer (optional) below. The layer's pin/bubble/leader visuals MAY be
+  restyled via its CSS custom properties (`--anno-accent`,
+  `--anno-bubble-bg`, `--anno-pin-size`, …) to match the design's own theme
+  — never change the toggle semantics (`body.anno-hidden`) or the
+  `data-anno*` attribute names when doing so, since the shared JS and the
+  submit payload both key off them.
+
+## Responsive device views
+
+A design page mocks an app that may ship on more than one form factor. The
+concept **declares** which ones; the user switches between them with the
+`.viewport-toggle` bottom-left. Desktop is the pre-existing full-bleed
+rendering, unchanged: no stage, no clone, no frame. A concept that declares
+nothing behaves exactly as it did before this existed and never renders the
+toggle.
+
+Declared on `section[data-iteration]`, overridable on a single
+`section[data-design]` whose form factors genuinely differ:
+
+| Attribute | Meaning | Default |
+|---|---|---|
+| `data-viewports` | Ordered, space-separated subset of `desktop tablet phone`. The order IS the click-cycle order. | `desktop` (→ no toggle) |
+| `data-viewport-default` | Which of them the page opens in. A phone-only app declares `data-viewports="phone"` and opens straight into the phone frame. | first entry of `data-viewports` |
+| `data-orientations` | Subset of `portrait landscape`. Both are rendered **side by side, simultaneously** — the reviewer compares them without switching. Declare one only for an app that locks its orientation. | `portrait landscape` |
+| `data-device-tablet`, `data-device-phone` | `WIDTHxHEIGHT` in portrait CSS pixels, e.g. `360x800` for an Android target. | `834x1194` / `390x844` |
+
+**Mock authoring constraints (device mode makes these load-bearing).** The
+frames are DOM clones of the screen's content rendered into a
+`container-type: size` box; they are not iframes and the browser viewport
+does not change. Inside `section[data-screen]`, therefore:
+
+- **No `vh` / `vw` / `dvh` / `svh` / `lvh` units.** They resolve against the
+  browser window, not the frame: a `height: 100vh` hero renders 1080px tall
+  inside a 390×844 phone shell and bursts out of it. Use `100%` (the frame
+  is definitely sized) or `cqh` / `cqw` against `container-name: device`.
+- **No `@media` queries for the device breakpoints.** They key off the
+  window, which never changes. Style device variants off the shell instead —
+  `.device-shell[data-device="phone"] .nav { … }`,
+  `.device-shell[data-orientation="landscape"] .sidebar { … }` — or use
+  `@container device (max-width: 480px)`.
+- **No `position: fixed`.** It anchors to the window in desktop mode and to
+  the transformed stage in device mode, i.e. two different results from one
+  rule. Use `position: absolute` inside the frame.
+- **No `<script>`, `<canvas>`, `<style>` or `<iframe>`.** A cloned `<script>`
+  is spec-marked "already started" and never runs; a cloned `<canvas>` comes
+  out blank because the bitmap is not copied. Both render correctly in
+  desktop mode and dead in device mode — a divergence with no error anywhere.
+  Mockups are declarative markup; their CSS lives in the page's single
+  `<head>` stylesheet like all other concept CSS.
+- **The annotation layer never enters a frame.** `[data-anno-layer]` is
+  stripped from every clone: its JS collects `[data-anno-pin]` and
+  `textarea[data-annotation]` document-wide, and a cloned answer is a third
+  textarea that persistence and the submit payload both skip — it would be
+  typed and silently lost. Annotations stay a desktop-view affordance.
+- **A view suspends device mode.** While a `section[data-view]` is the active
+  top-level item (`body[data-view-active="true"]`) no screen is on display,
+  so the stage is torn down and the toggle hides — a question view is prose,
+  not a screen to frame.
+- **Style mocks by class, never by `#id`.** Clone ids are namespaced per
+  frame (`dv1-`, `dv2-`) so the two copies cannot collide, which means an
+  `#id` rule stops matching inside the frames while it still matches the
+  hidden original.
+
+## Click-through wiring (`data-screen-link`)
+
+Buttons inside a mockup get `data-screen-link` to declare their navigation:
+
+```html
+<div class="device-frame">
+  <h4>Welcome</h4>
+  <button class="mock-btn" data-screen-link="screen-credentials">Los geht's</button>
+  <button class="mock-btn secondary" data-screen-link="screen-login">Anmelden</button>
+</div>
+```
+
+Values:
+- `data-screen-link="screen-id"` — jump to the screen with that id
+- `data-screen-link="next"` — advance to the next screen in DOM order
+- `data-screen-link="prev"` — go to the previous screen
+- Omit the attribute entirely for decorative / terminal buttons
+
+The wiring is a single delegated click handler installed alongside
+`showScreen` — see § Click-through Handler below.
+
+- `☰` (top-right) → Decision panel: iteration tabs, screen navigation, submit
+- `💬` (bottom-right) → Feedback dock: **context-sensitive** textarea for the
+  currently-visible screen + a persistent "general notes" textarea below
+
+Both FABs are the same 60px circle in the same accent colour — they differ
+only by glyph and position (see § Layout CSS). Do not re-size either one per
+page: it is the first thing that looks broken when concepts sit side by side.
+
+### Feedback behaviour (strict)
+
+- The dock starts **collapsed** in every state, including frozen iterations.
+  The 💬 FAB is the only thing that opens it. At concept start the artefact
+  is what the user came for, not three empty textareas over it.
+- Open, the dock has exactly two sizes — `compact` (420px, general note only)
+  and `wide` (560px, general + design + per-screen). `applyDockSize()` picks
+  one from `body[data-single-screen]` / `body[data-single-design]`. Never
+  size it to its content or to a viewport fraction. Both sizes are tuned so
+  screen + design + general (or view + general, while a view is active) fit
+  on a ~1080px-tall viewport without scrolling or needing the maximise
+  control (§ Layout CSS `.feedback-dock` / `.feedback-section`).
+
+- The dock is ordered **specific → general, top to bottom**: the currently-
+  active screen's textarea first, then the design textarea (only when the
+  iteration has ≥2 designs), then general notes last. While a view is
+  active, the view textarea takes the design+screen rows' place, so the
+  visible order becomes view → general. General sits last because it is
+  the one field that never disappears or changes label — the specific field
+  the user is looking at gets filled in first, the catch-all note last.
+- The 💬 dock always shows **one textarea for the currently-active screen**
+  (label: "Aktueller Screen: {screen-label}"). Its content is private to that
+  screen.
+- At the bottom, a **general notes textarea** stays visible regardless of
+  the active screen — the user can append from any screen.
+- When the user switches screens (via ☰ or keyboard), the screen textarea
+  swaps to the new screen's notes. Previous screen's notes are preserved and
+  come back when the user returns.
+- `localStorage` persists all screen notes independently + the general notes
+  + the active-screen id, so refresh / tab-close / browser-restart don't
+  lose state.
+- After Submit, a new iteration is appended (like decision). The user can
+  switch back to iteration N via the iteration-tabs and re-read their frozen
+  notes per screen.
+
+## Annotation Layer (optional)
+
+A second, independent feedback channel: instead of (or alongside) the 💬
+dock's free-form notes, Claude can pin a numbered question directly onto a
+concrete element of a screen and the user answers it right there. This is
+the home of every component-level question — top 3 to top 7 per design
+(`SKILL.md` § Step 0.5 count preferences); a view or a `decision` round
+never carries one. Pins carry questions, not decoration: a design with
+genuinely nothing element-level to ask has no layer, but that is the
+exception.
+
+- **Pin + short leader line to a bubble.** A numbered pin (`data-anno-pin`)
+  sits on the annotated element; a short leader line connects it to a speech
+  bubble (`data-anno-bubble`) beside it. Collapsed, the bubble shows one
+  truncated line of the question plus a chevron. Expanded
+  (`data-open="true"`), it shows the full question, an answer textarea and
+  an attachment drop area.
+- **Positioned in percentages, not pixels.** `--anno-x` / `--anno-y` on the
+  wrapping `.anno` element place the pin as a percentage of the screen box —
+  `.anno-layer` is `inset: 0`, so that box is the FULL section including the
+  chrome safe area (§ Layout CSS), not the padded content box the mock is
+  drawn in. Hand-picked coordinates must be read off the whole viewport, not
+  off the artefact. `anchorToTarget()` measures live rects and is unaffected;
+  this only matters for coordinates authored by hand. They survive any
+  viewport size either way. `data-anno-side="right|left|top|bottom"`
+  picks which side the bubble opens on — Claude chooses this at generation
+  time from the element's position in the mock; there is no runtime
+  collision math.
+- **The eye pill (`#anno-toggle`) toggles the whole layer**, globally, for
+  every screen — not per screen. It shows a live count of annotations on
+  the *current* screen and is the only thing that stays visible once the
+  layer is hidden, so the user can always bring it back. It only renders
+  when the active screen has ≥1 annotation (`updateAnnoUI()`, § Layout JS).
+  Hiding the layer (`body.anno-hidden`) removes pins, leaders and bubbles
+  completely — the design underneath must be pixel-clean, not just dimmed.
+- **The two existing FABs are untouched.** ☰ and 💬 keep working exactly as
+  before, independently of the annotation layer's state — the feedback dock
+  remains the normal way to leave free-form notes whether the layer is
+  shown or hidden.
+- **Answers persist for free.** The answer textarea carries
+  `data-comment="anno-{id}"`, so the existing `saveState()` / `restoreState()`
+  (§ State Persistence) picks it up with zero extra code, exactly like any
+  other comment field. The layer's own visibility (`body.anno-hidden`) is
+  persisted the same way `state['theme']` is (§ State Persistence).
+- **Attachments.** Each answer textarea carries `data-annotation="{id}"`
+  and `data-attachable`, plus an adjacent mount
+  `<div class="attach-slot" data-attach-slot="anno-{id}"></div>`. §
+  Attachments wires exactly one attachment bar per field: it matches on
+  `data-attachable` — not `data-comment`, which the textarea also carries,
+  so matching on it would double-wire — and mounts the bar into this
+  dedicated `.attach-slot` instead of appending after the textarea.
+- **Frozen iterations stay browsable.** `.anno-pin`, `[data-anno-summary]`
+  and `#anno-toggle` are exempt from the freeze sweep exactly like
+  `.design-switch-item` and `#panel-toggle` — see `iteration-rules.md` §
+  Freezing Design Iterations. The summary row must be exempt alongside the
+  pin: it is a second, fully equivalent way to open the same bubble, and
+  exempting only the pin leaves the layer half-navigable on a frozen tab.
+  Answer textareas become `readonly`, never `disabled`.
+- **Click-through safety.** A click on a pin, a summary row, or inside a
+  bubble must never be interpreted as `data-screen-link` navigation, even
+  though all three live inside the same `[data-screen]` — the click-through
+  handler (§ Click-through Handler) explicitly ignores `[data-anno-pin]`,
+  `[data-anno-summary]` and `.anno-bubble` before it looks for a navigation
+  target.
+
+See § Layout (markup), § Layout CSS (pin/bubble/eye-pill styling and the
+top-edge partition) and § Layout JS (`wireAnnotationLayer()`) below for the
+reference implementation, and § Screen-pattern markup for a worked example.
+
+## Views (optional)
+
+A third, independent thing a `design` iteration may hold: non-visual
+questions that belong **inside** the same round as the artefact they are
+about, instead of being deferred to a separate `decision` iteration one
+round later. A `section[data-view]` is a **top-level sibling of
+`section[data-design]`** — switched exactly like a design, fullscreen, with
+its own entry in the switcher and the panel TOC.
+
+```html
+<section data-iteration="3" data-iteration-template="design" data-active>
+  <section data-design="dispatch" data-nav-label="Dispatch board" data-design-active="true">
+    <section id="d1-s1" data-screen data-nav-label="Overview" data-screen-active="true">…</section>
+    <section id="d1-s2" data-screen data-nav-label="Detail" hidden>…</section>
+  </section>
+
+  <section data-view="nav-model" data-view-kind="decision"
+           data-nav-label="Navigation model" hidden>…</section>
+
+  <section data-view="card-density" data-view-kind="comparison"
+           data-nav-label="Card density A/B" hidden>…</section>
+</section>
+```
+
+**Rules:**
+
+- **≥1 `data-design` is mandatory** — see § Rules above. Views are never the
+  only top-level content.
+- **Exactly one top-level item is active** at a time: a design carrying
+  `data-design-active="true"` (and NOT `hidden`) or a view carrying
+  `data-view-active="true"` (and NOT `hidden`). Every other top-level item —
+  every other design, every other view — carries `hidden`. `showView()` and
+  `showDesign()` (§ Layout JS) both maintain this invariant; neither ever
+  leaves two top-level items simultaneously visible.
+- **Authored markup always makes a DESIGN the active item, never a view.**
+  A view becomes active only at runtime, through `showView()` — from the
+  switcher, the panel TOC, or the `_activeView` restore after a reload.
+  This is not a style preference: `buildDesignUI()` early-returns without an
+  active design, which would leave the switcher, both nav groups and all
+  three dock textarea containers unbuilt. The same rule holds after a tab
+  switch — the `iteration:changed` handler deliberately drops back to the
+  incoming iteration's active design (§ Layout JS). **A reload is not a tab
+  switch:** the boot `showIteration()` fires the same event for the round the
+  layout has just restored, so the handler compares the incoming round with
+  the one it last built (`shownIterationId`) and keeps a restored view that is
+  on screen — otherwise the boot hid the view moments after the `_activeView`
+  restore and the `showScreen()` → `saveState()` behind it deleted the key, so
+  no question view ever survived the reload every iteration append triggers
+  (pinned by `view-boot-restore.test.js` on the assembled fixture).
+- `data-view` ids are unique **page-wide** — and this is the one id space
+  where that matters, so do not pattern-match it off the others. Design ids
+  and screen ids deliberately REPEAT across iterations (that is what lets
+  `harvestDockValues()` carry a note forward when the same screen reappears
+  in the next round); a view id that repeated would collide in exactly the
+  places where designs and screens are meant to.
+- **A view scrolls; a design screen does not.** `body` keeps
+  `overflow: hidden` in `design` mode throughout — only the active view's own
+  box scrolls internally (`overflow-y: auto`), never the page. See § Layout CSS.
+- **When to use a view instead of a separate `decision` iteration** (also
+  stated in `SKILL.md` § Step 1a): the question is *about the artefact in
+  front of you* right now → a view inside this `design` iteration. The
+  question stands on its own, independent of any one mockup → its own
+  `decision` iteration. When in doubt, ask whether the user would need to
+  flip back to a screen to answer sensibly — if yes, it is a view.
+- **A view never re-asks the design choice** (`SKILL.md` § Step 1a
+  → Orthogonality). The verdict *between* the designs comes from the dock's
+  per-design / per-screen textareas — that is what `comments.designs` is
+  for. A `decision` / `comparison` view asks a question whose answer holds
+  whichever design wins; its `[data-decision]` groups are never the
+  designs themselves, never the traits that tell them apart, and its prose
+  never argues for or against a design. An alternative whose `data-label`
+  (or heading) equals a `data-design`'s `data-nav-label` or id in the same
+  iteration is refused by the deterministic gate (validation-gate.md P31).
+  A view that names one design with `data-view-for` is *about* that
+  design — a question inside it, not a vote on it.
+- **Navigation.** `#screen-nav` gains a second `.screen-nav-group` below the
+  designs group, headed by a plain (non-interactive) `.screen-nav-views-heading`
+  label, then one `.screen-nav-view-item` button per view **that names no
+  design** (see `data-view-for` below — a view tied to a design is listed
+  under that design instead, and the views group is skipped entirely when
+  every view is tied). The top-centre switcher (`#design-switcher`) lists
+  designs and views in one row: design segments (`.design-switch-item`), a
+  thin `.switcher-divider`, then view segments (`.view-switch-item`) — one
+  click from anywhere, no detour through the ☰ panel. Both are
+  auto-populated by `buildDesignUI()`, exactly like the design-only case.
+- **`data-view-for="{designId}"` (optional, all view kinds).** A view that
+  is *about one variant* names it: `buildDesignUI()` then nests the view's
+  `.screen-nav-view-item` inside that design's `.screen-nav-group`, after
+  its screens (`allViews.filter(v => v.dataset.viewFor === d.dataset.design)`);
+  the views group lists only the views without a (valid) `data-view-for`
+  and is not rendered when that list is empty. The top-centre switcher
+  stays one flat row — carry the variant name in the `data-nav-label`
+  ("Field mapping · Card A"). `collectDesignDecisions()` adds
+  `"design": "{designId}"` to every `decisions[]` and `mappings[]` entry
+  from such a view (§ Decision schema); the key is absent otherwise. A
+  `data-view-for` that names no `data-design` of the same iteration is a
+  gate warning (rule M10, validation-gate.md § Mappings) and falls back to the views group —
+  nothing breaks, the grouping is just lost. Absent → variant-independent,
+  exactly as before.
+- **Screen indicator.** While a view is active, `#screen-indicator` shows the
+  view's `data-nav-label` instead of the screen counter — the "Page N/total"
+  segment (`#indicator-screen-info`) hides, `#indicator-view` shows. Every
+  mount is null-guarded, same discipline as every other indicator segment.
+- **Feedback dock.** While a view is active, the dock shows **general +
+  one view-level textarea** (`data-comment="view-{id}"`,
+  `data-view-comment="{id}"`, label from the view's `data-nav-label`) and
+  hides the per-design and per-screen rows; the reverse holds while a design
+  is active. The view textareas are built **once per iteration** by
+  `buildViewTextareas()`, in the same build-once-per-iteration + hidden-swap
+  pattern `buildDesignTextareas()`/`buildScreenTextareas()` already use —
+  never rebuilt on a design/view switch, for the same reason documented at
+  the top of § Layout JS: a rebuild would drop unsent text and truncate the
+  submit payload.
+- **Click-through safety.** The `data-screen-link` click-through handler
+  (§ Click-through Handler) is scoped to the visible design and returns
+  immediately whenever a view is active (`body[data-view-active="true"]`) —
+  a stray `data-screen-link` button reachable only through markup reuse must
+  never fire screen navigation while the user is looking at a view.
+- **Freezing.** A frozen `design` iteration stays fully browsable: view
+  switching and the view nav keep working, exactly like the design switcher
+  and screen nav today. See `iteration-rules.md` § Freezing Design
+  Iterations for the exact exemption list and how a frozen view's submitted
+  values (bi-state selections, notes) are restored.
+
+### View kind `decision`
+
+Reuses the decision template's proven bi-state mechanics wholesale — no new
+markup vocabulary. A `data-view-kind="decision"` view is a fullscreen frame
+(heading + free prose authored above/between the alternatives) around one
+or more `[data-decision]` groups, each with the same bi-state
+(`Miteinbeziehen` / `Verwerfen`, default include) and the same mandatory
+adjacent `textarea[data-comment="{decisionId}-note"]` as § Bi-State Variant
+Evaluation. `ensureCommentSlots()` (§ Comment Slot Injection) already runs
+page-wide on `DOMContentLoaded` and reaches every `[data-decision]` group
+regardless of which template or view it lives in — nothing view-specific
+needs wiring there. What changes is only the frame: fullscreen, no sidebar,
+no 340px card constraint, so alternatives can carry as much authored context
+as the question needs.
+
+```html
+<section data-view="nav-model" data-view-kind="decision" data-nav-label="Navigation model" hidden>
+  <div class="view-frame">
+    <h2>Navigation model</h2>
+    <p>Tabs or a drawer for the second level? Both are wired in the mockup —
+       flip back to Dispatch board to try either one before deciding.</p>
+
+    <div class="variant-evaluation" data-decision="nav-tabs" data-label="Tabs">
+      <h3>Tabs</h3>
+      <p>Always-visible, one click, costs permanent header height.</p>
+      <div class="eval-group">
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-tabs" value="discard">
+          <span class="eval-label">Verwerfen</span>
+        </label>
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-tabs" value="include" checked>
+          <span class="eval-label">Miteinbeziehen</span>
+        </label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="nav-tabs-note">{{decision.comment_label}}</label>
+        <textarea id="nav-tabs-note" data-comment="nav-tabs-note" data-attachable
+                  placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+
+    <div class="variant-evaluation" data-decision="nav-drawer" data-label="Drawer">
+      <h3>Drawer</h3>
+      <p>Hidden by default, saves header height, one extra click per visit.</p>
+      <div class="eval-group">
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-drawer" value="discard">
+          <span class="eval-label">Verwerfen</span>
+        </label>
+        <label class="eval-option">
+          <input type="radio" name="eval-nav-drawer" value="include" checked>
+          <span class="eval-label">Miteinbeziehen</span>
+        </label>
+      </div>
+      <div class="field-row decision-comment-row">
+        <label for="nav-drawer-note">{{decision.comment_label}}</label>
+        <textarea id="nav-drawer-note" data-comment="nav-drawer-note" data-attachable
+                  placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+**Rules:**
+- Mandatory: ≥2 named alternatives (`[data-decision]` groups), each with the
+  bi-state selector and its adjacent note textarea.
+- `.view-frame` is a plain wrapper (no positioning of its own) — the view's
+  own `overflow-y: auto` scroll box does the layout work, see § Layout CSS.
+- `collectDesignDecisions()` (§ collectDecisions (design branch)) scans every
+  `[data-decision]` group inside every view of the active iteration — not
+  just the one on screen — and tags each entry with `view: "{viewId}"`. See
+  § Decision schema.
+
+### View kind `comparison` — mandatory skeleton, free interior
+
+Deliberately loose, the same way the design template's mockups are loose:
+Claude is free to author whatever the comparison needs, as long as the
+mandatory skeleton below is present. **Freedom here is a requirement, not an
+afterthought** — do not pad every comparison view with every optional block
+just because it is documented below.
+
+**Mandatory:**
+- a heading stating the question,
+- **≥2** `article[data-compare-option="{id}"]`, each with a title and a free
+  body (Claude may put anything inside — bullet points, a small mock,
+  metrics, prose),
+- a verdict control per option — the same bi-state (`Miteinbeziehen` /
+  `Verwerfen`) as § Bi-State Variant Evaluation, keyed
+  `data-decision="{optionId}"` so it reuses `ensureCommentSlots()` and
+  `collectDesignDecisions()` unchanged; an additional "favourite" radio group
+  (`name="compare-favourite-{viewId}"`) is allowed but never replaces the
+  per-option bi-state,
+- one note `textarea[data-attachable]` per option **and** one for the view as
+  a whole — all wired the same way as every other comment slot (§ State
+  Persistence picks them up via `data-comment`; `data-attachable` is the
+  hook § Attachments wires, appending a bar since these notes have no
+  dedicated `.attach-slot` mount).
+
+**Two layouts, both first-class — pick per comparison via
+`data-compare-layout`:**
+
+| Value | Shape | Use when |
+|---|---|---|
+| `grid` | Option cards side by side in a `repeat(auto-fit, minmax(280px, 1fr))` grid | The options differ in SHAPE — each needs its own preview, mockup fragment or prose |
+| `table` | One `table.cmp-table`: criteria as rows, options as columns, the evaluation controls in a final row | The options differ in VALUES along shared criteria — the reader wants to scan one row and compare like with like |
+
+Reach for `table` whenever the same handful of criteria applies to every
+option. A grid of cards then forces the reader to hop between columns to
+compare a single criterion, which is precisely the work a comparison view
+exists to remove. `.cmp-table` keeps its own horizontal scroll container so a
+five-option comparison never widens the page.
+
+**Optional, freely combinable — use only what the comparison needs:**
+- a criteria matrix (`table.cmp-matrix`, criteria as rows, options as
+  columns, an optional per-cell rating `<select>`) — this is the `grid`
+  layout's companion; with `data-compare-layout="table"` the matrix IS the
+  view and a second one is redundant,
+- per-criterion weight sliders,
+- pros/cons lists per option,
+- meta chips (effort, risk, cost — whatever is relevant),
+- live mockup fragments reusing `.device-frame` from § Screen-pattern markup,
+- a "no preference" escape checkbox/radio.
+
+```html
+<section data-view="card-density" data-view-kind="comparison" data-nav-label="Card density A/B" hidden>
+  <div class="view-frame view-compare" data-compare-layout="grid">
+    <h2>Which card density for the dispatch board?</h2>
+    <p>Both are wired into the Dispatch board mockup — switch back and try
+       scrolling a full shift's worth of calls in each before deciding.</p>
+
+    <div class="cmp-options">
+      <article class="cmp-option" data-compare-option="compact">
+        <h3>Compact</h3>
+        <p>More calls per screen, denser typography, icon-only actions.</p>
+        <!-- optional: pros/cons, meta chips, a .device-frame fragment -->
+        <div class="eval-group" data-decision="compact" data-label="Compact">
+          <label class="eval-option">
+            <input type="radio" name="eval-compact" value="discard">
+            <span class="eval-label">Verwerfen</span>
+          </label>
+          <label class="eval-option">
+            <input type="radio" name="eval-compact" value="include" checked>
+            <span class="eval-label">Miteinbeziehen</span>
+          </label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="compact-note">{{decision.comment_label}}</label>
+          <textarea id="compact-note" data-comment="compact-note" data-attachable
+                    placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </article>
+
+      <article class="cmp-option" data-compare-option="comfortable">
+        <h3>Comfortable</h3>
+        <p>Fewer calls per screen, larger tap targets, labelled actions.</p>
+        <div class="eval-group" data-decision="comfortable" data-label="Comfortable">
+          <label class="eval-option">
+            <input type="radio" name="eval-comfortable" value="discard">
+            <span class="eval-label">Verwerfen</span>
+          </label>
+          <label class="eval-option">
+            <input type="radio" name="eval-comfortable" value="include" checked>
+            <span class="eval-label">Miteinbeziehen</span>
+          </label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="comfortable-note">{{decision.comment_label}}</label>
+          <textarea id="comfortable-note" data-comment="comfortable-note" data-attachable
+                    placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </article>
+    </div>
+
+    <!-- Optional favourite pick, additive to the per-option bi-state above. -->
+    <fieldset class="cmp-favourite">
+      <legend>{{view.compare_favourite}}</legend>
+      <label><input type="radio" name="compare-favourite-card-density" value="compact"> Compact</label>
+      <label><input type="radio" name="compare-favourite-card-density" value="comfortable"> Comfortable</label>
+      <label><input type="radio" name="compare-favourite-card-density" value=""> {{view.compare_no_preference}}</label>
+    </fieldset>
+
+    <div class="field-row decision-comment-row">
+      <label for="card-density-view-note">{{decision.comment_label}}</label>
+      <textarea id="card-density-view-note" data-comment="card-density-view-note" data-attachable
+                placeholder="{{decision.comment_placeholder}}" rows="3"></textarea>
+    </div>
+  </div>
+</section>
+```
+
+**Layout:** `.cmp-options` is a CSS grid, `repeat(auto-fit, minmax(280px, 1fr))`
+— 2–4 candidates sit side by side and **wrap to a new row instead of
+shrinking** below a readable width. `data-compare-layout` on `.view-compare`
+is a layout hint Claude may set (`"grid"` default, `"stacked"` when the
+options genuinely need full width each) — purely presentational, no JS reads
+it today.
+
+**Rules:**
+- Mandatory skeleton only: ≥2 `[data-compare-option]`, a per-option
+  bi-state, one note per option + one for the view. Everything else is
+  optional and freely combinable — do not treat the optional list as a
+  checklist to fulfil.
+- Each `[data-compare-option]`'s bi-state reuses `data-decision="{optionId}"`
+  verbatim, so it is collected exactly like any other decision (tagged with
+  `view: "{viewId}"`, § Decision schema) — do not invent a parallel
+  "verdict" schema.
+- The "favourite" radio group, when present, carries no `data-decision` and
+  is picked up by the generic form catch-all (`el.name`/`el.id` key) like any
+  other named input — it augments, never replaces, the per-option verdicts.
+
+### View kind `mapping`
+
+For the question *"which of these many items goes where"* — an
+**assignment** of items to targets, not a choice between alternatives. A
+`data-view-kind="mapping"` view is a fullscreen frame around one
+`section[data-mapping]` whose content is a declarative JSON spec; the shared
+engine (§ Information Mapping (engine)) renders the schematic view, the
+matrix view, the tabs, the palette and every input from it. Claude authors
+**nothing but the wrapper, the heading/intro and the spec** — never a cell.
+The same block, with an inline note, lives in `free` rounds (§ Template:
+free → Mapping block (optional)); a design concept uses this view instead.
+
+```html
+<section data-iteration="3" data-iteration-template="design" data-active>
+  <section data-design="card_a" data-nav-label="Card A" data-design-active="true">…</section>
+  <section data-design="card_b" data-nav-label="Card B" hidden>…</section>
+
+  <section data-view="fields_a" data-view-kind="mapping" data-view-for="card_a"
+           data-nav-label="Field mapping · Card A" hidden>
+    <div class="view-frame view-mapping">
+      <h2>Which vehicle fields go where on Card A?</h2>
+      <p>Proposal pre-filled — correct it. Phone and desktop are separate.</p>
+      <section data-mapping="veh_a" id="veh_a" data-nav-label="Field mapping · Card A">
+        <script type="application/json" data-mapping-spec>{ … }</script>
+      </section>
+    </div>
+  </section>
+</section>
+```
+
+The spec's fields (`items`, `elements` / `axes`, `context`, `proposal`,
+`proposalOrder`, `slotNotes`, `adhocItems`, `submitted`) are tabled in
+§ Information Mapping (engine) → Spec; two complete examples are in the
+design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`
+§ 3.
+
+**Rules:**
+- **No inline note textarea inside a view.** The dock's view-level
+  textarea (`data-comment="view-{viewId}"`, built by `buildViewTextareas()`
+  like for every view) IS the mapping note — `collectMappings()` reads it
+  into the entry's `note` whenever the mapping section sits inside a
+  `section[data-view]`. Two note fields for one question is the rejected
+  alternative (gate rule M5, validation-gate.md § Mappings, flags an inline
+  `map-{m}-note` in a view).
+  Per-slot notes (`slotNotes: true`) are generated inline in both homes.
+- `data-view-for="{designId}"` is optional (rules in § Views (optional));
+  a mapping about one variant names it, and the payload entry then carries
+  `design`.
+- `.view-mapping` lifts the frame's width (`max-width: none; padding: 1rem
+  1.5rem`) — the two tier columns and a 30-column matrix need it. The matrix
+  is its own two-axis scroll box; the page never widens.
+- **≥ 1 `data-design` stays mandatory** — a mapping view is a view like any
+  other and never the only top-level content.
+- Ids: `data-mapping`, item, element, part, axis, column and context ids
+  match `^[a-z0-9_]+$` (no `-`, `.`, `@`, `:`, `>` — the state encodings
+  split on them). Item / element / axis ids are unique within a mapping,
+  part ids within their element; **mapping ids are unique page-wide** (they
+  are DOM ids: the section's `id`, the TOC anchor). `data-mapping` and `id`
+  carry the same value.
+- A view is never cloned into device frames (`renderDeviceStage` clones
+  active screens only), so the section id and the JSON block are safe here.
+  `<script type="application/json">` is inert; gate P18 forbids it only
+  inside `section[data-screen]`.
+- Switcher segment, `.screen-nav-view-item`, screen indicator label, dock
+  (general + view-level textarea), `_activeView` restore and view switching
+  on frozen tabs all behave exactly as for every other view. The progress
+  (`n unassigned · n constraint(s) open`) is the mapping's own summary line
+  and the per-tab counts; the panel TOC's progress mirror is a free-round
+  affordance (`#section-nav` is hidden in design mode).
+- Filtering is per view: the palette's pills (All / Unassigned / Multiple /
+  Changed + search) narrow the schematic; the toolbar's **row filter** (All /
+  Unassigned / Changed with live counts, `button.map-row-filter`) narrows the
+  matrix rows and their groups, in every tab at once. Both share one
+  predicate and are in-memory only — nothing is persisted, a frozen section
+  keeps them usable.
+- Freezing: when the round is frozen Claude writes the payload's
+  `mappings[]` entry back into the spec as `submitted` (§ Information
+  Mapping (engine) → Freezing) — the frozen view then shows the user's
+  submission read-only, never the proposal.
+
+## Layout — Fullscreen single-screen + Overlay Panel + Feedback Dock
+
+```html
+<!-- data-template mirrors the ACTIVE iteration; applyIterationTemplate()
+     rewrites it on every tab switch. body overflow is set by that function,
+     the inline style below is only the first-paint value. -->
+<html data-template="design">
+<body style="overflow: hidden">
+  <div class="concept-layout design fullscreen">
+    <div class="concept-content">
+      <main>
+        <!-- data-viewports / data-orientations declare the form factors this
+             concept's app supports (§ Responsive device views). Omit both for
+             a desktop-only concept: the toggle then never renders and the
+             layout is byte-for-byte what it was before device views existed.
+             A single design may override them; the iteration is the normal
+             place to declare. -->
+        <section data-iteration="1" data-iteration-template="design" data-active
+                 data-viewports="desktop tablet phone"
+                 data-orientations="portrait landscape">
+          <!-- One or more designs. Exactly one <section data-design> carries
+               data-design-active="true" (others get `hidden`). A single
+               design still needs this wrapper for markup uniformity — it
+               just degenerates to today's behaviour (see body[data-single-design]
+               below). -->
+          <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true">
+            <!-- All pages of THIS design live here. Exactly one carries
+                 data-screen-active="true" (others get `hidden`). Every screen
+                 is position: absolute; inset: 0 so it fills the viewport. A
+                 <div class="device-frame"> inside holds the actual mock content. -->
+            <section id="d1-s1" data-screen data-nav-label="Welcome" data-screen-active="true">
+              <div class="device-frame">…mock…</div>
+            </section>
+            <section id="d1-s2" data-screen data-nav-label="Credentials" hidden>
+              <div class="device-frame">…mock…</div>
+            </section>
+            <section id="d1-s3" data-screen data-nav-label="Success" hidden>
+              <div class="device-frame">…mock…</div>
+            </section>
+          </section>
+          <section data-design="holotable" data-nav-label="Holotable" hidden>
+            <section id="d2-s1" data-screen data-nav-label="Welcome" data-screen-active="true">
+              <div class="device-frame">…mock…</div>
+            </section>
+          </section>
+
+          <!-- Views — OPTIONAL top-level siblings of section[data-design],
+               never a replacement for the ≥1 design above. See § Views
+               (optional) and § Screen-pattern markup → View sections for the
+               full worked examples of both kinds. -->
+          <section data-view="nav-model" data-view-kind="decision"
+                    data-nav-label="Navigation model" hidden>…</section>
+          <section data-view="card-density" data-view-kind="comparison"
+                    data-nav-label="Card density A/B" hidden>…</section>
+        </section>
+      </main>
+    </div>
+
+    <!-- Minimal position indicator (top-left overlay) — NOT a header bar.
+         Built entirely in JS from {{design.position_iteration}} and
+         {{design.position_page}} (§ UI Locale) — the iteration segment only
+         renders when the concept has >1 iteration, the design segment only
+         when the iteration has >1 design. See buildDesignUI() below; the
+         spans here are just the mount points it fills in. -->
+    <div class="screen-indicator" id="screen-indicator">
+      <!-- updateIndicator() (§ Layout JS) fills these mount points on every
+           iteration/design/screen switch. Each optional segment carries its
+           own trailing " · " INSIDE the span, so hiding the span removes the
+           separator with it and never leaves a dangling one.
+           Static values are the generation-time first-paint fallback
+           (3-screen, single-iteration, single-design example) so the page
+           never flashes empty before JS runs.
+           EVERY id below is required — updateIndicator() null-guards each
+           lookup, so a missing span does not throw; the segment simply never
+           appears. That failure is silent, which is why the reference markup
+           must carry all four. -->
+      <span id="indicator-iteration" hidden>{{design.position_iteration}} <strong id="active-iteration-idx">1</strong> · </span>
+      <span id="indicator-design" hidden><strong id="active-design-label">Dispatch</strong> · </span>
+      <!-- Screen-counter segment — swaps out entirely (not just dimmed) for
+           #indicator-view below while a view is active. Both are
+           null-guarded by updateIndicator() (§ Layout JS), so a page that
+           omits one of the two degrades silently rather than throwing. -->
+      <span id="indicator-screen-info">
+        {{design.position_page}} <strong id="active-screen-idx">1</strong> / <span id="total-screens">3</span>
+        · <span id="active-screen-label">Welcome</span>
+      </span>
+      <!-- View-label segment — OPTIONAL, only ever shown while a
+           section[data-view] is the active top-level item (§ Views
+           (optional)). hidden by default so a page with no views never
+           shows an empty strong tag. -->
+      <span id="indicator-view" hidden><strong id="active-view-label">Navigation model</strong></span>
+    </div>
+
+    <!-- Annotation layer eye pill — OPTIONAL, only emitted when at least one
+         screen carries [data-anno-layer]. Sits on the left edge directly
+         BELOW #screen-indicator (never in the top-left corner itself, which
+         the indicator owns) — see § Layout CSS for the exact offset and the
+         updated top-edge partition comment. `hidden` by default; JS
+         (updateAnnoUI(), § Layout JS) reveals it only when the ACTIVE screen
+         has ≥1 annotation, and keeps the count live across screen/iteration
+         switches. aria-pressed / aria-label reflect body.anno-hidden. -->
+    <button id="anno-toggle" class="anno-toggle-fab" type="button" hidden
+            aria-pressed="true"
+            aria-label="{{anno.toggle_hide}}"
+            data-label-show="{{anno.toggle_show}}"
+            data-label-hide="{{anno.toggle_hide}}">
+      <span class="anno-eye" aria-hidden="true">👁</span>
+      <span id="anno-count" class="anno-count">0</span>
+    </button>
+
+    <!-- Design switcher (ghost bar, top centre) — one segment per
+         <section data-design>, only rendered when the iteration has ≥2
+         designs (hidden via body[data-single-design], see Layout CSS).
+         Auto-populated by buildDesignUI(); resting state shows only the
+         active label (CSS collapses the rest), hover/:focus-within expands
+         to the full segmented control.
+         When the iteration ALSO has ≥1 view (§ Views (optional)),
+         buildDesignUI() appends a thin .switcher-divider then one
+         .view-switch-item per view, in the SAME row — switching between a
+         design and a question about it is one click from anywhere. -->
+    <nav class="design-switcher" id="design-switcher" aria-label="{{design.switch_label}}">
+      <!-- auto-populated: one <button class="design-switch-item"> per
+           design, then (if any) a <span class="switcher-divider"> and one
+           <button class="view-switch-item"> per view -->
+    </nav>
+
+    <!-- Two FABs — the only floating UI besides the screen itself.
+         BOTH carry two labels: the toggle swaps `title` AND `aria-label`
+         together with `aria-expanded`, so pointer users get a hover tooltip
+         and screen-reader users hear the correct NEXT action ("Open" vs
+         "Minimize"). The labels are tooltip-only on purpose — an unlabelled
+         emoji circle is undiscoverable, but a visible pill would break the
+         shared 60px circle geometry the two FABs are pinned to (gate P13).
+         Every label string comes from the locale table; never bake English
+         (or "Feedback") in here.
+         `data-untouched` on the 💬 FAB drives a one-shot attention pulse
+         (§ Layout CSS) that the JS clears on the first dock open or the
+         first keystroke inside the dock — a returning user is never nagged
+         twice. -->
+    <button id="panel-toggle" class="panel-fab"
+            aria-label="{{panel.toggle_open}}"
+            title="{{panel.toggle_open}}"
+            aria-expanded="false"
+            data-label-open="{{panel.toggle_open}}"
+            data-label-close="{{panel.toggle_close}}">☰</button>
+    <button id="feedback-toggle" class="feedback-fab"
+            aria-label="{{proto.feedback_toggle}}"
+            title="{{proto.feedback_toggle}}"
+            aria-expanded="false"
+            data-untouched="true"
+            data-label-open="{{proto.feedback_toggle}}"
+            data-label-close="{{panel.minimize}}">💬</button>
+
+    <!-- Device-view toggle (bottom-left) — the fourth corner, and the
+         quietest thing on the page. One button, one gesture: each click
+         advances to the next DECLARED viewport and wraps around. It is
+         deliberately NOT a 60px FAB — those two are one accent-coloured
+         component for the page's two actions, this is a view control that
+         must not compete with them. Hidden entirely when the iteration
+         declares fewer than two viewports (body[data-single-viewport]).
+         Every label is a data-attribute rather than baked text: the JS
+         rewrites glyph + label + aria-label on each cycle, and the locale
+         substitution has to happen once, here, at generation time. -->
+    <button id="viewport-toggle" class="viewport-toggle" type="button" data-mode="desktop"
+            data-label-prefix="{{design.viewport_switch}}"
+            data-label-desktop="{{design.viewport_desktop}}"
+            data-label-tablet="{{design.viewport_tablet}}"
+            data-label-phone="{{design.viewport_phone}}"
+            data-label-portrait="{{design.orientation_portrait}}"
+            data-label-landscape="{{design.orientation_landscape}}"
+            aria-label="{{design.viewport_switch}}">
+      <!-- Inline SVG, not emoji: 🖥/📱 render as full-colour platform art
+           that clashes with a dark chrome pill and differs per OS. All three
+           share one 20×20 grid, stroke-only, currentColor — so they read as
+           one set. The monitor keeps a stand because a bare rectangle is
+           indistinguishable from a tablet in landscape; neither tablet nor
+           phone gets a notch or home button, which would have to move
+           between orientations and carries no information the label lacks. -->
+      <svg data-glyph="desktop" viewBox="0 0 20 20" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="16" height="11" rx="1.5"/>
+        <line x1="10" y1="14" x2="10" y2="17"/>
+        <line x1="7" y1="17" x2="13" y2="17"/>
+      </svg>
+      <svg data-glyph="tablet" viewBox="0 0 20 20" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="2" width="12" height="16" rx="2"/>
+      </svg>
+      <svg data-glyph="phone" viewBox="0 0 20 20" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <rect x="6" y="1" width="8" height="18" rx="2.2"/>
+        <line x1="8.5" y1="3.3" x2="11.5" y2="3.3"/>
+      </svg>
+      <span class="viewport-toggle-label">{{design.viewport_desktop}}</span>
+    </button>
+
+    <!-- Decision panel (☰) — contains: iteration-tabs, screen-nav, submit.
+         No section-TOC here: the screen-nav replaces it for design. -->
+    <aside class="concept-decision-panel" id="decision-panel">
+      <!-- Same head row as § Common Structure: round label · back link ·
+           🕘 rounds chip · theme toggle · ✕. This is the design round's ONLY
+           theme control — the document header that used to carry one is
+           hidden in design mode (§ Layout CSS). -->
+      <div class="panel-head">
+        <span class="panel-here-round" data-here-round></span>
+        <!-- Same wrapper as § Common Structure — the group (not either
+             child) carries margin-left: auto, so the chip stays right-aligned
+             whether or not #panel-here-back is [hidden]. -->
+        <span class="panel-here-right">
+          <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
+          <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
+                  aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
+                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+            <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
+          </button>
+        </span>
+        <button type="button" id="theme-toggle" class="theme-toggle-btn"
+                data-label-light="{{theme.to_light}}"
+                data-label-dark="{{theme.to_dark}}"
+                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+          <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
+          <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
+        </button>
+        <button id="panel-close" class="panel-close-btn" aria-label="{{panel.close}}">✕</button>
+      </div>
+      <!-- Same four-part anatomy as § Common Structure (here / scroll box /
+           status / foot) — only the containing aside differs. -->
+      <div class="panel-here" id="panel-here">
+        <span class="panel-here-section" data-here-section hidden></span>
+        <div class="panel-here-rounds-list" id="panel-here-rounds-list" hidden role="list">
+          <!-- auto-populated by buildRoundsChip() -->
+        </div>
+      </div>
+      <div class="panel-nav-scroll">
+      <nav class="iteration-tabs" role="tablist" aria-label="{{iteration.label}}"><!-- chips --></nav>
+      <!-- #section-nav also lives on the design skeleton: a free/decision round
+           on a design concept (the final report is always free) renders its TOC
+           here; CSS hides it while a design round is active and #screen-nav
+           otherwise (html[data-template] mirrors the active round). Without it
+           the final report of every design concept had no TOC at all — and no
+           ⚠ Danach-von-Hand entry. -->
+      <nav class="section-nav" id="section-nav" aria-label="{{nav.sections}}"></nav>
+      <nav class="screen-nav" id="screen-nav" aria-label="Screens">
+        <!-- auto-populated, two levels: one .screen-nav-group per
+             <section data-design>, a .screen-nav-design-heading button at
+             the top of each group, then one .screen-nav-item per page
+             nested beneath. Single-design pages skip the heading (CSS,
+             body[data-single-design]) and render as today's flat list.
+             The ● marker applies at both levels: a design heading shows it
+             when ANY of its pages, or its own design-level comment field,
+             carries unsubmitted text. Clicking either level switches and
+             closes the panel.
+             A SECOND .screen-nav-group renders below the designs group
+             whenever the iteration has ≥1 view (§ Views (optional)): a
+             plain, non-interactive .screen-nav-views-heading label, then
+             one .screen-nav-view-item button per view. Own class family
+             (screen-nav-view-*) so it can be styled independently of the
+             design nav items it sits below. -->
+      </nav>
+      </div><!-- /.panel-nav-scroll -->
+      <!-- Status line — same contract as § Common Structure: #connection-status
+           keeps its [data-state] (connecting | connected | disconnected), the
+           composed line + the six-state .panel-status[data-status] are
+           rendered by renderPanelStatus(); no overlay, no acknowledge button;
+           starts in "connecting" and never flashes "disconnected" before the
+           first heartbeat response. The progress <ol> lives under the line. -->
+      <div class="panel-status" id="panel-status" data-status="connecting">
+        <div id="connection-status" class="status-line" data-state="connecting" role="status" aria-live="polite">
+          <span class="status-glyph" aria-hidden="true">◐</span>
+          <span class="conn-label">{{panel.status_connecting}}</span>
+        </div>
+        <details class="status-detail" id="status-detail" hidden>
+          <summary class="status-detail-row">
+            <span class="status-dots" id="status-dots" aria-hidden="true"></span>
+            <span class="status-detail-label">{{panel.status_detail}}</span>
+          </summary>
+          <ol class="status-steps" id="status-steps" aria-live="polite">
+            <li data-step="submitted" data-state="done">
+              <span class="step-icon" aria-hidden="true">✓</span>
+              <span class="step-label">{{panel.step_submitted}}</span>
+            </li>
+            <li data-step="received" data-state="active">
+              <span class="step-icon" aria-hidden="true">⏳</span>
+              <span class="step-label">{{panel.step_received}}</span>
+            </li>
+            <li data-step="reality-check" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_reality_check}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_reality_check_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_reality_check}}</span>
+            </li>
+            <li data-step="implemented" data-state="pending" hidden>
+              <span class="step-icon" aria-hidden="true">○</span>
+              <span class="step-label" data-state-label="pending">{{panel.step_waiting}}</span>
+              <span class="step-label" data-state-label="active">{{panel.step_implemented_active}}</span>
+              <span class="step-label" data-state-label="done">{{panel.step_implemented}}</span>
+            </li>
+          </ol>
+        </details>
+      </div>
+      <!-- CTA foot — pinned, ≤120px, and it reserves the 💬 FAB's row below
+           it (§ Panel Chrome CSS: padding-bottom: calc(60px + 2rem)). -->
+      <div class="panel-cta">
+      <div id="panel-ready">
+        <div class="submit-split">
+          <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+            <span class="submit-label">{{panel.submit_iterate}}</span>
+            <span class="hint-cache" data-cache-hint="iterate" hidden>
+              <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+            </span>
+          </button>
+          <button type="button" id="submit-menu-btn" class="submit-menu-btn"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
+                  aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+            <span aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div id="submit-menu" class="submit-menu" role="menu" hidden>
+          <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+            <span class="warn-icon" aria-hidden="true">⚠</span>
+            {{panel.submit_implement}}
+          </button>
+          <p class="hint hint-cache" data-cache-hint="implement" hidden>
+            <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+          </p>
+          <p class="hint submit-menu-hint">{{panel.submit_menu_hint}}</p>
+        </div>
+      </div>
+      <div id="panel-submitted" style="display: none;">
+        <div class="submitted-indicator">
+          <span class="check-icon">✓</span>
+          <strong>{{panel.submitted}}</strong>
+        </div>
+        <p class="submitted-hint">{{panel.submitted_hint}}</p>
+      </div>
+      <!-- The remaining two panel states — #panel-frozen and
+           #panel-final-report — are IDENTICAL to § Common Structure and MUST
+           be copied verbatim from there into this .panel-cta. showIteration()
+           switches all four states regardless of template, so a design page
+           that ships only the two above loses its close-out sheet the moment
+           a final report is appended, and shows an empty panel on every past
+           tab. The aside itself is identical everywhere (§ Panel Chrome (all
+           templates)); only what surrounds it differs. -->
+      </div><!-- /.panel-cta -->
+    </aside>
+    <div class="panel-backdrop" id="panel-backdrop"></div>
+
+    <!-- Feedback dock (💬) — speech-bubble overlay, ordered specific → general,
+         top to bottom: current screen → design (when ≥2 designs) → general;
+         while a view is active, the view row takes the design+screen rows'
+         place (§ Layout CSS view-mode swap) so the visible order becomes
+         view → general. General sits LAST because it is the one field that
+         never disappears or changes label as the user navigates — the user
+         fills in the specific thing (what they're looking at) first and the
+         catch-all note last, and general's fixed position at the bottom
+         means it never jumps even though the rows above it swap content.
+         Anchored to the 💬 FAB (bottom-right): the FAB stays visible and
+         clickable, the dock floats above/around it like a chat bubble.
+         Now that ☰ lives top-right (Wave 3), the dock no longer reserves
+         space for it — see Layout CSS geometry comment.
+         The close button minimises (does not destroy state) — user input
+         is preserved on close, no value is lost.
+         CLOSED by default (data-open="false"): at concept start the user
+         wants to look at the mockup, not at three empty textareas covering
+         it. data-size is written by applyDockSize() — § Panel Chrome JS.
+         The dock is PAGE CHROME (§ Panel Chrome (all templates)): the
+         header row and the general section below are the same markup every
+         template carries; only the three row containers (#screen-textareas,
+         #design-textareas, #view-textareas) are the design layout's
+         addition, and they fold away by CSS while a document round of the
+         same page is on screen. -->
+    <aside class="feedback-dock" id="feedback-dock" data-open="false" data-size="compact" data-user-maximized="false">
+      <div class="feedback-dock-header">
+        <strong>{{proto.feedback_title}}</strong>
+        <!-- Maximise (Work package B) is a distinct control from minimise:
+             minimise CLOSES the dock (data-open toggle), maximise RESIZES it
+             (data-size override) without touching data-open at all. The two
+             must never be merged into one button. -->
+        <button id="feedback-maximize" class="feedback-maximize-btn" aria-pressed="false"
+                aria-label="{{panel.maximize}}" title="{{panel.maximize}}">⤢</button>
+        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
+      </div>
+      <div class="feedback-section">
+        <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong></label>
+        <!-- One hidden textarea per screen. Only the active one is shown.
+             Each carries data-comment="{screen-id}" AND
+             data-screen-comment="{screen-id}" — so saveState/restoreState
+             treats it like any comment field. -->
+        <div id="screen-textareas" data-placeholder="{{proto.feedback_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <!-- Design row — omitted for single-design iterations via
+           body[data-single-design="true"] (Layout CSS), no JS branching.
+           One hidden textarea per design; only the active one is shown,
+           same swap mechanism as the per-screen row above. Each carries
+           data-comment="design-{id}" AND data-design-comment="{id}". -->
+      <div class="feedback-section">
+        <label>{{design.feedback_design}}: <strong id="dock-design-label">Dispatch</strong></label>
+        <div id="design-textareas" data-placeholder="{{design.feedback_design_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <!-- View row — OPTIONAL, only present when the iteration has ≥1
+           section[data-view] (§ Views (optional)). Shown ONLY while a view
+           is the active top-level item (body[data-view-active="true"],
+           § Layout CSS); the design and per-screen rows above hide in that
+           state and this one takes their place — never all three visible
+           at once. One hidden textarea per view, built ONCE per iteration by
+           buildViewTextareas(), same build-once-swap-hidden discipline as
+           the design/screen rows. Each carries data-comment="view-{id}" AND
+           data-view-comment="{id}". -->
+      <div class="feedback-section">
+        <label>{{design.feedback_view}}: <strong id="dock-view-label">Navigation model</strong></label>
+        <div id="view-textareas" data-placeholder="{{design.feedback_view_placeholder}}"><!-- auto-populated --></div>
+      </div>
+      <div class="feedback-divider"></div>
+      <div class="feedback-section">
+        <label>{{proto.feedback_general}}</label>
+        <textarea id="design-general-feedback" data-comment="general" data-attachable
+                  placeholder="{{proto.feedback_general}}"></textarea>
+        <div class="attach-slot" data-attach-slot="general"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Shared content dimmer + frozen bar — see Common Structure for
+       behavior + CSS. Both are page-level chrome and MUST be copied verbatim:
+       showIteration() drives them regardless of template. -->
+  <div class="content-dimmer" id="content-dimmer"
+       role="button" tabindex="-1"
+       aria-label="{{panel.dim_dismiss}}"
+       title="{{panel.dim_dismiss}}" hidden></div>
+  <div class="frozen-bar" id="frozen-bar" role="status" hidden>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
+  </div>
+</body>
+</html>
+```
+
+## Layout CSS
+
+```css
+/* ── Scroll boxes ───────────────────────────────────────────────────────
+   Deliberately UNSCOPED (the only rules in this section that are): these
+   three are the page's scrolling surfaces in EVERY template, and a
+   scrollbar skin changes no geometry, so scoping it to design mode would
+   only mean the decision/free iterations of the same page keep the raw
+   platform bar. The boxes need `overflow-y: auto` for legitimate reasons
+   (a dock taller than its max-height, a long panel TOC, a screen taller
+   than the safe area), but the default Windows/Chromium bar is an opaque
+   16px slab against a dark panel — measured on a real page as the single
+   loudest piece of chrome in a 430px dock. Thin + border-coloured thumb on
+   a transparent track reads as part of the panel instead. Both syntaxes:
+   `scrollbar-*` covers Firefox and modern Chromium, the `::-webkit-*`
+   pseudo-elements cover the older Chromium/WebKit that ignore it. */
+.feedback-dock,
+.panel-nav-scroll,
+.panel-cta,
+section[data-screen] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color, #30363d) transparent;
+}
+.feedback-dock::-webkit-scrollbar,
+.panel-nav-scroll::-webkit-scrollbar,
+.panel-cta::-webkit-scrollbar,
+section[data-screen]::-webkit-scrollbar { width: 8px; }
+.feedback-dock::-webkit-scrollbar-thumb,
+.panel-nav-scroll::-webkit-scrollbar-thumb,
+.panel-cta::-webkit-scrollbar-thumb,
+section[data-screen]::-webkit-scrollbar-thumb {
+  background: var(--border-color, #30363d);
+  border-radius: 4px;
+}
+.feedback-dock::-webkit-scrollbar-track,
+.panel-nav-scroll::-webkit-scrollbar-track,
+.panel-cta::-webkit-scrollbar-track,
+section[data-screen]::-webkit-scrollbar-track { background: transparent; }
+
+/* EVERY rule below is scoped to html[data-template="design"]. That attribute
+   is a projection of the ACTIVE iteration (see § Per-Iteration Templates), so
+   flipping it flips the whole layout: a decision/free iteration on the same
+   page falls back to the normal grid + document scroll with zero JS. Never
+   write these rules unscoped — an unscoped `html, body { overflow: hidden }`
+   would lock scrolling for the sidebar iterations too. */
+html { margin: 0; padding: 0; }
+body { margin: 0; padding: 0; }
+html[data-template="design"],
+html[data-template="design"] body { height: 100%; overflow: hidden; }
+[data-template="design"] .concept-layout.design.fullscreen { display: block; width: 100vw; height: 100vh; overflow: hidden; }
+/* The canvas takes the whole viewport: the document column's `max-width:
+   1100px; padding: 2rem` (§ Layout CSS) is lifted here — a fullscreen mock
+   letterboxed to 1164px on a 1680px display was #418. Decision / free rounds
+   keep the cap. */
+[data-template="design"] .concept-layout.design .concept-content { position: absolute; inset: 0; overflow: hidden; max-width: none; padding: 0; }
+
+/* ── Document chrome vs. the fullscreen canvas ──────────────────────────
+   A page may START as decision or free (§ Per-Iteration Templates), and
+   those templates put a `<header>` with the <h1> and the subtitle directly
+   inside .concept-content, plus a
+   `<header class="iteration-intro">` at the top of every iteration section.
+   Both stay in NORMAL FLOW. Design mode then makes the iteration section
+   `position: absolute; inset: 0` — it paints OVER them instead of pushing
+   them aside, and the frozen-iteration opacity below let the h1 and the
+   intro shine through the mockup right under the fixed screen indicator
+   (measured at 1280x720: h1 at y=32, intro at y=0, indicator top-left, all
+   three overlapping and the page reading as "empty" after a ☰ switch).
+   Design mode owns the whole viewport, so the document header and the
+   per-iteration intro are hidden while it is active; flipping
+   `<html data-template>` back to decision/free brings both back, unchanged.
+   Hiding the header hides no control: the theme toggle lives in the ☰
+   panel's .panel-head row (§ Theme Toggle), which is page chrome on every
+   template and stays reachable in design mode. It used to be the header's
+   last child and was simply gone in design rounds. Do NOT re-home it into
+   the design chrome as a floating control: the two FABs are a closed pair
+   (P13), and the panel head is the one place every round shares. */
+html[data-template="design"] .concept-content > header,
+html[data-template="design"] section[data-iteration] > .iteration-intro { display: none; }
+
+/* Frozen design iterations stay FULLY opaque. The generic
+   `section[data-iteration]:not([data-active]) { opacity: 0.85 }`
+   (§ Tab Bar CSS) is a legible "this round is history" cue for a sidebar
+   iteration in normal flow. On an absolute/inset:0 design section it is a
+   bleed-through instead: whatever is behind the canvas — the document
+   header, a sibling iteration's intro — shows through the mockup. Frozen
+   state is already communicated here by the panel's frozen state and the
+   read-only dock (applyDockFreezeState), so the opacity buys nothing. */
+html[data-template="design"] section[data-iteration]:not([data-active]) { opacity: 1; }
+
+/* ── Chrome safe area ───────────────────────────────────────────────────
+   Every fixed control in design mode sits on the viewport's top or bottom
+   edge while the canvas beneath runs edge to edge (inset: 0). A flat 2rem
+   padding therefore starts the content at 32px where the chrome reaches
+   92px, so the first rows of any screen tall enough to fill the viewport
+   are painted UNDER the indicator, the design switcher and the ☰ FAB
+   (measured in Edge at 921x873: content top 32px, indicator bottom 50px —
+   18px of unreadable overlap on every screen of the page).
+
+   The § Layout CSS top-edge partition above solves the chrome-vs-chrome
+   collisions; this is the missing chrome-vs-CONTENT one. Two tokens, derived
+   from the geometry already fixed there, so the reserve can never drift from
+   the chrome that caused it:
+     TOP     .panel-fab        2rem offset + 60px circle   = 92px  (right)
+             .anno-toggle-fab  3.75rem offset + ~2rem pill = 92px  (left)
+             .screen-indicator 1rem offset + ~2.1rem pill  = 50px  (left)
+             .design-switcher  0.75rem offset + ~2.3rem    = 49px  (centre)
+     BOTTOM  .feedback-fab     2rem offset + 60px circle   = 92px  (right)
+             .viewport-toggle  2rem offset + 34px pill     = 66px  (left)
+
+   The reserve is deliberately NOT symmetric, because the two edges are not.
+   The top edge is occupied across its whole width — indicator on the left,
+   switcher in the centre, ☰ on the right — so content must clear its
+   deepest element everywhere: 92px = 5.75rem. The bottom edge carries two
+   CORNER controls and nothing in between, so the ordinary 2rem gutter is
+   the honest reserve there; a 60px FAB floating over a canvas corner is the
+   normal pattern, and mirroring the top would have spent another 60px of
+   artefact height on an edge that is empty across ~96% of its width. In
+   device mode that height is multiplicative — fitDeviceStage() scales the
+   frame pair to the box — so it is the most expensive space on the page.
+   The cost of the asymmetry is that `align-items: center` now centres the
+   artefact 30px below the true optical centre at 873px height (3.4%), which
+   is well under the threshold where anyone reads it as misaligned.
+   Chromium keeps centred overflow reachable in a scroll container (verified:
+   a 2000px probe in a 560px box still scrolls to its first row), so the
+   smaller content box this creates needs no `safe center` companion.
+
+   Every consumer repeats the value as a var() fallback. That is not
+   belt-and-braces: this file is a REFERENCE that gets copied in pieces, and
+   a page that takes the section rules without this declaration would have
+   the whole `padding` shorthand invalidated at computed-value time — losing
+   the horizontal gutter too, silently, with no chrome reserve either. */
+html[data-template="design"] {
+  --chrome-safe-top: 5.75rem;
+  --chrome-safe-bottom: 2rem;
+}
+
+/* Iteration sections fill the viewport. Screens inside do too —
+   only the active one is visible (hidden attribute on the others).
+   Outside design mode iterations stay in normal document flow. */
+[data-template="design"] section[data-iteration] { position: absolute; inset: 0; }
+section[data-iteration][hidden] { display: none; }
+[data-template="design"] section[data-screen] {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  /* Chrome safe area top, plain gutter sides and bottom. */
+  padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
+  overflow-y: auto;
+  animation: screen-in 0.25s ease;
+}
+section[data-screen][hidden] { display: none; }
+/* Structural backstop for the "exactly one of these is on screen" invariant.
+   `hidden` is the switchers' mechanism, and the markup above asks for it on
+   every inactive design and screen — but nothing enforces that, and these
+   boxes are position:absolute/inset:0. A single forgotten `hidden` therefore
+   does not misplace a section, it paints every sibling onto the same square:
+   three designs' mockups drawn on top of each other, their headings and
+   labels interleaved, the page unreadable and every click ambiguous.
+   The active flags are already this page's own source of truth — both
+   activeDesign() and activeScreen() resolve by them, and showDesign() /
+   showScreen() keep them in step with `hidden` on every switch — so they can
+   carry the visibility too. Both rules are `:has()`-guarded: they bite only
+   once a sibling IS marked active, so markup that omits the flags entirely
+   degrades to the old behaviour instead of blanking the canvas. */
+section[data-iteration]:has(> section[data-design][data-design-active="true"])
+  > section[data-design]:not([data-design-active="true"]) { display: none; }
+section[data-design]:has(section[data-screen][data-screen-active="true"])
+  section[data-screen]:not([data-screen-active="true"]) { display: none; }
+@keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Views (optional, § Views (optional)) — top-level siblings of
+   section[data-design]. Unlike a screen, a view SCROLLS inside its own box
+   — body stays overflow:hidden throughout design mode (see the html/body
+   rule above), only .view-frame's ancestor here gets overflow-y. Same
+   position:absolute/inset:0 fullscreen treatment as a screen otherwise, so
+   switching between a design and a view never shifts the surrounding
+   chrome (indicator/switcher/FABs stay put). */
+[data-template="design"] section[data-view] {
+  position: absolute; inset: 0;
+  /* Same chrome safe area as a screen — a view is the other thing that can
+     be full-height, and it is the one that always scrolls. */
+  padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
+  overflow-y: auto;
+  animation: screen-in 0.25s ease;
+}
+section[data-view][hidden] { display: none; }
+/* Same backstop, the other direction: outside view mode NO view paints, flag
+   or not. A view is fullscreen and absolutely positioned like a screen, so a
+   view that boots without `hidden` covers the design the page opened on.
+   body[data-view-active] is maintained by showView() (true) and by
+   showDesign() + the iteration switch (false), and its ABSENCE — nothing ran
+   yet — reads as "not in view mode", which is exactly the boot state. */
+body:not([data-view-active="true"]) section[data-view] { display: none; }
+.view-frame { max-width: 860px; margin: 0 auto; }
+/* Comparison view kind — see § Views (optional) → View kind `comparison`. */
+.cmp-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin: 1.25rem 0;
+}
+.cmp-option {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 60%, transparent);
+}
+.cmp-favourite {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;
+  border: 1px solid var(--border-color, #30363d); border-radius: 10px;
+  padding: 0.75rem 1rem; margin: 1rem 0;
+}
+.cmp-favourite legend { padding: 0 0.4rem; font-size: 0.85rem; color: var(--text-secondary); }
+/* data-compare-layout="table": the comparison IS the table. Wrapped in its
+   own scroll container so five options never widen the page — the view
+   scrolls vertically, this one horizontally, and body never scrolls. */
+.view-compare[data-compare-layout="table"] .cmp-options { display: block; overflow-x: auto; }
+.cmp-table { width: 100%; min-width: 34rem; border-collapse: collapse; margin: 1rem 0; }
+.cmp-table th, .cmp-table td {
+  border: 1px solid var(--border-color); padding: 0.55rem 0.7rem;
+  text-align: left; vertical-align: top; font-size: 0.9rem;
+}
+.cmp-table thead th { position: sticky; top: 0; background: var(--bg-secondary, #161b22); }
+.cmp-table tbody th { font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+.cmp-table tr:hover td { background: rgba(127, 127, 127, 0.06); }
+.cmp-table .cmp-verdict-row td { border-top: 2px solid var(--border-color); }
+.cmp-matrix { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.cmp-matrix th, .cmp-matrix td {
+  border: 1px solid var(--border-color, #30363d); padding: 0.5rem 0.75rem;
+  text-align: left; font-size: 0.9rem;
+}
+
+/* Design-only chrome: the screen indicator, the switchers, the device
+   toggle and the annotation layer all describe a fullscreen mockup, so they
+   exist in the DOM on every page but only render in design mode.
+   `.panel-fab`, `.feedback-fab` and `.feedback-dock` are deliberately NOT in
+   this list: the ☰ decision panel and the 💬 feedback dock are page chrome,
+   reached the same way in every template (§ Panel Chrome (all templates)).
+   All three used to be hidden here (the panel docked into a sidebar instead,
+   the dock simply vanished) — which is how a concept that mixed templates
+   moved its whole feedback surface between rounds. What a document round
+   shows of the dock is decided by the compact rule in § Panel Chrome CSS,
+   not by hiding it.
+   The `html` type selector is REQUIRED — a bare `:not([data-template="design"])`
+   also matches <body> (which never carries the attribute) and would hide the
+   chrome in design mode too. */
+html:not([data-template="design"]) .screen-indicator,
+html:not([data-template="design"]) .viewport-toggle,
+html:not([data-template="design"]) .design-switcher,
+html:not([data-template="design"]) .anno-toggle-fab,
+html:not([data-template="design"]) .anno-layer { display: none !important; }
+
+/* The panel carries BOTH navs because a page may mix iteration templates:
+   #screen-nav for design iterations, #section-nav for decision/free ones
+   (incl. the final report). Exactly one may render at a time, and the swap
+   must be driven by the template, never by JS: buildDesignUI() returns early
+   when the visible iteration has no design (`if (!active) return`), BEFORE it
+   clears nav.innerHTML — so on a decision tab the previous design's entries
+   are still sitting in #screen-nav. Without this rule they render as a dead
+   TOC whose headings switch to a design nobody is looking at. */
+html:not([data-template="design"]) #screen-nav,
+html[data-template="design"] #section-nav { display: none !important; }
+
+/* Minimal screen counter — NOT a header bar.
+   Left-anchored at 1rem and content-sized, so its natural width grows with
+   the page label while the switcher stays centred. Without a cap the two
+   overlap on narrow viewports (measured: 21px overlap at 768px, full
+   overlap at 375px). The cap is derived from the switcher's own geometry
+   below — switcher max-width 34vw, centred ⇒ its left edge is at 33vw, so
+   the indicator may occupy at most 33vw minus its 1rem offset minus a
+   0.5rem gap. Truncation with an ellipsis is the right degradation here:
+   the leading "page N/total" segment is the load-bearing part, the trailing
+   screen label is not. */
+.screen-indicator {
+  position: fixed; top: 1rem; left: 1rem; z-index: 90;
+  padding: 0.4rem 0.75rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 0.8rem;
+  backdrop-filter: blur(6px);
+  /* border-box is REQUIRED: with the default content-box the 0.75rem
+     padding and the border are added ON TOP of max-width and the element
+     still runs into the switcher (measured: 25px over budget at 375px). */
+  box-sizing: border-box;
+  max-width: calc(33vw - 1.5rem);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* No switcher to avoid when the iteration has a single design — the only
+   neighbour left is the ☰ FAB at the top right (left edge 100vw - 88px). */
+body[data-single-design="true"] .screen-indicator { max-width: calc(100vw - 8rem); }
+.screen-indicator strong { color: var(--text); }
+
+/* ── Annotation layer eye pill — left edge, directly below the screen
+   indicator (see the top-edge partition comment at .panel-fab below for the
+   3.75rem derivation). `hidden` by default in the markup; JS only unhides it
+   once the active screen has ≥1 annotation. Sits between the design switcher
+   (z-index 95) and the two FABs (z-index 100) — it is chrome of the same
+   weight as the switcher, not as load-bearing as the FABs. Theming hooks:
+   restyle via --anno-accent / --anno-bubble-bg, never by overriding this
+   rule's geometry per page (same discipline as the FAB pair below). */
+.anno-toggle-fab {
+  position: fixed; top: 3.75rem; left: 1rem; z-index: 96;
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.7rem; border-radius: 999px; border: none;
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 0.8rem;
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.anno-toggle-fab:hover { transform: scale(1.04); }
+.anno-toggle-fab[hidden] { display: none; }
+.anno-toggle-fab .anno-eye { font-size: 0.95rem; line-height: 1; }
+.anno-toggle-fab .anno-count {
+  min-width: 1.1rem; text-align: center; font-weight: 600; color: var(--text);
+}
+/* Hidden layer state: the eye pill itself always stays visible/clickable
+   (it is the only remnant, per spec) — everything ELSE the layer owns
+   disappears completely, not just dims. */
+body.anno-hidden .anno-toggle-fab .anno-eye { opacity: 0.5; }
+body.anno-hidden .anno-layer { display: none !important; }
+/* Auto-hides while the ☰ panel is open, same treatment as the design
+   switcher — both are secondary chrome the overlay panel supersedes. */
+body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
+
+/* ── Annotation layer — pins pinned to a screen element via percentage
+   coordinates (--anno-x / --anno-y), each with a short leader line to a
+   speech bubble. Every visual property below is a CSS custom property with
+   a sane default so a concept can restyle the layer to match its own theme
+   without touching the data-attribute contract (§ Annotation Layer). ── */
+.anno-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 40;
+}
+.anno {
+  position: absolute;
+  left: var(--anno-x, 50%); top: var(--anno-y, 50%);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+.anno-pin {
+  width: var(--anno-pin-size, 28px); height: var(--anno-pin-size, 28px);
+  border-radius: 50%;
+  border: 2px solid var(--anno-accent, var(--accent-color, #58a6ff));
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  color: var(--anno-accent, var(--accent-color, #58a6ff));
+  font-size: 0.8rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  transition: transform 0.15s;
+}
+.anno-pin:hover { transform: scale(1.08); }
+/* Answered pins invert to a filled state — visibly different at a glance
+   from the still-open questions. Recomputed on every input, never only at
+   generation time (see wireAnnotationLayer()). */
+.anno-pin[data-answered="true"] {
+  background: var(--anno-accent, var(--accent-color, #58a6ff));
+  color: #fff;
+}
+.anno-bubble {
+  position: absolute;
+  z-index: 1;
+  min-width: 180px; max-width: min(280px, 60vw);
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: var(--anno-bubble-radius, 12px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  font-size: 0.85rem;
+}
+/* One open bubble reads above every collapsed pin/bubble around it. Uses
+   :has() rather than a JS-set attribute — same pattern as the single-screen
+   collapse rules above (body[data-single-screen] .feedback-section:has(...)). */
+.anno:has(.anno-bubble[data-open="true"]) { z-index: 2; }
+.anno-bubble-summary {
+  display: flex; align-items: center; gap: 0.4rem; width: 100%;
+  padding: 0.55rem 0.75rem; border: none; background: none; cursor: pointer;
+  color: var(--text-color, #c9d1d9); text-align: left; font: inherit;
+}
+.anno-bubble-question {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.anno-bubble[data-open="true"] .anno-bubble-question { white-space: normal; }
+.anno-chevron { transition: transform 0.15s; color: var(--text-secondary); }
+.anno-bubble[data-open="true"] .anno-chevron { transform: rotate(90deg); }
+.anno-bubble-body { display: none; flex-direction: column; gap: 0.5rem; padding: 0 0.75rem 0.75rem; }
+.anno-bubble[data-open="true"] .anno-bubble-body { display: flex; }
+.anno-answer {
+  width: 100%; min-height: 64px; resize: vertical;
+  padding: 0.5rem 0.6rem; border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
+  font: inherit;
+}
+/* Attachment mount — deliberately empty, see § Annotation Layer. */
+.attach-slot:empty { display: none; }
+/* …and deliberately hidden while the field it belongs to is. The dock builds
+   one textarea PER screen / design / view and hides all but the active one
+   (§ Layout JS), but `.attach-slot` is that textarea's SIBLING, not its child:
+   the moment initCommentAttachments() mounts a bar the slot stops being
+   `:empty`, so without this rule every inactive field's bar renders under the
+   one visible textarea — a stack of N identical 📎 rows instead of one.
+   The mount is always emitted immediately after its textarea, so the adjacent
+   sibling combinator ties their visibility together with no JS to keep in
+   sync — showScreen()/showDesign()/showView() only touch `ta.hidden`. The
+   `.attach-bar` half covers the mountless fallback path, where the bar is
+   inserted straight after the textarea instead of into a slot. */
+textarea[hidden] + .attach-slot,
+textarea[hidden] + .attach-bar { display: none; }
+/* Leader line + bubble offset, one rule pair per side. The line is a short
+   fixed-length connector (14px), never computed at runtime. */
+.anno[data-anno-side="right"] .anno-bubble { left: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
+.anno[data-anno-side="right"] .anno-bubble::before { content: ''; position: absolute; top: 50%; left: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
+.anno[data-anno-side="left"] .anno-bubble { right: calc(var(--anno-pin-size, 28px) + 14px); top: 50%; transform: translateY(-50%); }
+.anno[data-anno-side="left"] .anno-bubble::before { content: ''; position: absolute; top: 50%; right: -14px; width: 14px; height: 2px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateY(-50%); }
+.anno[data-anno-side="top"] .anno-bubble { left: 50%; bottom: calc(var(--anno-pin-size, 28px) + 14px); transform: translateX(-50%); }
+.anno[data-anno-side="top"] .anno-bubble::before { content: ''; position: absolute; left: 50%; bottom: -14px; width: 2px; height: 14px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateX(-50%); }
+.anno[data-anno-side="bottom"] .anno-bubble { left: 50%; top: calc(var(--anno-pin-size, 28px) + 14px); transform: translateX(-50%); }
+.anno[data-anno-side="bottom"] .anno-bubble::before { content: ''; position: absolute; left: 50%; top: -14px; width: 2px; height: 14px; background: var(--anno-accent, var(--accent-color, #58a6ff)); transform: translateX(-50%); }
+
+/* ── Design switcher — ghost bar, top centre ──
+   Deliberately barely-there at rest: the viewport belongs to the mockup, not
+   to chrome. Only the active design's label shows, no background fill, no
+   separators. Hover AND :focus-within reveal the full segmented control —
+   :focus-within (not :focus-visible) is deliberate: the expanding element is
+   the container, and it must expand as soon as focus lands on ANY of its
+   segment buttons, which is exactly what keyboard tabbing produces. That
+   keeps the control reachable without a mouse.
+   Never collides with the screen indicator (top-left) or the ☰ FAB
+   (top-right once Wave 3 moves it there) — guaranteed by the width bands
+   documented at .panel-fab below, not by the labels happening to be short.
+   Hidden entirely below two designs (body[data-single-design="true"]). */
+.design-switcher {
+  position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%);
+  z-index: 95;
+  display: flex; gap: 2px;
+  padding: 0.3rem; border-radius: 999px;
+  background: transparent;
+  backdrop-filter: blur(6px);
+  opacity: 0.18;
+  transition: opacity 0.16s ease;
+  /* Hard width budget so the expanded (hover/focus) state cannot grow into
+     the screen indicator on the left or the ☰ FAB on the right — it spans
+     33vw…67vw at every viewport. Segments shrink and ellipsise instead;
+     min-width:0 is required or flex refuses to shrink below content width
+     because the labels are nowrap. */
+  box-sizing: border-box;
+  max-width: 34vw;
+  overflow: hidden;
+}
+.design-switcher:hover,
+.design-switcher:focus-within { opacity: 1; }
+.design-switch-item {
+  border: none; background: transparent; cursor: pointer;
+  padding: 0.35rem 0.85rem; border-radius: 999px;
+  font-size: 0.8rem; color: var(--text-secondary);
+  white-space: nowrap; transition: background 0.15s, color 0.15s;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+/* Resting state shows ONLY the active label — siblings collapse to width 0
+   so no separators/background are visible until the bar expands on hover. */
+.design-switcher:not(:hover):not(:focus-within) .design-switch-item:not([data-active="true"]) {
+  width: 0; padding: 0; margin: 0; overflow: hidden; pointer-events: none;
+}
+.design-switcher:not(:hover):not(:focus-within) {
+  background: transparent; border: none;
+}
+.design-switcher:hover,
+.design-switcher:focus-within {
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border: 1px solid var(--border-color);
+}
+.design-switch-item[data-active="true"] {
+  color: var(--text); font-weight: 600;
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+.design-switch-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+/* Auto-hides while the ☰ panel is open — the panel carries the same nav. */
+body.panel-open .design-switcher { opacity: 0; pointer-events: none; }
+
+/* ── View segments (§ Views (optional)) — same row as the design segments,
+   separated by a thin divider so switching between a design and a question
+   about it is one click. Same class family shape as .design-switch-item on
+   purpose: they read as one continuous control, not two bars glued
+   together. Only rendered (by buildDesignUI()) when the iteration has ≥1
+   view — a design-only iteration never emits either. */
+.switcher-divider {
+  align-self: center;
+  width: 1px; height: 1.1rem;
+  margin: 0 2px;
+  background: var(--border-color);
+  flex: none;
+}
+.design-switcher:not(:hover):not(:focus-within) .switcher-divider { width: 0; margin: 0; overflow: hidden; }
+.view-switch-item {
+  border: none; background: transparent; cursor: pointer;
+  padding: 0.35rem 0.85rem; border-radius: 999px;
+  font-size: 0.8rem; color: var(--text-secondary);
+  white-space: nowrap; transition: background 0.15s, color 0.15s;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+.design-switcher:not(:hover):not(:focus-within) .view-switch-item:not([data-active="true"]) {
+  width: 0; padding: 0; margin: 0; overflow: hidden; pointer-events: none;
+}
+.view-switch-item[data-active="true"] {
+  color: var(--text); font-weight: 600;
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+.view-switch-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+/* Resting state: if a VIEW is the active item, its own segment must stay
+   visible even though the bar is collapsed — same rule the resting design
+   segment already gets, just for the sibling class. */
+.design-switcher:not(:hover):not(:focus-within) .design-switch-item[data-active="true"] { width: auto; padding: 0.35rem 0.85rem; }
+
+/* Panel chrome (overlay aside, ☰ FAB, backdrop, close button) is NOT in this
+   section — it applies in every template and lives in § Panel Chrome (all
+   templates), so a decision- or free-only page carries it without taking the
+   design layout with it. The 💬 FAB, its dock and the FAB's reserved row
+   under the panel foot moved there too (#399) — the dock is page chrome in
+   every template; only the design-side row collapse rules stay below. */
+
+/* ── Screen navigation inside the ☰ panel ── */
+.screen-nav { display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+.screen-nav-item { display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 0.85rem; border-radius: 8px; text-decoration: none;
+  color: var(--text-color, #c9d1d9); font-size: 0.95rem;
+  border: 1px solid var(--border-color); background: transparent;
+  cursor: pointer; transition: all 0.15s; text-align: left; }
+.screen-nav-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-item[data-active="true"] {
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  border-color: var(--accent-color); font-weight: 600;
+}
+.screen-nav-item .screen-idx { color: var(--accent-color); font-weight: 600; margin-right: 0.5rem; }
+.screen-nav-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+
+/* Two-level nav: a design heading per <section data-design>, its pages
+   nested/indented beneath. Single-design pages never render the heading
+   (see body[data-single-design="true"] below), so this stays invisible
+   until it's needed. */
+.screen-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.screen-nav-group + .screen-nav-group { margin-top: 0.5rem; }
+.screen-nav-design-heading {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.5rem 0.85rem; border-radius: 8px; border: none;
+  background: transparent; color: var(--text); font-size: 0.9rem;
+  font-weight: 700; cursor: pointer; text-align: left; transition: background 0.15s;
+}
+.screen-nav-design-heading:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-design-heading[data-active="true"] { color: var(--accent-color); }
+.screen-nav-design-heading .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+.screen-nav-group .screen-nav-item { margin-left: 0.75rem; }
+
+/* ── Views group (§ Views (optional)) — second .screen-nav-group, only
+   rendered when the iteration has ≥1 view. The heading is a plain label,
+   NOT a button (unlike .screen-nav-design-heading): there is no single
+   "views" thing to switch to, only individual views below it. */
+.screen-nav-views-heading {
+  padding: 0.5rem 0.85rem 0.25rem;
+  color: var(--text-secondary); font-size: 0.75rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.screen-nav-view-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 0.85rem; border-radius: 8px; text-decoration: none;
+  color: var(--text-color, #c9d1d9); font-size: 0.95rem;
+  border: 1px solid var(--border-color); background: transparent;
+  cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.screen-nav-view-item:hover { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.screen-nav-view-item[data-active="true"] {
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  border-color: var(--accent-color); font-weight: 600;
+}
+.screen-nav-view-item .has-notes { color: var(--warning-color); font-size: 0.75rem; }
+
+/* Hidden per-screen / per-design / per-view textareas: only the active one
+   shown. #view-textareas belongs here for the same reason the other two do —
+   buildViewTextareas() hides every one of its textareas identically. */
+#screen-textareas textarea[hidden],
+#design-textareas textarea[hidden],
+#view-textareas textarea[hidden] { display: none; }
+
+/* Single-screen design: hide the per-screen feedback section + its own
+   leading divider. Order is screen -> design -> view -> general (specific
+   to general, top to bottom — general is always last and never hides), so
+   the divider that must disappear with the screen row is the one
+   immediately AFTER it (:has(+ .feedback-section ...) targets a divider by
+   what follows it, not by index), leaving general's own leading divider
+   alone regardless of how many of the rows above it are hidden. Only
+   general (and, if >=2 designs, per-design) notes remain visible.
+   body[data-single-screen] is the correct scope HERE: the dock always talks
+   about the screen currently on the canvas, so an active-design flag is
+   exactly what it needs. */
+body[data-single-screen="true"] .feedback-section:has(#screen-textareas),
+body[data-single-screen="true"] .feedback-divider:has(+ .feedback-section #screen-textareas) {
+  display: none;
+}
+
+/* The panel TOC collapses PER GROUP, never per body. #screen-nav is a
+   CROSS-design container: one .screen-nav-group per design, each led by the
+   heading that switches to it. body[data-single-screen] is written by
+   updateScreenScope() from the ACTIVE design's screen count, so gating the
+   container on it blanked the entire table of contents — every other
+   design's entry, and the only in-panel way back — the moment the user
+   switched to a design that happened to hold one screen. The flag belongs
+   on the group, stamped once per design by buildDesignUI(), where it is
+   also stable across switches instead of flipping under the user. */
+.screen-nav-group[data-single-screen="true"] .screen-nav-item { display: none; }
+
+/* Only when there is genuinely nothing left to navigate — one design, that
+   one design holds one screen, AND the iteration has no views — may the
+   container itself go. Without this the emptied flex box keeps its
+   border-bottom and paints a stray divider under the iteration tabs.
+   The :has() guard keeps the PANEL route to the views: their group lives
+   inside THIS container, and collapsing it would take that route with it.
+   The switcher route is independent — the .view-switch-item row inside
+   .design-switcher stays visible whenever view segments exist (see the
+   :not(:has(.view-switch-item)) guard two rules down) — so dropping the
+   guard here would not strand the views, it would leave them reachable
+   from the switcher only. "Nothing left to navigate" still has to mean
+   nothing, views included: the panel lists them, so it must not vanish
+   while they exist. */
+body[data-single-design="true"][data-single-screen="true"]
+  #screen-nav:not(:has(.screen-nav-view-item)) {
+  display: none;
+}
+
+/* Single-design iteration: sibling mechanism to single-screen above, set by
+   the same wiring pass (buildDesignUI()). Hides the design switcher and the
+   per-design feedback row via CSS only — no JS branching needed at the call
+   site, matching how single-screen already collapses. The design heading
+   level of #screen-nav also collapses back to a flat list since there is
+   nothing to group. The :not(:has(.view-switch-item)) guard on the switcher
+   selector keeps the switcher visible when the iteration has views: with a
+   single design plus views the switcher is the one-click route to the view
+   segments, so only a genuinely single-design, view-less switcher collapses. */
+body[data-single-design="true"] .design-switcher:not(:has(.view-switch-item)),
+body[data-single-design="true"] .screen-nav-design-heading,
+body[data-single-design="true"] .feedback-section:has([data-design-comment]),
+body[data-single-design="true"] .feedback-divider:has(+ .feedback-section [data-design-comment]) {
+  display: none;
+}
+body[data-single-design="true"] .screen-nav-group .screen-nav-item { margin-left: 0; }
+
+/* ── View mode dock swap (§ Views (optional)) — the dock never shows the
+   design/screen rows and the view row at once. Default (no view active):
+   the view row (built once per iteration, may be empty of any view) stays
+   hidden along with its leading divider. Once a view IS active
+   (body[data-view-active="true"], set by showView()/showDesign()), the
+   design + screen rows and THEIR leading dividers hide instead, and the
+   view row takes their place. Same :has()-based divider targeting as the
+   single-screen/single-design rules above. */
+body:not([data-view-active="true"]) .feedback-section:has(#view-textareas),
+body:not([data-view-active="true"]) .feedback-divider:has(+ .feedback-section #view-textareas) {
+  display: none;
+}
+body[data-view-active="true"] .feedback-section:has(#design-textareas),
+body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #design-textareas),
+body[data-view-active="true"] .feedback-section:has(#screen-textareas),
+body[data-view-active="true"] .feedback-divider:has(+ .feedback-section #screen-textareas) {
+  display: none;
+}
+
+/* General is always visible and now sits last, so it always carries a
+   leading divider — except the one case where screen, design AND view are
+   ALL hidden at once (single-design + single-screen + no view active):
+   general is then the only row left, and a divider with nothing above it
+   would float above an otherwise-empty dock. #design-general-feedback is
+   the general textarea's own id, so this targets exactly its divider. */
+body[data-single-design="true"][data-single-screen="true"]:not([data-view-active="true"])
+  .feedback-divider:has(+ .feedback-section #design-general-feedback) {
+  display: none;
+}
+
+/* Indicator swap (§ Views (optional)) — belt-and-suspenders CSS mirror of
+   the JS hidden-toggle in updateIndicator(); JS is authoritative (it also
+   fills #active-view-label), this rule only guards against a stale paint
+   between a view switch and the next updateIndicator() call. */
+body[data-view-active="true"] #indicator-screen-info { display: none; }
+body:not([data-view-active="true"]) #indicator-view { display: none; }
+
+/* ── Viewport toggle — device switcher, bottom-left ──
+   The fourth corner: indicator top-left, switcher top-centre, ☰ top-right,
+   💬 bottom-right. It must read as the quietest element on the page, and it
+   is deliberately 34px against the FABs' 60px — a third circle of the same
+   size would read as a third action, which this is not. Do NOT fold it into
+   the .panel-fab/.feedback-fab rule; that rule is one component with two
+   positions and this is a different component.
+   Corner arithmetic, so nobody has to re-derive it:
+     toggle   left 32px … 32+160px = 192px   (expanded), top edge 66px
+     💬 FAB   left 100vw - 92px                (60px + 2rem margin)
+   The two can only meet below 284px viewport width, which is out of scope.
+   Vertically the expanded toggle tops out at 66px while .feedback-dock
+   bottoms out at calc(2rem + 60px - 6px) = 86px — a 20px gap that holds
+   even where the dock becomes a full-width sheet at ≤560px. */
+.viewport-toggle {
+  position: fixed;
+  left: 2rem;
+  bottom: 2rem;
+  /* Same tier as .screen-indicator: quiet corner chrome. Above
+     .content-dimmer (50) so the view stays switchable after a submit,
+     below .panel-backdrop (150), .feedback-dock (180) and the panel (200). */
+  z-index: 90;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 34px;
+  /* Resting state is a plain circle showing only the glyph. max-width — not
+     width — is what animates: `width: auto` is not interpolable, and
+     animating a fixed width re-positions the glyph mid-transition. With
+     overflow: hidden the label reveals without the left edge ever moving,
+     which is what keeps a bottom-LEFT anchored control growing rightward
+     instead of drifting into the corner. */
+  max-width: 34px;
+  overflow: hidden;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color, #30363d) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  color: var(--text-secondary, #8b949e);
+  /* Barely-there, but not the switcher's 0.18: that bar can afford near-
+     invisibility because it carries a readable text label. An icon-only
+     button at 0.18 is undiscoverable. */
+  opacity: 0.55;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: max-width 0.22s cubic-bezier(0.2, 0.9, 0.3, 1),
+              opacity 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+.viewport-toggle svg { flex: none; width: 20px; height: 20px; }
+/* Exactly one glyph is visible, picked by the mode the JS wrote onto the
+   button. Driving it from CSS keeps the JS free of SVG construction. */
+.viewport-toggle svg { display: none; }
+.viewport-toggle[data-mode="desktop"] svg[data-glyph="desktop"],
+.viewport-toggle[data-mode="tablet"] svg[data-glyph="tablet"],
+.viewport-toggle[data-mode="phone"] svg[data-glyph="phone"] { display: block; }
+.viewport-toggle-label {
+  font-size: 0.8rem;               /* .screen-indicator's scale */
+  color: var(--text, #c9d1d9);
+  white-space: nowrap;
+  opacity: 0;
+  /* Delayed so the text fades in once the pill has mostly finished
+     widening — fading in while still clipped looks like chewed-off text. */
+  transition: opacity 0.15s ease 0.05s;
+}
+.viewport-toggle:hover,
+.viewport-toggle:focus-visible {
+  max-width: 160px;
+  opacity: 1;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 92%, transparent);
+  border-color: var(--border-color, #30363d);
+}
+.viewport-toggle:hover .viewport-toggle-label,
+.viewport-toggle:focus-visible .viewport-toggle-label { opacity: 1; }
+/* Outline, not a border swap: a border change would fight the max-width
+   transition and shift the glyph by a pixel on focus. */
+.viewport-toggle:focus-visible { outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px; }
+/* Press-in, deliberately the inverse of the FABs' :hover grow, so the two
+   never read as the same gesture. */
+.viewport-toggle:active { transform: scale(0.93); transition: transform 0.1s ease; }
+/* One declared viewport is no choice, so there is no control. Same collapse
+   idiom as body[data-single-design] / body[data-single-screen] above. */
+body[data-single-viewport="true"] .viewport-toggle { display: none; }
+/* A view (§ Views (optional)) replaces the design as the active top-level
+   item — no screen is on display, so there is no device to switch. Mirrors
+   the dock/indicator swaps that key off the same flag. */
+body[data-view-active="true"] .viewport-toggle { display: none; }
+/* Fades out under an open ☰ panel exactly like .design-switcher — it sits
+   below the backdrop anyway, and a half-dimmed control invites dead clicks. */
+body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
+
+/* ── Device stage — the portrait/landscape frame pair ──
+   Only ever built for the ACTIVE screen, and only outside desktop mode.
+   Desktop mode has no stage at all, which IS the visual distinction: bezels
+   and a canvas wash appear, nothing more elaborate.
+   The authored mockup stays in the DOM as the clone source and is hidden
+   with display:none — NOT opacity or off-screen positioning, both of which
+   leave it focusable and readable by a screen reader, i.e. the content would
+   be announced three times instead of two. */
+[data-template="design"] section[data-screen][data-device-mode] > *:not(.device-stage) { display: none; }
+/* Device mode replaces the section's own scrolling with the stage's. Leaving
+   overflow-y: auto here makes the scrollbar's appearance shrink clientWidth,
+   which lowers the fit scale, which removes the scrollbar again — a visible
+   oscillation, and a "ResizeObserver loop" warning in Chromium. */
+[data-template="design"] section[data-screen][data-device-mode] { overflow: hidden; padding: var(--chrome-safe-top, 5.75rem) 1.5rem var(--chrome-safe-bottom, 2rem); }
+.device-stage {
+  align-self: stretch;             /* the section centres its children; the
+                                      stage must instead fill it, or the
+                                      available height is undefined and the
+                                      fit maths has nothing to measure */
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* A quiet wash so the eye reads "staged device view" without a new colour:
+     40% of --input-bg, already the recessed-surface token of this template. */
+  background: color-mix(in srgb, var(--input-bg, #0d1117) 40%, transparent);
+  border-radius: 12px;
+}
+/* Below MIN_DEVICE_SCALE the pair genuinely does not fit and scrolling beats
+   squinting. Centred content that overflows its scroll container is unreachable
+   at the leading edge, so the alignment flips with the overflow. */
+.device-stage[data-clamped="true"] { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+/* transform: scale() leaves the LAYOUT box at full size. .device-fit is the
+   compensator: JS sets it to the SCALED size while .device-pair scales inside
+   it from the top-left corner. Without this pair of elements a scaled-down
+   mock still reserves its full unscaled height, the section grows scrollbars
+   around empty space, and the top of the stage ends up above the scroll
+   origin where it cannot be reached at all. */
+.device-fit { position: relative; flex: none; }
+.device-pair {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  /* ONE gap for both axes, deliberately. fitDeviceStage() reads it once and
+     scores the row and the column candidate with the same value, because the
+     axis is not known until bestFit() has answered. An axis-specific gap
+     override would therefore be scored with the PREVIOUS render's value and
+     the pick would lag one switch behind. If a differing gap is ever wanted,
+     bestFit() has to take one per axis — do not add a
+     `[data-axis="…"] { gap }` rule here. */
+  gap: 2rem;
+}
+/* Axis is chosen by JS from whichever direction yields the larger scale, not
+   by a width breakpoint — see bestFit() for why a fixed breakpoint is wrong
+   in both directions. */
+.device-pair[data-axis="column"] { flex-direction: column; }
+.device-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  /* Never shrink individually: the pair is scaled once, as a unit. Flex's
+     default shrink would otherwise make the two frames different sizes and
+     destroy the comparison the pair exists for. */
+  flex: none;
+}
+/* Restrained bezel: one border in --panel-bg so it recedes instead of
+   reading as glossy plastic, a hairline inset ring for definition against
+   dark backgrounds, one soft shadow for elevation. Phones carry thinner
+   bezels and rounder corners than tablets on every shipping device, so a
+   single uniform radius reads as wrong to anyone who has held either. */
+.device-bezel {
+  box-sizing: content-box;
+  background: var(--panel-bg, #161b22);
+  border: var(--device-bezel, 10px) solid var(--panel-bg, #161b22);
+  border-radius: var(--device-radius-outer, 20px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35), inset 0 0 0 1px var(--border-color, #30363d);
+}
+.device-bezel[data-device="tablet"] { --device-bezel: 10px; --device-radius-outer: 20px; --device-radius-inner: 10px; }
+.device-bezel[data-device="phone"]  { --device-bezel: 8px;  --device-radius-outer: 26px; --device-radius-inner: 18px; }
+/* The simulated screen. It scrolls itself — that is what a real device's
+   screen does, and it saves every mockup from managing its own scroll
+   region. container-type: size is what makes @container device (…) inside
+   the mock resolve against the SIMULATED size instead of the browser
+   window; it is the only mechanism that can, since the window never
+   changes. */
+.device-viewport {
+  width: var(--device-w);
+  height: var(--device-h);
+  border-radius: var(--device-radius-inner, 12px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--input-bg, #0d1117);
+  container-type: size;
+  container-name: device;
+}
+/* Same quiet-metadata register as .screen-indicator, so captions do not read
+   as a new text style. */
+.device-caption { font-size: 0.8rem; color: var(--text-secondary, #8b949e); text-align: center; }
+.device-caption strong { color: var(--text, #c9d1d9); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  /* The pill still expands — it has to, or the label is unreachable — it
+     just snaps rather than animating. */
+  .viewport-toggle { transition: opacity 0.16s ease, background 0.16s ease, border-color 0.16s ease; }
+  .viewport-toggle:active { transform: none; transition: none; }
+  /* Nothing to disable on .device-pair: its transform is recomputed on every
+     resize frame, so it is deliberately NOT transitioned in the base rule —
+     an animated scale would lag a frame behind the .device-fit box that has
+     to change instantly with it. */
+}
+```
+
+## Layout JS — single-screen navigation + context-sensitive feedback
+
+Only one screen is visible at a time, scoped to the one active design. Each
+design remembers its own last-viewed page (`lastScreenByDesign`, persisted
+via `saveState()`), so switching designs and back returns to that page, not
+page 1. `showScreen(id)` swaps the active screen, rebuilds the position
+indicator, and swaps the feedback-dock textarea to the matching per-screen
+`<textarea>`.
+
+The dock holds **one textarea per screen of EVERY design in the iteration**,
+built once per iteration by `buildScreenTextareas()` — never per design
+switch. Switching design or page only flips `hidden`; no node is ever
+destroyed. This is load-bearing in three ways:
+
+1. Values survive a design switch. `restoreState()` is re-invoked only at the
+   two points where the dock is (re)built — the design IIFE's own
+   `DOMContentLoaded` handler and `iteration:changed` — so a node destroyed
+   at any other moment is never rehydrated.
+2. `saveState()` serialises only nodes present in the DOM. It merges its scan
+   over the previously stored blob (see § State Persistence), so a destroyed
+   textarea no longer DELETES its `text:{screen-id}` key — but the note is
+   still invisible and unsubmittable until a node with that `data-comment`
+   exists again, and `collectDesignDecisions()` reads the DOM, not storage.
+3. `collectDesignDecisions()` scans the dock; only a dock holding all designs'
+   screens produces a complete `comments.screens` payload.
+
+Same rule, same reason as `buildDesignTextareas()` for the design-level row.
+Both builders carry values across the one rebuild they do have (iteration
+change) via `harvestDockValues()`.
+
+The dock itself — toggle, maximise, `applyDockSize()`, `applyDockFreezeState()`,
+`primeDock()`, `markDockSubmitted()` — is NOT wired here: it is page chrome in
+every template (§ Panel Chrome (all templates) → Feedback dock, #399), and this
+IIFE only calls the globals that block exports. What stays here is what only a
+design round has: the three row builders and the ordering of stash → rebuild
+→ restore → `primeDock()` on an iteration switch (gate P14b).
+
+```javascript
+(function wireDesignLayout() {
+  // Guard on the PAGE, not on the current projection: a page whose first
+  // iteration is `decision` may still contain a `design` iteration further
+  // down, and this IIFE only runs once at load.
+  // The legacy alias `prototype` is normalised FIRST — a page that carries
+  // data-template="prototype" on <html> and no data-iteration-template at
+  // all (the documented legacy shape) must still wire up. Comparing the raw
+  // value against 'design' only would fail both disjuncts and leave the
+  // page inert.
+  const DESIGN_TEMPLATES = new Set(['design', 'prototype']);
+  const hasDesign = DESIGN_TEMPLATES.has(document.documentElement.dataset.template || '')
+    || !!document.querySelector('section[data-iteration][data-iteration-template="design"],'
+                              + 'section[data-iteration][data-iteration-template="prototype"]');
+  if (!hasDesign) return;
+
+  // Per-design "last viewed page" memory, keyed by design id. Restored from
+  // localStorage's `_activeScreenByDesign` on load (see saveState below) so
+  // it survives reloads, not just in-session switches.
+  let lastScreenByDesign = {};
+  // Two values, deliberately: the device view is a VIEWING preference that
+  // belongs to the reader, while what can actually be RENDERED belongs to
+  // whatever the visible iteration and design declare.
+  //   viewportPref — the last mode the user chose. Persisted. NEVER clamped.
+  //   viewportMode — the effective mode, derived from pref ∩ declaration.
+  // Collapsing the two into one variable silently downgrades the choice: a
+  // page that mixes a design iteration with a decision one (the documented
+  // split for entangled questions) clamps the single variable to `desktop`
+  // the moment the user clicks the decision tab, and coming back shows a
+  // desktop view they never asked for. Same for a design that declares fewer
+  // form factors than its neighbour.
+  let viewportPref = null;
+  let viewportMode = 'desktop';
+  // The iteration this layout last built its chrome for. The
+  // `iteration:changed` handler compares the incoming iteration against it to
+  // tell a real tab switch (views are dropped, by design) from a re-entry into
+  // the SAME round — the boot `showIteration()` above all, which fires the same
+  // event moments after this block's own DOMContentLoaded listener restored
+  // `_activeView`. Without the distinction the boot event hid the restored
+  // view and the showScreen() → saveState() behind it deleted `_activeView`
+  // from storage, so no question view ever survived a reload.
+  let shownIterationId = null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      lastScreenByDesign = saved._activeScreenByDesign || {};
+      viewportPref = saved._viewportMode || null;
+    }
+  } catch (e) {}
+
+  function visibleIteration() {
+    return document.querySelector('section[data-iteration]:not([hidden])');
+  }
+  function activeDesign() {
+    const it = visibleIteration();
+    return it ? it.querySelector('section[data-design][data-design-active="true"]') : null;
+  }
+  function designs() {
+    const it = visibleIteration();
+    return it ? [...it.querySelectorAll('section[data-design]')] : [];
+  }
+  // Views (§ Views (optional)) — top-level siblings of section[data-design].
+  // Mirrors designs()/activeDesign() above. A page with no data-view
+  // sections simply yields an empty array everywhere below; every view
+  // code path is additive and no-ops in that case.
+  function views() {
+    const it = visibleIteration();
+    return it ? [...it.querySelectorAll('section[data-view]')] : [];
+  }
+  // Only returns a view that is BOTH marked active AND actually visible —
+  // unlike activeDesign() above, a view's data-view-active can legitimately
+  // go stale while a design is on screen (showDesign() does not touch it),
+  // so callers that care about "what is on screen right now" must use this,
+  // not a bare data-view-active lookup.
+  function activeViewVisible() {
+    const it = visibleIteration();
+    return it ? it.querySelector('section[data-view][data-view-active="true"]:not([hidden])') : null;
+  }
+
+  // Build screen-nav (two-level: design heading + nested pages), the design
+  // switcher ghost bar, and per-screen textareas — all scoped to the
+  // VISIBLE iteration (may be a frozen tab the user clicked back to, not
+  // necessarily the live one).
+  function buildDesignUI() {
+    const allDesigns = designs();
+    const active = activeDesign();
+    if (!active) return;
+
+    // Single-design collapse: CSS keys off body[data-single-design="true"]
+    // to hide the switcher + design-level feedback row, mirroring
+    // body[data-single-screen] below.
+    document.body.dataset.singleDesign = allDesigns.length <= 1 ? 'true' : 'false';
+
+    // Design switcher (ghost bar) — one segment per design.
+    const switcher = document.getElementById('design-switcher');
+    switcher.innerHTML = '';
+    allDesigns.forEach(d => {
+      const btn = document.createElement('button');
+      btn.className = 'design-switch-item';
+      btn.type = 'button';
+      btn.dataset.designId = d.dataset.design;
+      btn.dataset.active = String(d === active);
+      btn.textContent = d.dataset.navLabel || d.dataset.design;
+      btn.addEventListener('click', () => { showDesign(d.dataset.design); });
+      switcher.appendChild(btn);
+    });
+    // Views (§ Views (optional)) — appended to the SAME row after a thin
+    // divider, only when the iteration has ≥1. Never rendered for a
+    // design-only iteration (allViews.length === 0 short-circuits both the
+    // divider and the loop, so the switcher's markup is byte-identical to
+    // pre-views pages when no view exists).
+    const allViews = views();
+    if (allViews.length) {
+      const divider = document.createElement('span');
+      divider.className = 'switcher-divider';
+      divider.setAttribute('aria-hidden', 'true');
+      switcher.appendChild(divider);
+      allViews.forEach(v => {
+        const btn = document.createElement('button');
+        btn.className = 'view-switch-item';
+        btn.type = 'button';
+        btn.dataset.viewId = v.dataset.view;
+        btn.dataset.active = 'false';
+        btn.textContent = v.dataset.navLabel || v.dataset.view;
+        btn.addEventListener('click', () => { showView(v.dataset.view); });
+        switcher.appendChild(btn);
+      });
+    }
+
+    // Two-level screen-nav inside the ☰ panel: one .screen-nav-group per
+    // design, a heading button, then nested .screen-nav-item per page.
+    const nav = document.getElementById('screen-nav');
+    nav.innerHTML = '';
+    // One nav row per view — the same markup whether it sits under its
+    // design (`data-view-for`) or in the views group below.
+    const viewNavItem = v => {
+      const btn = document.createElement('button');
+      btn.className = 'screen-nav-view-item';
+      btn.type = 'button';
+      btn.dataset.viewId = v.dataset.view;
+      btn.innerHTML = `<span>${v.dataset.navLabel || v.dataset.view}</span>
+        <span class="has-notes" data-view-note-marker="${v.dataset.view}"></span>`;
+      btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
+      return btn;
+    };
+    allDesigns.forEach(d => {
+      const group = document.createElement('div');
+      group.className = 'screen-nav-group';
+
+      const heading = document.createElement('button');
+      heading.className = 'screen-nav-design-heading';
+      heading.type = 'button';
+      heading.dataset.designId = d.dataset.design;
+      heading.dataset.active = String(d === active);
+      heading.innerHTML = `<span>${d.dataset.navLabel || d.dataset.design}</span>
+        <span class="has-notes" data-design-note-marker="${d.dataset.design}"></span>`;
+      heading.addEventListener('click', () => { showDesign(d.dataset.design); closePanel(); });
+      group.appendChild(heading);
+
+      const screens = [...d.querySelectorAll('section[data-screen][id]')];
+      // Per-design collapse flag for the TOC (§ Layout CSS,
+      // .screen-nav-group[data-single-screen]). Derived from THIS design's
+      // own screens — body[data-single-screen] tracks only the design on the
+      // canvas, and using it here would hide every other design's rows too,
+      // flipping the whole TOC on every switch.
+      group.dataset.singleScreen = String(screens.length <= 1);
+      screens.forEach((sec, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'screen-nav-item';
+        btn.type = 'button';
+        btn.dataset.screenId = sec.id;
+        btn.dataset.designId = d.dataset.design;
+        btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
+          <span class="has-notes" data-note-marker></span>`;
+        btn.addEventListener('click', () => {
+          // Resolve the active design at CLICK time. buildDesignUI() only
+          // runs on iteration:changed / DOMContentLoaded, never on a design
+          // switch, so the build-time `active` above goes stale the moment
+          // the ghost bar is used — and a stale `d === active` sends a
+          // FOREIGN screen id into showScreen(), which then hides every
+          // screen of the design actually on the canvas (blank page).
+          // A VIEW on screen (§ Views (optional)) is the third case: the
+          // design still carries data-design-active="true" as its own
+          // "last shown page" memory, so `cur === d` reads true and a bare
+          // showScreen() would only swap pages INSIDE the hidden design —
+          // the view stays on the canvas and the click looks dead. Only
+          // showDesign() leaves view mode, so route through it whenever a
+          // view is what is actually visible.
+          const cur = activeDesign();
+          const viewOnScreen = document.body.dataset.viewActive === 'true';
+          if (viewOnScreen || !cur || cur.dataset.design !== d.dataset.design) showDesign(d.dataset.design, sec.id);
+          else showScreen(sec.id);
+          closePanel();
+        });
+        group.appendChild(btn);
+      });
+      // Views tied to THIS design (`data-view-for`, § Views (optional)) sit
+      // under its screens; the top-centre switcher stays one flat row.
+      allViews.filter(v => v.dataset.viewFor === d.dataset.design)
+        .forEach(v => group.appendChild(viewNavItem(v)));
+      nav.appendChild(group);
+    });
+
+    // Second nav group, below the designs — only for the views that belong
+    // to no design of this round: `data-view-for` absent, or naming a design
+    // that does not exist here (a gate warning; the TOC falls back silently).
+    // Heading is a plain label (no click handler): there is nothing to
+    // "switch to" at the group level, only the individual views nested
+    // under it. Skipped entirely when every view sits under a design.
+    const freeViews = allViews.filter(v => !v.dataset.viewFor
+      || !allDesigns.some(d => d.dataset.design === v.dataset.viewFor));
+    if (freeViews.length) {
+      const viewGroup = document.createElement('div');
+      viewGroup.className = 'screen-nav-group screen-nav-views-group';
+      const heading = document.createElement('div');
+      heading.className = 'screen-nav-views-heading';
+      heading.textContent = '{{design.nav_views_heading}}';
+      viewGroup.appendChild(heading);
+      freeViews.forEach(v => viewGroup.appendChild(viewNavItem(v)));
+      nav.appendChild(viewGroup);
+    }
+
+    buildDesignTextareas(allDesigns, active);
+    buildScreenTextareas(allDesigns);
+    buildViewTextareas(allViews);
+    updateScreenScope(active);
+    // § Attachments — rebuild bars for the freshly (re)created textareas
+    // and re-render any attachments already tracked for their slot keys.
+    if (typeof initCommentAttachments === 'function') initCommentAttachments();
+    // LAST: the builders above read the previous stamp to decide whether the
+    // text on screen was theirs to carry (harvestDockValues). Re-stamping
+    // before them would make every rebuild look like a same-round one.
+    const _liveNow = liveIterationId();
+    if (dock.dataset.iteration !== _liveNow) delete dock.dataset.submitted;
+    dock.dataset.iteration = _liveNow;
+  }
+  // harvestDockValues() and liveIterationId() are globals from § Panel
+  // Chrome's dock block (the dock is page chrome, so the carry-over that
+  // protects a rebuild belongs to it, not to this layout).
+
+  // Per-design textareas (💬) — one per design, only the active one shown.
+  // Rebuilt only when the design SET changes (buildDesignUI, i.e. iteration
+  // switches). A design switch never rebuilds anything: showDesign() just
+  // flips `hidden`.
+  function buildDesignTextareas(allDesigns, active) {
+    const container = document.getElementById('design-textareas');
+    if (!container) return;
+    const placeholder = container.dataset.placeholder || '';
+    const carried = harvestDockValues();
+    container.innerHTML = '';
+    allDesigns.forEach(d => {
+      const ta = document.createElement('textarea');
+      ta.dataset.comment = `design-${d.dataset.design}`;
+      ta.dataset.designComment = d.dataset.design;
+      ta.dataset.attachable = '';
+      ta.placeholder = placeholder;
+      ta.hidden = d !== active;
+      if (carried[ta.dataset.comment]) ta.value = carried[ta.dataset.comment];
+      container.appendChild(ta);
+      // The mount goes DIRECTLY after its textarea — nothing in between.
+      // `textarea[hidden] + .attach-slot` (§ Layout CSS) is what hides an
+      // inactive field's 📎 bar, and it only reaches an adjacent sibling.
+      // Same rule in buildScreenTextareas/buildViewTextareas below.
+      const slot = document.createElement('div');
+      slot.className = 'attach-slot';
+      slot.dataset.attachSlot = ta.dataset.comment;
+      container.appendChild(slot);
+    });
+    const label = document.getElementById('dock-design-label');
+    if (label && active) label.textContent = active.dataset.navLabel || active.dataset.design;
+  }
+
+  // Per-screen textareas (💬) — one per screen of EVERY design in the
+  // iteration, all hidden until showScreen() reveals the active one. Built
+  // ONCE per iteration, exactly like buildDesignTextareas above; never on a
+  // design switch. Destroying and rebuilding them per design lost user text
+  // (restoreState never re-runs) and truncated the submit payload
+  // (collectDesignDecisions scans this container).
+  // data-screen-design carries the owning design id — the dock lives outside
+  // section[data-design], so that attribute is the only link back.
+  function buildScreenTextareas(allDesigns) {
+    const container = document.getElementById('screen-textareas');
+    if (!container) return;
+    const placeholder = container.dataset.placeholder || '';
+    const carried = harvestDockValues();
+    container.innerHTML = '';
+    allDesigns.forEach(d => {
+      d.querySelectorAll('section[data-screen][id]').forEach(sec => {
+        const ta = document.createElement('textarea');
+        ta.dataset.comment = sec.id;
+        ta.dataset.screenComment = sec.id;
+        ta.dataset.screenDesign = d.dataset.design;
+        ta.dataset.attachable = '';
+        ta.placeholder = placeholder;
+        ta.hidden = true;
+        if (carried[sec.id]) ta.value = carried[sec.id];
+        container.appendChild(ta);
+        const slot = document.createElement('div');
+        slot.className = 'attach-slot';
+        slot.dataset.attachSlot = sec.id;
+        container.appendChild(slot);
+      });
+    });
+  }
+
+  // Per-view textareas (💬) — one per view of the iteration, built ONCE per
+  // iteration exactly like buildDesignTextareas/buildScreenTextareas above,
+  // for the same reason: rebuilding on every design/view switch would drop
+  // unsent text and truncate collectDesignDecisions()'s comments.views scan
+  // (§ Views (optional)). Only the currently-active view's textarea is
+  // shown; showView() below flips `hidden`, nothing is ever destroyed.
+  function buildViewTextareas(allViews) {
+    const container = document.getElementById('view-textareas');
+    if (!container) return;
+    const placeholder = container.dataset.placeholder || '';
+    const carried = harvestDockValues();
+    container.innerHTML = '';
+    allViews.forEach(v => {
+      const ta = document.createElement('textarea');
+      ta.dataset.comment = `view-${v.dataset.view}`;
+      ta.dataset.viewComment = v.dataset.view;
+      ta.dataset.attachable = '';
+      ta.placeholder = placeholder;
+      ta.hidden = true;
+      if (carried[ta.dataset.comment]) ta.value = carried[ta.dataset.comment];
+      container.appendChild(ta);
+      const slot = document.createElement('div');
+      slot.className = 'attach-slot';
+      slot.dataset.attachSlot = ta.dataset.comment;
+      container.appendChild(slot);
+    });
+  }
+
+  // Counters + single-screen collapse for the design currently active.
+  // Pure projection — touches no textarea, so it is safe to call on every
+  // design switch.
+  function updateScreenScope(design) {
+    const screens = [...design.querySelectorAll('section[data-screen][id]')];
+    // Optional chaining throughout: the indicator is documented as
+    // "can be hidden or simplified" for single-screen designs, so its spans
+    // are genuinely optional — an unguarded write would turn that documented
+    // choice into a boot-time TypeError.
+    const totalEl = document.getElementById('total-screens');
+    if (totalEl) totalEl.textContent = screens.length;
+    // Single-screen designs: hide the per-screen FEEDBACK row (and, combined
+    // with body[data-single-design], the now-empty #screen-nav). This flag
+    // describes the design currently on the canvas, so it must never gate the
+    // panel's per-design rows on its own — buildDesignUI() stamps
+    // group.dataset.singleScreen for those. See § Layout CSS.
+    document.body.dataset.singleScreen = screens.length <= 1 ? 'true' : 'false';
+  }
+
+  // ── Responsive device views ──────────────────────────────────────────
+  // See § Responsive device views for the declaration attributes. Desktop
+  // mode is a no-op by construction: no stage is built, nothing is cloned,
+  // and the layout is what it was before this code existed.
+  const VIEWPORT_MODES = ['desktop', 'tablet', 'phone'];
+  const VIEWPORT_ORIENTATIONS = ['portrait', 'landscape'];
+  // Portrait CSS pixels. iPad Air 11" and iPhone 15 — mid-range devices
+  // whose widths (834 / 390) are the ones layouts actually break at.
+  const DEVICE_SIZES = { tablet: [834, 1194], phone: [390, 844] };
+  // Below this a frame's text is unreadable; scrolling the pair is the
+  // better degradation than shrinking further.
+  const MIN_DEVICE_SCALE = 0.3;
+  const VIEWPORT_LABELS = (() => {
+    const d = (document.getElementById('viewport-toggle') || {}).dataset || {};
+    return {
+      desktop: d.labelDesktop || 'Desktop', tablet: d.labelTablet || 'Tablet',
+      phone: d.labelPhone || 'Phone',
+      portrait: d.labelPortrait || 'Portrait', landscape: d.labelLandscape || 'Landscape'
+    };
+  })();
+
+  // "834x1194" -> [834, 1194]. A malformed value falls back instead of
+  // producing NaN geometry: a NaN width collapses the frame to 0px and the
+  // mockup silently disappears with nothing logged anywhere.
+  function parseDeviceSize(raw, fallback) {
+    const m = /^\s*(\d{2,5})\s*[x×*]\s*(\d{2,5})\s*$/i.exec(String(raw == null ? '' : raw));
+    return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : fallback.slice();
+  }
+
+  // Space/comma separated token list, filtered against `allowed`, order
+  // preserved, duplicates dropped. Returns null when nothing valid remains so
+  // callers can apply their own default rather than inheriting an empty list.
+  function parseTokenList(raw, allowed) {
+    const out = [];
+    String(raw == null ? '' : raw).split(/[\s,]+/).forEach(tok => {
+      const k = tok.trim().toLowerCase();
+      if (k && allowed.indexOf(k) >= 0 && out.indexOf(k) < 0) out.push(k);
+    });
+    return out.length ? out : null;
+  }
+
+  // Cycles the DECLARED order, never VIEWPORT_MODES: a tablet+phone concept
+  // must not land on a desktop view its app does not have. An unknown current
+  // value (index -1) wraps to the first entry.
+  function nextViewportMode(modes, current) {
+    if (!modes.length) return 'desktop';
+    return modes[(modes.indexOf(current) + 1) % modes.length];
+  }
+
+  // Lays the pair out along whichever axis leaves the bigger uniform scale.
+  // A fixed "stack below 900px" breakpoint is wrong in BOTH directions:
+  // measured for a phone pair in a 900×800 window, side-by-side yields 0.70
+  // and stacked only 0.55, while a 1000×600 window is the reverse. Deciding
+  // from the two candidate scales is the same three lines and is right at
+  // every size. Ties go to `row` — side by side is the point of the view.
+  function bestFit(frames, availW, availH, gap) {
+    const add = (a, b) => a + b;
+    const span = gap * Math.max(0, frames.length - 1);
+    const rowW = frames.map(f => f[0]).reduce(add, 0) + span;
+    const rowH = frames.reduce((m, f) => Math.max(m, f[1]), 0);
+    const colW = frames.reduce((m, f) => Math.max(m, f[0]), 0);
+    const colH = frames.map(f => f[1]).reduce(add, 0) + span;
+    const fit = (w, h) => (w > 0 && h > 0 && availW > 0 && availH > 0)
+      ? Math.min(1, availW / w, availH / h) : 1;
+    const row = fit(rowW, rowH);
+    const col = fit(colW, colH);
+    const axis = col > row ? 'column' : 'row';
+    const raw = Math.max(row, col);
+    return {
+      axis,
+      scale: Math.max(MIN_DEVICE_SCALE, raw),
+      clamped: raw < MIN_DEVICE_SCALE,
+      width: axis === 'row' ? rowW : colW,
+      height: axis === 'row' ? rowH : colH
+    };
+  }
+
+  // Resolution order: active design -> its iteration -> built-in default.
+  // Declaring once on the iteration is the common case; the per-design
+  // override exists for the rare concept whose designs target different form
+  // factors. Because this reads the LIVE DOM on every call, a design switch
+  // picks up the new declaration without buildDesignUI() having to re-run
+  // (it deliberately does not — see buildScreenTextareas).
+  function viewportSpec() {
+    const design = activeDesign();
+    const iter = visibleIteration();
+    const read = key => (design && design.dataset[key]) || (iter && iter.dataset[key]) || '';
+    const modes = parseTokenList(read('viewports'), VIEWPORT_MODES) || ['desktop'];
+    const wanted = String(read('viewportDefault') || '').trim().toLowerCase();
+    return {
+      modes,
+      orientations: parseTokenList(read('orientations'), VIEWPORT_ORIENTATIONS)
+        || VIEWPORT_ORIENTATIONS.slice(),
+      initial: modes.indexOf(wanted) >= 0 ? wanted : modes[0],
+      sizes: {
+        tablet: parseDeviceSize(read('deviceTablet'), DEVICE_SIZES.tablet),
+        phone: parseDeviceSize(read('devicePhone'), DEVICE_SIZES.phone)
+      }
+    };
+  }
+
+  // Attributes that carry an id REFERENCE and must follow their target's
+  // rename. Missing one of these is silent: the control still renders, it
+  // just points at the other frame's copy.
+  const ID_REF_ATTRS = ['for', 'form', 'list', 'headers',
+                        'aria-labelledby', 'aria-describedby', 'aria-controls',
+                        'aria-owns', 'aria-activedescendant', 'aria-details',
+                        'aria-errormessage'];
+  // SVG paints reference defs by url(#id); an un-rewritten one resolves to
+  // the HIDDEN original's def, which works by accident in one frame and not
+  // at all once the original is display:none in some browsers.
+  const URL_REF_ATTRS = ['fill', 'stroke', 'clip-path', 'mask', 'filter',
+                         'marker-start', 'marker-mid', 'marker-end', 'style'];
+  // Deep-clones a subtree and namespaces every identifier in it. Without this
+  // the frames are two elements sharing one id (getElementById resolves to
+  // whichever comes first, label[for] focuses the wrong frame) and two radios
+  // in ONE group — clicking the landscape copy would clear the portrait one.
+  function prefixClone(node, prefix) {
+    const clone = node.cloneNode(true);
+    if (clone.nodeType !== 1) return clone;
+    // Same reason as the top-level filter in renderDeviceStage: a layer
+    // nested deeper than the screen's direct children must not reach a frame
+    // either, or its answers become unpersistable.
+    clone.querySelectorAll('[data-anno-layer]').forEach(el => el.remove());
+    [clone].concat([...clone.querySelectorAll('*')]).forEach(el => {
+      if (el.id) el.id = prefix + el.id;
+      const name = el.getAttribute('name');
+      if (name) el.setAttribute('name', prefix + name);
+      // Never carried into a clone: it would yank focus out of whatever the
+      // user was doing on every screen switch.
+      el.removeAttribute('autofocus');
+      ID_REF_ATTRS.forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v) el.setAttribute(attr, v.split(/\s+/).filter(Boolean).map(t => prefix + t).join(' '));
+      });
+      URL_REF_ATTRS.forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v && v.indexOf('url(#') >= 0) {
+          el.setAttribute(attr, v.replace(/url\(#([^)"']+)\)/g, (_, id) => 'url(#' + prefix + id + ')'));
+        }
+      });
+      ['href', 'xlink:href'].forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v && v.charAt(0) === '#' && v.length > 1) el.setAttribute(attr, '#' + prefix + v.slice(1));
+      });
+    });
+    return clone;
+  }
+
+  // Builds the stage for the ACTIVE screen only. Every other screen is
+  // `hidden`, so cloning into all of them would duplicate the page for
+  // nothing. Teardown is unconditional and page-wide: a stage left on the
+  // iteration the user just switched away from keeps a stale copy alive and
+  // would be found by the next fit pass.
+  function renderDeviceStage(spec) {
+    document.querySelectorAll('.device-stage').forEach(el => el.remove());
+    document.querySelectorAll('section[data-screen][data-device-mode]')
+      .forEach(s => { delete s.dataset.deviceMode; });
+    if (viewportMode === 'desktop') return;
+    // A view (§ Views (optional)) is the active top-level item instead of a
+    // design: its screens are hidden, so there is nothing to frame. Teardown
+    // above has already run, which is the whole point of returning here
+    // rather than earlier.
+    if (document.body.dataset.viewActive === 'true') return;
+    const size = spec.sizes[viewportMode];
+    const design = activeDesign();
+    const screen = design && design.querySelector('section[data-screen][data-screen-active="true"]');
+    if (!size || !screen) return;
+    // The clone source is EVERY element child except a stage — not
+    // `.device-frame`. That class is a documented convention with no CSS and
+    // no gate behind it, so a page that lays its mock out differently is
+    // legal today; keying on it would render empty frames on exactly those
+    // pages, and look correct while doing it.
+    // The annotation layer (§ Annotation Layer (optional)) is authored INSIDE
+    // the screen, so a naive clone carries it into both frames. Its own IIFE
+    // collects [data-anno-pin] and textarea[data-annotation] DOCUMENT-WIDE and
+    // keys them by attribute value, so a cloned pin would open its bubble in
+    // every copy — harmless — but a cloned ANSWER is a third textarea that
+    // saveState() and the submit payload both skip, because clones are
+    // excluded via [data-device-clone]. An answer typed inside a device frame
+    // would be silently lost. Annotations therefore stay a desktop-view
+    // affordance and the frames show the mockup itself.
+    const source = [...screen.children]
+      .filter(el => !el.classList.contains('device-stage') && !el.hasAttribute('data-anno-layer'));
+    if (!source.length) return;
+
+    const stage = document.createElement('div');
+    stage.className = 'device-stage';
+    // One marker for the whole subtree. saveState() and collectAllFormFields()
+    // filter on it via closest() — the clones must never reach localStorage or
+    // the submit payload, where they would triple every mock field under
+    // names no human ever typed into.
+    stage.setAttribute('data-device-clone', '');
+    const fitBox = document.createElement('div');
+    fitBox.className = 'device-fit';
+    const pair = document.createElement('div');
+    pair.className = 'device-pair';
+    fitBox.appendChild(pair);
+    stage.appendChild(fitBox);
+
+    spec.orientations.forEach((orientation, i) => {
+      const landscape = orientation === 'landscape';
+      const w = landscape ? size[1] : size[0];
+      const h = landscape ? size[0] : size[1];
+      const shell = document.createElement('div');
+      shell.className = 'device-shell';
+      shell.dataset.device = viewportMode;
+      shell.dataset.orientation = orientation;
+      // Labelled, NOT aria-hidden. Both frames are interactive by design, and
+      // aria-hidden over focusable content is an ARIA violation that produces
+      // a worse experience than the duplication it hides. The duplication is
+      // the point of this view; naming each frame is what makes it legible.
+      shell.setAttribute('role', 'group');
+      shell.setAttribute('aria-label',
+        (VIEWPORT_LABELS[viewportMode] || viewportMode) + ' · ' +
+        (VIEWPORT_LABELS[orientation] || orientation));
+
+      const bezel = document.createElement('div');
+      bezel.className = 'device-bezel';
+      bezel.dataset.device = viewportMode;
+      const vp = document.createElement('div');
+      vp.className = 'device-viewport';
+      vp.style.setProperty('--device-w', w + 'px');
+      vp.style.setProperty('--device-h', h + 'px');
+      const prefix = 'dv' + (i + 1) + '-';
+      source.forEach(node => vp.appendChild(prefixClone(node, prefix)));
+      bezel.appendChild(vp);
+
+      const caption = document.createElement('div');
+      caption.className = 'device-caption';
+      const strong = document.createElement('strong');
+      strong.textContent = VIEWPORT_LABELS[orientation] || orientation;
+      caption.appendChild(strong);
+      caption.appendChild(document.createTextNode(' · ' + w + ' × ' + h));
+
+      shell.appendChild(bezel);
+      shell.appendChild(caption);
+      pair.appendChild(shell);
+    });
+
+    screen.appendChild(stage);
+    screen.dataset.deviceMode = viewportMode;
+    wireFrameMirroring(pair);
+  }
+
+  // The frames render one screen twice; a box ticked in one has to tick in
+  // the other, or the pair reads as two different states of the same app.
+  // Index matching is exact because both frames are clones of one source.
+  // The handler assigns values WITHOUT dispatching further events: an echoed
+  // `input` would re-enter this handler from the twin and loop forever, and
+  // the clones are excluded from persistence anyway, so there is nothing
+  // downstream that needs the echo. Listeners live on the pair, which is
+  // destroyed and rebuilt on every switch — nothing to unbind, nothing to leak.
+  function wireFrameMirroring(pair) {
+    const SEL = 'input, select, textarea';
+    const sync = e => {
+      const el = e.target;
+      if (!el || !el.matches || !el.matches(SEL)) return;
+      const shell = el.closest('.device-shell');
+      if (!shell) return;
+      const idx = [...shell.querySelectorAll(SEL)].indexOf(el);
+      if (idx < 0) return;
+      pair.querySelectorAll('.device-shell').forEach(other => {
+        if (other === shell) return;
+        const twin = other.querySelectorAll(SEL)[idx];
+        if (!twin) return;
+        if (twin.type === 'checkbox' || twin.type === 'radio') twin.checked = el.checked;
+        else twin.value = el.value;
+      });
+    };
+    pair.addEventListener('input', sync);
+    pair.addEventListener('change', sync);
+  }
+
+  // Measures the pair unscaled (offsetWidth/offsetHeight are pre-transform),
+  // picks the axis, then writes the scaled size onto .device-fit so the
+  // LAYOUT box matches what is actually painted. Skipping that step is what
+  // puts a scrollbar around empty space and pushes the top of the stage above
+  // the scroll origin, where it cannot be reached at all.
+  function fitDeviceStage() {
+    // Scoped to the active design, exactly like renderDeviceStage's lookup.
+    // showDesign() hides the previous design but leaves its screens' own
+    // data-screen-active flag set, so a document-wide query here is one
+    // stale flag away from measuring a screen nobody is looking at.
+    const design = activeDesign();
+    const stage = design && design.querySelector(
+      'section[data-screen][data-screen-active="true"] .device-stage');
+    if (!stage) return;
+    const pair = stage.querySelector('.device-pair');
+    const fitBox = stage.querySelector('.device-fit');
+    if (!pair || !fitBox) return;
+    const shells = [...pair.children];
+    if (!shells.length) return;
+    const gap = parseFloat(getComputedStyle(pair).gap) || 0;
+    const frames = shells.map(s => [s.offsetWidth, s.offsetHeight]);
+    const box = stage.getBoundingClientRect();
+    const res = bestFit(frames, box.width, box.height, gap);
+    pair.dataset.axis = res.axis;
+    pair.style.transform = 'scale(' + res.scale + ')';
+    fitBox.style.width = Math.ceil(res.width * res.scale) + 'px';
+    fitBox.style.height = Math.ceil(res.height * res.scale) + 'px';
+    stage.dataset.clamped = res.clamped ? 'true' : 'false';
+  }
+
+  function renderViewportToggle(spec) {
+    const btn = document.getElementById('viewport-toggle');
+    if (!btn) return;
+    const current = VIEWPORT_LABELS[viewportMode] || viewportMode;
+    const upcoming = nextViewportMode(spec.modes, viewportMode);
+    btn.dataset.mode = viewportMode;
+    // Names the NEXT state, like #feedback-toggle's open/close label swap —
+    // this is a cycle, not an on/off control, so aria-pressed would be a lie.
+    const label = (btn.dataset.labelPrefix ? btn.dataset.labelPrefix + ': ' : '')
+      + current + ' → ' + (VIEWPORT_LABELS[upcoming] || upcoming);
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    const text = btn.querySelector('.viewport-toggle-label');
+    if (text) text.textContent = current;
+  }
+
+  // The one entry point. Idempotent, so every caller can just invoke it.
+  // Derives the effective mode from the preference WITHOUT writing back to
+  // it — see the two-variable comment at the top of this IIFE.
+  function applyViewport() {
+    const spec = viewportSpec();
+    viewportMode = (viewportPref && spec.modes.indexOf(viewportPref) >= 0)
+      ? viewportPref : spec.initial;
+    document.body.dataset.viewportMode = viewportMode;   // what is rendered
+    document.body.dataset.viewportPref = viewportPref || '';  // what was chosen
+    document.body.dataset.singleViewport = spec.modes.length <= 1 ? 'true' : 'false';
+    renderViewportToggle(spec);
+    renderDeviceStage(spec);
+    fitDeviceStage();
+  }
+  window.applyViewport = applyViewport;
+
+  function cycleViewport() {
+    const spec = viewportSpec();
+    if (spec.modes.length <= 1) return;
+    // Advances from what is CURRENTLY RENDERED, not from the stored
+    // preference: the user is clicking what they can see.
+    viewportPref = nextViewportMode(spec.modes, viewportMode);
+    applyViewport();
+    if (typeof saveState === 'function') saveState();
+  }
+
+  document.getElementById('viewport-toggle')?.addEventListener('click', cycleViewport);
+
+  // Exactly ONE resize listener, installed here at IIFE level rather than in
+  // the stage builder — installing it per build would accumulate one listener
+  // per screen switch, each measuring a detached stage.
+  let fitFrame = 0;
+  function scheduleFit() {
+    if (fitFrame) cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(() => { fitFrame = 0; fitDeviceStage(); });
+  }
+  window.addEventListener('resize', scheduleFit);
+  // Late-arriving webfonts and images change the mock's intrinsic size after
+  // the first measurement.
+  window.addEventListener('load', scheduleFit);
+
+  // Switches the active design (and, within it, the given page or its
+  // remembered last-viewed page). Closes over showScreen defined below.
+  window.showDesign = function(designId, screenId) {
+    const it = visibleIteration();
+    if (!it) return;
+    // Leaving view mode, if we were in it (§ Views (optional)) — no-op when
+    // already in design mode (every view already hidden/inactive). Views'
+    // own data-view-active memory is intentionally NOT preserved across a
+    // design switch: unlike designs, there is no "last active view" to
+    // return to, showView() is always an explicit click.
+    it.querySelectorAll('section[data-view]').forEach(v => {
+      v.hidden = true;
+      v.dataset.viewActive = 'false';
+    });
+    document.querySelectorAll('.view-switch-item, .screen-nav-view-item').forEach(item => {
+      item.dataset.active = 'false';
+    });
+    document.body.dataset.viewActive = 'false';
+    const targets = [...it.querySelectorAll('section[data-design]')];
+    targets.forEach(d => {
+      const match = d.dataset.design === designId;
+      d.hidden = !match;
+      d.dataset.designActive = match ? 'true' : 'false';
+    });
+    document.querySelectorAll('.design-switch-item').forEach(item => {
+      item.dataset.active = String(item.dataset.designId === designId);
+    });
+    document.querySelectorAll('.screen-nav-design-heading').forEach(h => {
+      h.dataset.active = String(h.dataset.designId === designId);
+    });
+    // Swap the per-design textarea (built once by buildDesignTextareas —
+    // only its `hidden` state and the dock label change on switch, same
+    // pattern as showScreen swapping [data-screen-comment] below).
+    document.querySelectorAll('[data-design-comment]').forEach(ta => {
+      ta.hidden = ta.dataset.designComment !== designId;
+    });
+    const dockDesignLabel = document.getElementById('dock-design-label');
+    if (dockDesignLabel) dockDesignLabel.textContent = targets.find(d => d.dataset.design === designId)?.dataset.navLabel || designId;
+    // Scoped to the VISIBLE iteration — design ids repeat across iterations,
+    // so an unscoped lookup would resolve to a frozen iteration's node and
+    // navigate the wrong section.
+    const design = it.querySelector(`section[data-design="${CSS.escape(designId)}"]`);
+    if (!design) return;
+    updateScreenScope(design);
+    const remembered = screenId || lastScreenByDesign[designId];
+    const first = design.querySelector('section[data-screen]');
+    const target = (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered : first?.id;
+    // showScreen() is the usual route to applyViewport(). A design with no
+    // screens has no target, so that route does not exist here — and the
+    // device stage cloned for the PREVIOUS design's screen would stay in the
+    // DOM, showing the old design's mockup under the new design's name.
+    // Teardown lives inside renderDeviceStage(), so the call has to happen
+    // either way.
+    if (target) showScreen(target);
+    else applyViewport();
+    updateDesignNoteMarkers();
+  };
+
+  // Switches the active top-level item to a view (§ Views (optional)).
+  // Mirrors showDesign() above: hides every OTHER top-level item (every
+  // design AND every other view), marks the target visible + active, and
+  // re-derives every piece of chrome that cares which item is on screen
+  // (switcher, screen-nav, indicator, dock). Unlike showScreen(), there is
+  // no "remembered" view to restore — the user always reaches a view via an
+  // explicit click on its switcher segment or nav item.
+  window.showView = function(viewId) {
+    const it = visibleIteration();
+    if (!it) return;
+    // Hide every design (top-level) without touching data-design-active —
+    // that attribute is design-vs-design memory, orthogonal to whether
+    // design mode itself is what's on screen right now.
+    it.querySelectorAll('section[data-design]').forEach(d => { d.hidden = true; });
+    const allViews = views();
+    let target = null;
+    allViews.forEach(v => {
+      const match = v.dataset.view === viewId;
+      v.hidden = !match;
+      v.dataset.viewActive = match ? 'true' : 'false';
+      if (match) target = v;
+    });
+    if (!target) return; // unknown view id — leave the page as-is rather than blanking it
+    document.querySelectorAll('.design-switch-item').forEach(item => { item.dataset.active = 'false'; });
+    document.querySelectorAll('.view-switch-item').forEach(item => {
+      item.dataset.active = String(item.dataset.viewId === viewId);
+    });
+    document.querySelectorAll('.screen-nav-design-heading, .screen-nav-item').forEach(item => {
+      item.dataset.active = 'false';
+    });
+    document.querySelectorAll('.screen-nav-view-item').forEach(item => {
+      item.dataset.active = String(item.dataset.viewId === viewId);
+    });
+    document.querySelectorAll('#feedback-dock [data-view-comment]').forEach(ta => {
+      ta.hidden = ta.dataset.viewComment !== viewId;
+    });
+    const label = target.dataset.navLabel || viewId;
+    const dockViewLabel = document.getElementById('dock-view-label');
+    if (dockViewLabel) dockViewLabel.textContent = label;
+    document.body.dataset.viewActive = 'true';
+    updateIndicator();
+    updateViewNoteMarkers();
+    if (typeof saveState === 'function') saveState();
+    // Consistent with showScreen()'s screen:changed below — lets
+    // wireAnnotationLayer() and any other cross-cutting listener react
+    // without knowing views exist.
+    document.dispatchEvent(new CustomEvent('view:changed', { detail: { id: viewId } }));
+  };
+
+  function updateViewNoteMarkers() {
+    document.querySelectorAll('[data-view-note-marker]').forEach(marker => {
+      const id = marker.dataset.viewNoteMarker;
+      const ta = document.querySelector(`#feedback-dock [data-view-comment="${CSS.escape(id)}"]`);
+      marker.textContent = (ta && ta.value.trim()) ? '●' : '';
+    });
+  }
+
+  window.showScreen = function(id) {
+    const design = activeDesign();
+    if (!design) return;
+    const screens = design.querySelectorAll('section[data-screen][id]');
+    // Membership guard. `hidden = s.id !== id` is a blanket hide when NO
+    // screen carries `id` — one foreign id (a nav entry of another design, a
+    // stale deep link, a restored state pointing at a deleted screen) empties
+    // the canvas with no error anywhere. Fall back to the design's first
+    // screen instead: something always paints.
+    if (!screens.length) return;
+    if (![...screens].some(s => s.id === id)) id = screens[0].id;
+    let idx = 0;
+    screens.forEach((s, i) => {
+      const match = s.id === id;
+      s.hidden = !match;
+      s.dataset.screenActive = match ? 'true' : 'false';
+      if (match) idx = i;
+    });
+    // Scoped to the active design for the same reason as showDesign's
+    // lookup: screen ids repeat across iterations.
+    const screen = design.querySelector(`#${CSS.escape(id)}`);
+    const label = screen?.dataset.navLabel || id;
+    // Guarded like every other indicator write — see updateScreenScope().
+    const labelEl = document.getElementById('active-screen-label');
+    if (labelEl) labelEl.textContent = label;
+    const idxEl = document.getElementById('active-screen-idx');
+    if (idxEl) idxEl.textContent = idx + 1;
+    const dockLabel = document.getElementById('dock-screen-label');
+    if (dockLabel) dockLabel.textContent = label;
+    // The dock holds every design's screen textareas, so match on the
+    // owning design too — screen ids are unique per iteration, but this
+    // keeps the swap correct even if a page reuses ids across designs.
+    document.querySelectorAll('#feedback-dock [data-screen-comment]').forEach(ta => {
+      ta.hidden = !(ta.dataset.screenComment === id
+        && (!ta.dataset.screenDesign || ta.dataset.screenDesign === design.dataset.design));
+    });
+    document.querySelectorAll('.screen-nav-item').forEach(item => {
+      item.dataset.active = String(item.dataset.screenId === id);
+    });
+    lastScreenByDesign[design.dataset.design] = id;
+    // Rebuilds the device frames for the screen that just became active, and
+    // re-clamps the mode against what THIS design declares. Runs before
+    // saveState() so the persisted `_viewportMode` is the one now on screen.
+    // Every other entry point (showDesign, iteration:changed, boot) reaches
+    // the switcher through this call rather than duplicating it.
+    applyViewport();
+    updateIndicator();
+    updateNoteMarkers();
+    if (typeof saveState === 'function') saveState();
+    // Lets the (optional) annotation layer refresh its per-screen counter
+    // without this function knowing that layer exists — see
+    // wireAnnotationLayer() below. Fired even when no listener is attached.
+    document.dispatchEvent(new CustomEvent('screen:changed', { detail: { id } }));
+  };
+
+  // Rebuilds the position indicator from the locale word-primitives +
+  // live numbers: "{iteration} · {design} · {page} N/total · {label}",
+  // dropping the iteration segment when there is one iteration and the
+  // design segment when the active iteration has one design. Never a
+  // fixed-shape string — each segment is toggled `hidden` independently so
+  // a missing one leaves no dangling " · ".
+  function updateIndicator() {
+    const totalIterations = document.querySelectorAll('section[data-iteration]').length;
+    const iterEl = document.getElementById('indicator-iteration');
+    if (iterEl) {
+      iterEl.hidden = totalIterations <= 1;
+      if (!iterEl.hidden) {
+        const activeIter = document.querySelector('section[data-iteration]:not([hidden])');
+        const idxEl = document.getElementById('active-iteration-idx');
+        if (idxEl && activeIter) idxEl.textContent = activeIter.dataset.iteration;
+      }
+    }
+    const designEl = document.getElementById('indicator-design');
+    if (designEl) {
+      const total = designs().length;
+      designEl.hidden = total <= 1;
+      if (!designEl.hidden) {
+        const active = activeDesign();
+        const labelEl = document.getElementById('active-design-label');
+        if (labelEl && active) labelEl.textContent = active.dataset.navLabel || active.dataset.design;
+      }
+    }
+    // View label swap (§ Views (optional)) — while a view is the visible
+    // top-level item, the screen-counter segment hides and the view label
+    // takes its place. Both spans are optional/null-guarded, same
+    // discipline as every other indicator segment above.
+    const viewInfoEl = document.getElementById('indicator-screen-info');
+    const viewLabelEl = document.getElementById('indicator-view');
+    const activeView = activeViewVisible();
+    if (viewInfoEl) viewInfoEl.hidden = !!activeView;
+    if (viewLabelEl) {
+      viewLabelEl.hidden = !activeView;
+      if (activeView) {
+        const labelEl = document.getElementById('active-view-label');
+        if (labelEl) labelEl.textContent = activeView.dataset.navLabel || activeView.dataset.view;
+      }
+    }
+  }
+
+  // Every per-screen textarea belongs to the DOCK, not to the mockup
+  // section — `section[data-design]` never contains one. Note markers must
+  // therefore query the dock and filter by the owning design id.
+  function dockScreenTextareas(designId) {
+    return [...document.querySelectorAll('#feedback-dock [data-screen-comment]')]
+      .filter(ta => !designId || !ta.dataset.screenDesign || ta.dataset.screenDesign === designId);
+  }
+
+  function updateNoteMarkers() {
+    document.querySelectorAll('.screen-nav-item').forEach(item => {
+      const id = item.dataset.screenId;
+      const ta = dockScreenTextareas(item.dataset.designId)
+        .find(t => t.dataset.screenComment === id);
+      const marker = item.querySelector('[data-note-marker]');
+      if (marker) marker.textContent = (ta && ta.value.trim()) ? '● Notiz' : '';
+    });
+    updateDesignNoteMarkers();
+    updateViewNoteMarkers();
+  }
+  window.updateNoteMarkers = updateNoteMarkers;
+
+  // Design heading marker: lights up when ANY of its pages, or its own
+  // design-level comment field (Feedback dock, Wave "design feedback row"
+  // — `[data-design-comment="{id}"]`, may not exist yet on older pages),
+  // carries unsubmitted text.
+  function updateDesignNoteMarkers() {
+    document.querySelectorAll('[data-design-note-marker]').forEach(marker => {
+      const id = marker.dataset.designNoteMarker;
+      const pageHasNotes = dockScreenTextareas(id).some(ta => ta.value.trim());
+      const designTa = document.querySelector(`[data-design-comment="${CSS.escape(id)}"]`);
+      const designHasNotes = designTa && designTa.value.trim();
+      marker.textContent = (pageHasNotes || designHasNotes) ? '●' : '';
+    });
+  }
+
+  // Panel toggle: NOT here. openPanel/closePanel and their wiring live in
+  // § Panel Chrome (all templates) because the ☰ panel exists on every page,
+  // including one that never renders a mockup — this IIFE does not. They are
+  // reached through `window.` from the dock paths below; the only thing kept
+  // here is the reference the click-through guard needs.
+  const panel = document.getElementById('decision-panel');
+  // Dock toggle, maximise, sizing, freeze state, submitted state: NOT here
+  // either (#399). The 💬 dock is page chrome like the panel, wired in
+  // § Panel Chrome (all templates) → Feedback dock, and reached from this
+  // IIFE through the globals it exports: harvestDockValues / liveIterationId
+  // (the row builders above), stashLiveDockValues / primeDock (the
+  // iteration:changed handler below), applyDockSize (restoreState). The
+  // element reference is kept only for the keyboard-shortcut guard at the
+  // bottom of this block.
+  const dock = document.getElementById('feedback-dock');
+
+  document.addEventListener('DOMContentLoaded', () => {
+    buildDesignUI();
+    // IMMEDIATELY after the rebuild and BEFORE showView()/showScreen(): the
+    // dock textareas exist only NOW, and buildDesignUI() created them EMPTY.
+    // showScreen() ends in saveState(), and saveState()'s merge cannot protect
+    // a key whose node IS present — it would serialise those empty textareas
+    // straight over the stored notes, and the restore further down would then
+    // read the blob it had just blanked. Measured in a browser: one reload
+    // emptied `text:{screen-id}` for good.
+    // § State Persistence's own DOMContentLoaded listener is not guaranteed to
+    // run before this one (the same unguaranteed ordering applyDockSize()
+    // already works around), so its restoreState() may have scanned a dock
+    // that did not exist yet, written nothing, and it never re-runs on its
+    // own. Re-restoring here is safe: restoreState() is idempotent (it only
+    // assigns values off the same stored blob) and no user input can have
+    // happened before DOMContentLoaded.
+    // Also deliberately BEFORE primeDock(): on a frozen tab
+    // applyDockFreezeState() stashes the live values into liveDockValues and
+    // paints the frozen blob over them, so restoring afterwards would clobber
+    // the frozen view and lose the stash.
+    if (typeof restoreState === 'function') restoreState();
+    if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
+    const active = document.querySelector('section[data-iteration][data-active]');
+    // Recorded BEFORE the view restore below: the boot showIteration() (§ Tab
+    // Switch JS) fires `iteration:changed` for this same round right after,
+    // and the handler keeps a restored view only when the round matches.
+    shownIterationId = active ? String(active.dataset.iteration) : null;
+    if (active) {
+      // Work package C — restore an active VIEW first. Defensive by
+      // design: an unknown/removed view id (edited between sessions, or
+      // belongs to a different iteration after a reload) simply fails the
+      // querySelector check below and falls through to the pre-existing
+      // screen-restore path exactly as if no view had ever been active —
+      // it must never leave the page blank.
+      let restoredView = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) restoredView = JSON.parse(raw)._activeView;
+      } catch (e) {}
+      const viewTarget = restoredView && active.querySelector(`section[data-view="${CSS.escape(restoredView)}"]`);
+      if (viewTarget) {
+        showView(restoredView);
+      } else {
+        const design = active.querySelector('section[data-design][data-design-active="true"]');
+        if (design) {
+          // Restore last active screen from localStorage if available,
+          // otherwise default to the first screen of the active design.
+          let restored = null;
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) restored = JSON.parse(raw)._activeScreen;
+          } catch (e) {}
+          const first = design.querySelector('section[data-screen]');
+          showScreen(restored && design.querySelector(`#${CSS.escape(restored)}`) ? restored : (first ? first.id : ''));
+        }
+      }
+    }
+    updateIndicator();
+    document.addEventListener('input', updateNoteMarkers);
+    // Runs after the restore above, once buildDesignUI() has set the
+    // body[data-single-*] flags applyDockSize() reads. The dock stays closed —
+    // priming only syncs its field state and its size.
+    primeDock();
+    // The stage showScreen() just built cloned the mock BEFORE restoreState()
+    // ran: that listener lives in a later block and therefore fires after this
+    // one. A rAF callback lands after EVERY DOMContentLoaded listener, so this
+    // rebuild clones the restored DOM instead of the pristine one. It is also
+    // the only viewport pass a design with zero screens gets, since showScreen()
+    // never runs there and the toggle would otherwise stay unbuilt.
+    requestAnimationFrame(applyViewport);
+  });
+
+  // Rebuild after iteration switches (fresh designs, fresh screens, fresh
+  // textareas). Preserve the previously active screen if it still exists in
+  // the newly visible design; otherwise fall back to that design's
+  // remembered page, or its first page.
+  document.addEventListener('iteration:changed', () => {
+    // Stash the OUTGOING iteration's unsent dock text before buildDesignUI()
+    // empties the three containers. applyDockFreezeState() (via primeDock()
+    // at the end of this handler) does the same stash, but by then the
+    // harvest reads an already-rebuilt dock and writes empty strings over
+    // the user's text. Design and screen ids happen to repeat across
+    // iterations so harvestDockValues() masks it there; view ids are unique
+    // page-wide, so a view note was lost every single time.
+    // showIteration() sets body.viewing-frozen BEFORE dispatching this
+    // event, so the class already describes the tab we are moving TO.
+    if (document.body.classList.contains('viewing-frozen')) stashLiveDockValues();
+    // Same round re-entered (the boot showIteration() above all) vs. a real
+    // tab switch. A question view survives the former and never the latter:
+    // on boot this block's own DOMContentLoaded listener has just restored
+    // `_activeView` via showView(), and this event arrives moments later for
+    // the very same round — treating it as a switch hid the view again and
+    // the showScreen() → saveState() below then deleted `_activeView` from
+    // storage. Only a view that is BOTH active AND on screen is kept
+    // (activeViewVisible()); a stale data-view-active behind a design is not.
+    const incoming = visibleIteration();
+    const incomingId = incoming ? String(incoming.dataset.iteration) : null;
+    const keptView = (incomingId !== null && incomingId === shownIterationId) ? activeViewVisible() : null;
+    shownIterationId = incomingId;
+    if (!keptView) {
+      // A question view never survives a tab switch. buildDesignUI() requires
+      // an active design, and a stale body[data-view-active] leaves the
+      // position indicator empty, kills arrow-key navigation and makes every
+      // data-screen-link click-dummy inert with no visible cause.
+      document.querySelectorAll('section[data-view]').forEach(v => {
+        v.dataset.viewActive = 'false';
+        v.hidden = true;
+      });
+      document.body.dataset.viewActive = 'false';
+      // ...and put the designs back on screen. showView() hides every design
+      // when a question view takes over the viewport, and nothing else undoes
+      // that: only showDesign() un-hides, and it is not on this path. Without
+      // this, a view -> other iteration tab -> back round trip lands on a
+      // design that still says data-design-active="true" while being
+      // display:none — no mockup, dead click-dummy, dead arrow keys, and no
+      // visible cause. Verified in a browser, not deduced.
+      if (incoming) {
+        incoming.querySelectorAll(':scope > section[data-design]').forEach(d => {
+          d.hidden = d.dataset.designActive !== 'true';
+        });
+      }
+    }
+    buildDesignUI();
+    // buildDesignUI() above destroyed and rebuilt the three dock containers,
+    // so the textareas below it are EMPTY again. Restore them here — before
+    // applyViewport(), showScreen() and primeDock(), every one of which ends
+    // in a saveState() that would write those empty nodes over the stored
+    // notes (the merge only protects keys whose node is ABSENT).
+    // harvestDockValues() carries what was on screen, but only that: a note
+    // belonging to a screen the OUTGOING iteration never rendered a textarea
+    // for exists in localStorage and nowhere else, and would come back blank.
+    // Skipped while a frozen tab is on screen: applyDockFreezeState() has
+    // already painted the frozen blob into the same fields and stashed the
+    // live values in liveDockValues, and writing localStorage over that would
+    // show live text under a read-only frozen iteration.
+    if (!document.body.classList.contains('viewing-frozen')
+        && typeof restoreState === 'function') restoreState();
+    // BEFORE the early return below, not after: switching to a decision/free
+    // iteration leaves no active design, so showScreen() — the usual route to
+    // applyViewport() — never runs. Without this call the device stage of the
+    // design iteration the user just left stays in the DOM, and the toggle
+    // keeps offering viewports that iteration never declared.
+    applyViewport();
+    // Re-entered round with its view still up: buildDesignUI() rebuilt the
+    // switcher, the nav and the dock textareas from scratch (every segment
+    // inactive, every view textarea hidden), so re-apply the view's chrome the
+    // same way a click would — showView() also ends in saveState(), which is
+    // what keeps `_activeView` in storage across the boot.
+    if (keptView) {
+      showView(keptView.dataset.view);
+      primeDock();
+      updateNoteMarkers();
+      return;
+    }
+    const design = activeDesign();
+    // A document round of this page (a decision reality-check, the free
+    // final report) has no design to show — but it HAS the dock (#399: page
+    // chrome in every template, general note only here), so the freeze
+    // state and the compact size still have to be applied before leaving.
+    // Skipping this used to be harmless only because the dock was hidden
+    // outside design rounds; now it would leave the live round's note
+    // editable under a frozen tab.
+    if (!design) { primeDock(); updateNoteMarkers(); return; }
+    const prevId = document.querySelector('[data-screen][data-screen-active="true"]')?.id;
+    const stillThere = prevId && design.querySelector(`section[data-screen]#${CSS.escape(prevId)}`);
+    const remembered = lastScreenByDesign[design.dataset.design];
+    const first = design.querySelector('section[data-screen]');
+    const target = stillThere ? prevId
+      : (remembered && design.querySelector(`#${CSS.escape(remembered)}`)) ? remembered
+      : first?.id;
+    if (target) showScreen(target);
+    // Re-sync frozen-vs-live fields and the dock size for the iteration we
+    // just switched to. Never touches open/closed — a tab switch must not
+    // yank the dock open over the mockup the user just navigated to.
+    primeDock();
+    // Last, so the ☰ "has notes" dots describe the values primeDock() left in
+    // the fields — restored, stashed or frozen.
+    updateNoteMarkers();
+  });
+
+  // Keyboard: Arrow Left/Right (and Space) jump between screens (within the
+  // active design) when no textarea/input is focused and no overlay is open.
+  document.addEventListener('keydown', e => {
+    // Both optional: this handler is bound on every design page, and either
+    // overlay can be absent from the markup. Unguarded, a missing one threw
+    // on EVERY keypress — the arrow keys stopped working and the console
+    // filled with errors pointing at the keyboard shortcut rather than at
+    // the markup.
+    if (dock?.dataset.open === 'true' || panel?.classList.contains('open')) return;
+    // Bailing out on textarea/input alone was too narrow: Space activates a
+    // FOCUSED BUTTON, so pressing it on a mock's "Continue" advanced the
+    // screen and swallowed the click at the same time. Device mode doubles
+    // the focusable mock surface, which is what made it worth fixing here.
+    if (e.target && e.target.closest
+        && e.target.closest('textarea, input, select, button, a[href], [contenteditable], [role="button"]')) return;
+    // A view is scrollable prose/questions, not a screen sequence — Arrow
+    // Left/Right must not hijack it into switching designs (§ Views (optional)).
+    // It has no device frames either, so `v` below is equally out of scope.
+    if (document.body.dataset.viewActive === 'true') return;
+    // `v` cycles the device view — the keyboard equivalent of the bottom-left
+    // toggle, and a no-op on concepts that declare a single viewport.
+    if (e.key === 'v' || e.key === 'V') { e.preventDefault(); cycleViewport(); return; }
+    const design = activeDesign();
+    if (!design) return;
+    const screens = [...design.querySelectorAll('section[data-screen]')];
+    const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
+    if (currentIdx < 0) return;
+    let nextIdx = currentIdx;
+    if (e.key === 'ArrowRight' || e.key === ' ') nextIdx = Math.min(currentIdx + 1, screens.length - 1);
+    else if (e.key === 'ArrowLeft') nextIdx = Math.max(currentIdx - 1, 0);
+    else return;
+    e.preventDefault();
+    showScreen(screens[nextIdx].id);
+  });
+})();
+```
+
+## Annotation Layer JS — `wireAnnotationLayer()`
+
+Entirely independent of `wireDesignLayout()` above: a page with no
+`[data-anno-layer]` anywhere runs this IIFE and does nothing else, forever
+(the `!toggle` early return). It never reaches into `wireDesignLayout()`'s
+closed-over state — the two communicate only via the `screen:changed` /
+`iteration:changed` DOM events and via `document.body.classList`, exactly
+like every other cross-cutting concern on this page (`viewing-frozen`,
+`panel-open`, `single-screen`, …).
+
+```javascript
+(function wireAnnotationLayer() {
+  const toggle = document.getElementById('anno-toggle');
+  if (!toggle) return; // no eye pill mounted — layer not used on this page
+
+  function activeScreen() {
+    // Scoped through the visible iteration and its active design, exactly
+    // like wireDesignLayout()'s own activeDesign()/activeScreen() lookups —
+    // this IIFE cannot reuse those closures (see note above) so the same
+    // scoping is reimplemented here. An unscoped
+    // 'section[data-screen][data-screen-active="true"]' would always
+    // resolve to the FIRST such screen in document order: the reference
+    // markup ships two simultaneously-active screens (one per design), and
+    // frozen iterations keep their own data-screen-active too. Without this
+    // scoping the eye pill would permanently report design 1 of iteration 1.
+    const it = document.querySelector('section[data-iteration]:not([hidden])');
+    if (!it) return null;
+    const design = it.querySelector('section[data-design][data-design-active="true"]');
+    if (!design) return null;
+    return design.querySelector('section[data-screen][data-screen-active="true"]');
+  }
+  function annotationsInScreen(screen) {
+    return screen ? [...screen.querySelectorAll('[data-anno]')] : [];
+  }
+
+  // Only one bubble open at a time, across every screen/design — a bubble
+  // left open under a screen the user has since navigated away from would
+  // otherwise reappear open on return.
+  function openBubble(id) {
+    document.querySelectorAll('[data-anno-bubble]').forEach(b => {
+      b.dataset.open = String(b.dataset.annoBubble === id);
+    });
+    document.querySelectorAll('[data-anno-pin], [data-anno-summary]').forEach(el => {
+      const owns = el.dataset.annoPin === id || el.dataset.annoSummary === id;
+      el.setAttribute('aria-expanded', String(owns));
+    });
+    openBubbleAt(id);
+  }
+  function closeAllBubbles() {
+    document.querySelectorAll('[data-anno-bubble]').forEach(b => { b.dataset.open = 'false'; });
+    document.querySelectorAll('[data-anno-pin], [data-anno-summary]').forEach(el => {
+      el.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  // Recomputed on every input, not just at generation time — an answer
+  // typed and then deleted must revert the pin to "unanswered".
+  function recomputeAnswered(anno) {
+    const ta = anno.querySelector('textarea[data-annotation]');
+    const pin = anno.querySelector('[data-anno-pin]');
+    if (!ta || !pin) return;
+    pin.dataset.answered = String(!!ta.value.trim());
+  }
+
+  // --- placement ---------------------------------------------------------
+  // Two problems the percentage-only approach had, both reported from a real
+  // page: pins landed in empty space next to the element they asked about,
+  // and bubbles opened straight off the edge of the screen. Authored
+  // coordinates stay supported (and stay the fallback), but a pin can now
+  // name the element it belongs to and the bubble is always pulled back into
+  // view.
+  function annoLayerOf(anno) { return anno.closest('[data-anno-layer]'); }
+
+  // data-anno-target is a CSS selector resolved INSIDE the pin's own screen,
+  // so the same selector may repeat on other screens without colliding.
+  function anchorToTarget(anno) {
+    const sel = anno.dataset.annoTarget;
+    if (!sel) return;                       // authored --anno-x/--anno-y wins
+    const screen = anno.closest('section[data-screen]');
+    const layer = annoLayerOf(anno);
+    if (!screen || !layer) return;
+    let target = null;
+    try { target = screen.querySelector(sel); } catch (e) { target = null; }
+    if (!target) return;                    // stale selector: keep last known spot
+    const box = layer.getBoundingClientRect();
+    const t = target.getBoundingClientRect();
+    if (!box.width || !box.height || !t.width) return;   // not laid out yet
+    const x = ((t.right - box.left) / box.width) * 100;
+    const y = ((t.top + t.height / 2 - box.top) / box.height) * 100;
+    anno.style.setProperty('--anno-x', Math.max(0, Math.min(100, x)).toFixed(2) + '%');
+    anno.style.setProperty('--anno-y', Math.max(0, Math.min(100, y)).toFixed(2) + '%');
+  }
+
+  // Keep an open bubble inside the viewport: flip to the opposite side first
+  // (that is what the authored side is for), then shift by whatever is still
+  // sticking out. A bubble the user cannot read is worse than one that opens
+  // on the "wrong" side.
+  function placeBubble(anno) {
+    if (!anno) return;
+    const bubble = anno.querySelector('[data-anno-bubble]');
+    if (!bubble || bubble.dataset.open !== 'true') return;
+    if (!anno.dataset.annoSideAuthored) {
+      anno.dataset.annoSideAuthored = anno.dataset.annoSide || 'right';
+    }
+    anno.dataset.annoSide = anno.dataset.annoSideAuthored;
+    bubble.style.marginLeft = '';
+    bubble.style.marginTop = '';
+    const pad = 12;
+    let r = bubble.getBoundingClientRect();
+    if (anno.dataset.annoSide === 'right' && r.right > window.innerWidth - pad) {
+      anno.dataset.annoSide = 'left';
+      r = bubble.getBoundingClientRect();
+    } else if (anno.dataset.annoSide === 'left' && r.left < pad) {
+      anno.dataset.annoSide = 'right';
+      r = bubble.getBoundingClientRect();
+    }
+    let dx = 0;
+    if (r.right > window.innerWidth - pad) dx = (window.innerWidth - pad) - r.right;
+    if (r.left + dx < pad) dx = pad - r.left;
+    if (dx) bubble.style.marginLeft = Math.round(dx) + 'px';
+    r = bubble.getBoundingClientRect();
+    let dy = 0;
+    if (r.bottom > window.innerHeight - pad) dy = (window.innerHeight - pad) - r.bottom;
+    if (r.top + dy < pad) dy = pad - r.top;
+    if (dy) bubble.style.marginTop = Math.round(dy) + 'px';
+  }
+
+  function openBubbleAt(id) {
+    const anno = document.querySelector(`[data-anno="${CSS.escape(id)}"]`);
+    if (anno) { anchorToTarget(anno); placeBubble(anno); }
+  }
+
+  function updateAnnoUI() {
+    const screen = activeScreen();
+    // Reconciliation with § Views (optional): showView() never clears the
+    // previously-active screen's data-screen-active, so activeScreen()
+    // above can still resolve to a (now hidden) screen while a view is on
+    // screen. The eye pill must not show a stale count — or render at all —
+    // over a view's own content. body[data-view-active] is undefined on
+    // pages that never use views, so this is a pure no-op there.
+    const viewActive = document.body.dataset.viewActive === 'true';
+    const all = viewActive ? [] : annotationsInScreen(screen);
+    // Recompute here, not only on `input`: restoreState() writes persisted
+    // answers back programmatically and fires no input event, so a reloaded
+    // page would otherwise paint every already-answered pin as unanswered.
+    all.forEach(anno => recomputeAnswered(anno));
+    all.forEach(anchorToTarget);
+    toggle.hidden = all.length === 0;
+    // The pill counts OPEN questions, not annotations — an answered pin is
+    // done, and a pill stuck at "3" after answering all three reads as broken.
+    const open = all.filter(anno => {
+      const pin = anno.querySelector('[data-anno-pin]');
+      return !pin || pin.dataset.answered !== 'true';
+    }).length;
+    const countEl = document.getElementById('anno-count');
+    if (countEl) countEl.textContent = String(open);
+    const hidden = document.body.classList.contains('anno-hidden');
+    const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
+    if (label) toggle.setAttribute('aria-label', label);
+    toggle.setAttribute('aria-pressed', String(!hidden));
+  }
+  // Called from § State Persistence's DOMContentLoaded handler AFTER
+  // restoreState() has applied the persisted body.anno-hidden class — see
+  // the note there. Exposed the same way updateNoteMarkers() is.
+  window.updateAnnoUI = updateAnnoUI;
+
+  document.querySelectorAll('[data-anno]').forEach(recomputeAnswered);
+
+  // Pin clicks toggle their own bubble. Bubble-summary clicks (the
+  // collapsed truncated-question row) do the same — either is a valid way
+  // to open the same bubble. Neither must ever reach the click-through
+  // handler's data-screen-link lookup — guarded there directly (§
+  // Click-through Handler), not by relying on event ordering here.
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('[data-anno-pin], [data-anno-summary]');
+    if (trigger) {
+      const id = trigger.dataset.annoPin || trigger.dataset.annoSummary;
+      const bubble = document.querySelector(`[data-anno-bubble="${CSS.escape(id)}"]`);
+      const isOpen = bubble && bubble.dataset.open === 'true';
+      if (isOpen) closeAllBubbles(); else openBubble(id);
+      return;
+    }
+    // Clicking anywhere else in the bubble (the textarea, the attach slot)
+    // must never close it; clicking anywhere outside the layer does.
+    if (e.target.closest('.anno-bubble')) return;
+    closeAllBubbles();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAllBubbles();
+  });
+
+  document.addEventListener('input', e => {
+    if (!e.target.matches('textarea[data-annotation]')) return;
+    const anno = e.target.closest('[data-anno]');
+    if (!anno) return;
+    recomputeAnswered(anno);
+    updateAnnoUI();
+    // data-comment on the same textarea already drives saveState()/
+    // restoreState() (§ State Persistence) — no extra persistence code
+    // needed for the answer text itself.
+  });
+
+  toggle.addEventListener('click', () => {
+    document.body.classList.toggle('anno-hidden');
+    // Hiding the layer must not leave a bubble open underneath it —
+    // reopening later should start from a clean collapsed state.
+    if (document.body.classList.contains('anno-hidden')) closeAllBubbles();
+    updateAnnoUI();
+    if (typeof saveState === 'function') saveState();
+  });
+
+  // The IIFE runs before the mock has its final layout, so the first anchor
+  // pass can read a half-measured box and pin the marker to a corner — where
+  // it then STAYS, because nothing else recomputes on a page that is simply
+  // sitting there. Re-run once the frame is painted and again on load (web
+  // fonts and images move things a second time).
+  requestAnimationFrame(() => updateAnnoUI());
+  window.addEventListener('load', () => updateAnnoUI());
+
+  document.addEventListener('screen:changed', updateAnnoUI);
+  document.addEventListener('iteration:changed', updateAnnoUI);
+  // A view takes over the whole viewport, so the pill must not keep floating
+  // over it with the previous screen's count. showView() dispatches this;
+  // without the listener the guard inside updateAnnoUI() never runs on the
+  // design -> view transition (the reverse works only by accident, because
+  // showDesign() routes through showScreen()).
+  document.addEventListener('view:changed', updateAnnoUI);
+  // A resize moves every anchored pin and can push an open bubble off-screen.
+  window.addEventListener('resize', () => {
+    updateAnnoUI();
+    const open = document.querySelector('[data-anno-bubble][data-open="true"]');
+    if (open) placeBubble(open.closest('[data-anno]'));
+  });
+  updateAnnoUI();
+})();
+```
+
+**Persistence extension:** the design layout's `saveState()` must also write
+`_activeScreen: '{current-screen-id}'` AND `_activeScreenByDesign: {designId:
+screenId, …}` into the localStorage payload — the former for the currently
+active design (kept for backward compatibility with the single-design
+degenerate case), the latter so EVERY design's last-viewed page survives a
+reload, not just the one on screen at save time. **Work package C** adds
+`_activeView` the same way (§ State Persistence `saveState()` already shows
+the literal code, a plain DOM read of `section[data-view-active="true"]`) —
+a reload used to always drop back to design mode even when the user was
+reading a question view; the `DOMContentLoaded` handler below now tries the
+restored view FIRST and only falls back to the screen-restore path when
+there is no view id, or the id no longer resolves to a `section[data-view]`
+in the active iteration. `_viewportMode` rides along
+in the shared `saveState()` block below, read straight off
+`body[data-viewport-pref]` so there is exactly one writer of the state blob
+and no cross-scope variable to keep in sync.
+
+## Click-through Handler
+
+Single delegated listener that interprets `data-screen-link` on any element
+inside a `[data-screen]` section, **scoped to the active design** — a link
+may only target screens within its own design, never reach across into
+another design's pages. Closes the ☰ panel (harmless no-op if it's not open)
+and fires `showScreen()`. Returns immediately while a view is the active
+top-level item (§ Views (optional)) — there is no screen on screen to
+navigate within.
+
+```javascript
+document.addEventListener('click', e => {
+  // Annotation pins/bubbles (§ Annotation Layer JS) live inside
+  // [data-screen] too and have their own click handling — they must never
+  // fall through to click-dummy navigation, even if a future pin design
+  // nests a [data-screen-link] ancestor by accident.
+  if (e.target.closest('[data-anno-pin], [data-anno-summary], .anno-bubble')) return;
+  // A view (§ Views (optional)) is the active top-level item — no design is
+  // on screen to navigate within, even though a hidden design still carries
+  // data-design-active="true" as its own "last shown page" memory. Bail
+  // before the lookup below would otherwise resolve to that hidden design.
+  if (document.body.dataset.viewActive === 'true') return;
+  const link = e.target.closest('[data-screen-link]');
+  if (!link) return;
+  const activeDesignEl = document.querySelector(
+    'section[data-iteration]:not([hidden]) section[data-design][data-design-active="true"]');
+  if (!activeDesignEl) return;
+  const dest = link.dataset.screenLink;
+  const screens = [...activeDesignEl.querySelectorAll('section[data-screen]')];
+  const currentIdx = screens.findIndex(s => s.dataset.screenActive === 'true');
+  let targetId = null;
+  if (dest === 'next') targetId = screens[Math.min(currentIdx + 1, screens.length - 1)]?.id;
+  else if (dest === 'prev') targetId = screens[Math.max(currentIdx - 1, 0)]?.id;
+  else targetId = dest;
+  // Guard against cross-design links: the target id must resolve to a
+  // <section data-screen> INSIDE the active design, not merely exist
+  // somewhere on the page.
+  if (!targetId || !activeDesignEl.querySelector(`#${CSS.escape(targetId)}`)) return;
+  e.preventDefault();
+  if (typeof closePanel === 'function') closePanel();
+  showScreen(targetId);
+});
+```
+
+## Screen-pattern markup
+
+A design iteration holds one or more `<section data-design>`, each owning
+its own set of pages. Each logical page inside a design is a `<section>`
+with `data-screen`:
+
+```html
+<section data-iteration="1" data-iteration-template="design" data-active
+         data-viewports="desktop phone" data-viewport-default="phone">
+  <header class="iteration-intro">
+    <h2>Iteration 1 · Login flow mockup</h2>
+    <p>High-fidelity walkthrough of the three-step sign-in flow.</p>
+  </header>
+
+  <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true">
+    <section id="d1-s1" data-nav-label="Welcome" data-screen data-screen-active="true">
+      <div class="device-frame">…mockup HTML for welcome screen…</div>
+    </section>
+
+    <section id="d1-s2" data-nav-label="Credentials" data-screen hidden>
+      <div class="device-frame">…mockup HTML for credentials screen…</div>
+    </section>
+
+    <section id="d1-s3" data-nav-label="Success" data-screen hidden>
+      <div class="device-frame">…mockup HTML for success screen…</div>
+    </section>
+  </section>
+
+  <section data-design="holotable" data-nav-label="Holotable" hidden>
+    <section id="d2-s1" data-nav-label="Welcome" data-screen data-screen-active="true">
+      <div class="device-frame">…mockup HTML for welcome screen…</div>
+    </section>
+  </section>
+</section>
+```
+
+**Rules:**
+- `data-screen` marks a block as a "feedback target" — it appears as a
+  per-screen textarea in the dock. Use it only for screens worth commenting on.
+- Every `data-screen` section MUST also have `id` and `data-nav-label` so
+  the panel TOC and the feedback dock can reference it. Screen ids only need
+  to be unique across the whole page — `d{design-index}-s{page-index}`
+  (e.g. `d1-s1`, `d2-s1`) keeps them readable and collision-free without
+  coordinating names across designs.
+- Exactly one `data-design` carries `data-design-active="true"`; the others
+  are `hidden`. Within the active design, exactly one `data-screen` carries
+  `data-screen-active="true"`.
+- **One design** → the wrapper is still required (markup shape stays
+  uniform across single- and multi-design concepts) but degenerates to
+  today's behaviour: no switcher, no per-design feedback field. Do not omit
+  `data-design` just because there's only one.
+- A design iteration section can still contain non-screen, non-design
+  `<section>`s (e.g. `id="design-notes" data-nav-label="Design notes"`)
+  directly under the iteration. Those appear in the TOC but NOT in the
+  feedback dock.
+- Iteration tabs still apply — when Claude iterates on feedback, a new
+  `<section data-iteration="N+1">` is appended with updated designs/screens
+  and the old one is frozen (see Shared Systems § Iteration Tabs).
+- **Form factors are declared on the iteration** via `data-viewports` /
+  `data-viewport-default` / `data-orientations` (§ Responsive device views).
+  Omit them for a desktop-only concept. The example above declares a
+  phone-first app that also has a desktop view, so the page opens in the
+  phone frames and the bottom-left toggle cycles the two.
+- **A screen's children are the clone source.** Everything inside
+  `section[data-screen]` (whether or not it is wrapped in `.device-frame`)
+  is cloned into each device frame, so it must be declarative markup —
+  no `<script>`, `<canvas>`, `<style>` or `<iframe>`, no `vh`/`vw` units, no
+  `position: fixed`, and no `#id` selectors in its CSS. § Responsive device
+  views explains what each of those does when cloned.
+- **Mock CSS is namespaced per design — never a bare generic name, never an
+  engine chrome class.** A round's `<style>` (at the top of the iteration,
+  outside every `section[data-screen]`) lives in the same document as the
+  engine: a mock rule `.overlay { position: absolute; left: 0; pointer-events:
+  none }` for its fog SVGs once restyled the decision panel, which then sat
+  docked left with a dead ☰ FAB (#400). Prefix every mock class per design
+  (`.d1-fog`, `.d2-card`; `mock-` is accepted too) or scope the selector
+  under the design (`[data-design="d1"] .fog`). Never write a selector that
+  names an engine class — `concept-decision-panel`, `panel-fab`,
+  `panel-backdrop`, `feedback-fab`, `feedback-dock`, `iteration-tabs`,
+  `iteration-tab`, `screen-indicator`, `design-switcher`, `frozen-bar`,
+  `closeout-sheet`, `device-frame`, `panel-here`, `panel-status`,
+  `concept-layout`, `concept-content` — the engine's own head stylesheet
+  owns those. `post.concept.gate` blocks both shapes (validation-gate.md P32).
+
+### Annotated screen (optional annotation layer)
+
+A screen with concrete, element-level questions adds `[data-anno-layer]`
+inside the `<section data-screen>`, one `.anno` per question. This is
+**additive** to the plain shape above — `data-screen`/`id`/`data-nav-label`
+work exactly the same either way:
+
+```html
+<section id="d1-s1" data-nav-label="Welcome" data-screen data-screen-active="true">
+  <div class="device-frame">…mockup HTML for welcome screen…</div>
+
+  <div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="a1" data-anno-side="right" style="--anno-x:62.5%;--anno-y:31.2%">
+      <button class="anno-pin" type="button" data-anno-pin="a1"
+              aria-expanded="false" aria-controls="anno-bubble-a1"
+              aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-a1" data-anno-bubble="a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="a1"
+                aria-expanded="false" aria-controls="anno-bubble-a1">
+          <span class="anno-bubble-question">Should the dispatch queue auto-refresh, or stay manual?</span>
+          <span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-a1" data-annotation="a1" data-attachable
+                    placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-a1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+**Rules (in addition to the plain screen rules above):**
+- `[data-anno-layer]` is a plain wrapper (no positioning of its own) placed
+  anywhere inside the `[data-screen]` section — it is absolutely positioned
+  to the screen's own box by CSS (§ Layout CSS), so it does not need to
+  live inside `.device-frame` specifically.
+- Annotation ids (`data-anno`, `data-anno-pin`, `data-anno-bubble`,
+  `data-anno-summary`, `data-annotation`, `data-attach-slot`'s `anno-{id}`
+  suffix) MUST be unique **page-wide**. Prefix them with the screen id —
+  `d1-s2-a1`, `d2-s1-a1` — which makes uniqueness structural instead of
+  something the author has to remember.
+  Do NOT number them `a1`, `a2` per screen. That reads harmless and is not:
+  `saveState()` keys the answer as `text:anno-{id}`, so two screens both
+  using `a1` share ONE storage slot — the last field saved wins, the other
+  answer is gone on reload, and both pins come back showing the same text.
+  The payload's `annotations[]` entries collide the same way
+  (§ Decision schema). Observed in a browser, not theorised.
+- **Prefer `data-anno-target` over hand-picked coordinates.** It takes a CSS
+  selector resolved inside the pin's own screen (`data-anno-target=".kb-card
+  .kb-title"`), and the pin is placed on that element's right edge at load,
+  on every screen/design/iteration switch and on resize. Hand-guessed
+  percentages drift the moment the mock reflows, and the reported symptom is
+  exactly that: numbered pins floating in empty space next to the thing they
+  ask about.
+- `--anno-x` / `--anno-y` stay supported as percentages of the screen box and
+  are the fallback whenever no target is given or the selector matches
+  nothing — a stale selector keeps the last known position instead of
+  collapsing the pin into a corner.
+- `data-anno-side` picks the side the bubble PREFERS to open toward. It is a
+  preference, not a promise: `placeBubble()` flips to the opposite side when
+  the preferred one would overflow the viewport, then shifts by whatever is
+  still sticking out, so a bubble is never half off-screen. The authored side
+  is remembered, so the bubble returns to it as soon as there is room again.
+- The pin number (`1`, `2`, …) and `{{anno.pin_label}}`'s `{n}` MUST match —
+  both are the 1-based order Claude assigns per screen, not a global counter
+  across the whole design.
+- Every answer textarea MUST carry `data-comment="anno-{id}"` (state
+  persistence, § State Persistence), `data-annotation="{id}"` (the payload
+  scan, § collectDecisions (design branch)) and `data-attachable` (hook for
+  a later change — do not wire uploads here). The immediately-following
+  `<div class="attach-slot" data-attach-slot="anno-{id}"></div>` stays empty.
+- Do not add the eye pill (`#anno-toggle`) or `body.anno-hidden` handling
+  per screen — both are page-global, emitted once in § Layout, driven by
+  `wireAnnotationLayer()` (§ Annotation Layer JS).
+
+### View sections (optional)
+
+`section[data-view]` is a top-level sibling of `section[data-design]`, not
+something nested inside one — see § Views (optional) above (right before
+§ Layout) for the full worked reference markup of both view kinds
+(`data-view-kind="decision"` and `data-view-kind="comparison"`), their CSS
+(`section[data-view]`, `.view-frame`, `.cmp-*`, `.view-switch-item`,
+`.screen-nav-view-item`) and their JS (`views()`, `showView()`,
+`buildViewTextareas()`). This subsection exists only as the same
+cross-reference anchor § Annotated screen has above, so a reader scanning
+top-to-bottom through § Screen-pattern markup does not miss that views
+exist. **≥1 `data-design` remains mandatory** alongside any number of views
+— see § Rules.
+
+## Decision schema
+
+The design submit payload's comments carry the shape every template emits —
+`general` (the dock's general note, `{ text, attachments }`, always present)
+and `items` (every other commented field: the dock rows as `design-{id}` /
+`{screen-id}` / `view-{id}`, view decision notes as `{id}-note`) — PLUS the
+design-level keyed maps `designs` / `screens` / `views`. `comments.screens`
+keeps flat screen-id keying regardless of which design a screen belongs to,
+so no consumer needs to learn the design nesting to read page feedback. `decisions` was always
+`[]` for a design iteration with no views — it is now populated whenever the
+iteration has ≥1 `data-view-kind="decision"` or `"comparison"` view, one
+entry per `[data-decision]` group across every view, each tagged with the
+owning `view` id (§ Views (optional)). A `data-view-kind="mapping"` view
+contributes no `decisions[]` entry; its result is one `mappings[]` entry:
+
+```json
+{
+  "submitted": true,
+  "template": "design",
+  "iteration": 2,
+  "decisions": [
+    { "id": "nav-tabs", "label": "Tabs", "evaluation": "include", "view": "nav-model", "note": "only for the desktop layout" },
+    { "id": "nav-drawer", "label": "Drawer", "evaluation": "discard", "view": "nav-model", "note": "" },
+    { "id": "compact", "label": "Compact", "evaluation": "include", "view": "card-density", "note": "" }
+  ],
+  "comments": {
+    "general": { "text": "...", "attachments": [ { "id": "<sha256>.png", "name": "shot.png", "mime": "image/png", "size": 84213, "path": ".claude/concepts/{{slug}}/attachments/<sha256>.png" } ] },
+    "items": [
+      { "id": "design-dispatch", "text": "...", "attachments": [] },
+      { "id": "d1-s1", "text": "...", "attachments": [] },
+      { "id": "view-nav-model", "text": "...", "attachments": [] },
+      { "id": "nav-tabs-note", "text": "only for the desktop layout", "attachments": [] }
+    ],
+    "designs": { "dispatch": "...", "holotable": "..." },
+    "screens": { "d1-s1": "...", "d1-s2": "..." },
+    "views": { "nav-model": "...", "card-density": "..." }
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "screen": "d1-s1",
+      "design": "dispatch",
+      "question": "Should the dispatch queue auto-refresh, or stay manual?",
+      "answer": "Auto-refresh, but with a manual pause toggle."
+    }
+  ],
+  "attachments": {
+    "general": [ { "id": "<sha256>.png", "name": "shot.png", "mime": "image/png", "size": 84213, "path": ".claude/concepts/{{slug}}/attachments/<sha256>.png" } ],
+    "design-dispatch": [],
+    "d1-s1": [],
+    "view-nav-model": [],
+    "anno-a1": [],
+    "nav-tabs-note": []
+  },
+  "mappings": [
+    {
+      "id": "veh_a", "label": "Field mapping · Card A", "view": "fields_a", "design": "card_a",
+      "mode": "schema",
+      "assigned":   { "card@phone": [["plate","card.header"], ["status","card.badge"]],
+                      "card@desktop": [["plate","card.header"]] },
+      "order":      { "card.line1@phone": ["mileage","location"] },
+      "diff":       [ {"item":"colour","target":"card.overview","ctx":"phone","proposed":false,"now":true},
+                      {"item":"fuel","target":"card.line2","ctx":"phone","proposed":true,"now":false} ],
+      "unassigned": ["chassis","battery"],
+      "violations": [ {"target":"card.line2","ctx":"phone","kind":"min","have":0,"want":1},
+                      {"item":"plate","kind":"required"} ],
+      "adhocItems": ["Next inspection"],
+      "note": "…",
+      "slotNotes":  { "card.badge": "…" }
+    }
+  ]
+}
+```
+
+`mappings` is always present — `[]` without a mapping view, otherwise one
+entry per live `section[data-mapping]` (frozen rounds and sections with a
+`.map-error` never contribute), produced by `collectMappings()`
+(§ Information Mapping (engine)). Inside an entry, `view` / `design` / `ctx`
+are present **only when applicable** — `view` when the section sits inside a
+`section[data-view]`, `design` when that view carries `data-view-for`,
+`ctx` on `diff[]` / `violations[]` entries only when the spec has a
+`context`; every other key is always present (empty-array / empty-object
+convention). `mode` is the view the user last had open (`"matrix"` for an
+axes-only spec). `assigned` is keyed by **matrix key**
+(`{elementId|axisId}` or `{elementId|axisId}@{ctx}`) and holds the checked
+`[item, target]` pairs of that matrix; `order` is keyed `{target}[@ctx]` for
+ordered parts only. `unassigned` means *assigned nowhere across ALL matrices
+of the mapping* (the `Σ` column in the UI is per matrix). `violations[]`
+kinds: `one` / `min` / `max` (per target, with `have` / `want`), `min1`
+(per item and `source`, an element / axis with `itemTargets: "min1"`),
+`required` (per item, mapping-wide). `note` is the dock's view-level text
+in a design round and the inline `map-{m}-note` text in a free round;
+`slotNotes` holds only the non-empty ones, keyed by target key. **`diff` is
+what Claude reads first, `assigned` is the full truth**, and `allFields`
+carries the compact state strings (`map-{m}-cells-…`, `-order-…`, `-adhoc`,
+`-ui`) — never the checkboxes, which are unnamed on purpose (§ Information
+Mapping (engine) → State). A `decisions[]` or `mappings[]` entry from a view
+carrying `data-view-for="{designId}"` additionally has
+`"design": "{designId}"`; the key is absent for a variant-independent view.
+
+`decisions[]` entries use the **same shape as the decision template's own
+schema** (`{id, label, evaluation}` — § Bi-State Variant Evaluation →
+Decision schema — `evaluation` is `"include"` or `"discard"`), plus the
+`view` field so Claude knows which view each entry answers and the `note`
+field carrying the mandatory adjacent `{decisionId}-note` textarea (empty
+string when the user left it blank) — the verdict without the reasoning is
+half the message, and it must not be reachable only through `allFields`.
+The comparison view's freer controls (favourite radios, criteria-matrix
+selects, weight sliders) deliberately stay untyped and arrive in
+`allFields` — they are author-invented per page, so no fixed schema can
+describe them. A design
+iteration with no views still emits `"decisions": []`, never omits the key
+— same empty-array convention as `annotations` above. `comments.views` is
+**optional and only present when the iteration has ≥1 view** — a view-less
+design iteration emits `"views": {}`, matching how `comments.designs`
+already degenerates to `{}` for a single-design iteration. Only views with
+non-empty, trimmed dock text are included, same trimming rule as every
+other `comments.*` level.
+
+`annotations` is **optional** and only present when the page uses the
+annotation layer (§ Annotation Layer (optional)) — a page with none emits
+`"annotations": []`, never omits the key (same convention as the empty
+`"decisions": []` above, so consumers never need an existence check). Only
+entries with a non-empty, trimmed `answer` are included — an unanswered pin
+contributes nothing to the payload, matching how `comments.*` already skips
+empty fields. `question` is read from the pin's bubble markup at submit
+time (`.anno-bubble-question` textContent), not hand-duplicated anywhere.
+
+`attachments` is a top-level map, keyed by the same slot key every
+`textarea[data-attachable]` carries as its `data-comment` value (`general`,
+`design-{id}`, `{screenId}`, `view-{id}`, `anno-{id}`, `{decisionId}-note`)
+— see § Attachments. Each value is the array `attachmentsFor(slotKey)`
+already produces (`{id, name, mime, size, path}`, synced files only). A slot
+with zero attachments is simply absent from the map — it is not padded with
+an empty array, unlike `comments.*`, because the map itself may legitimately
+be `{}` for an iteration where nothing was attached. This is a *separate*
+top-level key from the shared `comments.general.attachments` /
+`comments.items[].attachments` (§ collectDecisions (dispatcher)) — those
+cover the commented fields; this map is the complete per-slot index of the
+round (annotation answers included), which is why it stays its own key.
+
+## collectDecisions (design branch)
+
+```javascript
+// Called by the shared submit handler; `data-template` picks the branch.
+// Generic querySelectorAll('input, select, textarea') per the coverage gate
+// (iteration-rules.md § coverage gate) — no hand-listed field ids. Scoped to
+// #feedback-dock rather than [data-active]: the dock is an overlay that
+// lives outside section[data-iteration] in the DOM.
+// The dock holds a textarea for EVERY screen of EVERY design in the active
+// iteration (buildScreenTextareas), not just the design on screen — the
+// non-active ones are `hidden`, which does not affect querySelectorAll. That
+// is what makes this scan complete: an earlier version rebuilt the container
+// per design switch, so submitting a 2-design iteration shipped only the
+// design the user happened to be looking at and silently dropped the rest.
+// The dock's textareas are rebuilt per iteration and its storage keys carry
+// the round number (§ State Persistence `_iterationPrefix`), so it never
+// carries a previous iteration's text into the next payload — and, unlike the
+// old submit-time wipe that guaranteed the same thing, it does not destroy the
+// round's comments while the user is still waiting to read them back.
+function collectDesignDecisions() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  // The shared shape first — { general: { text, attachments }, items } over
+  // the live round + the dock (§ collectDecisions (dispatcher),
+  // collectComments) — then the design-specific keyed maps on top: the same
+  // dock rows, keyed by design / screen / view id so no consumer has to
+  // parse the `design-{id}` / `view-{id}` item ids.
+  const comments = { ...collectComments(active || document), designs: {}, screens: {}, views: {} };
+  document.querySelectorAll('#feedback-dock input, #feedback-dock select, #feedback-dock textarea').forEach(el => {
+    const value = (el.value || '').trim();
+    if (!value) return;
+    if (el.dataset.designComment) comments.designs[el.dataset.designComment] = value;
+    else if (el.dataset.screenComment) comments.screens[el.dataset.screenComment] = value;
+    // Views (§ Views (optional)) — same "dock lives outside
+    // section[data-iteration]" reasoning as designs/screens above.
+    else if (el.dataset.viewComment) comments.views[el.dataset.viewComment] = value;
+  });
+  // Decisions authored inside views (§ Views (optional)) — reuses the same
+  // [data-decision] bi-state markup and value convention
+  // ("include"/"discard") as the decision template's own cards (§ Bi-State
+  // Variant Evaluation), just scanned wherever it lives on THIS page: unlike
+  // the dock, views live INSIDE section[data-iteration][data-active], so
+  // this scan is scoped to `active` directly, same as the annotations scan
+  // below. Every view is scanned regardless of which is on screen — a view
+  // rebuilds nothing on switch (only `hidden` flips), so this sees all of
+  // them. A design iteration with no views yields `decisions: []`, the same
+  // empty-but-present convention as `annotations` below.
+  const decisions = [];
+  if (active) {
+    active.querySelectorAll('section[data-view]').forEach(view => {
+      view.querySelectorAll('[data-decision]').forEach(group => {
+        const checked = group.querySelector('input[type="radio"]:checked');
+        if (!checked) return;
+        // The adjacent {decisionId}-note textarea is mandatory (§ View kind
+        // decision, and ensureCommentSlots() injects it when an author
+        // forgets). Without it here the typed payload reports the verdict
+        // and drops the reasoning, leaving it reachable only through the
+        // untyped allFields bag. Look inside the group, then its card, then
+        // the view — ensureCommentSlots() appends next to the group, hand
+        // authored markup tends to put it one level up.
+        const decisionId = group.dataset.decision;
+        const noteEl = group.querySelector(`[data-comment="${decisionId}-note"]`)
+          || (group.parentElement && group.parentElement.querySelector(`[data-comment="${decisionId}-note"]`))
+          || view.querySelector(`[data-comment="${decisionId}-note"]`);
+        const entry = {
+          id: decisionId,
+          label: group.dataset.label || decisionId,
+          evaluation: checked.value,
+          view: view.dataset.view,
+          note: ((noteEl && noteEl.value) || '').trim()
+        };
+        // A view tied to one variant (`data-view-for`, § Views (optional))
+        // tags its decisions with that design; a variant-independent view
+        // carries no key at all rather than `design: null`.
+        if (view.dataset.viewFor) entry.design = view.dataset.viewFor;
+        decisions.push(entry);
+      });
+    });
+  }
+  // Annotations (§ Annotation Layer (optional)) live INSIDE
+  // section[data-iteration][data-active] — unlike the dock above, which is
+  // an overlay outside it — so this scan is scoped to `active` directly.
+  // Every design's screens are scanned regardless of which is on screen
+  // (same "every design, not just the active one" rule the dock scan
+  // relies on): the annotation layer is a per-screen DOM fixture, not
+  // something rebuilt on design switch, so querySelectorAll sees all of
+  // them whether their screen is currently `hidden` or not. Only answered
+  // pins (non-empty, trimmed textarea) produce an entry — an optional
+  // feature that ships zero completed annotations must still emit
+  // "annotations": [] (see § Decision schema), not omit the key.
+  const annotations = [];
+  if (active) {
+    active.querySelectorAll('[data-anno]').forEach(anno => {
+      const ta = anno.querySelector('textarea[data-annotation]');
+      const answer = ta ? (ta.value || '').trim() : '';
+      if (!answer) return;
+      const screen = anno.closest('section[data-screen][id]');
+      const design = anno.closest('section[data-design]');
+      const questionEl = anno.querySelector('.anno-bubble-question');
+      annotations.push({
+        id: anno.dataset.anno,
+        screen: screen ? screen.id : null,
+        design: design ? design.dataset.design : null,
+        question: questionEl ? questionEl.textContent.trim() : '',
+        answer
+      });
+    });
+  }
+  // Attachments (§ Attachments) — one entry per slot key that has at least
+  // one synced file. `comments.general.attachments` / `items[].attachments`
+  // already carry the commented fields' files; this map is the complete
+  // per-slot index (annotation answers included), walking every slot the
+  // attachment engine knows about rather than re-deriving the list from the
+  // DOM.
+  const attachments = {};
+  if (typeof attachmentsFor === 'function' && typeof _attachments !== 'undefined') {
+    for (const slotKey of _attachments.keys()) {
+      const list = attachmentsFor(slotKey);
+      if (list.length) attachments[slotKey] = list;
+    }
+  }
+  // Mappings (§ Information Mapping (engine)) — the engine's own collector,
+  // scoped to the live round like the scans above; `[]` on a page whose
+  // engine block is absent, so the key is always present (§ 9 uniform shape).
+  // `window.` on purpose: a bare `typeof collectMappings` here hits the TDZ of this very const.
+  const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
+  return {
+    submitted: true,
+    template: 'design',
+    iteration: active ? Number(active.dataset.iteration) : undefined,
+    decisions,
+    comments,
+    annotations,
+    attachments,
+    mappings: collectMappings(active || document)
+  };
+}
+```
+
+---
+
+# Template: free
+
+The same document layout as `decision`, but the body is Claude-authored free
+content: analysis, walkthrough, brainstorm, explainer, timeline. Tri-state
+evaluation is **opt-in** per section — Claude adds it only where it makes
+sense.
+
+## Layout — Document, freeform body
+
+Identical to the decision layout (§ Layout — Document rounds: content column,
+☰ overlay panel). The difference is in the body: no forced variant-card
+framing, no mandatory bi-state. Claude chooses the structure that fits the
+content.
+
+```html
+<html data-template="free">
+<body>
+  <div class="concept-layout">
+    <div class="concept-content">
+      <header>
+        <h1>{title}</h1>
+        <p class="subtitle">{optional}</p>
+        <!-- no controls here — the theme toggle sits in the ☰ panel head -->
+      </header>
+      <main>
+        <section data-iteration="1" data-iteration-template="free" data-active>
+          <header class="iteration-intro">
+            <h2>Iteration 1 · {subject}</h2>
+            <p>Short intro paragraph.</p>
+          </header>
+
+          <!-- Freeform body. Every nested <section id data-nav-label> gets
+               a scroll anchor in the panel TOC. A section becomes "evaluable"
+               by adding an eval-{id} radio group inside it (optional). -->
+          <section id="context" data-nav-label="Context">
+            <p>…</p>
+          </section>
+
+          <section id="finding-1" data-nav-label="Finding: latency spike">
+            <p>…</p>
+            <!-- OPT-IN bi-state: only present when Claude wants the user to
+                 confirm the finding is valid. Section id MUST match the
+                 radio name suffix (eval-{id}). -->
+            <div class="tri-state-group">
+              <label class="tri-state-option">
+                <input type="radio" name="eval-finding-1" value="discard">
+                <span class="tri-state-label">Verwerfen</span>
+              </label>
+              <label class="tri-state-option">
+                <input type="radio" name="eval-finding-1" value="include" checked>
+                <span class="tri-state-label">Miteinbeziehen</span>
+              </label>
+            </div>
+            <textarea data-comment="finding-1" placeholder="Anmerkung…"></textarea>
+          </section>
+
+          <section id="recommendation" data-nav-label="Recommendation">
+            <!-- plain section, no bi-state — just content -->
+            <p>…</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <aside class="concept-decision-panel" id="decision-panel">
+      <!-- Same structure as decision, including the .panel-head row
+           (#theme-toggle + #panel-close). Panel TOC auto-detects which
+           sections have eval-{id} radios and mirrors their current state. -->
+    </aside>
+    <!-- Page chrome, not design-only — see § Panel Chrome (all templates). -->
+    <button id="panel-toggle" class="panel-fab"
+            aria-label="{{panel.toggle_open}}"
+            title="{{panel.toggle_open}}"
+            aria-expanded="false"
+            data-label-open="{{panel.toggle_open}}"
+            data-label-close="{{panel.toggle_close}}">☰</button>
+    <div class="panel-backdrop" id="panel-backdrop"></div>
+  </div>
+
+  <!-- Shared content dimmer + frozen bar — see Common Structure for
+       behavior + CSS. Both are page-level chrome and MUST be copied verbatim:
+       showIteration() drives them regardless of template. -->
+  <div class="content-dimmer" id="content-dimmer"
+       role="button" tabindex="-1"
+       aria-label="{{panel.dim_dismiss}}"
+       title="{{panel.dim_dismiss}}" hidden></div>
+  <div class="frozen-bar" id="frozen-bar" role="status" hidden>
+    <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
+    <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
+  </div>
+</body>
+</html>
+```
+
+## Mapping block (optional)
+
+A `free` round whose question is *"which of these many items goes where"* —
+an assignment, not a choice between alternatives — carries ≥ 1
+`section[data-mapping]` in its body. It is the same construct as the design
+template's `data-view-kind="mapping"` view (§ View kind `mapping`), rendered
+by the same engine (§ Information Mapping (engine)) from the same JSON spec;
+the only authored difference is the **inline note textarea**, which a view
+does not have because the dock provides it there.
+
+```html
+<section data-iteration="2" data-iteration-template="free" data-active>
+  <header class="iteration-intro">…</header>
+  <section id="context" data-nav-label="Context">…</section>
+
+  <section data-mapping="req_trains" id="req_trains" data-nav-label="Requirements → release trains">
+    <h2>Which requirement lands in which train?</h2>
+    <script type="application/json" data-mapping-spec>{ … }</script>
+    <div class="field-row decision-comment-row">
+      <label for="req_trains-note">{{decision.comment_label}}</label>
+      <textarea id="req_trains-note" data-comment="map-req_trains-note" data-attachable rows="3"
+                placeholder="{{decision.comment_placeholder}}"></textarea>
+    </div>
+  </section>
+</section>
+```
+
+**Rules:**
+- **The inline note is mandatory** in a free-round block:
+  `textarea[data-comment="map-{m}-note"][data-attachable]` inside the
+  section (gate rule M5, validation-gate.md § Mappings). `collectMappings()` reads it into the
+  entry's `note`; it also arrives in `comments.items[]` like every other
+  `[data-comment]` of the live round, and attachments ride the existing
+  `data-attachable` path. Per-slot notes (`slotNotes: true`) are generated
+  by the engine, not authored.
+- **Panel TOC entry** like any `section[id][data-nav-label]`, plus a
+  **progress mirror** where a bi-state section shows its verdict:
+  `31/40 · 2 ⚠` (assigned items / items · open constraints), refreshed
+  after every cell write and every restore (§ Section Navigation,
+  `updateSectionNavState()` → `mappingProgress()`).
+- **Width.** The block keeps the 1100 px column: the matrix is its own
+  two-axis scroll box (`max-height: 80vh` in the document column) and the
+  two tier columns fit side by side (chips wrap). `data-map-wide` on the
+  section widens the whole column via
+  `.concept-content:has([data-map-wide]) { max-width: 1600px }` — never
+  `100vw`, the column is `overflow-y: auto` and would grow a horizontal
+  bar. Set it only for ≥ 20 columns.
+- Ids and uniqueness as in § View kind `mapping`: `^[a-z0-9_]+$`, mapping
+  ids unique page-wide, `data-mapping` = `id`.
+- **Row filter.** A matrix-only block (`axes`, no schematic) has no palette,
+  so the toolbar's row-filter pills (All / Unassigned / Changed, with live
+  counts) are its only narrowing: they hide the rows — and whole groups —
+  that fail the pill, in every matrix tab. In-memory only; the frozen block
+  keeps them.
+- **Never inside a `decision` round** (layout collision with the 340 px
+  variant cards) **and never in the final report.** A round that needs
+  both an assignment and verdicts becomes a `free` round with opt-in
+  bi-state sections, or two rounds.
+- The block is a section with content, not a bi-state section: it carries
+  no `eval-{id}` radios and produces no `decisions[]` entry — its result is
+  the `mappings[]` entry (§ Decision schema below).
+- Freezing (Step 5c): Claude writes the payload's `mappings[]` entry back
+  into the spec as `submitted` (§ Information Mapping (engine) →
+  Freezing); the frozen block then shows the submission read-only. The
+  note textarea is frozen like every other comment of that round
+  (`iteration-rules.md` § Freezing Design Iterations).
+
+## Optional bi-state auto-detection
+
+The section nav auto-detects whether a `<section data-nav-label>` contains an
+`eval-{id}` radio group and mirrors its current state (Miteinbeziehen /
+Verwerfen). Sections without a radio group just get a scroll anchor. See
+Shared Systems § Section Navigation for the implementation.
+
+## Decision schema
+
+The free template emits **only the sections that actually have bi-state
+radios**, plus whatever comments the user typed — inline notes under
+`items`, the 💬 dock's general note under `general` (same shape as every
+other template, § collectDecisions (dispatcher)):
+
+```json
+{
+  "template": "free",
+  "decisions": [
+    { "id": "finding-1", "label": "Finding: latency spike", "evaluation": "include" }
+  ],
+  "comments": {
+    "general": { "text": "...", "attachments": [] },
+    "items": [
+      { "id": "finding-1", "text": "...", "attachments": [] },
+      { "id": "recommendation", "text": "...", "attachments": [] }
+    ]
+  },
+  "mappings": []
+}
+```
+
+If no section has bi-state markers, `decisions` is an empty array and the
+submit payload is effectively a general-notes post (`comments.general`).
+`mappings` is always present — `[]` without a mapping block, otherwise one entry per live
+`section[data-mapping]` in the shape documented under § Template: design →
+Decision schema (`note` = the inline `map-{m}-note` text here; no `view` /
+`design` keys in a free round).
+
+## collectDecisions (free branch)
+
+```javascript
+function collectFreeDecisions() {
+  // Both scans are scoped to the LIVE round: section ids, eval-{id} names and
+  // data-comment keys repeat across rounds, so a document-wide scan shipped a
+  // frozen round's verdicts and notes as this round's — and a frozen mapping
+  // section carries a `map-{m}-note` textarea of its own.
+  const active = document.querySelector('section[data-iteration][data-active]') || document;
+  const decisions = [];
+  active.querySelectorAll('section[id][data-nav-label]').forEach(sec => {
+    const radio = sec.querySelector(`input[name="eval-${CSS.escape(sec.id)}"]:checked`);
+    if (!radio) return;
+    decisions.push({
+      id: sec.id,
+      label: sec.dataset.navLabel || sec.id,
+      evaluation: radio.value
+    });
+  });
+  // { general: { text, attachments }, items: [ … ] } — the live round's
+  // inline notes plus the 💬 dock's general note (§ collectDecisions
+  // (dispatcher), collectComments).
+  const comments = collectComments(active);
+  // Mappings (§ Information Mapping (engine)); `[]` without the engine block.
+  // `window.` on purpose: a bare `typeof collectMappings` here hits the TDZ of this very const.
+  const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
+  return { submitted: true, template: 'free', decisions, comments, mappings: collectMappings(active) };
+}
+```
+
+---
+
+# Shared Systems (all templates)
+
+All three templates reuse the same iteration, persistence, heartbeat, submit
+handler, and navigation plumbing. The only template-specific parts are the
+layout CSS and `collectDecisions` branch shown above. Everything below
+applies uniformly.
+
+## Section Navigation (Decision Panel as TOC)
+
+The decision panel doubles as a full table-of-contents for the active
+iteration. EVERY major `<section id="…" data-nav-label="…">` inside the
+current iteration gets a clickable nav entry — not just variants. Sections
+with a bi-state radio group additionally display the current evaluation
+state.
+
+A scroll spy marks the section the user is currently reading with
+`.is-active` (accent bar + tint), and auto-scrolls the TOC so that marker
+stays visible even in a long list. Without it, a 20-entry TOC forces the user
+to hunt for their own position on every scroll.
+
+```css
+/* The TOC is the whole content of the scroll box now — the live round's
+   sections only, everything else moved to the head's 🕘 rounds list — so it
+   reads as a nested level: indented, with a thin accent rail. */
+.section-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 8px 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid color-mix(in srgb, var(--accent-color, #58a6ff) 45%, transparent);
+}
+/* TOC groups — rendered only when ≥2 kinds meet AND the round has >12
+   entries (buildSectionNav); one open at a time. */
+.nav-group { margin: 2px 0; }
+.nav-group > summary {
+  list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::before { content: "▸"; margin-right: 0.35rem; }
+.nav-group[open] > summary::before { content: "▾"; }
+.nav-group > summary:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.nav-group-name { flex: 1 1 auto; }
+.nav-group-count { font-weight: 400; opacity: 0.8; }
+.nav-group > .section-nav-item { margin-left: 0.5rem; }
+.section-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text-color, #c9d1d9);
+  font-size: 0.9rem;
+  transition: background 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+.section-nav-item:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.section-nav-item:not([data-variant]) .section-nav-label {
+  font-weight: 500;
+  opacity: 0.9;
+}
+.section-nav-state {
+  font-size: 0.8rem;
+  color: var(--accent-color, #58a6ff);
+  white-space: nowrap;
+}
+.section-nav-state.state-discard { color: var(--danger-color, #f85149); }
+.section-nav-state.state-only { color: var(--success-color, #3fb950); }
+/* Mapping progress mirror (§ Information Mapping (engine)): muted until a
+   min/max rule is violated, then the warning colour. */
+.section-nav-state.state-mapping { color: var(--text-secondary); }
+.section-nav-state.state-mapping.has-violations { color: var(--warning-color); }
+/* "You are here" marker — driven by the scroll spy, NOT by :target or click
+   alone. The accent bar is an inset box-shadow (not a border) so the entry
+   never shifts horizontally when it becomes active. */
+.section-nav-item.is-active {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent-color, #58a6ff);
+  font-weight: 600;
+}
+.section-nav-item.is-active .section-nav-label { opacity: 1; }
+/* The hand-offs entry is the one TOC item that names work still left for the
+   reader — warning colour and a marker in every scroll position, so it cannot
+   be mistaken for one more report paragraph. */
+.section-nav-item[data-handoffs] .section-nav-label {
+  opacity: 1;
+  color: var(--warning-color, #d29922);
+  font-weight: 600;
+}
+.section-nav-item[data-handoffs] .section-nav-label::before { content: '⚠ '; }
+/* Selected-variant node — always open, its own .section-nav-item as the
+   summary, nested sub-sections indented one step further. Never gets the
+   toggle listener .nav-group does, so nothing can close it. */
+.nav-group.nav-variant-open > summary { padding: 0; background: none; cursor: default; }
+.nav-group.nav-variant-open > summary::-webkit-details-marker,
+.nav-group.nav-variant-open > summary::before { content: none; display: none; }
+.nav-group.nav-variant-open > summary:hover { background: none; }
+.nav-group.nav-variant-open > summary .section-nav-item { width: 100%; }
+.nav-group.nav-variant-open > .section-nav-item { margin-left: 0.75rem; }
+/* "Weitere Varianten · N · k verworfen" — one collapsed row for every
+   variant that is not the selected one. */
+.nav-group.nav-other-variants > .section-nav-item { margin-left: 0.5rem; opacity: 0.85; }
+/* "+N weitere" — only rendered when the TOC overflows the scroll box. */
+.nav-more-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-color, #58a6ff);
+  font-size: 0.8rem; font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-more-toggle:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-nav-item { transition: none; }
+}
+```
+
+**Every navigable section needs a matching `id` AND a `data-nav-label`:**
+```html
+<!-- Plain section — TOC entry, scroll only -->
+<section id="ist-zustand" data-nav-label="Ist-Zustand">...</section>
+
+<!-- Variant section — TOC entry + bi-state evaluation -->
+<section id="variant-a" class="variant-card" data-nav-label="A Orbital Ring">...</section>
+```
+
+Sections without `data-nav-label` are skipped by the TOC auto-populator.
+
+```javascript
+// --- Section Navigation (Decision Panel as TOC) ---
+// Rebuilt by installScrollSpy() on EVERY nav rebuild. An iteration switch
+// replaces the whole nav DOM, so a spy bound once at load would silently stop
+// highlighting on every tab except the one that existed at DOMContentLoaded.
+let scrollSpyEntries = [];
+let scrollSpyFrame = 0;
+
+// "Kompass" tree tunables — decided on the concept page, not tuned by feel:
+// group the TOC only when ≥2 kinds are present AND the round has >12
+// entries; honour a deliberate group close for 4 s before the scroll spy may
+// open that group again.
+const NAV_GROUP_MIN_KINDS = 2;
+const NAV_GROUP_OVER_ENTRIES = 12;
+const NAV_MANUAL_CLOSE_GRACE_MS = 4000;
+let _navManualClosedAt = new WeakMap();   // details.nav-group → Date.now() of a user close — reset on every buildSectionNav() rebuild
+let _lastActiveSectionId = null;            // survives a rebuild — the "reading line" fallback below
+// Bumped once per buildSectionNav() call, captured by every 'toggle'
+// listener bound during that call. `nav` (the #section-nav element) is the
+// SAME node across every rebuild — only its children are replaced — so a
+// 'toggle' event queued by an EARLIER build's (now-detached) group, firing
+// AFTER a later build has already replaced the tree, would otherwise still
+// read that detached group's OWN `.open` (never touched again after
+// detachment, so often still `true`), pass the "am I open" guard, and close
+// groups it queries fresh off the live `nav` — i.e. the CURRENT build's
+// groups, which have nothing to do with it. The generation check below
+// makes any listener from a superseded build a no-op, unconditionally,
+// before it reads or writes anything.
+let _navGeneration = 0;
+
+// The live round's chip is authored with {{iteration.active_suffix}} on it
+// (" · aktiv" / " · active" — the fixture builder and every hand-appended
+// chip still add it; § Iteration append checklist). The head must never
+// show it ("no aktiv/active wording on the live round's head line"), so it
+// is stripped once, here, at the single source every consumer (head, frozen
+// bar, rounds list, status line) reads data-tab-label from. Also covers the
+// older "(aktiv)"/"(active)" parenthesis form.
+function stripActiveSuffix(label) {
+  return label.replace(/\s*(?:·\s*(?:aktiv|active)\b|\(\s*(?:aktiv|active)\s*\))\s*$/i, '').trim();
+}
+
+// The label a chip was appended with, stamped on data-tab-label the first
+// time the tree is built — BEFORE any generated summary line is added to the
+// chip, so showIteration / renderPanelStatus / the frozen bar never read the
+// summary as part of the name.
+function iterationTabLabel(tab) {
+  if (!tab.dataset.tabLabel) {
+    const stale = tab.querySelector('.iteration-tab-summary');
+    if (stale) stale.remove();
+    tab.dataset.tabLabel = stripActiveSuffix(tab.textContent.trim());
+  }
+  return tab.dataset.tabLabel;
+}
+
+// ONE tree: every .iteration-tab is a node header. Non-selected chips get a
+// generated one-line summary ("14 Einträge · 3 verworfen", from that round's
+// section[id][data-nav-label] and its eval-* radios; reality-check and
+// final-report chips keep their glyph labels). The chips themselves are
+// never recreated — same <button>, same click listeners, only read from —
+// which is why the append checklist can keep string-appending them at the
+// end of nav.iteration-tabs. The bar itself is hidden (§ Tab Bar CSS); the
+// 🕘 rounds chip + list in the pinned head (buildRoundsChip) is what the
+// user actually sees and clicks.
+function buildIterationTree() {
+  const bar = document.querySelector('.iteration-tabs');
+  if (!bar) return;
+  const tabs = [...bar.querySelectorAll('.iteration-tab')];
+  const liveTab = tabs.find(t => t.getAttribute('aria-selected') === 'true');
+  tabs.forEach(tab => {
+    iterationTabLabel(tab);
+    const old = tab.querySelector('.iteration-tab-summary');
+    if (old) old.remove();
+    if (tab === liveTab) return;
+    if (tab.hasAttribute('data-reality-check') || tab.hasAttribute('data-final-report')) return;
+    const sec = document.querySelector('section[data-iteration="' + tab.dataset.iteration + '"]');
+    if (!sec) return;
+    const entries = sec.querySelectorAll('section[id][data-nav-label]');
+    let discarded = 0;
+    entries.forEach(s => {
+      const checked = s.querySelector('input[name="eval-' + s.id + '"]:checked');
+      if (checked && checked.value === 'discard') discarded++;
+    });
+    const summary = document.createElement('span');
+    summary.className = 'iteration-tab-summary';
+    summary.textContent = entries.length + ' {{nav.summary_entries}}'
+      + (discarded ? ' · ' + discarded + ' {{nav.summary_discarded}}' : '');
+    tab.appendChild(summary);
+  });
+  buildRoundsChip(tabs, liveTab);
+}
+
+// 🕘 rounds chip + its toggled list, both inside the pinned .panel-here.
+// "Previous" = every chip before the live one, same population the archive
+// fold used to wrap — only the presentation moved. Each row reuses the
+// .iteration-tab-summary text already computed above (single source), tags
+// itself {{nav.archived}}, and clicking it drives the SAME showIteration()
+// path as clicking the (now hidden) tab would.
+function buildRoundsChip(tabs, liveTab) {
+  const chip = document.getElementById('panel-here-rounds');
+  const list = document.getElementById('panel-here-rounds-list');
+  if (!chip || !list) return;
+  const liveIdx = liveTab ? tabs.indexOf(liveTab) : -1;
+  const previous = liveIdx > 0 ? tabs.slice(0, liveIdx) : [];
+  chip.hidden = previous.length === 0;
+  const count = chip.querySelector('[data-here-rounds-count]');
+  if (count) count.textContent = String(previous.length);
+  list.innerHTML = '';
+  previous.forEach(tab => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'panel-here-rounds-item';
+    row.setAttribute('role', 'listitem');
+    row.dataset.iteration = tab.dataset.iteration;
+    const label = document.createElement('span');
+    label.className = 'panel-here-rounds-label';
+    label.textContent = tab.dataset.tabLabel || tab.textContent.trim();
+    row.appendChild(label);
+    const tabSummary = tab.querySelector('.iteration-tab-summary');
+    if (tabSummary) {
+      const summary = document.createElement('span');
+      summary.className = 'panel-here-rounds-summary';
+      summary.textContent = tabSummary.textContent;
+      row.appendChild(summary);
+    }
+    const tag = document.createElement('span');
+    tag.className = 'panel-here-rounds-tag';
+    tag.textContent = '{{nav.archived}}';
+    row.appendChild(tag);
+    row.addEventListener('click', () => {
+      list.hidden = true;
+      chip.setAttribute('aria-expanded', 'false');
+      showIteration(tab.dataset.iteration);
+    });
+    list.appendChild(row);
+  });
+}
+
+// Closed by default, plain toggle, no persistence: a click on the chip
+// flips the list; a click outside it (or Escape) closes it again.
+document.addEventListener('click', e => {
+  const chip = document.getElementById('panel-here-rounds');
+  const list = document.getElementById('panel-here-rounds-list');
+  if (!chip || !list) return;
+  if (chip.contains(e.target)) {
+    const willOpen = list.hidden;
+    list.hidden = !willOpen;
+    chip.setAttribute('aria-expanded', String(willOpen));
+    return;
+  }
+  if (!list.hidden && !list.contains(e.target)) {
+    list.hidden = true;
+    chip.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const chip = document.getElementById('panel-here-rounds');
+  const list = document.getElementById('panel-here-rounds-list');
+  if (list && !list.hidden) {
+    list.hidden = true;
+    if (chip) chip.setAttribute('aria-expanded', 'false');
+  }
+});
+
+// The "selected" variant, per the TOC grouping rule: the one variant left on
+// "Miteinbeziehen" while every OTHER variant is "Verwerfen" — an unambiguous
+// signal the round has converged on one option. Below two variants there is
+// nothing to group around. Absent that unambiguous signal, fall back to
+// whichever variant was under the reading line before this rebuild (the spy
+// keeps _lastActiveSectionId current), so a mid-review round does not jump
+// its grouping on every radio click.
+function computeSelectedVariant(variantSections) {
+  if (variantSections.length < 2) return null;
+  let includeCount = 0, discardCount = 0, includeSec = null;
+  variantSections.forEach(s => {
+    const checked = s.querySelector(`input[name="eval-${s.id}"]:checked`);
+    const value = checked ? checked.value : 'include';
+    if (value === 'include') { includeCount++; includeSec = s; }
+    else if (value === 'discard') discardCount++;
+  });
+  if (includeCount === 1 && discardCount === variantSections.length - 1) return includeSec;
+  if (_lastActiveSectionId) {
+    const prev = variantSections.find(s => s.id === _lastActiveSectionId);
+    if (prev) return prev;
+  }
+  return null;
+}
+
+// "+N weitere" — only when the TOC would otherwise overflow the scroll box
+// (measured AFTER render, never a fixed cut-off). Hides the tail of the
+// direct-children list and reveals it on click.
+// On the FINAL REPORT the rule is different (applyNavWindow()): the TOC is
+// secondary there and the close-out sheet below it needs the height, so by
+// default only the entry under the reading line plus its neighbour on each
+// side stay visible, whatever the scroll box would fit.
+function applyNavOverflow(nav, scrollBox) {
+  nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
+  nav.querySelectorAll('[data-nav-overflow-hidden]').forEach(el => {
+    el.hidden = false;
+    el.removeAttribute('data-nav-overflow-hidden');
+  });
+  if (document.body.classList.contains('viewing-final')) {
+    applyNavWindow(nav, nav.querySelector('.section-nav-item.is-active'));
+    return;
+  }
+  if (!scrollBox || scrollBox.scrollHeight <= scrollBox.clientHeight) return;
+  const items = [...nav.children];
+  let hiddenCount = 0;
+  for (let i = items.length - 1; i >= 0 && scrollBox.scrollHeight > scrollBox.clientHeight; i--) {
+    items[i].hidden = true;
+    items[i].setAttribute('data-nav-overflow-hidden', '');
+    hiddenCount++;
+  }
+  if (!hiddenCount) return;
+  nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
+}
+function makeNavMoreToggle(nav, hiddenCount) {
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'nav-more-toggle';
+  toggle.textContent = '+' + hiddenCount + ' {{nav.more_entries}}';
+  toggle.addEventListener('click', () => {
+    nav.querySelectorAll('[data-nav-overflow-hidden]').forEach(el => {
+      el.hidden = false;
+      el.removeAttribute('data-nav-overflow-hidden');
+    });
+    // Expanded by hand stays expanded: the spy must not re-window the list
+    // on the next reading-line change (applyNavWindow() checks this).
+    nav.dataset.navExpanded = 'true';
+    toggle.remove();
+  });
+  return toggle;
+}
+// Final-report TOC window: at most NAV_WINDOW_MAX top-level entries —
+// the current one, the one before it (if any) and the one after it (if
+// any); at the first entry that is two, never three-from-the-top. The rest
+// hides behind the same "+N weitere" toggle the overflow rule uses, and the
+// window FOLLOWS the reading line (setActiveNavItem() re-applies it) until
+// the user expands the list once — `nav.dataset.navExpanded` — after which
+// it stays fully open for that build. Counts over the nav's direct children
+// (a grouped TOC's <details> counts as one entry), same as the overflow
+// rule; `current` is the child that CONTAINS the active item, or the first
+// child when nothing is active yet.
+const NAV_WINDOW_MAX = 3;
+function applyNavWindow(nav, activeItem) {
+  if (nav.dataset.navExpanded === 'true') return;
+  nav.querySelectorAll('.nav-more-toggle').forEach(el => el.remove());
+  const items = [...nav.children];
+  if (items.length <= NAV_WINDOW_MAX) return;
+  let cur = activeItem ? items.findIndex(el => el === activeItem || el.contains(activeItem)) : 0;
+  if (cur < 0) cur = 0;
+  const lo = Math.max(0, cur - 1);
+  const hi = Math.min(items.length - 1, cur + 1);
+  let hiddenCount = 0;
+  items.forEach((el, i) => {
+    const hide = i < lo || i > hi;
+    el.hidden = hide;
+    if (hide) { el.setAttribute('data-nav-overflow-hidden', ''); hiddenCount++; }
+    else el.removeAttribute('data-nav-overflow-hidden');
+  });
+  if (hiddenCount) nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
+}
+
+function buildSectionNav() {
+  buildIterationTree();
+  const nav = document.getElementById('section-nav');
+  if (!nav) return;
+  // Use :not([hidden]) so the nav reflects the VISIBLE iteration (may be
+  // a frozen tab the user is reviewing), not the live/latest one.
+  const activeIteration = document.querySelector('section[data-iteration]:not([hidden])');
+  if (!activeIteration) return;
+  // Top-level only — nested section[id][data-nav-label] (a variant's own
+  // sub-sections) are collected separately, under the selected-variant node.
+  const sections = [...activeIteration.querySelectorAll(':scope > section[id][data-nav-label]')];
+  nav.innerHTML = '';
+  // A hand-expanded final-report window (applyNavWindow()) is per build —
+  // the next tab switch starts windowed again.
+  delete nav.dataset.navExpanded;
+  // Every group + listener created from here on belongs to THIS generation;
+  // any 'toggle' event still queued from a PREVIOUS one is now stale by
+  // definition, whatever its own .open reads.
+  _navGeneration++;
+  const myGeneration = _navGeneration;
+  // TOC kinds come from the EXISTING contract — a section with an eval-{id}
+  // radio group is a variant, anything else is context — plus an optional
+  // data-nav-group="…" override on the section (its value is the group
+  // name).
+  const kindOf = sec => sec.dataset.navGroup
+    || (sec.querySelector(`input[name="eval-${sec.id}"]`) ? 'variants' : 'context');
+  const kindLabel = kind => kind === 'variants' ? '{{nav.group_variants}}'
+                          : kind === 'context'  ? '{{nav.group_context}}'
+                          : kind;
+  const makeItem = sec => {
+    const id = sec.id;
+    const label = sec.dataset.navLabel;
+    const hasTriState = !!sec.querySelector(`input[name="eval-${id}"]`);
+    const link = document.createElement('a');
+    link.href = '#' + id;
+    link.className = 'section-nav-item';
+    link.dataset.sectionId = id;
+    if (hasTriState) link.setAttribute('data-variant', '');
+    // The hand-offs section is the one entry that names work still left for
+    // the reader; the attribute is what the nav CSS paints.
+    if (sec.hasAttribute('data-handoffs')) link.setAttribute('data-handoffs', '');
+    const labelEl = document.createElement('span');
+    labelEl.className = 'section-nav-label';
+    labelEl.textContent = label;
+    link.appendChild(labelEl);
+    // A mapping section (§ Information Mapping (engine)) mirrors its progress
+    // where a variant shows its verdict: `assigned/total · violations ⚠`.
+    if (sec.hasAttribute('data-mapping')) link.setAttribute('data-mapping-nav', '');
+    if (hasTriState || sec.hasAttribute('data-mapping')) {
+      const stateEl = document.createElement('span');
+      stateEl.className = 'section-nav-state';
+      link.appendChild(stateEl);
+    }
+    return link;
+  };
+
+  const variantSections = sections.filter(s => s.querySelector(`input[name="eval-${s.id}"]`));
+  const selectedVariant = computeSelectedVariant(variantSections);
+
+  if (selectedVariant) {
+    // Grouped around the selected variant: it renders OPEN with its own
+    // sub-sections nested inside; every OTHER variant collapses into one
+    // accordion row; context sections stay flat, in document order.
+    const otherVariants = variantSections.filter(s => s !== selectedVariant);
+    let otherRow = null;
+    sections.forEach(sec => {
+      if (sec === selectedVariant) {
+        const open = document.createElement('details');
+        open.className = 'nav-group nav-variant-open';
+        open.dataset.navGroup = 'selected-variant';
+        open.open = true;
+        const summary = document.createElement('summary');
+        summary.className = 'nav-group-summary';
+        summary.appendChild(makeItem(sec));
+        open.appendChild(summary);
+        const subSections = [...sec.querySelectorAll('section[id][data-nav-label]')];
+        subSections.forEach(sub => open.appendChild(makeItem(sub)));
+        nav.appendChild(open);
+        return;
+      }
+      if (otherVariants.includes(sec)) {
+        if (!otherRow) {
+          otherRow = document.createElement('details');
+          otherRow.className = 'nav-group nav-other-variants';
+          otherRow.dataset.navGroup = 'other-variants';
+          const summary = document.createElement('summary');
+          summary.className = 'nav-group-summary';
+          const name = document.createElement('span');
+          name.className = 'nav-group-name';
+          name.textContent = '{{nav.other_variants}}';
+          summary.appendChild(name);
+          otherRow.appendChild(summary);
+          nav.appendChild(otherRow);
+        }
+        otherRow.appendChild(makeItem(sec));
+        return;
+      }
+      nav.appendChild(makeItem(sec));
+    });
+    if (otherRow) {
+      let discarded = 0;
+      otherVariants.forEach(s => {
+        const checked = s.querySelector(`input[name="eval-${s.id}"]:checked`);
+        if (checked && checked.value === 'discard') discarded++;
+      });
+      const name = otherRow.querySelector('.nav-group-name');
+      name.textContent = '{{nav.other_variants}} · ' + otherVariants.length
+        + (discarded ? ' · ' + discarded + ' {{nav.summary_discarded}}' : '');
+    }
+  } else {
+    // No unambiguous selection (or fewer than 2 variants) — the previous
+    // flat/kind-grouped list applies unchanged. Grouping is the exception,
+    // not the rule: only when ≥2 kinds meet AND the round has more than
+    // NAV_GROUP_OVER_ENTRIES entries.
+    const kinds = [...new Set(sections.map(kindOf))];
+    const grouped = kinds.length >= NAV_GROUP_MIN_KINDS && sections.length > NAV_GROUP_OVER_ENTRIES;
+    const hosts = {};
+    if (grouped) {
+      kinds.forEach(kind => {
+        const group = document.createElement('details');
+        group.className = 'nav-group';
+        group.dataset.navGroup = kind;
+        const summary = document.createElement('summary');
+        summary.className = 'nav-group-summary';
+        const name = document.createElement('span');
+        name.className = 'nav-group-name';
+        name.textContent = kindLabel(kind);
+        const count = document.createElement('span');
+        count.className = 'nav-group-count';
+        count.textContent = String(sections.filter(s => kindOf(s) === kind).length);
+        summary.appendChild(name);
+        summary.appendChild(count);
+        group.appendChild(summary);
+        nav.appendChild(group);
+        hosts[kind] = group;
+      });
+    }
+    sections.forEach(sec => {
+      (grouped ? hosts[kindOf(sec)] : nav).appendChild(makeItem(sec));
+    });
+  }
+  // One-open among the groups, bound HERE because this DOM is rebuilt on
+  // every tab switch — a listener bound once at load would sit on detached
+  // nodes. `toggle` runs the accordion (opening one closes the others,
+  // whoever opened it: a click or the scroll spy); the summary click records
+  // a DELIBERATE close, which openNavGroupFor honours for
+  // NAV_MANUAL_CLOSE_GRACE_MS instead of reopening the group next frame. The
+  // selected-variant node stays open by construction — no toggle listener on
+  // it, nothing may close it.
+  nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(group => {
+    group.addEventListener('toggle', () => {
+      // A 'toggle' event queued by THIS group can still fire after a LATER
+      // buildSectionNav() call has replaced the whole tree (nav.innerHTML =
+      // '' only detaches `group` — it does not, and cannot, cancel an
+      // already-queued event on it). A detached group's own `.open` is
+      // frozen at whatever it last was, so this check must come BEFORE the
+      // `!group.open` one: a stale but still-"open" `group` would otherwise
+      // pass that check and close CURRENT groups queried fresh off the
+      // shared, never-replaced `nav` element — the exact defect that left
+      // a freshly-built tree closed right after boot.
+      if (myGeneration !== _navGeneration) return;
+      if (!group.open) return;
+      nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(other => {
+        if (other !== group && other.open) other.open = false;
+      });
+    });
+    group.querySelector('summary').addEventListener('click', () => {
+      if (group.open) _navManualClosedAt.set(group, Date.now());
+      else _navManualClosedAt.delete(group);
+    });
+  });
+  // The tree now lives inside the scroll box on its own — the live round's
+  // TOC only; the other rounds moved to the head's rounds list.
+  const hereSection = document.querySelector('[data-here-section]');
+  if (hereSection) hereSection.hidden = !sections.length;
+  updateSectionNavState();
+  // Reset the manual-close grace on every rebuild. The groups themselves are
+  // brand new DOM nodes each time (nav.innerHTML = '' above), so old WeakMap
+  // entries can never match them by identity anyway — this just makes that
+  // explicit instead of relying on it, so nothing the spy does next (below)
+  // can be blocked by a stale close from a PREVIOUS build's groups.
+  _navManualClosedAt = new WeakMap();
+  // Deterministic open state — does NOT depend on the scroll spy having run,
+  // or on anything being `.is-active` yet: on a fresh page the spy may be
+  // IntersectionObserver-driven and asynchronous, or the very first
+  // getBoundingClientRect() read may simply predate layout/paint. Whichever
+  // group holds the reading line — or, if nothing can be measured at all,
+  // the FIRST group — is open the instant buildSectionNav() returns, on
+  // load, on every tab switch and on every rebuild, full stop. This is a
+  // FLOOR: openGroupExclusively() below is what the final state actually is.
+  const navItems = [...nav.querySelectorAll('.section-nav-item')];
+  const openGroupExclusively = item => {
+    const group = item && item.closest('details.nav-group');
+    if (!group) return false;
+    // Single-open, enforced HERE and now — never left for the accordion's
+    // own 'toggle' listener to sort out later. That listener only runs once
+    // its (browser-queued) 'toggle' EVENT fires, which is one more task tick
+    // than "the instant buildSectionNav() returns" allows: opening a second
+    // group via installScrollSpy() below, synchronously, right after this
+    // one was opened, would otherwise leave BOTH open until that event
+    // catches up — which is exactly the empty-looking, both-collapsed (or,
+    // depending on timing, both-open-then-one-randomly-wins) tree this whole
+    // mechanism exists to prevent.
+    //
+    // Assign ONLY on an actual transition, explicitly (never `g.open =
+    // false` on a group that is already closed, never `group.open = true`
+    // on one that is already open). A same-value assignment queues no
+    // 'toggle' event of its own, but this call runs up to twice per
+    // buildSectionNav() (the pre-spy floor, then the post-spy settle) and,
+    // across the two DOMContentLoaded-driven calls at boot, up to four
+    // times in one tick — every REAL close still queues one real 'toggle'
+    // event on THAT group, and if the two calls settle on the SAME target
+    // (the common case), being explicit keeps that count at the true
+    // minimum instead of leaving it to chance which browsers treat a
+    // same-value set as a no-op. Fewer queued events is what makes the
+    // accordion listener's own `if (!group.open) return;` guard reliable —
+    // a group that this run never actually closed can never have a stale
+    // queued close-event fire against a state some LATER call reopened.
+    nav.querySelectorAll('details.nav-group:not(.nav-variant-open)').forEach(g => {
+      if (g !== group && g.open) g.open = false;
+    });
+    if (!group.open) group.open = true;
+    return true;
+  };
+  if (!openGroupExclusively(pickInitialNavTarget(navItems))) {
+    const anyGroup = nav.querySelector('details.nav-group');
+    if (anyGroup) anyGroup.open = true;
+  }
+  installScrollSpy();   // nav DOM was replaced → rebind the spy — sets
+                         // .is-active from REAL geometry once it exists,
+                         // which may or may not be the same entry the
+                         // pre-spy pick above landed on.
+  // Whatever the spy resolved to (or, if it found nothing at all, the same
+  // deterministic pick as above) is the single source of truth for which
+  // group is open, reconciled synchronously — before any queued 'toggle'
+  // event from either open() call above has a chance to race the other.
+  const settledItem = nav.querySelector('.section-nav-item.is-active') || pickInitialNavTarget(navItems);
+  openGroupExclusively(settledItem);
+  applyNavOverflow(nav, document.querySelector('.panel-nav-scroll'));
+}
+
+// Synchronous, spy-independent pick of "the entry that should be open right
+// now": an already-settled `.is-active` item wins outright; failing that, the
+// LAST item whose section is at/above the 28%-down reading line — the same
+// heuristic updateScrollSpy uses — but ONLY when at least one section
+// produced a real (non-zero) rect; if every rect reads (0, 0) — no layout to
+// read yet, real browser or jsdom alike — there is no signal to act on, so
+// this deliberately falls back to the FIRST entry rather than guessing.
+function pickInitialNavTarget(items) {
+  if (!items.length) return null;
+  const active = items.find(i => i.classList.contains('is-active'));
+  if (active) return active;
+  const line = window.innerHeight * 0.28;
+  let picked = null;
+  let measured = false;
+  for (const item of items) {
+    const sec = document.getElementById(item.dataset.sectionId);
+    if (!sec) continue;
+    const rect = sec.getBoundingClientRect();
+    if (rect.top !== 0 || rect.bottom !== 0) measured = true;
+    if (rect.top <= line) picked = item;
+  }
+  return (measured && picked) ? picked : items[0];
+}
+
+// The scroll spy OPENS the group that holds the active entry and never
+// closes anything (the accordion listener above does the closing). A group
+// the user closed on purpose stays closed for NAV_MANUAL_CLOSE_GRACE_MS —
+// and, since setActiveNavItem returns early for an unchanged entry, until
+// the active entry actually changes.
+function openNavGroupFor(item) {
+  const group = item.closest('details.nav-group');
+  if (!group || group.open) return;
+  const closedAt = _navManualClosedAt.get(group) || 0;
+  if (Date.now() - closedAt < NAV_MANUAL_CLOSE_GRACE_MS) return;
+  group.open = true;
+}
+
+function updateSectionNavState() {
+  const labels = { include: 'Miteinbeziehen', discard: 'Verwerfen' };
+  document.querySelectorAll('.section-nav-item[data-variant]').forEach(link => {
+    const id = link.dataset.sectionId;
+    const checked = document.querySelector(`input[name="eval-${id}"]:checked`);
+    const currentState = checked ? checked.value : 'include';
+    const stateEl = link.querySelector('.section-nav-state');
+    if (stateEl) {
+      stateEl.textContent = labels[currentState] || currentState;
+      stateEl.className = 'section-nav-state state-' + currentState;
+    }
+  });
+  // Mapping progress mirror (§ Information Mapping (engine)): the engine
+  // re-calls this after every cell write and every restore.
+  if (typeof mappingProgress === 'function') {
+    // buildSectionNav() lists the VISIBLE round; resolve the section inside
+    // that same round. Mapping ids are unique page-wide (gate M2), so this is
+    // defence in depth — a page-wide lookup only when no round is visible.
+    const host = document.querySelector('section[data-iteration]:not([hidden])');
+    document.querySelectorAll('.section-nav-item[data-mapping-nav]').forEach(link => {
+      const id = link.dataset.sectionId;
+      const sec = host
+        ? [...host.querySelectorAll('section[data-mapping]')].find(s => s.id === id) || null
+        : document.getElementById(id);
+      const stateEl = link.querySelector('.section-nav-state');
+      if (!sec || !stateEl) return;
+      const p = mappingProgress(sec);
+      stateEl.textContent = p.assigned + '/' + p.total + (p.violations ? ' · ' + p.violations + ' ⚠' : '');
+      stateEl.className = 'section-nav-state state-mapping';
+      stateEl.classList.toggle('has-violations', p.violations > 0);
+    });
+  }
+}
+
+document.addEventListener('click', e => {
+  const link = e.target.closest('.section-nav-item');
+  if (!link) return;
+  e.preventDefault();
+  const target = document.querySelector(link.getAttribute('href'));
+  if (!target) return;
+  setActiveNavItem(link);   // instant feedback; the spy confirms it once the smooth scroll settles
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+function installScrollSpy() {
+  scrollSpyEntries = [];
+  document.querySelectorAll('.section-nav-item').forEach(item => {
+    const sec = document.getElementById(item.dataset.sectionId);
+    if (sec) scrollSpyEntries.push({ item, section: sec });
+  });
+  updateScrollSpy();
+}
+
+function setActiveNavItem(item) {
+  if (!item || item.classList.contains('is-active')) return;
+  scrollSpyEntries.forEach(({ item: other }) => {
+    other.classList.remove('is-active');
+    other.removeAttribute('aria-current');
+  });
+  item.classList.add('is-active');
+  item.setAttribute('aria-current', 'true');
+  _lastActiveSectionId = item.dataset.sectionId || null;
+  // "You are here" breadcrumb in the pinned head (§ Common Structure) — the
+  // final report has no second head line at all (showIteration hides it).
+  const here = document.querySelector('[data-here-section]');
+  if (here && !document.body.classList.contains('viewing-final')) {
+    const label = item.querySelector('.section-nav-label');
+    here.textContent = '› ' + (label ? label.textContent : '');
+    here.hidden = false;
+  }
+  updateHereRoundParenthesis(item);
+  openNavGroupFor(item);
+  // On the final report the TOC is a 3-entry window around the reading line
+  // (applyNavWindow()); it has to move with the line, or the active entry
+  // would scroll out of the window it is supposed to be the centre of.
+  if (document.body.classList.contains('viewing-final')) {
+    const nav = document.getElementById('section-nav');
+    if (nav && nav.contains(item)) applyNavWindow(nav, item);
+  }
+  revealNavItem(item);
+}
+
+// Head line reads "Iteration N (Variante)": the parenthesis names the
+// variant under the reading line, and ONLY when that section carries a
+// variant bi-state — general/context sections never get one.
+function updateHereRoundParenthesis(item) {
+  const round = document.querySelector('[data-here-round]');
+  if (!round) return;
+  if (round.dataset.hereRoundBase == null) round.dataset.hereRoundBase = round.textContent;
+  const base = round.dataset.hereRoundBase;
+  const isVariant = item && item.hasAttribute('data-variant');
+  if (isVariant) {
+    const label = item.querySelector('.section-nav-label');
+    round.textContent = base + ' (' + (label ? label.textContent : '') + ')';
+  } else {
+    round.textContent = base;
+  }
+}
+
+// Nearest ancestor that actually scrolls. Returns null when nothing between
+// `el` and <body> scrolls, so callers can fall back to the document.
+function nearestScrollBox(el) {
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if (/(auto|scroll|overlay)/.test(oy) && n.scrollHeight > n.clientHeight + 1) return n;
+  }
+  return null;
+}
+
+// Keeps the active entry inside the visible part of a long TOC. Scrolls ONLY
+// the panel's own scroll box — never the content column — and only when the
+// entry is genuinely out of view, so it can't fight the user's scrolling.
+function revealNavItem(item) {
+  // An entry inside a closed <details> (a folded group, or the archive) has
+  // no box at all; measuring its (0,0) rect would drag the scroll box to the
+  // top on every frame. Nothing to reveal → do nothing.
+  if (item.getClientRects().length === 0) return;
+  const box = nearestScrollBox(item.parentElement);
+  if (!box) return;
+  const boxRect = box.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  const pad = 12;
+  if (itemRect.top < boxRect.top + pad) {
+    box.scrollTop -= (boxRect.top + pad) - itemRect.top;
+  } else if (itemRect.bottom > boxRect.bottom - pad) {
+    box.scrollTop += itemRect.bottom - (boxRect.bottom - pad);
+  }
+}
+
+// Picks the section that owns the "reading line" (28% down the viewport):
+// the LAST section whose top is above the line. This is deliberately not
+// IntersectionObserver's isIntersecting — a section taller than the observer
+// band, or shorter than the gap between two entries, produces gaps and
+// flicker there. Two edge cases are pinned explicitly: above the first
+// section the first entry stays active, and at the very bottom of the scroll
+// container the last entry wins (a short trailing section may never reach
+// the line on its own).
+function updateScrollSpy() {
+  if (!scrollSpyEntries.length) return;
+  const line = window.innerHeight * 0.28;
+  let active = null;
+  for (const entry of scrollSpyEntries) {
+    if (entry.section.getBoundingClientRect().top <= line) active = entry;
+  }
+  if (!active) active = scrollSpyEntries[0];
+  const box = nearestScrollBox(scrollSpyEntries[0].section.parentElement)
+    || document.documentElement;
+  // "User is at the bottom" requires a real, measured scroll box — a
+  // scrollHeight of exactly 0 (nothing laid out yet, or the box's own
+  // ancestor is still off-canvas/hidden) is "nothing to measure", never
+  // "already at the bottom", and must not override the reading-line pick
+  // above with the LAST entry.
+  if (box.scrollHeight > 0 && box.scrollHeight - box.scrollTop - box.clientHeight < 4) {
+    active = scrollSpyEntries[scrollSpyEntries.length - 1];
+  }
+  setActiveNavItem(active.item);
+}
+
+function scheduleScrollSpy() {
+  if (scrollSpyFrame) return;
+  scrollSpyFrame = requestAnimationFrame(() => {
+    scrollSpyFrame = 0;
+    updateScrollSpy();
+  });
+}
+
+// Capture phase: scroll events do NOT bubble, so a listener on document only
+// sees them during capture. This covers both the document scroll and an inner
+// .concept-content scroll box without knowing which one is in play.
+document.addEventListener('scroll', scheduleScrollSpy, { capture: true, passive: true });
+window.addEventListener('resize', scheduleScrollSpy, { passive: true });
+
+document.addEventListener('change', updateSectionNavState);
+document.addEventListener('DOMContentLoaded', buildSectionNav);
+```
+
+**Important:**
+- Every navigable `<section>` needs `id` AND `data-nav-label`. A section
+  nested INSIDE a variant (its own sub-sections) also needs both — collected
+  separately once that variant is the selected one, never as a top-level TOC
+  entry of its own.
+- If a section has a bi-state radio group, its `name` MUST be `eval-{section-id}`.
+- `buildSectionNav()` must run again after every iteration switch.
+- Never call `installScrollSpy()` on its own — `buildSectionNav()` calls it as
+  its last step. Binding it independently is how the highlight goes stale
+  after a tab switch.
+- **The tree is JS-built, the chips are not.** `buildSectionNav()` builds
+  `#section-nav` for the live round only and `buildIterationTree()` derives
+  the 🕘 rounds chip + list in `.panel-here` from the chips; the page author
+  only ever appends a plain `<button class="iteration-tab" …>` at the end of
+  `nav.iteration-tabs` (iteration-rules.md § Iteration append checklist).
+  Never hand-write an `.iteration-tab-summary` or a `.nav-group` into the
+  HTML — they are recomputed from the sections on load.
+- **Selected-variant grouping beats size-based grouping.** When ≥2 variant
+  sections exist and exactly one is left "Miteinbeziehen" while every other
+  one is "Verwerfen" (or, absent that, whichever variant was under the
+  reading line before the rebuild), that variant renders OPEN with its own
+  nested sections, every other variant collapses into one
+  "{{nav.other_variants}}" row, and context sections stay flat. Otherwise the
+  size-based rule below applies unchanged.
+- **Grouping is opt-out by size, opt-in by attribute.** A round with ≤12
+  entries, or with only one kind, renders the flat list. To place a section
+  in a group of its own (or to rename its kind) add `data-nav-group="…"`
+  on the section — the value is the group name; `variants` and `context`
+  map to the locale labels.
+- One-open applies among `.nav-group` only (the selected-variant node is
+  exempt — nothing may close it) — never between the rounds list and the
+  TOC, which are two separate, independently-toggled surfaces now.
+- **"+N weitere" is overflow-only — except on the final report.**
+  `applyNavOverflow()` hides the TOC's tail only when `.panel-nav-scroll`'s
+  `scrollHeight` exceeds its `clientHeight` after render, and the toggle
+  expands it in place — never a fixed cut-off on a round that already fits.
+  On the final report (`body.viewing-final`) it defers to `applyNavWindow()`
+  instead: by default only the entry under the reading line plus one
+  neighbour on each side (at most `NAV_WINDOW_MAX` = 3 top-level entries)
+  stay visible, the rest sits behind the same toggle, and the window follows
+  the reading line (`setActiveNavItem()`) until the user expands it once.
+  The TOC is secondary there; the close-out sheet below it gets the height.
+
+## Decision Panel State CSS
+
+```css
+/* ── Panel anatomy (all templates) ──
+   .concept-decision-panel is a flex column (§ Panel Chrome sets that);
+   below the .panel-head chrome row (theme toggle + ✕, `flex: 0 0 auto`,
+   § Panel Chrome) these four children split it. `min-height: 0` on the scroll box is
+   load-bearing: a flex child refuses to shrink below its content height
+   without it, so the tree would grow past the viewport and push the pinned
+   foot off screen — exactly the "scroll the menu to find the button" defect
+   this anatomy exists to remove. */
+/* The "you are here" box below the head row: the "› TOC entry" sub-line
+   and, while the 🕘 chip is unfolded, the rounds list. The round label and
+   the chip themselves sit in .panel-head (§ Panel Chrome) — this box is
+   empty on the final report (no sub-line there) and then collapses to its
+   divider. */
+.panel-here {
+  flex: none;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color, #30363d);
+  font-size: 0.8rem;
+  color: var(--text-secondary, #8b949e);
+}
+.panel-here-round { font-weight: 600; color: var(--text-color, #c9d1d9); white-space: nowrap; }
+/* #panel-here-back + the 🕘 chip as one group at the right end of the head
+   row, left of the theme toggle. margin-left: auto lives HERE, not on
+   either child: #panel-here-back is [hidden] on the live round (the common
+   case), and an auto margin on the child itself would then contribute
+   nothing, leaving the chip stranded next to the round label instead of at
+   the right edge. The wrapper is always present, so the pair is always
+   pushed right, back link or not. */
+.panel-here-right {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  margin-left: auto;
+}
+.panel-here-section {
+  flex: 1 1 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 🕘 rounds chip. */
+.panel-here-rounds-btn {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.panel-here-rounds-btn:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+/* Toggled list — a plain disclosure, closed by default, no persistence.
+   Lives INSIDE .panel-here (flex-basis 100%) so it never scrolls with the
+   tree below it. */
+.panel-here-rounds-list {
+  flex: 1 1 100%;
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-color, #30363d);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.panel-here-rounds-list[hidden] { display: none; }
+.panel-here-rounds-item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  border: none; border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.panel-here-rounds-item:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+  opacity: 1;
+}
+.panel-here-rounds-label { font-weight: 600; white-space: nowrap; }
+.panel-here-rounds-summary { flex: 1 1 auto; text-align: right; }
+.panel-here-rounds-tag {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color, #30363d);
+  font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.panel-here-section[hidden],
+.panel-here-back[hidden],
+.panel-here-rounds-btn[hidden] { display: none; }
+/* The head does NOT fold on narrow viewports any more. It used to (#341):
+   the panel was a 487px bottom sheet there and the head cost 51px of it. The
+   panel is a full-height overlay in every template now, so the space argument
+   is gone — and the fold took `#panel-here-back` with it, one of the three
+   ways back to the live round from a frozen one, on exactly the viewport
+   where the other two are hardest to hit. */
+.panel-nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* On the final report the TOC is secondary — the close-out sheet is the main
+   content, and it needs most of the foot's height (§ CTA foot below). By
+   default the tree is a 3-entry window around the reading line
+   (applyNavWindow(), § Section Nav JS), so it normally fits this cap
+   without scrolling; the cap still applies once the user expands the list
+   with "+N weitere". A live check at 1440×768 with the rows region still
+   floored at 220px found only 1–3 of the 4 row heads fitting with a body
+   open; capping the tree tighter (28vh → 18vh) is what gives
+   `.closeout-rows` the room it needs. `min-height: 56px` keeps a sliver of
+   the tree reachable rather than letting it collapse to nothing — it is
+   secondary, not gone. */
+body.viewing-final .panel-nav-scroll {
+  flex: 0 1 auto;
+  max-height: 18vh;
+  min-height: 56px;
+}
+.panel-status {
+  flex: none;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-color, #30363d);
+}
+/* Hard cap. The smallest case (one round, three sections) and the largest
+   (ten rounds, twenty-five entries) get the same foot; what varies is only
+   how much of the tree is on screen. #367: this box is deliberately NOT
+   `position: relative` — #submit-menu's containing block must be
+   `.concept-decision-panel` (the overlay aside itself, already `position:
+   fixed`, see § Panel Chrome), never this one. Per CSS 2.1 § overflow, an
+   ancestor only clips an absolutely positioned descendant when it IS (or
+   contains) that descendant's containing block; skipping `position:
+   relative` here means `.panel-cta`'s own `overflow-y: auto` below cannot
+   clip the menu, however the foot is currently scrolled. */
+.panel-cta {
+  flex: none;
+  max-height: 120px;
+  padding-top: 0.6rem;
+  /* Safety net, never the plan: the cap is what keeps the call to action on
+     screen, so a foot whose content outgrows it scrolls inside the foot
+     instead of clipping — the first live check (#341) found the frozen block
+     at 157px with its "back to the live round" button cut off below the cap.
+     The scrollbar rules above already cover .panel-cta. Every foot state is
+     sized to fit WITHOUT scrolling (see #panel-frozen .hint and
+     .submitted-indicator below); this only catches the next overflow.
+     #367: an EARLIER fix routed #submit-menu around this clip with
+     `position: fixed`, sampling the split button's viewport rect once at
+     open time — but on the design layout the panel is still mid slide-in
+     transition when the caret is clicked fast, so that viewport rect was
+     stale by the time the transition finished and the menu opened up to
+     400px off-screen. Never anchor the menu to the viewport; it must move
+     WITH the panel, which is what removing `position: relative` from this
+     box achieves (see .submit-menu below). */
+  overflow-y: auto;
+}
+/* The close-out sheet is the one legitimate exception: a form to fill in, not
+   a call to action. On the final-report tab the foot grows to take the space
+   `.panel-nav-scroll` gave up above (§ .panel-nav-scroll) and becomes a flex
+   column itself — `overflow: hidden`, NOT `auto`: the foot must never scroll
+   as a whole, only `.closeout-rows` inside `#closeout-sheet` may (§ below).
+   A live check at 1440×768/900 found #closeout-execute below the fold with
+   EVERY row open before this: `.panel-cta` had a bounded height but stayed
+   `display: block` (its default from the base rule), so its child
+   `#panel-final-report` never became the flex column the sheet's own
+   internal flex/scroll needed a bounded parent height to shrink against —
+   a percentage/flex height against a `display: block` ancestor with
+   `height: auto` just resolves to the content's own natural size, i.e. no
+   cap at all. */
+body.viewing-final .panel-cta {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* `#panel-final-report` is the one child of `.panel-cta` actually shown in
+   this state (showIteration() sets its OWN inline `display: flex`, which is
+   what makes these apply at all — the other three sibling panel states stay
+   `display: none` and never become flex items). It must itself be the flex
+   column that hands `#closeout-sheet` a bounded, shrinkable height. */
+#panel-final-report {
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+#panel-final-report #view-iterations-btn {
+  flex: none;
+}
+/* The final report has no status line: the sheet's one button carries the
+   submission state itself (running/done/stalled — setCloseoutButtonState())
+   and the disconnected case as its "wird zwischengespeichert" label
+   (updateCloseoutButton()), so a second, separate line above the sheet only
+   cost the rows region ~40px for information the button already shows. */
+body.viewing-final .panel-status { display: none; }
+
+/* ── Status line ── one line, one glyph, six mutually exclusive states on
+   .panel-status[data-status], rendered by renderPanelStatus() (§ Claude
+   Connection Heartbeat):
+     saved       ✓ Gespeichert · verbunden           success
+     saving      … Speichert                         muted, transient
+     connecting  ◐ Gespeichert · verbinde…           accent, pulsing glyph
+     local-only  ⚠ Nur lokal gespeichert · getrennt  warning BACKGROUND — the one
+                 state that is categorically different: the work is not delivered
+     submitted   ⏳ Übermittelt · Claude arbeitet     accent (+ progress dots)
+     frozen      🕘 Iteration N · nur lesen           warning text
+   #connection-status inside it keeps the raw heartbeat on [data-state]
+   (connecting | connected | disconnected — the monitoring + gate contract).
+   Purely informational: it NEVER overlays or disables the submit buttons and
+   has no acknowledge button. Details stay in the DOM (the step list expands
+   under the line), never tooltip-only. */
+.status-line {
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem; font-weight: 600; line-height: 1.3;
+  color: var(--text-secondary, #8b949e);
+  transition: color 0.25s, background 0.25s;
+}
+.status-glyph { flex: none; width: 1.15em; text-align: center; }
+.conn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-status[data-status="saved"] .status-line { color: var(--success-color, #3fb950); }
+.panel-status[data-status="saving"] .status-line { color: var(--text-secondary, #8b949e); }
+.panel-status[data-status="connecting"] .status-line { color: var(--accent-color, #58a6ff); }
+.panel-status[data-status="submitted"] .status-line { color: var(--accent-color, #58a6ff); }
+.panel-status[data-status="frozen"] .status-line { color: var(--warning-color, #d29922); }
+.panel-status[data-status="local-only"] .status-line {
+  color: var(--text-color, #c9d1d9);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--warning-color, #d29922);
+}
+/* connecting + submitted pulse the glyph; every other state is steady. */
+.panel-status[data-status="connecting"] .status-glyph,
+.panel-status[data-status="submitted"] .status-glyph {
+  animation: conn-pulse 1.2s ease-in-out infinite;
+}
+@keyframes conn-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.82); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+/* Progress dots — the compact rendering of #status-steps for the pinned
+   line. One <i data-state> per visible step; the <ol> underneath is the
+   source of truth and opens on click. */
+.status-detail { margin-top: 0.25rem; }
+.status-detail[hidden] { display: none; }
+.status-detail > summary {
+  list-style: none;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+.status-detail > summary::-webkit-details-marker { display: none; }
+.status-detail > summary::after { content: "▸"; margin-left: auto; }
+.status-detail[open] > summary::after { content: "▾"; }
+.status-dots { display: inline-flex; gap: 5px; }
+.status-dots i {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border-color, #30363d);
+}
+.status-dots i[data-state="active"] {
+  background: var(--accent-color, #58a6ff);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.status-dots i[data-state="done"] { background: var(--success-color, #3fb950); }
+.status-detail .status-steps { margin: 0.4rem 0 0.2rem 0.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .status-glyph, .status-dots i { animation: none !important; }
+}
+
+/* Cache hint — shown only while Claude is disconnected, so the user knows
+   the click will be queued and auto-delivered on reconnect. Toggled via
+   [hidden] by _setCacheHints(): an inline badge INSIDE the primary button
+   and a line inside the submit menu. */
+.hint-cache {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0.25rem 0 0;
+  color: var(--warning-color, #d29922);
+  display: flex; align-items: center; gap: 0.35rem;
+}
+.hint-cache[hidden] { display: none; }
+.submit-btn .hint-cache {
+  font-size: 0.68rem; font-weight: 500; line-height: 1.2;
+  margin: 0; color: #fff; opacity: 0.9;
+}
+
+/* Content dimmer — covers the content area after submit so the user's focus
+   lands on the decision panel / FAB. Decision panel, FABs, feedback dock,
+   panel backdrop, and screen-indicator all sit at z-index ≥ 90 (the panel
+   itself at 200), so they paint above the dimmer
+   and stay clear + interactive. The dimmer itself is click-to-dismiss.
+   Auto-clears on page reload (next iteration / final report) because the
+   body class is not persisted. */
+.content-dimmer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  /* Theme-neutral grey overlay — works on dark and light backgrounds without
+     a CSS variable dependency. Same opacity range as .panel-backdrop. */
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+body.content-dimmed .content-dimmer:not([hidden]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.content-dimmer[hidden] { display: none; }
+.content-dimmer:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: -4px;
+}
+
+/* Frozen-iteration floating bar — shown by showIteration() on every non-live
+   tab, together with the re-armed dimmer (the "veil"). The veil is what gets
+   clicked away by reflex; the bar is what still says "you are in history"
+   afterwards, so it deliberately uses the WARNING tint rather than the muted
+   history colour of .frozen-indicator — being overlooked is the failure mode
+   it exists to fix. Sits above the dimmer (50) and the design chrome sharing
+   its band (switcher 95, anno pill 96), below the FABs (100), the panel
+   backdrop (150) and the panel itself. */
+.frozen-bar {
+  position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%);
+  z-index: 97;
+  box-sizing: border-box;
+  display: flex; align-items: center; gap: 0.6rem;
+  max-width: min(560px, calc(100vw - 2rem));
+  padding: 0.4rem 0.45rem 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--warning-color, #d29922);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 16%, var(--panel-bg, #161b22));
+  color: var(--text-color, #c9d1d9);
+  font-size: 0.82rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.frozen-bar[hidden] { display: none; }
+.frozen-bar-text {
+  min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.frozen-bar-text strong { color: var(--text-color, #c9d1d9); }
+.frozen-bar button {
+  flex-shrink: 0;
+  padding: 0.3rem 0.75rem; border-radius: 999px; border: none;
+  background: var(--accent-color, #58a6ff); color: #fff;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.frozen-bar button:hover { filter: brightness(1.12); }
+.frozen-bar button:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: 2px;
+}
+/* Design template: the top-centre band at 0.75rem belongs to .design-switcher.
+   Drop into the row below it (same 3.75rem derivation as .anno-toggle-fab)
+   and stay inside the switcher's 34vw width band, so the bar can never run
+   into the screen-indicator column on the left or the ☰ FAB on the right —
+   the same geometry contract every other piece of design chrome follows. */
+/* Document rounds: the ☰ FAB (top: 2rem; right: 2rem, a 60px circle) is new
+   here — it used to be design-only — and the bar's band runs straight through
+   it on a narrow viewport. Measured at 375px before this cap: the circle
+   covered ~44px of #frozen-bar-back, the on-content way back to the live
+   round. Ending the bar before the FAB's column costs nothing wide (the bar
+   is centred and far narrower than the cap there). */
+.frozen-bar { max-width: min(560px, calc(100vw - 184px)); }
+html[data-template="design"] .frozen-bar {
+  top: 3.75rem;
+  max-width: min(34vw, 560px);
+}
+
+/* Submitted state — compact: it shares the ≤120px foot with the frozen block
+   and the split button, and the progress itself lives in the status line.
+   Measured at panel width (#341): indicator 63px + hint 54px overran the cap
+   by 3px, so the indicator lost a little padding — 58 + 54 = 112, no scroll. */
+.submitted-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  margin-bottom: 0.3rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+  border: 1px solid var(--success-color, #3fb950);
+  font-size: 0.9rem;
+}
+.submitted-indicator .check-icon {
+  font-size: 1.1rem;
+  color: var(--success-color, #3fb950);
+}
+.submitted-hint {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Frozen panel state — same indicator language as the submitted panel, in the
+   muted border colour rather than a status colour: a frozen tab is neither
+   good news nor a warning, it is history. Same compactness rule as above. */
+.frozen-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.3rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 10%, transparent);
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.9rem;
+}
+.frozen-indicator .frozen-icon { font-size: 1.1rem; }
+/* The hint paragraph does not render in the foot (#341): at panel width it
+   wraps to three lines (67px) and pushes the frozen block to 157px — past the
+   120px cap, with the back button clipped below it. The same sentence is
+   already on screen twice: the status line ("🕘 Iteration N · nur lesen") and
+   the frozen bar over the content. The markup stays (screen readers, older
+   pages) — the foot is indicator + back button, ≈85px. */
+#panel-frozen .hint { display: none; font-size: 0.78rem; line-height: 1.35; margin: 0; }
+#panel-frozen .link-btn { margin-top: 0.3rem; }
+
+/* Progress steps under the status line.
+   Three states per <li>:
+     data-state="pending" → not yet started (muted, ○ icon)
+     data-state="active"  → currently happening (full text color, ⏳ icon
+                            with a slow pulse so the user sees motion)
+     data-state="done"    → completed (success color, ✓ icon)
+   The <li data-step="implemented"> is only revealed for action="implement"
+   submissions; submitWithAction sets its `hidden`. The <li
+   data-step="reality-check"> before it stays hidden even then, and is
+   unhidden by updateStatusSteps only if the check actually runs. */
+.status-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.status-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary, #8b949e);
+  transition: color 0.2s ease;
+}
+.status-steps li[data-state="active"] {
+  color: var(--text-color, #c9d1d9);
+  font-weight: 500;
+}
+.status-steps li[data-state="done"] {
+  color: var(--success-color, #3fb950);
+}
+.status-steps .step-icon {
+  display: inline-block;
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.status-steps li[data-state="active"] .step-icon {
+  animation: step-pulse 1.4s ease-in-out infinite;
+}
+@keyframes step-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+/* State-dependent step labels. When an <li> carries multiple
+   .step-label[data-state-label] spans, only the one matching the li's
+   current data-state is visible. Used by the "implemented" step where
+   "Implementierung läuft" (active) reads differently than "Implementierung
+   abgeschlossen" (done). Steps without data-state-label spans are
+   unaffected — their plain .step-label stays visible always. */
+.status-steps li .step-label[data-state-label] {
+  display: none;
+}
+.status-steps li[data-state="pending"] .step-label[data-state-label="pending"],
+.status-steps li[data-state="active"] .step-label[data-state-label="active"],
+.status-steps li[data-state="done"] .step-label[data-state-label="done"] {
+  display: inline;
+}
+
+/* Shared pulse (used by the active progress dot in the status line). */
+@keyframes pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+#submit-iterate-btn:disabled,
+#submit-implement-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Close-out sheet. Every question at once inside one bounded box — the box
+   is what tells the user this is a form to fill in, not a wall of
+   independent buttons.
+   The padding deliberately undercuts the 1.5rem "card padding" token from
+   § Design System: the panel is 360px (min(360px, 90vw) — 337px at a 375px
+   viewport), and after the panel's own 1.5rem gutters a 1.5rem sheet padding
+   would leave ~230px for two-column rows like [radio][label]. Do not "restore"
+   it to the token without re-checking that budget. */
+.closeout-sheet {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  padding: 0.9rem 0.95rem 1rem;
+  /* The sheet is its own flex column so #closeout-execute stays
+     PINNED at the bottom regardless of which row is open — only
+     .closeout-rows (§ below) scrolls. `flex: 1 1 auto; min-height: 0`, NOT
+     `height: 100%`: the sheet's parent (`#panel-final-report`) is itself a
+     flex column now (§ CTA foot), so the sheet is a flex ITEM there and
+     should size itself the normal flexbox way. A `height: 100%` here once
+     tried to resolve against `#panel-final-report`, but that element was
+     still `display: block` with an auto height at the time — a
+     percentage/flex height against a block ancestor with `height: auto`
+     just falls back to the content's own natural size, i.e. no cap at all,
+     which is why the button still sat below the fold at 1440×768/900 after
+     that first attempt. The whole chain — `.panel-cta` →
+     `#panel-final-report` → `.closeout-sheet` → `.closeout-rows` — must be
+     flex columns end to end, or the cap breaks at whichever link isn't. */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.closeout-sheet .closeout-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+/* The rows region: every accordion head + whichever ONE body is open. The
+   thing that scrolls internally so the button below it never has to.
+   `min-height: 0`, NOT a pixel floor: a fixed floor (260px, then before it
+   220px) either squeezed the plan/button off a short viewport or still only
+   fit 1 of 4 heads once a body was open. Sticky heads (§ below) are what
+   actually solve "all four heads always visible" now — the region itself is
+   free to flex to whatever height is left, however little. */
+.closeout-sheet .closeout-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* `display: contents`: a `.closeout-block` inside the rows region generates
+   NO BOX of its own — its head + body become direct flow children of
+   `.closeout-rows` instead. This is load-bearing, not cosmetic: a sticky
+   element's containing block is its nearest block-container ANCESTOR, and
+   with the block as a real box that ancestor was the (short) block itself,
+   not the scroll region — `bottom: N × H` could never pull a head above its
+   own block's top edge, so with a tall body open in an earlier row, every
+   LATER head sat below the visible region entirely (a live check measured
+   heads 2–4 at y=912/948/983 while the region's own box ended at y=711).
+   With `display: contents` the block disappears as a box and the heads'
+   containing block becomes `.closeout-rows` itself, so the offsets in
+   layoutCloseoutRowHeads() finally resolve against the region both edges
+   need to reach. `[hidden]` must keep winning (a hidden block's children
+   must not render at all) — the override two rules down is deliberately
+   MORE specific than this one so source order cannot flip it. */
+.closeout-sheet .closeout-rows > .closeout-block {
+  display: contents;
+}
+.closeout-sheet .closeout-rows > .closeout-block[hidden] {
+  display: none;
+}
+/* Sticky-both-edges row heads: each head gets `top: i × H` AND
+   `bottom: (n-1-i) × H` (H = `.closeout-row`'s own fixed `min-height`,
+   computed per visible block by layoutCloseoutRowHeads()). `top` alone
+   piles heads at the TOP as the region scrolls down, but the region is
+   almost always shorter than n × H here — a live check found only 1 of 4
+   heads fitting — so without the symmetric `bottom` constraint the later
+   heads still get pushed off the BOTTOM as the earlier ones pile at the
+   top. Both constraints together pin every head inside a fixed H-tall slot
+   regardless of scroll position, with no scroll listener and no measured
+   layout. `z-index` + an opaque `background` keep a stuck head above the
+   body content scrolling underneath it. Selector targets the head directly
+   (not `> .closeout-block > [data-closeout-row]`) because `display:
+   contents` above removes `.closeout-block` from the box tree entirely —
+   `>` through it would no longer match a rendered box to combine with. */
+.closeout-sheet .closeout-rows [data-closeout-row] {
+  position: sticky;
+  z-index: 1;
+  background: var(--panel-bg, #161b22);
+  border-bottom: 1px solid var(--border-color, #30363d);
+}
+/* A fixed, known height for the sticky math above to key off — it must
+   match CLOSEOUT_HEAD_H_REM in the JS exactly, or consecutive stuck heads
+   gap or overlap. */
+.closeout-sheet .closeout-row { min-height: 2.2rem; }
+/* No divider rule keyed off `.closeout-block + .closeout-block` inside the
+   rows region any more — with `display: contents` the block generates no
+   box for a `+` adjacent-sibling margin/border to land on regardless; the
+   divider lives entirely on the head's own border-bottom (above), which
+   travels with the sticky head and keeps every slot flush (zero gap), which
+   the offset math depends on. */
+/* Pinned foot: never inside .closeout-rows, always laid out after it, and
+   never fighting .closeout-rows for space. The button and the one stalled
+   hint are `flex: none` — a live check found `flex: 0 1 auto; min-height:
+   0` on a foot element let it collapse to 7px (invisible) exactly when
+   space was tight; a fixed pixel floor on `.closeout-rows` (above) pushed
+   the foot AND the "Iterationen ansehen" link below the viewport instead,
+   clipped by `.panel-cta`'s own `overflow: hidden`. `min-height: 0` on the
+   rows region (this time paired with sticky heads, not a floor) is what
+   lets the rows region give ground to this pinned foot rather than the
+   other way round. */
+.closeout-sheet #closeout-execute,
+.closeout-sheet .hint[data-finalize-state] {
+  flex: none;
+}
+.closeout-sheet .closeout-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #8b949e);
+}
+/* "n von N beantwortet" — lives next to the title while the sheet is live;
+   renderCloseout()/updateCloseoutProgress() empties it once the section is
+   data-closed (nothing left to answer). */
+.closeout-sheet .closeout-progress {
+  font-size: 0.72rem;
+  color: var(--text-secondary, #8b949e);
+  font-variant-numeric: tabular-nums;
+}
+.closeout-sheet .closeout-count {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-secondary, #8b949e);
+  font-variant-numeric: tabular-nums;
+}
+/* Legacy heading style — the rows get their heading from .closeout-row-label
+   instead (§ below). */
+.closeout-sheet .closeout-q {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+/* One rule separates the blocks, so the sheet reads as separate rows rather
+   than one long column of controls. */
+.closeout-sheet .closeout-block + .closeout-block {
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color, #30363d);
+}
+.closeout-sheet .closeout-block[hidden] { display: none; }
+/* Accordion row head — always visible, one line when collapsed. A real
+   <button> (not a div+click) so Enter/Space open it and it disables for free
+   under setCloseoutFrozen()'s `sheet.querySelectorAll('input, button')`. */
+.closeout-sheet .closeout-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The done state's hand-offs row (renderCloseout()'s data-closed branch):
+   still a <button> in the DOM (so its icon+label stay in normal flow), but
+   permanently `disabled` and stripped of every answerable affordance — no
+   mark, no summary, no aria-expanded. Without this override the row still
+   LOOKS clickable: `disabled` alone does not touch our own `cursor: pointer`
+   above. */
+.closeout-sheet .closeout-row:disabled {
+  cursor: default;
+}
+.closeout-sheet .closeout-mark {
+  flex: none;
+  width: 1.1rem;
+  text-align: center;
+  color: var(--text-secondary, #8b949e);
+}
+/* ✓ / ● / ○ — set by updateCloseoutRowSummary() from the block's own
+   data-answered / data-open, never painted from CSS alone: the glyph IS the
+   state a screen reader has nothing else to announce it by. */
+.closeout-sheet .closeout-block[data-answered="true"] .closeout-mark {
+  color: var(--success-color, #3fb950);
+}
+.closeout-sheet .closeout-block[data-open="true"]:not([data-answered="true"]) .closeout-mark {
+  color: var(--accent-color, #58a6ff);
+}
+/* Locked — a row AFTER the current one that has not been answered yet
+   (updateCloseoutRowSummary() sets data-locked + `disabled` on the head).
+   Dimmed as a whole and stripped of its summary: it is a preview of what is
+   still to come, not a question that can be answered out of order, and a
+   default like "Seite löschen" on a row the user has not reached yet would
+   read as already decided. `:disabled` alone would not touch our own
+   `cursor: pointer` (§ .closeout-row above). */
+.closeout-sheet .closeout-block[data-locked="true"] .closeout-row {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.closeout-sheet .closeout-block[data-locked="true"] .closeout-row-summary { display: none; }
+.closeout-sheet .closeout-row-icon { flex: none; font-size: 1rem; line-height: 1; }
+.closeout-sheet .closeout-row-label { flex: none; font-size: 0.85rem; font-weight: 600; }
+/* Right-aligned, truncated rather than wrapped — a collapsed row is one
+   line, whatever the answer reads like ("2 · Issue, Issue"). */
+.closeout-sheet .closeout-row-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+}
+/* The summary is what the row looks like collapsed; once it is the one open
+   row the expanded body says the same thing in full, so the one-liner would
+   just repeat it back squeezed into no space. */
+.closeout-sheet .closeout-row[aria-expanded="true"] .closeout-row-summary { display: none; }
+.closeout-sheet .closeout-row-body { margin-top: 0.6rem; }
+.closeout-sheet .closeout-row-body[hidden] { display: none; }
+.closeout-sheet .followup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.6rem 0 0.2rem;
+}
+/* One open point: its title, then its three routes on their own row. The
+   routes do NOT sit next to the title — at 360px panel width three segments
+   plus a title on one line is ~55px per segment, which truncates every label
+   the user needs to read before choosing. */
+.closeout-sheet .followup {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem 0.55rem;
+}
+.closeout-sheet .followup-title {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  margin-bottom: 0.45rem;
+}
+/* Origin tag — "bewusst vertagt" / "unterwegs gefunden". Muted on purpose:
+   it explains why the row exists, it is not a fourth choice. */
+.closeout-sheet .followup-origin {
+  display: inline-block;
+  margin: -0.2rem 0 0.45rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #8b949e);
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 12%, transparent);
+}
+.closeout-sheet .followup-routes {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.closeout-sheet .followup-route {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  cursor: pointer;
+}
+.closeout-sheet .followup-route + .followup-route {
+  border-left: 1px solid var(--border-color, #30363d);
+}
+/* The radio itself is the state, not the paint: hiding it visually while
+   keeping it focusable is what lets the label carry the selected look and
+   keeps keyboard/AT behaviour to a plain radio group. */
+.closeout-sheet .followup-route input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.closeout-sheet .followup-route span {
+  display: block;
+  padding: 0.35rem 0.2rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--text-secondary, #8b949e);
+}
+.closeout-sheet .followup-route:hover span {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.closeout-sheet .followup-route input:checked + span {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 20%, transparent);
+  color: var(--text-color, #c9d1d9);
+  font-weight: 600;
+}
+/* "Jetzt umsetzen" writes code — it gets the warning colour the implement
+   button uses, so the one row that reaches into the repo is visible at a
+   glance in a list of otherwise harmless choices. */
+.closeout-sheet .followup-route input[value="implement"]:checked + span {
+  background: color-mix(in srgb, var(--warning-color, #d29922) 22%, transparent);
+  color: var(--warning-color, #d29922);
+}
+.closeout-sheet .followup-route input:focus-visible + span {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: -2px;
+}
+.closeout-sheet .closeout-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin-bottom: 0.45rem;
+}
+.closeout-sheet .closeout-choice:hover {
+  border-color: var(--accent-color, #58a6ff);
+}
+.closeout-sheet .closeout-choice input[type="radio"] {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+.closeout-sheet .closeout-choice-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+/* Flex items default to min-width:auto, so a row only refuses to shrink below
+   its longest unbroken token — which in German (and in any URL-ish
+   data-issue-title) is easily 35+ characters. At the 375px viewport the row
+   has ~240px to work with, so without these three the block scrolls
+   horizontally instead of wrapping. */
+.closeout-sheet .closeout-choice-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.closeout-sheet .closeout-sub {
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+/* Hand-offs — the steps only the user can take once the close-out is
+   through. Warning-coloured like the routes that reach outside the page, and
+   the one block renderCloseout() keeps after data-closed: the last thing on
+   the sheet is the thing still left to do. Done state hides its own
+   .closeout-row head (no controls left) and shows the body directly. */
+.closeout-sheet .closeout-handoffs {
+  border: 1px solid color-mix(in srgb, var(--warning-color, #d29922) 55%, transparent);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 10%, transparent);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+}
+.closeout-sheet .closeout-handoffs .closeout-row-label { color: var(--warning-color, #d29922); }
+.closeout-sheet .closeout-handoffs-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.closeout-sheet .closeout-handoffs-list li { margin-bottom: 0.3rem; }
+.closeout-sheet #closeout-execute {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.closeout-sheet #closeout-execute:disabled { opacity: 0.5; cursor: not-allowed; }
+/* One button, five states, never a second element: neutral/accent
+   "Weiter ›" while rows are still unanswered, the warning-coloured
+   "⚠ Ausführen" once every visible row is (updateCloseoutButton() sets
+   [data-ready]), then — after the click — the submission's own status on
+   [data-finalize-state] (setCloseoutButtonState()): running (accent),
+   done (success), stalled (warning). `.implement-btn` (below, § Two-Button
+   Submit) supplies the warning colours as the base/default look; the
+   overrides here are the other four. The finalize states are disabled by
+   setCloseoutFrozen() and keep full opacity: they are a status readout,
+   not a greyed-out control. */
+.closeout-sheet #closeout-execute:not([data-ready="true"]) {
+  color: var(--accent-color, #58a6ff);
+  border-color: var(--accent-color, #58a6ff);
+}
+.closeout-sheet #closeout-execute:not([data-ready="true"]):hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+}
+.closeout-sheet #closeout-execute[data-finalize-state] { opacity: 1; cursor: default; }
+.closeout-sheet #closeout-execute[data-finalize-state="running"] {
+  color: var(--accent-color, #58a6ff);
+  border-color: var(--accent-color, #58a6ff);
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+}
+.closeout-sheet #closeout-execute[data-finalize-state="done"] {
+  color: var(--success-color, #3fb950);
+  border-color: var(--success-color, #3fb950);
+  background: color-mix(in srgb, var(--success-color, #3fb950) 10%, transparent);
+}
+.closeout-sheet #closeout-execute[data-finalize-state="stalled"] {
+  color: var(--warning-color, #d29922);
+  border-color: var(--warning-color, #d29922);
+}
+.link-btn {
+  display: inline-block;
+  margin-top: 0.6rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-color, #58a6ff);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-btn:hover { opacity: 0.8; }
+/* Transient highlight when "Review iterations" nudges the tab bar into view. */
+.iteration-tabs.tabs-nudge { animation: tabs-nudge 1.2s ease; }
+@keyframes tabs-nudge {
+  0%, 100% { box-shadow: none; }
+  30% { box-shadow: 0 0 0 2px var(--accent-color, #58a6ff); }
+}
+
+.closeout-sheet #closeout-followups-none {
+  color: var(--warning-color, #d29922);
+}
+
+/* Disposition fieldset — controls Step 6 cleanup. Lives inside the sheet's
+   "files" block; default selection is "discard" (matches the typical one-shot
+   refinement workflow). */
+.dispose-fieldset {
+  margin-top: 0;
+  padding: 0.85rem 0.95rem 1rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 70%, transparent);
+}
+.dispose-fieldset legend {
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-color, #c9d1d9);
+}
+.dispose-fieldset .dispose-hint {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.dispose-fieldset .dispose-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dispose-fieldset .dispose-option:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 8%, transparent);
+}
+.dispose-fieldset .dispose-option input[type="radio"] {
+  margin-top: 0.25rem;
+  accent-color: var(--accent-color, #58a6ff);
+}
+.dispose-fieldset .dispose-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.dispose-fieldset .dispose-label strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.dispose-fieldset .dispose-sub {
+  font-size: 0.74rem;
+  color: var(--text-secondary, #8b949e);
+  line-height: 1.4;
+}
+.dispose-fieldset .dispose-move-row {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border-color, #30363d);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.dispose-fieldset .dispose-move-row label {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #8b949e);
+  font-weight: 500;
+}
+.dispose-fieldset .dispose-move-row input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #30363d);
+  background: color-mix(in srgb, var(--bg-color, #0d1117) 80%, transparent);
+  color: var(--text-color, #c9d1d9);
+  font: inherit;
+  font-size: 0.82rem;
+}
+.dispose-fieldset .dispose-move-row input:focus {
+  outline: none;
+  border-color: var(--accent-color, #58a6ff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #58a6ff) 30%, transparent);
+}
+
+/* Iteration tab styling for the final-report tab — distinct from
+   numbered iteration tabs so the closing step reads as a milestone. */
+.iteration-tab[data-final-report] {
+  border-color: var(--success-color, #3fb950);
+  color: var(--success-color, #3fb950);
+}
+.iteration-tab[data-final-report][aria-selected="true"] {
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+  border-color: var(--success-color, #3fb950);
+  color: var(--text-color, #c9d1d9);
+}
+.iteration-tab[data-final-report][aria-selected="true"]::before {
+  content: "✓ ";
+  color: var(--success-color, #3fb950);
+}
+.iteration-tab[data-final-report]:not([aria-selected="true"])::before {
+  content: "";
+}
+
+/* Iteration tab styling for a reality-check round. Warning-toned, not error-
+   toned: nothing went wrong, the branch simply moved, and the round is a
+   normal iteration the user answers and moves on from. Loud enough that the
+   user understands why an implement click produced another round, quiet
+   enough that it does not read as a blocker. */
+.iteration-tab[data-reality-check] {
+  border-color: var(--warning-color, #d29922);
+  color: var(--warning-color, #d29922);
+}
+.iteration-tab[data-reality-check][aria-selected="true"] {
+  background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent);
+  border-color: var(--warning-color, #d29922);
+  color: var(--text-color, #c9d1d9);
+}
+.iteration-tab[data-reality-check]::before {
+  content: "⟲ ";
+  color: var(--warning-color, #d29922);
+}
+
+/* The explainer that opens a reality-check section. It is the first thing the
+   user reads after clicking implement and NOT getting code, so it carries the
+   whole "why am I looking at this" load — including the reassurance that the
+   implement order still stands. */
+.reality-banner {
+  border: 1px solid var(--warning-color, #d29922);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: color-mix(in srgb, var(--warning-color, #d29922) 8%, transparent);
+}
+.reality-banner h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  color: var(--text-color, #c9d1d9);
+}
+.reality-banner p { margin: 0.4rem 0 0; color: var(--text-secondary, #8b949e); }
+.reality-banner .reality-reassure { color: var(--text-color, #c9d1d9); font-weight: 600; }
+.reality-evidence {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-secondary, #8b949e) 10%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #8b949e);
+  overflow-x: auto;
+}
+
+/* Open-questions section — checkbox list with optional "[Issue #NNN]"
+   linked badges once items have been routed to GitHub. */
+/* Hand-offs section in the report body — what the user has to do by hand
+   after the merge. It used to be one more paragraph among the others and
+   disappeared visually; it is the one part of the report that turns into a
+   to-do for a person, so it is the one part that is painted. */
+section[data-handoffs] {
+  border-left: 4px solid var(--warning-color, #d29922);
+  background: color-mix(in srgb, var(--warning-color, #d29922) 8%, transparent);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.5rem 0;
+}
+section[data-handoffs] h3::before { content: '⚠ '; color: var(--warning-color, #d29922); }
+section[data-handoffs] ol { padding-left: 1.3rem; }
+section[data-handoffs] li { margin-bottom: 0.45rem; }
+section[data-open-questions] .open-questions-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+section[data-open-questions] .open-questions-list li {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  background: var(--bg-subtle, transparent);
+}
+section[data-open-questions] .open-questions-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+section[data-open-questions] .oq-done {
+  margin-left: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--success-color, #3fb950);
+}
+section[data-open-questions] .open-questions-list input[type="checkbox"]:disabled + .oq-label {
+  opacity: 0.7;
+}
+section[data-open-questions] .oq-issue-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 1px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--success-color, #3fb950);
+  border: 1px solid var(--success-color, #3fb950);
+  border-radius: 4px;
+  text-decoration: none;
+}
+section[data-open-questions] .oq-issue-link:hover {
+  background: color-mix(in srgb, var(--success-color, #3fb950) 15%, transparent);
+}
+```
+
+## State Persistence (localStorage + TTL)
+
+Interactive element state MUST survive page reloads AND accidental tab closes
+via `localStorage` with a time-to-live (TTL). This prevents the user from
+losing selections, comments, and ratings.
+
+**Storage key:** `concept-state-{slug}` (derived from the page's filename slug)
+**TTL:** 24 hours — auto-clears stale state from previous days
+
+```javascript
+const STORAGE_KEY = 'concept-state-' + location.pathname.split('/').pop().replace('.html', '');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// A QuotaExceededError from localStorage.setItem, unguarded, throws OUT of
+// every change/input handler — one oversized state (e.g. a very long
+// session with many iterations) then silently kills ALL persistence for the
+// rest of the page, with nothing telling the user their edits stopped being
+// saved. Every setItem call site in this file (saveState, both `-pending`
+// writes near the submit handler) MUST go through this wrapper rather than
+// calling localStorage.setItem directly.
+let _persistWarnEl = null;
+let _persistWarned = false;
+function _showPersistWarning() {
+  // Once is enough — re-showing it on every subsequent failed write would
+  // spam the page while the underlying problem (storage full) persists
+  // across many `input` events in a row.
+  if (_persistWarned) return;
+  _persistWarned = true;
+  if (!_persistWarnEl) {
+    _persistWarnEl = document.createElement('div');
+    _persistWarnEl.className = 'persist-warning-banner';
+    _persistWarnEl.setAttribute('role', 'alert');
+    _persistWarnEl.textContent = '{{state.persist_failed}}';
+    document.body.appendChild(_persistWarnEl);
+  }
+  _persistWarnEl.hidden = false;
+}
+function _guardedSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    // QuotaExceededError (or, rarely, a disabled/private-mode store) — the
+    // in-memory state (and the IndexedDB attachment mirror, § Attachments)
+    // is unaffected, only this localStorage mirror failed to write.
+    _showPersistWarning();
+    return false;
+  }
+}
+
+// --- Durable draft mirror (bridge) ---------------------------------------
+// localStorage is a CACHE, never the record of truth. It is wiped by a profile
+// reset, refused in private mode, capped by quota, flushed to disk lazily (a
+// power cut takes the last writes with it) — and, as every data-loss bug this
+// block guards against showed, one wrong line of page JS can clear the whole
+// key outright. So every autosave is ALSO mirrored to the bridge, which
+// fsyncs it before acking (§ Draft store in scripts/concept-server.py).
+//
+// The bridge is a plain Python process with no dependency on Claude: it keeps
+// accepting drafts long after Claude has stopped answering, which is exactly
+// the situation — a usage limit hit mid-round — where hours of typing used to
+// sit in a single browser key with nothing behind it.
+//
+// Debounced, because `input` fires per keystroke. Flushed via sendBeacon on
+// pagehide/hidden so a closed tab, a crash or a reload cannot outrun the last
+// write.
+const DRAFT_SLUG = STORAGE_KEY.replace(/^concept-state-/, '');
+const DRAFT_DEBOUNCE_MS = 1000;
+// A page opened as a file:// URL has no bridge by construction — every POST
+// would fail and the "no durable mirror" strip would be permanent noise.
+const DRAFT_ENABLED = /^https?:$/.test(location.protocol);
+let _draftTimer = null;
+let _draftCleared = [];      // keys the user emptied on purpose since last flush
+let _draftFailures = 0;
+let _draftStripEl = null;
+// While the strip is up, retry the flush on a slow timer so a recovered bridge
+// clears the warning by itself — otherwise it only goes away once the user
+// types again, and a healthy bridge keeps looking dead.
+const DRAFT_RETRY_MS = 30000;
+let _draftRetryTimer = null;
+// Draft-mirror phase for the pinned status line (§ Claude Connection
+// Heartbeat, renderPanelStatus): 'saving' while a flush is queued or in
+// flight, 'saved' once the bridge acked it, 'local' after three consecutive
+// failures (the same threshold as the offline strip).
+let _draftPhase = 'saved';
+function _setDraftPhase(phase) {
+  _draftPhase = phase;
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+}
+
+function _readStoredState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+
+function _draftPayload(cleared) {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  return JSON.stringify({
+    slug: DRAFT_SLUG,
+    page_version: document.documentElement.dataset.pageVersion || '',
+    iteration: live ? String(live.dataset.iteration || '') : '',
+    state: _readStoredState(),
+    cleared: cleared,
+  });
+}
+
+// Handed over, not copied: a key reported as deliberately cleared must be
+// reported exactly once, or a later flush would re-clear a note the user has
+// since retyped. A FAILED flush hands them back, so a dead bridge does not
+// turn "the user deleted this" into a fact nobody ever hears about — the
+// union would then resurrect the note on the next reload.
+function _takeCleared() { return _draftCleared.splice(0); }
+function _returnCleared(keys) { if (keys.length) _draftCleared.unshift(...keys); }
+
+// Only after three consecutive failures, so a single blip does not flash a
+// warning at the user; cleared again on the next success.
+function _setDraftHealth(ok) {
+  _draftFailures = ok ? 0 : _draftFailures + 1;
+  const show = _draftFailures >= 3;
+  if (show && !_draftStripEl) {
+    _draftStripEl = document.createElement('div');
+    _draftStripEl.className = 'draft-offline-strip';
+    _draftStripEl.setAttribute('role', 'status');
+    _draftStripEl.textContent = '{{state.draft_local_only}}';
+    document.body.appendChild(_draftStripEl);
+  }
+  if (_draftStripEl) _draftStripEl.hidden = !show;
+  // The status line follows the same three-strike rule: a single blip stays
+  // "Gespeichert" (the local copy IS saved), three in a row read "Nur lokal".
+  _setDraftPhase(show ? 'local' : 'saved');
+  // Retry only while the strip is showing; a hidden strip has nothing to clear.
+  if (show && !_draftRetryTimer) {
+    _draftRetryTimer = setTimeout(() => { _draftRetryTimer = null; flushDraft(); }, DRAFT_RETRY_MS);
+  } else if (!show && _draftRetryTimer) {
+    clearTimeout(_draftRetryTimer); _draftRetryTimer = null;
+  }
+}
+
+async function flushDraft() {
+  if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
+  if (!DRAFT_ENABLED) return;
+  const cleared = _takeCleared();
+  try {
+    const res = await fetch('/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: _draftPayload(cleared),
+      keepalive: true,
+    });
+    // A 507 means the bridge could not reach disk. Same rule as POST
+    // /decisions: that is NOT a success, and the local copy stays the only
+    // one — so the user is told rather than left believing it is safe.
+    if (!res.ok) _returnCleared(cleared);
+    _setDraftHealth(res.ok);
+  } catch (e) {
+    _returnCleared(cleared);
+    _setDraftHealth(false);
+  }
+}
+
+function queueDraftSync() {
+  if (!DRAFT_ENABLED) return;
+  if (_draftTimer) clearTimeout(_draftTimer);
+  _setDraftPhase('saving');   // "… Speichert" until flushDraft's ack lands
+  _draftTimer = setTimeout(flushDraft, DRAFT_DEBOUNCE_MS);
+}
+
+// Teardown path. sendBeacon is queued by the browser itself and survives the
+// document being discarded, which `fetch` — even with keepalive — does not
+// reliably do on every engine; the fetch below is the fallback for browsers
+// that refuse the beacon (payload too large).
+function flushDraftBeacon() {
+  if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
+  if (!DRAFT_ENABLED) return;
+  // No response to inspect on this path, so the cleared list is handed over
+  // unconditionally — a beacon the browser accepted is the best signal there is.
+  const body = _draftPayload(_takeCleared());
+  try {
+    if (navigator.sendBeacon &&
+        navigator.sendBeacon('/draft', new Blob([body], { type: 'application/json' }))) return;
+  } catch (e) { /* fall through to fetch */ }
+  try {
+    fetch('/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body,
+      keepalive: true,
+    });
+  } catch (e) { /* the localStorage copy stands — nothing else left to try */ }
+}
+window.addEventListener('pagehide', flushDraftBeacon);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushDraftBeacon();
+});
+
+// Merge the bridge's durable copy into localStorage on load. Order matters:
+//   1. a key the local blob does not have at all is taken from the bridge;
+//   2. a key the local blob has EMPTY while the bridge has text is taken from
+//      the bridge — this is the shape EVERY past data-loss bug produced;
+//   3. a non-empty local value always wins: it is the newer one, and it is
+//      what the user can currently see on screen.
+// The source is `recovered` (not `state`): the union of the last non-empty
+// value ever posted per key, so even a run of blank autosaves from a broken
+// client cannot erase anything.
+async function hydrateDraftFromBridge() {
+  if (!DRAFT_ENABLED) return;
+  let data = null;
+  try {
+    const res = await fetch('/draft?slug=' + encodeURIComponent(DRAFT_SLUG), { cache: 'no-store' });
+    if (!res.ok) return;
+    data = await res.json();
+  } catch (e) { return; }
+  if (!data || !data.found) return;
+  const local = _readStoredState();
+  let changed = false;
+  Object.entries(data.recovered || {}).forEach(([k, v]) => {
+    // Only typed text is mirrored back (#347). The bridge already limits
+    // `recovered` to `text:` keys, but an older bridge — or any future key
+    // the server lets through — must never steer THIS browser: `_activeView`,
+    // `_activeScreen*`, `_viewportMode` and every other `_`-prefixed
+    // navigation / preference key belong to the tab that wrote them. A
+    // second browser on the same page (a screenshot-verification tab) would
+    // otherwise be pulled onto whatever the user is reading.
+    if (typeof k !== 'string' || !k.startsWith('text:')) return;
+    if (typeof v !== 'string' || !v) return;
+    if (typeof local[k] === 'string' && local[k] !== '') return;
+    local[k] = v;
+    changed = true;
+  });
+  if (!changed) return;
+  local._savedAt = Date.now();
+  local._pageVersion = document.documentElement.dataset.pageVersion || '';
+  _guardedSetItem(STORAGE_KEY, JSON.stringify(local));
+  restoreState();
+  if (typeof updateNoteMarkers === 'function') updateNoteMarkers();
+}
+
+// Text keys are namespaced per iteration (`text:i3:d1-s1`). Without the
+// namespace the SAME key means different things in different rounds — screen
+// ids, `{decisionId}-note` and annotation ids all repeat — so iteration N+1
+// opened pre-filled with N's notes, and the workaround for that (emptying the
+// dock at submit time) destroyed the text the user had just sent before they
+// could read it back. See § Iteration Tabs.
+function _iterationPrefix() {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  return live ? 'i' + String(live.dataset.iteration) + ':' : '';
+}
+
+function saveState() {
+  const _pageVersion = document.documentElement.dataset.pageVersion || '';
+  // MERGE over the stored blob; never rebuild it from the DOM alone. The scans
+  // below only see nodes that exist RIGHT NOW, and the design template's dock
+  // is built by a different script block (§ Layout JS `buildDesignUI()`) whose
+  // DOMContentLoaded listener may not have run yet, and is torn down and
+  // rebuilt on every iteration switch. A from-scratch rebuild therefore wrote
+  // a blob with no `text:{screen-id}` keys on the first `input` event after
+  // load — deleting the user's notes rather than merely failing to show them.
+  // Keys whose node IS present are overwritten below as before, so this only
+  // ever preserves entries the current DOM has nothing to say about.
+  let state = {};
+  try {
+    const prev = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    // Same two rejections restoreState() makes. Without them a merge would
+    // resurrect an expired or foreign-version blob that the restore path
+    // would have deleted, and carry its dead keys forward for another day.
+    if (prev && typeof prev === 'object'
+        && !(prev._savedAt && (Date.now() - prev._savedAt) > STATE_TTL_MS)
+        && !(prev._pageVersion && prev._pageVersion !== _pageVersion)) {
+      state = prev;
+    }
+  } catch (e) { /* corrupt storage — start from an empty blob */ }
+  state._savedAt = Date.now();
+  state._pageVersion = _pageVersion;
+  // Device-view frames are CLONES of a mockup (§ Responsive device views).
+  // They carry namespaced ids, so persisting them would fill the blob with
+  // dead `dv1-*` / `dv2-*` keys — and, worse, the next screen switch tears the
+  // stage down before saveState() runs, which would DELETE those keys again.
+  // The authored original is still in the DOM (display:none) and is the one
+  // legitimate copy, so skipping the clones loses nothing.
+  // A FROZEN iteration's fields carry the values the user already submitted,
+  // and the shared feedback dock is painted with that same frozen text while
+  // a past tab is on screen (applyDockFreezeState, § Panel Chrome). Persisting
+  // either writes round N's answers over round N+1's — silently, because
+  // navigating a frozen design tab is allowed and every showScreen() ends in
+  // saveState(). Measured symptom: click an old tab, click a screen, come
+  // back, the live round's notes are the old round's notes.
+  const _frozenView = document.body.classList.contains('viewing-frozen');
+  const persistable = el => !el.closest('[data-device-clone]')
+    && !el.closest('section[data-iteration]:not([data-active])')
+    && !(_frozenView && el.closest('#feedback-dock'));
+  document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
+    // data-no-persist opts a control out of reload restoration. Used by the
+    // close-out sheet's ship question and its follow-up routes, which must
+    // be answered fresh every time: a restored "yes" from hours ago would
+    // sail through a later close-out and trigger a real release — or build a
+    // follow-up — that the user never re-authorised.
+    if (el.dataset.noPersist !== undefined) return;
+    if (!persistable(el)) return;
+    if (el.name || el.id) state['input:' + (el.name || el.id) + ':' + el.value] = el.checked;
+  });
+  const _ns = _iterationPrefix();
+  document.querySelectorAll('textarea, input[type="text"], input[type="number"]').forEach(el => {
+    if (!persistable(el)) return;
+    const _key = el.id || el.dataset.comment;
+    if (!_key) return;
+    // Belt-and-braces for the dock rebuild: buildDesignUI() re-creates every
+    // dock textarea EMPTY, so a saveState() that runs between the rebuild and
+    // the restore would blank a stored note (the merge above only protects
+    // keys whose node is ABSENT — these nodes are present). An empty field
+    // therefore may only overwrite a non-empty stored value once the user has
+    // actually typed into it: `data-touched` is stamped from a TRUSTED input
+    // event (see the capture-phase listener at the bottom of this block), so
+    // deliberately clearing a note — type, then delete — still persists "".
+    const _sk = 'text:' + _ns + _key;
+    if (el.value === '' && state[_sk] && el.dataset.touched === undefined) return;
+    // Report a deliberate clear to the bridge, whose `recovered` union would
+    // otherwise resurrect the note on the next reload, forever. Only a value
+    // that WAS stored and is now empty counts — never a field that was empty
+    // all along.
+    if (el.value === '' && state[_sk]) _draftCleared.push(_sk);
+    state[_sk] = el.value;
+  });
+  document.querySelectorAll('input[type="range"]').forEach(el => {
+    if (!persistable(el)) return;
+    if (el.id || el.name) state['range:' + (el.id || el.name)] = el.value;
+  });
+  document.querySelectorAll('select').forEach(el => {
+    if (!persistable(el)) return;
+    if (el.id || el.name) state['select:' + (el.id || el.name)] = el.value;
+  });
+  // Design template only, and read off the DOM rather than passed in: the
+  // design layout keeps its viewport state inside its own IIFE, and
+  // applyViewport() mirrors it onto the body precisely so this one writer can
+  // see it. Absent on every other template, where the key is simply not
+  // written. It persists the PREFERENCE (data-viewport-pref), not the mode
+  // currently rendered — saving while a decision-template tab is open would
+  // otherwise write back the clamped `desktop` and lose the user's choice.
+  if (document.body.dataset.viewportPref) state['_viewportMode'] = document.body.dataset.viewportPref;
+  state['theme'] = document.documentElement.getAttribute('data-theme');
+  // Same non-form-state precedent as 'theme' above: the (optional)
+  // annotation layer's show/hide toggle is global and outlives a single
+  // element, so it is keyed directly rather than through the input/text/
+  // range/select scans. Written unconditionally (not just when true) so
+  // toggling back to visible also persists past a reload.
+  state['annoHidden'] = document.body.classList.contains('anno-hidden');
+  // Work package B — the dock's user-controlled maximise override (a DOM
+  // attribute, not a JS closure variable, so it can be read/written from
+  // this script block even though applyDockSize() lives in a different
+  // IIFE — § Panel Chrome (all templates) → Feedback dock). The dock is page
+  // chrome in every template (#399); the `?.` guard only covers a page whose
+  // dock markup is missing, where it degenerates to `undefined` -> falsy.
+  state['dockMaximized'] = document.getElementById('feedback-dock')?.dataset.userMaximized === 'true';
+  // Work package C — persist the active VIEW (§ Views (optional)) the same
+  // DOM-read way: a view's active state lives on the element itself
+  // (data-view-active), so this needs no dependency on wireDesignLayout()'s
+  // closures despite living in a different script block. Absent on pages
+  // with no views, or while a design (not a view) is on screen.
+  // Explicitly DELETED when no view is active — this key means "the user was
+  // reading a view when they left", and under the merge above an absent write
+  // would silently keep the last one, sending every later reload back into a
+  // view the user had already navigated away from.
+  const _activeViewEl = document.querySelector('section[data-view][data-view-active="true"]:not([hidden])');
+  if (_activeViewEl) state['_activeView'] = _activeViewEl.dataset.view;
+  else delete state['_activeView'];
+  // Persist the user-interacted flag so a reload while the user has unsaved
+  // edits does not re-arm the empty-submit confirm dialog. Restored values
+  // would otherwise look like "untouched defaults" because change/input
+  // events fire from restoreState() (isTrusted=false) and are ignored.
+  // Deleted rather than left alone when false, for the same reason as
+  // _activeView above: the merge would otherwise make the flag permanent
+  // once set, surviving the panel reset that is supposed to clear it.
+  if (typeof _userInteracted !== 'undefined' && _userInteracted) {
+    state['_userInteracted'] = true;
+  } else {
+    delete state['_userInteracted'];
+  }
+  _guardedSetItem(STORAGE_KEY, JSON.stringify(state));
+  // Mirror it to disk. Debounced, never awaited: persistence must not make
+  // typing feel slow, and a failed mirror is reported by its own strip rather
+  // than by throwing out of an input handler.
+  queueDraftSync();
+}
+
+// TTL expiry and a page-version change used to DELETE the whole blob. Those
+// were the two most expensive lines in this file: both triggers are perfectly
+// ordinary — leaving the tab open overnight, and regenerating the page — and
+// the blob they deleted was the only copy of everything the user had typed and
+// not yet submitted.
+//
+// Nothing is deleted any more. The genuinely stale half (checkbox states, nav
+// positions, theme) is dropped, every `text:` key is carried over and
+// restored, a strip says so, and the untouched original is kept one key
+// sideways in case this page turns out to be a different concept that happens
+// to share the slug. A note that comes back where the user left it is never
+// worse than a note that is gone.
+let _recoveredStripEl = null;
+function _showRecoveredStrip() {
+  if (_recoveredStripEl) return;
+  _recoveredStripEl = document.createElement('div');
+  _recoveredStripEl.className = 'recovered-notes-strip';
+  _recoveredStripEl.setAttribute('role', 'status');
+  const span = document.createElement('span');
+  span.textContent = '{{state.recovered_found}}';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '{{state.recovered_dismiss}}';
+  btn.addEventListener('click', () => { _recoveredStripEl.hidden = true; });
+  _recoveredStripEl.appendChild(span);
+  _recoveredStripEl.appendChild(btn);
+  document.body.appendChild(_recoveredStripEl);
+}
+
+function _carryOverTypedWork(state) {
+  const typed = {};
+  Object.keys(state).forEach(k => {
+    if (k.indexOf('text:') === 0 && typeof state[k] === 'string' && state[k]) {
+      typed[k] = state[k];
+    }
+  });
+  const carried = Object.assign({
+    _savedAt: Date.now(),
+    _pageVersion: document.documentElement.dataset.pageVersion || '',
+    _carriedOver: true,
+  }, typed);
+  _guardedSetItem(STORAGE_KEY + '-archive', JSON.stringify(state));
+  _guardedSetItem(STORAGE_KEY, JSON.stringify(carried));
+  if (Object.keys(typed).length) _showRecoveredStrip();
+  return carried;
+}
+
+function restoreState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    let state = JSON.parse(raw);
+    const currentVersion = document.documentElement.dataset.pageVersion || '';
+    if ((state._savedAt && (Date.now() - state._savedAt) > STATE_TTL_MS) ||
+        (state._pageVersion && state._pageVersion !== currentVersion)) {
+      state = _carryOverTypedWork(state);
+    }
+    // Restore targets the LIVE round only. Frozen rounds carry their submitted
+    // values in the HTML, and their form-element names/ids repeat across
+    // rounds — a page-wide `querySelector` returns the OLDEST match (document
+    // order), so an unscoped restore wrote the live round's answers into
+    // iteration 1 and left the live round blank.
+    const _live = document.querySelector('section[data-iteration][data-active]');
+    const _ns = _live ? 'i' + String(_live.dataset.iteration) + ':' : '';
+    const _pick = sel => (_live && _live.querySelector(sel)) || document.querySelector(sel);
+    if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+    // Mirror of the theme restore above — see saveState(). Only ADDS the
+    // class; never removes it here, since the default (no class) already
+    // means "visible" and a missing/false key must not fight that default.
+    if (state.annoHidden) document.body.classList.add('anno-hidden');
+    // Mirror of the annoHidden restore above — see saveState(). Re-applies
+    // sizing immediately (not just on the next iteration switch) because
+    // this script block's DOMContentLoaded listener is not guaranteed to
+    // run after the dock block's own initial applyDockSize() call.
+    if (state.dockMaximized) {
+      const dockEl = document.getElementById('feedback-dock');
+      if (dockEl) dockEl.dataset.userMaximized = 'true';
+    }
+    if (typeof window.applyDockSize === 'function') window.applyDockSize();
+    // Preserve the user's prior interaction flag across reloads — see saveState().
+    if (state._userInteracted && typeof _userInteracted !== 'undefined') {
+      _userInteracted = true;
+    }
+    Object.entries(state).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      const [type, ...rest] = key.split(':');
+      if (type === 'input') {
+        const [name, val] = [rest.slice(0, -1).join(':'), rest[rest.length - 1]];
+        const el = _pick(`input[name="${name}"][value="${val}"], input[id="${name}"][value="${val}"]`);
+        // Mirror of the saveState() guard — also covers stale entries written
+        // before a control was marked data-no-persist. `touched` is the same
+        // re-entrancy guard the text branch below documents: restoreState()
+        // runs again when hydrateDraftFromBridge() merges the durable copy,
+        // and a late re-run must not flip a box the user has since changed —
+        // it changes no radio the close-out sheet mirrors, so the sheet and
+        // the payload would then describe different things.
+        if (el && el.dataset.noPersist === undefined && el.dataset.touched === undefined) {
+          el.checked = value;
+        }
+      } else if (type === 'text') {
+        let id = rest.join(':');
+        // Namespaced key (`text:i3:d1-s1`). Only the live round's own keys may
+        // be applied: screen ids, `{decisionId}-note` and annotation ids all
+        // repeat across rounds, so an unnamespaced restore filled the shared
+        // feedback dock with a previous round's notes. A legacy key with no
+        // namespace (written by pages generated before this) is treated as
+        // belonging to the live round — which is exactly what it meant then.
+        const nsMatch = /^i([^:]+):([\s\S]*)$/.exec(id);
+        if (nsMatch) {
+          if ('i' + nsMatch[1] + ':' !== _ns) return;
+          id = nsMatch[2];
+        }
+        // The page-wide fallback is what the feedback dock needs — it is an
+        // overlay that lives outside section[data-iteration].
+        const el = _pick(`[data-comment="${id}"]`)
+          || _pick(`textarea#${CSS.escape(id)}, input#${CSS.escape(id)}`);
+        // Never overwrite a field the user has already typed into during THIS
+        // page life. restoreState() is re-entrant (the design layout re-runs
+        // it after building the dock, and hydrateDraftFromBridge() runs it
+        // again when the durable copy adds anything), and a late re-run must
+        // not stamp a stored value over newer keystrokes.
+        if (el && el.dataset.touched === undefined) el.value = value;
+      } else if (type === 'range') {
+        const id = rest.join(':');
+        const el = _pick(`input#${CSS.escape(id)}, input[name="${id}"]`);
+        if (el) { el.value = value; el.dispatchEvent(new Event('input')); }
+      } else if (type === 'select') {
+        const id = rest.join(':');
+        const el = _pick(`select#${CSS.escape(id)}, select[name="${id}"]`);
+        if (el) el.value = value;
+      }
+    });
+  } catch (e) { /* corrupt storage — ignore */ }
+  // The text branch above sets mapping state inputs by value, without events
+  // (§ Information Mapping (engine)) — re-project the boxes, chips and counts
+  // from them, same precedent as updateNoteMarkers() after a dock restore.
+  if (typeof refreshMappings === 'function') refreshMappings();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // FIRST: the mapping state inputs (§ Information Mapping (engine)) must
+  // exist before the restore writes into them — script order is not
+  // guaranteed across the page's IIFEs, so the engine is not asked to time it.
+  if (typeof renderMappings === 'function') renderMappings();
+  // Inject missing per-decision comment slots BEFORE restoring state so the
+  // restored textarea values land on real DOM nodes. See § Comment Slot
+  // Injection for why this safety net exists.
+  if (typeof ensureCommentSlots === 'function') ensureCommentSlots();
+  restoreState();
+  // Then top up from the bridge's durable copy — the half that survives a
+  // wiped profile, a private window, a storage quota error and a power cut.
+  // Deliberately not awaited: the local restore has already painted the page,
+  // and this only ever ADDS keys the local blob is missing or has empty.
+  hydrateDraftFromBridge();
+  // Re-sync the (optional) annotation eye pill's aria-label/aria-pressed
+  // AFTER restoreState() has applied the persisted body.anno-hidden class —
+  // wireAnnotationLayer()'s own DOMContentLoaded-time updateAnnoUI() call
+  // may run before this listener (script order is not guaranteed across
+  // the page's several IIFEs), so relying on that alone would read the
+  // toggle's pre-restore state. See § Annotation Layer JS.
+  if (typeof updateAnnoUI === 'function') updateAnnoUI();
+});
+// Stamps the field the user is actually typing in, so saveState()'s
+// empty-value guard can tell "cleared on purpose" from "not restored yet".
+// CAPTURE phase, so it runs before the bubble-phase saveState below no matter
+// what else listens. isTrusted filters out the synthetic events restoreState()
+// dispatches — a restore must never count as user input.
+document.addEventListener('input', e => {
+  if (e.isTrusted && e.target && e.target.dataset) e.target.dataset.touched = 'true';
+}, true);
+document.addEventListener('change', saveState);
+document.addEventListener('input', saveState);
+```
+
+**Rules:**
+- Use `localStorage` with a 24-hour TTL
+- Save on every `change` and `input` event — not just on submit
+- Restore runs on `DOMContentLoaded` — before the user sees the page. The
+  design template re-runs it once more from § Layout JS, IMMEDIATELY after
+  `buildDesignUI()` has created the dock textareas and before anything that can
+  call `saveState()` (`showScreen()`, `primeDock()`): the two script blocks'
+  listeners have no guaranteed order, so the restore here may have scanned a
+  dock that did not exist yet
+- An empty `text:` field never overwrites a non-empty stored value unless the
+  user has typed into it (`data-touched`) — a rebuilt, not-yet-restored dock
+  textarea must not be mistaken for a cleared note
+- `saveState()` MERGES over the stored blob and never rebuilds it from the DOM
+  alone — a key whose node is currently absent must survive the write
+- `ensureCommentSlots()` runs IMMEDIATELY before `restoreState()` — see
+  § Comment Slot Injection for the rationale (must inject the slots before
+  the restore step rehydrates their values)
+- The `concept-submitted` class is NOT persisted
+- Theme preference IS persisted — prevents dark/light flash on reload
+- The (optional) annotation layer's global show/hide state IS persisted the
+  same way (`state['annoHidden']`) — see § Annotation Layer (optional).
+  Individual answers persist for free via the ordinary `text:` scan since
+  their textareas carry `data-comment`.
+- Every `localStorage.setItem` call site (here and the two `-pending` writes
+  near the submit handler) goes through `_guardedSetItem()`, never a bare
+  `localStorage.setItem` — a `QuotaExceededError` is caught, surfaces a
+  visible `.persist-warning-banner` (`{{state.persist_failed}}`) instead of
+  throwing out of the `change`/`input` handler, and further writes keep
+  being attempted (a later one may succeed once the user frees up space).
+
+**Durability rules — the ones that exist because work was actually lost:**
+
+- **Nothing in this page may ever call `localStorage.removeItem(STORAGE_KEY)`.**
+  Not on TTL expiry, not on a page-version change, not on a panel reset, not
+  on submit. Each of those was once a one-line "clean up local state" that
+  deleted every comment on the page, and two of them fired precisely when
+  things were already going wrong (a bridge that could not persist; Claude
+  stuck on a usage limit for longer than `PROCESSED_SAFETY_MS`). Stale state
+  is pruned key by key — `_carryOverTypedWork()` keeps every `text:` entry and
+  drops the rest — never by dropping the blob.
+- **Text keys are namespaced per iteration** (`text:i3:d1-s1`,
+  `_iterationPrefix()`). Screen ids, `{decisionId}-note` keys and annotation
+  ids all repeat across rounds, and the shared feedback dock lives outside
+  `section[data-iteration]` entirely, so an unnamespaced key means different
+  things in different rounds. `restoreState()` applies only the live round's
+  keys; a legacy key with no namespace is treated as the live round's.
+- **A frozen round is never persisted.** `persistable()` excludes
+  `section[data-iteration]:not([data-active])` always, and the dock while
+  `body.viewing-frozen` — otherwise browsing an old tab (which is allowed, and
+  ends every `showScreen()` in a `saveState()`) writes the old round's
+  submitted answers over the live round's unsent ones.
+- **The dock is not emptied on submit.** It is marked read-only
+  (`markDockSubmitted()`); the round stays live until Claude appends the next
+  section, and its comments are the only on-screen record of what was sent.
+- **Every save is mirrored to the bridge** (`queueDraftSync()` → `POST /draft`,
+  fsynced before the ack), flushed with `sendBeacon` on `pagehide`/`hidden`,
+  and merged back on load by `hydrateDraftFromBridge()`. `localStorage` is the
+  cache; the bridge's append-only draft log is the record that survives a
+  wiped profile, a private window, a quota error, a power cut, and a Claude
+  that has stopped answering.
+- `restoreState()` never overwrites a field carrying `data-touched` — it is
+  re-entrant (the design layout re-runs it; so does the bridge hydrate), and a
+  late re-run must not stamp a stored value over newer keystrokes.
+
+### Persist Warning Banner CSS
+
+`_showPersistWarning()` (above) creates this element on first failure —
+there is no static markup for it, it never appears unless a write actually
+fails, so nothing needs to reserve space for it up front.
+
+```css
+.persist-warning-banner {
+  position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
+  z-index: 10000; max-width: min(480px, calc(100vw - 2rem));
+  background: var(--danger-color, #f85149); color: #fff;
+  padding: .6rem 1rem; border-radius: 8px; font-size: .82rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+
+/* Same family, lower urgency: the work is safe, the user is only being told
+   where it currently lives (`.draft-offline-strip`) or that older notes were
+   brought back (`.recovered-notes-strip`). Both sit BELOW the frozen bar's
+   z-index band so they never cover the way back to the live round. */
+.draft-offline-strip,
+.recovered-notes-strip {
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+  z-index: 9000; max-width: min(560px, calc(100vw - 2rem));
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--panel-bg, #1c2128); color: var(--text-color, #e6edf3);
+  border: 1px solid var(--border-color, #30363d);
+  padding: .55rem .9rem; border-radius: 8px; font-size: .8rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+/* `display: flex` above outranks the UA `[hidden] { display: none }`, so the
+   attribute alone would never hide either strip once shown — same override
+   every other toggled bar carries (`.frozen-bar[hidden]`, `.hint-cache[hidden]`). */
+.draft-offline-strip[hidden],
+.recovered-notes-strip[hidden] { display: none; }
+.recovered-notes-strip button {
+  background: none; border: 1px solid var(--border-color, #30363d);
+  color: inherit; border-radius: 6px; padding: .2rem .6rem;
+  font-size: .75rem; cursor: pointer; white-space: nowrap;
+}
+```
+
+## Comment Slot Injection
+
+Every Bi-State `[data-decision]` group SHOULD ship with an inline adjacent
+`<textarea data-comment="$decisionId-note">` so the user can attach a
+free-form override to their include/discard choice (e.g. "only for X",
+"with variant Y", or any open question that does not fit a binary toggle).
+
+Generated pages must emit the textarea inline. To upgrade older pages that
+were generated before this rule existed — and as a runtime safety net if
+Claude forgets to add it during a one-off generation — every concept page
+also ships `ensureCommentSlots()`. It iterates over every `[data-decision]`
+group and injects a textarea where one is missing. The function runs once
+on `DOMContentLoaded` BEFORE `restoreState()` so the restore step can
+rehydrate previously typed comments into the newly-injected nodes.
+
+The catch-all `collectAllFormFields` picks up the textareas via
+`data-comment` without any collector change (see § collectDecisions
+dispatcher — the dispatcher already reads `el.dataset.comment` as a
+fallback key).
+
+```javascript
+function ensureCommentSlots() {
+  document.querySelectorAll('[data-decision]').forEach(group => {
+    // Anchor: prefer the surrounding card/section so the textarea ends up
+    // inside the same visual unit. Fall back to the group's parent if no
+    // recognised wrapper exists.
+    const card = group.closest('.pattern-card, .role-card, .variant-evaluation, section[id]')
+              || group.parentElement;
+    if (!card) return;
+
+    // Skip if the card already has a comment slot — works for both inline
+    // emission and prior runs of ensureCommentSlots().
+    if (card.querySelector('textarea[data-comment]')) return;
+
+    const id = (group.dataset.decision || group.id || '').trim();
+    if (!id) return;  // unnamed group — nothing useful to key the textarea by
+    const commentKey = id + '-note';
+
+    const row = document.createElement('div');
+    row.className = 'field-row decision-comment-row';
+
+    const label = document.createElement('label');
+    label.setAttribute('for', commentKey);
+    label.textContent = '{{decision.comment_label}}';
+
+    const ta = document.createElement('textarea');
+    ta.id = commentKey;
+    ta.dataset.comment = commentKey;
+    ta.dataset.attachable = '';
+    ta.placeholder = '{{decision.comment_placeholder}}';
+    ta.rows = 2;
+
+    row.appendChild(label);
+    row.appendChild(ta);
+    // Attachments for this comment (§ Attachments) — initCommentAttachments()
+    // (called at the bottom of this function) mounts the bar itself; it is
+    // the single place a bar is ever created, so it is not built here too.
+
+    // Insert right after the bi-state group when both share the same parent;
+    // otherwise append to the card so the override is visually attached.
+    if (group.nextSibling && group.parentNode === card) {
+      group.parentNode.insertBefore(row, group.nextSibling);
+    } else {
+      card.appendChild(row);
+    }
+  });
+  // Wire paste / drop / button on every comment textarea, including the ones
+  // emitted inline by the generator rather than injected above.
+  initCommentAttachments();
+}
+```
+
+**Notes:**
+- `{{decision.comment_label}}` and `{{decision.comment_placeholder}}` MUST be
+  replaced with the locale-resolved strings at generation time (see § UI Locale).
+- `ensureCommentSlots()` is idempotent — re-running it does nothing once
+  every group has a textarea, so it is safe to call multiple times (e.g.
+  after a Claude-driven iteration append).
+- Iteration appends MUST also call `ensureCommentSlots()` after the new
+  section is inserted; the `DOMContentLoaded` hook only fires on full
+  reloads. Either trigger it manually or rely on the next `/reload` POST
+  which forces a `location.reload()`.
+
+## Attachments
+
+Every field marked `textarea[data-attachable]` — the feedback dock (general,
+per-design, per-screen, per-view), annotation answers, comparison option and
+view notes, and decision comment slots — accepts a file: a 📎 button, **drag
+& drop** onto the textarea, and **Ctrl/Cmd+V paste**. A screenshot, a log
+file, a PDF spec, a recording — whatever explains the feedback best — beats
+re-describing it in prose, and the user should never have to pick which
+field "supports" attachments: they all do.
+
+**The marker is `data-attachable`, never `data-comment`.** Several
+attachable fields — annotation answers, the decision-note textareas — also
+carry `data-comment` for `saveState()`/`restoreState()` and the comment
+collectors. Matching on `data-comment` would wire an attachment bar onto
+*every* comment field a second time wherever `data-attachable` is also
+present, and would wire one onto plain text-only comment fields that were
+never meant to take a file. `data-attachable` is the one selector
+`initCommentAttachments()` uses, so there is exactly one bar per field,
+full stop.
+
+**One bar per field, one mount rule.** A field may already own a dedicated
+`<div class="attach-slot" data-attach-slot="{slotKey}">` immediately after
+it — the annotation layer and every dock-built textarea (design/screen/view
+rows, § Layout JS) declare one. When that mount exists, the bar is placed
+inside it; when it does not (decision comment slots, comparison notes,
+inline decision-template textareas), the bar is appended right after the
+textarea, exactly like the original image-only version of this section did.
+Either way, `initCommentAttachments()` is idempotent: it flags each wired
+textarea (`dataset.attachWired`) and never creates a second bar for the
+same slot key, so calling it again after `ensureCommentSlots()`, after a
+dock rebuild (§ Layout JS `buildDesignUI()`), or after an iteration append
+is always safe.
+
+**One bar per field is not one bar on screen — the mount must follow its
+field's visibility.** The dock builds a textarea per screen, per design and
+per view up front and then only flips `hidden` on switch (§ Layout JS), so
+at any moment most attachable fields are hidden. Their `.attach-slot` mounts
+are *siblings* of those textareas, and `.attach-slot:empty { display: none }`
+stops covering them the instant a bar is mounted — which is why the dock
+rendered one 📎 row per hidden field stacked under the single visible
+textarea. `textarea[hidden] + .attach-slot { display: none }` (§ Layout
+CSS) is what keeps the two in step; it works because the mount is always
+emitted directly after the textarea it belongs to. **Emit it that way** — a
+mount separated from its field, or one nested somewhere else in the row,
+silently reintroduces the stack. The same rule names `.attach-bar` for the
+mountless path, where `_mountAttachmentBar()` inserts the bar itself
+`afterend` of the textarea for exactly this reason.
+`ta.parentElement.appendChild(bar)` is the **forbidden legacy shape**: it
+drops the bar after everything else in the row, so it is no longer an
+adjacent sibling and no rule reaches it. A page that still contains it is
+stacking bars today and must have this whole block re-synced (§ Engine drift
+on iteration append in `validation-gate.md`).
+
+**The engine carries its own visibility CSS.** `initCommentAttachments()`
+calls `_ensureAttachStyles()` once, which injects
+`<style id="attach-visibility-styles">` with the two `textarea[hidden] + …`
+rules and `.attach-slot:empty` if that element is not on the page yet. The
+§ Layout CSS copy stays as well — belt and braces, the same argument as the
+`var()` fallbacks around `--chrome-safe-top`: this file is a REFERENCE that
+is copied in PIECES, and a page that took the JS without the Layout CSS rule
+would mount bars nothing ever hides. Hiding the bar is deliberately CSS-only:
+`showScreen()`/`showDesign()`/`showView()` must stay free to toggle nothing
+but `ta.hidden`, and the bar has to keep existing (and stay wired) while
+hidden so the attachments already on an inactive field are still there when
+the user switches back to it.
+
+**The durability rule is unchanged: upload on ATTACH, never on submit.** The
+file is sent to the bridge the moment it is picked/pasted/dropped and is
+fsynced to `.claude/concepts/<slug>/attachments/<sha256>.<ext>` shortly
+after. A teardown mid-review cannot lose it. Deferring the upload to submit
+time would put every attached file back inside the exact window that made
+submissions disappear (#284).
+
+Two independent copies exist until the submission is processed:
+
+| Copy | Written when | Survives |
+|------|-------------|----------|
+| IndexedDB (`concept-attachments`) | immediately, before the network call | server down, bridge reaped, offline |
+| `attachments/<sha256>.<ext>` on disk | on the `POST /attachments` ack | browser cache wipe, tab close, PC restart |
+
+The local copy is kept — not deleted on a successful upload — until the
+whole submission has been processed. An upload that fails leaves the
+attachment marked `synced: false` with a visible retry control, and it is
+retried on the next reconnect (`restoreAttachments()`) alongside
+`retryPendingSubmission()`.
+
+Content addressing by sha256 makes all of this idempotent: attaching the
+same file twice, or a retry re-sending one, resolves to the same file. A
+retry can never duplicate a blob.
+
+**Any file type is accepted.** The picker's `accept` restriction is gone,
+drag & drop and Ctrl+V no longer filter on `type.startsWith('image/')` —
+see § Bridge server: the server accepts "basically any file type", so the
+client no longer gatekeeps ahead of it. Plain-text paste is untouched: only
+`clipboardData.files` is intercepted, so pasting text into a focused
+textarea behaves exactly as before — a paste event with zero files falls
+through to the browser's default text-paste handling.
+
+**Rendering — only four raster types get a thumbnail.** `png`, `jpeg`,
+`gif`, `webp` render as an `<img>` thumbnail, same as before. Every other
+type — including a server-hosted SVG/PDF/office/archive file, which always
+comes back `application/octet-stream` (§ Bridge server, `GET
+/attachments/<id>` serving policy) and can never be rendered in an `<img>`
+— renders as a **file chip**: a type-derived icon, the original filename,
+a human-readable size, and a remove control. Chips and thumbnails share the
+same `.attach-thumb` wrapper and remove affordance; only the inner content
+differs.
+
+**Streaming upload with progress, JSON fallback.** The primary upload path
+sends the raw `File`/`Blob` via `XMLHttpRequest` with `X-Attach-Name`
+(percent-encoded) and `X-Attach-Mime` headers — the streaming shape from
+§ Bridge server. `xhr.upload.onprogress` drives a per-attachment progress
+bar so a large file never looks frozen. If the streaming shape is rejected
+as unsupported (a `404`/`501`-shaped response from an older bridge that
+only knows the legacy JSON shape), the client automatically falls back to
+the base64 JSON path used before this change. `413`/`507` responses are
+parsed for `reason` and surfaced as a readable message on the chip
+(too large / bridge storage full / bridge disk full) instead of a silent
+failure — the attachment stays local and marked unsynced either way, so
+nothing is lost, only unsynced until the next successful retry.
+
+### HTML
+
+The bar is injected per field by `ensureCommentSlots()` and
+`initCommentAttachments()`; generated pages may also emit it inline. No
+`accept` attribute on the file input — every type is allowed:
+
+```html
+<div class="attach-bar" data-attach-for="variant-a-note">
+  <button type="button" class="attach-btn"
+          title="{{attach.button_title}}" aria-label="{{attach.button_title}}">📎</button>
+  <input type="file" multiple hidden>
+  <div class="attach-thumbs"></div>
+</div>
+```
+
+`{{attach.button_title}}` → e.g. "Datei anhängen (oder Strg+V / hierher
+ziehen)". Resolve it at generation time per § UI Locale.
+
+**The 📎 alone is the affordance — no hint label.** Every attachable field
+carries a bar, so a spelled-out "Ctrl+V or drop any file" line repeated under
+each one is pure noise: it out-weighs the field it decorates and reads as
+clutter down a dock of them. The paste/drop shortcuts live in the button's
+`title`/`aria-label`, which is where a discoverable-but-quiet affordance
+belongs, and the drop target itself stays advertised by the dashed
+`.attach-dragover` outline the moment a file is dragged over the textarea.
+
+### CSS
+
+```css
+.attach-bar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
+.attach-btn {
+  background: var(--surface-2); border: 1px solid var(--border-color);
+  color: var(--text-secondary); border-radius: 6px; cursor: pointer;
+  /* Quieter than the field it decorates — the 📎 is the only affordance
+     (§ Attachments), so it must read as a small utility control, not a
+     button that competes with the textarea above it for attention. */
+  padding: .1rem .35rem; font-size: .85rem; line-height: 1.3;
+}
+.attach-btn:hover { border-color: var(--accent-color); color: var(--text-primary); }
+.attach-thumbs { display: flex; gap: .4rem; flex-wrap: wrap; width: 100%; }
+.attach-thumb { position: relative; width: 64px; height: 64px; border-radius: 6px;
+                overflow: hidden; border: 1px solid var(--border-color); }
+.attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* File chip — anything that is not one of the four raster types. Fixed
+   height to match .attach-thumb so a mixed row of thumbnails and chips
+   stays aligned; width grows to fit the filename instead of clipping it,
+   since (unlike a thumbnail) there is no image to fall back on. */
+.attach-chip {
+  display: flex; align-items: center; gap: .35rem; height: 64px; min-width: 64px;
+  max-width: 160px; padding: 0 .5rem; border-radius: 6px;
+  border: 1px solid var(--border-color); background: var(--surface-2);
+}
+.attach-chip .attach-chip-icon { font-size: 1.3rem; flex: none; }
+.attach-chip .attach-chip-meta { min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.attach-chip .attach-chip-name {
+  font-size: .7rem; color: var(--text-primary); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100px;
+}
+.attach-chip .attach-chip-size { font-size: .65rem; color: var(--text-tertiary); }
+.attach-thumb .attach-remove, .attach-chip .attach-remove {
+  position: absolute; top: 1px; right: 1px; width: 16px; height: 16px;
+  border: none; border-radius: 50%; cursor: pointer; font-size: .7rem; line-height: 1;
+  background: rgba(0,0,0,.65); color: #fff;
+}
+.attach-chip { position: relative; }
+/* Unsynced = on this machine only. Must be visible: it is the difference
+   between "safe everywhere" and "safe until this browser forgets". */
+.attach-thumb[data-synced="false"], .attach-chip[data-synced="false"] { border-color: var(--warning-color, #d08c30); }
+.attach-thumb[data-synced="false"]::after, .attach-chip[data-synced="false"]::after {
+  content: "⟳"; position: absolute; bottom: 1px; left: 3px;
+  font-size: .7rem; color: var(--warning-color, #d08c30);
+}
+/* Upload-in-flight progress bar — bottom edge of the thumb/chip. Width is
+   driven inline (style.width) from xhr.upload.onprogress; the element only
+   exists while synced === false AND a request is actually in flight. */
+.attach-progress {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
+  background: var(--accent-color); transition: width .15s linear;
+}
+/* Failed upload — distinct from "still trying" (data-synced=false with no
+   error) so the user knows a retry needs a click, not just patience. */
+.attach-thumb[data-error="true"], .attach-chip[data-error="true"] { border-color: var(--danger-color, #f85149); }
+.attach-retry {
+  position: absolute; bottom: 1px; right: 1px; width: 16px; height: 16px;
+  border: none; border-radius: 50%; cursor: pointer; font-size: .65rem; line-height: 1;
+  background: var(--danger-color, #f85149); color: #fff;
+}
+/* Drop affordance on the textarea itself. */
+textarea[data-attachable].attach-dragover { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
+```
+
+### JS
+
+```javascript
+// --- IndexedDB mirror: the copy that survives the bridge being gone ---
+const ATTACH_DB_NAME = 'concept-attachments';
+const ATTACH_STORE = 'blobs';
+const ATTACH_RASTER_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+function attachDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(ATTACH_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(ATTACH_STORE)) {
+        const os = db.createObjectStore(ATTACH_STORE, { keyPath: 'key' });
+        os.createIndex('bySlot', 'slot', { unique: false });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function attachDBPut(rec) {
+  const db = await attachDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ATTACH_STORE, 'readwrite');
+    tx.objectStore(ATTACH_STORE).put(rec);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function attachDBAll() {
+  const db = await attachDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ATTACH_STORE, 'readonly');
+    const req = tx.objectStore(ATTACH_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function attachDBDelete(key) {
+  const db = await attachDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(ATTACH_STORE, 'readwrite');
+    tx.objectStore(ATTACH_STORE).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror = resolve;
+  });
+}
+
+// Slot key -> [{key, slot, id, name, mime, size, synced, error, blob}]
+const _attachments = new Map();
+
+function buildAttachmentBar(slotKey) {
+  const bar = document.createElement('div');
+  bar.className = 'attach-bar';
+  bar.dataset.attachFor = slotKey;
+  bar.innerHTML =
+    '<button type="button" class="attach-btn" title="{{attach.button_title}}"' +
+    ' aria-label="{{attach.button_title}}">📎</button>' +
+    '<input type="file" multiple hidden>' +
+    '<div class="attach-thumbs"></div>';
+  return bar;
+}
+
+function _slotKeyOf(ta) { return ta.dataset.comment || ta.id || ''; }
+
+function _barFor(slotKey) {
+  return document.querySelector('.attach-bar[data-attach-for="' + CSS.escape(slotKey) + '"]');
+}
+
+// The engine ships its own visibility CSS. § Layout CSS declares the same two
+// rules, and that copy stays — but this file is a REFERENCE that gets copied
+// in PIECES (same argument as the `var()` fallbacks on --chrome-safe-top): a
+// page that took the Attachments JS without the Layout CSS rule mounts bars
+// that nothing ever hides, and the dock renders one 📎 row per hidden field
+// stacked under the single visible textarea. Injected once, idempotent by id,
+// so an iteration append that re-runs the engine adds nothing.
+function _ensureAttachStyles() {
+  if (document.getElementById('attach-visibility-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'attach-visibility-styles';
+  style.textContent =
+    'textarea[hidden] + .attach-slot,' +
+    'textarea[hidden] + .attach-bar { display: none; }' +
+    '.attach-slot:empty { display: none; }';
+  (document.head || document.documentElement).appendChild(style);
+}
+
+// Resolves where a slot's bar lives: a dedicated .attach-slot mount when the
+// markup declares one (annotation answers, every dock-built textarea — see
+// § Layout JS), otherwise appended straight after the textarea (decision
+// comment slots, comparison notes, inline decision-template textareas) —
+// same fallback the original image-only bar used.
+function _mountAttachmentBar(ta, slotKey) {
+  const existing = _barFor(slotKey);
+  if (existing) return existing;
+  const bar = buildAttachmentBar(slotKey);
+  const dedicated = document.querySelector('.attach-slot[data-attach-slot="' + CSS.escape(slotKey) + '"]');
+  if (dedicated) dedicated.appendChild(bar);
+  // `afterend`, not parentElement.appendChild: the bar belongs to ITS field,
+  // and appending the bar onto `ta.parentElement` is the FORBIDDEN legacy
+  // shape — a page still carrying it stacks bars and must be re-synced here,
+  // and appending to the container drops it after whatever else the row holds
+  // — far from the textarea, and out of reach of the
+  // `textarea[hidden] + .attach-bar` rule that hides it with its field.
+  else if (ta.parentElement) ta.insertAdjacentElement('afterend', bar);
+  return bar;
+}
+
+function formatAttachSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let n = bytes, i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+}
+
+function attachFileIcon(mime, name) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  if ((mime || '').startsWith('image/')) return '🖼️';
+  if ((mime || '').startsWith('video/')) return '🎬';
+  if ((mime || '').startsWith('audio/')) return '🎵';
+  if (mime === 'application/pdf' || ext === 'pdf') return '📕';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️';
+  if (['doc', 'docx', 'txt', 'md', 'rtf'].includes(ext)) return '📄';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+  if (['ppt', 'pptx'].includes(ext)) return '📽️';
+  if (['js', 'ts', 'py', 'json', 'html', 'css', 'java', 'go', 'rs', 'c', 'cpp'].includes(ext)) return '💻';
+  return '📎';
+}
+
+function initCommentAttachments() {
+  _ensureAttachStyles();
+  document.querySelectorAll('textarea[data-attachable]').forEach(ta => {
+    const slotKey = _slotKeyOf(ta);
+    if (!slotKey) return;
+    // Idempotent: a rebuilt textarea (dock rebuild, iteration append) is a
+    // brand-new node with a clean dataset, so this only short-circuits a
+    // genuine double-call on the SAME still-attached node.
+    if (ta.dataset.attachWired && _barFor(slotKey)) { renderAttachments(slotKey); return; }
+    ta.dataset.attachWired = '1';
+    const bar = _mountAttachmentBar(ta, slotKey);
+    if (bar.dataset.wired) { renderAttachments(slotKey); return; }
+    bar.dataset.wired = '1';
+
+    const fileInput = bar.querySelector('input[type="file"]');
+    bar.querySelector('.attach-btn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      addAttachments(slotKey, Array.from(fileInput.files || []));
+      fileInput.value = '';
+    });
+
+    // Ctrl/Cmd+V into the textarea — ANY file type in the clipboard, not
+    // just images. Plain text paste (files.length === 0) is left alone so
+    // the default text-paste behaviour is never touched.
+    ta.addEventListener('paste', ev => {
+      const items = Array.from((ev.clipboardData || {}).items || []);
+      const files = items.filter(i => i.kind === 'file')
+                         .map(i => i.getAsFile())
+                         .filter(Boolean);
+      if (!files.length) return;             // plain text paste — leave it alone
+      ev.preventDefault();
+      addAttachments(slotKey, files);
+    });
+
+    ['dragenter', 'dragover'].forEach(evt =>
+      ta.addEventListener(evt, e => { e.preventDefault(); ta.classList.add('attach-dragover'); }));
+    ['dragleave', 'drop'].forEach(evt =>
+      ta.addEventListener(evt, () => ta.classList.remove('attach-dragover')));
+    ta.addEventListener('drop', e => {
+      const files = Array.from(e.dataTransfer?.files || []);   // any type
+      if (!files.length) return;
+      e.preventDefault();
+      addAttachments(slotKey, files);
+    });
+
+    renderAttachments(slotKey);
+  });
+}
+
+async function addAttachments(slotKey, files) {
+  for (const file of files) {
+    const key = slotKey + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
+    const rec = {
+      key, slot: slotKey, id: null, name: file.name || 'attachment',
+      mime: file.type || 'application/octet-stream', size: file.size,
+      synced: false, error: null, progress: 0, blob: file,
+    };
+    // LOCAL FIRST — before the network call, so a failure at any point after
+    // this leaves the file recoverable on this machine.
+    try { await attachDBPut(rec); } catch { /* private mode: server copy still applies */ }
+    const list = _attachments.get(slotKey) || [];
+    list.push(rec);
+    _attachments.set(slotKey, list);
+    renderAttachments(slotKey);
+    uploadAttachment(rec).then(() => renderAttachments(slotKey));
+    if (typeof _markUserInteracted === 'function') _markUserInteracted();
+  }
+}
+
+// Streaming upload (§ Bridge server, Shape B) with progress, falling back to
+// the legacy base64-in-JSON path (Shape A) only when the streaming shape is
+// rejected as unsupported — an older bridge that has never heard of it.
+function _uploadStreaming(rec) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/attachments');
+    xhr.setRequestHeader('Content-Type', rec.mime || 'application/octet-stream');
+    xhr.setRequestHeader('X-Attach-Name', encodeURIComponent(rec.name));
+    xhr.setRequestHeader('X-Attach-Mime', rec.mime || 'application/octet-stream');
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      rec.progress = Math.round((e.loaded / e.total) * 100);
+      renderAttachments(rec.slot);
+    };
+    xhr.onload = () => {
+      if (xhr.status === 404 || xhr.status === 501) { resolve({ unsupported: true }); return; }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let reason = 'error_generic';
+        try { reason = 'error_' + (JSON.parse(xhr.responseText).reason || 'generic'); } catch { /* ignore */ }
+        resolve({ ok: false, reason });
+        return;
+      }
+      try { resolve({ ok: true, meta: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, reason: 'error_generic' }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, reason: 'error_offline' });
+    xhr.send(rec.blob);
+  });
+}
+
+function _uploadLegacyJSON(rec) {
+  return new Promise((resolve) => {
+    const fr = new FileReader();
+    fr.onerror = () => resolve({ ok: false, reason: 'error_offline' });
+    fr.onload = async () => {
+      const data = String(fr.result).split(',')[1] || '';
+      try {
+        const res = await fetch('/attachments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: rec.name, mime: rec.mime, data })
+        });
+        if (!res.ok) {
+          let reason = 'error_generic';
+          try { reason = 'error_' + ((await res.json()).reason || 'generic'); } catch { /* ignore */ }
+          resolve({ ok: false, reason });
+          return;
+        }
+        resolve({ ok: true, meta: await res.json() });
+      } catch { resolve({ ok: false, reason: 'error_offline' }); }
+    };
+    fr.readAsDataURL(rec.blob);
+  });
+}
+
+// Runtime locale for the chip tooltip (#343). Every other {{key}} on the page
+// is swapped at generation time; the upload-failure reason is only known in
+// the browser (`rec.error` = 'error_' + the bridge's `reason`), so the
+// substituted strings are carried here and looked up at render time. Keys
+// mirror the bridge's error taxonomy (bridge-server.md § Attachment HTTP
+// contract) plus the client-side `error_offline`; an unknown reason — a
+// client-bug 400 such as bad_json, or a reason added to the bridge later —
+// falls back to error_generic instead of showing a raw token.
+const ATTACH_LOCALE = {
+  uploading: '{{attach.uploading}}',
+  error_generic: '{{attach.error_generic}}',
+  error_too_large: '{{attach.error_too_large}}',
+  error_quota_exceeded: '{{attach.error_quota_exceeded}}',
+  error_disk_full: '{{attach.error_disk_full}}',
+  error_offline: '{{attach.error_offline}}',
+  error_empty: '{{attach.error_empty}}',
+  error_length_required: '{{attach.error_length_required}}',
+  error_client_aborted: '{{attach.error_client_aborted}}',
+  error_store_write_failed: '{{attach.error_store_write_failed}}',
+  error_store_unavailable: '{{attach.error_store_unavailable}}',
+};
+function attachStatusText(rec) {
+  if (rec.synced) return '';
+  if (rec.error) return ' — ' + (ATTACH_LOCALE[rec.error] || ATTACH_LOCALE.error_generic);
+  return ' — ' + ATTACH_LOCALE.uploading;
+}
+
+async function uploadAttachment(rec) {
+  rec.error = null;
+  let result;
+  try { result = await _uploadStreaming(rec); }
+  catch { result = { ok: false, reason: 'error_offline' }; }
+  if (result.unsupported) result = await _uploadLegacyJSON(rec);
+  if (result.ok) {
+    rec.id = result.meta.id;
+    rec.synced = true;
+    rec.progress = 100;
+    try { await attachDBPut(rec); } catch { /* ignore */ }
+    return true;
+  }
+  rec.error = result.reason || 'error_generic';    // ATTACH_LOCALE[reason] on the chip
+  return false;
+}
+
+function renderAttachments(slotKey) {
+  const bar = _barFor(slotKey);
+  if (!bar) return;
+  const thumbs = bar.querySelector('.attach-thumbs');
+  thumbs.innerHTML = '';
+  for (const rec of _attachments.get(slotKey) || []) {
+    const raster = ATTACH_RASTER_MIME.has(rec.mime);
+    const wrap = document.createElement('div');
+    wrap.className = raster ? 'attach-thumb' : 'attach-chip';
+    wrap.dataset.synced = String(!!rec.synced);
+    wrap.dataset.error = String(!!rec.error);
+    wrap.title = rec.name + attachStatusText(rec);
+
+    if (raster) {
+      const img = document.createElement('img');
+      // Prefer the server copy once it exists: it proves the durable write
+      // landed, and it survives an IndexedDB eviction.
+      img.src = rec.synced && rec.id ? '/attachments/' + rec.id : URL.createObjectURL(rec.blob);
+      img.alt = rec.name;
+      wrap.appendChild(img);
+    } else {
+      // Never <img> a non-raster blob — a server-hosted SVG/PDF/etc. is
+      // always served application/octet-stream (§ Bridge server), so there
+      // is nothing an <img> tag could show.
+      const icon = document.createElement('span');
+      icon.className = 'attach-chip-icon';
+      icon.textContent = attachFileIcon(rec.mime, rec.name);
+      const meta = document.createElement('div');
+      meta.className = 'attach-chip-meta';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'attach-chip-name';
+      nameEl.textContent = rec.name;
+      const sizeEl = document.createElement('span');
+      sizeEl.className = 'attach-chip-size';
+      sizeEl.textContent = formatAttachSize(rec.size);
+      meta.appendChild(nameEl);
+      meta.appendChild(sizeEl);
+      wrap.appendChild(icon);
+      wrap.appendChild(meta);
+    }
+
+    // In-flight progress — only while genuinely uploading (not yet synced,
+    // no error recorded yet).
+    if (!rec.synced && !rec.error) {
+      const bar2 = document.createElement('div');
+      bar2.className = 'attach-progress';
+      bar2.style.width = (rec.progress || 0) + '%';
+      wrap.appendChild(bar2);
+    }
+
+    if (rec.error) {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'attach-retry';
+      retry.title = '{{attach.retry}}';
+      retry.textContent = '⟳';
+      retry.addEventListener('click', () => { uploadAttachment(rec).then(() => renderAttachments(slotKey)); });
+      wrap.appendChild(retry);
+    }
+
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'attach-remove';
+    rm.title = '{{attach.remove}}';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => removeAttachment(slotKey, rec.key));
+    wrap.appendChild(rm);
+    thumbs.appendChild(wrap);
+  }
+}
+
+async function removeAttachment(slotKey, key) {
+  // Drops the LOCAL reference only. The server blob is content-addressed and
+  // may be referenced by another slot or an earlier round; the store is
+  // cleaned as a whole by the disposition step, never piecemeal from the UI.
+  _attachments.set(slotKey, (_attachments.get(slotKey) || []).filter(r => r.key !== key));
+  await attachDBDelete(key);
+  renderAttachments(slotKey);
+}
+
+async function restoreAttachments() {
+  let all = [];
+  try { all = await attachDBAll(); } catch { return; }
+  for (const rec of all) {
+    const list = _attachments.get(rec.slot) || [];
+    list.push(rec);
+    _attachments.set(rec.slot, list);
+  }
+  // Anything that never reached the bridge gets another chance now.
+  for (const rec of all.filter(r => !r.synced)) await uploadAttachment(rec);
+  for (const slot of _attachments.keys()) renderAttachments(slot);
+}
+
+// Called from every collectDecisions branch — only synced attachments are
+// named in the payload, because Claude reads them from disk by id. An
+// unsynced one is still on this machine and is retried, but it must not be
+// advertised as a path that does not exist.
+function attachmentsFor(slotKey) {
+  return (_attachments.get(slotKey) || [])
+    .filter(r => r.synced && r.id)
+    .map(r => ({ id: r.id, name: r.name, mime: r.mime, size: r.size,
+                 path: '.claude/concepts/{{slug}}/attachments/' + r.id }));
+}
+
+function unsyncedAttachmentCount() {
+  let n = 0;
+  for (const list of _attachments.values()) n += list.filter(r => !r.synced).length;
+  return n;
+}
+```
+
+Wire `restoreAttachments()` into `DOMContentLoaded` **after** `ensureCommentSlots()`
+(the bars must exist before thumbnails render), and call `initCommentAttachments()`
+again after any iteration append, exactly like `ensureCommentSlots()` — and,
+for the design template, after every dock rebuild (§ Layout JS
+`buildDesignUI()` already does this — see the `initCommentAttachments()` call
+at the end of that function).
+
+`{{slug}}` is the concept's date-slug, substituted at generation time — it is
+the store directory name, so Claude can open the referenced file directly with
+the Read tool.
+
+## Information Mapping (engine)
+
+Shared, template-independent engine for `section[data-mapping]` (§ View kind `mapping`,
+§ Mapping block (optional)). Copied verbatim into every page like the annotation layer;
+`renderMappings()` early-returns on pages without a mapping. The matrix's checkboxes are
+the DOM truth; one CSS-hidden text input per matrix is the persisted form (§ State
+Persistence picks it up as `text:i{N}:map-…`). With more than one matrix a tab strip
+(`button.map-tab`) switches schematic and matrix together; the toolbar tools (⧉ copy
+context, ↺ proposal, + item) and the slot notes (`textarea[data-comment="map-{m}-note-{target}"]`)
+are generated too. Inside an iteration without `data-active` the section is frozen
+(`data-map-frozen`): it renders from `spec.submitted` read-only — no tools, no chip ×,
+view state in memory — and shows a `.map-error` banner when `submitted` is missing.
+See the design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-design.md`.
+
+### Spec
+
+The `<script type="application/json" data-mapping-spec>` inside the section:
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `items[]` | `{id, label, group?, hint?, required?}` | the units to place; `group` (order of first appearance) is collapsible in both views; `required: true` flags an item that is assigned nowhere |
+| `elements[]` | `{id, label, itemTargets?, parts[]}` | a schematic UI element (list card, detail page, form…) made of parts; `itemTargets`: `"one"` (an item goes to exactly one part here — checking another swaps along the row), `"min1"` (flag an item unassigned on this element) or `"any"` (default) |
+| `parts[]` | `{id, label, tier?, row?, accepts?, min?, max?, ordered?}` | a slot inside an element. `tier`: `"first"` (at first glance, default) or `"after"` (after click) — an attribute of the target, not a dimension; `row`: parts sharing a row sit side by side inside their tier column, rows stack (numeric, parts without one come last); `accepts`: `"one"` (exactly one item, another swaps) or `"many"` (default); `min` / `max` soft, flagged; `ordered: true` keeps an order input |
+| `axes[]` | `{id, label, itemTargets?, columns[]: {id, label, accepts?, min?, max?}}` | an abstract target axis for non-UI mappings (release trains, roles): named columns, no schematic |
+| `context` | `{id, label, values[]: {id, label}}` | optional extra dimension (device, role…): every value yields a full copy of the target set → one matrix per value; the tab strip switches them |
+| `proposal` | `[[item, target, ctx?], …]` | Claude's pre-filled assignment — **mandatory** (empty only when Claude honestly has none); `ctx` present iff the spec has `context` |
+| `proposalOrder` | `{"target[@ctx]": [itemIds]}` | initial order for ordered parts |
+| `slotNotes` | `true` | one per-target note textarea, revealed by ✎ |
+| `adhocItems` | `true` | the user may add ≤ 20 label-only items ("+ item"), group "Added by you", ids `u1…` |
+| `submitted` | `{cells: {"matrixKey": [[item, target]…]}, order, adhoc, slotNotes}` | the user's submission, written by Claude when the round is frozen (see Freezing) |
+
+Target key = `{elementId}.{partId}` or `{axisId}.{columnId}`; matrix key =
+`{elementId|axisId}` or `{elementId|axisId}@{ctx}`. `elements` and `axes` may coexist,
+at least one is required; a spec without `elements` renders the matrix only and no view
+toggle. Cardinality is **never blocked, always flagged** (amber / red counts, ⚠, the
+summary line) — an item assigned nowhere is reported as `unassigned`, not an error,
+unless it is `required` or its element / axis says `min1`. A spec that does not parse
+or does not normalise (unknown id in `proposal`, bad id, duplicate item id, reserved id)
+renders a red `div.map-error[role=alert]` with the error in place of the mapping and
+contributes no `mappings[]` entry — never a silent blank.
+
+### Rendered DOM contract
+
+Everything below is generated; the authored markup is the wrapper section, the spec and
+(free rounds) the note. `div.map-root` (or the spec-error box) is mounted **directly after
+the spec script**, so an authored note that follows the spec stays below the mapping.
+
+| Element | Identity | Count | Purpose |
+|---|---|---|---|
+| `input[type=checkbox]` | **no name / id**; `data-map-cell="{item}>{target}"`, `data-proposed="1|0"`; inside `td.map-cell-td[data-accepts=one]?` > `label` > input + `span.map-cell` | items × targets × contexts | DOM truth, keyboard + label semantics; `disabled` when frozen |
+| `input[type=text].map-state` | `map-{m}-cells-{matrixKey}`, `map-{m}-order-{target}[@ctx]` (ordered parts), `map-{m}-adhoc` (with `adhocItems`), `map-{m}-ui`; all in one `div.map-states` directly under the section, `tabindex="-1"`, `aria-hidden` | 1 per matrix + ordered parts + adhoc + ui | persisted form (§ State), `allFields`; `readonly` when frozen |
+| `div.map-root` > `div.map-toolbar`, `div.map-summary[aria-live]`, `div.map-schema[data-map-ctx]` ×n, `div.map-matrices`, `div.map-slot-notes`? | | 1 | section layout; `.map-root [hidden]` wins over every display rule |
+| `button.map-view-btn[data-map-mode][aria-pressed]` × 2 in `.map-view-toggle[role=group]` | | with `elements` only | Schema \| Matrix |
+| `button.map-tab[data-map-tab="{matrixKey}"][aria-pressed]` in `div.map-tabs`, with `span.map-tabs-label` (Context / Axis) and `span.map-tab-count` | | > 1 matrix | active matrix / context; the count reads `{n} open` per matrix |
+| `button.map-row-filter[data-filter="all\|unassigned\|changed"][aria-pressed]` × 3 in `div.map-row-filters[role=group]`, each with `span.map-filter-count` | | 1 per mapping, `hidden` unless the matrix is on screen | matrix row filter (spec § 7 "Rows"): hides `tr.map-item-row`s that fail the pill and every `tr.map-group-row` with no passing member — in EVERY matrix, not just the visible tab; same predicate and counts as the palette pills (`unassigned` = nowhere across all matrices, `changed` = any diff vs `data-proposed`); in memory (`model.rowFilter`), never persisted; a frozen section keeps it |
+| `div.map-tools` > `button.map-copy[data-from][data-to]` per ordered context pair, `button.map-reset`, `button.map-add-item` (with `adhocItems`), `div.map-status.map-tools-status[role=status]` | | live sections only | ⧉ copy context, ↺ proposal, + item, duplicate hint |
+| `div.map-element[data-map-element]` > caption > `div.map-tiers` > `div.map-tier[data-tier]` > `div.map-row[data-row]` > `div.map-slot[data-map-target][data-accepts]` > `button.map-slot-label` (+ `.map-slot-count`), `.map-slot-chips` > `button.map-chip[data-item]`, `button.map-slot-note-btn` | | per element / context | schematic view, arm-then-tap |
+| `div.map-palette` > `input[type=search].map-search` (unnamed), `button.map-filter[data-filter][aria-pressed]` × 4, `button.map-palette-collapse[aria-expanded]`, `div.map-groups` > `div.map-group[data-group]` > `button.map-group-toggle[aria-expanded]` + `button.map-item-chip[data-item][aria-pressed]` | | per schematic | palette, search, filters |
+| `div.map-matrix[data-map-matrix="{matrixKey}"]` > `div.map-scroll` > `table.map-table[role=grid]` — `thead` rows `tr.map-head-src` (element / axis label, colspan = its columns), `tr.map-head-tier` (`th[data-tier]`, only when both tiers occur), `tr.map-head-targets` (`th[data-map-target][data-col-tier]` + `.map-col-count`), `tr.map-group-row` (with `button.map-group-toggle`), `tr.map-item-row` (`th[scope=row].map-item-label`, cells, `td.map-sum`); `data-dense="true"` above 18 columns, `data-head-rows="2|3"` (header row count — the sticky offsets and the scroll padding follow it) | | per matrix, `hidden` when inactive | matrix view; inputs exist regardless of what is on screen |
+| `textarea[data-comment="map-{m}-note"][data-attachable]` | **authored**, free rounds only | 1 | mapping note (design rounds: the dock's `view-{id}`) |
+| `textarea[data-comment="map-{m}-note-{target}"]` in `label.map-slot-note` (hidden until ✎) | generated when `slotNotes` | per target (not per context) | per-slot note; `readonly` when frozen |
+| `div.map-error[role=alert]` | | on failure | spec error (in place of the mapping) or frozen-without-`submitted` banner (prepended above it) |
+
+Controls are `<button>`s, never radios: freezing is Claude's hand-edit of the HTML plus
+`section[data-iteration]:not([data-active]) input { pointer-events: none }` — buttons are
+untouched by that rule (like `.view-switch-item`), so a frozen mapping keeps its view
+toggle, tabs, group collapse and filters; the palette search is the one input the engine
+CSS re-enables there (it filters what is on screen, it writes nothing). The view toggle
+carries `aria-disabled="true"` (and ignores clicks) while the active tab is an axis — an
+axis has no schematic. The ✎ buttons carry `has-note` while their target's note has text.
+The renderer **measures nothing** (it runs while its view is `hidden`): `data-dense` and
+`data-head-rows` are derived from the column count and the tier layout.
+
+### State and load order
+
+The checkboxes are unnamed, so `saveState()` and `collectAllFormFields()` ignore them;
+the persisted form is one compact string per matrix in the `.map-state` text inputs:
+cells = space-separated `item>target` pairs (a deliberately empty matrix is the sentinel
+`-`, never `""`), order = comma-separated item ids, adhoc = a JSON array of labels, ui =
+`mode=schema;tab=card@phone`. They ride the existing `text:` path unchanged
+(`text:i{N}:{id}`, iteration-namespaced), so the draft mirror, `_carryOverTypedWork()`
+and `allFields` all cover them.
+
+Script order across the page's IIFEs is not guaranteed, so `renderMappings()` is the
+**first statement of § State Persistence's `DOMContentLoaded` handler** (before
+`ensureCommentSlots()` and `restoreState()`, `typeof`-guarded): it creates the state
+inputs (from `submitted` on a frozen section, else from `proposal`), renders the
+checkboxes from them and projects the schematic. `restoreState()` may then overwrite a
+live state input's value — and it **runs three times** (load, every `iteration:changed`,
+after `hydrateDraftFromBridge()`), setting values without events — so it ends with
+`refreshMappings()` (precedent: `updateNoteMarkers()`), which re-reads every state
+input, normalises it, re-sets the checkboxes, re-projects and re-mirrors the TOC. A
+restore never touches an input the user changed in this page life (`data-touched`) and
+never applies another round's keys (the `i{N}:` namespace), so a frozen round's baked
+`submitted` cannot be overwritten by a stale local key. Unknown item / target ids in a
+state string are dropped. `setCell()` is the only cell write path (schematic, matrix,
+keyboard, reset, copy): it applies the `accepts: "one"` / `itemTargets: "one"` swaps,
+rewrites the affected state inputs, stamps `data-touched`, sets `_userInteracted`,
+dispatches bubbling `input` + `change` events and re-projects. Search, filters,
+collapsed groups and the armed item / slot are in-memory only.
+
+### Freezing
+
+At Step 5c, when the next round is appended, Claude writes the payload's `mappings[]`
+entry into the frozen round's spec as `"submitted": {cells, order, adhoc, slotNotes}` —
+`cells` is the entry's `assigned` verbatim (keyed by matrix key), `order` its `order`,
+`adhoc` its `adhocItems`, `slotNotes` its `slotNotes`. On a section inside an iteration
+without `data-active` the renderer sets `data-map-frozen="true"` and initialises from
+`submitted`, keeps `data-proposed` from `proposal` so the ◆ markers stay visible, renders
+every checkbox `disabled`, the state inputs and slot-note textareas `readonly`, omits the
+tools and the chip ×, and keeps toggle, tabs, collapse, search and filters browsable
+(their state lives in memory on a frozen section; the `readonly` ui input is never
+written). A `submitted` that is missing **or incomplete** (no `cells`, or a matrix key
+missing) is treated as missing: the proposal is shown behind a prepended
+`div.map-error[role=alert]` (`map.frozen_missing`) and gate rule M9
+(validation-gate.md § Mappings) fails the page — silently presenting the proposal as the user's decision is the one outcome this
+construct must never produce. Frozen sections contribute no `mappings[]` entry.
+
+### Authoring rule
+
+Claude writes **only** the wrapper `section[data-mapping][id][data-nav-label]`, the JSON
+spec and — in free rounds — the note textarea; never a cell, a state input or a control.
+Ids match `^[a-z0-9_]+$`; mapping ids are unique page-wide; item ids matching `u\d+` are
+reserved for ad-hoc items and rejected by the engine. Labels are content, not UI strings
+— no `{{…}}` locale tokens inside a spec — and must not contain `</script>` (the HTML
+parser would end the JSON block early; the parse then fails visibly). Keep ≤ 60 items, ≤ 20
+targets per matrix, ≤ 4 context values per mapping; split beyond that.
+
+### Wiring
+
+Wiring into the shared systems (all of it lives in those systems, not here):
+`renderMappings()` is the **first** statement of § State Persistence's `DOMContentLoaded`
+handler (the state inputs must exist before `restoreState()` writes into them — script order
+across IIFEs is not guaranteed) and `restoreState()` ends with `refreshMappings()`, which
+re-projects the boxes from the restored values and re-mirrors the TOC.
+`collectDesignDecisions()` / `collectFreeDecisions()` emit `mappings: collectMappings(active)`
+(§ 9 shape; `collectDecisionDecisions()` emits `[]`, so the key is always present); a view with
+`data-view-for` tags its `decisions[]` and `mappings[]` entries with `design`. In the panel
+TOC (`buildSectionNav()`) a `section[data-mapping]` entry carries `data-mapping-nav` and a
+`.section-nav-state.state-mapping` reading `assigned/total · violations ⚠` from
+`mappingProgress()`, refreshed after every cell write and restore. In the design template's ☰
+nav (`buildDesignUI()`) a view with `data-view-for` is listed under that design after its
+screens; the views group holds only the views that name no design of the round.
+
+### CSS
+
+```css
+/* Information mapping — persisted form (hidden text inputs) */
+.map-state { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+/* layout: toolbar, summary, one schematic per context, one matrix per key */
+.map-root { display: flex; flex-direction: column; gap: 0.75rem; }
+.map-root [hidden] { display: none !important; }   /* the flex/grid rules below must not beat the hidden attribute */
+.map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.map-toolbar:empty { display: none; }
+.map-view-toggle { display: inline-flex; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+.map-view-btn { border: 0; border-right: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; }
+.map-view-btn:last-child { border-right: 0; }
+.map-view-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); font-weight: 600; }
+.map-view-btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }   /* an axis tab has no schematic: the toggle is inert there */
+.map-tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.map-tabs-label { font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.25rem; }
+.map-tab { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.2rem 0.7rem; cursor: pointer; }
+.map-tab[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); font-weight: 600; }
+.map-tab-count { font-size: 0.75rem; color: var(--warning-color); }
+.map-tab-count:empty { display: none; }
+.map-tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-left: auto; }
+.map-copy, .map-reset, .map-add-item { border: 1px solid var(--border-color); border-radius: 6px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.25rem 0.6rem; cursor: pointer; }
+.map-copy:hover, .map-reset:hover, .map-add-item:hover { color: var(--text-color); border-color: var(--accent-color); }
+.map-add-item:disabled { opacity: 0.5; cursor: default; }
+.map-tools-status:empty { display: none; }
+.map-summary { font-size: 0.9rem; color: var(--text-secondary); }
+.map-summary[data-ok="false"] { color: var(--warning-color); }
+.map-error { border: 1px solid var(--danger-color, #f85149); color: var(--danger-color, #f85149); padding: 0.75rem; border-radius: 6px; }
+.view-mapping { max-width: none; padding: 1rem 1.5rem; }
+.concept-content:has([data-map-wide]) { max-width: 1600px; }
+
+/* schematic: element → tiers side by side → rows → slots */
+.map-schema { display: flex; flex-direction: column; gap: 1rem; }
+.map-element { border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; }
+.map-element-caption { font-weight: 600; margin-bottom: 0.5rem; }
+.map-tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.map-tiers:has(> .map-tier:only-child) { grid-template-columns: 1fr; }
+@media (max-width: 700px) { .map-tiers { grid-template-columns: 1fr; } }
+.map-tier { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: color-mix(in srgb, var(--text-secondary) 6%, transparent); }
+.map-tier[data-tier="first"] { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.map-tier-label { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.map-row { display: flex; gap: 0.5rem; }
+.map-slot { flex: 1; min-width: 0; border: 1px dashed var(--border-color); border-radius: 6px; padding: 0.4rem; background: var(--panel-bg); }
+.map-slot.is-armed { border-style: solid; border-color: var(--accent-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 25%, transparent); }
+.map-slot.is-under { border-color: var(--warning-color); }
+.map-slot.is-over { border-color: var(--danger-color, #f85149); }
+.map-slot.is-swapped { animation: map-swap 0.7s ease-out; }
+@keyframes map-swap { from { background: color-mix(in srgb, var(--warning-color) 35%, transparent); } to { background: var(--panel-bg); } }
+.map-schema[data-armed="item"] .map-slot { cursor: copy; }
+.map-slot-label { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; width: 100%; border: 0; background: transparent; color: var(--text-color); font: inherit; font-weight: 600; text-align: left; padding: 0 0 0.3rem; cursor: pointer; }
+.map-slot-count { font-weight: 400; font-size: 0.8rem; color: var(--text-secondary); }
+.map-slot.is-under .map-slot-count { color: var(--warning-color); }
+.map-slot.is-under .map-slot-count::after { content: " ⚠"; }
+.map-slot.is-over .map-slot-count { color: var(--danger-color, #f85149); }
+.map-slot-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; min-height: 1.6rem; }
+.map-slot-note-btn { border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 0 0.2rem; cursor: pointer; }
+.map-slot-note-btn:hover, .map-slot-note-btn.has-note { color: var(--accent-color); }   /* has-note: the target's note carries text */
+.map-table th .map-slot-note-btn { font-weight: 400; }
+
+/* slot notes: one textarea per target, revealed by ✎ */
+.map-slot-notes { display: flex; flex-direction: column; gap: 0.5rem; }
+.map-slot-notes:empty { display: none; }
+.map-slot-note { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--text-secondary); }
+.map-slot-note:has(> textarea[hidden]) { display: none; }
+.map-slot-note textarea { width: 100%; box-sizing: border-box; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; resize: vertical; }
+
+/* chips — in slots and in the palette */
+.map-chip, .map-item-chip { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid var(--border-color); border-radius: 999px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; font-size: 0.85rem; line-height: 1.2; padding: 0.15rem 0.55rem; cursor: pointer; }
+.map-chip.is-proposed::before { content: "·"; color: var(--text-secondary); }
+.map-chip.is-changed, .map-item-chip.is-changed { text-decoration: underline var(--accent-color); text-underline-offset: 3px; }
+.map-chip.is-changed::before, .map-item-chip.is-changed .map-item-label::after { content: "◆"; color: var(--accent-color); font-size: 0.7em; }
+.map-item-chip.is-changed .map-item-label::after { margin-left: 0.25rem; }
+.map-chip.is-removed { opacity: 0.5; text-decoration: line-through; cursor: default; }
+.map-chip-remove { color: var(--text-secondary); padding-left: 0.15rem; }
+.map-chip:hover .map-chip-remove, .map-chip:focus-visible .map-chip-remove { color: var(--danger-color, #f85149); }
+.map-item-chip[aria-pressed="true"] { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.map-item-count { font-size: 0.75rem; color: var(--text-secondary); }
+.map-item-chip.is-unassigned .map-item-count { color: var(--warning-color); }
+
+/* palette: sticky tray at the bottom of the mapping's scroll box */
+.map-palette { position: sticky; bottom: 0; background: var(--panel-bg); border-top: 1px solid var(--border-color); padding: 0.5rem 0; display: flex; flex-direction: column; gap: 0.4rem; z-index: 1; }
+.map-palette-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.map-palette-title { font-weight: 600; }
+.map-search { flex: 1; min-width: 8rem; padding: 0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--input-bg, transparent); color: var(--text-color); font: inherit; }
+/* § Iteration Tabs CSS kills pointer events on every input of a frozen tab; the palette
+   search only filters what is on screen, so it stays live there (specificity 0,4,1 beats
+   that rule's 0,2,2 wherever the two blocks land in the page). */
+section[data-iteration]:not([data-active]) .map-root .map-search { pointer-events: auto; filter: none; }
+.map-filters, .map-row-filters { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.map-filter, .map-row-filter { border: 1px solid var(--border-color); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.6rem; cursor: pointer; }
+.map-filter[aria-pressed="true"], .map-row-filter[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-color) 18%, transparent); color: var(--text-color); border-color: var(--accent-color); }
+.map-filter-count { opacity: 0.8; }
+.map-palette-collapse { margin-left: auto; border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 0 0.3rem; cursor: pointer; }
+.map-groups { display: flex; flex-direction: column; gap: 0.4rem; }
+.map-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem; }
+.map-group-toggle { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.85rem; padding: 0.1rem 0.3rem; cursor: pointer; white-space: nowrap; }
+.map-group-count { opacity: 0.8; }
+.map-group-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.map-status { min-height: 1.2rem; font-size: 0.85rem; color: var(--accent-color); }
+
+/* matrix: one scroll box per table so sticky headers and the sticky first column work together.
+   Every header row is exactly 2rem tall (row height fixed, no vertical padding, the 1px
+   border inside it) and each row sticks at index × 2rem — by ROW INDEX, not by class: a
+   matrix without a tier row has two rows, and a class-bound `top: 4rem` on the targets
+   row left it floating one row below the source row, over the first body row
+   (browser-verified). The renderer stamps `data-head-rows="2|3"` on the table so the
+   scroll padding matches the header height exactly in both cases. */
+.map-scroll { --map-head-rows: 2; overflow: auto; width: max-content; max-width: 100%; max-height: calc(100vh - var(--map-chrome, 220px)); scroll-padding: calc(var(--map-head-rows) * 2rem) 0 0 230px; border: 1px solid var(--border-color); border-radius: 6px; }
+.map-scroll:has(> .map-table[data-head-rows="3"]) { --map-head-rows: 3; }
+html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
+.map-table { border-collapse: separate; border-spacing: 0; width: max-content; font-size: 0.85rem; }
+.map-table th, .map-table td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 0.2rem 0.4rem; white-space: nowrap; }
+.map-table thead tr { height: 2rem; }
+.map-table thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-bg); text-align: center; font-weight: 600; padding: 0 0.5rem; }
+.map-table thead tr:nth-child(2) th { top: 2rem; }
+.map-table thead tr:nth-child(3) th { top: 4rem; }
+.map-table tr.map-head-tier th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.map-table tr.map-head-tier th[data-tier="first"] { background: color-mix(in srgb, var(--accent-color) 12%, var(--panel-bg)); }
+.map-table tr.map-head-targets th { font-weight: 500; }
+.map-table tr.map-head-targets th[data-col-tier="first"] { background: color-mix(in srgb, var(--accent-color) 6%, var(--panel-bg)); }
+.map-table th.map-item-label, .map-table th.map-corner { position: sticky; left: 0; z-index: 3; background: var(--panel-bg); min-width: 220px; text-align: left; font-weight: 400; }
+.map-table thead th.map-corner { z-index: 4; }
+.map-table tr.map-group-row td { background: color-mix(in srgb, var(--text-secondary) 8%, var(--panel-bg)); position: sticky; left: 0; z-index: 1; text-align: left; }
+.map-table tr.map-item-row { height: 28px; }
+.map-table td.map-sum { text-align: center; color: var(--text-secondary); }
+.map-cell-td { padding: 0; text-align: center; position: relative; }
+.map-cell-td label { display: block; width: 28px; height: 28px; margin: auto; cursor: pointer; }
+.map-cell-td input { position: absolute; opacity: 0; width: 28px; height: 28px; margin: 0; cursor: pointer; }
+.map-cell { display: block; width: 18px; height: 18px; margin: 5px; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box; }
+.map-cell-td input:checked + .map-cell { background: var(--accent-color); border-color: var(--accent-color); }
+.map-cell-td input:focus-visible + .map-cell { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.map-cell-td[data-accepts="one"] .map-cell { border-radius: 50%; }
+.map-cell-td input:disabled, .map-cell-td input:disabled + .map-cell, .map-cell-td:has(input:disabled) label { cursor: default; }
+.map-cell-td.is-changed .map-cell { box-shadow: inset 0 0 0 2px var(--panel-bg), inset 0 0 0 4px var(--accent-color); }
+.map-cell-td.is-changed input:not(:checked) + .map-cell { border-style: dashed; border-color: var(--accent-color); }
+.map-table[data-dense="true"] tr.map-head-targets th { writing-mode: vertical-rl; transform: rotate(180deg); padding: 0.4rem 0.2rem; }
+.map-col-count { color: var(--text-secondary); font-weight: 400; }
+.map-col-count.is-under, .map-table td.map-sum.is-under { color: var(--warning-color); }   /* td.map-sum: must outrank the base Σ rule above */
+.map-col-count.is-over { color: var(--danger-color, #f85149); }
+.map-table th.is-under .map-col-count { color: var(--warning-color); }
+.map-table th.is-over .map-col-count { color: var(--danger-color, #f85149); }
+```
+
+### JS
+
+```javascript
+// --- Information mapping engine (§ Information Mapping) --------------------
+(function () {
+  const MAP_LOCALE = {
+    view_schema: '{{map.view_schema}}', view_matrix: '{{map.view_matrix}}',
+    tier_first: '{{map.tier_first}}', tier_after: '{{map.tier_after}}',
+    items: '{{map.items}}', search: '{{map.search}}',
+    filter_all: '{{map.filter_all}}', filter_unassigned: '{{map.filter_unassigned}}',
+    filter_multiple: '{{map.filter_multiple}}', filter_changed: '{{map.filter_changed}}',
+    reset: '{{map.reset}}', reset_confirm: '{{map.reset_confirm}}',
+    copy: '{{map.copy}}', copy_confirm: '{{map.copy_confirm}}',
+    add_item: '{{map.add_item}}', add_item_prompt: '{{map.add_item_prompt}}',
+    add_item_duplicate: '{{map.add_item_duplicate}}', added_group: '{{map.added_group}}',
+    armed_item: '{{map.armed_item}}', armed_slot: '{{map.armed_slot}}',
+    summary_unassigned: '{{map.summary_unassigned}}', summary_violations: '{{map.summary_violations}}',
+    summary_ok: '{{map.summary_ok}}', slot_empty_min: '{{map.slot_empty_min}}',
+    slot_over_max: '{{map.slot_over_max}}', item_required: '{{map.item_required}}',
+    remove: '{{map.remove}}', slot_note: '{{map.slot_note}}', context: '{{map.context}}',
+    axis: '{{map.axis}}', tab_open: '{{map.tab_open}}',
+    frozen_missing: '{{map.frozen_missing}}', spec_error: '{{map.spec_error}}'
+  };
+  const fmt = (s, vars) => String(s).replace(/\{(\w+)\}/g, (_, k) => (vars && k in vars) ? vars[k] : '{' + k + '}');
+  const ID_RE = /^[a-z0-9_]+$/;
+  const MODELS = new WeakMap();      // section → model
+
+  // --- spec → model ----------------------------------------------------------
+  function normalizeSpec(raw) {
+    const err = msg => { throw new Error(msg); };
+    const items = (raw.items || []).map(it => ({ id: it.id, label: it.label || it.id, group: it.group || '', hint: it.hint || '', required: !!it.required, adhoc: false }));
+    const sources = [];
+    (raw.elements || []).forEach(el => sources.push({ kind: 'element', id: el.id, label: el.label || el.id, itemTargets: el.itemTargets || 'any',
+      targets: (el.parts || []).map(p => ({ key: el.id + '.' + p.id, id: p.id, label: p.label || p.id, tier: p.tier === 'after' ? 'after' : 'first',
+        row: Number.isFinite(p.row) ? p.row : null, accepts: p.accepts === 'one' ? 'one' : 'many', min: p.min || 0, max: p.max || 0, ordered: !!p.ordered })) }));
+    (raw.axes || []).forEach(ax => sources.push({ kind: 'axis', id: ax.id, label: ax.label || ax.id, itemTargets: ax.itemTargets || 'any',
+      targets: (ax.columns || []).map(c => ({ key: ax.id + '.' + c.id, id: c.id, label: c.label || c.id, tier: 'first', row: null,
+        accepts: c.accepts === 'one' ? 'one' : 'many', min: c.min || 0, max: c.max || 0, ordered: false })) }));
+    if (!sources.length) err('no elements/axes');
+    sources.forEach(s => { if (!s.targets.length) err('source without targets: ' + s.id); });
+    const contexts = raw.context && Array.isArray(raw.context.values) && raw.context.values.length
+      ? raw.context.values.map(v => ({ id: v.id, label: v.label || v.id })) : null;
+    const all = [...items.map(i => i.id), ...sources.map(s => s.id), ...sources.flatMap(s => s.targets.map(t => t.id)), ...(contexts || []).map(c => c.id)];
+    all.forEach(id => { if (typeof id !== 'string' || !ID_RE.test(id)) err('bad id: ' + id); });
+    const seen = new Set(); items.forEach(i => { if (seen.has(i.id)) err('duplicate item id: ' + i.id); seen.add(i.id); });
+    items.forEach(i => { if (/^u\d+$/.test(i.id)) err('reserved id: ' + i.id); });                 // `u{n}` belongs to ad-hoc items
+    const matrices = [];
+    sources.forEach(s => (contexts || [null]).forEach(c => matrices.push({ key: s.id + (c ? '@' + c.id : ''), src: s, ctx: c ? c.id : null, targets: s.targets })));
+    const targetKeys = new Set(sources.flatMap(s => s.targets.map(t => t.key)));
+    const itemIds = new Set(items.map(i => i.id));
+    (raw.proposal || []).forEach(p => { if (!itemIds.has(p[0]) || !targetKeys.has(p[1])) err('proposal references unknown id: ' + p.join(',')); });
+    const groups = [...new Set(items.map(i => i.group))];
+    return { items, groups, sources, contexts, matrices, targetKeys, proposal: raw.proposal || [], proposalOrder: raw.proposalOrder || {},
+             submitted: raw.submitted || null, slotNotes: !!raw.slotNotes, adhocItems: !!raw.adhocItems, hasElements: sources.some(s => s.kind === 'element') };
+  }
+
+  // --- state encoding (§ State model) ----------------------------------------
+  const encodeCells = pairs => pairs.length ? pairs.map(p => p[0] + '>' + p[1]).join(' ') : '-';
+  const decodeCells = str => String(str || '').trim() === '-' ? [] : String(str || '').split(/\s+/).filter(Boolean).map(t => t.split('>')).filter(p => p.length === 2);
+  function matrixOf(model, targetKey, ctx) { return model.matrices.find(m => m.ctx === (ctx || null) && m.targets.some(t => t.key === targetKey)); }
+  function sectionOf(sectionOrId) {
+    return typeof sectionOrId === 'string' ? document.querySelector('[data-mapping="' + sectionOrId + '"]') : sectionOrId;
+  }
+  function stateInput(section, m, kind, suffix) {
+    const id = 'map-' + m + '-' + kind + (suffix ? '-' + suffix : '');
+    let input = [...section.querySelectorAll('input.map-state')].find(i => i.id === id);
+    if (input) return input;
+    let holder = section.querySelector(':scope > div.map-states');
+    if (!holder) { holder = document.createElement('div'); holder.className = 'map-states'; section.appendChild(holder); }
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'map-state';
+    input.id = id;
+    input.tabIndex = -1;
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('aria-hidden', 'true');
+    holder.appendChild(input);
+    return input;
+  }
+  // Pairs of a matrix as the checkboxes should show them: decoded from the
+  // state input, unknown item / target ids dropped (a re-served round with a
+  // changed target set must not crash or resurrect cells).
+  function readCells(model, matrix, state) {
+    const keys = new Set(matrix.targets.map(t => t.key));
+    const ids = new Set(model.items.map(i => i.id));
+    const out = []; const seen = new Set();
+    decodeCells(state.value).forEach(p => {
+      const k = p[0] + '>' + p[1];
+      if (ids.has(p[0]) && keys.has(p[1]) && !seen.has(k)) { seen.add(k); out.push(p); }
+    });
+    return out;
+  }
+  function proposalPairs(model, matrix) {
+    const keys = new Set(matrix.targets.map(t => t.key));
+    return model.proposal.filter(p => (p[2] || null) === matrix.ctx && keys.has(p[1])).map(p => [p[0], p[1]]);
+  }
+  const orderKey = (matrix, target) => target.key + (matrix.ctx ? '@' + matrix.ctx : '');
+  const splitOrder = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+  // Order input = the checked items of that target in their existing order,
+  // newcomers appended. `silent` skips the events (initial render, restore).
+  function syncOrder(section, model, matrix, target, pairs, silent) {
+    const input = stateInput(section, model.id, 'order', orderKey(matrix, target));
+    const checked = pairs.filter(p => p[1] === target.key).map(p => p[0]);
+    const kept = splitOrder(input.value).filter(id => checked.includes(id));
+    const next = kept.concat(checked.filter(id => !kept.includes(id))).join(',');
+    if (next === input.value) return;
+    if (silent) input.value = next; else writeState(input, next);
+  }
+
+  // --- the single write path -------------------------------------------------
+  function setCell(sectionOrId, itemId, targetKey, ctx, on) {
+    const section = sectionOf(sectionOrId);
+    const model = section && MODELS.get(section); if (!model) return false;
+    if (!writeCell(section, model, itemId, targetKey, ctx, on)) return false;
+    refreshAll(section, model);
+    return true;
+  }
+  // The write without the refresh (bulk callers refresh once); returns the
+  // matrix that changed, or null when nothing was written.
+  function writeCell(section, model, itemId, targetKey, ctx, on) {
+    if (isFrozen(section)) return null;
+    const matrix = matrixOf(model, targetKey, ctx); if (!matrix) return null;
+    const target = matrix.targets.find(t => t.key === targetKey);
+    const state = stateInput(section, model.id, 'cells', matrix.key);
+    let pairs = decodeCells(state.value);
+    const has = pairs.some(p => p[0] === itemId && p[1] === targetKey);
+    if (on === has) return null;
+    if (on) {
+      if (target.accepts === 'one') pairs = pairs.filter(p => p[1] !== targetKey);                       // slot swap
+      if (matrix.src.itemTargets === 'one') pairs = pairs.filter(p => p[0] !== itemId);                  // row swap
+      pairs.push([itemId, targetKey]);
+    } else pairs = pairs.filter(p => !(p[0] === itemId && p[1] === targetKey));
+    writeState(state, encodeCells(pairs));
+    if (target.ordered) syncOrder(section, model, matrix, target, pairs);
+    return matrix;
+  }
+  // After any write: EVERY matrix is re-projected, not just the one written —
+  // the Σ flag of a `required` item reads assignedAnywhere(), so unchecking
+  // its last cell in one context must flag its row in the others at once.
+  // ≤ 4 matrices × ≤ 60 items × ≤ 20 targets (§ Authoring rule): cheap.
+  function refreshAll(section, model) {
+    model.matrices.forEach(mx => projectMatrix(section, model, mx));                                   // checkboxes + counts + markers
+    refreshSchema(section, model);                                                                      // slot chips + palette badges
+    updateSummary(section, model);
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();
+  }
+  function writeState(input, value) {
+    input.value = value;
+    input.dataset.touched = 'true';
+    if (typeof _userInteracted !== 'undefined') _userInteracted = true;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // --- validation (never blocks, always flags) --------------------------------
+  function assignedAnywhere(section, model) {
+    const set = new Set();
+    model.matrices.forEach(mx => readCells(model, mx, stateInput(section, model.id, 'cells', mx.key)).forEach(p => set.add(p[0])));
+    return set;
+  }
+  // The violations of ONE matrix (the tab counts); `required` is mapping-wide
+  // and lives in violationsOf only.
+  function matrixViolations(section, model, mx) {
+    const out = [];
+    const withCtx = v => { if (mx.ctx) v.ctx = mx.ctx; return v; };
+    const pairs = readCells(model, mx, stateInput(section, model.id, 'cells', mx.key));
+    mx.targets.forEach(t => {
+      const have = pairs.filter(p => p[1] === t.key).length;
+      if (t.accepts === 'one' && have > 1) out.push(withCtx({ target: t.key, kind: 'one', have, want: 1 }));
+      if (t.min && have < t.min) out.push(withCtx({ target: t.key, kind: 'min', have, want: t.min }));
+      if (t.max && have > t.max) out.push(withCtx({ target: t.key, kind: 'max', have, want: t.max }));
+    });
+    if (mx.src.itemTargets === 'min1') {
+      model.items.forEach(it => {
+        if (!pairs.some(p => p[0] === it.id)) out.push(withCtx({ item: it.id, kind: 'min1', source: mx.src.id }));
+      });
+    }
+    return out;
+  }
+  function violationsOf(section, model) {
+    const out = model.matrices.flatMap(mx => matrixViolations(section, model, mx));
+    const anywhere = assignedAnywhere(section, model);
+    model.items.forEach(it => { if (it.required && !anywhere.has(it.id)) out.push({ item: it.id, kind: 'required' }); });
+    return out;
+  }
+  function mappingProgress(sectionOrId) {
+    const section = sectionOf(sectionOrId);
+    const model = section && MODELS.get(section);
+    if (!model) return { assigned: 0, total: 0, violations: 0 };
+    return { assigned: assignedAnywhere(section, model).size, total: model.items.length, violations: violationsOf(section, model).length };
+  }
+
+  // --- matrix view (§ Matrix view) -------------------------------------------
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+  // Column order: spec order within a tier, first tier before after tier, so
+  // the tier band spans contiguous columns.
+  const orderedTargets = matrix => matrix.targets.filter(t => t.tier === 'first').concat(matrix.targets.filter(t => t.tier === 'after'));
+  function contextLabel(model, ctx) {
+    const c = ctx && (model.contexts || []).find(x => x.id === ctx);
+    return c ? c.label : '';
+  }
+  const ADHOC_GROUP = '__adhoc';
+  const groupLabel = group => group === ADHOC_GROUP ? MAP_LOCALE.added_group : group;
+  const isFrozen = section => section.dataset.mapFrozen === 'true';
+  // Shared by the matrix's group rows and the palette's groups.
+  function groupToggle(group, count) {
+    const btn = el('button', 'map-group-toggle');
+    btn.type = 'button';
+    btn.setAttribute('aria-expanded', 'true');
+    btn.appendChild(el('span', 'map-group-glyph', '▾'));
+    btn.appendChild(document.createTextNode(' ' + groupLabel(group) + ' '));
+    btn.appendChild(el('span', 'map-group-count', String(count)));
+    return btn;
+  }
+  function slotNoteButton() {
+    const note = el('button', 'map-slot-note-btn', '✎');
+    note.type = 'button';
+    note.title = MAP_LOCALE.slot_note;
+    note.setAttribute('aria-label', MAP_LOCALE.slot_note);
+    return note;
+  }
+  function renderMatrix(section, model, matrix) {
+    const targets = orderedTargets(matrix);
+    const nFirst = targets.filter(t => t.tier === 'first').length;
+    const nAfter = targets.length - nFirst;
+    const bothTiers = nFirst > 0 && nAfter > 0;
+    const headRows = bothTiers ? 3 : 2;
+
+    const wrap = el('div', 'map-matrix');
+    wrap.dataset.mapMatrix = matrix.key;
+    const scroll = el('div', 'map-scroll');
+    const table = el('table', 'map-table');
+    table.setAttribute('role', 'grid');
+    table.setAttribute('aria-label', matrix.src.label + (matrix.ctx ? ' · ' + contextLabel(model, matrix.ctx) : ''));
+    if (targets.length > 18) table.dataset.dense = 'true';
+    table.dataset.headRows = String(headRows);                                                      // sticky offsets + scroll padding (CSS)
+
+    const thead = el('thead');
+    const srcRow = el('tr', 'map-head-src');
+    const corner = el('th', 'map-corner'); corner.rowSpan = headRows; srcRow.appendChild(corner);
+    const srcTh = el('th', 'map-src', matrix.src.label); srcTh.colSpan = targets.length; srcRow.appendChild(srcTh);
+    const sumHead = el('th', 'map-sum-head', 'Σ'); sumHead.rowSpan = headRows; srcRow.appendChild(sumHead);
+    thead.appendChild(srcRow);
+    if (bothTiers) {
+      const tierRow = el('tr', 'map-head-tier');
+      const first = el('th', null, MAP_LOCALE.tier_first); first.colSpan = nFirst; first.dataset.tier = 'first'; tierRow.appendChild(first);
+      const after = el('th', null, MAP_LOCALE.tier_after); after.colSpan = nAfter; after.dataset.tier = 'after'; tierRow.appendChild(after);
+      thead.appendChild(tierRow);
+    }
+    const targetRow = el('tr', 'map-head-targets');
+    targets.forEach(t => {
+      const th = el('th');
+      th.dataset.mapTarget = t.key;
+      th.dataset.colTier = t.tier;
+      if (t.accepts === 'one') th.dataset.accepts = 'one';
+      th.appendChild(el('span', 'map-col-label', t.label));
+      th.appendChild(document.createTextNode(' '));
+      th.appendChild(el('span', 'map-col-count', ''));
+      if (model.slotNotes) th.appendChild(slotNoteButton());
+      targetRow.appendChild(th);
+    });
+    thead.appendChild(targetRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    const proposed = new Set(proposalPairs(model, matrix).map(p => p[0] + '>' + p[1]));
+    model.groups.forEach(group => {
+      const members = model.items.filter(i => i.group === group);
+      if (group) tbody.appendChild(groupRow(group, members.length, targets.length));
+      members.forEach(item => tbody.appendChild(itemRow(section, matrix, targets, item, proposed)));
+    });
+    table.appendChild(tbody);
+    const firstBox = table.querySelector('input[data-map-cell]');
+    if (firstBox) firstBox.tabIndex = 0;                 // roving tabindex entry point
+    scroll.appendChild(table);
+    wrap.appendChild(scroll);
+    return wrap;
+  }
+  function groupRow(group, count, nTargets) {
+    const gr = el('tr', 'map-group-row');
+    gr.dataset.group = group;
+    const td = el('td'); td.colSpan = nTargets + 2;
+    td.appendChild(groupToggle(group, count));
+    gr.appendChild(td);
+    return gr;
+  }
+  function itemRow(section, matrix, targets, item, proposed) {
+    const tr = el('tr', 'map-item-row');
+    tr.dataset.item = item.id;
+    tr.dataset.group = item.group;
+    const th = el('th', 'map-item-label');
+    th.setAttribute('scope', 'row');
+    th.appendChild(el('span', null, item.label));
+    if (item.hint) th.title = item.hint;
+    tr.appendChild(th);
+    targets.forEach(t => {
+      const td = el('td', 'map-cell-td');
+      if (t.accepts === 'one') td.dataset.accepts = 'one';
+      const label = el('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.mapCell = item.id + '>' + t.key;
+      cb.dataset.proposed = proposed.has(item.id + '>' + t.key) ? '1' : '0';
+      cb.tabIndex = -1;
+      cb.disabled = isFrozen(section);                                                              // a checkbox cannot be readonly
+      cb.setAttribute('aria-label', item.label + ' → ' + t.label);
+      label.appendChild(cb);
+      label.appendChild(el('span', 'map-cell'));
+      td.appendChild(label);
+      tr.appendChild(td);
+    });
+    tr.appendChild(el('td', 'map-sum', '0'));
+    return tr;
+  }
+  function matrixEl(section, key) {
+    return [...section.querySelectorAll('[data-map-matrix]')].find(d => d.dataset.mapMatrix === key) || null;
+  }
+  // Checkboxes, per-column counts, per-row Σ and change markers from the state
+  // input — the only direction: the state string is read, never derived from
+  // the boxes.
+  function projectMatrix(section, model, matrix) {
+    const wrap = matrixEl(section, matrix.key);
+    if (!wrap) return;
+    const pairs = readCells(model, matrix, stateInput(section, model.id, 'cells', matrix.key));
+    const on = new Set(pairs.map(p => p[0] + '>' + p[1]));
+    const anywhere = assignedAnywhere(section, model);
+    wrap.querySelectorAll('input[data-map-cell]').forEach(cb => {
+      cb.checked = on.has(cb.dataset.mapCell);
+      cb.closest('td').classList.toggle('is-changed', cb.checked !== (cb.dataset.proposed === '1'));
+    });
+    wrap.querySelectorAll('th[data-map-target]').forEach(th => {
+      const t = matrix.targets.find(x => x.key === th.dataset.mapTarget);
+      const n = pairs.filter(p => p[1] === t.key).length;
+      const count = th.querySelector('.map-col-count');
+      count.textContent = t.accepts === 'one' ? n + '/1' : String(n);
+      th.classList.toggle('is-under', !!t.min && n < t.min);
+      th.classList.toggle('is-over', (!!t.max && n > t.max) || (t.accepts === 'one' && n > 1));
+      th.title = th.classList.contains('is-under') ? fmt(MAP_LOCALE.slot_empty_min, { n: t.min })
+               : th.classList.contains('is-over') ? fmt(MAP_LOCALE.slot_over_max, { n: t.max || 1 }) : '';
+      markNoteButton(section, model, th);
+    });
+    const min1 = matrix.src.itemTargets === 'min1';
+    wrap.querySelectorAll('tr.map-item-row').forEach(tr => {
+      const item = model.items.find(i => i.id === tr.dataset.item);
+      const n = pairs.filter(p => p[0] === tr.dataset.item).length;
+      const sum = tr.querySelector('.map-sum');
+      sum.textContent = String(n);
+      const flagged = (item.required && !anywhere.has(item.id)) || (min1 && n === 0);
+      sum.classList.toggle('is-under', flagged);
+      sum.title = flagged ? MAP_LOCALE.item_required : '';
+    });
+  }
+  function updateSummary(section, model) {
+    const line = section.querySelector('.map-root > .map-summary');
+    if (!line) return;
+    const p = mappingProgress(section);
+    const parts = [];
+    if (p.total - p.assigned > 0) parts.push(fmt(MAP_LOCALE.summary_unassigned, { n: p.total - p.assigned }));
+    if (p.violations > 0) parts.push(fmt(MAP_LOCALE.summary_violations, { n: p.violations }));
+    line.textContent = parts.length ? parts.join(' · ') : MAP_LOCALE.summary_ok;
+    line.dataset.ok = String(!parts.length);
+    section.querySelectorAll('.map-tab').forEach(tab => {
+      const mx = model.matrices.find(x => x.key === tab.dataset.mapTab);
+      const n = mx ? matrixViolations(section, model, mx).length : 0;
+      tab.querySelector('.map-tab-count').textContent = n ? fmt(MAP_LOCALE.tab_open, { n }) : '';
+    });
+  }
+
+  // --- keyboard: arrows move, Home/End jump; Space is the native toggle -------
+  function moveFocus(cb, dx, dy, edge) {
+    const row = cb.closest('tr');
+    const table = cb.closest('table');
+    const rows = [...table.querySelectorAll('tr.map-item-row:not([hidden])')];
+    const boxes = r => [...r.querySelectorAll('input[data-map-cell]')];
+    const col = boxes(row).indexOf(cb);
+    let r = rows.indexOf(row) + dy;
+    let c = col + dx;
+    if (edge === 'home') c = 0;
+    if (edge === 'end') c = boxes(row).length - 1;
+    r = Math.max(0, Math.min(rows.length - 1, r));
+    c = Math.max(0, Math.min(boxes(rows[r]).length - 1, c));
+    const next = boxes(rows[r])[c];
+    if (!next || next === cb) return;
+    setEntryPoint(table, next);
+    next.focus();
+    if (typeof next.scrollIntoView === 'function') next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+  // Exactly one box per table carries tabindex 0 — reset all before promoting.
+  function setEntryPoint(table, box) {
+    table.querySelectorAll('input[data-map-cell]').forEach(b => { b.tabIndex = -1; });
+    if (box) box.tabIndex = 0;
+  }
+  const KEYS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  // --- view state: `mode=schema|matrix;tab=<matrixKey>` in map-{m}-ui ----------
+  const encodeUi = ui => Object.keys(ui).filter(k => ui[k]).map(k => k + '=' + ui[k]).join(';');
+  const uiInput = (section, model) => stateInput(section, model.id, 'ui');
+  // A frozen section keeps its view state in memory (`model.ui`): the readonly
+  // ui input is never written there.
+  function readUi(section, model) {
+    const ui = isFrozen(section) && model.ui ? model.ui : parseUi(uiInput(section, model).value);
+    return Object.assign({}, ui, { mode: model.hasElements && ui.mode !== 'matrix' ? 'schema' : 'matrix',
+                                   tab: model.matrices.some(mx => mx.key === ui.tab) ? ui.tab : model.matrices[0].key });
+  }
+  // What is on screen: an axis has no schematic, so its tab shows the matrix
+  // whatever `mode=` says (the stored mode survives for the element tabs).
+  function visibleMode(model, ui) {
+    const active = model.matrices.find(mx => mx.key === ui.tab);
+    return active.src.kind === 'element' ? ui.mode : 'matrix';
+  }
+  // The one write path for the ui input: merge, never drop other keys.
+  function writeUi(section, model, patch) {
+    const ui = Object.assign(readUi(section, model), patch);
+    if (isFrozen(section)) model.ui = ui;
+    else writeState(uiInput(section, model), encodeUi(ui));
+    applyView(section, model);
+  }
+  function activateTab(section, key) {
+    const model = MODELS.get(section);
+    if (!model || !model.matrices.some(mx => mx.key === key)) return;
+    writeUi(section, model, { tab: key });
+  }
+  function renderTabs(model) {
+    const strip = el('div', 'map-tabs');
+    const multiSrc = model.sources.length > 1;
+    // Group labels: "Context" once before the element tabs (only when a context
+    // exists), "Axis" once before the first axis tab. Elements without a
+    // context get no label.
+    let contextLabelled = !model.contexts, axisLabelled = false;
+    model.matrices.forEach(mx => {
+      if (mx.src.kind === 'element' && !contextLabelled) { strip.appendChild(el('span', 'map-tabs-label', MAP_LOCALE.context)); contextLabelled = true; }
+      if (mx.src.kind !== 'element' && !axisLabelled) { strip.appendChild(el('span', 'map-tabs-label', MAP_LOCALE.axis)); axisLabelled = true; }
+      const btn = el('button', 'map-tab');
+      btn.type = 'button';
+      btn.dataset.mapTab = mx.key;
+      btn.setAttribute('aria-pressed', 'false');
+      const parts = [];
+      if (multiSrc) parts.push(mx.src.label);
+      if (mx.ctx) parts.push(contextLabel(model, mx.ctx));
+      btn.appendChild(el('span', 'map-tab-label', parts.join(' · ') || mx.key));
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', 'map-tab-count', ''));
+      strip.appendChild(btn);
+    });
+    return strip;
+  }
+  function renderTools(model) {
+    const tools = el('div', 'map-tools');
+    const ctxs = model.contexts || [];
+    ctxs.forEach(from => ctxs.forEach(to => {
+      if (from === to) return;
+      const btn = el('button', 'map-copy', '⧉ ' + fmt(MAP_LOCALE.copy, { from: from.label, to: to.label }));
+      btn.type = 'button';
+      btn.dataset.from = from.id;
+      btn.dataset.to = to.id;
+      tools.appendChild(btn);
+    }));
+    const reset = el('button', 'map-reset', '↺ ' + MAP_LOCALE.reset);
+    reset.type = 'button';
+    tools.appendChild(reset);
+    if (model.adhocItems) {
+      const add = el('button', 'map-add-item', '+ ' + MAP_LOCALE.add_item);
+      add.type = 'button';
+      tools.appendChild(add);
+    }
+    const status = el('div', 'map-status map-tools-status');
+    status.setAttribute('role', 'status');
+    tools.appendChild(status);
+    return tools;
+  }
+  function renderViewToggle() {
+    const wrap = el('div', 'map-view-toggle');
+    wrap.setAttribute('role', 'group');
+    [['schema', MAP_LOCALE.view_schema], ['matrix', MAP_LOCALE.view_matrix]].forEach(([mode, label]) => {
+      const btn = el('button', 'map-view-btn', label);
+      btn.type = 'button';
+      btn.dataset.mapMode = mode;
+      btn.setAttribute('aria-pressed', 'false');
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+  // The schematic of the active tab's context or the active matrix is on
+  // screen; everything else stays in the DOM, hidden. On an axis tab the
+  // view toggle is marked aria-disabled (no schematic to switch to).
+  function applyView(section, model) {
+    const ui = readUi(section, model);
+    const active = model.matrices.find(mx => mx.key === ui.tab);
+    const mode = visibleMode(model, ui);
+    const axis = active.src.kind !== 'element';
+    section.querySelectorAll('.map-view-btn').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.mapMode === mode));
+      if (axis) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
+    });
+    section.querySelectorAll('.map-tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mapTab === ui.tab)));
+    section.querySelectorAll('.map-schema').forEach(s => { s.hidden = !(mode === 'schema' && s.dataset.mapCtx === (active.ctx || '')); });
+    section.querySelectorAll('[data-map-matrix]').forEach(w => { w.hidden = !(mode === 'matrix' && w.dataset.mapMatrix === ui.tab); });
+    section.querySelectorAll('.map-row-filters').forEach(f => { f.hidden = mode !== 'matrix'; });    // the palette filters the schematic
+  }
+
+  // --- schematic view (§ Schematic view) --------------------------------------
+  function renderSchema(section, model, ctx) {
+    const schema = el('div', 'map-schema');
+    schema.dataset.mapCtx = ctx || '';
+    if (ctx) schema.setAttribute('aria-label', contextLabel(model, ctx));
+    model.sources.filter(s => s.kind === 'element').forEach(src => {
+      const element = el('div', 'map-element');
+      element.dataset.mapElement = src.id;
+      element.appendChild(el('div', 'map-element-caption', src.label));
+      const tiers = el('div', 'map-tiers');
+      ['first', 'after'].forEach(tier => {
+        const targets = src.targets.filter(t => t.tier === tier);
+        if (!targets.length) return;
+        const col = el('div', 'map-tier');
+        col.dataset.tier = tier;
+        col.appendChild(el('div', 'map-tier-label', tier === 'first' ? MAP_LOCALE.tier_first : MAP_LOCALE.tier_after));
+        rowsOf(targets).forEach(([row, members]) => {
+          const r = el('div', 'map-row');
+          r.dataset.row = row;
+          members.forEach(t => r.appendChild(renderSlot(model, t)));
+          col.appendChild(r);
+        });
+        tiers.appendChild(col);
+      });
+      element.appendChild(tiers);
+      schema.appendChild(element);
+    });
+    schema.appendChild(renderPalette(model));
+    const status = el('div', 'map-status');
+    status.setAttribute('role', 'status');
+    schema.appendChild(status);
+    return schema;
+  }
+  // Parts sharing a `row` sit side by side, rows in numeric order; a part
+  // without one gets its own row after the numbered ones.
+  function rowsOf(targets) {
+    const rows = new Map();
+    targets.forEach(t => {
+      const key = t.row === null ? t.id : String(t.row);
+      if (!rows.has(key)) rows.set(key, []);
+      rows.get(key).push(t);
+    });
+    const rank = ([, members]) => members[0].row === null ? Number.MAX_SAFE_INTEGER : members[0].row;
+    return [...rows.entries()].sort((a, b) => rank(a) - rank(b));
+  }
+  function renderSlot(model, t) {
+    const slot = el('div', 'map-slot');
+    slot.dataset.mapTarget = t.key;
+    slot.dataset.accepts = t.accepts;
+    const label = el('button', 'map-slot-label');
+    label.type = 'button';
+    label.appendChild(el('span', null, t.label));
+    label.appendChild(document.createTextNode(' '));
+    label.appendChild(el('span', 'map-slot-count', ''));
+    slot.appendChild(label);
+    slot.appendChild(el('div', 'map-slot-chips'));
+    if (model.slotNotes) slot.appendChild(slotNoteButton());
+    return slot;
+  }
+  // One note per target (not per context), revealed by the ✎ on a slot or a
+  // column header. Plain `data-comment` textareas — no `data-attachable`.
+  function renderSlotNotes(section, model) {
+    const wrap = el('div', 'map-slot-notes');
+    model.sources.flatMap(s => s.targets).forEach(t => {
+      const label = el('label', 'map-slot-note');
+      label.appendChild(el('span', 'map-slot-note-label', t.label));
+      const ta = document.createElement('textarea');
+      ta.dataset.comment = 'map-' + model.id + '-note-' + t.key;
+      ta.rows = 2;
+      ta.hidden = true;
+      ta.readOnly = isFrozen(section);
+      label.appendChild(ta);
+      wrap.appendChild(label);
+    });
+    return wrap;
+  }
+  function slotNoteArea(section, model, key) {
+    return [...section.querySelectorAll('.map-slot-notes textarea')].find(ta => ta.dataset.comment === 'map-' + model.id + '-note-' + key) || null;
+  }
+  function toggleSlotNote(section, model, key) {
+    const ta = slotNoteArea(section, model, key);
+    if (!ta) return;
+    ta.hidden = !ta.hidden;
+    if (!ta.hidden && !isFrozen(section)) ta.focus();
+  }
+  // The ✎ of a slot or a column header carries `has-note` while its target's
+  // note has text — set on every projection and on each keystroke in the note.
+  function markNoteButton(section, model, holder) {
+    const btn = holder.querySelector('.map-slot-note-btn');
+    if (!btn) return;
+    const ta = slotNoteArea(section, model, holder.dataset.mapTarget);
+    btn.classList.toggle('has-note', !!ta && ta.value.trim() !== '');
+  }
+  function markNoteHolders(section, model, key) {
+    section.querySelectorAll('.map-slot[data-map-target], th[data-map-target]').forEach(h => { if (h.dataset.mapTarget === key) markNoteButton(section, model, h); });
+  }
+  function renderPalette(model) {
+    const pal = el('div', 'map-palette');
+    const head = el('div', 'map-palette-head');
+    head.appendChild(el('span', 'map-palette-title', MAP_LOCALE.items + ' (' + model.items.length + ')'));
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'map-search';
+    search.placeholder = MAP_LOCALE.search;
+    search.setAttribute('aria-label', MAP_LOCALE.search);
+    head.appendChild(search);
+    const filters = el('div', 'map-filters');
+    [['all', MAP_LOCALE.filter_all], ['unassigned', MAP_LOCALE.filter_unassigned],
+     ['multiple', MAP_LOCALE.filter_multiple], ['changed', MAP_LOCALE.filter_changed]].forEach(([f, label]) => {
+      const btn = el('button', 'map-filter');
+      btn.type = 'button';
+      btn.dataset.filter = f;
+      btn.setAttribute('aria-pressed', String(f === 'all'));
+      btn.appendChild(el('span', null, label));
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', 'map-filter-count', ''));
+      filters.appendChild(btn);
+    });
+    head.appendChild(filters);
+    const collapse = el('button', 'map-palette-collapse', '▴');
+    collapse.type = 'button';
+    collapse.setAttribute('aria-expanded', 'true');
+    collapse.setAttribute('aria-label', MAP_LOCALE.items);
+    head.appendChild(collapse);
+    pal.appendChild(head);
+    const groups = el('div', 'map-groups');
+    model.groups.forEach(group => groups.appendChild(paletteGroup(model, group)));
+    pal.appendChild(groups);
+    return pal;
+  }
+  function paletteGroup(model, group) {
+    const members = model.items.filter(i => i.group === group);
+    const g = el('div', 'map-group');
+    g.dataset.group = group;
+    if (group) g.appendChild(groupToggle(group, members.length));
+    const chips = el('div', 'map-group-chips');
+    members.forEach(item => chips.appendChild(itemChip(item)));
+    g.appendChild(chips);
+    return g;
+  }
+  function itemChip(item) {
+    const chip = el('button', 'map-item-chip');
+    chip.type = 'button';
+    chip.dataset.item = item.id;
+    chip.setAttribute('aria-pressed', 'false');
+    chip.appendChild(el('span', 'map-item-label', item.label));
+    chip.appendChild(el('span', 'map-item-count', ''));
+    return chip;
+  }
+  // Slot chips, counts and palette badges from the state strings plus the
+  // matrix's `data-proposed` stamps; the armed cue and the view last.
+  function refreshSchema(section, model) {
+    const stats = itemStats(section, model);                                                        // after projectMatrix: reads the boxes
+    if (model.hasElements) {
+      section.querySelectorAll('.map-schema').forEach(schema => {
+        const ctx = schema.dataset.mapCtx || null;
+        schema.querySelectorAll('.map-slot').forEach(slot => refreshSlot(section, model, slot, ctx));
+        refreshPalette(model, schema, stats);
+        refreshArmed(model, schema);
+      });
+    }
+    applyRowFilter(section, model, stats);                                                          // matrix rows, every tab
+    applyView(section, model);
+  }
+  function refreshSlot(section, model, slot, ctx) {
+    const key = slot.dataset.mapTarget;
+    const matrix = matrixOf(model, key, ctx);
+    if (!matrix) return;
+    const target = matrix.targets.find(t => t.key === key);
+    const pairs = readCells(model, matrix, stateInput(section, model.id, 'cells', matrix.key));
+    let items = pairs.filter(p => p[1] === key).map(p => p[0]);
+    if (target.ordered) {
+      const ord = splitOrder(stateInput(section, model.id, 'order', orderKey(matrix, target)).value).filter(id => items.includes(id));
+      items = ord.concat(items.filter(id => !ord.includes(id)));
+    }
+    const proposed = new Set();
+    const wrap = matrixEl(section, matrix.key);
+    if (wrap) wrap.querySelectorAll('input[data-map-cell][data-proposed="1"]').forEach(cb => {
+      const p = cb.dataset.mapCell.split('>');
+      if (p[1] === key) proposed.add(p[0]);
+    });
+    const chips = slot.querySelector('.map-slot-chips');
+    chips.textContent = '';
+    const labelOf = id => (model.items.find(i => i.id === id) || { label: id }).label;
+    items.forEach(id => {
+      const chip = el('button', 'map-chip');
+      chip.type = 'button';
+      chip.dataset.item = id;
+      chip.classList.add(proposed.has(id) ? 'is-proposed' : 'is-changed');
+      chip.appendChild(el('span', 'map-chip-label', labelOf(id)));
+      if (!isFrozen(section)) {
+        const x = el('span', 'map-chip-remove', '×');
+        x.setAttribute('aria-label', MAP_LOCALE.remove);
+        x.title = MAP_LOCALE.remove;
+        chip.appendChild(x);
+      }
+      chips.appendChild(chip);
+    });
+    proposed.forEach(id => {                                                                         // removed proposal → ghost
+      if (items.includes(id)) return;
+      const ghost = el('span', 'map-chip is-removed');
+      ghost.dataset.item = id;
+      ghost.appendChild(el('span', 'map-chip-label', labelOf(id)));
+      chips.appendChild(ghost);
+    });
+    const n = items.length;
+    const count = slot.querySelector('.map-slot-count');
+    count.textContent = target.accepts === 'one' ? n + '/1' : String(n);
+    const under = !!target.min && n < target.min;
+    const over = (!!target.max && n > target.max) || (target.accepts === 'one' && n > 1);
+    slot.classList.toggle('is-under', under);
+    slot.classList.toggle('is-over', over);
+    count.title = under ? fmt(MAP_LOCALE.slot_empty_min, { n: target.min }) : over ? fmt(MAP_LOCALE.slot_over_max, { n: target.max || 1 }) : '';
+    markNoteButton(section, model, slot);
+  }
+  // Per item across ALL matrices: where it sits and whether any cell differs
+  // from the proposal.
+  function itemStats(section, model) {
+    const stats = new Map(model.items.map(i => [i.id, { places: [], changed: false }]));
+    model.matrices.forEach(mx => {
+      readCells(model, mx, stateInput(section, model.id, 'cells', mx.key)).forEach(p => {
+        const t = mx.targets.find(x => x.key === p[1]);
+        stats.get(p[0]).places.push(t.label + (mx.ctx ? ' (' + contextLabel(model, mx.ctx) + ')' : ''));
+      });
+      const wrap = matrixEl(section, mx.key);
+      if (wrap) wrap.querySelectorAll('input[data-map-cell]').forEach(cb => {
+        if (cb.checked !== (cb.dataset.proposed === '1')) stats.get(cb.dataset.mapCell.split('>')[0]).changed = true;
+      });
+    });
+    return stats;
+  }
+  // One predicate for the palette's filter pills AND the matrix row filter:
+  // unassigned = nowhere across ALL matrices, changed = any cell differs from
+  // the proposal (both straight from itemStats()).
+  const filterPass = (filter, s) => filter === 'unassigned' ? s.places.length === 0
+    : filter === 'multiple' ? s.places.length >= 2
+    : filter === 'changed' ? s.changed : true;
+  function filterCounts(model, stats) {
+    const counts = { all: 0, unassigned: 0, multiple: 0, changed: 0 };
+    model.items.forEach(item => {
+      const s = stats.get(item.id);
+      counts.all++;
+      if (filterPass('unassigned', s)) counts.unassigned++;
+      if (filterPass('multiple', s)) counts.multiple++;
+      if (filterPass('changed', s)) counts.changed++;
+    });
+    return counts;
+  }
+  function refreshPalette(model, schema, stats) {
+    const active = schema.querySelector('.map-filter[aria-pressed="true"]');
+    const filter = active ? active.dataset.filter : 'all';
+    const q = schema.querySelector('.map-search').value.trim().toLowerCase();
+    const counts = filterCounts(model, stats);
+    schema.querySelectorAll('.map-item-chip').forEach(chip => {
+      const item = model.items.find(i => i.id === chip.dataset.item);
+      const s = stats.get(item.id);
+      const n = s.places.length;
+      chip.querySelector('.map-item-count').textContent = n ? n + '×' : '○';
+      chip.title = s.places.join(', ');
+      chip.classList.toggle('is-changed', s.changed);
+      chip.classList.toggle('is-unassigned', n === 0);
+      const hit = !q || (item.label + ' ' + groupLabel(item.group)).toLowerCase().includes(q);
+      chip.hidden = !(filterPass(filter, s) && hit);
+    });
+    schema.querySelectorAll('.map-filter').forEach(b => { b.querySelector('.map-filter-count').textContent = String(counts[b.dataset.filter]); });
+    schema.querySelectorAll('.map-group').forEach(g => { g.hidden = ![...g.querySelectorAll('.map-item-chip')].some(c => !c.hidden); });
+    schema.querySelector('.map-palette-title').textContent = MAP_LOCALE.items + ' (' + model.items.length + ')';
+  }
+  // Matrix row filter (spec § 7 "Rows: All / Unassigned / Changed") — the
+  // toolbar pills, one set per mapping, in-memory (`model.rowFilter`), never
+  // persisted. Rows hide when they fail the filter OR their group is
+  // collapsed; a group row hides when none of its members pass. Applied to
+  // EVERY matrix, not just the visible tab, so switching tabs keeps the view.
+  function renderRowFilters() {
+    const wrap = el('div', 'map-row-filters');
+    wrap.setAttribute('role', 'group');
+    [['all', MAP_LOCALE.filter_all], ['unassigned', MAP_LOCALE.filter_unassigned], ['changed', MAP_LOCALE.filter_changed]].forEach(([f, label]) => {
+      const btn = el('button', 'map-row-filter');
+      btn.type = 'button';
+      btn.dataset.filter = f;
+      btn.setAttribute('aria-pressed', String(f === 'all'));
+      btn.appendChild(el('span', null, label));
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', 'map-filter-count', ''));
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+  function applyRowFilter(section, model, stats) {
+    const filter = model.rowFilter || 'all';
+    const counts = filterCounts(model, stats);
+    section.querySelectorAll('.map-row-filter').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.filter === filter));
+      b.querySelector('.map-filter-count').textContent = String(counts[b.dataset.filter]);
+    });
+    section.querySelectorAll('[data-map-matrix] table').forEach(table => {
+      const collapsed = new Set([...table.querySelectorAll('tr.map-group-row')]
+        .filter(gr => gr.querySelector('.map-group-toggle').getAttribute('aria-expanded') !== 'true')
+        .map(gr => gr.dataset.group));
+      const passing = new Set();
+      table.querySelectorAll('tr.map-item-row').forEach(tr => {
+        const s = stats.get(tr.dataset.item);
+        const pass = !!s && filterPass(filter, s);
+        if (pass) passing.add(tr.dataset.group);
+        tr.hidden = !pass || collapsed.has(tr.dataset.group);
+      });
+      table.querySelectorAll('tr.map-group-row').forEach(gr => { gr.hidden = !passing.has(gr.dataset.group); });
+      // The keyboard entry point must sit on a visible row.
+      const entry = table.querySelector('input[data-map-cell][tabindex="0"]');
+      if (!entry || entry.closest('tr').hidden) setEntryPoint(table, table.querySelector('tr.map-item-row:not([hidden]) input[data-map-cell]'));
+    });
+  }
+
+  // --- arm, then tap: one in-memory `armed` per mapping ------------------------
+  function refreshArmed(model, schema) {
+    const a = model.armed || null;
+    const ctx = schema.dataset.mapCtx || null;
+    schema.querySelectorAll('.map-item-chip').forEach(c => c.setAttribute('aria-pressed', String(!!a && a.kind === 'item' && a.id === c.dataset.item)));
+    schema.querySelectorAll('.map-slot').forEach(s => s.classList.toggle('is-armed', !!a && a.kind === 'slot' && a.id === s.dataset.mapTarget && a.ctx === ctx));
+    schema.dataset.armed = a ? a.kind : '';
+    let text = '';
+    if (a && a.kind === 'item') text = fmt(MAP_LOCALE.armed_item, { label: (model.items.find(i => i.id === a.id) || { label: a.id }).label });
+    if (a && a.kind === 'slot') text = fmt(MAP_LOCALE.armed_slot, { label: (model.sources.flatMap(s => s.targets).find(t => t.key === a.id) || { label: a.id }).label });
+    schema.querySelector('.map-status').textContent = text;
+  }
+  function setArmed(section, model, armed) {
+    model.armed = armed;
+    section.querySelectorAll('.map-schema').forEach(schema => refreshArmed(model, schema));
+  }
+  function tapItem(section, model, id) {
+    if (isFrozen(section)) return;
+    const a = model.armed;
+    if (a && a.kind === 'slot') { toggleCell(section, model, id, a.id, a.ctx); return; }
+    setArmed(section, model, a && a.id === id ? null : { kind: 'item', id });
+  }
+  function tapSlot(section, model, key, ctx) {
+    if (isFrozen(section)) return;
+    const a = model.armed;
+    if (a && a.kind === 'item') { toggleCell(section, model, a.id, key, ctx); return; }             // item stays armed
+    setArmed(section, model, a && a.kind === 'slot' && a.id === key && a.ctx === ctx ? null : { kind: 'slot', id: key, ctx });
+  }
+  function toggleCell(section, model, item, key, ctx) {
+    const matrix = matrixOf(model, key, ctx);
+    if (!matrix) return;
+    const pairs = readCells(model, matrix, stateInput(section, model.id, 'cells', matrix.key));
+    const has = pairs.some(p => p[0] === item && p[1] === key);
+    const target = matrix.targets.find(t => t.key === key);
+    const swaps = !has && target.accepts === 'one' && pairs.some(p => p[1] === key);
+    if (setCell(section, item, key, ctx, !has) && swaps) flashSlot(section, key, ctx);
+  }
+  const FLASH = new WeakMap();       // slot → pending timeout
+  function flashSlot(section, key, ctx) {
+    section.querySelectorAll('.map-schema').forEach(schema => {
+      if ((schema.dataset.mapCtx || null) !== ctx) return;
+      const slot = [...schema.querySelectorAll('.map-slot')].find(s => s.dataset.mapTarget === key);
+      if (!slot) return;
+      clearTimeout(FLASH.get(slot));
+      slot.classList.add('is-swapped');
+      FLASH.set(slot, setTimeout(() => { slot.classList.remove('is-swapped'); FLASH.delete(slot); }, 700));
+    });
+  }
+  function reorderChip(section, model, slot, ctx, id, dir) {
+    const key = slot.dataset.mapTarget;
+    const matrix = matrixOf(model, key, ctx);
+    const target = matrix && matrix.targets.find(t => t.key === key);
+    if (!target || !target.ordered || section.dataset.mapFrozen === 'true') return;
+    const ids = [...slot.querySelectorAll('button.map-chip')].map(c => c.dataset.item);
+    const i = ids.indexOf(id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    ids.splice(i, 1); ids.splice(j, 0, id);
+    writeState(stateInput(section, model.id, 'order', orderKey(matrix, target)), ids.join(','));
+    refreshSchema(section, model);
+    const chip = [...slot.querySelectorAll('button.map-chip')].find(c => c.dataset.item === id);
+    if (chip) chip.focus();
+  }
+  // Toolbar, tabs, ✎ and the palette collapse — true when the click was consumed.
+  function toolClick(section, model, t) {
+    const hit = sel => { const n = t.closest(sel); return n && section.contains(n) ? n : null; };
+    const viewBtn = hit('.map-view-btn');
+    if (viewBtn) {                                                                                  // inert on an axis tab (aria-disabled)
+      if (viewBtn.getAttribute('aria-disabled') !== 'true') writeUi(section, model, { mode: viewBtn.dataset.mapMode });
+      return true;
+    }
+    const tab = hit('.map-tab');
+    if (tab) { activateTab(section, tab.dataset.mapTab); return true; }
+    const rowFilter = hit('.map-row-filter');
+    if (rowFilter) {                                                                                // in memory, frozen or live
+      model.rowFilter = rowFilter.dataset.filter;
+      applyRowFilter(section, model, itemStats(section, model));
+      return true;
+    }
+    const note = hit('.map-slot-note-btn');
+    if (note) {
+      const holder = note.closest('.map-slot') || note.closest('th[data-map-target]');
+      if (holder) toggleSlotNote(section, model, holder.dataset.mapTarget);
+      return true;
+    }
+    const collapse = hit('.map-palette-collapse');
+    if (collapse) {
+      const open = collapse.getAttribute('aria-expanded') !== 'true';
+      collapse.setAttribute('aria-expanded', String(open));
+      collapse.textContent = open ? '▴' : '▾';
+      collapse.closest('.map-palette').querySelector('.map-groups').hidden = !open;
+      return true;
+    }
+    if (isFrozen(section)) return false;                                                            // no tools on a frozen section
+    const copy = hit('.map-copy');
+    if (copy) { copyContext(section, model, copy.dataset.from, copy.dataset.to); return true; }
+    if (hit('.map-reset')) { resetMatrix(section, model, readUi(section, model).tab); return true; }
+    if (hit('.map-add-item')) { addItemPrompt(section, model); return true; }
+    return false;
+  }
+  function wireSchema(section, model) {
+    section.addEventListener('click', e => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (toolClick(section, model, t)) return;
+      const schema = t.closest('.map-schema');
+      if (!schema || !section.contains(schema)) return;
+      const ctx = schema.dataset.mapCtx || null;
+      const remove = t.closest('.map-chip-remove');
+      if (remove) { setCell(section, remove.closest('.map-chip').dataset.item, remove.closest('.map-slot').dataset.mapTarget, ctx, false); return; }
+      const itemChip = t.closest('.map-item-chip');
+      if (itemChip) { tapItem(section, model, itemChip.dataset.item); return; }
+      const slot = t.closest('.map-slot');
+      if (slot) { tapSlot(section, model, slot.dataset.mapTarget, ctx); return; }
+      const filter = t.closest('.map-filter');
+      if (filter) {
+        schema.querySelectorAll('.map-filter').forEach(b => b.setAttribute('aria-pressed', String(b === filter)));
+        refreshPalette(model, schema, itemStats(section, model));
+        return;
+      }
+      if (t.closest('button, input, label')) return;
+      if (model.armed) setArmed(section, model, null);                                              // empty space disarms
+    });
+    section.addEventListener('input', e => {
+      const s = e.target;
+      if (s instanceof HTMLInputElement && s.classList.contains('map-search')) refreshPalette(model, s.closest('.map-schema'), itemStats(section, model));
+      const prefix = 'map-' + model.id + '-note-';
+      if (s instanceof HTMLTextAreaElement && s.closest('.map-slot-note') && String(s.dataset.comment || '').startsWith(prefix)) markNoteHolders(section, model, s.dataset.comment.slice(prefix.length));
+    });
+    section.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (model.armed) { setArmed(section, model, null); e.stopPropagation(); }
+        return;
+      }
+      const chip = e.target instanceof Element ? e.target.closest('button.map-chip') : null;
+      if (!chip || !section.contains(chip)) return;
+      const slot = chip.closest('.map-slot');
+      const ctx = chip.closest('.map-schema').dataset.mapCtx || null;
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        setCell(section, chip.dataset.item, slot.dataset.mapTarget, ctx, false);
+        slot.querySelector('.map-slot-label').focus();
+      } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        reorderChip(section, model, slot, ctx, chip.dataset.item, e.key === 'ArrowLeft' ? -1 : 1);
+      }
+    });
+  }
+
+  // --- tools: copy context, reset, ad-hoc items (§ Proposal, reset, ad-hoc) --
+  // Clears every matrix of the target context, then replays the source pairs
+  // through the cell write path in source order (so accepts:one swaps stay
+  // deterministic); order inputs follow; one refresh at the end.
+  function copyContext(section, model, from, to) {
+    if (from === to || !model.contexts) return;
+    if (!window.confirm(fmt(MAP_LOCALE.copy_confirm, { from: contextLabel(model, from), to: contextLabel(model, to) }))) return;
+    model.matrices.filter(mx => mx.ctx === to).forEach(mx => writeState(stateInput(section, model.id, 'cells', mx.key), '-'));
+    model.matrices.filter(mx => mx.ctx === from).forEach(src => {
+      const pairs = readCells(model, src, stateInput(section, model.id, 'cells', src.key));
+      pairs.forEach(p => writeCell(section, model, p[0], p[1], to, true));
+      const dst = model.matrices.find(mx => mx.ctx === to && mx.src === src.src);
+      if (dst) src.targets.filter(t => t.ordered).forEach(t => {
+        writeState(stateInput(section, model.id, 'order', orderKey(dst, t)), stateInput(section, model.id, 'order', orderKey(src, t)).value);
+      });
+    });
+    refreshAll(section, model);
+  }
+  function resetMatrix(section, model, key) {
+    const matrix = model.matrices.find(mx => mx.key === key);
+    if (!matrix || !window.confirm(MAP_LOCALE.reset_confirm)) return;
+    const pairs = proposalPairs(model, matrix);
+    writeState(stateInput(section, model.id, 'cells', matrix.key), encodeCells(pairs));
+    matrix.targets.filter(t => t.ordered).forEach(t => {
+      writeState(stateInput(section, model.id, 'order', orderKey(matrix, t)), (model.proposalOrder[orderKey(matrix, t)] || []).join(','));
+      syncOrder(section, model, matrix, t, pairs);
+    });
+    refreshAll(section, model);
+  }
+  const ADHOC_MAX = 20, ADHOC_LABEL_MAX = 60;
+  const adhocLabels = model => model.items.filter(i => i.adhoc).map(i => i.label);
+  const adhocLabel = raw => String(raw).trim().slice(0, ADHOC_LABEL_MAX).trim();                 // one normalisation for prompt and restore
+  function syncAddButton(section, model) {
+    const add = section.querySelector('.map-add-item');
+    if (add) add.disabled = adhocLabels(model).length >= ADHOC_MAX;
+  }
+  function addItemPrompt(section, model) {
+    if (!model.adhocItems || adhocLabels(model).length >= ADHOC_MAX) return;
+    const status = section.querySelector('.map-tools-status');
+    const raw = window.prompt(MAP_LOCALE.add_item_prompt);
+    if (raw === null) return;
+    const label = adhocLabel(raw);
+    if (!label) return;
+    if (model.items.some(i => i.label.trim().toLowerCase() === label.toLowerCase())) {
+      if (status) status.textContent = MAP_LOCALE.add_item_duplicate;
+      return;
+    }
+    if (status) status.textContent = '';
+    addAdhocItem(section, model, label);
+    writeState(stateInput(section, model.id, 'adhoc'), JSON.stringify(adhocLabels(model)));
+    refreshAll(section, model);
+    syncAddButton(section, model);
+  }
+  // Model + DOM for one ad-hoc item: a row in every matrix, a chip in every
+  // palette, both inside the implicit "Added by you" group.
+  function addAdhocItem(section, model, label) {
+    const id = 'u' + (adhocLabels(model).length + 1);
+    const item = { id, label, group: ADHOC_GROUP, hint: '', required: false, adhoc: true };
+    model.items.push(item);
+    if (!model.groups.includes(ADHOC_GROUP)) model.groups.push(ADHOC_GROUP);
+    const count = adhocLabels(model).length;
+    model.matrices.forEach(mx => {
+      const wrap = matrixEl(section, mx.key);
+      if (!wrap) return;
+      const tbody = wrap.querySelector('tbody');
+      const targets = orderedTargets(mx);
+      let gr = [...tbody.querySelectorAll('tr.map-group-row')].find(r => r.dataset.group === ADHOC_GROUP);
+      if (!gr) { gr = groupRow(ADHOC_GROUP, 0, targets.length); tbody.appendChild(gr); }
+      gr.querySelector('.map-group-count').textContent = String(count);
+      const row = itemRow(section, mx, targets, item, new Set());
+      row.hidden = gr.querySelector('.map-group-toggle').getAttribute('aria-expanded') !== 'true';
+      tbody.appendChild(row);
+      if (!wrap.querySelector('input[data-map-cell][tabindex="0"]')) setEntryPoint(wrap.querySelector('table'), row.querySelector('input[data-map-cell]'));
+    });
+    section.querySelectorAll('.map-schema .map-groups').forEach(groups => {
+      let g = [...groups.querySelectorAll('.map-group')].find(x => x.dataset.group === ADHOC_GROUP);
+      if (!g) { g = paletteGroup(model, ADHOC_GROUP); groups.appendChild(g); }
+      else {
+        g.querySelector('.map-group-count').textContent = String(count);
+        g.querySelector('.map-group-chips').appendChild(itemChip(item));
+      }
+    });
+  }
+  function removeAdhocItems(section, model) {
+    const ids = new Set(model.items.filter(i => i.adhoc).map(i => i.id));
+    if (!ids.size) return;
+    model.items = model.items.filter(i => !i.adhoc);
+    model.groups = model.groups.filter(g => g !== ADHOC_GROUP);
+    if (model.armed && model.armed.kind === 'item' && ids.has(model.armed.id)) model.armed = null;
+    section.querySelectorAll('tr.map-item-row, tr.map-group-row, .map-palette .map-group').forEach(n => {
+      if (n.dataset.group === ADHOC_GROUP) n.remove();
+    });
+  }
+  // The `map-{m}-adhoc` input is the truth for ad-hoc items (restore may
+  // overwrite it): re-create them from it before the cells are decoded.
+  function syncAdhoc(section, model) {
+    if (!model.adhocItems) return;
+    const input = stateInput(section, model.id, 'adhoc');
+    let labels = [];
+    try { labels = JSON.parse(input.value || '[]'); } catch { labels = []; }
+    labels = (Array.isArray(labels) ? labels : []).map(adhocLabel).filter(Boolean).slice(0, ADHOC_MAX);
+    const current = adhocLabels(model);
+    if (labels.length !== current.length || labels.some((l, i) => l !== current[i])) {
+      removeAdhocItems(section, model);
+      labels.forEach(l => addAdhocItem(section, model, l));
+      const enc = JSON.stringify(labels);
+      if (input.value !== enc) input.value = enc;
+    }
+    syncAddButton(section, model);
+  }
+
+  // --- section rendering -----------------------------------------------------
+  function readSpec(section) {
+    const script = section.querySelector('script[data-mapping-spec]');
+    if (!script) throw new Error('no spec');
+    return normalizeSpec(JSON.parse(script.textContent));
+  }
+  function wireSection(section, model) {
+    section.addEventListener('change', e => {
+      const cb = e.target;
+      if (!(cb instanceof HTMLInputElement) || !cb.dataset.mapCell) return;
+      const parts = cb.dataset.mapCell.split('>');
+      const wrap = cb.closest('[data-map-matrix]');
+      const matrix = model.matrices.find(m => m.key === wrap.dataset.mapMatrix);
+      // The click already flipped the box; setCell reads `has` from the state
+      // string, so a refused write (frozen, unknown target) must re-project.
+      if (!setCell(section, parts[0], parts[1], matrix.ctx, cb.checked)) projectMatrix(section, model, matrix);
+    });
+    section.addEventListener('click', e => {
+      const btn = e.target.closest('button.map-group-toggle');
+      if (!btn || !section.contains(btn)) return;
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', String(open));
+      btn.querySelector('.map-group-glyph').textContent = open ? '▾' : '▸';
+      const row = btn.closest('tr.map-group-row');
+      if (!row) {                                                                                   // palette group
+        btn.closest('.map-group').querySelector('.map-group-chips').hidden = !open;
+        return;
+      }
+      // Row visibility = collapse state ∧ row filter, recomputed in one place
+      // (applyRowFilter also keeps the keyboard entry point on a visible row).
+      applyRowFilter(section, model, itemStats(section, model));
+    });
+    section.addEventListener('keydown', e => {
+      const cb = e.target;
+      if (!(cb instanceof HTMLInputElement) || !cb.dataset.mapCell) return;
+      if (KEYS[e.key]) { e.preventDefault(); moveFocus(cb, KEYS[e.key][0], KEYS[e.key][1]); }
+      else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); moveFocus(cb, 0, 0, e.key.toLowerCase()); }
+    });
+    wireSchema(section, model);
+  }
+  // The mapping (or its error box) renders IN PLACE of the spec script: a free
+  // round's authored note follows the spec, and appending at the section's
+  // end put the note above the matrix and its tools (browser-verified).
+  function mount(section, node) {
+    const spec = section.querySelector('script[data-mapping-spec]');
+    if (spec) spec.after(node); else section.appendChild(node);
+  }
+  // One broken mapping must never abort renderMappings() — it is the first
+  // statement of the persistence handler, and ensureCommentSlots() plus
+  // restoreState() for the WHOLE page follow it. A spec that does not parse
+  // or normalise fails in readSpec; one that passes but breaks the builder
+  // (a malformed `proposalOrder`, say) fails inside buildSection. Both end
+  // the same way: the half-built DOM is dropped, the error box is mounted
+  // in place of the spec and the section is marked rendered.
+  function renderSection(section) {
+    try { buildSection(section, readSpec(section)); }
+    catch (e) {
+      MODELS.delete(section);
+      delete section.dataset.mapFrozen;
+      section.querySelectorAll('.map-root, .map-states').forEach(n => n.remove());                   // mappings never nest
+      const banner = el('div', 'map-error', fmt(MAP_LOCALE.spec_error, { error: e.message }));
+      banner.setAttribute('role', 'alert');
+      mount(section, banner);
+    }
+    section.dataset.mapRendered = 'true';
+  }
+  function buildSection(section, model) {
+    const m = section.dataset.mapping;
+    model.id = m;
+    MODELS.set(section, model);
+
+    // Frozen = inside an iteration that is not the active one: the baked
+    // `submitted` state is shown read-only; without it the proposal is shown
+    // behind a visible banner (never silently as the user's decision).
+    const iteration = section.closest('section[data-iteration]');
+    const frozen = !!iteration && !iteration.hasAttribute('data-active');
+    if (frozen) section.dataset.mapFrozen = 'true';
+    // A submission is only trusted when it carries every matrix key (the
+    // payload always does) — a partial or stale one is treated as missing.
+    const complete = s => !!s && typeof s === 'object' && !!s.cells && typeof s.cells === 'object'
+      && model.matrices.every(mx => Array.isArray(s.cells[mx.key]));
+    const submitted = frozen && complete(model.submitted) ? model.submitted : null;
+    if (frozen && !submitted) {
+      const banner = el('div', 'map-error', MAP_LOCALE.frozen_missing);
+      banner.setAttribute('role', 'alert');
+      section.prepend(banner);
+    }
+
+    // State inputs first (the persistence block may overwrite them right after),
+    // initialised from the proposal (or the submission) — value only, no
+    // events, nothing touched. Ad-hoc items before cells so their ids resolve.
+    if (model.adhocItems) stateInput(section, m, 'adhoc').value = JSON.stringify(submitted && Array.isArray(submitted.adhoc) ? submitted.adhoc : []);
+    model.matrices.forEach(mx => {
+      const state = stateInput(section, m, 'cells', mx.key);
+      const src = submitted ? submitted.cells[mx.key] : null;
+      const pairs = src ? src.filter(p => Array.isArray(p) && p.length === 2).map(p => [String(p[0]), String(p[1])]) : proposalPairs(model, mx);
+      state.value = encodeCells(pairs);
+      mx.targets.filter(t => t.ordered).forEach(t => {
+        const input = stateInput(section, m, 'order', orderKey(mx, t));
+        const order = submitted && submitted.order && Array.isArray(submitted.order[orderKey(mx, t)]) ? submitted.order[orderKey(mx, t)] : model.proposalOrder[orderKey(mx, t)];
+        input.value = (order || []).join(',');
+      });
+    });
+    stateInput(section, m, 'ui').value = encodeUi({ mode: model.hasElements ? 'schema' : 'matrix', tab: model.matrices[0].key });
+
+    const root = el('div', 'map-root');
+    const toolbar = el('div', 'map-toolbar');
+    if (model.hasElements) toolbar.appendChild(renderViewToggle());
+    if (model.matrices.length > 1) toolbar.appendChild(renderTabs(model));
+    toolbar.appendChild(renderRowFilters());                                                        // browsable on a frozen section too
+    if (!frozen) toolbar.appendChild(renderTools(model));
+    root.appendChild(toolbar);
+    const summary = el('div', 'map-summary');
+    summary.setAttribute('aria-live', 'polite');
+    root.appendChild(summary);
+    if (model.hasElements) (model.contexts || [null]).forEach(c => root.appendChild(renderSchema(section, model, c ? c.id : null)));
+    const matrices = el('div', 'map-matrices');
+    model.matrices.forEach(mx => matrices.appendChild(renderMatrix(section, model, mx)));
+    root.appendChild(matrices);
+    if (model.slotNotes) {
+      const notes = renderSlotNotes(section, model);
+      const texts = submitted && submitted.slotNotes && typeof submitted.slotNotes === 'object' ? submitted.slotNotes : {};
+      notes.querySelectorAll('textarea').forEach(ta => {
+        const key = ta.dataset.comment.slice(('map-' + m + '-note-').length);
+        if (typeof texts[key] === 'string') ta.value = texts[key];
+      });
+      root.appendChild(notes);
+    }
+    mount(section, root);
+    syncAdhoc(section, model);
+    model.matrices.forEach(mx => {
+      const state = stateInput(section, m, 'cells', mx.key);
+      const pairs = readCells(model, mx, state);
+      state.value = encodeCells(pairs);                                                             // unknown ids dropped (a stale submission)
+      mx.targets.filter(t => t.ordered).forEach(t => syncOrder(section, model, mx, t, pairs, true));
+    });
+    if (frozen) section.querySelectorAll('input.map-state').forEach(i => { i.readOnly = true; });
+    model.matrices.forEach(mx => projectMatrix(section, model, mx));
+    refreshSchema(section, model);
+    updateSummary(section, model);
+    wireSection(section, model);
+  }
+  function renderMappings(root) {
+    const scope = root || document;
+    scope.querySelectorAll('section[data-mapping]:not([data-map-rendered])').forEach(renderSection);
+    // The TOC may already be built (IIFE order): mirror the fresh progress
+    // now — restoreState() returns early without a stored blob, so this is
+    // the only refresh a first visit gets.
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();
+  }
+  // Re-reads every state input (restoreState() sets values without events),
+  // normalises the string back, re-sets the boxes and recomputes the counts.
+  function refreshMappings(root) {
+    const scope = root || document;
+    scope.querySelectorAll('section[data-mapping][data-map-rendered]').forEach(section => {
+      const model = MODELS.get(section);
+      if (!model) return;
+      syncAdhoc(section, model);                                                                       // before the cells: `u2>…` must resolve
+      model.matrices.forEach(mx => {
+        const state = stateInput(section, model.id, 'cells', mx.key);
+        const pairs = readCells(model, mx, state);
+        const enc = encodeCells(pairs);
+        if (state.value !== enc) state.value = enc;
+        mx.targets.filter(t => t.ordered).forEach(t => syncOrder(section, model, mx, t, pairs, true));
+        projectMatrix(section, model, mx);
+      });
+      refreshSchema(section, model);                                                                    // re-applies the restored ui mode too
+      updateSummary(section, model);
+    });
+    if (typeof updateSectionNavState === 'function') updateSectionNavState();                          // TOC progress mirror after a restore
+  }
+
+  // --- payload (§ Payload) ---------------------------------------------------
+  function parseUi(value) {
+    const out = {};
+    String(value || '').split(';').forEach(kv => { const i = kv.indexOf('='); if (i > 0) out[kv.slice(0, i)] = kv.slice(i + 1); });
+    return out;
+  }
+  function collectMappings(scope) {
+    const root = scope || document;
+    const out = [];
+    root.querySelectorAll('section[data-mapping][data-map-rendered]').forEach(section => {
+      const model = MODELS.get(section);
+      if (!model || section.querySelector('.map-error') || section.dataset.mapFrozen === 'true') return;   // a past round is never a current decision
+      const m = model.id;
+      const entry = { id: m, label: section.dataset.navLabel || m };
+      const view = section.closest('section[data-view]');
+      if (view) {
+        entry.view = view.dataset.view;
+        if (view.dataset.viewFor) entry.design = view.dataset.viewFor;
+      }
+      const ui = parseUi(([...section.querySelectorAll('input.map-state')].find(i => i.id === 'map-' + m + '-ui') || {}).value);
+      entry.mode = !model.hasElements ? 'matrix' : (ui.mode === 'matrix' ? 'matrix' : 'schema');
+      entry.assigned = {};
+      entry.order = {};
+      entry.diff = [];
+      model.matrices.forEach(mx => {
+        const pairs = readCells(model, mx, stateInput(section, m, 'cells', mx.key));
+        entry.assigned[mx.key] = pairs.map(p => [p[0], p[1]]);
+        mx.targets.filter(t => t.ordered).forEach(t => {
+          const checked = pairs.filter(p => p[1] === t.key).map(p => p[0]);
+          const input = stateInput(section, m, 'order', orderKey(mx, t));
+          entry.order[orderKey(mx, t)] = splitOrder(input.value).filter(id => checked.includes(id));
+        });
+        const wrap = matrixEl(section, mx.key);
+        if (!wrap) return;
+        wrap.querySelectorAll('input[data-map-cell]').forEach(cb => {
+          const proposed = cb.dataset.proposed === '1';
+          if (cb.checked === proposed) return;
+          const parts = cb.dataset.mapCell.split('>');
+          const d = { item: parts[0], target: parts[1] };
+          if (mx.ctx) d.ctx = mx.ctx;
+          d.proposed = proposed; d.now = cb.checked;
+          entry.diff.push(d);
+        });
+      });
+      const anywhere = assignedAnywhere(section, model);
+      entry.unassigned = model.items.filter(i => !anywhere.has(i.id)).map(i => i.id);
+      entry.violations = violationsOf(section, model);
+      let adhoc = [];
+      const adhocInput = [...section.querySelectorAll('input.map-state')].find(i => i.id === 'map-' + m + '-adhoc');
+      if (adhocInput) { try { adhoc = JSON.parse(adhocInput.value || '[]'); } catch { adhoc = []; } }
+      entry.adhocItems = Array.isArray(adhoc) ? adhoc : [];
+      const noteEl = view ? document.querySelector('[data-comment="view-' + view.dataset.view + '"]')
+                          : section.querySelector('[data-comment="map-' + m + '-note"]');
+      entry.note = noteEl ? String(noteEl.value || '').trim() : '';
+      entry.slotNotes = {};
+      section.querySelectorAll('[data-comment^="map-' + m + '-note-"]').forEach(ta => {
+        const text = String(ta.value || '').trim();
+        if (text) entry.slotNotes[ta.dataset.comment.slice(('map-' + m + '-note-').length)] = text;
+      });
+      out.push(entry);
+    });
+    return out;
+  }
+
+  window.renderMappings = renderMappings;
+  window.refreshMappings = refreshMappings;
+  window.setCell = setCell;
+  window.collectMappings = collectMappings;
+  window.mappingProgress = mappingProgress;
+})();
+```
+
+## collectDecisions (dispatcher)
+
+The submit handler picks the branch from the **active iteration's**
+`data-iteration-template` (via `resolveIterationTemplate()`, § Tab Switch JS),
+not from the `<html data-template>` projection — that projection follows the
+tab the user is *looking at* and would mis-route the payload when a frozen tab
+of a different template is open. An `action` (`iterate` | `implement`) is passed in from the button that was
+clicked and merged into the payload.
+
+The dispatcher ALSO runs a generic catch-all scoped to the active
+iteration (`section[data-iteration][data-active]`) so every named form
+element ships in `allFields`, regardless of whether the template-specific
+branch was updated for new fields. This is the safety net mandated by
+`validation-gate.md` § Generic Form Collection — never remove it, never
+replace it with hand-listed selectors. The typed sub-objects (`decisions`,
+`comments`) live alongside `allFields` for ergonomics; they do not
+substitute for it.
+
+`comments` has ONE shape in every branch — `collectComments()` below builds
+it: `{ general: { text, attachments }, items: [ { id, text, attachments } ] }`.
+`general` is the 💬 dock's general note (page chrome, every template) and is
+always present; `items` lists every other commented field of the live round.
+The design branch keeps its `designs` / `screens` / `views` maps next to
+them. Note that the dock lives OUTSIDE `section[data-iteration]`, so
+`allFields` (scoped to the active section) does not carry the general note —
+`comments.general` is its typed home.
+
+```javascript
+function collectAllFormFields(scope) {
+  const fields = {};
+  // Catch-all: every named input, select, textarea inside scope.
+  scope.querySelectorAll('input, select, textarea').forEach(el => {
+    // Device-view frames are CLONES of the mockup (§ Responsive device views)
+    // and they live inside section[data-iteration][data-active], i.e. exactly
+    // this scope. Without this filter a login mock ships `email`, `dv1-email`
+    // and `dv2-email` — three fields for one control, under names no human
+    // ever typed into, and the panel goes green either way. The authored
+    // original is untouched and still collected; only the copies are dropped.
+    // Additive on purpose: the selector string above is pinned by
+    // validation-gate.md pattern 21 and must stay literal.
+    if (el.closest('[data-device-clone]')) return;
+    const key = el.dataset.field
+             || el.dataset.v4
+             || el.dataset.confirm
+             || el.dataset.rename
+             || el.dataset.entities
+             || el.dataset.comment
+             || el.name
+             || el.id;
+    if (!key) return;  // unnamed control — skip
+    if (el.type === 'checkbox') {
+      fields[key] = el.checked;
+    } else if (el.type === 'radio') {
+      if (el.checked) fields[el.name] = el.value;
+    } else {
+      fields[key] = el.value;
+    }
+  });
+  return fields;
+}
+
+// Comments in ONE shape for every template (#399):
+//   { general: { text, attachments }, items: [ { id, text, attachments } ] }
+// `general` is the 💬 dock's general-notes textarea (data-comment="general",
+// § Panel Chrome (all templates) → Feedback dock) — ALWAYS present, empty
+// strings and all, so no consumer branches on the template to find the note.
+// `items` holds every other [data-comment] field that carries text or an
+// attachment: the inline notes of a decision/free round, the {id}-note of a
+// view decision, a mapping note, and on a design round the dock's per-design /
+// per-screen / per-view rows (the design branch additionally keys those into
+// its `designs` / `screens` / `views` maps).
+// The dock lives OUTSIDE section[data-iteration], so the scan covers the live
+// round AND the dock — never the whole document: ids repeat across rounds, and
+// a frozen round's fields must not ship as this round's. The dock cannot leak
+// a frozen round either: its rows are rebuilt per round (§ Layout JS) and its
+// general field is stashed/restored around every frozen visit
+// (applyDockFreezeState). A page that also carries an inline
+// data-comment="general" (older document rounds) contributes to the same
+// note — the texts are joined, nothing is dropped.
+function collectComments(active) {
+  const attachmentsOf = key => (typeof attachmentsFor === 'function') ? attachmentsFor(key) : [];
+  const generalTexts = [];
+  const items = [];
+  const seen = new Set();
+  const fields = [
+    ...active.querySelectorAll('[data-comment]'),
+    ...document.querySelectorAll('#feedback-dock [data-comment]'),
+  ];
+  fields.forEach(el => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    const id = el.dataset.comment;
+    const text = (el.value || '').trim();
+    if (id === 'general') { if (text) generalTexts.push(text); return; }
+    const attachments = attachmentsOf(id);
+    // An image with no prose is a complete comment — a screenshot often says
+    // it better than a sentence. Gating on `text` alone (as this did before
+    // attachments existed) would silently drop an image-only remark.
+    if (text || attachments.length) items.push({ id, text, attachments });
+  });
+  return {
+    general: { text: generalTexts.join('\n\n'), attachments: attachmentsOf('general') },
+    items,
+  };
+}
+
+function collectDecisions(action = 'iterate') {
+  const active = document.querySelector('section[data-iteration][data-active]')
+              || document.body;
+  const allFields = collectAllFormFields(active);
+
+  // Resolve the template from the ACTIVE iteration, never from <html>: the
+  // projection there could be stale (e.g. the user is viewing a frozen tab
+  // with a different layout) and would mis-route the payload.
+  const template = resolveIterationTemplate(active);
+  let payload;
+  if (template === 'design') payload = collectDesignDecisions();
+  else if (template === 'free') payload = collectFreeDecisions();
+  else payload = collectDecisionDecisions();
+  payload.action = action;
+  payload.allFields = allFields;
+  return payload;
+}
+
+// Verdict + note of one bi-state group (§ Bi-State Variant Evaluation). The
+// radio ships `include` checked by default, so a group the user never touched
+// still reports `include` rather than dropping out of the payload. The
+// adjacent `{id}-note` textarea sits inside the group, or next to it when
+// ensureCommentSlots() injected it at runtime — look inside first, then one
+// level up (same lookup as the design branch's view decisions).
+function getElementState(el) {
+  const checked = el.querySelector('input[type="radio"]:checked');
+  const noteId = `${el.dataset.decision}-note`;
+  const noteEl = el.querySelector(`[data-comment="${noteId}"]`)
+    || (el.parentElement && el.parentElement.querySelector(`[data-comment="${noteId}"]`));
+  return {
+    evaluation: checked ? checked.value : 'include',
+    note: ((noteEl && noteEl.value) || '').trim()
+  };
+}
+
+function collectDecisionDecisions() {
+  const decisions = [];
+  // Scoped to the LIVE round — decision ids and comment keys repeat across
+  // rounds (same reasoning as collectFreeDecisions()).
+  const active = document.querySelector('section[data-iteration][data-active]') || document;
+
+  active.querySelectorAll('[data-decision]').forEach(el => {
+    decisions.push({
+      id: el.dataset.decision,
+      label: el.dataset.label || '',
+      ...getElementState(el)
+    });
+  });
+
+  // { general: { text, attachments }, items: [ … ] } — the live round's
+  // inline notes plus the 💬 dock's general note (collectComments above).
+  const comments = collectComments(active);
+
+  // `mappings` is always present (§ Information Mapping (engine), uniform
+  // payload shape); the decision template hosts no mapping section.
+  return { submitted: true, template: 'decision', decisions, comments, mappings: [] };
+}
+```
+
+## Two-Button Submit (iterate vs. implement)
+
+Every decision panel carries **two** submit actions, not one, in a
+**split button**. The primary button ("Zur nächsten Iteration") fills the
+row and fires `action: "iterate"` — a Claude turn that never touches code.
+The ▾ caret next to it opens a small menu (`#submit-menu`, `role="menu"`)
+holding the secondary action ("Mit Feedback implementieren"), which fires
+`action: "implement"` — a Claude turn that DOES apply real file/code
+changes. The misclick barrier is the extra click plus colour + border
+(warning outline, ⚠ icon), not distance: there is no `.submit-gap` anywhere
+any more — the final-report close-out sheet dropped its own copy too, in
+favour of the accordion rows in front of its single button (§ The close-out
+sheet). The hint lines moved into `title` tooltips; the one line that stays
+visible is inside the menu ("Kein Code beim Primär-Button").
+
+### HTML
+
+```html
+<div id="panel-ready">
+  <div id="decision-summary"><!-- auto-summary --></div>
+
+  <div class="submit-split">
+    <!-- Primary: safe, never implements. The hint is its tooltip; the cache
+         badge inside it shows only while disconnected (_setCacheHints). -->
+    <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+      <span class="submit-label">{{panel.submit_iterate}}</span>
+      <span class="hint-cache" data-cache-hint="iterate" hidden>
+        <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+      </span>
+    </button>
+    <!-- Caret: opens the menu. aria-expanded mirrors the menu's [hidden]. -->
+    <button type="button" id="submit-menu-btn" class="submit-menu-btn"
+            aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
+            aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+      <span aria-hidden="true">▾</span>
+    </button>
+  </div>
+
+  <!-- One level deeper: the explicit implementation commit. Opens UPWARD
+       over the status line; Escape / outside click closes it. -->
+  <div id="submit-menu" class="submit-menu" role="menu" hidden>
+    <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+      <span class="warn-icon" aria-hidden="true">⚠</span>
+      {{panel.submit_implement}}
+    </button>
+    <p class="hint hint-cache" data-cache-hint="implement" hidden>
+      <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
+    </p>
+    <p class="hint submit-menu-hint">{{panel.submit_menu_hint}}</p>
+  </div>
+</div>
+```
+
+### CSS
+
+```css
+.submit-btn, .implement-btn {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+.submit-btn {
+  border: none;
+  background: var(--accent-color, #58a6ff);
+  color: white;
+}
+.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Split button: primary + caret share one rounded pill. */
+.submit-split { display: flex; align-items: stretch; margin-top: 0.4rem; }
+.submit-split .submit-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px 0 0 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+}
+.submit-menu-btn {
+  flex: none;
+  width: 2.5rem;
+  margin-top: 0;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, #fff 28%, transparent);
+  border-radius: 0 10px 10px 0;
+  background: var(--accent-color, #58a6ff);
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.submit-menu-btn:hover,
+.submit-menu-btn[aria-expanded="true"] { filter: brightness(1.15); }
+/* position: absolute, with `.concept-decision-panel` (already `position:
+   fixed`, § Panel Chrome) as its containing block — NOT `.panel-cta`, which
+   deliberately stays un-positioned (see the comment on `.panel-cta` above)
+   so its own `overflow-y: auto` foot-safety-net cannot clip this popover.
+   #367 (two rounds): a first fix made the menu `position: fixed` anchored to
+   the VIEWPORT, sampled from the split button's rect once at open time —
+   that broke on the design layout, where the panel can still be mid
+   slide-in transition when the caret is clicked, so the sampled viewport
+   rect went stale the instant the transition finished and the menu opened
+   up to 400px off-screen. Anchoring to the panel instead means the menu
+   moves WITH the panel for free (it is laid out relative to the same
+   containing block), so no re-sampling on transition is needed — only on
+   open and on resize. wireSubmitMenu() computes left/width/bottom relative
+   to the panel from both rects sampled in the same frame (see JS). */
+.submit-menu {
+  position: absolute;
+  z-index: 5;
+  padding: 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--warning-color, #d29922);
+  background: var(--panel-bg, #161b22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.submit-menu[hidden] { display: none; }
+.submit-menu .implement-btn { margin-top: 0; }
+.submit-menu-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #8b949e);
+  margin: 0.4rem 0 0;
+}
+
+.implement-btn {
+  background: transparent;
+  color: var(--warning-color, #d29922);
+  border: 1px solid var(--warning-color, #d29922);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.implement-btn:hover {
+  background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent);
+}
+.implement-btn .warn-icon { font-size: 1rem; }
+.hint-warn { color: var(--warning-color, #d29922); }
+
+/* Durability warning strip — shown when a submission or an attachment did
+   not reach the bridge's durable store. Deliberately loud: a silent failure
+   here is the exact bug the store exists to remove. */
+.submit-warning {
+  display: none;
+  margin: 0 0 .75rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--warning-color, #d29922);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning-color, #d29922) 12%, transparent);
+  color: var(--text-primary);
+  font-size: .8rem;
+  line-height: 1.4;
+}
+```
+
+### JS
+
+```javascript
+let _submittedAt = 0;
+// Reload counter captured at submit time. The panel only flips back to
+// "ready" via _processed_at when the server's reload counter has advanced
+// past this — i.e. Claude has actually written the new iteration. Without
+// this gate, /reset stamps _processed_at while Claude is still mid-write
+// and the user sees re-enabled buttons on the still-active old iteration.
+let _submittedReloadCounter = null;
+let _submitInFlight = false;
+// Action picked at submit time ("iterate" | "implement"). Drives whether
+// the third progress step ("Implementierung abgeschlossen") is shown.
+// Reset on restorePanelToReady.
+let _submittedAction = null;
+// Tracks whether the user has actually changed any field in the active
+// iteration. restoreState() and DOMContentLoaded fire change/input events
+// that are NOT user-driven, so we gate on event.isTrusted to ignore them.
+// Reset to false on iteration-switch / reload — collectDecisions still
+// ships the full payload, but submitWithAction asks for confirmation if
+// the user clicks submit without having touched anything.
+let _userInteracted = false;
+function _markUserInteracted(e) {
+  if (e && e.isTrusted) _userInteracted = true;
+}
+document.addEventListener('change', _markUserInteracted, true);
+document.addEventListener('input', _markUserInteracted, true);
+document.addEventListener('iteration:changed', () => { _userInteracted = false; });
+
+const _emptyConfirmKey = {
+  iterate: 'panel.empty_iterate_confirm',
+  implement: 'panel.empty_implement_confirm'
+};
+
+function wireSubmit(btnId, action) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener('click', () => submitWithAction(action));
+}
+
+async function submitWithAction(action) {
+  // Belt-and-suspenders guard: if a submission is already in flight (panel
+  // shows "submitted"), ignore further clicks. restorePanelToReady() resets
+  // _submittedAt to 0, so this only blocks while we're actually waiting.
+  if (_submitInFlight || _submittedAt) return;
+
+  // Empty-submit guard: if the user clicks submit without having modified
+  // any field in the active iteration, ask before sending. Avoids burning
+  // a Claude turn on accidental clicks. Implement ALWAYS confirms — it is the
+  // one action that writes code — but never twice: the empty-submit wording
+  // already says so when nothing was changed.
+  if (!_userInteracted) {
+    const msg = (action === 'implement')
+      ? '{{panel.empty_implement_confirm}}'
+      : '{{panel.empty_iterate_confirm}}';
+    if (!window.confirm(msg)) return;
+  } else if (action === 'implement') {
+    if (!window.confirm('{{panel.submit_implement_confirm}}')) return;
+  }
+
+  _submitInFlight = true;
+
+  // A throwing collector must not wedge the button behind the in-flight
+  // guard above (#383): release the flag, say what broke, hand control back.
+  let data;
+  try {
+    data = collectDecisions(action);
+  } catch (e) {
+    _submitInFlight = false;
+    console.error('collectDecisions failed', e);
+    showSubmitWarning('{{panel.submit_collect_failed}}: ' + ((e && e.message) || e));
+    return;
+  }
+  const container = document.getElementById('concept-decisions');
+  container.textContent = JSON.stringify(data);
+  // design template only: the feedback dock is a single overlay shared by
+  // every iteration, and its field ids repeat per iteration (`d1-s1`) — so
+  // iteration N+1 must not open pre-filled with N's notes. This used to be
+  // solved by EMPTYING the dock here, at submit time, which destroyed the
+  // text the user had just sent: switch to an older tab, switch back, and the
+  // round they were still waiting on showed no comments at all. The keys are
+  // namespaced per iteration now (§ State Persistence `_iterationPrefix`), so
+  // nothing leaks forward and nothing has to be thrown away — the dock is only
+  // marked read-only, so the user can read back what they sent while Claude
+  // works. Runs AFTER collectDecisions(), never before. See § Panel Chrome
+  // (all templates) → Feedback dock.
+  if (typeof markDockSubmitted === 'function') markDockSubmitted();
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+  _submittedAt = Date.now();
+  _submittedReloadCounter = _bootReloadCounter;
+  _submittedAction = action;
+
+  // Reset progress list to the just-submitted baseline. The third step
+  // is only revealed for implement-action submissions — iterate ends at
+  // step 2 (panel reload onto the new iteration restores the ready panel).
+  resetStatusSteps(action);
+
+  document.getElementById('panel-ready').style.display = 'none';
+  document.getElementById('panel-submitted').style.display = 'block';
+  // The pinned status line flips to "Übermittelt · Claude arbeitet" + dots.
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+
+  // The submitted panel is already on screen, and it is a promise that the
+  // payload is safe. That promise must be backed by a DURABLE ack, not by
+  // "the request did not throw". `fetch` rejects only on a transport failure,
+  // so a 507 (bridge could not persist) resolved like any other response and
+  // the old code counted it as success — then cleared the local copy. That is
+  // the client-side half of #284.
+  let durable = false;
+  let transportFailed = false;
+  try {
+    const res = await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    durable = res.ok && body.durable !== false;
+  } catch (e) {
+    transportFailed = true;
+  }
+
+  if (!durable) {
+    // Keep a local copy first, whatever went wrong.
+    _guardedSetItem(STORAGE_KEY + '-pending', JSON.stringify(data));
+    if (transportFailed) {
+      // Offline / bridge down. This case self-heals — retryPendingSubmission()
+      // fires on reconnect — so the submitted panel stays up and we only
+      // explain the delay.
+      showSubmitWarning('{{panel.submit_queued_offline}}');
+    } else {
+      // The bridge answered but could not persist (disk full, store gone).
+      // Nothing retries this on its own, so do NOT leave a "sent" panel
+      // standing over it: hand control back and say why.
+      restorePanelToReady();
+      showSubmitWarning('{{panel.submit_not_durable}}');
+    }
+  }
+
+  const unsynced = (typeof unsyncedAttachmentCount === 'function')
+    ? unsyncedAttachmentCount() : 0;
+  if (unsynced > 0) showSubmitWarning('{{panel.attachments_not_synced}}');
+
+  saveState();
+  _submitInFlight = false;
+}
+
+wireSubmit('submit-iterate-btn', 'iterate');
+wireSubmit('submit-implement-btn', 'implement');
+
+// --- Submit menu (the implement action lives one level deeper) ---
+// ▾ toggles #submit-menu; aria-expanded mirrors [hidden]. Escape and any
+// click outside close it; choosing the item closes it before the confirm
+// dialog opens, so the menu never sits open behind a modal.
+//
+// #367 (two rounds): .panel-cta carries `overflow-y: auto` as its ≤120px
+// foot safety net, so an `absolute` popover anchored to THAT box and opening
+// upward gets clipped/scrolled away by it — round one fixed that by making
+// the menu `position: fixed` off the split button's VIEWPORT rect sampled
+// once at open time. That broke on the design layout: the ☰ panel is still
+// sliding in (`transition: right 0.3s ease`, § Panel Chrome) when a fast
+// click reaches the caret, so the sampled rect is stale the instant the
+// transition finishes — measured 400px off-screen. Anchoring the menu to
+// `.concept-decision-panel` instead (its containing block; `.panel-cta`
+// deliberately drops `position: relative`, see its CSS comment) means the
+// menu moves WITH the panel for free — no re-sampling needed mid-transition,
+// only on open and on resize. Both rects below are read in the same frame,
+// so the panel-relative offsets are correct whether or not the slide-in has
+// finished.
+(function wireSubmitMenu() {
+  const btn = document.getElementById('submit-menu-btn');
+  const menu = document.getElementById('submit-menu');
+  if (!btn || !menu) return;
+  const anchor = btn.closest('.submit-split') || btn;
+  const panel = menu.closest('.concept-decision-panel') || menu.parentElement;
+  const position = () => {
+    const pr = panel.getBoundingClientRect();
+    const sr = anchor.getBoundingClientRect();
+    menu.style.left = (sr.left - pr.left) + 'px';
+    menu.style.width = sr.width + 'px';
+    menu.style.bottom = (pr.bottom - sr.top + 6) + 'px';
+  };
+  const setOpen = (open) => {
+    if (open) position();
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.hidden;
+    setOpen(open);
+    if (open) menu.querySelector('[role="menuitem"]')?.focus();
+  });
+  menu.addEventListener('click', (e) => {
+    if (e.target.closest('[role="menuitem"]')) setOpen(false);
+  });
+  document.addEventListener('click', (e) => {
+    if (menu.hidden || menu.contains(e.target) || btn.contains(e.target)) return;
+    setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || menu.hidden) return;
+    setOpen(false);
+    btn.focus();
+  });
+  window.addEventListener('resize', () => { if (!menu.hidden) position(); });
+  // The panel's own slide-in/out transition (§ Panel Chrome, `right 0.3s`)
+  // bubbles here; re-measuring on its end is cheap insurance if the menu was
+  // opened while the panel was still moving.
+  panel.addEventListener('transitionend', () => { if (!menu.hidden) position(); });
+})();
+
+// --- Submit warnings ---
+// A submission that did not reach disk must SAY SO on the page. The whole
+// failure mode this guards against is a confident "übermittelt" panel sitting
+// on top of work that no longer exists anywhere, which is what sends the user
+// away believing Claude will pick it up.
+//
+// Locale strings, resolved at generation time per § UI Locale:
+//   {{panel.submit_queued_offline}}   — "Bridge nicht erreichbar — wird bei
+//                                        Reconnect automatisch nachgeholt.
+//                                        Deine Eingaben sind lokal gesichert."
+//   {{panel.submit_not_durable}}      — "Die Bridge konnte die Übermittlung
+//                                        nicht sichern (Speicherproblem).
+//                                        Nichts ist verloren — deine Eingaben
+//                                        liegen lokal. Bitte erneut absenden."
+//   {{panel.attachments_not_synced}}  — "Ein Bild liegt noch nur lokal vor und
+//                                        wird automatisch nachgereicht."
+//   {{panel.submit_collect_failed}}   — "Entscheidungen konnten nicht
+//                                        eingesammelt werden — nichts wurde
+//                                        gesendet. …" (+ the error message)
+function showSubmitWarning(msg) {
+  // Host = whichever panel is ON SCREEN. Both panels exist at all times and
+  // only `display` flips between them; a warning raised while the ready
+  // panel is up (collector threw, restorePanelToReady() ran first) must not
+  // land in the hidden submitted panel where nobody sees it.
+  const submitted = document.getElementById('panel-submitted');
+  const host = (submitted && submitted.style.display !== 'none') ? submitted
+            : (document.getElementById('panel-ready') || submitted);
+  if (!host) return;
+  let strip = host.querySelector('.submit-warning');
+  if (!strip) {
+    strip = document.createElement('div');
+    strip.className = 'submit-warning';
+    strip.setAttribute('role', 'alert');
+    host.insertBefore(strip, host.firstChild);
+  }
+  strip.textContent = msg;
+  strip.style.display = 'block';
+}
+
+function clearSubmitWarning() {
+  document.querySelectorAll('.submit-warning').forEach(el => el.remove());
+}
+
+// --- Content dimmer (focus shifter after submit) ---
+// After a submit the user's attention belongs on the decision panel / FAB,
+// not on the now-frozen content. showContentDimmer reveals a fixed overlay
+// over the content area; the panel + FABs sit at higher z-index and stay
+// clear and clickable. The dimmer itself is click-to-dismiss — clicking
+// anywhere on it removes `content-dimmed` and hides the overlay, letting
+// the user re-engage with the content without losing the submitted state.
+// On page reload (next iteration / final report) the body class is naturally
+// gone, so no extra cleanup is needed.
+function showContentDimmer() {
+  const dim = document.getElementById('content-dimmer');
+  if (dim) dim.hidden = false;
+}
+function hideContentDimmer() {
+  const dim = document.getElementById('content-dimmer');
+  if (dim) dim.hidden = true;
+  document.body.classList.remove('content-dimmed');
+}
+// Frozen veil — the same overlay doubles as the lock over a past iteration.
+// showIteration() calls this on EVERY entry into a non-live tab, so a veil the
+// user lifted (click / Escape) comes back the moment they switch tabs: at most
+// the one past round currently on screen is ever unlocked, and switching to
+// the live tab hides the dimmer instead (see showIteration), so from the live
+// round every past round is locked again.
+function lockFrozenView() {
+  document.body.classList.add('content-dimmed');
+  showContentDimmer();
+}
+document.getElementById('content-dimmer')
+  ?.addEventListener('click', hideContentDimmer);
+// Keyboard escape — keyboard-only users can't click the dimmer, so let
+// Escape dismiss it. Only acts while the dimmer is actually visible AND the
+// panel is closed: with the panel open the same press is the dismissal of the
+// panel (§ Panel Chrome (all templates)), and letting it through here would
+// silently unlock the frozen round behind it instead.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.body.classList.contains('panel-open')) return;
+  const dim = document.getElementById('content-dimmer');
+  if (dim && !dim.hidden) hideContentDimmer();
+});
+
+// A user-changed checkbox/radio is `touched` from then on — the same mark
+// the text fields carry (§ State Persistence). It is what stops a late
+// restoreState() (the durable-draft merge) from silently reverting an answer
+// the close-out sheet has already mirrored into its rows and its plan.
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t && t.matches && t.matches('input[type="checkbox"], input[type="radio"]')) {
+    t.dataset.touched = '1';
+  }
+}, true);
+
+// --- Final-report close-out sheet (action: "finalize") ---
+// The final report used to hand the user four independent controls at once —
+// Shippen, Issues erstellen, Concept beenden, Iterationen ansehen — each with
+// its own submit and an execution order nobody could see. A four-step wizard
+// fixed the ordering but bought a new confusion: every "Weiter" looked like it
+// might already have done something, and the consequence list — the thing
+// that makes one irreversible click legitimate — sat three steps deep.
+//
+// This is ONE sheet, an ACCORDION of rows in the order Claude executes them
+// (open points → ship → this page → hand-offs), one open at a time, a live
+// plan BELOW the single button, and nothing that commits anything before that
+// button. Claude then runs the parts in that same fixed order (SKILL.md
+// Step 5b · finalize).
+const CLOSEOUT_DEFAULT_ROUTE = 'issue';
+// The rows in accordion/execution order. 'plan' is deliberately not one of
+// them — it is the readout of the rows above, never a thing to answer.
+const CLOSEOUT_ROW_KINDS = ['followups', 'ship', 'files', 'handoffs'];
+
+function finalReportSection() {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  return (active && active.hasAttribute('data-final-report')) ? active : null;
+}
+
+// The [data-open-questions] checkboxes in the REPORT BODY stay the single
+// source of truth for which points are still open. Already-routed items carry
+// `disabled` (Claude sets it when it writes the [Issue #NNN] link or the
+// implemented note), so they drop out here and the whole block disappears
+// once everything is routed.
+function openQuestionBoxes() {
+  const active = finalReportSection();
+  const block = active ? active.querySelector('[data-open-questions]') : null;
+  return block
+    ? Array.from(block.querySelectorAll('input[type="checkbox"]:not(:disabled)'))
+    : [];
+}
+
+// The id Claude gets back in the payload: whatever the report declared.
+function followUpId(el) { return el.name || el.id || ''; }
+
+// The key the ROW's radio group is named after — which is not the same thing.
+// `name`/`id` are mandatory on an open-question checkbox and unique in
+// practice, but a hand-written report breaks both assumptions, and a radio
+// group is keyed by name document-wide: two rows sharing one make choosing a
+// route on the second silently un-choose the first, and every nameless row
+// would answer with the default no matter what the user clicked. So the key
+// is the declared id when it is usable, and a disambiguated one when it is
+// not — the payload keeps the declared value either way.
+function followUpKeys(boxes) {
+  const seen = {};
+  return boxes.map((el, i) => {
+    const raw = followUpId(el);
+    if (!raw) return 'pos-' + i;
+    seen[raw] = (seen[raw] || 0) + 1;
+    return seen[raw] === 1 ? raw : raw + '~' + seen[raw];
+  });
+}
+
+// Which of the three routes the user picked for one open point. Before the
+// radios exist (first render) — and for any row whose group somehow lost its
+// selection — the answer is the harmless default: file an issue, write no
+// code.
+function followUpRoute(key) {
+  if (!key) return CLOSEOUT_DEFAULT_ROUTE;
+  const host = document.getElementById('closeout-followup-list');
+  const el = host && host.querySelector('input[name="fu-' + CSS.escape(key) + '"]:checked');
+  return el ? el.value : CLOSEOUT_DEFAULT_ROUTE;
+}
+
+// One payload item. `description` = explicit data-issue-body, else the
+// visible .oq-label text. Either is enough for Claude to skip the
+// auto-issue AskUserQuestion path — the user committed against the plan on
+// screen, so we MUST NOT ask again. The same shape feeds both buckets: an
+// item the user routed to "jetzt umsetzen" carries exactly the context an
+// implementing agent needs.
+function followUpItem(el) {
+  const labelEl = el.closest('label')?.querySelector('.oq-label');
+  const labelText = labelEl ? labelEl.textContent.trim() : '';
+  return {
+    id: followUpId(el),
+    title: el.dataset.issueTitle || labelText,
+    type: el.dataset.issueType || 'chore',
+    description: el.dataset.issueBody || labelText,
+    // Optional project-specific label hints — picked up by Claude when
+    // present, silently ignored when absent. Concept HTML is generated by
+    // Claude, so these are populated from concept context.
+    role: el.dataset.issueRole || null,
+    module: el.dataset.issueModule || null,
+    milestone: el.dataset.issueMilestone || null,
+    selected: true
+  };
+}
+
+function collectFollowUps(route) {
+  const boxes = openQuestionBoxes();
+  const keys = followUpKeys(boxes);
+  return boxes
+    .filter((el, i) => el.checked && followUpRoute(keys[i]) === route)
+    .map(followUpItem);
+}
+
+// Two buckets out of one list. They are disjoint by construction — a row has
+// exactly one route — so an item can never be filed AND built.
+function collectIssueItems() { return collectFollowUps('issue'); }
+function collectImplementItems() { return collectFollowUps('implement'); }
+
+function collectDisposition() {
+  const sheet = document.getElementById('closeout-sheet');
+  const scope = sheet || document;
+  const radio = scope.querySelector('input[name="dispose-mode"]:checked');
+  const moveEl = document.getElementById('dispose-move-to');
+  const mode = radio ? radio.value : 'discard';
+  const moveTo = (moveEl && moveEl.value.trim()) ? moveEl.value.trim() : null;
+  return { mode, moveTo };
+}
+
+function closeoutShipChoice() {
+  // Scoped to the sheet: every one of these controls is the panel's own, and
+  // a same-named control in the report body would otherwise win by document
+  // order and answer for the user.
+  const sheet = document.getElementById('closeout-sheet');
+  const el = sheet && sheet.querySelector('input[name="closeout-ship"]:checked');
+  return el ? el.value : null;
+}
+
+// --- Accordion rows: open/answered state, one row open at a time ---
+// "Answered" survives a reload within the SAME session (sessionStorage,
+// never localStorage — the route/ship radios stay data-no-persist by design,
+// see § above, and this must not smuggle their choices back in). Keyed by
+// iteration so a later final report (a resumed/second close-out on the same
+// page) starts fresh rather than inheriting a prior round's progress.
+function closeoutStorageKey() {
+  const section = finalReportSection();
+  const iter = section ? section.dataset.iteration : '0';
+  return (typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'concept') + '-closeout-answered-' + iter;
+}
+function loadCloseoutAnswered() {
+  try {
+    const raw = sessionStorage.getItem(closeoutStorageKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function saveCloseoutAnswered(map) {
+  try { sessionStorage.setItem(closeoutStorageKey(), JSON.stringify(map)); } catch (e) { /* best effort */ }
+}
+
+// The rows currently on the sheet — every non-plan block that is not hidden.
+// A block hides for a real reason (no open points, no hand-offs), so a
+// hidden block is never counted against "every row answered".
+function closeoutRows() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return [];
+  return CLOSEOUT_ROW_KINDS
+    .map(kind => sheet.querySelector('.closeout-block[data-closeout-block="' + kind + '"]'))
+    .filter(el => el && !el.hidden);
+}
+function closeoutOpenRow() {
+  return closeoutRows().find(el => el.dataset.open === 'true') || null;
+}
+function closeoutAllAnswered() {
+  const rows = closeoutRows();
+  return rows.length === 0 || rows.every(el => el.dataset.answered === 'true');
+}
+// Exactly one open row at a time — opening one closes the others. Opening a
+// row never touches its answered state: re-opening an already-answered row
+// (to look again, or change the answer) keeps it answered.
+function openCloseoutRow(target) {
+  closeoutRows().forEach(el => {
+    const isTarget = el === target;
+    el.dataset.open = isTarget ? 'true' : 'false';
+    const head = el.querySelector('[data-closeout-row]');
+    const body = el.querySelector('[data-closeout-row-body]');
+    if (head) head.setAttribute('aria-expanded', isTarget ? 'true' : 'false');
+    if (body) body.hidden = !isTarget;
+  });
+}
+// The collapsed row's one-line answer, reusing the same collectors/labels the
+// plan and the payload already read from — never a second source of truth.
+function closeoutRowSummary(kind) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (kind === 'followups') {
+    const boxes = openQuestionBoxes();
+    if (!boxes.length) return '';
+    const keys = followUpKeys(boxes);
+    const host = document.getElementById('closeout-followup-list');
+    const labels = {
+      issue: (host && host.dataset.labelIssue) || 'Issue',
+      implement: (host && host.dataset.labelImplement) || '',
+      ignore: (host && host.dataset.labelIgnore) || ''
+    };
+    const parts = boxes.map((b, i) => labels[followUpRoute(keys[i])] || '');
+    return boxes.length + ' · ' + parts.join(', ');
+  }
+  if (kind === 'ship') {
+    const choice = closeoutShipChoice();
+    if (!choice) return (sheet && sheet.dataset.labelUnanswered) || '';
+    return choice === 'yes'
+      ? (sheet && sheet.dataset.labelShipYes) || ''
+      : (sheet && sheet.dataset.labelShipNo) || '';
+  }
+  if (kind === 'files') {
+    const mode = document.querySelector('input[name="dispose-mode"]:checked');
+    return (mode && mode.closest('label')?.querySelector('strong')?.textContent.trim()) || '';
+  }
+  if (kind === 'handoffs') {
+    const n = document.querySelectorAll('#closeout-handoffs-list li').length;
+    return ((sheet && sheet.dataset.labelSteps) || '{n}').replace('{n}', String(n));
+  }
+  return '';
+}
+// Locked = not answered AND not the open row: every unanswered row after the
+// current one. The order of the sheet is the order Claude executes it in, so
+// a later row may only be reached through "Weiter ›" on the ones before it;
+// an answered row stays reachable (closeoutRowClick()) to go back and change
+// the answer. `disabled` on the head is what makes the lock real for
+// keyboard and AT, the data-locked attribute is what the CSS dims.
+function isCloseoutRowLocked(block) {
+  return block.dataset.answered !== 'true' && block.dataset.open !== 'true';
+}
+function updateCloseoutRowSummary(block) {
+  const summaryEl = block.querySelector('[data-closeout-summary]');
+  if (summaryEl) summaryEl.textContent = closeoutRowSummary(block.dataset.closeoutBlock);
+  const answered = block.dataset.answered === 'true';
+  const open = block.dataset.open === 'true';
+  const mark = block.querySelector('[data-closeout-mark]');
+  if (mark) mark.textContent = answered ? '✓' : open ? '●' : '○';
+  const locked = isCloseoutRowLocked(block);
+  block.dataset.locked = locked ? 'true' : 'false';
+  const head = block.querySelector('[data-closeout-row]');
+  // A frozen sheet has already disabled every head (setCloseoutFrozen) —
+  // never re-enable one from here.
+  const sheet = document.getElementById('closeout-sheet');
+  if (head && !(sheet && sheet.dataset.frozen === 'true')) head.disabled = locked;
+}
+function updateCloseoutProgress() {
+  const sheet = document.getElementById('closeout-sheet');
+  const el = document.getElementById('closeout-progress');
+  if (!sheet || !el) return;
+  const rows = closeoutRows();
+  const done = rows.filter(r => r.dataset.answered === 'true').length;
+  const tpl = sheet.dataset.labelProgress || '{n}/{total}';
+  el.textContent = rows.length
+    ? tpl.replace('{n}', String(done)).replace('{total}', String(rows.length))
+    : '';
+}
+// The one button's pre-submit states — never two buttons. Ready = every
+// visible row answered; only then does it read as the warning-coloured
+// execute action, with the consequence warning as its native title. While
+// the bridge is disconnected the ready label says so ("· wird
+// zwischengespeichert"): the final report has no status line of its own
+// (§ CSS body.viewing-final .panel-status), so the button is the one place
+// left to say that the click will be queued rather than delivered.
+// checkClaudeConnection() calls this on every heartbeat for that reason.
+// Never touches a button that already carries a finalize state — after the
+// click the button is the submission's status (setCloseoutButtonState()) and
+// nothing on the sheet may repaint it as a live control again.
+function updateCloseoutButton() {
+  const btn = document.getElementById('closeout-execute');
+  if (!btn || btn.dataset.finalizeState) return;
+  const ready = closeoutAllAnswered();
+  btn.dataset.ready = ready ? 'true' : 'false';
+  const label = btn.querySelector('[data-closeout-btn-label]');
+  const icon = btn.querySelector('[data-closeout-btn-icon]');
+  const conn = document.getElementById('connection-status');
+  const offline = !!conn && conn.dataset.state === 'disconnected';
+  if (label) {
+    label.textContent = !ready ? (btn.dataset.labelNext || '')
+      : offline ? (btn.dataset.labelExecuteOffline || btn.dataset.labelExecute || '')
+      : (btn.dataset.labelExecute || '');
+  }
+  // The icon is warning-only. "Weiter ›" already carries its own "›" inside
+  // the label string — an always-visible icon glyph next to it used to
+  // render "› Weiter ›". Hidden (not emptied) in the "next" state so no
+  // stray gap/glyph is left in the flex row either.
+  if (icon) {
+    icon.hidden = !ready;
+    icon.textContent = ready ? '⚠' : '';
+  }
+  // "Ein Klick, alles davon" only makes sense once the click it describes
+  // can actually fire.
+  if (ready) btn.title = btn.dataset.titleExecute || '';
+  else btn.removeAttribute('title');
+}
+// After the click the button IS the status: running → done, or stalled.
+// Sets [data-finalize-state] (the CSS colour), swaps the label/icon from the
+// baked-in data-label-* strings and clears the execute title; `null` clears
+// the state again (restoreCloseoutToReady) and hands the button back to
+// updateCloseoutButton(). The stalled state is the only one that also keeps
+// a paragraph under the button (`.hint[data-finalize-state="stalled"]`): it
+// carries an instruction ("schau in den Chat"), not just a state.
+function setCloseoutButtonState(state) {
+  const btn = document.getElementById('closeout-execute');
+  const sheet = document.getElementById('closeout-sheet');
+  if (sheet) {
+    sheet.querySelectorAll('.hint[data-finalize-state]').forEach(el => {
+      el.hidden = el.dataset.finalizeState !== state;
+    });
+  }
+  if (!btn) return;
+  if (!state) {
+    delete btn.dataset.finalizeState;
+    updateCloseoutButton();
+    return;
+  }
+  btn.dataset.finalizeState = state;
+  btn.removeAttribute('title');
+  const glyph = state === 'running' ? '⏳' : state === 'done' ? '✓' : '⚠';
+  const key = 'label' + state.charAt(0).toUpperCase() + state.slice(1);
+  const label = btn.querySelector('[data-closeout-btn-label]');
+  const icon = btn.querySelector('[data-closeout-btn-icon]');
+  if (label) label.textContent = btn.dataset[key] || '';
+  if (icon) { icon.hidden = false; icon.textContent = glyph; }
+}
+function refreshCloseoutRows() {
+  closeoutRows().forEach(updateCloseoutRowSummary);
+  updateCloseoutProgress();
+  updateCloseoutButton();
+}
+// Called at the end of every non-closed renderCloseout(). Row DOM nodes are
+// static (they live in the skeleton, not rebuilt per render), so
+// `dataset.answered === undefined` is true only on the very first render —
+// every later call leaves in-session progress alone and just re-derives the
+// summaries/progress/button from current answers.
+// Fixed to match the `min-height` on .closeout-row (§ CSS) — the two MUST
+// agree, or consecutive stuck heads either gap or overlap.
+const CLOSEOUT_HEAD_H_REM = 2.2;
+// Sticky-both-edges: each head gets BOTH `top: i × H` and
+// `bottom: (n-1-i) × H`. `top` alone piles heads at the TOP as the region
+// scrolls down, but once the region is shorter than n × H (routine here —
+// 4 heads is already ~9rem, and a live check found only 1 head fitting
+// inside a fixed-height rows region before this), the LAST head(s) still get
+// pushed out past the bottom of the scroll container while the earlier ones
+// pile up top. Adding the symmetric `bottom` offset gives every head a
+// second constraint pinning it from the other edge, so the browser keeps it
+// inside a fixed HxH-tall "slot" regardless of scroll position or how short
+// the region is — no scroll-listener, no measured layout, just two sticky
+// constraints per element. Indices are over VISIBLE blocks only (computed
+// fresh on every call): a hidden block (no open points, no hand-offs) must
+// not leave a gap in the stack.
+function layoutCloseoutRowHeads() {
+  const rows = closeoutRows();
+  const n = rows.length;
+  rows.forEach((block, i) => {
+    block.dataset.closeoutIndex = String(i);
+    const head = block.querySelector('[data-closeout-row]');
+    if (!head) return;
+    head.style.top = (i * CLOSEOUT_HEAD_H_REM) + 'rem';
+    head.style.bottom = ((n - 1 - i) * CLOSEOUT_HEAD_H_REM) + 'rem';
+  });
+}
+function initCloseoutRows() {
+  const rows = closeoutRows();
+  if (!rows.length) return;
+  const answered = loadCloseoutAnswered();
+  rows.forEach(r => {
+    if (r.dataset.answered === undefined) {
+      r.dataset.answered = answered[r.dataset.closeoutBlock] ? 'true' : 'false';
+    }
+  });
+  if (!closeoutOpenRow()) {
+    openCloseoutRow(rows.find(r => r.dataset.answered !== 'true') || rows[0]);
+  }
+  // Re-run on every call, not just the first: the visible SET can change
+  // (a followups/hand-offs block appearing or disappearing) and the offsets
+  // above are only valid for the current set.
+  layoutCloseoutRowHeads();
+  refreshCloseoutRows();
+}
+// A row head click. Only an ANSWERED row (or the one already open) may be
+// opened by hand — going back to change an answer; a locked row's head is
+// `disabled` (updateCloseoutRowSummary()) so it never gets here from a real
+// click, but the guard stays for programmatic callers. Going back leaves the
+// rows in between exactly as they were: answered stays answered, and
+// "Weiter ›" from the re-opened row lands on the first still-unanswered one
+// again (closeoutButtonClick()).
+function closeoutRowClick(block) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!block || !sheet || sheet.dataset.frozen === 'true') return;
+  if (isCloseoutRowLocked(block)) return;
+  openCloseoutRow(block);
+  refreshCloseoutRows();
+}
+// The single button's click handler. Not yet all answered → confirm the open
+// row (refusing on an unanswered ship question) and open the next unanswered
+// one; all answered → this IS the execute click.
+function closeoutButtonClick() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || sheet.dataset.frozen === 'true') return;
+  if (closeoutAllAnswered()) {
+    submitFinalize();
+    return;
+  }
+  const rows = closeoutRows();
+  const open = closeoutOpenRow() || rows.find(r => r.dataset.answered !== 'true');
+  if (!open) return;
+  if (open.dataset.closeoutBlock === 'ship' && !closeoutShipChoice()) {
+    const req = document.getElementById('closeout-ship-required');
+    if (req) {
+      req.hidden = false;
+      req.scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
+  open.dataset.answered = 'true';
+  const answered = loadCloseoutAnswered();
+  answered[open.dataset.closeoutBlock] = true;
+  saveCloseoutAnswered(answered);
+  const next = rows.find(r => r.dataset.answered !== 'true');
+  openCloseoutRow(next || open);
+  refreshCloseoutRows();
+}
+
+// Re-renders the sheet. Called from showIteration() with { reset: true } (a
+// tab switch re-reads the report from scratch) and from the change listener
+// without it. There are no steps to keep a position in any more — the reset
+// flag only forces the follow-up rows to be rebuilt from the body.
+function refreshCloseout(opts) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  if (opts && opts.reset) {
+    // Force the rows to be re-derived from the report body — the section may
+    // have been rewritten under us. The user's answers are carried over by
+    // buildFollowUpList(); "reset" is about the row SET, never about the
+    // choices made on it.
+    const host = document.getElementById('closeout-followup-list');
+    if (host) host.dataset.itemKey = '';
+  }
+  renderCloseout();
+}
+
+// Freezing is not cosmetic: after a submit the payload is fixed, so a live
+// radio or a re-enabled execute button would let the user act on a screen
+// that no longer describes what was sent.
+// Scoped to the sheet's own controls ONLY. Never touch the body's
+// [data-open-questions] checkboxes here: Claude disables those permanently as
+// it routes each item, and a blanket re-enable on unfreeze would hand back
+// checkboxes for issues that already exist.
+function setCloseoutFrozen(frozen) {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  sheet.dataset.frozen = frozen ? 'true' : 'false';
+  sheet.querySelectorAll('input, button').forEach(el => { el.disabled = frozen; });
+  // Unfreezing re-enabled every row head above — a locked row must not come
+  // back clickable.
+  if (!frozen) closeoutRows().forEach(updateCloseoutRowSummary);
+}
+
+// Re-arm after a finalize that did not complete — a blocked ship, a stale
+// processed state, a bridge that could not persist. Without this the execute
+// button stays disabled forever and the user's only way out is a reload.
+function restoreCloseoutToReady() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  setCloseoutButtonState(null);
+  setCloseoutFrozen(false);
+  renderCloseout();
+}
+
+// What the user has to do by hand once the close-out is through — the one
+// part of a concept nothing here can automate, so it must not disappear into
+// the report body. Mirrors the report's [data-handoffs] list onto the sheet;
+// renderCloseout() keeps this block after data-closed, when every other block
+// is gone.
+function renderHandoffs() {
+  const sheet = document.getElementById('closeout-sheet');
+  const block = sheet && sheet.querySelector('[data-closeout-block="handoffs"]');
+  const host = document.getElementById('closeout-handoffs-list');
+  if (!block || !host) return;
+  const section = finalReportSection();
+  const list = section ? section.querySelector('[data-handoffs]') : null;
+  const items = list ? Array.from(list.querySelectorAll('li')) : [];
+  host.textContent = '';
+  items.forEach(li => {
+    const el = document.createElement('li');
+    el.textContent = li.textContent.trim().replace(/\s+/g, ' ');
+    host.appendChild(el);
+  });
+  const count = document.getElementById('closeout-handoffs-count');
+  if (count) count.textContent = items.length ? '(' + items.length + ')' : '';
+  block.hidden = items.length === 0;
+}
+
+function renderCloseout() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+
+  // A closed-out report is done. Claude stamps data-closed on the section
+  // before the final /reload, so the reloaded page shows the outcome instead
+  // of re-arming a sheet whose bridge has already been shut down — a live
+  // execute button there would queue a submission nobody will ever pick up.
+  const section = finalReportSection();
+  if (section && section.hasAttribute('data-closed')) {
+    sheet.querySelectorAll('.closeout-block').forEach(el => {
+      el.hidden = el.dataset.closeoutBlock !== 'handoffs';
+    });
+    renderHandoffs();
+    // Done means no controls at all — the hand-offs row keeps its icon +
+    // label as a plain heading but loses every answerable affordance: no ○/✓
+    // mark, no "current answer" summary, no aria-expanded, permanently
+    // disabled so it neither opens/closes anything nor looks clickable
+    // (§ CSS ":disabled" override — the row's own cursor:pointer would
+    // otherwise survive `disabled`). Never `head.hidden`: [hidden] loses to
+    // `.closeout-row`'s own `display: flex` in the cascade, which is what
+    // left a live-looking "○ Danach von Hand" row after close in practice.
+    const handoffsBlock = sheet.querySelector('[data-closeout-block="handoffs"]');
+    if (handoffsBlock) {
+      const head = handoffsBlock.querySelector('[data-closeout-row]');
+      const body = handoffsBlock.querySelector('[data-closeout-row-body]');
+      if (head) {
+        head.disabled = true;
+        head.removeAttribute('aria-expanded');
+        const mark = head.querySelector('[data-closeout-mark]');
+        if (mark) mark.hidden = true;
+        const summary = head.querySelector('[data-closeout-summary]');
+        if (summary) { summary.hidden = true; summary.textContent = ''; }
+      }
+      if (body) body.hidden = false;
+    }
+    // The button stays, as the outcome: "✓ Concept abgeschlossen." — disabled
+    // (nothing left to click), never hidden (the done state must be visible
+    // where the action was).
+    setCloseoutButtonState('done');
+    const exec = document.getElementById('closeout-execute');
+    if (exec) { exec.hidden = false; exec.disabled = true; }
+    const progress = document.getElementById('closeout-progress');
+    if (progress) progress.textContent = '';
+    return;
+  }
+
+  const boxes = openQuestionBoxes();
+  const followBlock = sheet.querySelector('[data-closeout-block="followups"]');
+  if (followBlock) followBlock.hidden = boxes.length === 0;
+  const count = document.getElementById('closeout-followup-count');
+  if (count) count.textContent = boxes.length ? '(' + boxes.length + ')' : '';
+
+  if (boxes.length) buildFollowUpList();
+  renderHandoffs();
+
+  // Every point dropped is a legitimate answer, but it is worth saying out
+  // loud: nothing at all will be carried out of this concept.
+  const none = document.getElementById('closeout-followups-none');
+  if (none) {
+    none.hidden = !(boxes.length > 0
+      && collectIssueItems().length === 0
+      && collectImplementItems().length === 0);
+  }
+  const req = document.getElementById('closeout-ship-required');
+  if (req && closeoutShipChoice()) req.hidden = true;
+
+  // Re-apply after the rebuild above: buildFollowUpList() creates fresh
+  // radios, which would otherwise come back live on a frozen sheet.
+  if (sheet.dataset.frozen === 'true') setCloseoutFrozen(true);
+
+  // Accordion state — row set may have just changed (a block appeared or
+  // disappeared above), so re-derive open/answered/summaries/button every
+  // time, not just on first render.
+  initCloseoutRows();
+}
+
+// One row per still-open point: its title, then its three routes. The body
+// checkbox stays authoritative for "is this point still open" — "Ignorieren"
+// unchecks it, the other two check it — so Claude's routed-item rewrite keeps
+// working unchanged.
+function buildFollowUpList() {
+  const host = document.getElementById('closeout-followup-list');
+  if (!host) return;
+  const boxes = openQuestionBoxes();
+  // Only rebuild when the underlying item SET changed — a rebuild driven by a
+  // route's own change event would tear the row out from under the user's
+  // cursor mid-click. The comparison is by id, never by count: Claude can
+  // route one item (it gains `disabled`, leaving openQuestionBoxes) while the
+  // same rewrite appends another, and a count-keyed fast path would then sync
+  // every row to the WRONG body checkbox — the user picks a route on a row
+  // labelled A and files an issue for B.
+  const keys = followUpKeys(boxes);
+  const ids = JSON.stringify(keys);
+  if (host.dataset.itemKey === ids) return;
+  // Answers survive the rebuild. refreshCloseout({ reset: true }) runs on
+  // EVERY tab switch, so without this a detour into an earlier round to
+  // re-read something silently reset every row the user had set to "jetzt
+  // umsetzen" back to Issue — and the plan above the execute button would
+  // have agreed with the reset, not with what they chose. Keyed by the radio
+  // group name, so an id that is gone drops its answer with its row.
+  const previous = {};
+  host.querySelectorAll('.followup-routes input[type="radio"]:checked')
+      .forEach(el => { previous[el.name] = el.value; });
+  host.dataset.itemKey = ids;
+  host.textContent = '';
+  const labels = {
+    issue: host.dataset.labelIssue || 'Issue',
+    implement: host.dataset.labelImplement || 'Implement now',
+    ignore: host.dataset.labelIgnore || 'Drop',
+    originDeferred: host.dataset.labelOriginDeferred || 'deferred by you',
+    originFound: host.dataset.labelOriginFound || 'found on the way'
+  };
+  boxes.forEach((src, i) => {
+    const key = keys[i];
+    const row = document.createElement('div');
+    row.className = 'followup';
+    row.dataset.followup = followUpId(src) || key;
+    const title = document.createElement('span');
+    title.className = 'followup-title';
+    const labelEl = src.closest('label')?.querySelector('.oq-label');
+    title.textContent = src.dataset.issueTitle
+      || (labelEl ? labelEl.textContent.trim() : '');
+    row.appendChild(title);
+    // Where a row came from is part of the decision: a point the user parked
+    // themselves reads differently from one Claude stumbled over. The
+    // admission gate (SKILL.md § Open points admission gate) allows exactly
+    // these two origins; any other value is a report that skipped the gate,
+    // and the row then carries no tag rather than a made-up one.
+    const origin = src.dataset.oqOrigin;
+    if (origin === 'deferred' || origin === 'found') {
+      const tag = document.createElement('span');
+      tag.className = 'followup-origin';
+      tag.dataset.origin = origin;
+      tag.textContent = origin === 'deferred' ? labels.originDeferred : labels.originFound;
+      row.appendChild(tag);
+    }
+    const routes = document.createElement('div');
+    routes.className = 'followup-routes';
+    routes.setAttribute('role', 'radiogroup');
+    routes.setAttribute('aria-label', title.textContent);
+    ['issue', 'implement', 'ignore'].forEach(value => {
+      const label = document.createElement('label');
+      label.className = 'followup-route';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      // Named so the three form one radio group, but data-no-persist for the
+      // same reason the ship radios carry it: saveState() otherwise restores
+      // every named radio document-wide, and a remembered "jetzt umsetzen"
+      // would sail through a later close-out and write code the user never
+      // re-authorised. After a reload every row falls back to the default.
+      input.name = 'fu-' + key;
+      input.value = value;
+      input.dataset.noPersist = '';
+      // The body checkbox decides ignore-vs-not (it is the source of truth
+      // for "still open"); a preserved answer only chooses between the two
+      // routes that keep it open.
+      const prior = previous['fu-' + key];
+      const initial = !src.checked ? 'ignore'
+        : (prior === 'implement' ? 'implement' : CLOSEOUT_DEFAULT_ROUTE);
+      if (value === initial) input.checked = true;
+      input.addEventListener('change', () => {
+        src.checked = value !== 'ignore';
+        src.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      const text = document.createElement('span');
+      text.textContent = labels[value];
+      label.appendChild(input);
+      label.appendChild(text);
+      routes.appendChild(label);
+    });
+    row.appendChild(routes);
+    host.appendChild(row);
+  });
+}
+
+// One submit for the whole close-out. Claude executes the parts in a fixed
+// order (issues → implement → ship → disposition), so the user never has to
+// sequence outward-facing actions by clicking things in the right order.
+// POST /decisions has NO version guard (that lives on /reset and /status), so
+// a payload the bridge already fsynced but whose response never reached the
+// browser sits in two places at once. For an iterate that is harmless; for a
+// finalize it means a second `gh issue create` run and a second real release.
+// The id is what lets retryPendingSubmission() recognise its own payload on
+// the bridge and drop the local copy instead of re-sending it.
+function newSubmissionId() {
+  return 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+async function submitFinalize() {
+  const active = finalReportSection();
+  const sheet = document.getElementById('closeout-sheet');
+  const btn = document.getElementById('closeout-execute');
+  if (!active || !sheet || !btn) return;
+  if (sheet.dataset.frozen === 'true') return;
+
+  // The ship question has no preselected answer on purpose: a release must
+  // never be the by-product of running the sheet. Explain the block instead
+  // of disabling execute, which would look broken.
+  if (!closeoutShipChoice()) {
+    const req = document.getElementById('closeout-ship-required');
+    if (req) {
+      req.hidden = false;
+      req.scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
+
+  const issues = collectIssueItems();
+  const implement = collectImplementItems();
+  const payload = {
+    submitted: true,
+    action: 'finalize',
+    submission_id: newSubmissionId(),
+    issues: { create: issues.length > 0, items: issues },
+    implement: { run: implement.length > 0, items: implement },
+    ship: { run: closeoutShipChoice() === 'yes' },
+    disposition: collectDisposition()
+  };
+
+  setCloseoutFrozen(true);
+  setCloseoutButtonState('running');
+
+  const container = document.getElementById('concept-decisions');
+  if (container) container.textContent = JSON.stringify(payload);
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+  // Same submit-state bookkeeping submitWithAction does. Without it
+  // pollProcessedState() returns at its first line, so a finalize gets no
+  // `_picked_up_at` progress in the status channel and — worse — no
+  // PROCESSED_SAFETY_MS recovery: a Claude that dies mid-finalize would leave
+  // the sheet disabled under a spinner forever.
+  _submittedAt = Date.now();
+  _submittedReloadCounter = _bootReloadCounter;
+  _submittedAction = 'finalize';
+
+  // A finalize can ship. "The request did not throw" is not good enough here —
+  // require the bridge's durable ack, exactly as submitWithAction does.
+  let durable = false;
+  let transportFailed = false;
+  try {
+    const res = await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    durable = res.ok && body.durable !== false;
+  } catch (e) {
+    transportFailed = true;
+  }
+
+  if (!durable) {
+    _guardedSetItem(STORAGE_KEY + '-pending', JSON.stringify(payload));
+    if (transportFailed) {
+      // Offline / bridge down — retryPendingSubmission() delivers it on
+      // reconnect, so leave the sent state up and just explain the delay.
+      if (typeof showSubmitWarning === 'function') {
+        showSubmitWarning('{{panel.submit_queued_offline}}');
+      }
+    } else {
+      // The bridge answered but could not persist. Nothing retries that on its
+      // own, so hand the sheet back rather than leave a "sent" state standing
+      // over a payload that never landed.
+      restoreCloseoutToReady();
+      document.body.classList.remove('concept-submitted', 'content-dimmed');
+      hideContentDimmer();
+      _submittedAt = 0;
+      _submittedReloadCounter = null;
+      _submittedAction = null;
+      if (typeof showSubmitWarning === 'function') {
+        showSubmitWarning('{{panel.submit_not_durable}}');
+      }
+    }
+  }
+}
+
+// A finalize takes minutes — issues, follow-ups built by agents, a release.
+// If the tab is reloaded while it runs, the sheet would come back fully
+// re-armed, and a second execute would carry a NEW submission_id that the
+// replay guard cannot recognise as a duplicate: a second `gh issue create`
+// run and a second real release. So ask the bridge what is in flight before
+// arming anything.
+async function restoreInFlightCloseout() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || !finalReportSection()) return;
+  try {
+    const res = await fetch('/decisions', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.submitted || data.action !== 'finalize') return;
+    // Processed: Claude is done with it. Either this page is about to be
+    // rewritten, or the session is over — nothing to re-arm and nothing to
+    // freeze.
+    if (data._processed_at) return;
+    setCloseoutFrozen(true);
+    setCloseoutButtonState('running');
+    document.body.classList.add('concept-submitted');
+    // Re-join the submit-state machine so pollProcessedState() keeps tracking
+    // the round that outlived its tab.
+    _submittedAt = Date.now();
+    _submittedReloadCounter = _bootReloadCounter;
+    _submittedAction = 'finalize';
+    if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  } catch (e) { /* bridge unreachable — leave the sheet as the DOM has it */ }
+}
+
+// The safety net (pollProcessedState → restorePanelToReady) must NOT re-arm a
+// finalize. It was delivered durably; Claude either finishes it and rewrites
+// this page, or reports a blocker and sends /reload. Re-arming here would put
+// a live execute button on a page whose file may already be deleted (the
+// default disposition is "Seite löschen", which deliberately sends no
+// /reload) and whose bridge is shutting down — a click there queues a payload
+// nobody will ever pick up.
+function markCloseoutStalled() {
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet) return;
+  setCloseoutFrozen(true);
+  setCloseoutButtonState('stalled');
+}
+
+// "Iterationen ansehen" is wired in wireCloseout() below — non-committal,
+// client-only: it scrolls the iteration tab bar into view and flashes it so
+// the user can revisit earlier rounds without leaving the final report. The
+// sheet stays put; the whole point of the persistent panel is that there is
+// nothing to re-open.
+
+// Recompute whenever an input the plan summarises changes — the open-questions
+// checkboxes in the body, a follow-up route, the ship choice, the disposition
+// mode. The generic change listener (for saveState) fires the same event, so
+// we just hook into the same channel.
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (!t || !t.matches) return;
+  // A frozen sheet describes a payload that is already on its way — nothing
+  // on screen may still re-render against newer input.
+  if (document.getElementById('closeout-sheet')?.dataset.frozen === 'true') return;
+  // Element-agnostic on purpose: openQuestionBoxes() and the gating contract
+  // both accept ANY element carrying [data-open-questions]. A listener pinned
+  // to `section[...]` silently stops updating the rows and the plan on a
+  // report that used a div or ul — so the plan would name the wrong counts
+  // right before the one irreversible click.
+  if (t.matches('[data-open-questions] input[type="checkbox"]') ||
+      t.matches('.followup-routes input[type="radio"]') ||
+      t.matches('input[name="closeout-ship"]') ||
+      t.matches('input[name="dispose-mode"]')) {
+    refreshCloseout();
+  }
+});
+// Wired on DOM-ready, not at parse time: this block is copied verbatim into
+// generated pages, and one whose script ends up before the markup would
+// otherwise get a rendered sheet whose execute button is inert — no console
+// error, no request, nothing to see.
+function wireCloseout() {
+  document.getElementById('closeout-execute')?.addEventListener('click', closeoutButtonClick);
+  // One delegated listener for every row head — the accordion body is
+  // static (never rebuilt per render), so binding once here is enough; only
+  // buildFollowUpList()'s OWN inner content is rebuilt, and its rows sit
+  // inside the already-wired followups row body.
+  document.getElementById('closeout-sheet')?.addEventListener('click', e => {
+    const head = e.target.closest('[data-closeout-row]');
+    if (!head) return;
+    closeoutRowClick(head.closest('.closeout-block'));
+  });
+  document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
+    const tabs = document.querySelector('.iteration-tabs');
+    if (!tabs) return;
+    tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    tabs.classList.remove('tabs-nudge');
+    void tabs.offsetWidth;  // force reflow so the animation restarts
+    tabs.classList.add('tabs-nudge');
+  });
+  refreshCloseout({ reset: true });
+  restoreInFlightCloseout();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', wireCloseout);
+} else {
+  wireCloseout();
+}
+
+// --- Offline Submit Queue ---
+async function retryPendingSubmission() {
+  const pendingKey = STORAGE_KEY + '-pending';
+  const pending = localStorage.getItem(pendingKey);
+  if (!pending) return;
+  // Did this exact payload already land? `fetch` can throw after the bridge
+  // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
+  // that is already being processed. Re-POSTing a finalize that way runs its
+  // side effects — issue creation, a real release, file deletion — a second
+  // time. Payloads without a submission_id (iterate/implement, legacy pages)
+  // keep the old unconditional-retry behaviour.
+  try {
+    const id = JSON.parse(pending).submission_id;
+    if (id) {
+      const cur = await fetch('/decisions', { cache: 'no-store' });
+      const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
+      if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
+    }
+  } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
+  try {
+    const res = await fetch('/decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: pending
+    });
+    const body = res.ok ? await res.json().catch(() => ({})) : {};
+    // Drop the local copy ONLY once the bridge confirms it reached disk.
+    // `res.ok` alone is not that confirmation — see submitWithAction.
+    if (res.ok && body.durable !== false) localStorage.removeItem(pendingKey);
+  } catch (e) { /* still offline */ }
+  // Images that never made it up get another attempt on the same trigger.
+  if (typeof restoreAttachments === 'function') restoreAttachments();
+}
+```
+
+Claude-side: on receiving the payload, branch on `action`:
+- `iterate` → Step 5b iterate branch: summarize + append next iteration only
+- `implement` → Step 5b implement branch: actually write code/files, then
+  append the final-report section (frozen "implementiert" record)
+- `finalize` → Step 5b finalize branch: run the selected close-out parts in a
+  FIXED order — issues (`gh issue create` behind the user-value gate) →
+  implement (the follow-ups routed to "jetzt umsetzen", built through the
+  devops role agents) → ship (full `/do-ship` pipeline) → Step 6 cleanup with the
+  bundled disposition
+- `create-issues` / `ship` / `dispose-concept` → **legacy**, still accepted:
+  pages generated before the sheet send these one at a time. Each maps onto
+  the matching part of the finalize branch (see SKILL.md § Legacy final-report
+  actions); never emit them from newly generated pages
+
+## Panel State Reset
+
+The primary reset is the page reload itself: Claude POSTs `/reload` after
+writing the new iteration, the browser's `pollReload` calls
+`location.reload()`, and the freshly loaded page is in ready state because
+the `concept-submitted` class is not persisted.
+
+`restorePanelToReady()` is a safety-net — only called when `_processed_at`
+indicates Claude finished AND a reload counter advance has been observed
+(i.e. a reload is imminent / about to happen) OR a long stale timeout has
+elapsed (recovery for closed tabs / JS errors where reload never fired).
+
+```javascript
+function restorePanelToReady() {
+  // A final report has no ready panel — its ready state is a re-armed sheet.
+  // Un-hiding #panel-ready here would paint the iterate/implement buttons over
+  // a final report and let the user submit `iterate` against a closed session,
+  // which showIteration() forbids by construction.
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active && active.hasAttribute('data-final-report')) {
+    // A delivered finalize is never re-armed by the safety net — see
+    // markCloseoutStalled(). Every other stuck round on a final report is
+    // handed back so the user can act.
+    if (_submittedAction === 'finalize' && typeof markCloseoutStalled === 'function') {
+      markCloseoutStalled();
+    } else if (typeof restoreCloseoutToReady === 'function') {
+      restoreCloseoutToReady();
+    }
+  } else {
+    document.getElementById('panel-submitted').style.display = 'none';
+    document.getElementById('panel-ready').style.display = 'block';
+    ['submit-iterate-btn', 'submit-implement-btn'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.disabled = false;
+    });
+  }
+  document.body.classList.remove('concept-submitted', 'content-dimmed');
+  hideContentDimmer();
+  // Re-arm the dock together with the submit buttons. markDockSubmitted() made
+  // it read-only on the way out; a ready panel over an uneditable comment
+  // surface is worse than either state on its own.
+  if (typeof unmarkDockSubmitted === 'function') unmarkDockSubmitted();
+  _submittedAt = 0;
+  _submittedReloadCounter = null;
+  _submitInFlight = false;
+  _submittedAction = null;
+  // Status line back from "Übermittelt · Claude arbeitet" to the draft state.
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  // PANEL state only. This used to end in
+  //     localStorage.removeItem('concept-state-' + slug)
+  // which deleted every comment, rating and selection on the page. Both paths
+  // into this function make that catastrophic: it also runs when the bridge
+  // answered 507 (nothing was persisted anywhere, and the local copy was the
+  // only one left), and after the five-minute safety timeout — i.e. precisely
+  // when Claude has stopped responding because of a usage limit. Losing the
+  // user's work is never part of recovering a panel.
+  try {
+    const st = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (st && typeof st === 'object') {
+      delete st._userInteracted;
+      _guardedSetItem(STORAGE_KEY, JSON.stringify(st));
+    }
+  } catch (e) { /* corrupt blob — leave it alone, never delete it */ }
+}
+```
+
+## Submit Progress Steps
+
+After a submit the pinned status line reads "⏳ Übermittelt · Claude
+arbeitet" and shows one progress dot per step; the four-step `#status-steps`
+list itself sits in a `<details class="status-detail">` under the line
+(hidden until submit), so the user can see exactly where the submission is
+in Claude's pipeline. The states the list tracks:
+
+| Step | Trigger | Visible? |
+|---|---|---|
+| 1 · Übermittelt | The user just clicked submit (POST /decisions succeeded) | Always |
+| 2 · Claude verarbeitet | First `/pending=true` response on the server (the pickup waker, or the backup cron, picked up the submission) — surfaces via `_picked_up_at` in `/decisions` | Always |
+| 3 · Realitäts-Check | Claude POSTs `/status {phase: "reality-check"}` before re-checking the concept against the default branch (`reality-check.md` § The check) — surfaces via `_phase === "reality-check"` | Only once that POST arrives — a check that resolves instantly, or is skipped outright, never shows a step |
+| 4 · Implementierung abgeschlossen | Claude POSTs `/status {phase: "implemented"}` after the implement branch finishes — surfaces via `_phase === "implemented"` in `/decisions` | Only for `action: "implement"` submissions |
+
+**Step 3 reveals itself, it is not pre-armed.** `resetStatusSteps` leaves it
+hidden even for an implement submission, because the overwhelmingly common case
+is a remote that has not moved — and a step that appears, sits at "pending" and
+then flips straight to done would advertise work that never happened. It becomes
+visible the moment the `reality-check` phase actually lands, which is also the
+only moment its duration is worth showing.
+
+The browser only writes step state in `submitWithAction` (reset to baseline)
+and in `updateStatusSteps` (advance based on server fields). After
+`/reload` lands, the freshly loaded page is in ready state, so the steps
+naturally reset for the next submission.
+
+```javascript
+// Lookup helper — every step access goes through this.
+function _stepEl(name) {
+  return document.querySelector('#status-steps li[data-step="' + name + '"]');
+}
+
+function _setStep(name, state, icon) {
+  const li = _stepEl(name);
+  if (!li) return;
+  li.dataset.state = state;
+  const iconEl = li.querySelector('.step-icon');
+  if (iconEl && icon) iconEl.textContent = icon;
+  if (typeof renderStatusDots === 'function') renderStatusDots();
+}
+
+// Compact mirror of the <ol> for the pinned status line: one dot per VISIBLE
+// step, carrying that step's data-state. The <ol> stays the source of truth
+// (and stays in the DOM, expandable under the line) — the dots never hold
+// state of their own, so they cannot disagree with the list.
+function renderStatusDots() {
+  const dots = document.getElementById('status-dots');
+  const list = document.getElementById('status-steps');
+  if (!dots || !list) return;
+  dots.innerHTML = '';
+  list.querySelectorAll('li[data-step]').forEach(li => {
+    if (li.hidden) return;
+    const dot = document.createElement('i');
+    dot.dataset.state = li.dataset.state || 'pending';
+    dots.appendChild(dot);
+  });
+}
+
+// Baseline shown immediately after a submit click. Step 1 done, step 2
+// active (waiting for /pending pickup), the implement step either hidden
+// (iterate) or pending-and-visible (implement), and the reality-check step
+// ALWAYS hidden — it reveals itself only if the check actually runs, see
+// § Submit Progress Steps.
+function resetStatusSteps(action) {
+  _setStep('submitted', 'done', '✓');
+  _setStep('received', 'active', '⏳');
+  const rc = _stepEl('reality-check');
+  if (rc) {
+    rc.hidden = true;
+    rc.dataset.state = 'pending';
+    const rcIcon = rc.querySelector('.step-icon');
+    if (rcIcon) rcIcon.textContent = '○';
+  }
+  const impl = _stepEl('implemented');
+  if (impl) {
+    impl.hidden = (action !== 'implement');
+    impl.dataset.state = 'pending';
+    const iconEl = impl.querySelector('.step-icon');
+    if (iconEl) iconEl.textContent = '○';
+  }
+  if (typeof renderStatusDots === 'function') renderStatusDots();
+}
+
+// Called from pollProcessedState on every tick. Idempotent — re-applying
+// the same server state is a no-op.
+function updateStatusSteps(data) {
+  if (!_submittedAt) return;
+  if (data && data._picked_up_at) {
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+      // If implement is the queued action, the third step now becomes
+      // the active waiter. For iterate, step 3 stays hidden and the
+      // /reload-driven page reload is the implicit "done".
+      if (_submittedAction === 'implement') {
+        const impl = _stepEl('implemented');
+        if (impl && !impl.hidden && impl.dataset.state === 'pending') {
+          _setStep('implemented', 'active', '⏳');
+        }
+      }
+    }
+  }
+  if (data && data._phase === 'reality-check' && _submittedAction === 'implement') {
+    // The check is running. Reveal the step now — this is the only place that
+    // unhides it, so a skipped or instant check never advertises itself.
+    // reality-check implies received, same monotonic argument as below.
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+    }
+    const rc = _stepEl('reality-check');
+    if (rc && rc.dataset.state !== 'done') {
+      rc.hidden = false;
+      _setStep('reality-check', 'active', '⏳');
+    }
+  }
+  if (data && data._phase === 'implemented' && _submittedAction === 'implement') {
+    // implemented implies received — if /status arrives before the cron's
+    // /pending=true has stamped _picked_up_at (rare but possible: Claude
+    // POSTed /status before its first /pending fetch landed), step 2 must
+    // still flip to done so the list stays monotonically consistent.
+    const recv = _stepEl('received');
+    if (recv && recv.dataset.state !== 'done') {
+      _setStep('received', 'done', '✓');
+    }
+    // Same for the reality check, but only when it made itself visible — an
+    // invisible step must not pop into existence already ticked.
+    const rc = _stepEl('reality-check');
+    if (rc && !rc.hidden && rc.dataset.state !== 'done') {
+      _setStep('reality-check', 'done', '✓');
+    }
+    const impl = _stepEl('implemented');
+    if (impl && !impl.hidden && impl.dataset.state !== 'done') {
+      _setStep('implemented', 'done', '✓');
+    }
+  }
+}
+```
+
+## Theme Toggle
+
+The page defaults to **dark** (`<html data-theme="dark">`, see § Common
+Structure); a project's `reference.md` may override the default, the user's
+choice is persisted as `state['theme']` (§ State Persistence). The control is
+`#theme-toggle` in the ☰ panel's `.panel-head` row — page chrome on every
+template, never in the content column, never a FAB (the two FABs are a closed
+pair, gate P13). It flips `data-theme` and names the NEXT action: while dark
+the ☀️ glyph shows (CSS, § Panel Chrome) and the tooltip reads
+`{{theme.to_light}}`; while light, 🌙 and `{{theme.to_dark}}`.
+
+```javascript
+// Null-guarded (#341): a page whose panel predates the head row has no
+// #theme-toggle, and an unguarded dereference here threw at boot and took the
+// rest of the script with it — the tab-switch boot never ran, so the "you are
+// here" head stayed empty until the first manual tab click.
+(() => {
+  const html = document.documentElement;
+  const wire = () => {
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    // Tooltip + a11y label name the NEXT action, exactly like the ☰/💬 FABs.
+    // Read off the button's own dataset — the locale substitution happened
+    // once, at generation time, in the markup. The glyph is CSS
+    // (html[data-theme] → [data-glyph]), so nothing here touches the spans.
+    const sync = () => {
+      const next = html.getAttribute('data-theme') === 'dark' ? btn.dataset.labelLight : btn.dataset.labelDark;
+      if (!next) return;
+      btn.setAttribute('title', next);
+      btn.setAttribute('aria-label', next);
+    };
+    btn.addEventListener('click', () => {
+      const current = html.getAttribute('data-theme');
+      html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+      sync();
+      // § State Persistence saves on `change`/`input`; a <button> click fires
+      // neither, so the choice would only reach localStorage with the user's
+      // next keystroke — and a reload in between reverted the theme. Same
+      // explicit-save pattern as showScreen()/applyViewport().
+      if (typeof saveState === 'function') saveState();
+    });
+    // data-theme has more than one writer: restoreState() sets it on load
+    // (and again on the bridge draft restore), so the label follows the
+    // attribute itself rather than only this button's click.
+    new MutationObserver(sync).observe(html, { attributes: true, attributeFilter: ['data-theme'] });
+    sync();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();
+```
+
+## Claude Connection Heartbeat (HTTP Bridge)
+
+The server response splits the heartbeat into TWO timestamps:
+
+- `claude_ts` — last `POST /heartbeat` from Claude (the polling cron is alive
+  and Claude will pick up submissions). This is the field the indicator must
+  gate on.
+- `server_ts` — daemon-thread self-pulse (the bridge process is alive). The
+  GREEN/connected state still gates exclusively on `claude_ts` — `server_ts`
+  is never sufficient to show "connected". It is used to distinguish the
+  bootstrap window (`claude_ts==0`, server alive → "connecting" indefinitely)
+  from a genuinely dead bridge (`server_ts` stale → disconnected warning).
+- `ts` — legacy alias of `claude_ts` for back-compat with older pages that
+  pre-date the split. Always equal to `claude_ts` on a current server.
+
+Gating on `server_ts` would keep the indicator green even after Claude's
+session restarts (cron is session-only and dies with the session) — silently
+hiding the case where submissions fall into a black hole. The bug that
+motivated the split: `_heartbeat_ts` used to be a single field that the
+self-pulse refreshed every 30s, so the page showed "Claude verbunden"
+indefinitely no matter what Claude was actually doing.
+
+**Tab liveness — three page-side duties (#397).** The pickup waker re-opens
+the page when the server no longer knows an open tab. For that verdict to be
+right the page must (a) identify itself, (b) keep polling while hidden, and
+(c) say goodbye when it really closes:
+
+- `_tabId` — a per-load random id, appended as `?tab=<id>` to every
+  `GET /heartbeat` and `GET /reload`, so the server keeps a per-tab
+  registry instead of one anonymous `browser_ts`. Two tabs are two entries;
+  a reload is a new id.
+- `startHeartbeatWorker` — the `/heartbeat` poll runs in a dedicated
+  `Worker` (blob URL). Chromium's intensive wake-up throttling coalesces a
+  hidden page's DOM timers to one wake-up per minute after 5 min; worker
+  timers are exempt, so the registry stays fresh while the tab is merely in
+  the background. Falls back to the main-thread interval when the worker
+  cannot start.
+- `sendTabBye` — on `pagehide` with `event.persisted === false` the page
+  POSTs `/bye` via `navigator.sendBeacon`. Never on `visibilitychange`:
+  hidden is not closed. This is the only signal that distinguishes a closed
+  tab from a throttled or sleeping one, and it is what lets the waker act
+  within a minute of a real close instead of guessing from silence.
+
+**Freeze-aware verdict.** The checker looks at the age of the last *sample*
+before it looks at `claude_ts`. A page that was frozen — Edge Sleeping Tabs
+or efficiency mode, a PC suspend, a worker that died without `onerror` —
+wakes up holding a sample from before the nap, and judging `claude_ts` from
+it painted "Nur lokal gespeichert · getrennt" on every return to the tab
+(the reported "connection keeps dropping"). `recoverFromFreeze` re-polls at
+once, replaces a worker that stayed silent for a minute, and opens a
+`WAKE_GRACE_MS` window in which a stale `claude_ts` reads "connecting" —
+the pulser's timers were suspended with the machine and need one cycle too.
+"disconnected" is painted only after two consecutive stale evaluations, so a
+single late pulse from a busy bridge is a blip, not a warning.
+
+```javascript
+const HEARTBEAT_STALE_MS = 90000;  // claude_ts older than this → nothing is pulsing
+const SERVER_STALE_MS    = 90000;  // server_ts older than this → bridge process down
+// HEARTBEAT_GRACE_MS / _pageLoadedAt removed — the bootstrap window is now
+// keyed on claude_ts==0 && fresh server_ts (mirrors the concept-server
+// watchdog, which tolerates claude_ts==0 indefinitely), not a fixed timer.
+let _lastHeartbeatTs = 0;
+let _lastServerTs    = 0;
+// True once /heartbeat has returned a parseable response at least once. Until
+// then the connection state is treated as "connecting" (unknown), NEVER
+// "disconnected" — this is the fix for the fresh-page connect→disconnect→
+// connect flash: before the first poll lands, _lastServerTs is still 0, so the
+// old code mis-classified the unknown window as a dead bridge.
+let _everPolled      = false;
+// Wall-clock time the last /heartbeat SAMPLE arrived (worker or main thread)
+// — as opposed to what the sample said. A gap here means this page was not
+// running: Edge put the tab to sleep, the PC suspended, or the worker died.
+// None of those is a dead bridge, and the verdict must not say so from a
+// sample that predates the gap (see checkClaudeConnection).
+let _lastSampleAt    = 0;
+const SAMPLE_STALE_MS = 15000;   // > 3 worker ticks without a sample → we were frozen
+// After a detected freeze the pulser needs one cycle of its own to catch up
+// (its timers were suspended with the machine), so a stale claude_ts inside
+// this window is "connecting", not "disconnected".
+const WAKE_GRACE_MS   = 45000;
+let _wakeGraceUntil   = 0;
+// A single stale evaluation never paints the warning: the line flips to
+// "getrennt" only when two consecutive checks (≥ 5 s apart) agree.
+let _disconnectStreak = 0;
+let _lastState        = 'connecting';
+let _pollInFlight     = null;
+
+// Per-load tab identity (#397). Rides on every browser-only poll as
+// `?tab=<id>` so the bridge can tell two tabs apart and notice when THIS one
+// leaves (see sendTabBye). Random per document on purpose: a reload is a new
+// tab from the server's point of view — its bye is immediately followed by
+// the fresh load's first poll, which is exactly what the waker expects.
+const _tabId = (() => {
+  try { return crypto.randomUUID().replace(/-/g, '').slice(0, 16); }
+  catch (e) { return Math.random().toString(36).slice(2, 18); }
+})();
+const _tabQuery = '?tab=' + _tabId;
+
+function applyHeartbeat(data) {
+  if (!data || typeof data !== 'object') return;
+  // Prefer `claude_ts` (post-split server); fall back to `ts` for
+  // back-compat with legacy server builds that only expose the merged field.
+  // NEVER use `server_ts` here — the daemon self-pulse would falsely
+  // light up the indicator while Claude's polling cron is dead.
+  _lastHeartbeatTs = data.claude_ts || data.ts || 0;
+  // Consumed by checkClaudeConnection to tell the bootstrap window
+  // (claude_ts==0, server alive → "connecting") apart from a dead bridge.
+  // NEVER drives the green/connected state — that still gates on claude_ts.
+  // Legacy servers without server_ts leave this 0 → serverAlive=false → the
+  // bootstrap path is inert and behavior falls back to the old timing.
+  _lastServerTs = data.server_ts || 0;
+  _everPolled = true;   // we now have real evidence of the bridge state
+  _lastSampleAt = Date.now();
+}
+
+// Single-flight: a wake-up can fire the visibility handler, the main-thread
+// interval and the worker's first message within the same second — one poll
+// answers all of them.
+function pollHeartbeat() {
+  if (_pollInFlight) return _pollInFlight;
+  _pollInFlight = (async () => {
+    try {
+      const res = await fetch('/heartbeat' + _tabQuery, { cache: 'no-store' });
+      applyHeartbeat(await res.json());
+    } catch (e) { /* server unreachable — leave _everPolled unchanged */ }
+    finally { _pollInFlight = null; }
+  })();
+  return _pollInFlight;
+}
+
+// The heartbeat poll lives in a dedicated Worker (#397). A hidden tab's DOM
+// timers are throttled by Chromium to ONE wake-up per minute after 5 min in
+// the background; worker timers are not. Without this the server saw a
+// backgrounded page poll once a minute (or never, with Edge Sleeping Tabs),
+// concluded "closed" and opened another tab — every few minutes, all session.
+// The worker only fetches and reports; the connection verdict stays on the
+// main thread. Absolute URL: a blob worker cannot resolve a relative path.
+let _hbWorker = null;
+function startHeartbeatWorker() {
+  try {
+    if (_hbWorker) { try { _hbWorker.terminate(); } catch (e) {} _hbWorker = null; }
+    const url = JSON.stringify(location.origin + '/heartbeat' + _tabQuery);
+    const src = 'const u=' + url + ';async function p(){try{const r=await fetch(u,{cache:"no-store"});postMessage(await r.json())}catch(e){}}p();setInterval(p,5000);';
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.onmessage = (ev) => { applyHeartbeat(ev.data); checkClaudeConnection(); };
+    w.onerror = () => { _hbWorker = null; };   // main-thread interval takes over
+    _hbWorker = w;
+    return true;
+  } catch (e) { _hbWorker = null; return false; }
+}
+
+// Called from every wake-up path (visibility, main-thread tick, worker
+// message) when the last sample is older than the worker's cadence allows:
+// re-poll NOW instead of waiting for the next tick, and open the grace
+// window so the verdict reads "connecting" until the pulser has had its
+// turn. A worker that has been silent for a minute is not trusted to come
+// back — it is replaced.
+let _lastRecoverAt = 0;
+function recoverFromFreeze(now) {
+  // Rate-limited: a bridge that is really unreachable makes every poll fail,
+  // and each failed poll ends in checkClaudeConnection — without this guard
+  // that would be a tight poll loop.
+  if (now - _lastRecoverAt < SAMPLE_STALE_MS) return;
+  _lastRecoverAt = now;
+  if (now - _lastSampleAt > 60000) startHeartbeatWorker();
+  _wakeGraceUntil = now + WAKE_GRACE_MS;
+  pollHeartbeat().then(checkClaudeConnection);
+}
+
+// Unload beacon (#397). `pagehide` with `persisted === false` is the one
+// moment a document is really going away (close, navigate, reload); a
+// bfcache freeze (`persisted === true`) and a visibility change are not.
+// sendBeacon is queued by the browser and survives the document being
+// discarded. The server drops this tab from its registry; the waker reopens
+// the page only when no tab is left — so hiding the tab never reopens it,
+// closing the last one does, once.
+function sendTabBye(ev) {
+  if (ev && ev.persisted) return;
+  try {
+    const body = new Blob([JSON.stringify({ tab: _tabId })], { type: 'application/json' });
+    if (navigator.sendBeacon && navigator.sendBeacon('/bye', body)) return;
+  } catch (e) { /* fall through */ }
+  try { fetch('/bye', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: _tabId }), keepalive: true }); }
+  catch (e) { /* the server's TAB_STALE_MS prune is the backstop */ }
+}
+window.addEventListener('pagehide', sendTabBye);
+
+// Safety-net timeout — if Claude /reset stamped _processed_at but no
+// reload counter advance ever followed (closed tab, JS error, server
+// went down between /reload and /reset), we still want to recover the
+// panel rather than leaving the user stuck staring at "submitted".
+// 5 minutes is long enough that any well-behaved iteration will have
+// reloaded the page first, and short enough that a real stuck state
+// recovers without manual intervention.
+const PROCESSED_SAFETY_MS = 5 * 60 * 1000;
+
+async function pollProcessedState() {
+  if (!_submittedAt) return;
+  try {
+    const res = await fetch('/decisions', { cache: 'no-store' });
+    const data = await res.json();
+    // Advance the submit-panel progress list based on the per-submission
+    // signals on the server. Done before the processed_at gate so the
+    // user sees pickup/implementation states even while the panel is
+    // still in the submitted state (i.e. before /reset).
+    updateStatusSteps(data);
+    const processedIso = data && data._processed_at;
+    if (!processedIso) return;
+    const processedMs = Date.parse(processedIso);
+    if (!Number.isFinite(processedMs) || processedMs <= _submittedAt) return;
+
+    // _processed_at IS newer than submission. Two paths to actually
+    // restore the panel:
+    //   (a) The reload counter has advanced past submit-time → Claude
+    //       wrote a new iteration; pollReload will trigger location.reload()
+    //       within 3s. Restoring eagerly here is a no-op visually but
+    //       cleans local state.
+    //   (b) A long safety timeout elapsed → reload never fired (closed
+    //       tab, JS error, network blip); recover so the user is not
+    //       stuck on a frozen "submitted" panel.
+    // Otherwise: Claude is mid-processing (e.g. /reset arrived but file
+    // write + /reload is still pending, or the protocol order was wrong).
+    // Keep the panel in "submitted" state so the user cannot duplicate-
+    // submit on the still-active old iteration.
+    let reloadAdvanced = false;
+    try {
+      const r2 = await fetch('/reload' + _tabQuery, { cache: 'no-store' });
+      if (r2.ok) {
+        const { counter } = await r2.json();
+        reloadAdvanced = (_submittedReloadCounter !== null) &&
+                         (counter > _submittedReloadCounter);
+      }
+    } catch (_) { /* ignore — fall back to safety timer */ }
+
+    const longStale = (Date.now() - _submittedAt) > PROCESSED_SAFETY_MS;
+    if (reloadAdvanced || longStale) {
+      restorePanelToReady();
+    }
+  } catch (e) { /* retry next tick */ }
+}
+
+function _setCacheHints(visible) {
+  document.querySelectorAll('[data-cache-hint]').forEach(el => {
+    el.hidden = !visible;
+  });
+}
+
+// --- Status line (all templates) ---
+// The one renderer for the pinned .panel-status line. Inputs, in priority:
+//   frozen tab (body.viewing-frozen)        → 🕘 {tab label} · nur lesen
+//   submission in flight (_submittedAt)     → ⏳ Übermittelt · Claude arbeitet  + dots
+//   disconnected OR draft mirror failing    → ⚠ Nur lokal gespeichert · getrennt
+//   draft flush pending                     → … Speichert
+//   heartbeat still connecting              → ◐ Gespeichert · verbinde…
+//   otherwise                               → ✓ Gespeichert · verbunden
+// The raw heartbeat stays on #connection-status[data-state] (written by
+// checkClaudeConnection); the draft phase comes from § State Persistence
+// (_draftPhase). Every writer of those inputs calls this, so the line can
+// never show a stale state — and it renders in EVERY panel state, submitted
+// and frozen included.
+function renderPanelStatus() {
+  const host = document.getElementById('panel-status');
+  const line = document.getElementById('connection-status');
+  if (!host || !line) return;
+  const conn = line.dataset.state || 'connecting';
+  const draft = (typeof _draftPhase === 'string') ? _draftPhase : 'saved';
+  const submitted = (typeof _submittedAt === 'number' && _submittedAt > 0)
+    || document.body.classList.contains('concept-submitted');
+  const frozen = document.body.classList.contains('viewing-frozen');
+  let status, glyph, text;
+  if (frozen) {
+    const tab = document.querySelector('.iteration-tab[aria-selected="true"]');
+    const label = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : '';
+    status = 'frozen'; glyph = '🕘'; text = label + ' · {{panel.status_frozen}}';
+  } else if (submitted) {
+    status = 'submitted'; glyph = '⏳'; text = '{{panel.status_working}}';
+  } else if (conn === 'disconnected' || draft === 'local') {
+    status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only}}';
+  } else if (draft === 'saving') {
+    status = 'saving'; glyph = '…'; text = '{{panel.status_saving}}';
+  } else if (conn === 'connecting') {
+    status = 'connecting'; glyph = '◐'; text = '{{panel.status_connecting}}';
+  } else {
+    status = 'saved'; glyph = '✓'; text = '{{panel.status_saved}}';
+  }
+  host.dataset.status = status;
+  const glyphEl = line.querySelector('.status-glyph');
+  const labelEl = line.querySelector('.conn-label');
+  if (glyphEl) glyphEl.textContent = glyph;
+  if (labelEl) labelEl.textContent = text;
+  // The heartbeat wording lives in the tooltip — the line itself says what
+  // the user wants to know (is my work safe / delivered), not what the
+  // bridge is doing.
+  line.title = conn === 'connected'    ? '{{panel.connected_title}}'
+             : conn === 'disconnected' ? '{{panel.disconnected_title}}'
+             :                           '{{panel.connecting_title}}';
+  const detail = document.getElementById('status-detail');
+  if (detail) detail.hidden = (status !== 'submitted');
+  if (typeof renderStatusDots === 'function') renderStatusDots();
+}
+
+function checkClaudeConnection() {
+  const now = Date.now();
+
+  // Connected: Claude has pinged AND that ping is recent. (gate unchanged —
+  // never gates on server_ts, or a dead pulser would read green forever.)
+  const isConnected = _lastHeartbeatTs && (now - _lastHeartbeatTs) < HEARTBEAT_STALE_MS;
+
+  // Server liveness via the daemon self-pulse. Mirrors the concept-server
+  // watchdog: claude_ts==0 is the legitimate bootstrap window, tolerated
+  // indefinitely while server_ts proves the bridge is alive.
+  const serverAlive = _lastServerTs && (now - _lastServerTs) < SERVER_STALE_MS;
+
+  // "connecting" covers TWO not-connected-but-not-dead windows — NEITHER may
+  // be classified as disconnected:
+  //   (a) !_everPolled — no /heartbeat response has come back yet (the first
+  //       ~1 network RTT after load). Calling this disconnected IS the
+  //       fresh-page connect→disconnect→connect flash; it is "connecting".
+  //   (b) claude_ts==0 while server_ts is fresh — Claude has never pinged but
+  //       the bridge is alive; the pickup waker (~20s), the backup cron tick (<=60s), or the setup-time
+  //       POST flips us to connected.
+  const bootstrapping = !_everPolled || ((_lastHeartbeatTs === 0) && serverAlive);
+
+  // Freeze detection. Every one of these was reported as "die Verbindung
+  // bricht dauernd ab" and none of them was a dead bridge:
+  //   - Edge Sleeping Tabs / efficiency mode froze this page (worker
+  //     included); on return the DOM interval fires FIRST, with a sample
+  //     from before the nap, and read a stale claude_ts as "disconnected"
+  //     for the 5 s until the worker's next fetch;
+  //   - the PC slept: same thing, plus the pulser's own timers were
+  //     suspended, so even a fresh sample shows a stale claude_ts for up to
+  //     one pulser cycle (20 s) after wake;
+  //   - the worker died silently (no onerror): the main-thread fallback
+  //     never engaged because _hbWorker was still set.
+  // A sample older than SAMPLE_STALE_MS is evidence about THIS PAGE, not the
+  // bridge: re-poll now, replace a worker that stayed silent, and hold
+  // "connecting" through WAKE_GRACE_MS. Only a bridge that stays silent past
+  // SERVER_STALE_MS after that is "disconnected".
+  const sampleAge = _everPolled ? (now - _lastSampleAt) : 0;
+  const frozen = _everPolled && sampleAge > SAMPLE_STALE_MS;
+  if (frozen) recoverFromFreeze(now);
+  const inGrace = now < _wakeGraceUntil;
+  const unreachable = _everPolled && sampleAge > SERVER_STALE_MS && !inGrace;
+
+  let state = isConnected ? 'connected'
+            : (bootstrapping || ((frozen || inGrace) && !unreachable)) ? 'connecting'
+            : 'disconnected';
+  // Two-strike rule: a stale verdict has to repeat on the next evaluation
+  // (≥ 5 s later) before the warning paints. One late pulse — the bridge
+  // answering a heartbeat in 12 s because the machine is busy — is a blip.
+  if (state === 'disconnected' && ++_disconnectStreak < 2) {
+    state = _lastState === 'connected' ? 'connecting' : _lastState;
+  } else if (state !== 'disconnected') {
+    _disconnectStreak = 0;
+  }
+  _lastState = state;
+
+  const pill = document.getElementById('connection-status');
+  const btns = ['submit-iterate-btn', 'submit-implement-btn']
+    .map(id => document.getElementById(id)).filter(Boolean);
+  const panelSubmitted = document.getElementById('panel-submitted');
+
+  // Drive the status line FIRST, in every panel state: [data-state] is the
+  // raw heartbeat contract, renderPanelStatus composes the visible line from
+  // it. The line lives in .panel-status, OUTSIDE #panel-ready, so it stays
+  // on screen — and must stay truthful — while the submitted panel is up.
+  // Purely informational, never a blocker.
+  if (pill) pill.dataset.state = state;
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  // The final report hides the status line (§ CSS body.viewing-final
+  // .panel-status); its execute button carries the disconnected case as its
+  // own label instead, so it has to follow the heartbeat too.
+  if (typeof updateCloseoutButton === 'function') updateCloseoutButton();
+
+  // While the submitted panel is up, leave the ready-panel BUTTONS alone —
+  // only the button handling below is skipped, never the line above.
+  if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
+
+  // Submit buttons stay ENABLED in every state. A disconnected click is not a
+  // black hole: the POST either lands on the live bridge (picked up when
+  // Claude's cron next polls) or, if the server is down, throws and is cached
+  // in localStorage, then auto-delivered by retryPendingSubmission on
+  // reconnect. The per-button cache hint shows only while disconnected so the
+  // user knows the click will be queued rather than lost.
+  _setCacheHints(state === 'disconnected');
+  btns.forEach(b => { b.disabled = false; });
+
+  if (isConnected) retryPendingSubmission();
+}
+
+// Kick an immediate heartbeat poll on load so the pill resolves to
+// "connected" within one network RTT instead of sitting on "connecting" for
+// the full 5 s interval. The shorter the connecting window, the less the user
+// notices the bootstrap at all.
+pollHeartbeat().then(checkClaudeConnection);
+startHeartbeatWorker();
+
+// Coming back to the tab is the moment the user looks at the status line —
+// and, after a nap, the moment the stale-sample verdict would have shown.
+// Poll first, judge second. Both paths go through checkClaudeConnection,
+// which handles the frozen case itself; this only shortens the wait.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  pollHeartbeat().then(checkClaudeConnection);
+});
+
+// Main-thread cadence. When the worker is alive it owns the /heartbeat fetch
+// (unthrottled in a hidden tab); this loop then only re-evaluates the verdict
+// and the processed-state poll. Throttling here is harmless — the indicator
+// it drives is not visible in a hidden tab anyway.
+setInterval(async () => {
+  if (!_hbWorker) await pollHeartbeat();
+  checkClaudeConnection();
+  await pollProcessedState();
+}, 5000);
+```
+
+**Claude-side heartbeat** (executed by Claude via Bash or CronCreate):
+```bash
+curl -s -X POST http://localhost:{port}/heartbeat
+```
+
+## Iteration Tabs
+
+Iterations of a concept page are appended as `<section data-iteration="N">`
+blocks inside the same HTML file. `nav.iteration-tabs` still lives at the top
+of the panel's scroll box exactly as it always has, so the append checklist
+(one plain chip, string-appended) never changes — but the bar itself is no
+longer the visible round switcher: `buildIterationTree()` hides it
+(`.iteration-tabs { display: none }`, § Tab Bar CSS) and re-derives the 🕘
+rounds chip + its list in the pinned head (`.panel-here`, § Common Structure)
+from the same chips. All three templates support iterations — design and
+free include them identically.
+
+**At runtime the bar is one tree ("Kompass", § Section Navigation):** the
+selected chip's TOC is `#section-nav`, built fresh by `buildSectionNav()` and
+shown alone in the scroll box (the tree no longer holds the other rounds);
+every other chip carries a generated `.iteration-tab-summary` line, consumed
+by `buildRoundsChip()` for the head's 🕘 rounds list and never rendered on
+screen itself. None of that is written into the HTML — the markup below
+stays a flat list of `<button class="iteration-tab">` chips, appended by
+string edit, and the JS re-derives the head chip/list from it on every load
+and every switch.
+
+### Tab Bar HTML
+
+```html
+<nav class="iteration-tabs" role="tablist" aria-label="Iterationen">
+  <button class="iteration-tab" role="tab"
+          data-iteration="1" aria-selected="false" aria-controls="iter-1">
+    Iteration 1
+  </button>
+  <!-- Reality-check tab: a NORMAL iteration in every mechanical respect —
+       it keeps the running data-iteration counter, both submit buttons, and
+       the ordinary freeze behaviour. Only the label and the
+       data-reality-check flag differ, so the user can see at a glance why an
+       implement click produced another round. Appended only by the implement
+       path when the default branch drifted; never two in a row. See
+       reality-check.md. -->
+  <button class="iteration-tab" role="tab" data-reality-check
+          data-iteration="2" aria-selected="false" aria-controls="iter-2">
+    {{iteration.reality_tab}}
+  </button>
+  <!-- Final-report tab: same DOM contract (data-iteration carries the
+       running counter), distinct labelling + the data-final-report
+       flag so .iteration-tab[data-final-report] CSS + panel JS pick
+       it up. The label is the locale string {{iteration.final_tab}},
+       NEVER "Iteration N". Only the implement-action path appends
+       this — at most one per concept session. -->
+  <button class="iteration-tab" role="tab" data-final-report
+          data-iteration="3" aria-selected="true" aria-controls="iter-3">
+    {{iteration.final_tab}}
+  </button>
+</nav>
+
+<main>
+  <section id="iter-1" data-iteration="1" data-iteration-template="decision" hidden>…frozen round 1…</section>
+  <section id="iter-2" data-iteration="2" data-iteration-template="decision" data-reality-check hidden>…frozen reality check…</section>
+  <section id="iter-3" data-iteration="3" data-iteration-template="free" data-final-report data-active>
+    …final report (Abschlussbericht)…
+  </section>
+</main>
+```
+
+Rules:
+- Exactly one section carries `data-active`. The matching tab has
+  `aria-selected="true"`.
+- A new chip is appended as a plain `<button class="iteration-tab">` at the
+  END of `nav.iteration-tabs` — never with a hand-written
+  `.iteration-tab-summary`, never a hand-built rounds chip/list. The tree
+  (summaries, the moved `#section-nav`, the head's rounds chip/list) is
+  rebuilt by `buildSectionNav()` on load and on every switch; markup that
+  pre-empts it is simply re-derived.
+- Non-active sections get the `hidden` attribute AND are frozen
+  (see "Freezing Past Iterations").
+- Tabs stay clickable — switching tab reveals the chosen section and
+  hides all others.
+- A concept session has **at most one** `data-final-report` section.
+  Once it exists, no further iterate/implement submissions are
+  accepted (the panel-final-report has no such buttons). The only
+  submission the final-report tab can produce is `action: "finalize"`.
+- `data-reality-check` marks a round the implement path inserted because the
+  default branch drifted. It goes on **both** the section and its tab, and it
+  is load-bearing, not decorative: submitting implement from a section that
+  carries it skips the check and implements immediately, which is what stops
+  two forced rounds in a row. The section additionally carries
+  `data-reality-head="<sha>"` — the commit that check examined, which the
+  baseline advances to once the round is answered. A concept may contain several over its life —
+  but never two adjacent ones, because the round after a reality check is
+  always either the implementation or an ordinary iterate round. See
+  `reality-check.md`.
+
+### Reality-check section explainer
+
+The first child of a `data-reality-check` section, before any decision card.
+It answers the only question the user has at that moment — "I clicked
+implement, why am I reading this?" — and it is copied with the wording from
+the locale table, never improvised:
+
+```html
+<section id="iter-2" data-iteration="2" data-iteration-template="decision" data-reality-check
+         data-reality-head="9be03d1f4c22" data-active>
+  <div class="reality-banner" role="note">
+    <h2>{{reality.headline}}</h2>
+    <p>{{reality.intro}}</p>
+    <p class="reality-evidence">4f2a1c9 · feat(hooks): rename pre.x → pre.y<br>
+       9be03d1 · refactor(bridge): /status payload now requires version</p>
+    <p class="reality-reassure">{{reality.reassure}}</p>
+  </div>
+  <!-- …one flat, independently answerable decision card per drift item… -->
+</section>
+```
+
+`.reality-evidence` carries the actual commits — short SHA + subject, one per
+line. It is not optional: a drift claim the user cannot verify is a claim they
+have to take on trust, and `reality-check.md` § Force classes forbids showing
+a card without that evidence.
+
+### Tab Bar CSS
+
+```css
+/* The bar is no longer the round switcher — the 🕘 rounds chip + list in
+   .panel-here (§ Common Structure) took over that job. It stays in the DOM,
+   hidden, so the append checklist and the chips' click listeners never
+   change: buildIterationTree()/buildRoundsChip() read data-tab-label,
+   aria-selected and the generated .iteration-tab-summary straight off these
+   (invisible) buttons. */
+.iteration-tabs {
+  display: none;
+}
+/* Generated summary line (buildIterationTree): "14 Einträge · 3 verworfen".
+   Computed here and consumed by buildRoundsChip() for the head's rounds
+   list — the bar itself never renders it on screen. */
+.iteration-tab-summary {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-secondary, #8b949e);
+}
+.iteration-tab {
+  flex: 0 0 auto;
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  background: var(--bg-subtle, transparent);
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.iteration-tab:hover {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 10%, transparent);
+  color: var(--text-color, #c9d1d9);
+}
+.iteration-tab[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent-color, #58a6ff) 15%, transparent);
+  color: var(--text-color, #c9d1d9);
+  border-color: var(--accent-color, #58a6ff);
+  font-weight: 600;
+}
+.iteration-tab[aria-selected="true"]::before {
+  content: "● ";
+  color: var(--accent-color, #58a6ff);
+}
+section[data-iteration]:not([data-active]) {
+  opacity: 0.85;
+}
+/* Kills every input on a frozen tab — which is exactly why the mapping view
+   toggle, tabs and collapse controls (§ Information Mapping) are <button>s:
+   a frozen mapping stays browsable while its checkboxes go inert. */
+section[data-iteration]:not([data-active]) .tri-state-btn,
+section[data-iteration]:not([data-active]) input,
+section[data-iteration]:not([data-active]) textarea,
+section[data-iteration]:not([data-active]) select {
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+```
+
+### Freezing Past Iterations
+
+When appending iteration N+1, Claude must freeze the previous section:
+
+1. Remove `data-active`, add `hidden` to the previous `<section>`.
+   **`data-active` is the ONLY attribute a freeze removes from the section
+   element.** Every other `data-*` on it — `data-iteration`,
+   `data-iteration-template`, `data-final-report`, `data-reality-check` —
+   survives verbatim. This is not cosmetic bookkeeping: `data-reality-check`
+   is what tells the implement path that this round was already the forced
+   one, and dropping it while rewriting the file re-arms a check that has
+   already been answered.
+2. On every `input`, `textarea`, `select`, `button` inside it: set `disabled`.
+3. On every `textarea`, `input[type="text"]`: set `readonly`.
+4. For bi-state buttons: keep the `aria-pressed`/selected class exactly as
+   the user submitted it — do NOT clear selections.
+5. Add a small "Eingefroren — Iteration N" banner at the top (optional).
+
+### Tab Switch JS
+
+```javascript
+// Resolve the template of ONE iteration section. Authoritative source is
+// data-iteration-template; `prototype` is the legacy alias of `design`;
+// a missing attribute falls back to the current <html data-template> so
+// pages generated before per-iteration templates behave exactly as before.
+// The page-level attribute as it was WRITTEN AT GENERATION TIME, captured at
+// script load — before applyIterationTemplate() can project anything onto it.
+const _pageTemplateAtLoad = document.documentElement.dataset.template || '';
+
+// The concept's BASE template: the first iteration section that declares one.
+// This — never the live <html data-template> — is the fallback for a section
+// that declares none. That attribute is a PROJECTION rewritten on every tab
+// switch, so using it as the fallback made an undeclared section's layout
+// depend on which tab the user arrived from: the same final report rendered
+// as a fullscreen canvas when reached from a design tab and as a document
+// when reached from a decision tab. Observed on a real generated page whose
+// final-report section shipped without data-iteration-template. Deterministic
+// or not at all.
+let _baseTemplate = null;
+function baseIterationTemplate() {
+  if (_baseTemplate) return _baseTemplate;
+  // LOWEST iteration number, not first-in-DOM: sections are appended in order
+  // today, but a re-sync or a hand edit that moves one (a reality-check round
+  // pulled up, a final report hoisted) would otherwise silently redefine the
+  // base template for every section that declares none.
+  const declared = Array.from(
+    document.querySelectorAll('section[data-iteration][data-iteration-template]')
+  ).sort((a, b) => (parseInt(a.dataset.iteration, 10) || 0) - (parseInt(b.dataset.iteration, 10) || 0));
+  const raw = (declared[0] && declared[0].dataset.iterationTemplate) || _pageTemplateAtLoad || 'decision';
+  _baseTemplate = raw === 'prototype' ? 'design' : raw;
+  return _baseTemplate;
+}
+
+function resolveIterationTemplate(section) {
+  const raw = (section && section.dataset && section.dataset.iterationTemplate)
+    || baseIterationTemplate();
+  return raw === 'prototype' ? 'design' : raw;
+}
+
+// Project the shown iteration's template onto <html> and lock/unlock body
+// scroll. Everything else (layout, panel docking, FABs, dock) is pure CSS off
+// [data-template="design"] — no per-iteration layout code beyond these two
+// lines. Called FIRST from showIteration().
+function applyIterationTemplate(section) {
+  const template = resolveIterationTemplate(section);
+  document.documentElement.dataset.template = template;
+  document.body.style.overflow = template === 'design' ? 'hidden' : '';
+  return template;
+}
+
+function showIteration(n) {
+  // MUST run first: the layout must be correct before buildSectionNav() or
+  // any iteration:changed listener measures/renders against it.
+  applyIterationTemplate([...document.querySelectorAll('section[data-iteration]')]
+    .find(sec => String(sec.dataset.iteration) === String(n)));
+  document.querySelectorAll('section[data-iteration]').forEach(sec => {
+    const match = String(sec.dataset.iteration) === String(n);
+    sec.hidden = !match;
+  });
+  document.querySelectorAll('.iteration-tab').forEach(tab => {
+    const match = String(tab.dataset.iteration) === String(n);
+    tab.setAttribute('aria-selected', match ? 'true' : 'false');
+  });
+  const activeSec = document.querySelector('section[data-iteration][data-active]');
+  const isLive = activeSec && String(activeSec.dataset.iteration) === String(n);
+  // The live section may be a regular iteration OR a final report. The
+  // panel switches between three live states (ready / submitted / final)
+  // plus the frozen state for non-live tabs.
+  const isFinal = isLive && activeSec.hasAttribute('data-final-report');
+  document.body.classList.toggle('viewing-frozen', !isLive);
+  document.body.classList.toggle('viewing-final', !!isFinal);
+  const panelReady = document.getElementById('panel-ready');
+  const panelSubmitted = document.getElementById('panel-submitted');
+  const panelFrozen = document.getElementById('panel-frozen');
+  const panelFinal = document.getElementById('panel-final-report');
+  // ready and submitted are mutually exclusive (#341): submitWithAction hides
+  // the ready block, and a detour into a past tab and back must not bring
+  // it back under the submitted indicator — that showed both blocks at once
+  // (126px in a 120px foot) with live submit buttons under "übermittelt".
+  const submitted = document.body.classList.contains('concept-submitted');
+  if (panelReady) panelReady.style.display = (isLive && !isFinal && !submitted) ? 'block' : 'none';
+  if (panelSubmitted) {
+    panelSubmitted.style.display = (isLive && !isFinal && submitted) ? 'block' : 'none';
+  }
+  // 'flex', not 'block': #panel-final-report is a flex column (§ CTA foot
+  // CSS) so it can hand #closeout-sheet a bounded, shrinkable height — a
+  // plain 'block' display left the sheet sizing to its own content with
+  // nothing to cap it, and #closeout-execute sat below the fold.
+  if (panelFinal) panelFinal.style.display = isFinal ? 'flex' : 'none';
+  if (panelFrozen) panelFrozen.style.display = isLive ? 'none' : 'block';
+  // Frozen veil + floating bar. Every entry into a non-live tab RE-LOCKS the
+  // round behind the shared content dimmer (lockFrozenView), so at most the
+  // one past round on screen can be unlocked and any tab switch — to another
+  // past round or back to the live one — relocks it. The bar stays up after
+  // the user lifts the veil: the veil is clicked away by reflex, the bar is
+  // what still tells them they are in history. On the live tab the dimmer is
+  // hidden (a veil lifted on a past round must not reappear over the live one).
+  const frozenBar = document.getElementById('frozen-bar');
+  if (frozenBar) {
+    frozenBar.hidden = !!isLive;
+    const title = frozenBar.querySelector('[data-frozen-bar-title]');
+    const tab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
+    if (title) title.textContent = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : String(n);
+  }
+  if (isLive) hideContentDimmer(); else lockFrozenView();
+  // Pinned "you are here" head: the selected tab's label — no "· aktiv"
+  // suffix on the live round, an {{nav.archived}} marker on a frozen one —
+  // plus, on a frozen tab, the compact "↩ zur Runde N" link back to the live
+  // round. The label comes from data-tab-label when the summary line has
+  // been added to the chip (buildSectionNav), otherwise from the chip text
+  // itself. The reading-line parenthesis (updateHereRoundParenthesis) is
+  // re-applied by the scroll spy right after this, off the fresh base.
+  // The round label sits in the .panel-head row (one line with the 🕘 chip,
+  // theme toggle and ✕); the sub-line stays in #panel-here — hence the
+  // document-wide lookup for the label and the box-scoped one for the rest.
+  const here = document.getElementById('panel-here');
+  if (here) {
+    const hereTab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
+    const round = document.querySelector('[data-here-round]');
+    if (round) {
+      const label = hereTab ? (hereTab.dataset.tabLabel || stripActiveSuffix(hereTab.textContent.trim())) : String(n);
+      round.dataset.hereRoundBase = label + (isLive ? '' : ' · {{nav.archived}}');
+      round.textContent = round.dataset.hereRoundBase;
+    }
+    // The final report drops the second head line entirely — the accordion
+    // shows the selection instead.
+    const section = here.querySelector('[data-here-section]');
+    if (section && isFinal) section.hidden = true;
+    const back = document.getElementById('panel-here-back');
+    if (back) {
+      back.hidden = !!isLive;
+      back.textContent = '↩ {{panel.here_back}} ' + (activeSec ? activeSec.dataset.iteration : '');
+    }
+  }
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+  if (typeof buildSectionNav === 'function') buildSectionNav();
+  if (typeof refreshCloseout === 'function') refreshCloseout({ reset: true });
+  document.dispatchEvent(new CustomEvent('iteration:changed'));
+}
+
+document.querySelectorAll('.iteration-tab').forEach(tab => {
+  tab.addEventListener('click', () => showIteration(tab.dataset.iteration));
+});
+
+// The way back to the live round. Without it the only exit from a past tab is
+// to spot which chip is the live one — and the live tab is not always the last
+// chip (the final report is), so guessing is a real failure mode. Two entry
+// points, one target: the panel's #back-to-live-btn and the floating
+// #frozen-bar-back (the bar sits over the content, where the user's eyes are
+// after they lift the veil — the panel link alone was too easy to miss).
+function goToLiveIteration() {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  if (live) showIteration(live.dataset.iteration);
+}
+document.getElementById('back-to-live-btn')?.addEventListener('click', goToLiveIteration);
+document.getElementById('frozen-bar-back')?.addEventListener('click', goToLiveIteration);
+document.getElementById('panel-here-back')?.addEventListener('click', goToLiveIteration);
+
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('section[data-iteration][data-active]');
+  if (active) showIteration(active.dataset.iteration);
+});
+```
+
+### Reload Polling
+
+A Claude-driven reload (next iteration / final-report append) MUST land the
+user at the top of the page. Without this, the browser restores the previous
+scroll position — the user submitted from the bottom of the decision panel,
+sees the page "do nothing" visually, and only notices the change because the
+iteration tab moved. The sessionStorage flag scopes the jump to reloads we
+triggered, so manual F5 while reading still preserves scroll position.
+
+The `counter > _bootReloadCounter` comparison is restart-safe without any
+client logic: the server seeds its in-memory counter from epoch milliseconds
+(#225), so a restarted bridge always reports a counter ahead of anything the
+previous run handed out. An open tab sees the restart as a normal advance and
+force-reloads once — the desired re-sync after Claude re-launched the bridge
+mid-session.
+
+```javascript
+let _bootReloadCounter = null;
+async function pollReload() {
+  try {
+    const res = await fetch('/reload' + _tabQuery, { cache: 'no-store' });
+    if (!res.ok) return;
+    const { counter } = await res.json();
+    if (_bootReloadCounter === null) { _bootReloadCounter = counter; return; }
+    if (counter > _bootReloadCounter) {
+      // Tag the reload as Claude-driven so the fresh load jumps to top.
+      try { sessionStorage.setItem('_concept_jumpTop', '1'); } catch (_) {}
+      location.reload();
+    }
+  } catch (e) { /* bridge offline */ }
+}
+setInterval(pollReload, 3000);
+document.addEventListener('DOMContentLoaded', pollReload);
+
+// Disable the browser's scroll restoration for Claude-driven reloads and
+// force scroll to top. Runs before any layout-affecting init, and again on
+// `load` to win against late restorations on slower browsers.
+(function () {
+  let pending = false;
+  try { pending = sessionStorage.getItem('_concept_jumpTop') === '1'; } catch (_) {}
+  if (!pending) return;
+  try { sessionStorage.removeItem('_concept_jumpTop'); } catch (_) {}
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  const jump = () => window.scrollTo(0, 0);
+  jump();
+  document.addEventListener('DOMContentLoaded', jump);
+  window.addEventListener('load', jump);
+})();
+```
+
+## Final Report Panel
+
+The final-report section closes a concept session. It is appended via the
+implement-action branch of Step 5b (see `SKILL.md` § Final-report append).
+The right-side panel automatically switches to `panel-final-report` mode
+when `showIteration()` detects `data-final-report` on the active section
+— no iterate / implement buttons, **no status line and no pipeline recap**:
+the foot is the **close-out sheet** (`#closeout-sheet`) and nothing else,
+with a non-committal "Iterationen ansehen" link below it. The panel's
+`.panel-status` line ("Gespeichert · verbunden") is hidden on this tab
+(`body.viewing-final .panel-status`), and the persistent status channel
+that used to sit above the sheet is gone — both said things the sheet's one
+button now says itself (a disconnected bridge becomes its "· wird
+zwischengespeichert" label, a running or finished close-out becomes its
+state), and each cost the accordion rows ~40–50px it needs. The TOC above
+the sheet shrinks to a 3-entry window around the reading line
+(`applyNavWindow()`, § Section Nav JS) for the same reason.
+
+The sheet is deliberately **DOM-driven, not connection-driven**: it is
+present because the section carries `data-final-report`, so it survives
+reloads and stays fully visible even when the Claude heartbeat is stale —
+the close-out affordance must never vanish just because the connection
+flickered. Reviewing earlier iterations (via the ever-present tab bar or the
+"Iterationen ansehen" nudge) never hides it, so there is nothing to
+"re-open".
+
+**A final report is a document round.** Append it with
+`data-iteration-template="free"` — never leave the attribute off (see
+`resolveIterationTemplate()`, § Tab Switch JS: an undeclared section used to
+inherit whatever tab the reader came from) and never make it `design`, whose
+`position: absolute; inset: 0` sections and hidden `.iteration-intro` are
+built for a mockup, not for a report with a TOC. The ☰ panel is page chrome
+and does not move with that choice — see § Panel Chrome (all templates).
+
+### The close-out sheet
+
+**Why one sheet.** The panel first showed four controls at once — 🚀 Shippen,
+Issues erstellen, Concept beenden, Iterationen ansehen — each firing its own
+submit. Two things were wrong with that, both structural:
+
+1. **No order.** Three of the four were real, irreversible actions with a
+   correct sequence (issues before ship before file cleanup), but the panel
+   presented them as peers and left the sequencing to the user.
+2. **No way to want more than one.** The first click submitted, dimmed the
+   content and ended the round. A user who wanted issues *and* a ship *and* a
+   specific disposition had no way to say so.
+
+A four-step wizard (issues → ship → files → review) fixed both and introduced
+a third problem, reported from real use: **the flow was unreadable.** "Weiter"
+between questions looked like it might already be doing something; the old
+"Alles ausführen" button and the per-step Weiter were two different kinds of
+commitment on the same screen; and the plan of consequences — the one thing
+that licenses an irreversible click — only appeared on the last step. Putting
+every question on screen at once (the sheet's first cut) fixed the ordering
+and the readability, but on a full sheet (open points + ship + files +
+hand-offs) it traded that for a wall the user had to scroll past to reach the
+plan and the button — "viel Scrollen, viel Platz für wenig Interaktion". A
+free-click accordion with a "Gewählt: …" plan line under the button, three
+status hints beneath that, and a status line + pipeline recap above the
+sheet fixed the wall but spent ~180px of a 360px-wide panel repeating what
+the rows' own summaries and the button already said.
+
+The sheet is now a **sequential accordion**: the same rows, the same fixed
+execution order, but each collapses to one line — `○`/`●`/`✓` · icon ·
+label · current answer — and exactly one is open at a time
+(`openCloseoutRow()`). The order is enforced, not suggested: the first
+unanswered row opens by itself, every unanswered row after it is **locked**
+(`data-locked`, head `disabled`, dimmed, no summary —
+`isCloseoutRowLocked()`), and the only way forward is the single button at a
+fixed place, which reads **"Weiter ›"** while any row is unanswered (clicking
+it confirms the open row and opens the next unanswered one —
+`closeoutButtonClick()`) and turns into the warning-coloured **"⚠ Ausführen"**
+only once every row is (`updateCloseoutButton()`), which is the same click
+that submits `finalize`. Never two buttons, never "Alles ausführen". An
+**answered** row stays clickable (`closeoutRowClick()`) to go back and change
+the answer; the rows in between keep their state. "Answered" means the row
+was open when that one button was clicked, not a per-row control: a
+pre-selected default may stand as given, confirming just means the user
+looked. There is no separate plan line: each collapsed row's inline summary
+("shippen", "Seite löschen", "2 · Issue, Issue", "2 Schritte") IS the
+readout of what will happen, and the consequence warning ("Ein Klick, alles
+davon …") is the execute button's native title. Progress ("n von N
+beantwortet", `#closeout-progress`) and each row's answered flag are mirrored
+into `sessionStorage` (`closeoutStorageKey()`, keyed by `STORAGE_KEY` +
+iteration) so a reload within the same session does not re-ask what was
+already answered — never `localStorage`, which the route/ship radios
+deliberately avoid (`data-no-persist`, see below).
+
+**After the click the button is the status.** `setCloseoutButtonState()`
+swaps the same button through "⏳ Claude arbeitet es ab …" (submit and
+in-flight restore), "✓ Concept abgeschlossen." (the `data-closed` render)
+and "⚠ Übermittelt · Claude antwortet nicht" (`markCloseoutStalled()`),
+disabled and colour-coded on `[data-finalize-state]`; only the stalled
+state also keeps a paragraph under the button, because it carries an
+instruction (check the chat). No status hint ever sits under a live button.
+
+**Blocks** — top to bottom, and the same order Claude executes them in.
+Every block is an accordion row (`data-closeout-row`):
+
+| Block | Shown when | Default | Produces |
+|---|---|---|---|
+| `followups` | the report has a `[data-open-questions]` block with ≥1 non-disabled checkbox | every row on **Issue** | `issues: { create, items[] }` + `implement: { run, items[] }` |
+| `ship` | always | **none — the user must answer** | `ship: { run }` |
+| `files` | always | `discard` (label: "Seite löschen") | `disposition: { mode, moveTo }` |
+| `handoffs` | the report has a `[data-handoffs]` section with ≥1 `<li>` | — (read-only; "answered" = opened once) | nothing; mirrors the steps the user has to take by hand, and is the only block still shown after `data-closed` |
+
+**Three routes per open point, not a checkbox.** A follow-up is worth
+tracking, worth building now, or worth dropping — and the old checkbox could
+only say "file an issue" or "forget it". Each row therefore carries a
+three-way radio group (`Issue` / `Jetzt umsetzen` / `Ignorieren`), and the
+payload splits into two disjoint buckets. `Jetzt umsetzen` is the one route
+that writes code, so it is painted in the warning colour the implement button
+uses.
+
+**Each row names its origin.** A point is on the sheet either because the
+user parked it during the concept or because it turned up on the way and has
+nothing to do with the scope — those are the only two admissible origins
+(`SKILL.md` § Open points admission gate), declared per item as
+`data-oq-origin="deferred"` / `"found"` and rendered as a muted tag
+(`final.origin_deferred` / `final.origin_found`) under the title. The tag
+is context for the route decision, not a fourth choice; it also makes a row
+that skipped the gate visible at a glance — an in-scope leftover has no
+honest origin to declare.
+
+The `[data-open-questions]` checkboxes in the report body stay the **single
+source of truth for which points are still open**: `Ignorieren` unchecks the
+body box, the other two check it, and Claude's routed-item rewrite (adding
+`disabled` + the `[Issue #NNN]` link) keeps working unchanged. The route
+radios carry `data-no-persist` for the same reason the ship radios do —
+`saveState()` restores every named radio document-wide, and a remembered
+"jetzt umsetzen" would sail through a later close-out and write code nobody
+re-authorised. After a reload every row falls back to `Issue`, which writes
+nothing.
+
+**The ship question has no default on purpose.** It is the one block that
+reaches outside the repo, so it must be an answered question, never a skipped
+one. Execute stays enabled and explains the block
+(`#closeout-ship-required`) rather than sitting there disabled and looking
+broken.
+
+**The rows are what license the single click.** Every consequence is
+readable on the collapsed rows themselves, in execution order — "2 · Issue,
+Jetzt umsetzen", "shippen", "Seite löschen", "2 Schritte" — and each
+summary re-renders on every change (`updateCloseoutRowSummary()`), so it can
+never describe an older answer than the one on screen. `#closeout-execute`
+sits at a fixed place below the rows and reads "Weiter ›" until every row is
+answered, then transforms into the warning-coloured "⚠ Ausführen" — reaching
+the irreversible click is a deliberate, staged sequence rather than a
+distance-based misclick barrier.
+
+**"Seite löschen", never "Verwerfen".** The disposition block used to be
+labelled *Verwerfen (Standard)*, one word away from the bi-state *Verwerfen*
+on every variant card — and it read as "throw the work away" when it only
+ever deleted an HTML file. The label names the file now, and its hint says
+the implementation is untouched.
+
+**Payload:**
+
+```json
+{
+  "submitted": true,
+  "action": "finalize",
+  "submission_id": "sub-…",
+  "issues":    { "create": true, "items": [ /* routed to Issue */ ] },
+  "implement": { "run": true,    "items": [ /* routed to Jetzt umsetzen */ ] },
+  "ship":      { "run": true },
+  "disposition": { "mode": "discard", "moveTo": null }
+}
+```
+
+`submitFinalize()` requires the bridge's **durable ack** (`body.durable`), not
+just a non-throwing fetch — a finalize can ship, so a 507 that silently looked
+like success would be the worst possible place to lose a payload. On transport
+failure it queues via the offline submit queue; on a non-durable answer it
+hands the sheet back and warns.
+
+**Lifecycle of the sheet's own state:**
+
+| Moment | State |
+|---|---|
+| Submit | `setCloseoutFrozen(true)` — every control disabled, the button reads "⏳ Claude arbeitet es ab …" (`setCloseoutButtonState('running')`), `_submittedAt` set so `pollProcessedState()` tracks the round like any other submission |
+| Non-durable answer | `restoreCloseoutToReady()` — re-armed, warning shown; the payload is in the offline queue |
+| Blocked ship / stuck round | `restorePanelToReady()` routes to `restoreCloseoutToReady()` for a final report — it must never un-hide `#panel-ready`, which would paint iterate/implement onto a closed session |
+| Successful close-out | Claude stamps `data-closed` on the section before the last `/reload`; `renderCloseout()` then shows the button as "✓ Concept abgeschlossen." (disabled) and no other controls at all |
+
+### Final-report section HTML
+
+The body of the section is structured like a multi-section freeform
+report — every `<section id data-nav-label>` inside it surfaces in the
+section TOC automatically. Open questions / TODOs use a dedicated
+`<section data-open-questions>` wrapper around a checkbox list.
+
+```html
+<section id="iter-3" data-iteration="3" data-iteration-template="free" data-final-report data-active>
+  <div class="iteration-intro">
+    <h2>{{iteration.final_tab}}</h2>
+    <p>Kurze Einleitung — was wurde umgesetzt, in welcher Form.</p>
+  </div>
+
+  <section id="summary" data-nav-label="Zusammenfassung">
+    <h3>Zusammenfassung</h3>
+    <p>Was wurde gebaut, mit welchem Commit.</p>
+  </section>
+
+  <section id="changed-files" data-nav-label="Geänderte Dateien">
+    <h3>Geänderte Dateien</h3>
+    <ul>
+      <li><code>src/auth/middleware.ts</code> — Token-Validierung neu</li>
+    </ul>
+  </section>
+
+  <section id="tests" data-nav-label="Tests &amp; Verifikation">
+    <h3>Tests &amp; Verifikation</h3>
+    <p>Was lief, was wurde übersprungen, mit Begründung.</p>
+  </section>
+
+  <!-- Optional — render only when there are real follow-ups to track.
+       Each <li> is one item; data-issue-* attributes feed the finalize
+       payload's issues.items[] directly so Claude can call
+       `gh issue create` end-to-end without ever asking the user a
+       follow-up question. Mandatory attrs: data-issue-title,
+       data-issue-type, data-oq-origin ("deferred" = the user parked it
+       during this concept, "found" = surfaced on the way, unrelated to
+       the scope — nothing else is admissible, see SKILL.md § Open
+       points admission gate). Recommended: data-issue-body (richer description
+       than the visible label; falls back to the .oq-label text).
+       Optional project-context hints (only when Claude can infer them
+       from the concept): data-issue-role, data-issue-module,
+       data-issue-milestone. Checkboxes default to `checked`. -->
+  <section id="open-questions"
+           data-nav-label="{{final.open_questions}}"
+           data-open-questions>
+    <h3>{{final.open_questions}}</h3>
+    <ul class="open-questions-list">
+      <li>
+        <label>
+          <input type="checkbox"
+                 name="oq-saml-edge"
+                 data-issue-title="[BUG] Auth fails for SAML users"
+                 data-issue-type="bug"
+                 data-issue-body="During smoke test of the new middleware, SAML logins failed with 'invalid assertion'. Out of scope for the auth-middleware-redesign concept (concept covered OIDC only). Reproduce: log in via SAML IdP in staging."
+                 data-issue-role="backend"
+                 data-issue-module="auth"
+                 data-oq-origin="found"
+                 checked>
+          <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
+        </label>
+      </li>
+      <li>
+        <label>
+          <input type="checkbox"
+                 name="oq-rate-limit"
+                 data-issue-title="[FEATURE] Rate-limit the token endpoint"
+                 data-issue-type="feature"
+                 data-issue-body="Parked by the user in iteration 2 (card 'Rate limiting' answered 'später'): the new bearer-token flow ships without a per-client rate limit on /auth/token. Add a sliding-window limit (suggested 60/min per client id) with a 429 + Retry-After response."
+                 data-issue-role="backend"
+                 data-issue-module="auth"
+                 data-oq-origin="deferred"
+                 checked>
+          <span class="oq-label">Rate-limit the token endpoint — parked by you in iteration 2</span>
+        </label>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Optional — ONLY when the user has to do something by hand after the
+       merge. data-handoffs paints the section, marks its TOC entry and
+       mirrors the list onto the close-out sheet, where it is the one block
+       that stays visible after the close-out. Omit it entirely when there
+       is nothing to hand over; never use it for recommendations. -->
+  <section id="handoffs" data-nav-label="{{final.handoffs}}" data-handoffs>
+    <h3>{{final.handoffs}}</h3>
+    <ol>
+      <li>Set the scheduled task's cron to <code>0,20,40 * * * *</code> — the description is already updated.</li>
+      <li>Watch the first run's report line: a title that stays on "working" for more than 3 h is a run that died holding the lock.</li>
+    </ol>
+  </section>
+</section>
+```
+
+### Open-questions item attributes
+
+The first four attributes are MANDATORY for the auto-issue pipeline.
+Without them Claude has no way to land a complete `gh issue create` call
+and would have to fall back to interactive prompting — which is exactly
+the regression we are designing against. Generate them when you author
+the final-report block; do not leave the user to fill them in.
+
+| Attribute | Required? | Purpose |
+|---|---|---|
+| `name` (or `id`) | yes | Stable identifier reused in the `create-issues` payload's `item.id` |
+| `data-issue-title` | yes | Verbatim title used by `gh issue create` (`[TYPE] Imperative title`). Without this the payload's `title` falls back to the visible `.oq-label` text, which usually breaks the title-format gate |
+| `data-issue-type` | yes | Maps to the issue label (`bug`, `feature`, `refactor`, `chore`, `docs`, `design`). Defaults to `chore` if omitted — set it explicitly |
+| `data-oq-origin` | yes | Why the row exists — `deferred` (the user parked it during this concept; say where in the body) or `found` (surfaced on the way, unrelated to the scope). Rendered as a muted tag under the row's title. No other value is admissible: an in-scope leftover has no honest origin and belongs in the Zusammenfassung as a shortfall, not here (`SKILL.md` § Open points admission gate; validation gate 33b) |
+| `data-issue-body` | recommended | Multi-sentence description used as the GitHub issue body. Falls back to the `.oq-label` text when missing — that is usually too terse for a tracked issue. Always populate this with the concept-context the user would need to act on the issue cold (repro steps for bugs, motivation for refactors, etc.) |
+| `data-issue-role` | optional | Project-specific role label hint (`backend`, `frontend`, `infra`, …). Picked up when the project's `auto-issue` extension defines `role:*` labels; silently ignored otherwise |
+| `data-issue-module` | optional | Project-specific module label hint (`auth`, `ingest`, `ui-core`, …). Same gating as `role` |
+| `data-issue-milestone` | optional | Milestone name to attach. Claude will only honor this if the milestone already exists; never auto-creates one from this attribute |
+| `checked` | default `true` | User opts out, not in |
+| `disabled` | set by Claude | Added after the item has been routed (becomes `[Issue #NNN]`) so `openQuestionBoxes()` ignores it on the next reload |
+
+### After a point is routed — HTML rewrite pattern
+
+When Claude processes a `finalize` payload it rewrites every routed `<li>` so
+the user sees what became of it: an issue link for part A, an "umgesetzt" note
+for part B. The checkbox stays in the DOM but is disabled, which keeps
+`restoreState()` consistent across reloads — and dropping it out of
+`openQuestionBoxes()` is what removes the row from the close-out sheet:
+
+```html
+<li>
+  <label>
+    <input type="checkbox"
+           name="oq-saml-edge"
+           data-issue-title="[BUG] Auth fails for SAML users"
+           data-issue-type="bug"
+           data-oq-origin="found"
+           checked disabled>
+    <span class="oq-label">Auth fails for SAML users — observed during smoke test, out of scope here</span>
+    <a class="oq-issue-link"
+       href="https://github.com/{owner}/{repo}/issues/123"
+       target="_blank"
+       rel="noopener noreferrer">{{final.issue_link_prefix}} #123</a>
+  </label>
+</li>
+```
+
+An item the user routed to "Jetzt umsetzen" gets the same treatment with an
+`.oq-done` note instead of the link:
+
+```html
+<li>
+  <label>
+    <input type="checkbox"
+           name="oq-rate-limit"
+           data-issue-title="[FEATURE] Rate-limit the token endpoint"
+           data-issue-type="feature"
+           data-oq-origin="deferred"
+           checked disabled>
+    <span class="oq-label">Rate-limit the token endpoint — parked by you in iteration 2</span>
+    <span class="oq-done">✓ {{final.done_prefix}} — <code>src/auth/rate-limit.ts</code></span>
+  </label>
+</li>
+```
+
+Once every `<li>` in the section is `disabled`, the sheet's follow-up block
+drops out automatically — the section becomes a read-only audit log of what
+was routed, and of what was built during the close-out.
+
+### What the sheet renders, and when
+
+`refreshCloseout()` re-renders on:
+- `DOMContentLoaded`
+- `iteration:changed` (via `showIteration()`) — with `{ reset: true }`, so a
+  tab switch rebuilds the follow-up rows from the report body rather than
+  trusting a stale row set. `reset` is about the row SET only: the answers
+  already given are carried across the rebuild by id, because a detour into an
+  earlier round to re-read something must not silently move a row back from
+  "jetzt umsetzen" to Issue
+- any `change` on a `[data-open-questions]` checkbox, a follow-up route, the
+  ship radios, or the disposition radios
+
+The `followups` block renders iff all of:
+1. Active section has `data-final-report`.
+2. Active section contains a `[data-open-questions]` block.
+3. That block has at least one `:not(:disabled)` checkbox.
+
+The `handoffs` block renders iff the active final report has a
+`[data-handoffs]` section with at least one `<li>` (`renderHandoffs()`,
+called from `renderCloseout()`). It is the only block that stays visible
+once the section carries `data-closed`: the sheet's done state is the button
+reading "✓ Concept abgeschlossen." plus whatever is left for the user to do
+by hand, and nothing else.
+
+Rendering runs client-side only — Claude never adds or removes a block via the
+bridge; it controls the follow-up block indirectly by disabling checkboxes
+when it writes the routed HTML.
+
+`buildFollowUpList()` rebuilds the rows only when the underlying item **set**
+changes, keyed by id — never by count — and carries the existing answers
+across that rebuild, also by id. A rebuild driven by a route's own
+change event would tear the row out from under the user's cursor mid-click,
+and a count-keyed fast path would re-sync every row to the wrong body
+checkbox when Claude routes one item and appends another in the same rewrite.
+
+### Disposition Control
+
+The disposition fieldset (`#panel-dispose-concept`) is the sheet's `files`
+block — always present, not gated on open-questions content. Its three radios +
+optional `moveTo` text input drive Step 6 cleanup behaviour. The user chooses
+how the concept files should land on disk before closing the session.
+
+**Disposition modes:**
+
+| `mode` | Step 6 cleanup behaviour |
+|---|---|
+| `discard` *(default)* | Delete the concept HTML AND the matching `-decisions.json` from `docs/concepts/`. |
+| `keep` | Leave the files in place (or under `moveTo` if set). They remain git-tracked. |
+| `gitignore` | Leave the files in place (or under `moveTo` if set) AND append `docs/concepts/{slug}.*` (or the moved path glob) to the repo's `.gitignore` if not already covered. |
+
+**Optional `moveTo` (string):** the user may type a target directory
+(e.g. `docs/architecture/decisions/`). When set, Claude `mv`s both the
+HTML file AND the decisions JSON to that directory FIRST, then applies
+the `mode` semantics. Empty / whitespace-only input is treated as null.
+
+**Payload shape:**
+
+```json
+{ "mode": "discard" | "keep" | "gitignore", "moveTo": "docs/architecture/" | null }
+```
+
+The `finalize` payload carries this sub-object alongside `issues` and `ship`;
+so do the legacy `create-issues` / `ship` / `dispose-concept` payloads. The
+contract is documented in `SKILL.md` § Step 6 — Cleanup-By-Disposition.
+
+**Backward compatibility:** old concept sessions that submitted without a
+`disposition` field, or any submission that ended the session before this
+control existed, default to `disposition: { mode: "discard", moveTo: null }`.
+The default is intentionally aggressive — most one-shot refinements do not
+need to persist the HTML in git, and a stray opt-out is cheaper to fix
+(re-render or check-in manually) than a stale concept directory full of
+forgotten artefacts.
+
+### One submission, four consequences
+
+`finalize` is a single submission that can carry up to four real actions.
+Claude executes them in a fixed order — **issues → implement → ship → Step 6
+cleanup** — and the order is not negotiable:
+
+- Issues first, because they are cheap, local to GitHub, independent of
+  everything else, and their creation must not depend on a release
+  succeeding. A run that dies later still leaves the follow-ups tracked.
+- Implement second (the points routed to "jetzt umsetzen", built by the
+  devops agents — SKILL.md Step 5b · finalize part B), because a release must
+  contain that work rather than predate it.
+- Ship third, because it is the one part that can hard-fail on a gate. When it
+  does, Claude stops there: created issues and implemented follow-ups stand,
+  **cleanup does not run**, and the concept session stays open so the user can
+  retry.
+- Cleanup last, because `discard` deletes the concept HTML — doing that before
+  the outward-facing steps would destroy the record while it is still needed.
+
+**Replay protection is client-side, and it has to be.** The `_version`
+mismatch guard people reach for here only exists on `POST /reset` and
+`POST /status` — `POST /decisions` has no such guard, it just creates a new
+version and flips `/pending` to true. So a finalize whose response was lost
+in transit after the bridge had already fsynced it sits in BOTH places, and
+the offline queue would happily deliver it again: duplicate `gh issue create`,
+a second real release, `discard` applied twice. That is why every finalize
+carries a `submission_id` and `retryPendingSubmission()` compares it against
+what `/decisions` already holds before re-POSTing (see § Offline Submit
+Queue). Do not drop that field, and do not "simplify" the retry.
+
+## Design System
+
+### Colors
+- Dark mode: `#0d1117` background, `#c9d1d9` text, `#58a6ff` accent
+- Light mode: `#ffffff` background, `#24292f` text, `#0969da` accent
+- Success: `#3fb950` / `#1a7f37`
+- Warning: `#d29922` / `#9a6700`
+- Danger: `#f85149` / `#cf222e`
+
+### Typography
+- System font stack: `-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+- Headings: 600 weight, tight letter-spacing
+- Body: 400 weight, 1.6 line-height
+- Code: `'Cascadia Code', 'Fira Code', monospace`
+
+### Spacing
+- Section gap: `2rem`
+- Card padding: `1.5rem`
+- Element gap: `0.75rem`
+
+### Interactive Elements
+- Toggle switches: 44px wide, smooth transition, clear on/off state
+- Checkboxes: custom styled, visible check mark
+- Comment fields: `width: 100%` within their container, `min-height: 80px`,
+  auto-expanding textarea
+- Text inputs: `width: 100%` within container, generous padding (`0.75rem`)
+- Submit button: in decision panel, full-width within panel
+- Sliders: labeled endpoints, current value display, full container width

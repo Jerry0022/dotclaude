@@ -1,8 +1,8 @@
 /**
  * @module skill-trigger-router
- * @version 0.4.0
+ * @version 0.5.0
  * @description Pure trigger-matching core for `prompt.skill.enforce`'s router
- *   half (PR 1 of the skill restructure —
+ *   half (PR 1 + PR 2 of the skill restructure —
  *   docs/superpowers/specs/2026-09-24-skill-restructure-design.md "Triggers —
  *   how hidden skills still run").
  *
@@ -11,17 +11,28 @@
  *   model, which still reads each skill's full description (including its
  *   "Do NOT trigger for …" negations). Three signal sources:
  *
- *   1. **Alias mentions** — `/do-learn`, `/auto-fix`, … (PR 2 names) mapped to
- *      the CURRENT skill via `ALIAS_MAP`. Aliases of skills owned by a
- *      dedicated hook (`SKIP_SKILLS`: ship, claude-batch, claude-strict) emit
- *      nothing — those hooks learn the aliases in PR 2.
+ *   1. **Alias mentions** — the pre-PR-2 names (`/fix`, `/concept`,
+ *      `/claude-learn`, `/run-backlog`, `/promote`, …) mapped to the skill
+ *      that now owns them via `ALIAS_MAP` (built from `skill-names.js`);
+ *      a folded name also carries its mode (`/run-backlog` → do-run mode
+ *      `backlog`, `/promote` → do-ship mode `promote`). A 1:1 alias of a
+ *      skill owned by a dedicated hook (`SKIP_SKILLS`: do-ship, do-batch,
+ *      claude-strict) emits nothing — `prompt.ship.detect` and
+ *      `prompt.batch.collect` recognise `/ship` and `/claude-batch`
+ *      themselves. The NEW names are real skills and go through the inline
+ *      mention path in `prompt.skill.enforce`.
+ *      Reach: only a prompt that reaches UserPromptSubmit is seen here. A
+ *      typed `/old-name` at the very start of a prompt is a slash command to
+ *      the harness; whether an unknown one is rejected locally or passed on
+ *      is undocumented (spec § Triggers), so the alias is only guaranteed
+ *      for mid-prompt mentions ("mach das mit /fix").
  *   2. **Trigger phrases** from every skill's `triggers:` frontmatter
  *      (`hooks/lib/skill-meta.js`) — but only three kinds:
  *        - **multi-word phrases** ("this is broken", "führe mich durch"),
  *          minus the per-skill `PHRASE_DENYLIST` of phrases that are
  *          ambiguous in everyday speech ("prüf alles", "neue version");
  *        - **slash forms** that are not a skill directory name themselves
- *          (`/devops-learn` → claude-learn; a real `/name` is the inline
+ *          (`/devops-learn` → do-learn; a real `/name` is the inline
  *          mention path in `prompt.skill.enforce.js`);
  *        - **single words** only when listed in the curated
  *          `SINGLE_WORD_ALLOWLIST` (words nobody uses by accident:
@@ -35,7 +46,7 @@
  *      The frontmatter itself stays complete (trigger-preservation test);
  *      the allowlist/denylist only narrow what the ROUTER acts on.
  *   3. **Error patterns** — language-independent bug-report signals route to
- *      `fix`. A stack frame or `Traceback` counts anywhere, including inside
+ *      `auto-fix`. A stack frame or `Traceback` counts anywhere, including inside
  *      a fenced code block (that is where a pasted trace lives). A bare
  *      `…Error:` / `…Exception:` only counts in the prose OUTSIDE fences
  *      (pasted code like `except ValueError:` is not a report). An HTTP
@@ -76,58 +87,64 @@
  *   the hook, which filters this module's output (see its header).
  */
 
-/** Skills owned by a dedicated UserPromptSubmit hook: `ship`
- *  (prompt.ship.detect), `claude-batch` (prompt.batch.collect),
+const { RENAMED, FOLDED, modeForPhrase } = require('./skill-names');
+
+/** Skills owned by a dedicated UserPromptSubmit hook: `do-ship`
+ *  (prompt.ship.detect), `do-batch` (prompt.batch.collect),
  *  `claude-strict` (prompt.strict.enforce). The router never emits them —
- *  not from phrases and not from aliases — so two hooks never issue
- *  conflicting mandates for one prompt. */
-const SKIP_SKILLS = new Set(['ship', 'claude-batch', 'claude-strict']);
+ *  not from phrases and not from 1:1 aliases — so two hooks never issue
+ *  conflicting mandates for one prompt. Exception: a phrase or alias of a
+ *  FOLDED mode (do-ship's `promote` mode: "promote to stable", `/promote`)
+ *  is no ship intent, so it still routes, tagged with its mode. */
+const SKIP_SKILLS = new Set(['do-ship', 'do-batch', 'claude-strict']);
 
 /** Multi-word (and a few single-word) frontmatter phrases the router ignores
  *  because they are ambiguous in ordinary prose, or owned elsewhere:
- *  - promote "release" — also a ship-intent keyword (prompt.ship.detect);
- *  - tune-audit "prüf alles" — "prüf alles nochmal" is a review request;
+ *  - do-ship (promote mode) "release" — also a ship-intent keyword
+ *    (prompt.ship.detect);
+ *  - do-run (audit mode) "prüf alles" — "prüf alles nochmal" is a review
+ *    request;
  *  - auto-update "neue version" — "neue Version der Datei"; "update plugin",
  *    "plugin updaten", "self update" — generic consumer-project phrases
  *    ("update plugin settings for eslint", "das vite plugin updaten"), and
  *    auto-update is explicit-only per its description;
  *  - setup-readme "update the readme" — a to-do item ("implement X and
  *    update the readme"), not a README rewrite;
- *  - concept "visualize this" — "visualize this as a bar chart";
- *  - web-guide "guide me through" — "guide me through this code" is a
+ *  - auto-concept "visualize this" — "visualize this as a bar chart";
+ *  - auto-guide "guide me through" — "guide me through this code" is a
  *    code walkthrough, not a website guide;
  *  - auto-graph "graphify" — the user has a global graphify skill;
- *  - run-agents "use agents" / "parallel agents" — a hard go for the
- *    delegation policy (spawn directly), not a request for the run-agents
+ *  - auto-agents "use agents" / "parallel agents" — a hard go for the
+ *    delegation policy (spawn directly), not a request for the auto-agents
  *    ceremony (deep-knowledge/agent-proactivity.md);
- *  - setup-issue "new issue" / "neues issue" — "that's a new issue after
+ *  - auto-issue "new issue" / "neues issue" — "that's a new issue after
  *    the merge", "das ist ein neues Issue";
- *  - tune-harden "lint und fix" — "lint und fix, dann ship" is a plain
+ *  - auto-harden "lint und fix" — "lint und fix, dann ship" is a plain
  *    to-do list, not a hardening pass;
  *  - auto-usage "token budget" — "keep the token budget low".
  *  Compared lowercase. */
 const PHRASE_DENYLIST = Object.freeze({
-  promote: new Set(['release']),
-  'tune-audit': new Set(['prüf alles']),
+  'do-ship': new Set(['release']),
+  'do-run': new Set(['prüf alles']),
   'auto-update': new Set(['neue version', 'update plugin', 'plugin updaten', 'self update']),
   'auto-graph': new Set(['graphify']),
-  'run-agents': new Set(['use agents', 'parallel agents']),
-  'setup-issue': new Set(['new issue', 'neues issue']),
-  'tune-harden': new Set(['lint und fix']),
+  'auto-agents': new Set(['use agents', 'parallel agents']),
+  'auto-issue': new Set(['new issue', 'neues issue']),
+  'auto-harden': new Set(['lint und fix']),
   'auto-usage': new Set(['token budget']),
   'setup-readme': new Set(['update the readme']),
-  concept: new Set(['visualize this']),
-  'web-guide': new Set(['guide me through']),
+  'auto-concept': new Set(['visualize this']),
+  'auto-guide': new Set(['guide me through']),
 });
 
 /** The ONLY single-word triggers that force a load — words that name the
  *  skill's job and hardly occur otherwise. Compared lowercase; a word must
  *  also be in the skill's own `triggers:` to count. */
 const SINGLE_WORD_ALLOWLIST = Object.freeze({
-  'tune-rethink': new Set(['festgefahren', 'unstuck']),
-  'tune-audit': new Set(['auditiere', 'auditieren', 'qualitätsaudit']),
-  'tune-harden': new Set(['stabilisieren', 'härten']),
-  'tune-polish': new Set(['feinschliff']),
+  // rethink mode: festgefahren, unstuck · audit mode: the three audit words
+  'do-run': new Set(['festgefahren', 'unstuck', 'auditiere', 'auditieren', 'qualitätsaudit']),
+  'auto-harden': new Set(['stabilisieren', 'härten']),
+  'auto-polish': new Set(['feinschliff']),
 });
 
 /** Router-only phrases (not in any frontmatter): verb-object forms of a word
@@ -136,7 +153,7 @@ const SINGLE_WORD_ALLOWLIST = Object.freeze({
  *  a false match forces a 1.4k-line skill, so only a request FOR a concept
  *  routes. Compared lowercase; matched with the same word-boundary rules. */
 const ROUTER_PHRASES = Object.freeze({
-  concept: Object.freeze([
+  'auto-concept': Object.freeze([
     'ein concept', 'concept für', 'concept dazu', 'als concept', 'concept-seite', 'concept-page',
     'make a concept', 'create a concept', 'a concept for',
   ]),
@@ -152,28 +169,18 @@ const META_WINDOW = 3;
 const TOKEN_SPLIT_RE = /[\s!-/:-@[-`{-~]+/;
 
 /**
- * Alias map for the PR 2 renames: recognises the NEW name in prompt text
- * today and maps it to the CURRENT skill it corresponds to 1:1. Names with no
- * current 1:1 equivalent are absent: `do-run` (a new router folding five
- * run-* skills) and `auto-agents` (a new execution path, not run-agents).
- * Aliases whose target is in SKIP_SKILLS (`do-ship`, `do-batch`) stay in the
- * map for PR 2 but are filtered out by `detectAliasMentions`.
- *
- * Exported as one constant so PR 2 only has to edit this object.
+ * Alias map after the PR 2 renames: every OLD name → the skill that owns it
+ * now, plus the mode for a folded skill (`run-burn` → do-run mode `burn`).
+ * Built from `skill-names.js` so the renames live in exactly one table.
+ * A 1:1 alias whose target is in SKIP_SKILLS (`/ship`, `/claude-batch`) is
+ * filtered out by `detectAliasHits` — the dedicated hook owns it. A folded
+ * alias always passes: `/promote` is no ship-intent prompt.
+ * @type {Readonly<Record<string, {skill:string, mode:string|null}>>}
  */
-const ALIAS_MAP = Object.freeze({
-  'do-ship': 'ship',
-  'do-learn': 'claude-learn',
-  'do-batch': 'claude-batch',
-  'auto-concept': 'concept',
-  'auto-fix': 'fix',
-  'auto-issue': 'setup-issue',
-  'auto-polish': 'tune-polish',
-  'auto-harden': 'tune-harden',
-  'auto-guide': 'web-guide',
-  'auto-extend': 'claude-extend-skill',
-  'auto-update': 'auto-update',
-});
+const ALIAS_MAP = Object.freeze(Object.fromEntries([
+  ...Object.entries(RENAMED).map(([oldName, skill]) => [oldName, Object.freeze({ skill, mode: null })]),
+  ...Object.entries(FOLDED).map(([oldName, f]) => [oldName, Object.freeze({ skill: f.skill, mode: f.mode })]),
+]));
 
 /** `/<name>` preceded by start, whitespace or opening punctuation — never a
  *  path segment. Mirrors `prompt.skill.enforce`'s MENTION_RE. */
@@ -223,22 +230,34 @@ function stripFences(message) {
 }
 
 /**
- * Detect alias mentions (`/do-learn`, `/auto-fix`, …) outside code and
- * quotes and map them to their current skill name. Aliases of SKIP_SKILLS
- * are dropped.
+ * Detect old-name slash mentions (`/fix`, `/claude-learn`, `/run-backlog`,
+ * …) outside code and quotes and map them to the skill (and mode) that owns
+ * them now. 1:1 aliases of SKIP_SKILLS are dropped.
  * @param {string} message
- * @returns {string[]} deduped current skill names, in order of appearance
+ * @returns {{skill:string, mode:string|null, alias:string}[]} deduped by
+ *   skill, in order of appearance
  */
-function detectAliasMentions(message) {
+function detectAliasHits(message) {
   if (typeof message !== 'string' || !message) return [];
   const found = [];
   for (const m of stripCodeAndQuotes(message).matchAll(SLASH_MENTION_RE)) {
     const alias = m[2].toLowerCase().replace(/-+$/, '');
+    if (!Object.prototype.hasOwnProperty.call(ALIAS_MAP, alias)) continue;
     const target = ALIAS_MAP[alias];
-    if (!target || SKIP_SKILLS.has(target)) continue;
-    if (!found.includes(target)) found.push(target);
+    if (!target.mode && SKIP_SKILLS.has(target.skill)) continue;
+    if (found.some(h => h.skill === target.skill)) continue;
+    found.push({ skill: target.skill, mode: target.mode, alias });
   }
   return found;
+}
+
+/**
+ * Skill names only — see `detectAliasHits`.
+ * @param {string} message
+ * @returns {string[]} deduped current skill names, in order of appearance
+ */
+function detectAliasMentions(message) {
+  return detectAliasHits(message).map(h => h.skill);
 }
 
 /** Chinese/Japanese script ranges: no inter-word spaces, so a trigger phrase
@@ -331,24 +350,30 @@ function isRoutablePhrase(skill, phrase, skillNames) {
 
 /**
  * Flatten every skill's `triggers:` frontmatter plus `ROUTER_PHRASES` into
- * the router corpus (SKIP_SKILLS dropped, only routable phrases kept).
+ * the router corpus (SKIP_SKILLS dropped except their folded-mode phrases,
+ * only routable phrases kept). A phrase of a folded mode carries `mode`.
  * @param {Record<string, object>} skills — from `skill-meta.loadAllSkills`
- * @returns {{skill:string, phrase:string, matcher:object}[]} longest first
+ * @returns {{skill:string, phrase:string, matcher:object, mode?:string}[]} longest first
  */
 function buildWordTriggerCorpus(skills) {
   const entries = [];
   const names = new Set(Object.keys(skills || {}).map(n => n.toLowerCase()));
   for (const [name, meta] of Object.entries(skills || {})) {
-    if (SKIP_SKILLS.has(name)) continue;
+    const skipped = SKIP_SKILLS.has(name);
     const byLang = meta && meta.triggers && typeof meta.triggers === 'object' ? meta.triggers : {};
     for (const list of Object.values(byLang)) {
       if (!Array.isArray(list)) continue;
       for (const phrase of list) {
         if (typeof phrase !== 'string' || !phrase.trim()) continue;
+        const mode = modeForPhrase(name, phrase);
+        if (skipped && !mode) continue;
         if (!isRoutablePhrase(name, phrase, names)) continue;
-        entries.push({ skill: name, phrase, matcher: buildPhraseMatcher(phrase) });
+        const entry = { skill: name, phrase, matcher: buildPhraseMatcher(phrase) };
+        if (mode) entry.mode = mode;
+        entries.push(entry);
       }
     }
+    if (skipped) continue;
     for (const phrase of ROUTER_PHRASES[name] || []) {
       entries.push({ skill: name, phrase, matcher: buildPhraseMatcher(phrase) });
     }
@@ -361,8 +386,8 @@ function buildWordTriggerCorpus(skills) {
  * Match the corpus against a message (code and quotes removed first).
  * @param {string} message raw prompt
  * @param {{skill:string,phrase:string,matcher:object}[]} corpus
- * @returns {{skill:string, phrase:string, nearMeta?:true}[]} deduped by
- *   skill; `nearMeta` only when a meta word sits next to the match
+ * @returns {{skill:string, phrase:string, mode?:string, nearMeta?:true}[]}
+ *   deduped by skill; `nearMeta` only when a meta word sits next to the match
  */
 function matchWordTriggers(message, corpus) {
   if (typeof message !== 'string' || !message) return [];
@@ -375,13 +400,14 @@ function matchWordTriggers(message, corpus) {
     if (i === -1) continue;
     seen.add(entry.skill);
     const hit = { skill: entry.skill, phrase: entry.phrase };
+    if (entry.mode) hit.mode = entry.mode;
     if (nearMetaWord(haystack, i, entry.matcher.length)) hit.nearMeta = true;
     out.push(hit);
   }
   return out;
 }
 
-// --- Language-independent error-pattern → fix routing -----------------
+// --- Language-independent error-pattern → auto-fix routing -----------------
 
 const STACK_FRAME_RE = /\bat\s+[^\s(]+\s*\([^()\n]*:\d+:\d+\)/; // "at fn (file:line:col)"
 const PY_FRAME_RE = /File\s+"[^"\n]+",\s+line\s+\d+/; // File "x.py", line N
@@ -458,7 +484,7 @@ function capAndDedupe(entries, cap = 4) {
  * @param {string} message raw prompt
  * @param {Record<string, object>} skills — `skill-meta.loadAllSkills` output
  * @param {{cap?:number}} [opts]
- * @returns {{skill:string, reason:string, explicit?:boolean, phrase?:boolean, nearMeta?:boolean}[]}
+ * @returns {{skill:string, reason:string, mode?:string, explicit?:boolean, phrase?:boolean, nearMeta?:boolean}[]}
  */
 function routeMessage(message, skills, opts = {}) {
   const cap = opts.cap || 4;
@@ -467,19 +493,23 @@ function routeMessage(message, skills, opts = {}) {
 
   const entries = [];
 
-  for (const skill of detectAliasMentions(message)) {
-    if (known[skill]) entries.push({ skill, reason: 'alias mention', explicit: true });
+  for (const { skill, mode, alias } of detectAliasHits(message)) {
+    if (!known[skill]) continue;
+    const e = { skill, reason: `alias /${alias}${mode ? ` (mode ${mode})` : ''}`, explicit: true };
+    if (mode) e.mode = mode;
+    entries.push(e);
   }
 
-  // Before the phrases: when both hit `fix`, the dedupe keeps the error
+  // Before the phrases: when both hit `auto-fix`, the dedupe keeps the error
   // pattern, which the caller never softens.
-  if (known.fix && looksLikeBugReport(message)) {
-    entries.push({ skill: 'fix', reason: 'error pattern (stack trace / Traceback / Error class / HTTP status)' });
+  if (known['auto-fix'] && looksLikeBugReport(message)) {
+    entries.push({ skill: 'auto-fix', reason: 'error pattern (stack trace / Traceback / Error class / HTTP status)' });
   }
 
   const corpus = buildWordTriggerCorpus(known);
-  for (const { skill, phrase, nearMeta } of matchWordTriggers(message, corpus)) {
-    const e = { skill, reason: `trigger phrase "${phrase}"`, phrase: true };
+  for (const { skill, phrase, nearMeta, mode } of matchWordTriggers(message, corpus)) {
+    const e = { skill, reason: `trigger phrase "${phrase}"${mode ? ` (mode ${mode})` : ''}`, phrase: true };
+    if (mode) e.mode = mode;
     if (nearMeta) e.nearMeta = true;
     entries.push(e);
   }
@@ -496,6 +526,7 @@ module.exports = {
   META_WORD_RE,
   nearMetaWord,
   detectAliasMentions,
+  detectAliasHits,
   buildPhraseMatcher,
   isRoutablePhrase,
   buildWordTriggerCorpus,

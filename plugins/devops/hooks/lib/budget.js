@@ -54,7 +54,7 @@
  *   the weekly limit was retried after the reset with a 16-char prompt; no
  *   suffix (short prompt), no SessionStart (the process never restarted),
  *   and the model carried "weekly limit hit" from the transcript into its
- *   own /run-agents args. So a window that reset since the previous reading
+ *   own /auto-agents args. So a window that reset since the previous reading
  *   is a POSITIVE signal (`announce`): the full line goes out on every prompt
  *   while the snapshot is past its reset or the window reset recently
  *   (RECENT_RESET_*), regardless of prompt length, and names the reset so it

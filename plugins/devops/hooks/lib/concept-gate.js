@@ -4,7 +4,7 @@
  * @description Deterministic validator for concept HTML pages.
  *
  *   Backstop for two recurring regressions where Claude only "half-uses" the
- *   concept skill:
+ *   auto-concept skill:
  *     A) the page bakes in a "copy the JSON, paste it into chat" submit
  *        instead of the live bridge — a clipboard fallback that defeats the
  *        whole monitoring loop.
@@ -753,7 +753,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('Which design wins is what the 💬 dock\'s per-design notes are for. A decision / comparison view');
     lines.push('asks a question whose answer holds whichever design wins (data model, sync strategy, library, …).');
     lines.push('Fix: drop the alternatives that are the designs again — usually the whole view — rather than');
-    lines.push('relabelling them; see skills/concept/SKILL.md § Step 1a → Orthogonality and validation-gate.md P31.');
+    lines.push('relabelling them; see skills/auto-concept/SKILL.md § Step 1a → Orthogonality and validation-gate.md P31.');
     lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
     return lines.join('\n');
   }
@@ -777,7 +777,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   if (mapping.length) {
     lines.push('Mapping spec problems — the information-mapping engine cannot render these sections as authored:');
     mapping.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
-    lines.push('  Fix: regenerate the spec from skills/concept/deep-knowledge/templates.md § Information Mapping (engine) → Spec');
+    lines.push('  Fix: regenerate the spec from skills/auto-concept/deep-knowledge/templates.md § Information Mapping (engine) → Spec');
     lines.push('  (ids ^[a-z0-9_]+$, unique, data-mapping = section id; ≥ 1 item; lists are arrays; proposal/submitted');
     lines.push('  refer only to declared items and {src}.{part} targets; a ctx value present iff the spec has "context"');
     lines.push("  with values). When freezing a round, write \"submitted\" into the frozen spec from the payload's");

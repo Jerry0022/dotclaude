@@ -23,7 +23,7 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 3. **Completion Card** — render per `templates/completion-card.md`, anatomy
    pinned in `deep-knowledge/completion-card-design.md` (source of truth when
    the two disagree)
-4. **Ship recommendation** — after 5+ code edits, recommend `/ship`
+4. **Ship recommendation** — after 5+ code edits, recommend `/do-ship`
 
 **Card anatomy** (full spec: `deep-knowledge/completion-card-design.md`): two
 blocks, nothing between them. Block 1 — title (`### **✨✨✨ … ✨✨✨**`, the
@@ -133,7 +133,7 @@ Subagents inherit all output contracts:
   asks the user to SHIP or act on a result that has not arrived. `stop.flow.guard`
   reads the open work out of the transcript and blocks a card that omits it.
   Never put an internal agentId in a card — use the agent type or task label.
-- **A turn that ends with a `/concept` page open renders its card with
+- **A turn that ends with a `/auto-concept` page open renders its card with
   `concept: { phase }`** (`waiting` · `iterating` · `implementing`) — the CTA
   becomes "🧭 CONCEPT wartet auf deine Entscheidungen / in Iteration /
   in Implementierung — ich MELDE mich" and
@@ -142,7 +142,7 @@ Subagents inherit all output contracts:
   Real content agents still go into `pending` and are folded into that line.
   Pass `cwd` too — the card then prints the page's `http://localhost:{port}/…`
   link above the CTA, read from `.claude/concept-active.json`.
-- **A card rendered while `/claude-batch` is collecting says so by itself**:
+- **A card rendered while `/do-batch` is collecting says so by itself**:
   with `cwd` passed, the card reads `.claude/batch-mode.json` and swaps its CTA
   for "📥 BATCH sammelt. {n} Notizen · nächster Prompt wird Notiz #{n+1} ·
   "{marker}" löst aus — ich WARTE". No card field — the state file is the truth.
@@ -160,12 +160,12 @@ Subagents inherit all output contracts:
   rendered), so an outcome prefix never outlives the turn it described: a
   new prompt means new work. The hourglass is one state — "Claude works, not
   your move" — never a worded `⏳ Working – ` (a legacy form, only stripped).
-  `/concept` sets `🧭 Concept – ` only while the page waits for the user:
+  `/auto-concept` sets `🧭 Concept – ` only while the page waits for the user:
   generating the page, processing a submission, iterating and implementing
   are Claude's move and show `⏳ ` (a user prompt swaps the compass for it,
-  the concept skill does so when it picks up a submission, and the card
+  the auto-concept skill does so when it picks up a submission, and the card
   re-states the compass only for the `waiting` phase, #416).
-  `/claude-batch` owns `📥 Batch – ` while collecting, `/ship` `🚀 Shipping – `
+  `/do-batch` owns `📥 Batch – ` while collecting, `/do-ship` `🚀 Shipping – `
   while the pipeline runs — the bare `⏳ ` never replaces a running 📥 /
   `🚀 Shipping – ` (a ship prompt is marked `🚀 Shipping – ` by
   `prompt.flow.title-work` itself, via `hooks/lib/ship-intent.js`), nor a
@@ -219,17 +219,17 @@ nothing about what the other eight are running.
 ## Issue Creation & Editing — Always Delegate
 
 When a skill, agent or hook needs a GitHub issue **created or changed**, it
-MUST delegate to `/setup-issue` via the **Skill** tool — never call
+MUST delegate to `/auto-issue` via the **Skill** tool — never call
 `gh issue create` or `gh issue edit` directly. That skill enforces title
 format, label set, milestone, project-board placement, **the target
 repository** (an issue meant for another repo silently lands in the current
 one without `--repo`), loads project-specific extensions from
-`{project}/.claude/skills/setup-issue/`, and in **refine mode** owns the one
+`{project}/.claude/skills/auto-issue/`, and in **refine mode** owns the one
 managed `## Refinement` section (markers, acceptance criteria, decisions)
 that later autonomous runs implement from. Direct `gh issue` writes bypass
 all of that and silently drift from the project's conventions.
 
 Callers hand over a self-contained prompt (title / type / body, or issue +
 refinement) — with a complete hand-over the skill asks nothing, so
-zero-prompt flows (`/concept` finalize, `/run-backlog` Step 2) delegate
+zero-prompt flows (`/auto-concept` finalize, `/do-run backlog` Step 2) delegate
 too. Invoked mid-flow it returns without its own completion card.

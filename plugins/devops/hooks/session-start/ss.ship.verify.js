@@ -88,7 +88,7 @@ function isAbandoned(data, now = Date.now()) {
  * The workflow run belonging to this merge, restricted to the watcher's own
  * window. A run created after the deadline is a LATER event on the same commit
  * — in this repo the Release workflow fires on the bare `vX.Y.Z` tag that
- * `/promote` adds to the already-merged commit days afterwards — and must not
+ * `/do-ship promote` adds to the already-merged commit days afterwards — and must not
  * be reported as the ship's CI.
  *
  * @param {Array|null} runs `gh run list --json ...` output

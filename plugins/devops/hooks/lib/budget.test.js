@@ -241,7 +241,7 @@ describe("the positive signal — a reset since the previous reading is announce
    * Incident 2026-09-20: a session that hit the weekly limit was retried after
    * the reset with a 16-char prompt. The suffix is empty for `free` and gated
    * on prompt length, no SessionStart fired, and the model carried "weekly
-   * limit hit" from the transcript into its own /run-agents args. `announce`
+   * limit hit" from the transcript into its own /auto-agents args. `announce`
    * is the stateless fix: the full line, naming the reset, on every prompt
    * while a window is past its reset or reset recently (PO + redteam review).
    */

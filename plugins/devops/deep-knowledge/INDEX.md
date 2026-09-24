@@ -9,14 +9,14 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [agent-proactivity.md](agent-proactivity.md) | Agent Delegation Policy | Always-on (injected at SessionStart). This plugin instruction **is** the |
-| [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for `run-autonomous` Step 5. Read this at the start of |
+| [autonomous-execution.md](autonomous-execution.md) | Autonomous Execution — Gate, Guardrails, Late-Permission Protocol | Detailed execution rules for do-run autonomous mode Step 5. Read this at the ... |
 | [browser-file-urls.md](browser-file-urls.md) | Browser File URLs (Windows + Git-Bash) | Cross-cutting rule: whenever a skill opens a local HTML file in a browser |
 | [browser-tool-strategy.md](browser-tool-strategy.md) | Browser Tool Strategy | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [claude-desktop-app-setup.md](claude-desktop-app-setup.md) | Claude Desktop App Setup (Windows) | Windows-specific reference for Claude Desktop App launcher configuration and ... |
 | [claude-directory-structure.md](claude-directory-structure.md) | Claude Directory Structure Convention | All Claude Code configuration belongs inside `.claude/`. Nothing Claude-specific |
 | [code-defaults.md](code-defaults.md) | Code Defaults | Standard coding conventions enforced across all projects using the devops plu... |
 | [codex-integration.md](codex-integration.md) | Codex Integration | Cross-cutting reference for all points where `codex-plugin-cc` skills are |
-| [commit-conventions.md](commit-conventions.md) | Commit Conventions | How commits are written in projects using this plugin. Referenced by `/ship`, |
+| [commit-conventions.md](commit-conventions.md) | Commit Conventions | How commits are written in projects using this plugin. Referenced by `/do-ship`, |
 | [completion-card-design.md](completion-card-design.md) | Completion Card — Design Specification (v2, "one page, three lines, one decision") | Single source of truth for how a completion card looks and reads, on every |
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
@@ -24,8 +24,8 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [documentation-maintenance.md](documentation-maintenance.md) | Documentation Maintenance | Keep project docs in their target state as behavior, flows, and architecture ... |
 | [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
-| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/ship`, the role agents, and hooks. |
-| [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/tune-harden` and `/tune-polish`. Covers |
+| [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/do-ship`, the role agents, and hooks. |
+| [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/auto-harden` and `/auto-polish`. Covers |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |
 | [issue-trust.md](issue-trust.md) | Issue Trust — Who May Fill an Autonomous Queue | Cross-cutting rule for every skill that turns GitHub issues into **autonomously |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Cross-cutting rule for all implementation agents (core, frontend, feature, ai) |

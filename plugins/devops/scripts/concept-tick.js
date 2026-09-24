@@ -18,7 +18,7 @@
  *   spell out inline happens here.
  *
  *   Nothing was dropped, only moved. The steps map 1:1 onto the numbered steps
- *   of `skills/concept/deep-knowledge/bridge-server.md` § step 3:
+ *   of `skills/auto-concept/deep-knowledge/bridge-server.md` § step 3:
  *     (0) self-cleanup gate — state file missing / foreign port / concept HTML
  *         gone ⇒ POST /shutdown and tell Claude which cron to delete
  *     (1) heartbeat POST — keeps the page's connection indicator green
@@ -119,7 +119,7 @@ function inspectState(statePath, port, exists = fs.existsSync, owner = '') {
   // Numeric, so no `"port": 8883` spacing dependency and no 8883-vs-88831 slip.
   if (parsed.port !== port) {
     // A file another session wrote is not this cron's to clean up (#417): two
-    // /concept sessions in one repo used to share the path, and A's tick read
+    // /auto-concept sessions in one repo used to share the path, and A's tick read
     // B's port as "my concept ended", POSTed /shutdown to ITS OWN bridge and
     // told Claude to rm the file — B's bridge died on the next poll. With an
     // owner token on both sides, a foreign file is reported and left alone;
@@ -272,7 +272,7 @@ function pendingInstruction(port, version) {
     `\`_version\` and \`_processed_at\` before treating the rest as decision data. Read \`action\` — it is one ` +
     `of "iterate", "implement" or "finalize" (legacy pages may still send "create-issues", "ship" or ` +
     `"dispose-concept" one at a time), each with its own branch in ` +
-    `concept SKILL.md Step 5b. Process per Step 5 (Live Feedback Loop). ` +
+    `auto-concept SKILL.md Step 5b. Process per Step 5 (Live Feedback Loop). ` +
     `"finalize" carries issues{} + implement{} + ship{} + disposition{} in ONE payload — run the selected ` +
     `parts in the fixed order issues, then implement (the follow-ups the user routed to "jetzt umsetzen", ` +
     `built through the devops role agents), then ship, then Step 6 cleanup, and skip cleanup when the ship ` +

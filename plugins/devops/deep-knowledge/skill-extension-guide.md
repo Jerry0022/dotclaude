@@ -20,7 +20,7 @@ In each layer, you can create two files:
 
 | File | Purpose | Example |
 |---|---|---|
-| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /ship |
+| `SKILL.md` | Override or add steps to the skill | Add a deploy step to /do-ship |
 | `reference.md` | Add context the skill reads before executing | List version files, deploy targets |
 
 Both are optional. Create only what you need.
@@ -47,17 +47,29 @@ Lives in `{project}/.claude/skills/{skill-name}/`. Applies only to this project.
 my-angular-app/
 └── .claude/
     └── skills/
-        ├── ship/
+        ├── do-ship/
         │   ├── SKILL.md        ← "Before PR: run ng build --prod"
         │   └── reference.md    ← "Deploy via SSH to 192.168.178.32"
-        ├── run-backlog/
-        │   └── reference.md    ← "Also trust @our-release-bot as an author"
-        └── debug/
+        ├── do-run/
+        │   └── reference.md    ← "Backlog mode: also trust @our-release-bot as an author"
+        └── auto-fix/
             └── reference.md    ← "Logs at %APPDATA%/MyApp/logs/"
 ```
 
 **Use for:** Project-specific build commands, deploy targets, version files,
 log paths, test commands, CI integration.
+
+## Renamed skills — the old directory keeps working
+
+The skill restructure (PR 2) renamed most skills (`ship` → `do-ship`, `fix` →
+`auto-fix`, `concept` → `auto-concept`, …) and folded others into modes
+(`run-backlog` → `do-run` backlog mode, `promote` → `do-ship` promote mode).
+An extension written under the old name is still read: every Step 0 looks up
+the new directory first and falls back to the old one; a mode additionally
+reads the extension of the skill it was folded from. The full table lives in
+`hooks/lib/skill-names.js` (`RENAMED`, `FOLDED`); hooks that read an
+extension file themselves use its `resolveExtensionFile()`. New extensions
+go under the new name.
 
 ## How extensions are loaded
 
@@ -72,7 +84,7 @@ Every plugin skill starts with Step 0:
 
 ## Extension examples by skill
 
-### /ship
+### /do-ship
 ```markdown
 # reference.md
 ## Quality gates
@@ -87,7 +99,7 @@ Every plugin skill starts with Step 0:
 - electron-builder.json → `"version": "X.Y.Z"`
 ```
 
-### /tune-polish
+### /auto-polish
 ```markdown
 # reference.md
 ## UI rules
@@ -100,11 +112,11 @@ Every plugin skill starts with Step 0:
 - All list rows use `--space-3` vertical rhythm.
 ```
 The same section is read by the `post.design.remind` hook (prevention while
-writing), by `/ship` Step 1d through `/tune-polish --invoked-by=ship`
-(static check on the diff) and by a full `/tune-polish` pass (static +
+writing), by `/do-ship` Step 1d through `/auto-polish --invoked-by=ship`
+(static check on the diff) and by a full `/auto-polish` pass (static +
 runtime). Rule ids and the default allowlists: `deep-knowledge/ui-defaults.md`.
 
-### /run-backlog
+### /do-run backlog
 ```markdown
 # reference.md
 ## Issue trust
@@ -121,7 +133,7 @@ runtime). Rule ids and the default allowlists: `deep-knowledge/ui-defaults.md`.
 - Angular dev server: terminal output
 ```
 
-### /setup-issue
+### /auto-issue
 ```markdown
 # reference.md
 ## Project board
@@ -137,12 +149,12 @@ runtime). Rule ids and the default allowlists: `deep-knowledge/ui-defaults.md`.
 
 ## Delivery targets
 
-Configure how `/ship` delivers the release by setting a `deliver:` field in
-`{project}/.claude/skills/ship/reference.md`.
+Configure how `/do-ship` delivers the release by setting a `deliver:` field in
+`{project}/.claude/skills/do-ship/reference.md`.
 
 ### 1. `git+gh` (default)
 
-No extension needed. `/ship` creates a PR via `gh`, merges it, and pushes the
+No extension needed. `/do-ship` creates a PR via `gh`, merges it, and pushes the
 tag. This is the built-in behavior when no `deliver:` field is present.
 
 ### 2. `ssh-rsync` *(future work)*
@@ -152,7 +164,7 @@ Currently the value is accepted but falls through to `none` — the documented s
 stable so consumer reference.md files can be authored now.
 
 ```yaml
-# .claude/skills/ship/reference.md
+# .claude/skills/do-ship/reference.md
 deliver: ssh-rsync
 target: user@host:/var/www/app
 rsync_args: ["-az", "--delete"]
@@ -166,7 +178,7 @@ Planned extension that will push config to a Home Assistant instance after ship.
 Currently the value is accepted but falls through to `none`.
 
 ```yaml
-# .claude/skills/ship/reference.md
+# .claude/skills/do-ship/reference.md
 deliver: ha-rest
 base_url: http://homeassistant.local:8123
 token_env: HA_TOKEN
@@ -178,13 +190,13 @@ after upload. Canonical use case: shipping HA YAML configs managed in git.
 ### 4. `none`
 
 For projects that only edit files in-place with no delivery step. `deliver: none` makes
-`/ship` skip Step 4a entirely.
+`/do-ship` skip Step 4a entirely.
 
 ## Post-merge deploy verification
 
 Independent of `deliver:`, projects can opt into a background watcher that probes
 production after CI goes green. Add a `verify:` block to the same
-`{project}/.claude/skills/ship/reference.md`:
+`{project}/.claude/skills/do-ship/reference.md`:
 
 ```yaml
 verify:
@@ -196,7 +208,7 @@ verify:
   timeout_seconds: 600
 ```
 
-Full field reference: see [`skills/ship/deep-knowledge/post-merge-verify.md`](../skills/ship/deep-knowledge/post-merge-verify.md).
+Full field reference: see [`skills/do-ship/deep-knowledge/post-merge-verify.md`](../skills/do-ship/deep-knowledge/post-merge-verify.md).
 
 Failures (CI red or verify probe failing) land in `<repo>/.claude/.ship-watcher/<sha>.json`
 and surface at the next SessionStart via the `ss.ship.verify` hook, plus a
@@ -216,7 +228,7 @@ Override responsibilities, tools, or collaboration rules per project.
 
 When a project-side skill extension opens a local HTML file in the browser
 via `file://` (instead of the bridge-server's `http://localhost:…`), the
-URL becomes invalid as soon as `/ship` cleans up the worktree the
+URL becomes invalid as soon as `/do-ship` cleans up the worktree the
 file lived in. The user sees a 404 / blank tab and thinks the content
 itself is broken — when in reality the merged HTML is fine at the
 equivalent path inside the main repo.
@@ -232,11 +244,11 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
 
 - `<absolute native path>`: on Windows, run `cygpath -w` over a Git-Bash
   path first; on macOS/Linux a plain absolute path is enough.
-- `--context=<tag>` is optional metadata used in `/ship` logs
+- `--context=<tag>` is optional metadata used in `/do-ship` logs
   (e.g. `concept`, `prototype`, `mockup`, `report`). Pick whatever makes
   the trail readable.
 
-`/ship` Step 5c invokes the tracker's `reopen-main` subcommand
+`/do-ship` Step 5c invokes the tracker's `reopen-main` subcommand
 after `ship_cleanup` removes the worktree:
 
 ```bash
@@ -257,7 +269,7 @@ already invalid the moment the bridge server is killed.
 
 ## Scaffolding
 
-Run `/claude-extend-skill` to interactively scaffold an extension for any plugin skill.
+Say "extend skill" (the hidden `auto-extend` skill) to interactively scaffold an extension for any plugin skill.
 It lists all available skills, checks whether an extension already exists in your
 project, and either scaffolds new files or opens the existing ones for editing.
 

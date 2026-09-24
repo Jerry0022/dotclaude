@@ -124,9 +124,9 @@ describe("card widget buttons — Code-tab host", () => {
   });
 
   test("a slash prompt is refused even with activation, empty composer and no lock", async () => {
-    // Why the buttons carry "ship", not "/devops:ship" (live 2026-09-23).
+    // Why the buttons carry "ship", not "/devops:do-ship" (live 2026-09-23).
     const w = mount();
-    for (const text of ["/devops:ship", " /compact focus"]) {
+    for (const text of ["/devops:do-ship", " /compact focus"]) {
       w.host.clickAt = w.host.now;
       w.dom.window.postMessage({ jsonrpc: "2.0", id: 2, method: "ui/message", params: { role: "user", content: [{ type: "text", text }] } }, "*");
       await w.advance(50);

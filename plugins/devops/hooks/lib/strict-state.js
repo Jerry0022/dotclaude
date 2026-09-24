@@ -65,7 +65,7 @@ const CONTRACT_BLOCK = [
   'failure → apply nothing, revert, report.',
   'PRECEDENCE (scope only): overrides doc-maintenance, pre-mortem outputs, "make',
   'reasonable decisions independently", concept zero-prompt invariant. Completion',
-  'card, /ship docs-sync and tune-polish approval stay.',
+  'card, do-ship docs-sync and auto-polish approval stay.',
   'PROPAGATION: put this block verbatim at the top of every Agent prompt and',
   'every skill you invoke; it binds concept iterations and autonomous resumes.',
   'REPORT (≤4 lines, before the card, omit empty lines):',

@@ -4,7 +4,7 @@ description: >-
   Feature worker agent — implements features in an isolated worktree.
   Can delegate to other role agents (frontend, core, ai, etc.) when
   the feature spans multiple domains.
-  Never spawn proactively — the full-ceremony path is /run-agents or /run-autonomous, offered to the user first.
+  Never spawn proactively — the full-ceremony path is /auto-agents or /do-run autonomous, offered to the user first.
   <example>Implement the video filter feature end-to-end</example>
   <example>Add multi-tenant support: migration, auth, and UI</example>
 model: inherit
@@ -45,7 +45,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 4. **Push the integration branch to origin immediately:**
    `git push -u origin <feature-branch-name>`
    This is mandatory **when an origin exists** — sub-agents need it on origin
-   for `/ship` auto-detection. Without an origin, skip the push: the branch is
+   for `/do-ship` auto-detection. Without an origin, skip the push: the branch is
    local and sub-agents in the same repo can still branch off it. With no repo
    at all, there is no integration branch to push.
 5. When delegating to sub-agents, ALWAYS include:
@@ -54,7 +54,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
    Never pass a branch name you did not create: every sub-agent re-runs the
    sync in step 2 against it, so one invented name fails once per agent.
 6. After each sub-agent wave completes, ship their branches **sequentially** (one at a time):
-   Call `/ship` for each sub-branch, wait for completion before the next.
+   Call `/do-ship` for each sub-branch, wait for completion before the next.
    Do NOT ship multiple sub-branches in parallel to avoid merge conflicts.
 
 ## Delegation

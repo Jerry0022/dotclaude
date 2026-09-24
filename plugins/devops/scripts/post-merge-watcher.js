@@ -161,6 +161,23 @@ function getFinalRunStatus({ cwd, runId }) {
 }
 
 /**
+ * The ship extension moved from `.claude/skills/ship/` to
+ * `.claude/skills/do-ship/` (skill restructure PR 2). A `--verify-config`
+ * pointing at the new dir that does not exist falls back to the old one, so a
+ * consumer extension written before the rename keeps its post-merge verify.
+ * @param {string|null} refPath
+ * @param {(p:string)=>boolean} [exists]
+ * @returns {string|null}
+ */
+function resolveVerifyConfigPath(refPath, exists = existsSync) {
+  if (!refPath) return null;
+  if (exists(refPath)) return refPath;
+  const legacy = refPath.replace(/([\\/]\.claude[\\/]skills[\\/])do-ship([\\/])/, "$1ship$2");
+  if (legacy !== refPath && exists(legacy)) return legacy;
+  return refPath;
+}
+
+/**
  * Parse a verify: yaml block from a reference.md.
  * Looks for a fenced ```yaml block whose root key is `verify:`, falls back
  * to scanning the raw file body. Accepts only the documented keys; no nesting.
@@ -309,15 +326,19 @@ function markAbandoned(reason) {
 // Graceful termination (session teardown, Ctrl-C, logoff) still gets a verdict
 // on disk. A hard kill or power loss cannot be caught here — that is what
 // `deadlineAt` plus the reader's reconciliation are for.
-for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"]) {
-  try {
-    process.on(sig, () => {
-      markAbandoned(`received ${sig}`);
-      process.exit(143);
-    });
-  } catch { /* signal not supported on this platform */ }
+// Only when run as the watcher process — a `require` (unit test) must not
+// install process-wide handlers.
+if (require.main === module) {
+  for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"]) {
+    try {
+      process.on(sig, () => {
+        markAbandoned(`received ${sig}`);
+        process.exit(143);
+      });
+    } catch { /* signal not supported on this platform */ }
+  }
+  process.on("exit", () => markAbandoned("process exited before reaching a verdict"));
 }
-process.on("exit", () => markAbandoned("process exited before reaching a verdict"));
 
 async function main() {
   const args = parseArgs(process.argv);
@@ -333,7 +354,7 @@ async function main() {
   const pr = args.pr ? Number(args.pr) : null;
   const maxWaitSec = args["max-wait"] ? Number(args["max-wait"]) : DEFAULT_MAX_WAIT_SEC;
   const stateDir = resolveStateDir({ stateDir: args["state-dir"], cwd });
-  const verifyConfigPath = args["verify-config"] || null;
+  const verifyConfigPath = resolveVerifyConfigPath(args["verify-config"] || null);
   const version = args.version || null;
 
   const stateFile = join(stateDir, `${mergeSha}.json`);
@@ -444,7 +465,9 @@ async function main() {
   writeState(stateFile, state);
 }
 
-main().catch((e) => {
+if (require.main !== module) {
+  module.exports = { resolveVerifyConfigPath };
+} else main().catch((e) => {
   console.error("post-merge-watcher fatal:", e.message);
   // Ensure the state file does not stay in "watching" forever — flip it to
   // a terminal failure so the SessionStart hook surfaces the crash instead of

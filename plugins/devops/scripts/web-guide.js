@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * @script web-guide
- * @description CLI helper for the `/web-guide` skill. Builds the three
+ * @description CLI helper for the `/auto-guide` skill. Builds the three
  *   `javascript_tool` payloads exchanged with `web-guide-overlay.js` (inject /
  *   step / wait) and manages the `store` command that upserts a secret the
  *   user typed into the overlay into a dotenv-style file, without ever
  *   printing the value. Zero dependencies, CommonJS.
  *
- *   Protocol reference: skills/web-guide/deep-knowledge/protocol.md
+ *   Protocol reference: skills/auto-guide/deep-knowledge/protocol.md
  *   (§ Payload helper, § Step, § Secrets).
  *
  *   Env vars:

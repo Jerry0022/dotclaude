@@ -33,8 +33,8 @@ idea and takes precedence on the scope axis:
   tests, narrowed scope) and "make reasonable decisions independently" do not
   widen the diff; what they would have changed goes to the strict report's
   `untouched` line instead.
-- Unaffected: the completion card, `/ship` Step 2.6 docs-sync, the
-  `/tune-polish` approval rule.
+- Unaffected: the completion card, `/do-ship` Step 2.6 docs-sync, the
+  `/auto-polish` approval rule.
 
 Every spawned agent inherits the block verbatim (`pre.strict.agent-gate`
 refuses a spawn without it). Skill: `skills/claude-strict/SKILL.md`.

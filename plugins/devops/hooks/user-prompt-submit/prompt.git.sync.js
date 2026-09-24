@@ -24,7 +24,7 @@ require('../lib/plugin-guard');
 
 const { takeResult, renderContext } = require('../lib/git-sync-bg');
 
-// While /claude-batch collect mode is active, do not TAKE the result.
+// While /do-batch collect mode is active, do not TAKE the result.
 // takeResult() consumes the file, and the payload leaves via stdout — i.e. as
 // turn context. A collected prompt is erased and produces no turn, so the
 // result would be consumed into nothing and a ⚠ conflict would never reach

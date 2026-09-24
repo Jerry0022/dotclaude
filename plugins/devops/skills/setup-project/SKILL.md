@@ -10,6 +10,7 @@ description: >-
   or source code changes.
 layer: 0
 invokes: []
+disable-model-invocation: true
 triggers:
   en: ["set up this project", "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene"]
 argument-hint: "[--audit | --init] [--fix]"
@@ -250,13 +251,17 @@ Do NOT auto-create — only report status and recommend.
 ## Step 7 — Inform about skill extensions
 
 Check if `.claude/skills/` exists in the project. If any extensions are already
-present, list them in the report.
+present, list them in the report. An extension under a pre-PR-2 skill name
+(`ship/`, `fix/`, `run-backlog/`, … — `{PLUGIN_ROOT}/hooks/lib/skill-names.js`)
+is still loaded as a fallback; report it as "old name, still works — rename to
+`<new-name>/` when convenient".
 
-Point the user to `/claude-extend-skill` for interactively scaffolding or adapting
-extensions for any plugin skill:
+Point the user to the `auto-extend` skill (hidden from the slash menu — they
+say "extend skill") for interactively scaffolding or adapting extensions for
+any plugin skill:
 
 > "Du kannst jedes Plugin-Skill für dieses Projekt anpassen.
-> Nutze `/claude-extend-skill`, um interaktiv eine Extension anzulegen oder
+> Sag einfach „extend skill“, um interaktiv eine Extension anzulegen oder
 > eine bestehende zu bearbeiten. Mehr dazu: siehe Plugin README."
 
 ## Step 8 — Output report
@@ -280,7 +285,7 @@ extensions for any plugin skill:
 - [WARNING/OK/INFO] ...
 
 ### Plugin Extensions
-- [INFO] Run /claude-extend-skill to scaffold extensions for plugin skills
+- [INFO] Say "extend skill" to scaffold extensions for plugin skills (auto-extend)
 ```
 
 ## Step 9 — Completion Card

@@ -41,9 +41,9 @@ describe("machine prompts are never collected", () => {
   // These do NOT match prompt.flow.silent-turn.js — an allowlist reusing only
   // that module would swallow them and the AFK run would never start.
   test.each([
-    ["run-autonomous autostart", "AUTONOMOUS_AUTOSTART: resume Step 5 with task=…"],
+    ["autonomous-mode autostart", "AUTONOMOUS_AUTOSTART: resume Step 5 with task=…"],
     ["worktree resume nudge", "AUTONOMOUS_RESUME: weiter"],
-    ["run-backlog autostart", "RUN_BACKLOG_AUTOSTART: presence timeout. phase=presence, queue=1,2,3"],
+    ["backlog-mode autostart", "RUN_BACKLOG_AUTOSTART: presence timeout. phase=presence, queue=1,2,3"],
   ])("%s (silent-turn gap)", (_label, prompt) => {
     expect(isMachinePrompt(prompt)).toBe(true);
   });
@@ -58,17 +58,17 @@ describe("machine prompts are never collected", () => {
 
 describe("escape hatch survives slash-command expansion", () => {
   // A real slash command arrives pre-expanded with a <command-name> tag — the
-  // raw text is not literally "/claude-batch off". A naive text comparison
+  // raw text is not literally "/do-batch off". A naive text comparison
   // would miss exactly the escape it protects, locking the user out.
   test("expanded command is detected and passed through", () => {
-    const expanded = "<command-message>claude-batch</command-message>\n<command-name>/claude-batch</command-name>\n<command-args>off</command-args>";
+    const expanded = "<command-message>do-batch</command-message>\n<command-name>/do-batch</command-name>\n<command-args>off</command-args>";
     expect(isExpandedCommand(expanded)).toBe(true);
     expect(classify({ text: expanded, marker: ">>", modeActive: true })).toBe("passthrough");
   });
 
   test("plain text mentioning a slash command is still collected", () => {
-    expect(isExpandedCommand("wir sollten /ship mal aufräumen")).toBe(false);
-    expect(classify({ text: "wir sollten /ship mal aufräumen", marker: ">>", modeActive: true }))
+    expect(isExpandedCommand("wir sollten /do-ship mal aufräumen")).toBe(false);
+    expect(classify({ text: "wir sollten /do-ship mal aufräumen", marker: ">>", modeActive: true }))
       .toBe("collect");
   });
 });
@@ -526,8 +526,8 @@ describe("detectActivation — the prompt that turns the mode on", () => {
   // notes were executed instead of filed and the marker dialog got skipped.
   test("a bare activation carries no content", () => {
     for (const t of [
-      "<command-name>/claude-batch</command-name><command-args>on</command-args>",
-      "<command-name>/claude-batch</command-name>",
+      "<command-name>/do-batch</command-name><command-args>on</command-args>",
+      "<command-name>/do-batch</command-name>",
       "sammelmodus an",
       "Sammelmodus bitte an",
       "collect mode on",
@@ -540,7 +540,7 @@ describe("detectActivation — the prompt that turns the mode on", () => {
 
   test("an activation with notes typed into it is flagged", () => {
     const cmd = detectActivation(
-      "<command-name>/claude-batch</command-name>" +
+      "<command-name>/do-batch</command-name>" +
       "<command-args>on der Header ist rot und die Filter-API fehlt</command-args>",
     );
     expect(cmd).toMatchObject({ activating: true, viaCommand: true, carriesContent: true });
@@ -554,7 +554,7 @@ describe("detectActivation — the prompt that turns the mode on", () => {
 
   test("another slash command with a long payload is not an activation", () => {
     expect(detectActivation(
-      "<command-name>/ship</command-name><command-args>der Header ist rot</command-args>",
+      "<command-name>/do-ship</command-name><command-args>der Header ist rot</command-args>",
     ).activating).toBe(false);
   });
 
@@ -608,7 +608,7 @@ describe("detectActivation — the prompt that turns the mode on", () => {
 
 describe("parseBatchCommand — routing on the first token only", () => {
   const expanded = (args) =>
-    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+    `<command-name>/do-batch</command-name><command-args>${args}</command-args>`;
 
   test.each([
     ["", "bare", ""],
@@ -638,19 +638,26 @@ describe("parseBatchCommand — routing on the first token only", () => {
   });
 
   test("the raw slash form is recognised too", () => {
-    expect(parseBatchCommand("/claude-batch on")).toEqual({ route: "on", residue: "" });
-    expect(parseBatchCommand("/devops:claude-batch")).toEqual({ route: "bare", residue: "" });
+    expect(parseBatchCommand("/do-batch on")).toEqual({ route: "on", residue: "" });
+    expect(parseBatchCommand("/devops:do-batch")).toEqual({ route: "bare", residue: "" });
+  });
+
+  test("the pre-PR-2 name /claude-batch still counts (raw and expanded)", () => {
+    expect(parseBatchCommand("/claude-batch off")).toEqual({ route: "off", residue: "" });
+    expect(parseBatchCommand(
+      "<command-name>/devops:claude-batch</command-name><command-args>go</command-args>",
+    )).toEqual({ route: "go", residue: "" });
   });
 
   test("a namespaced expanded command still counts", () => {
     expect(parseBatchCommand(
-      "<command-name>/devops:claude-batch</command-name><command-args>off</command-args>",
+      "<command-name>/devops:do-batch</command-name><command-args>off</command-args>",
     )).toEqual({ route: "off", residue: "" });
   });
 
   test("other commands and plain prose are not invocations", () => {
-    expect(parseBatchCommand("<command-name>/ship</command-name><command-args></command-args>")).toBe(null);
-    expect(parseBatchCommand("wir sollten /claude-batch dokumentieren")).toBe(null);
+    expect(parseBatchCommand("<command-name>/do-ship</command-name><command-args></command-args>")).toBe(null);
+    expect(parseBatchCommand("wir sollten /do-batch dokumentieren")).toBe(null);
     expect(parseBatchCommand("")).toBe(null);
     expect(parseBatchCommand(null)).toBe(null);
   });
@@ -658,7 +665,7 @@ describe("parseBatchCommand — routing on the first token only", () => {
 
 describe("classify — a re-activation while collecting is absorbed", () => {
   const expanded = (args) =>
-    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+    `<command-name>/do-batch</command-name><command-args>${args}</command-args>`;
   const on = (text, hookInput) => classify({ text, hookInput, marker: ">>", modeActive: true });
   const off = (text) => classify({ text, marker: ">>", modeActive: false });
 
@@ -718,8 +725,8 @@ describe("mode summary — one block, three places", () => {
     expect(s).toContain(".claude/batch.md");
     expect(s).toContain("Eingabe blockiert");
     expect(s).toContain("\">go <text>\"");
-    expect(s).toContain("/claude-batch go");
-    expect(s).toContain("/claude-batch off");
+    expect(s).toContain("/do-batch go");
+    expect(s).toContain("/do-batch off");
     expect(s).toContain("main");
     expect(s).toContain("8 Stunden oder 100 Notizen");
   });
@@ -737,7 +744,7 @@ describe("mode summary — one block, three places", () => {
 
 describe("help route and the long-form summary", () => {
   const expanded = (args) =>
-    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+    `<command-name>/do-batch</command-name><command-args>${args}</command-args>`;
 
   test.each(["help", "hilfe", "?"])("`%s` routes to help", (args) => {
     expect(parseBatchCommand(expanded(args))).toEqual({ route: "help", residue: "" });
@@ -753,7 +760,7 @@ describe("help route and the long-form summary", () => {
     expect(h).toContain("A) Was DU machst");
     expect(h).toContain("B) Was CLAUDE macht");
     expect(h).toContain("\">go <text>\"");
-    for (const cmd of ["off", "on", "status", "marker", "help", "/claude-batch go"]) {
+    for (const cmd of ["off", "on", "status", "marker", "help", "/do-batch go"]) {
       expect(h, `help does not mention ${cmd}`).toContain(cmd);
     }
     expect(h).toContain("8 Stunden oder 100 Notizen");

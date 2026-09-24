@@ -1,6 +1,6 @@
 # Autonomous Execution — Gate, Guardrails, Late-Permission Protocol
 
-Detailed execution rules for `run-autonomous` Step 5. Read this at the start of
+Detailed execution rules for do-run autonomous mode Step 5. Read this at the start of
 autonomous execution.
 
 ## Execution Mode Gate
@@ -26,7 +26,7 @@ Behavior depends on `$EXEC_MODE` from Step 2.
 
 **Forbidden (always):**
 - push to `main`/`master` or any shared branch; force-push to anything
-- /ship or /ship
+- /do-ship or /do-ship
 - creating PRs
 - external communications (Discord, email, Slack, GitHub comments/issues)
 - purchases, account creation
@@ -47,7 +47,7 @@ erase it, and the run's output is then gone. Pushing the run's own branch is the
 only measure that survives those. It is not a delivery step — nothing is merged,
 no PR is opened, `main` is never touched, and the user still reviews and decides
 to ship when they return. See `agent-orchestration.md` § Inter-Wave Verification
-Gate (handoff durability) and `skills/run-burn/deep-knowledge/burn-scheduler.md`
+Gate (handoff durability) and `skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md`
 § Landing protocol.
 
 Everything else stays local — the user reviews and decides to ship when they

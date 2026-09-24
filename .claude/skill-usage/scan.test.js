@@ -30,13 +30,19 @@ function assistantSkillEntry(skillId, { isSidechain = false } = {}) {
 
 describe("stripPrefix / extractCommandName", () => {
   it("strips a plugin prefix", () => {
-    expect(stripPrefix("devops:ship")).toBe("ship");
-    expect(stripPrefix("ship")).toBe("ship");
+    expect(stripPrefix("devops:do-ship")).toBe("do-ship");
+    expect(stripPrefix("do-ship")).toBe("do-ship");
+  });
+
+  it("maps a pre-PR-2 name to the skill that owns it now", () => {
+    expect(stripPrefix("devops:ship")).toBe("do-ship");
+    expect(stripPrefix("fix")).toBe("auto-fix");
+    expect(stripPrefix("devops:run-backlog")).toBe("do-run");
   });
 
   it("reads the slash-command name out of the wrapper tag, prefix stripped", () => {
-    expect(extractCommandName("<command-message>devops:ship</command-message>\n<command-name>devops:ship</command-name>")).toBe(
-      "ship"
+    expect(extractCommandName("<command-message>devops:do-ship</command-message>\n<command-name>devops:do-ship</command-name>")).toBe(
+      "do-ship"
     );
     expect(extractCommandName("plain text, no command")).toBeNull();
   });
@@ -66,25 +72,36 @@ describe("scanSession", () => {
   it("attributes a Skill call to the same turn's slash command", () => {
     const file = path.join(dir, "s1.jsonl");
     writeSession(dir, "s1.jsonl", [
-      userEntry("<command-message>devops:ship</command-message>\n<command-name>devops:ship</command-name>"),
-      assistantSkillEntry("devops:ship"),
+      userEntry("<command-message>devops:do-ship</command-message>\n<command-name>devops:do-ship</command-name>"),
+      assistantSkillEntry("devops:do-ship"),
     ]);
     const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
     const fixGaps = [];
-    scanSession(file, ["ship", "fix"], stats, fixGaps);
-    expect(stats.skills.get("ship")).toEqual({ total: 1, slash: 1, model: 0 });
+    scanSession(file, ["do-ship", "auto-fix"], stats, fixGaps);
+    expect(stats.skills.get("do-ship")).toEqual({ total: 1, slash: 1, model: 0 });
   });
 
   it("attributes a Skill call with no matching slash command to the model", () => {
     const file = path.join(dir, "s2.jsonl");
     writeSession(dir, "s2.jsonl", [
       userEntry("kannst du mir dazu ein concept machen?"),
-      assistantSkillEntry("devops:concept"),
+      assistantSkillEntry("devops:auto-concept"),
     ]);
     const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
     const fixGaps = [];
-    scanSession(file, ["concept"], stats, fixGaps);
-    expect(stats.skills.get("concept")).toEqual({ total: 1, slash: 0, model: 1 });
+    scanSession(file, ["auto-concept"], stats, fixGaps);
+    expect(stats.skills.get("auto-concept")).toEqual({ total: 1, slash: 0, model: 1 });
+  });
+
+  it("counts a pre-PR-2 name recorded in old history under the new skill", () => {
+    const file = path.join(dir, "s2b.jsonl");
+    writeSession(dir, "s2b.jsonl", [
+      userEntry("<command-message>devops:ship</command-message>\n<command-name>devops:ship</command-name>"),
+      assistantSkillEntry("devops:ship"),
+    ]);
+    const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
+    scanSession(file, ["do-ship"], stats, []);
+    expect(stats.skills.get("do-ship")).toEqual({ total: 1, slash: 1, model: 0 });
   });
 
   it("counts a bug-like prompt not followed by fix as a gap", () => {
@@ -92,7 +109,7 @@ describe("scanSession", () => {
     writeSession(dir, "s3.jsonl", [userEntry("Also wenn ich auf Ship klicke passiert gar nix")]);
     const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
     const fixGaps = [];
-    scanSession(file, ["fix"], stats, fixGaps);
+    scanSession(file, ["auto-fix"], stats, fixGaps);
     expect(stats.bugLikePrompts).toBe(1);
     expect(fixGaps).toHaveLength(1);
   });
@@ -101,11 +118,11 @@ describe("scanSession", () => {
     const file = path.join(dir, "s4.jsonl");
     writeSession(dir, "s4.jsonl", [
       userEntry("es ist alles kaputt, fix das bitte"),
-      assistantSkillEntry("devops:fix"),
+      assistantSkillEntry("devops:auto-fix"),
     ]);
     const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
     const fixGaps = [];
-    scanSession(file, ["fix"], stats, fixGaps);
+    scanSession(file, ["auto-fix"], stats, fixGaps);
     expect(stats.bugLikePrompts).toBe(1);
     expect(fixGaps).toHaveLength(0);
   });
@@ -114,11 +131,11 @@ describe("scanSession", () => {
     const file = path.join(dir, "s5.jsonl");
     writeSession(dir, "s5.jsonl", [
       userEntry("normal prompt", { isSidechain: true }),
-      assistantSkillEntry("devops:ship", { isSidechain: true }),
+      assistantSkillEntry("devops:do-ship", { isSidechain: true }),
     ]);
     const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
     const fixGaps = [];
-    scanSession(file, ["ship"], stats, fixGaps);
+    scanSession(file, ["do-ship"], stats, fixGaps);
     expect(stats.skills.size).toBe(0);
     expect(stats.bugLikePrompts).toBe(0);
   });
@@ -131,7 +148,7 @@ describe("scanSession", () => {
     ]);
     const stats = { skills: new Map(), bugLikePrompts: 0, sessionsScanned: 1 };
     const fixGaps = [];
-    scanSession(file, ["fix"], stats, fixGaps);
+    scanSession(file, ["auto-fix"], stats, fixGaps);
     expect(stats.bugLikePrompts).toBe(0);
   });
 

@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: fix-ship-button-noop-ar
-context:
-  scaffold_script: scaffold.sh

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.skill.enforce
- * @version 0.5.0
+ * @version 0.6.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Detects inline skill commands (e.g. /fix, /ship) mentioned in a user
+ * @description Detects inline skill commands (e.g. /do-learn, /do-ship) mentioned in a user
  *   prompt (typed as text, not invoked as a real slash command) and injects a
  *   mandatory instruction to load the referenced skill via the Skill tool
  *   before answering.
@@ -22,9 +22,10 @@
  *   quotes, are ignored.
  *
  *   Trigger ROUTER (lib/skill-trigger-router.js — read its header for the
- *   matching rules): PR-2 aliases (`/do-learn` → claude-learn), multi-word
+ *   matching rules): pre-PR-2 names as aliases (`/claude-learn` → do-learn,
+ *   `/run-backlog` → do-run mode backlog), multi-word
  *   `triggers:` phrases, non-skill slash forms, a curated single-word
- *   allowlist, and language-independent error patterns (→ fix). Context
+ *   allowlist, and language-independent error patterns (→ auto-fix). Context
  *   filters applied here, before anything is emitted:
  *     - machine prompts (cron `Silently …`, `<<autonomous-loop>>`,
  *       `AUTONOMOUS_*:` / `RUN_BACKLOG_AUTOSTART:`, `<scheduled-task`,
@@ -32,11 +33,11 @@
  *     - batch collect mode active or being activated, or an AFK lockout
  *       armed → the router is silent;
  *     - a routed (not typed) skill already invoked this session (Skill tool
- *       or slash command), `concept` while a VALID, non-stale
+ *       or slash command, old or new name), `auto-concept` while a VALID, non-stale
  *       `.claude/concept-active.json` exists (ss.concept.resume's
  *       isValidState + isStale — a leftover copied into a new worktree does
- *       not mute it), tune-polish/tune-harden while claude-strict is active,
- *       `fix` in a consumer project when the prompt is about the devops
+ *       not mute it), auto-polish/auto-harden while claude-strict is active,
+ *       `auto-fix` in a consumer project when the prompt is about the devops
  *       plugin (prompt.plugin.scope routes that to an upstream issue) → that
  *       entry is dropped.
  *
@@ -49,7 +50,7 @@
  *
  *   Pending guide hint: when stop.guide.handoff recorded a web hand-off in a
  *   card turn, the next real user prompt gets ONE non-mandatory hint to
- *   offer web-guide (auto-guide); the record is cleared on use.
+ *   offer auto-guide; the record is cleared on use.
  */
 
 require('../lib/plugin-guard');
@@ -72,8 +73,8 @@ const MENTION_RE = /(^|[\s([{"'`>])\/([a-z][a-z0-9-]*)/gi;
 /** Tail of the transcript scanned for "skill already invoked this session". */
 const INVOKED_SCAN_BYTES = 4 * 1024 * 1024;
 
-/** Skills tune-polish/tune-harden conflict with while strict mode is on. */
-const STRICT_SUPPRESSED = new Set(['tune-polish', 'tune-harden']);
+/** Skills auto-polish/auto-harden conflict with while strict mode is on. */
+const STRICT_SUPPRESSED = new Set(['auto-polish', 'auto-harden']);
 
 /**
  * Not typed by the user: cron/loop ticks, AFK resumes, scheduled tasks,
@@ -151,7 +152,7 @@ function readTail(file, bytes) {
 /** A concept page is open: a state file that passes the same validity rules
  *  the resume hook and the completion card apply (ss.concept.resume's
  *  isValidState + isStale, as mode-state.readConceptState) — a stale or
- *  invalid leftover must not mute concept routing forever. `/concept` state
+ *  invalid leftover must not mute concept routing forever. `/auto-concept` state
  *  is keyed to the session cwd by design (CONVENTIONS.md → Project-Rooted
  *  State); the project root is checked too in case the session has since
  *  cd'ed into a subdirectory. */
@@ -229,9 +230,9 @@ function filterRouted(entries, hook, message, cwd) {
 
   return entries.filter(e => {
     if (e.explicit) return true;
-    if (e.skill === 'concept' && conceptActive(cwd)) return false;
+    if (e.skill === 'auto-concept' && conceptActive(cwd)) return false;
     if (STRICT_SUPPRESSED.has(e.skill) && strictActive()) return false;
-    if (e.skill === 'fix' && consumerPluginTalk()) return false;
+    if (e.skill === 'auto-fix' && consumerPluginTalk()) return false;
     if (invokedSkills().has(e.skill)) return false;
     return true;
   });
@@ -275,11 +276,14 @@ function buildSoftHint(entries) {
 
 /**
  * Build the combined mandatory-invoke instruction.
- * @param {{skill:string, reason:string}[]} entries
+ * @param {{skill:string, reason:string, mode?:string}[]} entries — a `mode`
+ *   (folded skill, e.g. do-run `backlog`) is passed as the skill's args
  * @returns {string}
  */
 function buildInstruction(entries) {
-  const calls = entries.map(e => `  Skill("${e.skill}")`).join('\n');
+  const calls = entries
+    .map(e => (e.mode ? `  Skill("${e.skill}") with args "${e.mode}"` : `  Skill("${e.skill}")`))
+    .join('\n');
   const named = entries.map(e => `${e.skill} (${e.reason})`).join(', ');
   return [
     `[prompt.skill.enforce] The user message references or triggers: ${named}.`,

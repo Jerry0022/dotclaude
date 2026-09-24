@@ -5,14 +5,15 @@ description: >-
   Analyze repository branch hygiene: unmerged branches, stale locals with deleted
   remotes, active sessions (worktrees), open PRs that still need to land, verify
   work landed in main. Results: interactive concept page with filters, 2-state
-  delete controls, a ship queue for open PRs (each landed via /ship, one after
+  delete controls, a ship queue for open PRs (each landed via /do-ship, one after
   another, as if shipped from its own session), inline detail expand, and an
   Apply-Manifest + Dry-Run-Confirm before executing anything.
   Triggers on: "repo health", "branch cleanup", "branch hygiene", "offene PRs
   landen", "open PRs shippen".
   Explicit user request only.
 layer: 0
-invokes: [ship]
+invokes: [auto-concept, do-ship]
+disable-model-invocation: true
 triggers:
   en: ["repo health", "branch cleanup", "branch hygiene"]
   de: ["offene PRs landen", "open PRs shippen"]
@@ -296,18 +297,18 @@ or no match → `session: null`, never a failure.
 
 | `shippable` | Condition | Page label |
 |---|---|---|
-| `yes` | own PR, not draft, `mergeable != CONFLICTING`, head is `lokal` / `nur-remote` / clean `session` | „bereit — via /ship landen" |
+| `yes` | own PR, not draft, `mergeable != CONFLICTING`, head is `lokal` / `nur-remote` / clean `session` | „bereit — via /do-ship landen" |
 | `session-dirty` | head worktree has uncommitted changes | „in Session <title> shippen — uncommittete Änderungen" |
-| `conflict` | `mergeable == CONFLICTING` | „Konflikt — /ship rebased, Konflikte ggf. manuell" (still selectable; `/ship` Step 1b resolves what it can and blocks the rest) |
+| `conflict` | `mergeable == CONFLICTING` | „Konflikt — /do-ship rebased, Konflikte ggf. manuell" (still selectable; `/do-ship` Step 1b resolves what it can and blocks the rest) |
 | `draft` | `isDraft` | „Draft — erst fertigstellen" |
-| `checks-red` | `statusCheckRollup` has a failed required check | „CI rot — /ship wartet nicht auf rot" (selectable, expected to block) |
+| `checks-red` | `statusCheckRollup` has a failed required check | „CI rot — /do-ship wartet nicht auf rot" (selectable, expected to block) |
 | `fremd` | not the viewer's PR | „fremder PR — nicht von hier shippen" (never selectable) |
 
 Pre-check on the page only `shippable: yes` AND `mergeStateStatus` in
 `CLEAN` / `BEHIND` / `UNSTABLE`(no required failure) — the user opts into the
 rest consciously. A PR is never both a delete candidate and a ship candidate:
 a head branch with an open PR is `pr-open` in Untersuchen (unchecked) and
-appears in the ship queue; if the user ships it, `/ship` removes the branch
+appears in the ship queue; if the user ships it, `/do-ship` removes the branch
 itself, so the delete checkbox for that branch is disabled on the page with
 tooltip „wird beim Shippen entfernt".
 
@@ -358,7 +359,7 @@ expand. No round-trip to Claude is needed to view it.
 
 Build a **self-contained HTML concept page** using the `dashboard` variant.
 Follow the design system and full HTML/CSS/JS scaffold in
-`skills/concept/deep-knowledge/templates.md` — the authoritative source,
+`skills/auto-concept/deep-knowledge/templates.md` — the authoritative source,
 referenced by name (not by concept's step numbers, which drift).
 
 ### Page Structure & Tooltips
@@ -423,7 +424,7 @@ Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or 
   (grün / rot / ausstehend), mergeable badge, review decision, age. Action is a
   **single „Shippen" checkbox** — pre-checked per Step 5b, disabled (with the
   reason as tooltip) for `session-dirty`, `draft`, `fremd`. Never a merge
-  button that bypasses `/ship`: the queue lands every PR through the full
+  button that bypasses `/do-ship`: the queue lands every PR through the full
   pipeline (preflight, rebase, build, tests, version bump, CI gate).
 - Every action option has a `title` tooltip — see Tooltip Explanations table
 - "Remote-Branches auch loeschen" as a global toggle in the Apply-Manifest sidebar
@@ -438,7 +439,7 @@ Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or 
 
 Open the page in the browser and monitor for the submit signal.
 Follow the open + monitor bridge in
-`skills/concept/deep-knowledge/bridge-server.md` (server launch,
+`skills/auto-concept/deep-knowledge/bridge-server.md` (server launch,
 Edge-open, heartbeat + decision polling), respecting the
 **Edge Credo** (`{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md` § Edge Credo):
 new tab in running Edge, user's profile context, Claude extension for interaction.
@@ -446,7 +447,7 @@ new tab in running Edge, user's profile context, Claude extension for interactio
 ```bash
 start "" msedge "file:///$(cygpath -m "{filepath}")"
 
-# Track the opened report so /ship can re-open it from the main-repo
+# Track the opened report so /do-ship can re-open it from the main-repo
 # path after a future worktree cleanup (issue #160).
 node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
   "$(cygpath -w "{filepath}")" \
@@ -463,7 +464,7 @@ Inform the user:
 > Repo-Health geoeffnet. Löschbar-Gruppe ist vorausgefuellt — hake ab, was du
 > behalten willst. Untersuchen-Gruppe ist eingeklappt — klappe auf und hake an,
 > was du loeschen willst. Offene PRs: „Shippen" ist bei landebereiten PRs
-> vorausgewaehlt — jeder wird einzeln via /ship gelandet. Klick „?" fuer
+> vorausgewaehlt — jeder wird einzeln via /do-ship gelandet. Klick „?" fuer
 > Inline-Details pro Eintrag. Submit startet Dry-Run-Vorschau bevor
 > irgendetwas passiert.
 
@@ -478,7 +479,7 @@ When the user submits via the concept page:
    - Aktive Sessions (clean) with `remove: true` -> Step 10c (cleanup)
    - Everything else -> no-op (keep)
    - A branch that is both the head of a `ship: true` PR and `delete: true`
-     is dropped from the delete set with a note — `/ship` removes it.
+     is dropped from the delete set with a note — `/do-ship` removes it.
 3. **Re-check worktree branches** — run `git worktree list --porcelain` again
    and rebuild the protected set. NEVER trust cached data for deletion.
 4. **Validate** every branch marked for deletion:
@@ -519,7 +520,7 @@ Remote prunen: ja / nein
 
 Then show a **Dry-Run-Confirm** prompt before executing:
 
-> Shippt P PRs (jeder via /ship: Rebase, Build, Tests, CI-Gate, Merge),
+> Shippt P PRs (jeder via /do-ship: Rebase, Build, Tests, CI-Gate, Merge),
 > löscht N lokal, M remote, entfernt K Worktrees.
 > Merges und Löschungen sind NICHT rückgängig zu machen.
 > Fortfahren?  [Ja] [Abbrechen]
@@ -529,8 +530,8 @@ Only proceed after explicit confirmation.
 ### Step 10b — Ship Queue (before any cleanup)
 
 Land the selected PRs **one after another**, each through the complete
-`/ship` pipeline — exactly what would happen if the user sat in P sessions
-and typed `/ship` in each, minus the tab-switching. Never `gh pr merge`
+`/do-ship` pipeline — exactly what would happen if the user sat in P sessions
+and typed `/do-ship` in each, minus the tab-switching. Never `gh pr merge`
 directly: the guard hook blocks it and it would skip rebase, build, tests,
 version bump and the CI gate.
 
@@ -546,9 +547,9 @@ node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').write
 Project ship extensions read this marker and defer their post-ship
 finalizers to the end of the queue (the dotclaude plugin-source repo's
 extension would otherwise mark the MCP servers stale after PR 1 and block
-every later `ship_*` call — the same trap `/run-backlog` guards against with
+every later `ship_*` call — the same trap `/do-run backlog` guards against with
 its lockout owner). The marker is NOT an autonomous lockout: the user is
-present, every `/ship` gate stays interactive.
+present, every `/do-ship` gate stays interactive.
 
 **Per PR:**
 
@@ -560,17 +561,17 @@ present, every `/ship` gate stays interactive.
    - `quelle: nur-remote` → `git fetch origin <branch>:<branch>` then the same
      `worktree add`.
    Record `tempWorktree: true` for the two created cases.
-2. **Invoke the pipeline:** `Skill("devops:ship", args: "--cwd=<path> --keep --queued")`.
+2. **Invoke the pipeline:** `Skill("devops:do-ship", args: "--cwd=<path> --keep --queued")`.
    `--cwd` makes every `ship_*` call and every git/gh command target that
-   directory instead of this session's own worktree (see `/ship` → *Composed
+   directory instead of this session's own worktree (see `/do-ship` → *Composed
    ships*). `--keep` because the branch/worktree teardown is this step's job,
-   not the ship's — `/ship` must never `ExitWorktree` on a directory that is
+   not the ship's — `/do-ship` must never `ExitWorktree` on a directory that is
    not its session's own. `--queued` is informational (card wording).
 3. **Read the outcome** from the ship's `ship_release` result / card variant:
    - `ship-successful` → record `merged: true, mergeSha, version`.
    - `ship-blocked` → record the reason; **continue with the next PR**. One
      blocked PR never halts the queue (COMPLETED > INTERRUPTED > BLOCKED, as
-     in `/run-backlog`).
+     in `/do-run backlog`).
 4. **Tear down** (merged PRs only):
    - `tempWorktree: true` → `git worktree remove <path>` (no `--force`), then
      `git branch -d <branch>` (lowercase `-d`: refuses if not merged — a
@@ -587,7 +588,7 @@ present, every `/ship` gate stays interactive.
 **After the last PR:**
 
 1. Run the project ship-extension finalizer exactly once if ≥1 PR merged —
-   read `{project}/.claude/skills/ship/SKILL.md` for the step the extension
+   read `{project}/.claude/skills/do-ship/SKILL.md` (pre-PR-2 fallback: `ship/`) for the step the extension
    deferred while `.claude/.ship-queue` existed, run it, capture its output.
 2. Delete `.claude/.ship-queue`.
 3. Update the concept page via browser eval: ✅ per merged PR (with merge
@@ -674,7 +675,7 @@ When triggered, call `mcp__plugin_devops_dotclaude-completion__render_completion
 Pass: `variant`, `summary` (e.g. "Repo hygiene — 2 PRs shipped, 4 branches
 cleaned"), `lang`, `session_id`, `changes` (counts per action: PRs merged /
 blocked, local/remote/worktrees removed), and `state` when git operations
-happened. Each `/ship` in the queue rendered its own card already; this final
+happened. Each `/do-ship` in the queue rendered its own card already; this final
 card is the aggregate. Output the markdown VERBATIM as the LAST thing in the
 response.
 

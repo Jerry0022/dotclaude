@@ -68,8 +68,14 @@ describe("hasSetupIssueMarker", () => {
     expect(hasSetupIssueMarker('gh issue create --title x --body y # via setup-issue')).toBe(true);
   });
 
+  test("the new auto-issue marker and the pre-PR-2 setup-issue marker both count", () => {
+    expect(hasSetupIssueMarker('gh issue create --title x --body y # via auto-issue')).toBe(true);
+    expect(hasSetupIssueMarker('gh issue edit 3 --title x  # via setup-issue')).toBe(true);
+    expect(hasSetupIssueMarker('gh issue edit 3 --title x  # via other-issue')).toBe(false);
+  });
+
   test("marker with extra spacing → true", () => {
-    expect(hasSetupIssueMarker('gh issue create --title x  #   via   setup-issue')).toBe(true);
+    expect(hasSetupIssueMarker('gh issue create --title x  #   via   auto-issue')).toBe(true);
   });
 
   test("no marker → false", () => {
@@ -126,7 +132,7 @@ describe("hasSetupIssueMarker — same-segment rule (R7)", () => {
     expect(hasSetupIssueMarker(both)).toBe(true);
   });
 
-  test("setup-issue's own documented forms pass", () => {
+  test("auto-issue's own documented forms pass", () => {
     expect(hasSetupIssueMarker('gh issue create --repo "a/b" --title "[BUG] x" --body "y" --label "type:bug"  # via setup-issue')).toBe(true);
     expect(hasSetupIssueMarker('gh issue edit 12 --body-file "/tmp/body.md"  # via setup-issue — add --repo when set')).toBe(true);
   });
@@ -136,7 +142,7 @@ describe("hasSetupIssueMarker — same-segment rule (R7)", () => {
   });
 });
 
-describe("multi-line bodies — heredoc forms (setup-issue rule)", () => {
+describe("multi-line bodies — heredoc forms (auto-issue rule)", () => {
   test('--body "$(cat <<\'EOF\' … EOF\\n)"  # via setup-issue counts as marked', () => {
     const cmd =
       'gh issue create --title "[BUG] x" --body "$(cat <<\'EOF\'\n' +
@@ -154,7 +160,7 @@ describe("multi-line bodies — heredoc forms (setup-issue rule)", () => {
 
   test("--body-file - <<'EOF'  # via setup-issue is UNMARKED (documents the self-block)", () => {
     // The marker trails the heredoc opener, but the body lines follow on new
-    // lines and end the gh segment; the write reads as unmarked. setup-issue
+    // lines and end the gh segment; the write reads as unmarked. auto-issue
     // therefore never pipes the body on stdin via a heredoc.
     const cmd =
       "gh issue create --title \"[BUG] x\" --body-file - <<'EOF'  # via setup-issue\n" +

@@ -177,12 +177,12 @@ describe("webGuideInvokedThisTurn", () => {
   const skill = (name) => line({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Skill", input: { skill: name } }] } });
   const said = (text) => line({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } });
 
-  test("web-guide this turn → true", () => {
-    expect(webGuideInvokedThisTurn([user("connect upstash"), skill("web-guide")].join("\n"))).toBe(true);
+  test("auto-guide this turn → true", () => {
+    expect(webGuideInvokedThisTurn([user("connect upstash"), skill("auto-guide")].join("\n"))).toBe(true);
   });
 
-  test("namespaced devops:web-guide and the PR-2 name auto-guide → true", () => {
-    expect(webGuideInvokedThisTurn([user("x"), skill("devops:web-guide")].join("\n"))).toBe(true);
+  test("namespaced devops:auto-guide and the PR-2 name auto-guide → true", () => {
+    expect(webGuideInvokedThisTurn([user("x"), skill("devops:auto-guide")].join("\n"))).toBe(true);
     expect(webGuideInvokedThisTurn([user("x"), skill("devops:auto-guide")].join("\n"))).toBe(true);
   });
 
@@ -190,8 +190,8 @@ describe("webGuideInvokedThisTurn", () => {
     expect(webGuideInvokedThisTurn([user("connect upstash"), said("1. open upstash.com")].join("\n"))).toBe(false);
   });
 
-  test("web-guide invoked in an EARLIER turn does not count for this one", () => {
-    const t = [skill("web-guide"), user("next task"), said("1. open vercel.com")].join("\n");
+  test("auto-guide invoked in an EARLIER turn does not count for this one", () => {
+    const t = [skill("auto-guide"), user("next task"), said("1. open vercel.com")].join("\n");
     expect(webGuideInvokedThisTurn(t)).toBe(false);
   });
 
@@ -234,7 +234,7 @@ describe("pending hand-off (card turns)", () => {
   test("the hint is an offer, not a mandate", () => {
     const hint = buildPendingHint("Upstash");
     expect(hint).toContain("Upstash");
-    expect(hint).toContain("web-guide");
+    expect(hint).toContain("auto-guide");
     expect(hint).not.toMatch(/MANDATORY/);
   });
 });

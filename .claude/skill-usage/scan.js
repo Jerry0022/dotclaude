@@ -23,7 +23,9 @@
 //   - "slash": the invoking turn's user prompt contains
 //     `<command-name>...</command-name>` (Claude Code's wrapper for a typed
 //     slash command) naming that skill, with or without a plugin prefix
-//     (`devops:ship` and `ship` both match `ship`).
+//     (`devops:do-ship` and `do-ship` both match `do-ship`). A pre-PR-2
+//     name counts for the skill that owns it now (`ship` → `do-ship`,
+//     `run-backlog` → `do-run`; plugins/devops/hooks/lib/skill-names.js).
 //   - "model": every other `Skill` tool_use with `input.skill` naming that
 //     skill — the model chose to invoke it, whether nudged by a natural
 //     prompt, a hook-injected line, or mid-conversation reasoning. This
@@ -44,6 +46,7 @@ const os = require("os");
 const path = require("path");
 
 const SKILLS_DIR = path.join(__dirname, "..", "..", "plugins", "devops", "skills");
+const { canonicalSkillName } = require("../../plugins/devops/hooks/lib/skill-names");
 
 const BUG_LIKE_RE =
   /\b(kaputt|bug|crash(?:ed|es)?|broken|doesn'?t work|geht nicht|funktioniert nicht|passiert (?:gar )?nix|nix passiert|fehler(?:haft)?|error|exception|traceback|stack trace)\b/i;
@@ -86,7 +89,7 @@ function listSessionFiles(projectsDir) {
 
 function stripPrefix(name) {
   const idx = name.lastIndexOf(":");
-  return idx === -1 ? name : name.slice(idx + 1);
+  return canonicalSkillName(idx === -1 ? name : name.slice(idx + 1));
 }
 
 function extractCommandName(text) {
@@ -185,7 +188,7 @@ function scanSession(filePath, devopsSkills, stats, fixGaps) {
       }
       stats.skills.set(skill, bucket);
 
-      if (skill === "fix" || skill === "auto-fix") currentPromptFixSeen = true;
+      if (skill === "auto-fix") currentPromptFixSeen = true;
     }
   }
   closeOutPrompt();

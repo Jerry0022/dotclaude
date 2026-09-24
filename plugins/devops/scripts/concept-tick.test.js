@@ -340,7 +340,7 @@ describe("tick", () => {
 });
 
 
-// #417 — two /concept sessions in sibling worktrees shared one state file;
+// #417 — two /auto-concept sessions in sibling worktrees shared one state file;
 // A's tick read B's port as "my concept ended", POSTed /shutdown and told
 // Claude to rm the file, and B's bridge died on the next poll. With an owner
 // token on both sides a foreign file is left alone and the tick keeps

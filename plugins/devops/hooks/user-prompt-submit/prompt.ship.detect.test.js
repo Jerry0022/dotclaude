@@ -51,19 +51,19 @@ afterEach(() => {
 // below it, and whenever the size is unknown, the ship instruction is unchanged.
 describe("prompt.ship.detect — careful compact", () => {
   test("small context: the ship instruction, no compact advice", () => {
-    const r = runHook({ prompt: "/ship", transcript_path: transcript(90_000) });
+    const r = runHook({ prompt: "/do-ship", transcript_path: transcript(90_000) });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Skill("ship")');
+    expect(r.stdout).toContain('Skill("do-ship")');
     expect(r.stdout).not.toContain("[ship-compact]");
   });
 
   test("large context: the compact advice replaces the ship instruction", () => {
-    const r = runHook({ prompt: "/ship", transcript_path: transcript(434_000) });
+    const r = runHook({ prompt: "/do-ship", transcript_path: transcript(434_000) });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("[ship-compact]");
     expect(r.stdout).toContain("434 k");
     expect(r.stdout).toContain("/compact ");
-    expect(r.stdout).not.toContain('Skill("ship")');
+    expect(r.stdout).not.toContain('Skill("do-ship")');
   });
 
   test("an affirmation after edits is a ship too, and gets the same stop", () => {
@@ -74,26 +74,26 @@ describe("prompt.ship.detect — careful compact", () => {
   });
 
   test("--no-compact lets the large-context ship through", () => {
-    const r = runHook({ prompt: "/ship --no-compact", transcript_path: transcript(434_000) });
-    expect(r.stdout).toContain('Skill("ship")');
+    const r = runHook({ prompt: "/do-ship --no-compact", transcript_path: transcript(434_000) });
+    expect(r.stdout).toContain('Skill("do-ship")');
     expect(r.stdout).not.toContain("[ship-compact]");
   });
 
   test("no transcript path (unknown size) never stops a ship", () => {
-    const r = runHook({ prompt: "/ship" });
-    expect(r.stdout).toContain('Skill("ship")');
+    const r = runHook({ prompt: "/do-ship" });
+    expect(r.stdout).toContain('Skill("do-ship")');
   });
 
   test("threshold 0 disables the stop", () => {
-    const r = runHook({ prompt: "/ship", transcript_path: transcript(900_000) }, { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" });
-    expect(r.stdout).toContain('Skill("ship")');
+    const r = runHook({ prompt: "/do-ship", transcript_path: transcript(900_000) }, { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" });
+    expect(r.stdout).toContain('Skill("do-ship")');
   });
 
   test("never twice in a row: the next ship prompt runs, the one after that is asked again", () => {
     const t = transcript(434_000);
     expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-compact]");
     const second = runHook({ prompt: "ship", transcript_path: t });
-    expect(second.stdout).toContain('Skill("ship")');
+    expect(second.stdout).toContain('Skill("do-ship")');
     expect(second.stdout).not.toContain("[ship-compact]");
     // the marker was consumed — a later ship on a big context is asked again
     expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-compact]");
@@ -103,7 +103,7 @@ describe("prompt.ship.detect — careful compact", () => {
     const t = transcript(469_000);
     fs.appendFileSync(t, JSON.stringify({ type: "system", subtype: "compact_boundary", compactMetadata: { trigger: "manual", preTokens: 469_000 } }) + "\n");
     const r = runHook({ prompt: "ship", transcript_path: t });
-    expect(r.stdout).toContain('Skill("ship")');
+    expect(r.stdout).toContain('Skill("do-ship")');
     expect(r.stdout).not.toContain("[ship-compact]");
   });
 

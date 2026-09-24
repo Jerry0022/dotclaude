@@ -1,0 +1,1026 @@
+# Concept Bridge Server + Edge
+
+The **concept bridge server** (`scripts/concept-server.py`) serves static files
+AND provides HTTP endpoints for heartbeat and decision exchange.
+
+> **Timestamp unit convention (read before writing any client code).**
+> Every timestamp the server exposes — `server_ts`, `claude_ts`, `ts` —
+> is **milliseconds since the Unix epoch**, byte-compatible with JavaScript's
+> `Date.now()`. The browser compares them directly, with no conversion:
+> ```js
+> Date.now() - _lastHeartbeatTs < HEARTBEAT_STALE_MS   // both in ms
+> Date.now() - _lastServerTs    < SERVER_STALE_MS       // same unit contract
+> ```
+> `_lastServerTs` (cached from `server_ts`) is compared against `SERVER_STALE_MS`
+> to distinguish the bootstrap window from a dead bridge — same ms-since-epoch
+> unit, same staleness-comparison pattern as `_lastHeartbeatTs`.
+> **Never divide either side by 1000.** A snippet copied from elsewhere that
+> assumes seconds-since-epoch (`claude_ts / 1000`, `Date.now() / 1000`) flips
+> the staleness math negative and silently renders "Claude verbunden" forever
+> while submissions rot in the bridge. This is the single most expensive
+> silent-failure mode of the whole concept system, because neither the user
+> nor Claude notices anything is wrong until days later.
+>
+> `_processed_at` and `_picked_up_at` are **ISO-8601 UTC strings** (parsed
+> client-side via `Date.parse`). The split is deliberate: heartbeat math
+> needs cheap numeric comparisons every 5 s, while the processed/pickup
+> markers are read once per cycle and benefit from human-readable
+> serialization in `/decisions` payloads.
+
+1. Find the bridge server script — the **highest** cached version, never the
+   first `ls` hit:
+   ```bash
+   # Several version directories coexist in the cache after updates
+   # (0.145.1, 0.147.0, 0.148.0 …). `ls … | head -1` returned the LEXICALLY
+   # first one, i.e. the OLDEST server while the hooks already ran the newest.
+   # Prefer the root the hook runtime hands us; otherwise version-sort the
+   # glob (`sort -V` orders 0.9 < 0.10) and take the last entry.
+   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/concept-server.py}"
+   [ -f "$PLUGIN_ROOT" ] || PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | sort -V | tail -1)
+   ```
+   The same rule applies to every other script resolved from the cache in
+   this document (`concept-port-registry.js`, `concept-watch.js`,
+   `concept-tick.js`, `concept-drift.js`): `sort -V | tail -1`, never
+   `head -1`. See CONVENTIONS.md § Scripts → Path rule.
+
+2. Start the bridge server in the **session cwd** — the worktree when this
+   session runs in one (the watchdog resolves `--html` against the cwd, the
+   concept HTML is written into THIS checkout, and the state file of step 4
+   lives here too, #417):
+   **Launch it via the Bash tool's `run_in_background: true`** — NOT
+   `nohup … &` (or any `&`-backgrounded child) inside a single foreground
+   Bash call. A child backgrounded inside one tool call is reaped when that
+   call's shell is torn down, so the server dies a few calls later, mid-
+   session, with no error — the page then silently loses its bridge. Only a
+   detached background task survives across turns:
+   ```bash
+   # Bash tool, run_in_background: true  (no trailing &, no nohup)
+   python "$PLUGIN_ROOT" {port} "{session-cwd}" \
+       --html "docs/concepts/{date}-{slug}.html"
+   ```
+
+   **Pick the port via the cross-session registry — never a bare random number
+   (Defect B: cross-session collision).** Two concurrent concept sessions in
+   different worktrees that both picked the same random 8700-8999 port used to
+   sweep and kill each other's live bridge. Every live bridge now advertises
+   `{port, pid, worktree, …}` at `~/.claude/concept-bridges/<port>.json`; the
+   picker skips any port owned by a LIVE FOREIGN session (and any bound port):
+   ```bash
+   REG="$(dirname "$PLUGIN_ROOT")/concept-port-registry.js"
+   PORT="$(node "$REG" pick "{project-root}")"   # a free, foreign-safe port
+   ```
+   Record `$PORT`. An exact OS PID is not reliably knowable from a detached
+   task, so `server_pid` in the state file is best-effort — cleanup targets the
+   server by **port** via `/shutdown`, never by PID, so the precise PID is not
+   required. `concept-server.py` writes its own registry entry on bind and
+   removes it on `/shutdown`, on a watchdog reap, at interpreter exit and on
+   SIGINT/SIGTERM. A hard-killed server (TerminateProcess, power loss) still
+   leaves a stale entry; `pick` therefore sweeps the registry first
+   (`pruneStale`): an entry is deleted when its port no longer accepts a TCP
+   connect — a live foreign bridge is never touched, and the recorded pid is
+   deliberately not trusted (Windows reuses pids within days).
+   `node "$REG" prune` runs the same sweep on its own. Both the server and the
+   picker honour `CONCEPT_BRIDGE_REGISTRY_DIR`, which the test suites set to a
+   temp directory so hard-killed test servers cannot silt the real registry.
+
+   **Sweep the port BEFORE launching — exactly one instance must own it.**
+   A prior instance that did not fully die (its listening socket lingers in
+   TIME_WAIT/CLOSE_WAIT) plus a fresh launch used to leave **two** servers
+   bound to the same port (Windows permitted this via `SO_REUSEADDR`). `curl`
+   then hit whichever accepted the connection — sometimes the healthy one
+   (200), sometimes the wedged one (HTTP 000 / timeout) — surfacing as a
+   connection indicator that flickers between connected and "Claude nicht
+   verbunden" for no apparent reason.
+
+   **The server now binds the port EXCLUSIVELY** (`SO_EXCLUSIVEADDRUSE` on
+   Windows, `allow_reuse_address=False`; see `concept-server.py` §
+   `ConceptBridgeServer`), so a silent double-bind can no longer happen — a
+   duplicate launch instead **fails loudly** (`cannot bind port … exit 1`).
+   That turns the old silent flicker into a clear error, but you still MUST
+   sweep a lingering prior instance of YOUR OWN before launching — a socket
+   stuck in TIME_WAIT would make the fresh bind fail.
+
+   **Only ever sweep a port THIS session owns — NEVER a foreign one (Defect
+   B).** The old guidance blindly `Stop-Process`-ed every listener on the port,
+   which is exactly how one session killed another's live bridge. Gate the
+   sweep on the registry: `can-claim` exits 0 when the port is free, ours, or
+   held by a dead owner, and non-zero when a LIVE FOREIGN session owns it. The
+   picker already avoids foreign ports, so this is a belt-and-braces check on
+   the exact port you are about to bind:
+   ```bash
+   # Bash: bail out rather than kill another session's bridge
+   node "$REG" can-claim "$PORT" "{project-root}" \
+     || { echo "port $PORT now owned by another session — re-run the picker"; exit 1; }
+   ```
+   ```powershell
+   # PowerShell tool — safe now: the port is provably ours / free
+   Get-NetTCPConnection -LocalPort $PORT -State Listen -EA SilentlyContinue |
+     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue }
+   ```
+   After launch, assert a **single** listener (`netstat -ano | grep
+   "127.0.0.1:{port}"` → exactly one LISTENING row — the server binds
+   loopback-only, see § Loopback-only bind below, so it will NOT show up
+   under `0.0.0.0:{port}`) before opening the browser.
+   If the bind still fails because a foreign session grabbed the port in the
+   race window, re-run `node "$REG" pick "{project-root}"` for a fresh port and
+   retry — never force the sweep.
+
+   **The server must be threaded.** `concept-server.py` uses
+   `http.server.ThreadingHTTPServer` (not the single-threaded `HTTPServer`).
+   A single-threaded server serves one request at a time, so the browser's
+   own poll loops (it hits `/heartbeat`, `/decisions`, `/reload` every few
+   seconds) plus the background watcher plus any manual `curl` collide: one
+   slow or held connection blocks the serve loop and **every** subsequent
+   request times out — the socket still accepts (LISTENING) but returns
+   nothing, so `curl` reports HTTP 000 for 15 s+ and the page reads
+   "Claude nicht verbunden" even though the process is alive. This is a
+   distinct cause of HTTP 000 from the duplicate-instance case above; both
+   present identically. If you ever fork the script, keep it threaded.
+   `$PORT` is written to `.claude/concept-active.json` in step 6 so the
+   SessionStart resume hook can find this server again after a Claude restart.
+
+   **Loopback-only bind, origin gate on every data-bearing endpoint, no CORS
+   wildcard (#312 red-team F1).** `concept-server.py` binds `127.0.0.1`, not
+   all interfaces — the server holds the user's full review notes and every
+   file attached to the concept with no authentication beyond origin
+   checking, so it must not be reachable from other hosts on the LAN. The
+   single origin check, `_same_origin_ok` (no `Origin` header — curl, i.e.
+   Claude's own polling — or an `Origin` matching the bridge's own
+   host/localhost/127.0.0.1; anything else 403s), gates every endpoint that
+   returns or accepts real content: `GET /decisions`, `GET /pending`,
+   `GET /recovery`, `GET /draft`, `GET /attachments/<id>`, `POST /decisions`,
+   `POST /draft`, `POST /attachments`, `POST /reload`, `POST /shutdown`. It deliberately
+   does NOT gate `GET /heartbeat` or `GET /reload` (a bare counter, nothing
+   sensitive) — those stay reachable from same-origin without a check so the
+   page's own poll loop never has an extra failure mode. `Access-Control-
+   Allow-Origin` is never a wildcard: the server echoes the request's own
+   `Origin` back only when `_same_origin_ok` accepts it, and omits the CORS
+   headers entirely for a request with no `Origin` (CORS is a browser-only
+   concept; `curl` never needs it). **A missing `Origin` header always
+   passes** — that is Claude's own `curl` polling, and the whole monitoring
+   loop depends on it continuing to work with no header at all.
+
+   **The `--html` flag is mandatory.** It arms the server-side watchdog:
+   if the concept HTML file disappears for > 10 s, the watchdog terminates
+   the bridge automatically — no orphan server can survive a manual
+   `rm docs/concepts/…`, a failed disposition step, or a worktree wipe.
+   The watchdog ALSO terminates if Claude's heartbeat goes stale for > 30
+   min (`--heartbeat-timeout-ms` default `1800000`), catching the dead-cron
+   case (session closed without /shutdown, cron prompt loop dropped). Both
+   conditions independently guarantee the server cannot become a ghost.
+
+   The 30 min default is calibrated for concept-review flows where the user
+   may read, think, and annotate for an extended period before submitting —
+   short idle pauses are expected and should not kill the server. Active
+   coding sessions with a tighter watchdog requirement can pass a lower value
+   (e.g. `--heartbeat-timeout-ms 300000` for 5 min) explicitly.
+
+3. Set up the **sparse backstop cron** (every 15 minutes). It used to fire
+   every minute and was described as the pickup path; since #363 the two
+   token-free watchers below own the whole monitoring duty — heartbeat,
+   self-cleanup, page liveness, pickup — and the cron is a last-resort
+   backstop only. **Every cron fire is a model turn**: Claude must issue the
+   Bash call and read its (empty) result, two inferences over the full cached
+   context, counted against the 5-h/weekly limits. At once a minute that was
+   hundreds of near-empty turns per concept session competing with the user's
+   own work; at once per 15 min it is four an hour, and it only matters if
+   BOTH watchers died without a session restart (a restart re-arms them via
+   `ss.concept.resume`).
+
+   **The prompt is two sentences — the procedure is a script.** Claude Code
+   renders a cron's *entire* prompt text as its card in the background tasks
+   panel, so the old inline body (gate + heartbeat + `curl | python -c` probe +
+   the whole pending-branch procedure, 1128 characters) made one card fill the
+   panel and hid every other background task from the user. Nothing was
+   dropped: `scripts/concept-tick.js` performs every one of those steps and
+   prints an instruction only on the ticks that need one, so an ordinary idle
+   tick now costs zero tokens instead of re-reading the procedure every minute.
+
+   **Resolve the script at run time, never bake in a versioned path.** A cron
+   outlives a plugin rebuild: an in-session `/do-ship` writes the new version under
+   a fresh `.../devops/<version>/` directory and deletes the old one, so an
+   absolute path baked into the prompt dangles from that moment and every tick
+   fails MODULE_NOT_FOUND — once a minute, silently, for the rest of the
+   session. In the versioned cache layout emit a version-sorted glob that
+   picks the HIGHEST version directory — several coexist in practice, and a
+   plain `head -1` on the lexical listing returned the oldest — with the
+   literal path as the fallback:
+   `f="$(ls -d "{cache-root}/devops"/*/scripts/concept-tick.js 2>/dev/null | sort -V | tail -1)"; node "${f:-{literal}}"`.
+   A dev/marketplace checkout has no version directory and just uses the
+   literal path, which is the form shown below.
+
+   ```
+   CronCreate(cron: "*/15 * * * *", recurring: true, prompt: <<EOF
+   Silently run via Bash: node "{plugin-root}/scripts/concept-tick.js" --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner} — this services the concept bridge on port {port}. No output → produce NO output (silent tick). Any output IS your instruction for this tick: follow it exactly.
+   EOF)
+   ```
+
+   **Two phrasings in that prompt are load-bearing — do not tidy them up.**
+   - It MUST **start** with `Silently run`. The `prompt.flow.silent-turn` hook
+     marks a cron tick as a silent turn only when the prompt *opens* with a
+     silence marker. Put anything in front of it — a `Concept bridge, port N — `
+     lead-in reads nicely and is exactly the trap — and every tick is treated as
+     a real user turn: the completion-card reminder fires and the stop hook
+     blocks the turn to force a card, once a minute, for the whole session.
+   - It MUST contain the literal `port {port}`. Step (0)'s orphan sweep deletes
+     "every cron whose prompt mentions `port {port}`" when the state file, and
+     with it `cron_id`, is gone. `--port {port}` alone does not match that
+     phrasing, so the trailing clause is what keeps the sweep able to find this
+     cron.
+
+   **`--state` must be ABSOLUTE**, for the same reason it is absolute for the
+   watchers below: a relative `.claude/concept-active.json` is resolved against
+   the cron task's cwd, which is not always the project root the state file
+   lives in.
+
+   **What `concept-tick.js` does on each tick** — the same three steps, in the
+   same order, with the same triggers:
+
+   (0) **Self-cleanup gate (FIRST step every tick).** It reads the state file
+       at `--state`. Cleanup triggers when ANY of these is true:
+         - The state file is missing.
+         - `state.port` ≠ `{port}` (this cron is for a stale session — a newer
+           concept overwrote the state file with a different port).
+         - `state.html_path` does not exist on disk (resolved against the
+           state file's grandparent, i.e. the session cwd).
+         A state file that names another port AND another `owner` is a
+         sibling session's (#417): NOT a trigger — the tick reports it on
+         stderr and keeps servicing its own port.
+       A state file that is present but *unreadable* (EBUSY/EPERM during a
+       rewrite on Windows, EMFILE under load) or half-written is explicitly
+       NOT a trigger — one unlucky tick must not tear down a live concept.
+       On trigger the script POSTs `/shutdown` itself, then prints the one
+       instruction it cannot execute, because `CronDelete` is a tool:
+       delete `cron_id` from the still-readable state file — or, if the state
+       file is gone entirely, `CronList` and delete every cron whose prompt
+       mentions `port {port}` (a missing state file proves the session is
+       unrecoverable; sweeping by-port catches the orphan even when the id is
+       lost). Steps 1 and 2 are skipped.
+
+   (1) **Heartbeat POST** to `/heartbeat`. A single failure is reported on
+       stderr only: bridge liveness is owned by the keepalive pulser and the
+       server-side `--html` watchdog, and a per-tick complaint about a dying
+       bridge would spam the transcript once a minute. **The second
+       consecutive failure prints the relaunch instruction — once (#348).**
+       A bridge that dies *without* a session restart (a crash, a manual
+       kill, the watchdog) had nobody to bring it back: the pulser only
+       notices while its own session is alive. The tick therefore keeps a
+       consecutive-miss counter (`tick_heartbeat_failures`) and a one-shot
+       marker (`relaunch_requested_at`) in the state file; the instruction
+       — relaunch on the SAME port with the recorded `--html`, re-arm pulser
+       and waker — fires on the tick that crosses two misses with no marker
+       set, every later miss is silent again, and the next successful
+       heartbeat clears both fields so a later death fires it again. One
+       transient miss between good ticks never fires. The instruction says
+       what to do when the port is already bound (another session brought
+       the bridge back): skip the relaunch, only re-arm the watchers.
+
+   (2) **Pending check** against the deterministic `/pending` endpoint — a
+       strict `{"pending": true|false, "version": N}` with no free-form
+       content, **never** a substring match on `/decisions`. Not pending →
+       the script prints nothing at all and the tick is silent.
+
+       Pending → it prints the processing instruction, carrying the version
+       from `/pending`. That instruction is the branch procedure that used to
+       sit in the cron prompt, and it is unchanged:
+         • Fetch `curl -s http://localhost:{port}/decisions`. Parse the JSON.
+           Note `_version`. Strip `_version` and `_processed_at` before
+           treating the rest as decision data. Read `action` — it is one of
+           THREE values, each with its own SKILL.md Step 5b branch:
+             - "iterate"        → next iteration on the concept page only
+             - "implement"      → apply real code changes + final-report
+             - "finalize"       → the final report's close-out sheet, ONE
+                                  payload carrying issues{} + implement{} +
+                                  ship{} + disposition{}. Run the selected
+                                  parts in a FIXED order: (A) issues —
+                                  user-value gate (merges combination-only
+                                  items silently), then `/auto-issue` (hand-over,
+                                  no prompt) per gated item; (B) implement — the follow-ups
+                                  routed to "jetzt umsetzen", built through
+                                  the devops role agents, then noted in the
+                                  report; (C) ship — the full /do-ship pipeline,
+                                  stop + report on a hard gate failure and
+                                  skip (D); (D) Step 6 cleanup with the
+                                  disposition
+           Legacy pages generated before the sheet still send "create-issues",
+           "ship" or "dispose-concept" one at a time — map each onto the
+           matching part above (SKILL.md § Legacy final-report actions).
+           Process per Step 5 (Live Feedback Loop) — act on the user's choices
+           (approve/tweak/reject, included options, comment-driven tweaks).
+           Step 5c writes the new iteration to the HTML file and POSTs
+           `/reload` BEFORE the reset below. Reset is the LAST action.
+
+         • **Zero-prompt invariant for finalize (and its legacy variants).**
+           This branch MUST complete end-to-end without asking the user
+           anything. The payload (issues.items[], implement.items[], ship.run,
+           disposition{}) is self-sufficient by design; any missing optional
+           field falls back to a sane default. If you catch yourself reaching
+           for AskUserQuestion, stop — the answer is in the payload, the
+           concept HTML, or the project's new-issue extension. The user signed
+           off on the sheet's live plan, which named every consequence in
+           execution order before the click.
+           (Exception: the ship part MUST still stop and surface a hard
+           ship-pipeline gate failure, and a force-push to main/master still
+           needs explicit confirmation.)
+
+         • After the file rewrite AND the `/reload` POST have completed,
+           reset conditionally — pass the noted version:
+           `curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{"version": <noted>}' http://localhost:{port}/reset`
+         • If the HTTP code is 409 (version mismatch) → the user submitted
+           again while you were processing. Re-fetch /decisions, process the
+           new payload (which supersedes what you just finished), then retry
+           the conditional reset with the new `_version`.
+         • Re-launch the pickup waker immediately after `/reset`, then report
+           the outcome to the user. The visible panel reset happens via the
+           `/reload`-triggered `location.reload()` in the browser — the page
+           reloads onto the new iteration with a fresh ready panel. The
+           `_processed_at` poll is only a safety-net for stuck states.
+
+   **Why `/pending` and not a substring check on `/decisions`?** The
+   `/decisions` JSON response is formatted via Python's default `json.dumps`,
+   which emits `"submitted": true` **with** a space after the colon — a literal
+   `contains "submitted":true` test silently misses every submission.
+   `/pending` collapses the signal to a strict boolean, and `concept-tick.js`
+   parses it as JSON rather than string-matching it, so the check cannot drift
+   into false negatives between ticks.
+
+   **Why a script and not a Read per tick.** The other way to shorten the
+   prompt would be to have the cron read the procedure from a file. That costs
+   tokens on *every* tick, and the idle tick is the overwhelmingly common case
+   — a submission arrives once every few minutes at best. A Bash call that
+   prints nothing costs nothing, and it replaces the TWO curl calls the old
+   body already made per tick, so this is strictly cheaper than what it
+   replaced rather than a new per-tick cost.
+
+   **Side effect — submit-panel progress list.** The first `/pending=true`
+   response also stamps `_picked_up_at` on the server. The browser reads
+   that field from `/decisions` and advances the "Claude verarbeitet" step
+   in the submitted panel — no extra Claude action required. For the
+   implement branch, additionally POST `/status` once code changes are done
+   (see SKILL.md Step 5b · implement, sub-step 3) so the third step
+   ("Implementierung abgeschlossen") lights up before the page reloads.
+
+   **Why combined, not two crons?** One cron minimizes race conditions and makes
+   the contract explicit: every tick does both. The waker (below) is what makes
+   the submit-to-process lag ~20 s; the cron's 15-min cadence is the lag only
+   when both watchers are gone.
+
+   **The cron alone does NOT keep the indicator green — add TWO decoupled
+   background tasks.** The page flips to "Claude nicht verbunden" as soon as
+   Claude's last `/heartbeat` POST is older than `HEARTBEAT_STALE_MS` (90 s).
+   The once-a-minute cron is the documented keepalive, but session-only crons
+   fire ONLY while the REPL is idle and have multi-minute gaps in practice
+   (observed: a 638 s gap with the cron registered and the session idle) — so
+   during normal reading/thinking the indicator goes red.
+
+   **Keepalive and pickup MUST be separate tasks.** The naive single watcher
+   (pulse + `exit 0` on pending) has a load-bearing flaw: `exit 0` is how it
+   wakes Claude, so the instant a submission lands the watcher is *gone* — and
+   for an `implement` submission Claude then processes for many minutes with
+   NOTHING pulsing `/heartbeat` (the idle-only cron can't fire during a busy
+   `implement` turn). The indicator goes red *precisely during implementation*
+   — exactly when the user is watching for progress. Splitting the two roles
+   removes that coupling.
+
+   Launch both as **detached background tasks** (Bash tool,
+   `run_in_background: true`, no trailing `&`, no `nohup`). Both are the same
+   script in two modes — `scripts/concept-watch.js`, resolved the same way as
+   the server in step 1.
+
+   **Resolve the path INSIDE each launch command.** Every Bash tool call is a
+   fresh shell (see § Troubleshooting), so a `WATCH=$(...)` assignment in one
+   call is empty in the next — `node "" --mode pulse` dies in under 100 ms and,
+   unlike every other launch in this document, does so silently.
+
+   **(1) Keepalive pulser — pulses only, NEVER exits on pending.** Launched
+   once at concept open; runs for the whole session so `claude_ts` stays warm
+   even across a long `implement`. Exits only when the concept is truly gone:
+   ```bash
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode pulse --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner}
+   ```
+
+   **(2) Pickup waker — wakes Claude the instant a submission lands.** Its
+   `exit 0` re-invokes the model immediately instead of waiting up to 60 s for
+   the next cron tick. Re-launched after each processing round. It does NOT
+   pulse the heartbeat (that is the pulser's job) — it only watches `/pending`:
+   ```bash
+   node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode watch --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner}
+   ```
+
+   **Verify both actually started.** They are the only launches in this document
+   whose failure would be silent — the server has a heartbeat round-trip, the
+   port has a single-listener assert, the page has a 200-gate, and these had
+   nothing. Read each task's output once after launching: a `*_EXIT reason=`
+   line within seconds means it never got going. `STATE_NEVER_APPEARED` in
+   particular means the launch outran step 4 — write the state file, then
+   re-launch.
+
+   **Why a script and not an inline `while true; do … sleep 20; done`.** The
+   loop shape is easy to write and was wrong in four independent ways, each of
+   which silently reproduced the bug the watchers exist to prevent:
+   - it tested a **relative** `.claude/concept-active.json`, but this document
+     mandates the state file at the session cwd, which is not always the
+     task's cwd — both watchers then exited `STATE_GONE` on iteration 1;
+   - it was launched here, in step 3, **before** step 4 writes that file, so a
+     literal reading killed both at t=0. `--state` is absolute and `--grace`
+     (60 s) waits for the file instead of treating its absence as terminal, so
+     the step 3 → step 4 order is safe as written;
+   - its port guard `grep -qE '"port"…\b'` depended on JSON spacing and on
+     `\b`, a GNU extension — on BSD/macOS grep it never matched, so both
+     watchers exited `PORT_CHANGED` immediately. The script compares the port
+     numerically;
+   - `allowed-tools` matches command *prefixes*, and a multi-line loop has no
+     usable prefix, so the only grant that covered it was a blanket one. A
+     `node …` invocation is already covered by `Bash(node *)`.
+
+   Behaviour is otherwise unchanged: both poll every ~20 s (well under the 90 s
+   threshold), and **tolerate a slow or absent bridge** — measured on
+   2026-09-20, a bridge on a machine running four agents and a build took
+   10–20 s per `/heartbeat`, and the old 8 s deadline × 4 turned every such
+   stretch into a `SERVER_DEAD`, a relaunch and a red indicator. Requests now
+   wait up to 30 s (`--timeout`), the **pulser never exits on request
+   failures** while the state file is there (it reconnects when the bridge
+   is back or relaunched on the same port), and the waker reports
+   `SERVER_DEAD` only after `--dead-after` (300 s) of continuous failure.
+   **Cleanup verdicts are debounced** (`--confirm`, 3 polls): the state file
+   and the page are both rewritten mid-session, and on Windows a tmp+rename
+   or an `mv` leaves a window in which the file is not there — one such poll
+   used to make the waker POST `/shutdown` on a live bridge (the journal
+   shows the shutdown/restore pair). A real end still takes the server down
+   within ~1 min. **Two watchers of one kind on one port** find each other through the
+   id echo (`POST /heartbeat?pulser=<id>` → `prev_pulser`,
+   `GET /pending?waker=<id>` → `prev_waker`): the younger pulser exits
+   `DUPLICATE_PULSER`, the OLDER waker exits `DUPLICATE_WAKER` (its owner is
+   the superseded session; two wakers woke two Claudes for one submission) —
+   `ss.concept.resume` re-arms the watchers on every session start, and on
+   Windows the old detached tasks survive it.
+   The exit lines (`PULSER_EXIT reason=…` / `WAKER_EXIT reason=…`) keep
+   their shape, so the reason → action table in SKILL.md Step 5d applies
+   verbatim.
+
+   **The waker owns the monitoring duty (#363).** Three things the per-minute
+   cron used to carry live in `--mode watch` now, token-free:
+   - **Self-cleanup gate.** Every poll re-reads the state file: gone, foreign
+     port, or `html_path` no longer on disk (resolved against the project
+     root) ⇒ the waker POSTs `/shutdown` itself and exits `STATE_GONE` /
+     `PORT_CHANGED` / `HTML_GONE`. No cron is needed for a dead concept to
+     take its server down.
+   - **Page liveness.** The server keeps a per-tab registry: every browser
+     poll (GET `/heartbeat`, GET `/reload`) carries the page's `?tab=<id>`,
+     and a real unload beacons `POST /bye` (`pagehide`, persisted=false).
+     `/pending` reports `browser_ts` (last poll from any tab),
+     `browser_tabs` (tabs registered) and `browser_bye_ts`. The waker
+     re-opens `http://localhost:{port}/{html_path}` in the user's Edge only
+     when **no tab is registered** — after the last tab's `/bye` plus a
+     60 s grace, or after every tab has been silent for `--liveness`
+     seconds (default **900**). Silence alone while a tab is registered never
+     reopens: Edge throttles a hidden tab's timers to one wake-up per minute
+     after 5 min and suspends a Sleeping Tab entirely, so 180 s of silence
+     used to open a fresh tab every few minutes (#397). The page keeps the
+     registry fresh from a Worker (exempt from that throttling). Once per
+     window, re-armed only after a tab is seen again, so a tab closed on
+     purpose gets one reopen and never a storm. Before the first poll the
+     waker's own start is the baseline. `--liveness 0` switches it off.
+   - **Structured exit.** A submission exits with
+     `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=iterate|implement|finalize`
+     (`/pending` carries the submission's `action`), so the woken Claude reads
+     ONE line and branches on it instead of re-probing.
+
+   **Lifecycle:** launch BOTH at concept open. On `PENDING_SUBMISSION` the
+   waker exits and wakes Claude; Claude processes the payload and
+   **re-launches only the waker** — immediately after `/reset` (SKILL.md 5c
+   step 7), not at the end of the round. The pulser is still running and must
+   not be duplicated (a second pulser on the same port is harmless but
+   wasteful; if unsure, the pulser's `STATE_GONE`/`PORT_CHANGED` guards make a
+   stale one exit on its own). Keep the cron too — but as a **sparse
+   backstop** only (every 15 min): it fires solely while the REPL is idle, so
+   it cannot cover the window between the waker exiting and being re-launched,
+   because during a processing round the REPL is busy. That window is closed
+   by re-launching early, not by the cron.
+
+   **None of the three is pending work.** The server, the pulser and the waker
+   run for the whole concept and never yield a result — they are the waiting
+   itself. `stop.flow.guard` recognizes them (by `concept-server.py` /
+   `concept-watch.js` in the command, or by the role the launch description
+   names) and ignores them; a completion card must never list them under
+   `pending`. A card rendered while the concept is open carries
+   `concept: { phase }` instead (SKILL.md § Completion cards while the concept
+   is open).
+
+4. **Persist active-concept state.** Write `.claude/concept-active.json` in
+   the **session cwd** — the worktree when this session runs in one, the
+   project root otherwise — with the metadata the SessionStart resume hook
+   (`ss.concept.resume`) needs to recover this concept after a Claude
+   restart. Do this BEFORE the first heartbeat — once the file exists, any
+   subsequent SessionStart can rediscover the running server.
+
+   ```json
+   {
+     "port": 8742,
+     "html_path": "docs/concepts/2026-04-12-auth-middleware-redesign.html",
+     "slug": "auth-middleware-redesign",
+     "server_pid": 12345,
+     "cron_id": "ab12cd34",
+     "owner": "a1b2c3d4",
+     "started_at": "2026-04-12T14:30:00.000Z",
+     "baseline_ref": "main",
+     "baseline_sha": "4f2a1c9e77b3",
+     "baseline_captured_at": "2026-04-12T14:30:02.000Z"
+   }
+   ```
+
+   - `port` — the bridge port chosen in step 2.
+   - `html_path` — relative path inside the project; the hook uses it to
+     verify the concept file still exists.
+   - `slug` — kebab-case topic from the filename, used in resume messaging.
+   - `server_pid` — captured via `echo $!` after the `python … &` launch.
+   - `cron_id` — the ID `CronCreate` returned in step 3. A new session
+     refreshes the polling cron, the old ID is just informational (the old
+     session-only cron died with the prior session and cannot be reaped).
+   - `owner` — a random token minted when this file is written
+     (`node -e "process.stdout.write(require('crypto').randomBytes(4).toString('hex'))"`),
+     passed as `--owner {owner}` to the tick, the pulser and the waker.
+     A tick or watcher that finds the file naming another owner AND another
+     port leaves it alone — no `/shutdown`, no cleanup instruction — and
+     keeps servicing its own port (#417). Without an owner on both sides the
+     port rule alone decides, as before.
+   - `started_at` — ISO-8601 UTC. When the concept was OPENED. Staleness is
+     measured from the last activity (this stamp, the store's `state.json`
+     `saved_at`, the newest draft, the journal tail — #426), never from the
+     open alone, and a store holding a typed note is never stale.
+   - `baseline_ref` / `baseline_sha` / `baseline_captured_at` — the reality
+     check's anchor: the default branch and the **remote** tip this concept was
+     written against, written by `scripts/concept-drift.js --capture` right
+     after this file is created and advanced after every check. Remote rather
+     than local, so it stays meaningful when the session runs inside a worktree
+     while this file lives at the project root. Absent in a repo with no remote
+     (and on pages generated before the gate existed) — the implement gate then
+     skips silently rather than blocking. See `reality-check.md` § Baseline.
+   - `tick_heartbeat_failures` / `relaunch_requested_at` — written by
+     `concept-tick.js` only (#348): the consecutive heartbeat-miss count and
+     the one-shot marker that makes the relaunch instruction fire once. Both
+     are removed by the next successful heartbeat; nothing else reads them.
+
+   **What survives a Claude restart, and how it comes back (#348).** The
+   bridge server, the keepalive pulser and the pickup waker are all
+   background Bash tasks and die with the session — the cron too. At the next
+   SessionStart the `ss.concept.resume` hook reads this file, probes
+   `/heartbeat`, and hands the new session one of three mandates: a live
+   bridge → re-arm the three watchers (and process a pending submission
+   first); a dead bridge with an unprocessed submission on disk → the
+   recovery mandate (relaunch on the same port, verify the store, process);
+   a dead bridge with nothing pending → the relaunch mandate (same port,
+   same `--html`, verified heartbeat round-trip, all three watchers). Only a
+   concept with no activity for more than 24 h — measured against the durable
+   store (last save, newest draft, journal tail), not the open — and no typed
+   draft is pruned instead, and the hook prints one PRUNED line naming the
+   state file, port and store dir, never a silent exit (#426). The page
+   reconnects on its own once the heartbeat is back; the reviewer never has
+   to reload or wait for someone to notice the red indicator.
+
+   Path: ALWAYS `<session-cwd>/.claude/concept-active.json` — the cwd this
+   Claude session runs in, i.e. the worktree for a worktree session (NOT the
+   primary checkout's root, NOT under `docs/`). `ss.concept.resume` reads
+   exactly `process.cwd()/.claude/concept-active.json`, and two sessions in
+   sibling worktrees of one repo must not share a file: when they did, B's
+   write made A's tick read "my concept ended", POST `/shutdown` and tell
+   Claude to `rm` the file — B's page went "nicht verbunden" every 15 min
+   (#417). The server may still be rooted anywhere; `--html` and
+   `html_path` are relative to this cwd. Create `.claude/` if needed; do
+   not commit the file (add `concept-active.json` to `.gitignore` if not
+   already covered by `.claude/`).
+
+4b. **The durable store — nothing to launch, but know it exists (#284).**
+   The server creates `.claude/concepts/<html-basename>/` on startup, derived
+   from `--html`, and **refuses to start (exit 1) if it cannot write there**.
+   That is deliberate: a bridge without durability looks perfectly healthy
+   right up until it eats a submission, so the failure belongs at launch time
+   where the 200-gate and the single-listener assert already catch problems.
+   Override the location with `--store <path>` only if you have a reason to.
+
+   ```
+   .claude/concepts/{date}-{slug}/
+     journal.jsonl    append-only, fsynced: submissions, pickups, progress
+                      checkpoints, attachments, resets, teardowns
+     state.json       atomically-replaced snapshot; restored on boot
+     attachments/     <sha256>.<ext> — pasted/dropped/uploaded files, any
+                      type (#312). Extension is derived, never trusted
+                      verbatim — see § Attachment HTTP contract.
+       index.json     id -> {name, mime, size, sha256, added_at} — the
+                      only place the ORIGINAL filename survives; the
+                      on-disk name is purely content-addressed.
+     drafts/          UNSENT work, mirrored from the page on every autosave
+       <slug>.jsonl   append-only revision log, fsynced per line
+       <slug>.json    latest revision, atomically replaced
+     UNPROCESSED      present iff a submission has not been processed yet
+   ```
+
+   **`drafts/` is for the half that was never submitted.** `journal.jsonl`
+   only ever sees a payload the user pressed submit on; everything typed
+   before that lived exclusively in the browser's `localStorage`, which does
+   not survive a wiped profile, a private window, a quota error, a power cut,
+   or a bug in the page's own persistence — and which nothing else had a copy
+   of. The page now POSTs its whole state blob to `/draft` on every (debounced)
+   autosave and flushes it with `sendBeacon` on `pagehide`, and the server
+   fsyncs it before acking, exactly like a submission.
+
+   The log is **append-only on purpose**. `GET /draft?slug=<slug>` returns the
+   latest revision *and* `recovered`: the per-key union of the last non-empty
+   value ever posted, minus keys the page reported as deliberately cleared. So
+   a client that posts a blank blob — the shape every past data-loss bug took —
+   cannot destroy anything, and the page merges `recovered` back on load into
+   any key it is missing or holds empty. Losing a comment now requires losing
+   the disk.
+
+   `GET /recovery` lists a one-line summary per draft (`slug`, `rev`,
+   `saved_at`, `iteration`, `recoverable_keys`, `chars`). Read it on a resumed
+   session: without it, a bridge that came back after a crash looks identical
+   whether the user had typed nothing or had typed for an hour. Never overwrite
+   or regenerate a concept HTML file while a draft holds comments you have not
+   accounted for.
+
+   What this buys, concretely: `POST /decisions` fsyncs the payload BEFORE it
+   acks the browser, and the server reloads `state.json` on boot. A bridge
+   that dies for any reason — PC restart, crash, or the watchdog reaping it
+   because Claude hit a usage limit and the session-scoped pulser stopped
+   heartbeating — comes back serving the SAME `pending: true` and the same
+   `_version`. Before this, `GET /pending` answered `false` afterwards, which
+   is indistinguishable from "the user never submitted".
+
+   **Restart on the same port, always.** The store is keyed to the concept,
+   not the port, but the open tab and `concept-active.json` both point at the
+   old port. A new port orphans them and makes fresh watchers exit
+   `PORT_CHANGED`.
+
+   **Ask the server where you stand** before processing anything on a resumed
+   session:
+   ```bash
+   curl -s http://localhost:{port}/recovery
+   ```
+   It returns `{unprocessed, version, marker, progress[], last_checkpoint,
+   attachments[], drafts[]}`. A non-null `marker` means the previous process
+   was torn down hard rather than exiting cleanly; a `drafts[]` entry with
+   `recoverable_keys > 0` means the user has typed comments that were never
+   submitted — surface them, never silently discard or overwrite them.
+
+   **Checkpoint as you process.** For `implement` and for each part of a
+   `finalize`, POST each real artifact as it comes into existence. Namespace
+   the `action` per finalize part (`finalize:issues`, `finalize:ship`,
+   `finalize:cleanup`) — a bare `"ship"` is indistinguishable from a legacy
+   stand-alone ship submission, and a resumed session would then stop after
+   verifying the release instead of running the cleanup part:
+   ```bash
+   curl -s -X POST -H "Content-Type: application/json" \
+     -d '{"action":"finalize:ship","step":"pr-opened","status":"done","version":<v>,"artifacts":{"branch":"feat/x","pr":42}}' \
+     http://localhost:{port}/progress
+   ```
+   A recovered run reads these to find out how far the dead run got — and
+   then **verifies each artifact against reality** (`git rev-parse`,
+   `gh pr view`, `gh issue view`) before continuing, because the checkpoint
+   records what the previous run believed, and it died for a reason. The
+   checkpoint says where to look; git and gh say what is true.
+
+   The store is disposed of by SKILL.md § Step 6a alongside the concept HTML —
+   `discard` removes the whole directory, guarded so an `UNPROCESSED` marker
+   is never deleted silently.
+
+4c. **Attachment HTTP contract (#312).** The bridge accepts arbitrary file
+   attachments — "basically any file type, size does not matter" — through
+   two request shapes on the SAME endpoint, `POST /attachments`, dispatched
+   on `Content-Type`. Both shapes return the identical response body on
+   success, so a client implementer only needs to pick a shape once, per
+   file size, and everything downstream (read-back URL, dedup handling) is
+   the same.
+
+   **Limits and how to change them.**
+
+   | Constant                       | Default   | CLI flag                          | Env var                              |
+   |---------------------------------|-----------|------------------------------------|----------------------------------------|
+   | Per-file cap (streaming path)   | 256 MiB   | `--max-attachment-bytes <n>`       | `CONCEPT_MAX_ATTACHMENT_BYTES`         |
+   | Total store cap (all files)     | 4 GiB     | `--max-attachment-total-bytes <n>` | `CONCEPT_MAX_ATTACHMENT_TOTAL_BYTES`   |
+   | Per-file cap (legacy JSON path) | 32 MiB    | *(fixed, not configurable)*        | *(fixed, not configurable)*            |
+   | `/decisions` payload cap        | 32 MiB    | *(fixed — JSON only carries references now, not blobs)* | |
+
+   Resolution order for the two configurable caps: CLI flag > env var >
+   default. The legacy base64-in-JSON path is memory-bound (the whole file
+   is base64-decoded into RAM before it touches disk), so it keeps its own
+   fixed, lower 32 MiB cap regardless of `--max-attachment-bytes` — files
+   above that MUST use the streaming path.
+
+   Free disk space on the store volume (`shutil.disk_usage`) is checked
+   against the size plus a 64 MiB safety margin TWICE: once as an advisory
+   pre-check (before decoding Shape A's base64, or before Shape B streams
+   the body to a temp file at all — fails obviously-hopeless uploads fast),
+   and once authoritatively inside `_attachment_quota_lock`, in the same
+   critical section as the quota check and the write/rename. Only the
+   second check is what actually prevents two concurrent uploads from both
+   observing free space, both passing the advisory check, and together
+   eating into the safety margin — a single un-locked check cannot do that
+   regardless of where it runs. Either check failing refuses with
+   `507 disk_full`.
+
+   **Shape A — legacy base64-in-JSON** (existing pages; kept working
+   unchanged). `Content-Type: application/json` (or no `Content-Type` at
+   all — an empty header also routes here):
+   ```json
+   POST /attachments
+   Content-Type: application/json
+
+   {"name": "shot.png", "mime": "image/png", "data": "<base64>"}
+   ```
+   Rejects a decoded payload above 32 MiB with `413` and a `hint` field
+   pointing at Shape B.
+
+   **Shape B — streaming raw body** (any Content-Type other than
+   `application/json`, e.g. the file's real MIME or
+   `application/octet-stream`). Metadata travels in headers instead of the
+   JSON envelope so the body can be piped straight to disk without ever
+   being fully materialised in memory:
+   ```
+   POST /attachments
+   Content-Type: application/octet-stream        (or the file's real MIME)
+   X-Attach-Name: spec.pdf                        (percent-encoded UTF-8,
+                                                    i.e. encodeURIComponent(name))
+   X-Attach-Mime: application/pdf
+   Content-Length: 8421553                        (REQUIRED — no chunked
+                                                    transfer-encoding support;
+                                                    the cap and disk-space
+                                                    checks both run against
+                                                    this value BEFORE any
+                                                    body byte is read)
+
+   <raw file bytes>
+   ```
+   Server behaviour: reads the body in ~1 MiB chunks into a temp file
+   (`attachments/.upload-<uuid>.tmp`) inside the store dir, hashing with
+   `sha256` as it streams — the process never holds the full file in memory.
+   `Content-Length > MAX_ATTACHMENT_BYTES` is rejected with `413`
+   immediately, before any read. A missing `Content-Length` is rejected with
+   `411`. On success the temp file is `fsync`ed then `os.replace`d onto the
+   content-addressed final name; on ANY failure (client aborts mid-upload,
+   the per-file cap is exceeded, the disk fills, a dedup hit makes the temp
+   file redundant) the temp file is removed — no orphaned `.tmp` is ever
+   left in the store, even across a hard kill (a leftover `.upload-*.tmp`
+   from an unclean process death is swept at the NEXT server startup, since
+   it was never finalised — no journal line, no quota accounting — so
+   discarding it is always safe).
+
+   **Response — identical for both shapes:**
+   ```json
+   {
+     "ok": true,
+     "durable": true,
+     "id": "<sha256>.<ext>",
+     "sha256": "<sha256>",
+     "mime": "image/png",
+     "size": 8421553,
+     "url": "/attachments/<sha256>.<ext>",
+     "deduplicated": false
+   }
+   ```
+   `deduplicated: true` means the sha256 already existed on disk — the
+   upload was a no-op past the hash compare, no bytes were rewritten, and
+   quota was not incremented a second time. This applies across BOTH shapes:
+   the same content uploaded once via Shape A and again via Shape B (or
+   under an entirely different claimed filename) still resolves to one file
+   and one quota charge.
+
+   **Error responses** (`{"ok": false, "reason": "...", ...}` JSON body,
+   except `411`/`403` which use the plain `send_error` HTML body):
+
+   | Status | `reason`             | When | Extra fields |
+   |--------|-----------------------|------|---------------|
+   | 400    | `empty`               | zero-byte upload (both shapes) | |
+   | 400    | `bad_json`            | Shape A body is not valid JSON | |
+   | 400    | `bad_base64`          | Shape A `data` does not decode | |
+   | 400    | `bad_content_length`  | `Content-Length` is not a non-negative integer (either shape; also guards `/decisions`, `/reset`, `/progress`, `/status`) | |
+   | 400    | `client_aborted`      | Shape B: connection closed before all declared bytes arrived | `detail` |
+   | 403    | *(none — `send_error`)* | cross-origin request (see § same-origin gate below) | |
+   | 411    | `length_required`     | Shape B has no `Content-Length` header | |
+   | 413    | `too_large`           | over the applicable per-file cap | `size`\*, `max_bytes`, `hint`\*\* |
+   | 507    | `disk_full`           | free space would drop below the safety margin | `free_bytes`, `needed_bytes` |
+   | 507    | `quota_exceeded`      | would exceed `MAX_ATTACHMENT_TOTAL_BYTES` | `total_bytes`, `max_total_bytes` |
+   | 507    | `store_write_failed`  | write/rename failed for a reason other than disk-full | `detail` |
+   | 507    | `store_unavailable`   | the durable store itself failed to initialise at boot | |
+
+   \* `size` is present when the actual/decoded size is known (Shape A, or
+   Shape B's declared `Content-Length` check); \*\* `hint` is present only
+   when the legacy path's fixed 32 MiB cap was hit, pointing at Shape B.
+
+   **Same-origin gate.** `POST /attachments` uses the same `_same_origin_ok`
+   check as every other data-bearing endpoint — see § Loopback-only bind,
+   origin gate on every data-bearing endpoint above: no `Origin` header
+   (curl, Claude's own requests) or an `Origin` matching the bridge's own
+   host/localhost/127.0.0.1 is accepted; anything else gets a bare `403`.
+
+   **`GET /attachments/<sha256>.<ext>` — serving policy.** The identifier is
+   shape-validated (`^[0-9a-f]{64}\.[a-z0-9]{1,12}$`) before it ever touches
+   the filesystem — traversal-proof regardless of stored extension. A query
+   string on the request (e.g. a cache-busting `?v=2`) is stripped before
+   this check, so it never 404s a valid id. Only the four raster image types
+   are ever **candidates** for inline serving:
+
+   | Extension | Content-Type |
+   |-----------|---------------|
+   | `.png`  | `image/png`  |
+   | `.jpg`  | `image/jpeg` |
+   | `.gif`  | `image/gif`  |
+   | `.webp` | `image/webp` |
+
+   Being one of those four extensions is necessary but not sufficient
+   (#312 red-team F3). The stored extension comes from the UPLOADER's
+   claimed filename, not from the bytes — an SVG or HTML file uploaded as
+   `payload.png` with `X-Attach-Mime: image/png` would otherwise be served
+   `Content-Type: image/png` + `Content-Disposition: inline`, with
+   `X-Content-Type-Options: nosniff` as the only thing stopping the browser
+   from executing it. Before choosing the inline branch the server checks
+   the blob's own leading bytes against that extension's magic-byte
+   signature (PNG's 8-byte header, JPEG's `FF D8 FF`, GIF's `GIF87a`/
+   `GIF89a`, WebP's `RIFF….WEBP` container) — see `_sniff_matches_ext` in
+   `concept-server.py`. Only a match gets `Content-Type: <real mime>` +
+   `Content-Disposition: inline`.
+
+   **Everything else** — a signature mismatch on one of the four
+   extensions, any other extension (`.svg`, `.html`, `.js`, `.pdf`, office
+   formats, archives, media), and anything with an unrecognised or absent
+   extension (`.bin`) — is always served as
+   `Content-Type: application/octet-stream` with
+   `Content-Disposition: attachment; filename="<sanitised original name>";
+   filename*=UTF-8''<percent-encoded original name>` (RFC 5987, so non-ASCII
+   names still round-trip in browsers that support the extended parameter,
+   with a safe ASCII fallback for those that don't). `filename` comes from
+   `attachments/index.json` when known, falling back to the blob id.
+   `X-Content-Type-Options: nosniff` is set on EVERY response, inline or
+   not, as defense in depth — but the signature check, not nosniff, is what
+   actually decides whether a blob is ever offered inline.
+
+   This is what replaces the old outright SVG ban: an uploaded SVG (or HTML
+   or JS file) can only execute script against the bridge's own origin if
+   the browser renders it in place, and a forced download served as an inert
+   content-type can't do that — so accepting the type and controlling how
+   it's served (bytes-verified, not extension-trusted) is strictly safer
+   than a growing list of type-specific rejections, and it is what makes
+   "basically any file type" possible without reopening the XSS risk the
+   old allowlist existed to close.
+
+   **Stored extension derivation.** Never trusts the client's filename
+   extension blindly — only its *shape*. Given the client-supplied `name`
+   and `mime`: (1) if `name` contains a `.`, take the substring after the
+   last `.`, lowercase it, and use it if it matches `^[a-z0-9]{1,12}$`;
+   (2) else if the declared `mime` is one of the four raster types above,
+   use that type's canonical extension; (3) else fall back to Python's
+   stdlib `mimetypes.guess_extension(mime)` if it produces something matching
+   the same shape; (4) else `.bin`. The stored filename is always
+   `<sha256><ext>` — the client-supplied name is NEVER used as a filesystem
+   path component, only as free text in `index.json` and the
+   `Content-Disposition` header.
+
+   **`attachments/index.json`.** The blob store is purely content-addressed,
+   so the original filename would otherwise be unrecoverable outside the
+   journal. `index.json` is a flat `{ "<id>": {"name", "mime", "size",
+   "sha256", "added_at"} }` map, read-modify-write merged (never replaced
+   wholesale) and atomically written (`_durable_write`: tmp + fsync +
+   `os.replace`) under the SAME `_attachment_quota_lock` that already
+   serialises quota-check → write → accounting for attachments — so
+   concurrent uploads under `ThreadingHTTPServer` cannot race each other's
+   index entries. Entries are written only for a NEW blob (a dedup hit
+   leaves the original entry as-is). `GET /recovery`'s `attachments[]` now
+   also carries `name`/`mime` from this index for each entry, so a resumed
+   session can say "you attached spec.pdf" instead of a hash.
+
+5. **Verified heartbeat round-trip.** A naked `POST /heartbeat` with no
+   read-back is not enough — if the server failed to bind, never started,
+   or crashed on the first request, the POST exits 0 and the next step
+   opens a tab against a dead bridge with no error surfaced. The whole
+   concept session then sits behind a green "Claude verbunden" indicator
+   that never actually was true.
+
+   Do a **pre/post compare**, not just `claude_ts > 0`. A bare check
+   passes on any process that has ever seen a heartbeat — including a
+   stale bridge left running on the same port from a prior session. We
+   need proof that *our* POST landed on the running handler.
+
+   ```bash
+   # (a) Read claude_ts BEFORE our POST.
+   pre=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
+     | python -c "import sys,json; print(int(json.load(sys.stdin).get('claude_ts') or 0))" \
+     2>/dev/null)
+   pre=${pre:-0}
+
+   # (b) Send Claude pulse.
+   curl -s -X POST http://localhost:$PORT/heartbeat > /dev/null
+
+   # (c) Read claude_ts AFTER our POST. The server returns ms since epoch
+   #     (same units as JS Date.now()) — see § Timestamp unit convention
+   #     above. Our POST must have advanced the timestamp; if post <= pre,
+   #     either the POST never landed on the intended fresh bridge or the
+   #     bridge is wedged.
+   post=$(curl -s --max-time 3 http://localhost:$PORT/heartbeat \
+     | python -c "import sys,json; print(int(json.load(sys.stdin).get('claude_ts') or 0))" \
+     2>/dev/null)
+   post=${post:-0}
+
+   if [ "$post" -le "$pre" ]; then
+     echo "Bridge server on port $PORT did not advance claude_ts ($pre -> $post) — aborting."
+     kill $SERVER_PID 2>/dev/null
+     # Only YOUR state file (#417): a sibling session may have written its own
+     # since — compare the owner token before deleting.
+     node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
+     # Tell the user; DO NOT proceed to step 6 (opening the browser would
+     # land on a dead or stale bridge).
+     exit 1
+   fi
+   ```
+
+   The 3-second timeout matters: a hung TCP connect is the failure mode
+   we are trying to catch, not a slow JSON response. If you cannot run
+   the `python -c` snippet for some reason (locked-down environment),
+   substitute any tool that parses the JSON and compares `claude_ts`
+   numerically — never accept HTTP 200 alone, because the daemon
+   self-pulse keeps `server_ts` fresh even when the request-handling
+   thread is wedged.
+
+6. **Verify the concept URL serves 200, THEN open it in the user's real
+   Edge browser** (reuses the running instance, adds a tab). Both halves are
+   non-negotiable. The 200-gate exists because opening a tab on a 404 IS the
+   "concept url not found" the user sees, and that 404 has three independent
+   causes the bare open command cannot tell apart:
+   - wrong URL path — a bare filename instead of the full project-relative
+     `{html_path}` (`SimpleHTTPRequestHandler` serves from the server's cwd,
+     so `/foo.html` 404s when the file is at `docs/concepts/foo.html`);
+   - the server's cwd does not contain `{html_path}` — e.g. the bridge was
+     started in the worktree root while the HTML was written to the main
+     project tree, or vice-versa;
+   - empty `{port}`/`{html_path}` — the values were left as shell vars that
+     did not survive into this command, collapsing the URL to
+     `http://localhost:/`.
+
+   Gate the open on a real 200 so any of these aborts loudly with the
+   offending URL instead of opening a silent broken tab:
+
+   ```bash
+   # Substitute {port} and {html_path} with CONCRETE literal values — do NOT
+   # rely on $PORT/$HTML_PATH surviving from an earlier command; each Bash
+   # tool call is a fresh shell with no inherited state.
+   URL="http://localhost:{port}/{html_path}"
+   CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$URL")
+   if [ "$CODE" != "200" ]; then
+     echo "Concept URL $URL -> HTTP $CODE (expected 200) - NOT opening a tab."
+     echo "Fix: ensure the bridge server's cwd is the project root holding {html_path}, and that {port}/{html_path} are concrete values."
+     exit 1
+   fi
+
+   # Windows (primary target)
+   start "" msedge "$URL"
+   ```
+   On macOS: `open -a "Microsoft Edge" "$URL"`, on Linux: `microsoft-edge "$URL" &`.
+
+   The empty `""` is required on Windows — without it, `cmd.exe` interprets
+   the first quoted argument as a window title.
+
+   **NEVER substitute one of these instead of the shell command above:**
+   - `mcp__Claude_Preview__preview_start` / `preview_*` — sandboxed iframe,
+     no heartbeat, user cannot use it as the concept page.
+   - `mcp__plugin_playwright_playwright__browser_navigate` — opens a
+     separate Playwright-controlled browser the user does not see.
+   - Just printing the `http://localhost:{port}/…` URL to the user — the
+     user expects the page to open automatically, not to copy-paste a URL.
+
+   If `start "" msedge …` exits non-zero (Edge missing / not in PATH),
+   surface the exact error to the user and ask them how to proceed
+   (Edge protocol handler `start microsoft-edge:"http://…"`, manually
+   pasting the URL, or another installed browser). Do NOT silently fall
+   back to the preview MCP — the concept flow needs a real visible
+   browser window with an active tab.
+
+7. After monitoring ends (user says "fertig"/"done", aborts, finishes the
+   final report's close-out sheet, or Step 6 of SKILL.md fires the
+   completion card), run the bridge-side cleanup:
+   ```bash
+   # Graceful shutdown via HTTP — survives PID recycling on Windows where
+   # `kill $SERVER_PID` may target a process that already exited and got
+   # its PID reused by an unrelated program. The server replies 200 then
+   # calls os._exit(0); the listening socket is released within ~100 ms.
+   curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
+   # Only YOUR state file (#417): a sibling session may have written its own
+   # since — compare the owner token before deleting.
+   node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
+   ```
+   Also delete the polling cron via `CronDelete <cron_id>`. The state file
+   MUST be removed when the concept session is intentionally ended,
+   otherwise the next SessionStart will surface a phantom resume hint for a
+   server that no longer exists.
+
+   **Fallback if /shutdown fails.** If the curl POST returns non-zero (server
+   already dead, port unbound, etc.) just continue — the state file removal
+   and cron deletion still need to happen. A PID-kill is no longer required
+   because the watchdog (added in step 2) would terminate any surviving
+   process within 30 s when the cron stops POSTing heartbeats.
+
+   The **on-disk concept artefacts** (`docs/concepts/{date}-{slug}.html`
+   and the matching `-decisions.json`) are handled by `SKILL.md` § Step 6a
+   — Cleanup-By-Disposition. The bridge-side cleanup above is concerned
+   only with the server / state file / cron; disposition of the HTML
+   itself is driven by the user's final-report choice (`discard` /
+   `keep` / `gitignore` + optional `moveTo`) and runs as part of the
+   same Step 6 in SKILL.md.

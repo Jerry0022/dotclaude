@@ -38,7 +38,7 @@ function runHook(userMessage, home, cwd, field = "prompt") {
   // Always hand the hook a project dir of its own: it falls back to
   // process.cwd() for the delegation mode and the AFK lockout sentinel, and a
   // vitest run from the repo root would otherwise leak the repo's own state in
-  // (an armed AUTONOMOUS-LOCKOUT.flag during /run-backlog silenced the budget
+  // (an armed AUTONOMOUS-LOCKOUT.flag during /do-run backlog silenced the budget
   // line and failed the reset tests, 2026-09-22).
   cwd ??= emptyProject();
   const r = spawnSync(process.execPath, [HOOK], {
@@ -71,7 +71,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
 
   test("nudge is short and names every tier", () => {
     expect(Buffer.byteLength(nudge, "utf8")).toBeLessThan(600);
-    for (const needle of ["Inline", "devops:research", "devops:qa", "devops:redteam", "devops:po", "2–3 parallel", "run-agents", "Hard stop"]) {
+    for (const needle of ["Inline", "devops:research", "devops:qa", "devops:redteam", "devops:po", "2–3 parallel", "auto-agents", "Hard stop"]) {
       expect(nudge).toContain(needle);
     }
   });
@@ -151,7 +151,7 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
    * Incident 2026-09-20: the session had hit the weekly limit; "Erneut
    * versuchen" (16 chars) the next morning got only `[ui-locale: en]` — no
    * nudge (short prompt), no suffix (free is silent), no SessionStart — and
-   * the model wrote "Wochenbudget ~100 %" into its own /run-agents args. The
+   * the model wrote "Wochenbudget ~100 %" into its own /auto-agents args. The
    * full line must go out on that prompt, naming the reset.
    */
   const homeWith = (usage) => {

@@ -50,7 +50,7 @@ function buildPendingHint(service) {
   return [
     `[stop.guide.handoff] Your last answer handed the user manual web steps for ${service}.`,
     'If the user is doing those steps now (or asks about them), offer the devops',
-    '`web-guide` skill (target name `auto-guide`) to guide them live in their browser',
+    '`auto-guide` skill to guide them live in their browser',
     'tab. Offer only — do not invoke it unasked, and ignore this note if unrelated.',
   ].join('\n') + '\n';
 }

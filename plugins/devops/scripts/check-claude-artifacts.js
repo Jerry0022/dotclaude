@@ -52,7 +52,7 @@ const NOT_RUNTIME = new Set([
 
 /**
  * Runtime artifacts that are keyed to the SESSION cwd on purpose, not the repo
- * root: the /concept skill writes its state file into `{session-cwd}/.claude/`
+ * root: the /auto-concept skill writes its state file into `{session-cwd}/.claude/`
  * and every reader must look in that same place (concept/SKILL.md § state
  * file). Anything else joined onto the raw cwd is a finding.
  */

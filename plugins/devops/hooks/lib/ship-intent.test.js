@@ -2,16 +2,19 @@ import { describe, test, expect } from "vitest";
 import { isShipIntent, SHIP_KEYWORDS, SHIP_SLASH, KEYWORD_MAX_CHARS } from "./ship-intent.js";
 
 // One classifier for both hooks: prompt.ship.detect turns the intent into a
-// Skill('ship') instruction, prompt.flow.title-work marks the sidebar with
-// 🚀 Shipping instead of the bare hourglass. Observed 2026-09-21: a "/ship"
+// Skill('do-ship') instruction, prompt.flow.title-work marks the sidebar with
+// 🚀 Shipping instead of the bare hourglass. Observed 2026-09-21: a "/do-ship"
 // prompt after a change left "⏳" on the title for the whole pipeline because
 // the title hook only knew the hourglass and the skill's own rename is a
 // courtesy step the model sometimes skips.
 describe("ship-intent", () => {
   test("slash invocations of the ship skill count, with or without arguments", () => {
+    expect(isShipIntent("/do-ship")).toBe(true);
+    expect(isShipIntent("/devops:do-ship")).toBe(true);
+    expect(isShipIntent("  /do-ship --keep")).toBe(true);
+    // the pre-PR-2 name still counts
     expect(isShipIntent("/ship")).toBe(true);
-    expect(isShipIntent("/devops:ship")).toBe(true);
-    expect(isShipIntent("  /ship --keep")).toBe(true);
+    expect(isShipIntent("/devops:ship --keep")).toBe(true);
     expect(isShipIntent("/Ship it")).toBe(true);
     expect(SHIP_SLASH.test("/shipping-list")).toBe(false);
   });
@@ -27,7 +30,7 @@ describe("ship-intent", () => {
     for (const p of ["fertig?", "Fertig ?", "ship it?", "können wir das releasen?"]) {
       expect(isShipIntent(p), p).toBe(false);
     }
-    expect(isShipIntent("/ship?")).toBe(true);
+    expect(isShipIntent("/do-ship?")).toBe(true);
   });
 
   test("ordinary prompts are not a ship", () => {
@@ -45,10 +48,10 @@ describe("ship-intent", () => {
       "erst sanduhr und dann ready erwarten und ship immer nur wenn das letzte was gemacht wurde ein ship war";
     expect(prose.length).toBeGreaterThan(KEYWORD_MAX_CHARS);
     expect(isShipIntent(prose)).toBe(false);
-    expect(isShipIntent("In `.claude/skills/ship/SKILL.md` (project ship extension of the dotclaude repo, Step 8) the hook path " +
+    expect(isShipIntent("In `.claude/skills/do-ship/SKILL.md` (project ship extension of the dotclaude repo, Step 8) the hook path " +
       "is resolved with `ls | head -1`, which picks the oldest cache dir. Fix: prefer the marketplace clone.")).toBe(false);
     expect(isShipIntent("Ship trotzdem — mit skipChecks, die roten Befunde landen als Issue.")).toBe(true);
-    expect(isShipIntent("/ship " + "x".repeat(400))).toBe(true);
+    expect(isShipIntent("/do-ship " + "x".repeat(400))).toBe(true);
     expect(isShipIntent("x".repeat(KEYWORD_MAX_CHARS - 8) + " ship it")).toBe(true);
     expect(isShipIntent("x".repeat(KEYWORD_MAX_CHARS) + " ship it")).toBe(false);
   });

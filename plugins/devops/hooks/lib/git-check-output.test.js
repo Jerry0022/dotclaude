@@ -58,7 +58,7 @@ describe("#268 — findings survive a session that never asks", () => {
 
     // The exact findings from the issue report must be present as their own lines,
     // not merely summarised inside the ask block.
-    expect(out).toContain("- 13 unpushed commit(s) → run `/ship` to commit, push & create PR");
+    expect(out).toContain("- 13 unpushed commit(s) → run `/do-ship` to commit, push & create PR");
     expect(out).toContain("- 7 stash entries → review with `git stash list`");
     expect(out).toContain("**current repo**");
   });
@@ -69,7 +69,7 @@ describe("#268 — findings survive a session that never asks", () => {
       workspace: onMain,
       cwd: CWD,
     }));
-    expect(out).toContain("- 4 uncommitted file(s) → run `/ship` to commit, push & create PR");
+    expect(out).toContain("- 4 uncommitted file(s) → run `/do-ship` to commit, push & create PR");
   });
 
   test("the directive demands the findings be restated in the final message", () => {
@@ -103,15 +103,15 @@ describe("#268 — findings survive a session that never asks", () => {
         cwd: CWD,
       });
       expect(out[0]).toContain("Restate only findings that still hold");
-      expect(out[0]).toContain("/ship landed the changes");
+      expect(out[0]).toContain("/do-ship landed the changes");
       expect(out[0]).toContain('no "outdated" note');
     }
   });
 
   test("no input combination drops a current-repo finding — full rendered line, in the repo block", () => {
     const cases = [
-      [issue("uncommitted", 1, "1 uncommitted file(s)"), "- 1 uncommitted file(s) → run `/ship` to commit, push & create PR"],
-      [issue("unpushed", 1, "1 unpushed commit(s)"), "- 1 unpushed commit(s) → run `/ship` to commit, push & create PR"],
+      [issue("uncommitted", 1, "1 uncommitted file(s)"), "- 1 uncommitted file(s) → run `/do-ship` to commit, push & create PR"],
+      [issue("unpushed", 1, "1 unpushed commit(s)"), "- 1 unpushed commit(s) → run `/do-ship` to commit, push & create PR"],
       [issue("stash", 1, "1 stash entry"), "- 1 stash entry → review with `git stash list`, then `git stash pop` or `git stash drop`"],
     ];
     for (const workspace of [null, onMain, detached, featureNoWorktree]) {
@@ -185,7 +185,7 @@ describe("ask block", () => {
     expect(out).toContain("Erst aktuelle Changes shippen");
     expect(out).toContain("Changes mitnehmen in neuen Worktree");
     expect(out).toContain("Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1");
-    expect(out).toContain("Ship-first: invoke /ship");
+    expect(out).toContain("Ship-first: invoke /do-ship");
     expect(out).toContain("Take-along: `git stash`");
     expect(out).toContain("Stay: set env `DEVOPS_ALLOW_MAIN=1`");
   });
@@ -193,7 +193,7 @@ describe("ask block", () => {
   test("offers only the worktree option when there are no pending changes", () => {
     const out = text(compose({ dirty: [], workspace: onMain, cwd: CWD }));
     expect(out).toContain("Worktree + Feature-Branch anlegen (recommended)");
-    expect(out).not.toContain("Ship-first: invoke /ship");
+    expect(out).not.toContain("Ship-first: invoke /do-ship");
     expect(out).not.toContain("Take-along: `git stash`");
   });
 
@@ -205,7 +205,7 @@ describe("ask block", () => {
     }));
     expect(out).toContain("- 3 stash entries → review with `git stash list`");
     expect(out).toContain("Worktree + Feature-Branch anlegen (recommended)");
-    expect(out).not.toContain("Ship-first: invoke /ship");
+    expect(out).not.toContain("Ship-first: invoke /do-ship");
   });
 
   test("non-main workspace types get the informative bypass wording and no DEVOPS_ALLOW_MAIN resolution", () => {

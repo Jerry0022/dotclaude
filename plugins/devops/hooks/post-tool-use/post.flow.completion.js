@@ -148,7 +148,7 @@ const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 /**
  * Did a ship_release response report a merge? MCP results arrive as
  * `{ content: [{ type: 'text', text: '<json>' }] }`; tolerate a bare object or
- * string too. `merged` is the field the ship skill itself gates on — never
+ * string too. `merged` is the field the do-ship skill itself gates on — never
  * `success`, which the skipped shapes (file-only, no-remote) also set.
  */
 function shipReleaseMerged(toolResponse) {
@@ -456,7 +456,7 @@ process.stdin.on('end', () => {
   if (editCount >= 5) {
     lines.push(
       '',
-      `SHIP: ${editCount} code edits this session. Recommend /ship when task is done.`,
+      `SHIP: ${editCount} code edits this session. Recommend /do-ship when task is done.`,
     );
     // Desktop-takeover question — only inject if profile lists packaged_electron_final_test as must-ask
     const lang = getLocale(hook.session_id);

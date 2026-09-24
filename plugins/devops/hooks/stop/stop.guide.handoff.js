@@ -4,8 +4,8 @@
  * @version 0.3.0
  * @event Stop
  * @plugin devops
- * @description Offer the web-guide skill when Claude's own answer hands the user a manual click-through on an external website.
- *   web-guide was invoked 0 times in 1 128 sessions although Claude
+ * @description Offer the auto-guide skill when Claude's own answer hands the user a manual click-through on an external website.
+ *   auto-guide was invoked 0 times in 1 128 sessions although Claude
  *   repeatedly wrote out such click-throughs (Upstash setup, Discord bot
  *   authorization, Supabase MCP login, …). The signal is in Claude's OWN
  *   last answer, so a UserPromptSubmit hook cannot see it.
@@ -30,7 +30,7 @@
  *   Never acts when: stop_hook_active (loop guard), the turn is silent /
  *   machine-driven (session flag OR the turn's opening prompt in the
  *   transcript — the flag alone races stop.flow.guard deleting it), the
- *   turn already invoked web-guide / auto-guide, or input is malformed.
+ *   turn already invoked auto-guide (or web-guide), or input is malformed.
  */
 
 require('../lib/plugin-guard');
@@ -76,7 +76,7 @@ function buildReason(service) {
     '[stop.guide.handoff] Manual web hand-off detected — this reads like a text',
     `click-through for ${service} instead of a live-guided step.`,
     '',
-    'Offer the devops `web-guide` skill (target name `auto-guide`): it drives the',
+    'Offer the devops `auto-guide` skill: it drives the',
     'user through the exact steps live in their browser tab, instead of a text list',
     'they have to execute by hand.',
     '',

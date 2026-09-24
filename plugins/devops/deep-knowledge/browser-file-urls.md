@@ -59,22 +59,22 @@ If the output shows `file:///c/Users/...` (no colon), the URL is broken.
 
 ## Skills that must follow this rule
 
-- `run-autonomous` (AUTONOMOUS-REPORT.html)
+- do-run autonomous mode (AUTONOMOUS-REPORT.html)
 - `concept` (concept pages)
 - `setup-cleanup` (interactive branch report)
 - any future skill that writes an HTML file and opens it in a browser
 
 ## Pair every `file://` open with a tracker call (issue #160)
 
-When the opened file lives inside a worktree, `/ship` will later
+When the opened file lives inside a worktree, `/do-ship` will later
 remove that worktree and the user's browser tab will 404. The session
-tracker keeps a list of every file the session opened so the ship skill
+tracker keeps a list of every file the session opened so the do-ship skill
 can re-open it from the equivalent main-repo path post-cleanup:
 
 ```bash
 start msedge "file:///$(cygpath -m "$ABS_PATH")"
 
-# Track the open so /ship Step 5c can re-open from main repo after
+# Track the open so /do-ship Step 5c can re-open from main repo after
 # ship_cleanup nukes the worktree.
 node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
   "$(cygpath -w "$ABS_PATH")" \
@@ -83,7 +83,7 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
 
 `cygpath -w` produces the Windows-style absolute path (`C:\Users\…`) the
 tracker compares against the worktree root. The `--context` flag is
-optional but useful in `/ship` Step 5c logs (`concept`,
+optional but useful in `/do-ship` Step 5c logs (`concept`,
 `autonomous-report`, `repo-health`, etc.).
 
 ## Cross-platform note

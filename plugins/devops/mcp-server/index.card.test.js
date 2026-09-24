@@ -389,7 +389,7 @@ describe("render_completion_card — every input. field lands somewhere", () => 
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha", stableLag: { versions: 3, days: 5 } } },
     });
-    expect(text).toContain("› alpha liegt 3 Versionen / 5 Tage vor stable → `/promote`");
+    expect(text).toContain("› alpha liegt 3 Versionen / 5 Tage vor stable → `/do-ship promote`");
   });
 
   test("pending overrides evidence with a provisional-evidence post and the block's items as points", async () => {
@@ -521,9 +521,9 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
   test("an identifier-like area keeps its subject on a lowercase description; a worded area is dropped", async () => {
     const text = await cardText({
       variant: "ready", summary: "Subjekt", lang: "de", session_id: "test-ev-6",
-      changes: [{ area: "run-agents", description: "nutzt dieselben Schwellen" }, { area: "Ship", description: "merged ohne Tag" }],
+      changes: [{ area: "auto-agents", description: "nutzt dieselben Schwellen" }, { area: "Ship", description: "merged ohne Tag" }],
     });
-    expect(text).toMatch(/^› run-agents nutzt dieselben Schwellen$/m);
+    expect(text).toMatch(/^› auto-agents nutzt dieselben Schwellen$/m);
     expect(text).toMatch(/^› merged ohne Tag$/m);
   });
 

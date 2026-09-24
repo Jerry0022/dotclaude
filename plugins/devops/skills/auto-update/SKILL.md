@@ -6,8 +6,9 @@ description: >-
   ss.plugin.update hook (pull + cache + registry), then adds changelog and
   verification report. Triggers on: "update plugin", "plugin updaten",
   "self update", "devops update", "neue version". Explicit user request only.
-layer: 0
+layer: 2
 invokes: []
+user-invocable: false
 triggers:
   en: ["update plugin", "self update", "devops update"]
   de: ["plugin updaten", "neue version"]
@@ -146,7 +147,7 @@ Quiet style: {synced | current | customized — left as is | not installed}
 Restart the session for hooks and MCP tools to take effect.
 Skills are available immediately.
 
-⚠ MCP tools (/ship, /setup-issue, completion card) will be
+⚠ MCP tools (/do-ship, /auto-issue, completion card) will be
 blocked by pre.mcp.health until restart — the running MCP processes
 point at the now-deleted old installPath.
 ```

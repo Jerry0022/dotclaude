@@ -2,6 +2,13 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+// Extension dirs of the pre-PR-2 names stay valid as FALLBACKS (a consumer
+// extension written before the rename keeps working), so a Step 0 / prose ref
+// to an old name is legitimate — but only for the skill that owns it now.
+const { canonicalSkillName } = require("../hooks/lib/skill-names.js");
 
 // Repo-wide contracts every SKILL.md must satisfy. Each of these caught a real
 // defect that was invisible at review time and silent at runtime.
@@ -35,19 +42,25 @@ function withoutCodeFences(body) {
  * Every markdown file belonging to a skill — SKILL.md, reference.md, any other
  * top-level doc, plus the sibling deep-knowledge dir. Enumerating only SKILL.md
  * left reference.md invisible to all three assertions, which is exactly where a
- * stale path survives unnoticed.
+ * stale path survives unnoticed. Mode files of a folding skill
+ * (`modes/<mode>.md`, `modes/<mode>/*.md`, `modes/<mode>/deep-knowledge/*.md`)
+ * belong to it too.
  */
 function skillDocs(skill) {
   const dir = path.join(SKILLS_DIR, skill);
-  const docs = fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter(e => e.isFile() && e.name.endsWith(".md"))
-    .map(e => [e.name]);
-
-  const dkDir = path.join(dir, "deep-knowledge");
-  if (fs.existsSync(dkDir)) {
-    for (const f of fs.readdirSync(dkDir).filter(f => f.endsWith(".md"))) {
-      docs.push(["deep-knowledge", f]);
+  const mdIn = (...rel) => {
+    const abs = path.join(dir, ...rel);
+    if (!fs.existsSync(abs)) return [];
+    return fs.readdirSync(abs, { withFileTypes: true })
+      .filter(e => e.isFile() && e.name.endsWith(".md"))
+      .map(e => [...rel, e.name]);
+  };
+  const docs = [...mdIn(), ...mdIn("deep-knowledge")];
+  const modesDir = path.join(dir, "modes");
+  if (fs.existsSync(modesDir)) {
+    docs.push(...mdIn("modes"));
+    for (const e of fs.readdirSync(modesDir, { withFileTypes: true }).filter(e => e.isDirectory())) {
+      docs.push(...mdIn("modes", e.name), ...mdIn("modes", e.name, "deep-knowledge"));
     }
   }
   return docs;
@@ -81,10 +94,12 @@ describe("bare deep-knowledge/ refs resolve", () => {
   });
 
   test.each(skillDirs())("%s", skill => {
-    const ownsSibling = fs.existsSync(path.join(SKILLS_DIR, skill, "deep-knowledge"));
     const unresolved = [];
 
     for (const rel of skillDocs(skill)) {
+      // A mode's own docs (modes/<mode>/…) resolve against modes/<mode>/deep-knowledge/.
+      const base = rel[0] === "modes" && rel.length > 2 ? path.join(SKILLS_DIR, skill, "modes", rel[1]) : path.join(SKILLS_DIR, skill);
+      const ownsSibling = fs.existsSync(path.join(base, "deep-knowledge"));
       const body = withoutCodeFences(
         fs.readFileSync(path.join(SKILLS_DIR, skill, ...rel), "utf8"),
       );
@@ -98,19 +113,17 @@ describe("bare deep-knowledge/ refs resolve", () => {
         // there. Without one there is only one possible referent, the
         // plugin-level dir — but a typo there is just as dead, only silent.
         const target = ownsSibling
-          ? path.join(SKILLS_DIR, skill, "deep-knowledge", file)
+          ? path.join(base, "deep-knowledge", file)
           : path.join(PLUGIN_DK_DIR, file);
         if (!fs.existsSync(target)) {
-          unresolved.push(`${rel.join("/")} → deep-knowledge/${file}`);
+          unresolved.push(`${rel.join("/")} → deep-knowledge/${file} (${ownsSibling ? "sibling" : "plugin-level"})`);
         }
       }
     }
 
     expect(
       unresolved,
-      ownsSibling
-        ? "bare deep-knowledge/ ref resolves to a non-existent sibling — qualify plugin-level refs with {PLUGIN_ROOT}/"
-        : "bare deep-knowledge/ ref names no plugin-level file",
+      "bare deep-knowledge/ ref does not resolve — a sibling dir makes it mean the sibling; qualify plugin-level refs with {PLUGIN_ROOT}/",
     ).toEqual([]);
   });
 });
@@ -168,24 +181,31 @@ describe("skill extension paths point at skills that exist", () => {
   const proseFiles = [];
   for (const skill of skillDirs()) {
     for (const rel of skillDocs(skill)) {
-      proseFiles.push([`skills/${skill}/${rel.join("/")}`, path.join(SKILLS_DIR, skill, ...rel)]);
+      proseFiles.push([`skills/${skill}/${rel.join("/")}`, path.join(SKILLS_DIR, skill, ...rel), skill]);
     }
   }
   for (const [dir, label] of [["deep-knowledge", "deep-knowledge"], ["agents", "agents"]]) {
     const abs = path.join(PLUGIN_ROOT, dir);
     if (!fs.existsSync(abs)) continue;
     for (const f of fs.readdirSync(abs).filter(f => f.endsWith(".md"))) {
-      proseFiles.push([`${label}/${f}`, path.join(abs, f)]);
+      proseFiles.push([`${label}/${f}`, path.join(abs, f), null]);
     }
   }
 
-  test.each(proseFiles)("%s", (_label, file) => {
+  test.each(proseFiles)("%s", (_label, file, owner) => {
     const body = withoutCodeFences(fs.readFileSync(file, "utf8"));
     const unknown = [];
     for (const m of body.matchAll(/\.claude\/skills\/([A-Za-z0-9._-]+)\//g)) {
       const dir = m[1];
       if (dir.startsWith("{") || dir.startsWith("<")) continue; // placeholder
       if (EXEMPT_EXTENSION_DIRS.has(dir)) continue;
+      // An old name is a legitimate fallback dir — in the docs of the skill
+      // that owns it now, or in plugin-level prose that says so on the line.
+      const legacyOwner = canonicalSkillName(dir);
+      if (!SKILL_NAMES.has(dir) && legacyOwner !== dir && SKILL_NAMES.has(legacyOwner)) {
+        const lineText = body.slice(body.lastIndexOf("\n", m.index) + 1, body.indexOf("\n", m.index));
+        if (owner === legacyOwner || /pre-PR-2|fallback/i.test(lineText)) continue;
+      }
       if (!SKILL_NAMES.has(dir)) unknown.push(`.claude/skills/${dir}/`);
     }
     expect([...new Set(unknown)], "extension path names a skill that does not exist").toEqual([]);
@@ -201,17 +221,19 @@ describe("skill extension paths point at skills that exist", () => {
       .map(m => m[1])
       .filter(d => !d.startsWith("{") && !d.startsWith("<"));
     for (const dir of globalRefs) {
-      expect(dir, `Step 0 global extension dir must equal the frontmatter name`).toBe(name);
+      // The new name, or a pre-PR-2 name of this very skill (fallback dir).
+      const ok = dir === name || canonicalSkillName(dir) === name;
+      expect(ok, `Step 0 global extension dir ${dir} must be the frontmatter name ${name} or one of its pre-PR-2 names`).toBe(true);
     }
   });
 });
 
 describe("issue title prefixes are members of the canonical table", () => {
-  // setup-issue treats a title-format violation as a hard error, so a skill
+  // auto-issue treats a title-format violation as a hard error, so a skill
   // handing over `[FEAT]` instead of `[FEATURE]` fails at issue-creation time —
   // in the branch whose whole job is filing the issue somewhere else.
   const rules = fs.readFileSync(
-    path.join(SKILLS_DIR, "setup-issue", "deep-knowledge", "issue-rules.md"),
+    path.join(SKILLS_DIR, "auto-issue", "deep-knowledge", "issue-rules.md"),
     "utf8",
   );
   const canonical = new Set([...rules.matchAll(/\|\s*`\[([A-Z]+)\]`\s*\|/g)].map(m => m[1]));

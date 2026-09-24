@@ -85,7 +85,7 @@ a hard gate), so automatic execution carries no risk of blocking workflows.
 
 ## Integration Points
 
-### 1. /ship — Pre-PR Code Review (Step 2, Quality Gates)
+### 1. /do-ship — Pre-PR Code Review (Step 2, Quality Gates)
 
 **When:** After build + lint + tests pass, before commit/push/PR.
 **Skill:** `/codex:rescue` (delegates diff review to Codex).
@@ -100,7 +100,7 @@ a hard gate), so automatic execution carries no risk of blocking workflows.
 **Value:** Only point in the pipeline where a second AI reviews the code
 systematically. Tests verify behavior; Codex reviews design and logic.
 
-### 2. /fix — Rescue on Unclear Root Cause (Step 6, Decision)
+### 2. /auto-fix — Rescue on Unclear Root Cause (Step 6, Decision)
 
 **When:** Root cause analysis yields no clear result after investigation.
 **Skill:** `/codex:rescue`
@@ -118,12 +118,12 @@ systematically. Tests verify behavior; Codex reviews design and logic.
 **When:** 2+ consecutive Bash failures detected.
 **Skill:** `/codex:rescue` (mentioned as alternative)
 **Behavior:**
-- Existing behavior: mandate `/fix` (as `additionalContext` on
+- Existing behavior: mandate `/auto-fix` (as `additionalContext` on
   PostToolUseFailure — plain stdout of a PostToolUse* hook never reaches the model)
 - Added: mention `/codex:rescue` as alternative for delegation
 - No automatic invocation — hook outputs text only (cannot invoke skills)
 
-**Value:** Low-cost hint. The actual automatic invocation happens when `/fix`
+**Value:** Low-cost hint. The actual automatic invocation happens when `/auto-fix`
 runs and reaches Step 6 with an unclear root cause (see Integration Point 2).
 
 ### 4. QA Agent — Codex Review
@@ -154,8 +154,8 @@ runs and reaches Step 6 with an unclear root cause (see Integration Point 2).
 
 | Integration Point | Estimated Cost | Frequency |
 |---|---|---|
-| /ship review | ~20-40K tokens | Per ship (~2-5/week) |
-| /fix rescue | ~30-50K tokens | When stuck (~1-3/week) |
+| /do-ship review | ~20-40K tokens | Per ship (~2-5/week) |
+| /auto-fix rescue | ~30-50K tokens | When stuck (~1-3/week) |
 | post.flow.debug | 0 (hook text only) | N/A |
 | QA review | ~20-40K tokens | Per QA run |
 | Research delegation | ~20-40K tokens | Per research task |

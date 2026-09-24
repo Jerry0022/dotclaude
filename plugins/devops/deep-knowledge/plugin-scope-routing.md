@@ -5,7 +5,7 @@ in some other project becomes an **issue in the plugin source repo**, never a
 local fix there.
 
 This is the single source of truth for the "which repo owns this change?"
-question. `/claude-learn` Step 2 implements it for captured learnings; every
+question. `/do-learn` Step 2 implements it for captured learnings; every
 other skill, agent, and ad-hoc turn follows the same hierarchy.
 
 ## The hierarchy
@@ -50,7 +50,7 @@ Do not re-implement it.
 
 1. Resolve the upstream slug from the installed marketplace metadata
    (`{owner.name}/{name}`); canonical value is `Jerry0022/dotclaude`.
-2. Invoke `/setup-issue` via the **Skill** tool — never `gh issue create`
+2. Invoke `/auto-issue` via the **Skill** tool — never `gh issue create`
    directly (see `plugin-behavior.md` → "Issue Creation — Always Delegate").
    Hand it a self-contained prompt:
    - **title** — `[BUG] <short>` for a defect, `[FEATURE] <short>` for a gap
@@ -92,6 +92,6 @@ explicitly. If you cannot, it is an upstream issue.
 When the target is a *third* project (neither this session's nor the plugin's),
 the topic still wins: a plugin problem goes upstream regardless of which project
 surfaced it. A genuinely project-specific rule for another repo becomes an issue
-in that repo (via `/setup-issue`), or — if it has no GitHub remote — a
+in that repo (via `/auto-issue`), or — if it has no GitHub remote — a
 copy-pastable prompt for the user. Ask before writing files into another
 project's tree.

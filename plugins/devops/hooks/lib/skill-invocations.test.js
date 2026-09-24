@@ -19,12 +19,18 @@ const skill = (name, toolName = "Skill") =>
 
 describe("invokedSkillsInTranscript", () => {
   test("collects namespaced and bare skill names from the raw JSONL", () => {
-    const t = [user("a"), skill("devops:concept"), user("b"), skill("fix")].join("\n");
-    expect([...invokedSkillsInTranscript(t)].sort()).toEqual(["concept", "fix"]);
+    const t = [user("a"), skill("devops:auto-concept"), user("b"), skill("auto-fix")].join("\n");
+    expect([...invokedSkillsInTranscript(t)].sort()).toEqual(["auto-concept", "auto-fix"]);
+  });
+
+  test("a pre-PR-2 name also counts as its new name (session straddling the update)", () => {
+    const t = [user("a"), skill("devops:ship"), user("b"), skill("fix"), skill("devops:run-backlog")].join("\n");
+    const got = invokedSkillsInTranscript(t);
+    for (const n of ["ship", "do-ship", "fix", "auto-fix", "run-backlog", "do-run"]) expect(got.has(n), n).toBe(true);
   });
 
   test("connector-namespaced Skill tool counts", () => {
-    expect(invokedSkillsInTranscript(skill("devops:ship", "mcp__x__Skill")).has("ship")).toBe(true);
+    expect(invokedSkillsInTranscript(skill("devops:do-ship", "mcp__x__Skill")).has("do-ship")).toBe(true);
   });
 
   test("empty / non-string → empty set", () => {
@@ -34,10 +40,10 @@ describe("invokedSkillsInTranscript", () => {
 });
 
 describe("skillInvokedThisTurn", () => {
-  const isFix = (_i, name) => name === "fix";
+  const isFix = (_i, name) => name === "auto-fix";
 
   test("true when this turn invoked it, tool results do not end the turn", () => {
-    expect(skillInvokedThisTurn([user("go"), skill("devops:fix"), toolResult()].join("\n"), isFix)).toBe(true);
+    expect(skillInvokedThisTurn([user("go"), skill("devops:auto-fix"), toolResult()].join("\n"), isFix)).toBe(true);
   });
 
   test("false when it ran in an earlier turn", () => {
@@ -83,30 +89,31 @@ describe("slash-started skills (R5)", () => {
   const cmdString = (name) => line({ type: "user", message: { role: "user", content: `<command-name>${name}</command-name>` } });
 
   test.each([
-    ["/devops:concept", "concept"],
-    ["/concept", "concept"],
-    ["devops:tune-rethink", "tune-rethink"],
-    ["/fix", "fix"],
+    ["/devops:auto-concept", "auto-concept"],
+    ["/auto-concept", "auto-concept"],
+    ["devops:tune-rethink", "do-run"],
+    ["/fix", "auto-fix"],
+    ["/devops:ship", "do-ship"],
   ])("invokedSkillsInTranscript collects <command-name>%s</command-name>", (raw, name) => {
     expect(invokedSkillsInTranscript([cmd(raw), user("later")].join("\n")).has(name)).toBe(true);
     expect(invokedSkillsInTranscript(cmdString(raw)).has(name)).toBe(true);
   });
 
   test("skillInvokedThisTurn counts a slash command that opened the turn", () => {
-    const isIssue = (_i, name) => name === "setup-issue";
-    expect(skillInvokedThisTurn([cmd("/devops:setup-issue"), toolResult()].join("\n"), isIssue)).toBe(true);
-    expect(skillInvokedThisTurn([cmd("/setup-issue")].join("\n"), isIssue)).toBe(true);
+    const isIssue = (_i, name) => name === "auto-issue";
+    expect(skillInvokedThisTurn([cmd("/devops:auto-issue"), toolResult()].join("\n"), isIssue)).toBe(true);
+    expect(skillInvokedThisTurn([cmd("/auto-issue")].join("\n"), isIssue)).toBe(true);
   });
 
   test("… but not one from an earlier turn", () => {
-    const isIssue = (_i, name) => name === "setup-issue";
-    expect(skillInvokedThisTurn([cmd("/devops:setup-issue"), user("next")].join("\n"), isIssue)).toBe(false);
+    const isIssue = (_i, name) => name === "auto-issue";
+    expect(skillInvokedThisTurn([cmd("/devops:auto-issue"), user("next")].join("\n"), isIssue)).toBe(false);
   });
 
   test("the predicate receives the raw name as input.skill", () => {
     let seen = null;
-    skillInvokedThisTurn(cmd("/devops:web-guide"), (input) => { seen = input; return false; });
-    expect(seen).toEqual({ skill: "devops:web-guide" });
+    skillInvokedThisTurn(cmd("/devops:auto-guide"), (input) => { seen = input; return false; });
+    expect(seen).toEqual({ skill: "devops:auto-guide" });
   });
 });
 

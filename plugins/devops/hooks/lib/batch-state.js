@@ -1,7 +1,7 @@
 /**
  * @module batch-state
  * @version 0.4.1
- * @description State and classification for the `/claude-batch` collect mode.
+ * @description State and classification for the `/do-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
  * on them, until the user fires the merge with an execute marker.
@@ -66,7 +66,7 @@ const MARKER_SUGGESTIONS = ['>>', '>go', '>start'];
  * hook that reads stdin would fight over the stream.
  *
  * The AUTONOMOUS_* entries are ADDITIONS — they do not match silent-turn's
- * patterns. Without them an AFK `/run-backlog` or `/run-autonomous` resume
+ * patterns. Without them an AFK `/do-run backlog` or `/do-run autonomous` resume
  * would be swallowed into the queue and the night run would never start.
  */
 const MACHINE_PATTERNS = [
@@ -92,7 +92,7 @@ const ATTACHMENT_PATTERNS = [
 ];
 
 /**
- * Phrases that turn an ordinary prompt into a claude-batch invocation.
+ * Phrases that turn an ordinary prompt into a do-batch invocation.
  *
  * Mirrors the skill's own trigger list. Used ONLY to recognise an activating
  * prompt while the mode is still OFF — never to decide collect vs. execute.
@@ -150,7 +150,7 @@ const ROUTE_WORDS = /\b(on|an|start|off|aus|stop|go|los|merge|marker|status|bitt
 
 /**
  * Below this many characters of residue, an invocation is "activation only" —
- * `/claude-batch on` and friends. Above it the user typed work into the very
+ * `/do-batch on` and friends. Above it the user typed work into the very
  * prompt that turns collection on, and that work must be filed as a note
  * instead of executed.
  */
@@ -302,7 +302,7 @@ function appendNote(cwd, text, when) {
   const file = notesPath(cwd);
   const header = fs.existsSync(file)
     ? ''
-    : '# claude-batch notes\n\nCollected prompts, newest last. Edit freely — the merge reads this file.\n';
+    : '# do-batch notes\n\nCollected prompts, newest last. Edit freely — the merge reads this file.\n';
   fs.appendFileSync(file, `${header}\n<!-- ${stamp} -->\n${String(text).trim()}\n`, 'utf8');
   return countNotes(cwd);
 }
@@ -375,7 +375,7 @@ function isMachinePrompt(text) {
 
 /**
  * An expanded slash command carries a <command-name> tag — the raw text is NOT
- * literally "/claude-batch off". Comparing against the typed form would miss
+ * literally "/do-batch off". Comparing against the typed form would miss
  * exactly the escape hatch it is meant to protect.
  */
 function isExpandedCommand(text) {
@@ -503,7 +503,7 @@ function effectiveMarker(cwd) {
 
 // ── invocation routing ─────────────────────────────────────────────────────
 
-/** First-token routes of `/claude-batch <arg>`, mirroring the skill's Step 1. */
+/** First-token routes of `/do-batch <arg>`, mirroring the skill's Step 1. */
 const BATCH_ROUTES = {
   on:     /^(on|an|start)$/i,
   off:    /^(off|aus|stop)$/i,
@@ -516,7 +516,7 @@ const BATCH_ROUTES = {
 /**
  * Routes the hook absorbs itself while the mode is already ON.
  *
- * `/claude-batch`, `/claude-batch on` and `/claude-batch <text>` while
+ * `/do-batch`, `/do-batch on` and `/do-batch <text>` while
  * collecting are not requests for a turn: the user either forgot the mode is
  * on, or is filing a note through the command. `help` is a static text.
  * Letting any of them reach the model costs a full turn — the exact cost the
@@ -526,10 +526,10 @@ const BATCH_ROUTES = {
 const REARM_ROUTES = new Set(['bare', 'on', 'content', 'help']);
 
 /**
- * Is this prompt a `/claude-batch` invocation, and which route does it take?
+ * Is this prompt a `/do-batch` invocation, and which route does it take?
  *
  * Accepts the expanded form (`<command-name>` tag, what the harness delivers)
- * and the raw form (`/claude-batch …` at line start) so the decision does not
+ * and the raw form (`/do-batch …` at line start) so the decision does not
  * depend on which one a given runtime hands over. Routes on the FIRST token
  * only; everything after it is `residue` — note content, never an instruction.
  *
@@ -542,11 +542,11 @@ function parseBatchCommand(text) {
   let args;
   const cmd = /<command-name>\s*\/?([\w.:-]+)\s*<\/command-name>/i.exec(s);
   if (cmd) {
-    if (!/(?:^|[:/])claude-batch$/i.test(cmd[1])) return null;
+    if (!/(?:^|[:/])(?:do|claude)-batch$/i.test(cmd[1])) return null;
     const a = /<command-args>([\s\S]*?)<\/command-args>/i.exec(s);
     args = a ? a[1] : '';
   } else {
-    const raw = /^\s*\/(?:devops:)?claude-batch(?=\s|$)([\s\S]*)$/i.exec(s);
+    const raw = /^\s*\/(?:devops:)?(?:do|claude)-batch(?=\s|$)([\s\S]*)$/i.exec(s);
     if (!raw) return null;
     args = raw[1];
   }
@@ -578,18 +578,18 @@ function renderModeSummary(p) {
     `Sammelmodus AKTIV${count} · Marker "${marker}"`,
     `• Sammeln:    jeder Prompt ohne Marker landet als Notiz in .claude/batch.md.`,
     `              Das rote "Eingabe blockiert"-Panel ist dabei normal, kein Fehler.`,
-    `• Umsetzen:   "${marker} <text>" oder /claude-batch go — merged zuerst main in den`,
+    `• Umsetzen:   "${marker} <text>" oder /do-batch go — merged zuerst main in den`,
     `              Branch, liest alle Notizen und plant EINE Umsetzung. Text nach dem`,
     `              Marker ist Anweisung für diese nächste Phase.`,
-    `• Abschalten: /claude-batch off — beendet nur das Sammeln, Notizen bleiben;`,
-    `              /claude-batch on sammelt später weiter (auch nach dem Auto-Ende).`,
+    `• Abschalten: /do-batch off — beendet nur das Sammeln, Notizen bleiben;`,
+    `              /do-batch on sammelt später weiter (auch nach dem Auto-Ende).`,
     `• Auto-Ende:  nach ${hours} Stunden oder ${max} Notizen.`,
-    `• Sonstiges:  /claude-batch status · marker (Marker ändern) · help (Ablauf ausführlich).`,
+    `• Sonstiges:  /do-batch status · marker (Marker ändern) · help (Ablauf ausführlich).`,
   ].join('\n');
 }
 
 /**
- * The long form of the summary — `/claude-batch help`. Two lists: what the
+ * The long form of the summary — `/do-batch help`. Two lists: what the
  * user does, step by step, and what Claude does at each of those steps. Shown
  * by the hook while collecting (costs nothing) and by the skill otherwise.
  *
@@ -600,22 +600,22 @@ function renderHelp(p = {}) {
   const hours = p.expiryHours ?? DEFAULTS.expiryHours;
   const max = p.maxNotes ?? DEFAULTS.maxNotes;
   return [
-    'claude-batch — Sammelmodus: erst sammeln, dann EINMAL gebündelt umsetzen.',
+    'do-batch — Sammelmodus: erst sammeln, dann EINMAL gebündelt umsetzen.',
     '',
     'A) Was DU machst',
-    '1. /claude-batch             Einschalten. Beim ersten Mal fragt Claude nach dem',
+    '1. /do-batch                 Einschalten. Beim ersten Mal fragt Claude nach dem',
     `                             Ausführungs-Marker (aktuell "${marker}"). Text hinter dem`,
     '                             Aufruf wird sofort Notiz #1.',
     '2. Prompts tippen            Jeder Prompt ohne Marker wird Notiz. Das rote',
     '                             "Eingabe blockiert"-Panel ist normal, kein Fehler.',
     '                             Screenshots und @Dateien gehen zu Claude durch, der',
     '                             sie nur als Notiz ablegt — nicht bearbeitet.',
-    `${`3. "${marker} <text>"`.padEnd(29)}Umsetzung starten (oder /claude-batch go). Text hinter`,
+    `${`3. "${marker} <text>"`.padEnd(29)}Umsetzung starten (oder /do-batch go). Text hinter`,
     '                             dem Marker ist Anweisung für diese Phase.',
     '4. Plan freigeben            Claude legt EINEN Plan vor. Ab hier läuft die',
     '                             Unterhaltung wieder normal, der Modus ist aus.',
     '',
-    'Weitere Befehle: /claude-batch off (nur stoppen, Notizen bleiben) · on (weiter',
+    'Weitere Befehle: /do-batch off (nur stoppen, Notizen bleiben) · on (weiter',
     'sammeln, auch nach dem Auto-Ende) · status · marker (Ausführungs-Marker ändern)',
     `· help. Auto-Ende nach ${hours} Stunden oder ${max} Notizen — der Marker erreicht`,
     'die Notizen auch danach.',
@@ -694,9 +694,9 @@ function detectActivation(text) {
   let viaCommand = false;
   const cmd = /<command-name>\s*\/?([\w.-]+)\s*<\/command-name>/i.exec(s);
   if (cmd) {
-    // An expanded slash command is unambiguous: either it IS /claude-batch, or
+    // An expanded slash command is unambiguous: either it IS /do-batch, or
     // it is some other command and none of this applies.
-    if (!/claude-batch/i.test(cmd[1])) return none;
+    if (!/(?:do|claude)-batch/i.test(cmd[1])) return none;
     viaCommand = true;
     const args = /<command-args>([\s\S]*?)<\/command-args>/i.exec(s);
     residue = args ? args[1] : '';
@@ -741,7 +741,7 @@ function detectActivation(text) {
  * no notes injected, and the model truthfully reporting that it sees no batch
  * while ten notes sat in the file.
  *
- * `rearm`: a `/claude-batch` invocation that would only switch on a mode that
+ * `rearm`: a `/do-batch` invocation that would only switch on a mode that
  * is already on (bare, `on`, or free text = a note). The hook absorbs it —
  * stores the residue as a note, answers with the mode summary, exit 2 — so
  * repeating the activation never costs a turn. The exits (`off`, `go`,

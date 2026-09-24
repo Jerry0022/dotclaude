@@ -49,12 +49,12 @@ describe("claude-strict SKILL.md", () => {
     expect(task, "routing table lacks the free-text task row").toBeTruthy();
     expect(task).toMatch(/task/);
     expect(task).toMatch(/Step 3/);
-    expect(task).toMatch(/\/concept/);
+    expect(task).toMatch(/\/do-run/);
   });
 
   it("names every propagation channel", () => {
     const step3 = section("## Step 3 — Execute the task under the contract", "## Step 4 — Strict report");
-    for (const channel of ["**Agent**", "**Skill**", "/concept", "AUTONOMOUS_AUTOSTART", "RUN_BACKLOG_AUTOSTART", "--strict", "concept-active.json", "AUTONOMOUS-LOCKOUT.flag"]) {
+    for (const channel of ["**Agent**", "**Skill**", "/auto-concept", "AUTONOMOUS_AUTOSTART", "RUN_BACKLOG_AUTOSTART", "--strict", "concept-active.json", "AUTONOMOUS-LOCKOUT.flag"]) {
       expect(step3, `Step 3 does not name ${channel}`).toContain(channel);
     }
     expect(step3).toMatch(/refuses a spawn without it/);

@@ -12,7 +12,7 @@ first tool call; pick the tier by signal, not by habit.
 | **Inline** | 1 domain, Q&A, quick fix, or an answer reachable by reading ~5 files or fewer | No agent — a sub-agent pays a full context bootstrap and loses the conversation. |
 | **1 agent, background** | The deliverable is a *conclusion* whose path would flood the conversation: anything that needs web pages (`research` — even one fetch), a sweep over more than ~10 files (`Explore`, "is our X sound?"), a full test suite or build (`qa`), a high-stakes plan or diff to attack (`redteam`), a trade-off with real stakes that no file answers (`po`) | Spawn with `run_in_background: true`; keep working inline; relay the conclusion, not the transcript. |
 | **2–3 agents, parallel** | Two *analysis* lenses on one question (`research` + `po`, `po` + `redteam`) | Spawn in one message, ~5–15 tool calls per agent. **Implementing** agents in parallel (`core` + `frontend` editing the working tree at once) are never auto-spawned: offer it in one sentence like a ceremony. A UI consuming a new endpoint is not independent: Inline if ~5 files or fewer, else Full ceremony. |
-| **Full ceremony** | 3+ domains, a feature end-to-end, or a high-risk change (migration, auth, breaking contract, destructive op) | Never auto-start. Offer `/run-agents` (`/run-autonomous` if the user will be away) in one sentence; proceed only on a yes. |
+| **Full ceremony** | 3+ domains, a feature end-to-end, or a high-risk change (migration, auth, breaking contract, destructive op) | Never auto-start. Offer `/auto-agents` (`/do-run autonomous` if the user will be away) in one sentence; proceed only on a yes. |
 
 Every spawn is announced to the user — also under the Quiet output style.
 `pre.agent.announce` resolves the effective model and effort and hands you
@@ -25,9 +25,9 @@ version (`claude-opus-5-5`) in frontmatter, an override or a prompt.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
-- **Explicit run skill** — inside `/run-agents`, `/run-autonomous`,
-  `/run-backlog`, `/run-burn` the invocation itself is the answer: never ask
-  the budget question, never downgrade a model for budget (run-burn upgrades
+- **Explicit run skill** — inside `/auto-agents`, `/do-run autonomous`,
+  `/do-run backlog`, `/do-run burn` the invocation itself is the answer: never ask
+  the budget question, never downgrade a model for budget (do-run burn mode upgrades
   on purpose). Hooks drop the budget suffix on `AUTONOMOUS_*` prompts.
 - **Hard stop** — the user *narrows the request* with "just", "quick",
   "inline", "no agents" (de: "nur X", "schnell", "keine Agents") → Inline
@@ -87,4 +87,4 @@ tool-call ceiling in the agent prompt. Class names say what they do.
   with none treat it as ask-before-parallel.
 
 Details: `agent-orchestration.md` (roster, waves, QA, budget item in the
-spawn template), `agent-collaboration.md` (handoffs), `/run-agents`.
+spawn template), `agent-collaboration.md` (handoffs), `/auto-agents`.

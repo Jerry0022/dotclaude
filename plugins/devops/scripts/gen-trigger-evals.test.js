@@ -9,7 +9,7 @@ describe("gen-trigger-evals", () => {
     expect(changed, `evals/triggers/ is stale, rerun node plugins/devops/scripts/gen-trigger-evals.js:\n${diffs.join("\n")}`).toBe(false);
   });
 
-  it("expands into 100 cases across fix/setup-issue/concept/tune-harden/claude-extend-skill", () => {
+  it("expands into 100 cases across fix/auto-issue/concept/auto-harden/auto-extend", () => {
     const data = loadCases();
     const dirs = buildDirs(data);
     expect(dirs.size).toBe(100);

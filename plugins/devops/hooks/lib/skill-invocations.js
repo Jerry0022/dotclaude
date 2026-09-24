@@ -1,14 +1,19 @@
 /**
  * @module skill-invocations
- * @version 0.2.0
+ * @version 0.3.0
  * @description Which skills did the transcript already invoke? Shared by
  *   `prompt.skill.enforce` (the trigger router must not re-mandate a skill
  *   that is already running this session), `stop.guide.handoff` (the turn
- *   already invoked web-guide / auto-guide), `post.flow.debug` (fix is
- *   already active this turn) and `pre.issue.guard` (setup-issue / auto-issue
+ *   already invoked auto-guide), `post.flow.debug` (auto-fix is
+ *   already active this turn) and `pre.issue.guard` (auto-issue
  *   ran this turn). Both a Skill tool_use and a slash-started skill
  *   (`<command-name>/devops:x</command-name>`, with or without the plugin
  *   prefix) count.
+ *
+ *   Old and new names count alike (PR 2 renames, `skill-names.js`): the
+ *   session-wide set holds the recorded name AND its current name, so a
+ *   session that invoked `devops:ship` before the update reads as having run
+ *   `do-ship`; `skillInvokedThisTurn` predicates compare with `isSkill`.
  *
  *   Two scans, deliberately different in cost:
  *     - `invokedSkillsInTranscript` — session-wide, a single regex pass over
@@ -19,9 +24,11 @@
  *       only the lines it visits.
  *
  *   Transcript shape (verified against real Claude Code transcripts):
- *   `{"type":"tool_use","id":…,"name":"Skill","input":{"skill":"devops:concept",…}}`
+ *   `{"type":"tool_use","id":…,"name":"Skill","input":{"skill":"devops:auto-concept",…}}`
  *   — the skill name may carry a `plugin:` namespace, which is stripped.
  */
+
+const { canonicalSkillName } = require('./skill-names');
 
 /** The Skill tool — bare or under a connector namespace (`…__Skill`). */
 function isSkillTool(name) {
@@ -39,7 +46,7 @@ function isPromptEntry(entry) {
   return content.some(b => b && b.type !== 'tool_result');
 }
 
-/** `devops:concept` → `concept`; lowercased; '' for anything non-string. */
+/** `devops:auto-concept` → `auto-concept`; lowercased; '' for anything non-string. */
 function normalizeSkillName(raw) {
   if (typeof raw !== 'string') return '';
   const s = raw.trim().toLowerCase();
@@ -55,7 +62,7 @@ const SKILL_INVOKE_RE =
 const COMMAND_NAME_RE = /<command-name>\s*\/?([\w.:-]+)\s*<\/command-name>/g;
 
 /**
- * Raw names of every slash command recorded in a text (`devops:concept`, `fix`).
+ * Raw names of every slash command recorded in a text (`devops:auto-concept`, `auto-fix`).
  * @param {string} text
  * @returns {string[]}
  */
@@ -68,18 +75,19 @@ function commandNamesIn(text) {
  * Every skill name invoked anywhere in the (tail of the) transcript — via
  * the Skill tool or as a slash command.
  * @param {string} transcriptContent raw JSONL
- * @returns {Set<string>} normalized skill names
+ * @returns {Set<string>} normalized skill names, each old name also as its
+ *   current name (`ship` → `ship` + `do-ship`)
  */
 function invokedSkillsInTranscript(transcriptContent) {
   const out = new Set();
   if (typeof transcriptContent !== 'string' || !transcriptContent) return out;
   for (const m of transcriptContent.matchAll(SKILL_INVOKE_RE)) {
     const name = normalizeSkillName(m[1]);
-    if (name) out.add(name);
+    if (name) { out.add(name); out.add(canonicalSkillName(name)); }
   }
   for (const raw of commandNamesIn(transcriptContent)) {
     const name = normalizeSkillName(raw);
-    if (name) out.add(name);
+    if (name) { out.add(name); out.add(canonicalSkillName(name)); }
   }
   return out;
 }

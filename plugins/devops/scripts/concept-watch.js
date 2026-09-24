@@ -49,7 +49,7 @@
  *       `node …` invocation is already covered.
  *
  *   Exit lines keep the `PULSER_EXIT reason=…` / `WAKER_EXIT reason=…` shape
- *   so the reason→action table in the concept skill still applies verbatim,
+ *   so the reason→action table in the auto-concept skill still applies verbatim,
  *   plus `STATE_NEVER_APPEARED` for a launch that outran its setup,
  *   `HTML_GONE` for a concept whose page was deleted (#363), and
  *   `DUPLICATE_PULSER` / `DUPLICATE_WAKER` for a watcher that stepped down in

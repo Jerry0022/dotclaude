@@ -4,7 +4,7 @@
 > This file retains Agent wave model + QA testing protocol.
 
 Shared orchestration logic for agent selection, prompting, and wave execution.
-Referenced by `/run-agents` and `/run-autonomous`. *Whether* to spawn at all —
+Referenced by `/auto-agents` and `/do-run autonomous`. *Whether* to spawn at all —
 and how many — is decided upstream by the always-on delegation policy in
 [agent-proactivity.md](agent-proactivity.md); this file covers the *how* once
 that decision is made.
@@ -39,8 +39,8 @@ The orchestrator can override `model` at invocation time but **not** `effort` �
 the Agent tool has no effort parameter, so the frontmatter value is always the
 effective one.
 This table is the **source of truth for the `Model · Effort` column** the plan
-tables show — `/run-agents` Step 3 renders each agent as `model · effort` (e.g.
-`opus · high`); the `/run-burn` plan lists `default → override` per role — keep
+tables show — `/auto-agents` Step 3 renders each agent as `model · effort` (e.g.
+`opus · high`); the `/do-run burn` plan lists `default → override` per role — keep
 it in sync with the agent frontmatter. When you override a model at invocation,
 show it as `default → override` with the effort repeated on both sides
 (`sonnet · medium → opus · medium`); the effort never carries an arrow.
@@ -50,7 +50,7 @@ One standing override comes from the delegation policy's budget class
 agents"), the opus roles run as `opus · high → sonnet · high` — shown exactly
 like any other override — and the prompt's tool-call ceiling (item 6 of the
 template) drops to ≤ 10 or ≤ 5: effort itself cannot be lowered at spawn, the
-ceiling is its proxy. `/run-burn` is exempt (explicit run skill).
+ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
 
 | Agent | model | effort | Notes |
 |-------|-------|--------|-------|
@@ -70,13 +70,13 @@ ceiling is its proxy. `/run-burn` is exempt (explicit run skill).
 - Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`.
   The Agent tool accepts `sonnet`, `opus`, `haiku` and `fable` — `fable` is an
   accepted value for upward overrides, not only `opus`.
-- **`/run-burn` inverts this**: it overrides **upward only** (sonnet → opus)
+- **`/do-run burn` inverts this**: it overrides **upward only** (sonnet → opus)
   per its depth profile, and never downgrades for cost. The profile's
   `effort: high` is a prompt directive, not a tool parameter — the frontmatter
   value stays the effective reasoning effort. Its goal is to consume the
   remaining weekly budget as depth-per-task rather than as
   breadth-of-unfinished-tasks. See
-  `skills/run-burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
+  `skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
 - **Never downgrade to haiku** for agents with `effort: high` (po, research) — haiku + high effort wastes tokens without quality gain
 - Upgrading to opus or fable is fine for any agent when task complexity warrants it
 
@@ -89,7 +89,7 @@ ceiling is its proxy. `/run-burn` is exempt (explicit run skill).
 | **Complex** | 3+ domains, cross-cutting, or high risk | Full agent roster with wave model |
 
 These tiers map 1:1 onto the delegation policy: Simple → Inline, Medium → the
-automatic 1-agent / 2–3-agent tiers, Complex → `/run-agents` offered, never
+automatic 1-agent / 2–3-agent tiers, Complex → `/auto-agents` offered, never
 auto-started.
 
 **Effort budget per agent** (Step 4 of the prompt template — embed it, scaled to
@@ -195,7 +195,7 @@ agent.
   work
 - Scope cuts (do X now, defer Y? include Z or skip?)
 
-**Use `/concept` instead when:**
+**Use `/auto-concept` instead when:**
 - 3+ design alternatives need side-by-side comparison with pros/cons
 - A UI/UX layout decision benefits from a visual mockup (prototype template)
 - An architecture or strategy choice has multi-dimensional trade-offs

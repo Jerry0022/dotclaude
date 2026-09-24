@@ -20,5 +20,5 @@ See @.claude/project-map.md for directory structure.
 - The `.claude/plugins/cache/` on a consumer machine is the installed copy
 
 ## Release
-- Use `/ship` for the full release pipeline
+- Use `/do-ship` for the full release pipeline
 - CHANGELOG.md is auto-maintained per release

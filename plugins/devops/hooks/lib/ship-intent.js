@@ -2,7 +2,7 @@
  * @module ship-intent
  * @version 0.2.0
  * @description The one ship-intent classifier for user prompts. Shared by
- *   `prompt.ship.detect` (which turns the intent into a Skill('ship')
+ *   `prompt.ship.detect` (which turns the intent into a Skill('do-ship')
  *   instruction) and `prompt.flow.title-work` (which marks the sidebar with
  *   `🚀 Shipping – ` instead of the bare `⏳ ` when the prompt IS a ship).
  *   One list, so the two hooks can never disagree about what a ship prompt is.
@@ -13,9 +13,10 @@
  *   skill's Pre-Step C, which the hook instruction leaves in place.
  */
 
-/** A slash invocation of the ship skill — `/ship`, `/devops:ship`, with or
- *  without arguments. Matched on the raw prompt start, case-insensitively. */
-const SHIP_SLASH = /^\s*\/(?:devops:)?ship\b/i;
+/** A slash invocation of the do-ship skill — `/do-ship`, `/devops:do-ship` or the
+ *  pre-PR-2 `/ship`, with or without arguments. Matched on the raw prompt
+ *  start, case-insensitively. */
+const SHIP_SLASH = /^\s*\/(?:devops:)?(?:do-)?ship\b/i;
 
 /** A keyword counts as an ORDER only in a prompt up to this length. "ship it",
  *  "ab damit", the card's button prompts — orders are short. A long prompt

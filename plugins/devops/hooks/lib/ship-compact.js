@@ -2,11 +2,11 @@
  * @module ship-compact
  * @version 0.3.0
  * @plugin devops
- * @description The "careful compact before /ship" advice, shared by
- *   `prompt.ship.detect` (which emits it instead of the Skill('ship')
+ * @description The "careful compact before /do-ship" advice, shared by
+ *   `prompt.ship.detect` (which emits it instead of the Skill('do-ship')
  *   instruction) and its test.
  *
- *   Why: a /ship runs ~16 API calls, each re-reading the WHOLE context, and
+ *   Why: a /do-ship runs ~16 API calls, each re-reading the WHOLE context, and
  *   it runs at the end of a session when that context is largest. Measured
  *   over 10 sessions (2026-09-21): Ø 434 k tokens per ship call, ~24 % of
  *   the session's tokens for a step that produces ~10 k output tokens.
@@ -45,7 +45,7 @@ const DEFAULT_THRESHOLD = 350_000;
  *  summary, preserved tail. Measured 103–113 k (2026-09-22). */
 const POST_COMPACT_FLOOR = 100_000;
 
-/** `/ship --no-compact`, `ship it --no-compact` — one-shot opt-out. */
+/** `/do-ship --no-compact`, `ship it --no-compact` — one-shot opt-out. */
 const NO_COMPACT = /(^|\s)--no-compact\b/i;
 
 /** The compaction focus. It names what the user asked to keep (2026-09-21:
@@ -101,10 +101,10 @@ function shipCompactAdvice({ tokens, prompt, advisedBefore = false, env = proces
   if (NO_COMPACT.test(prompt || '')) return null;
   const size = formatTokens(tokens);
   return [
-    `[ship-compact] Context is ${size} tokens (threshold ${formatTokens(limit)}). A /ship on this context`,
+    `[ship-compact] Context is ${size} tokens (threshold ${formatTokens(limit)}). A /do-ship on this context`,
     `re-reads it ~16 times (${shipCostEstimate(tokens)} tokens, almost all cache reads) for ~10 k tokens of output.`,
-    'Do NOT start the ship pipeline on this prompt: no ship skill, no ship_preflight, no git/gh',
-    'command — even if the ship skill is already loaded in this turn. No hook or skill can trigger a compaction —',
+    'Do NOT start the ship pipeline on this prompt: no do-ship skill, no ship_preflight, no git/gh',
+    'command — even if the do-ship skill is already loaded in this turn. No hook or skill can trigger a compaction —',
     'the user has to. End the turn with the completion card and nothing else — render_completion_card with:',
     '',
     `  variant: "ship-blocked", summary: "Ship angehalten — Kontext erst kompaktieren", compact: { tokens: ${tokens} }`,

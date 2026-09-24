@@ -4,13 +4,13 @@ version: 0.1.0
 description: >-
   Strict mode — the deliverable is exactly what the prompt names, nothing
   wider; attributes the prompt leaves open are Claude's call and every such
-  choice is reported. Propagates to every skill, agent, /concept iteration
+  choice is reported. Propagates to every skill, agent, /auto-concept iteration
   and autonomous resume the turn starts. `/claude-strict <task>` for one
   prompt, `/claude-strict on|off` for the current worktree + branch — never
   project-wide. Triggers on: "/claude-strict", "strict", "strikt", "genau so
   und nicht mehr", "nur das ändern", "nichts anderes anfassen". Do NOT
-  trigger for: ordinary requests without a literal-scope signal, /tune-harden
-  or /tune-polish scope fences (they stay as they are), or TypeScript
+  trigger for: ordinary requests without a literal-scope signal, /auto-harden
+  or /auto-polish scope fences (they stay as they are), or TypeScript
   `strict` compiler options.
 layer: 0
 invokes: []
@@ -51,10 +51,10 @@ Route on the **first token** of `$ARGUMENTS` only. No argument → **status**.
 | `on`, `an`, `start` | Step 5 — arm the branch mode (`on`) |
 | `off`, `aus`, `stop` | Step 5 — clear the mode |
 | `status`, none | Step 5 — report |
-| *anything else* (free text, including another slash command such as `/concept …`) | **task** — Step 3, under the contract in Step 2 |
+| *anything else* (free text, including another slash command such as `/do-run …`) | **task** — Step 3, under the contract in Step 2 |
 
-A task argument is never filed or deferred: `/claude-strict /concept Rand-Varianten`
-means "run /concept, strictly". The hook has already armed an inline mode for
+A task argument is never filed or deferred: `/claude-strict /do-run audit Rand-Varianten`
+means "run /do-run audit, strictly". The hook has already armed an inline mode for
 this turn (`reason: inline`); you do not arm it again.
 
 ## Step 2 — The contract
@@ -80,7 +80,7 @@ TESTS: an assertion pinning the exact old value may be updated. Any other
 failure → apply nothing, revert, report.
 PRECEDENCE (scope only): overrides doc-maintenance, pre-mortem outputs, "make
 reasonable decisions independently", concept zero-prompt invariant. Completion
-card, /ship docs-sync and tune-polish approval stay.
+card, do-ship docs-sync and auto-polish approval stay.
 PROPAGATION: put this block verbatim at the top of every Agent prompt and
 every skill you invoke; it binds concept iterations and autonomous resumes.
 REPORT (≤4 lines, before the card, omit empty lines):
@@ -126,11 +126,11 @@ updated the mixin" changes every box — that is not the request).
      not paraphrase the block. Nested agents inherit the same duty; say so
      in the agent prompt ("forward this block to every agent you spawn").
    - **Skill** tool: invoke the other skill normally; the contract is in
-     context. Where the callee has a flag channel (`/tune-harden`,
-     `/tune-polish`: `--invoked-by=…`), also pass `--strict`. For `/concept`:
+     context. Where the callee has a flag channel (`/auto-harden`,
+     `/auto-polish`: `--invoked-by=…`), also pass `--strict`. For `/auto-concept`:
      the `implement` action executes the literally selected items only;
      `iterate` is unchanged (it never touches code anyway).
-   - **Autonomous** runners (`/run-autonomous`, `/run-backlog`, `/run-agents`):
+   - **Autonomous** runners (`/do-run autonomous`, `/do-run backlog`, `/auto-agents`):
      include `strict=on` in the task line of any `AUTONOMOUS_AUTOSTART:` /
      `RUN_BACKLOG_AUTOSTART:` cron prompt you create, so a re-launched session
      re-reads the contract from the prompt even before the hook fires.
@@ -195,6 +195,6 @@ returns; never assume.
 - Not a caution mode. Do not ask more questions than the ambiguity rule
   requires; do not add confirmation gates.
 - Not a refusal mode. A request that needs one import gets the import.
-- Not a replacement for `/tune-harden` / `/tune-polish` scope fences; strict
+- Not a replacement for `/auto-harden` / `/auto-polish` scope fences; strict
   is at least as narrow and composes with them.
 - Not project-wide. `on` binds to the worktree + branch you are in.

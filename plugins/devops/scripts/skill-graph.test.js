@@ -154,3 +154,119 @@ describe("trigger preservation: every quoted description-trigger phrase survives
     ).toContain(phrase);
   });
 });
+
+// ── Spec "Units" + "Call graph" (PR 2 of the skill restructure) ─────────────
+// docs/superpowers/specs/2026-09-24-skill-restructure-design.md is the single
+// source; this table mirrors it so a frontmatter edit that drifts from the
+// approved design fails here. `visibility`: "menu" = user-invocable (default),
+// "hidden" = `user-invocable: false`, "user-only" = `disable-model-invocation: true`.
+const { RENAMED, FOLDED, FOLDED_TRIGGERS } = require("../hooks/lib/skill-names.js");
+
+const UNITS = {
+  "do-batch":      { layer: 0, visibility: "menu",      invokes: ["do-run", "auto-concept"] },
+  "setup-cleanup": { layer: 0, visibility: "user-only", invokes: ["auto-concept", "do-ship"] },
+  "setup-project": { layer: 0, visibility: "user-only", invokes: [] },
+  "do-run":        { layer: 1, visibility: "menu",      invokes: ["auto-concept", "do-ship", "auto-harden", "auto-polish", "auto-agents", "auto-issue"] },
+  "do-learn":      { layer: 1, visibility: "menu",      invokes: ["auto-issue"] },
+  "auto-concept":  { layer: 2, visibility: "hidden",    invokes: ["do-ship", "auto-agents", "auto-issue"] },
+  "auto-fix":      { layer: 2, visibility: "hidden",    invokes: ["auto-agents"] },
+  "auto-guide":    { layer: 2, visibility: "hidden",    invokes: [] },
+  "auto-extend":   { layer: 2, visibility: "hidden",    invokes: [] },
+  "auto-update":   { layer: 2, visibility: "hidden",    invokes: [] },
+  "do-ship":       { layer: 3, visibility: "menu",      invokes: ["auto-harden", "auto-polish"] },
+  "auto-harden":   { layer: 4, visibility: "hidden",    invokes: ["auto-agents"] },
+  "auto-polish":   { layer: 4, visibility: "hidden",    invokes: ["auto-agents"] },
+  "auto-agents":   { layer: 5, visibility: "hidden",    invokes: [] },
+  "auto-issue":    { layer: 5, visibility: "hidden",    invokes: [] },
+};
+
+// PR 3 moves these out of skills/; until then they keep their PR-1 frontmatter.
+const PR3_SKILLS = ["setup-readme", "auto-graph", "auto-usage", "claude-strict"];
+
+const MODE_FILES = {
+  "do-run": ["backlog", "autonomous", "burn", "rethink", "audit"],
+  "do-ship": ["promote"],
+};
+
+function visibilityOf(meta) {
+  if (meta.disableModelInvocation === true) return "user-only";
+  if (meta.userInvocable === false) return "hidden";
+  return "menu";
+}
+
+describe("spec Units table: the exact skill roster", () => {
+  test("skills/ holds exactly the spec units plus the four PR-3 skills", () => {
+    expect([...SKILL_NAMES].sort()).toEqual([...Object.keys(UNITS), ...PR3_SKILLS].sort());
+  });
+
+  test("no pre-PR-2 skill directory survives", () => {
+    for (const oldName of [...Object.keys(RENAMED), ...Object.keys(FOLDED)]) {
+      expect(SKILL_NAMES, `old skill dir still present: ${oldName}`).not.toContain(oldName);
+    }
+  });
+
+  test.each(Object.keys(UNITS))("%s: frontmatter name equals its directory", (name) => {
+    expect(ALL_SKILLS[name].name).toBe(name);
+  });
+});
+
+describe("spec Units table: layer and visibility", () => {
+  test.each(Object.entries(UNITS))("%s", (name, unit) => {
+    const meta = ALL_SKILLS[name];
+    expect(meta, `${name} missing`).toBeTruthy();
+    expect(meta.layer, `${name} layer`).toBe(unit.layer);
+    expect(visibilityOf(meta), `${name} visibility`).toBe(unit.visibility);
+  });
+
+  test("every auto-* unit is hidden from the slash menu", () => {
+    for (const name of Object.keys(UNITS).filter((n) => n.startsWith("auto-"))) {
+      expect(ALL_SKILLS[name].userInvocable, name).toBe(false);
+    }
+  });
+});
+
+describe("spec call graph: the exact invokes edges", () => {
+  test.each(Object.entries(UNITS))("%s", (name, unit) => {
+    expect([...ALL_SKILLS[name].invokes].sort()).toEqual([...unit.invokes].sort());
+  });
+
+  test.each(PR3_SKILLS)("%s (PR 3) invokes nothing", (name) => {
+    expect(ALL_SKILLS[name].invokes).toEqual([]);
+  });
+});
+
+describe("folded skills: mode files exist and the old triggers survive", () => {
+  const modeCases = Object.entries(MODE_FILES).flatMap(([skill, modes]) => modes.map((m) => [skill, m]));
+
+  test.each(modeCases)("%s/modes/%s.md exists and carries a body", (skill, mode) => {
+    const file = path.join(SKILLS_DIR, skill, "modes", `${mode}.md`);
+    expect(fs.existsSync(file), file).toBe(true);
+    const body = fs.readFileSync(file, "utf8");
+    expect(body.startsWith("---"), `${file} must not carry skill frontmatter (it is not a skill)`).toBe(false);
+    expect(body.length).toBeGreaterThan(500);
+  });
+
+  test("every folded skill has a mode file in its owner", () => {
+    for (const [oldName, fold] of Object.entries(FOLDED)) {
+      expect(MODE_FILES[fold.skill], `${oldName} → ${fold.skill}`).toContain(fold.mode);
+    }
+  });
+
+  test("the owner's SKILL.md points at every mode file", () => {
+    for (const [skill, modes] of Object.entries(MODE_FILES)) {
+      const body = fs.readFileSync(path.join(SKILLS_DIR, skill, "SKILL.md"), "utf8");
+      for (const mode of modes) expect(body, `${skill} → modes/${mode}.md`).toContain(`modes/${mode}.md`);
+    }
+  });
+
+  const triggerCases = Object.entries(FOLDED_TRIGGERS).flatMap(([oldName, byLang]) =>
+    Object.values(byLang).flat().map((phrase) => [oldName, FOLDED[oldName].skill, phrase]));
+
+  test.each(triggerCases)("%s → %s keeps %j", (_old, owner, phrase) => {
+    expect(Object.values(ALL_SKILLS[owner].triggers).flat()).toContain(phrase);
+  });
+
+  test("the snapshot is not empty", () => {
+    expect(triggerCases.length).toBeGreaterThan(30);
+  });
+});

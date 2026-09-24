@@ -16,7 +16,7 @@
  *   (pre.strict.agent-gate) refuses spawns that lack it but injects nothing,
  *   so one turn never carries the block twice.
  *
- *   Never arms on a prompt that `/claude-batch` will collect: that prompt is
+ *   Never arms on a prompt that `/do-batch` will collect: that prompt is
  *   erased by the harness, so an armed mode would be invisible and answered by
  *   nobody (see batch-state.willBeCollected).
  *

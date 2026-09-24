@@ -5,7 +5,7 @@
  * @event SessionStart
  * @plugin devops
  * @description Recover an open concept session after a Claude restart.
- *   Reads `.claude/concept-active.json` (written by /concept Step 3),
+ *   Reads `.claude/concept-active.json` (written by /auto-concept Step 3),
  *   probes the bridge server to confirm it is still running, and instructs
  *   Claude to re-arm everything that watches it — the backup cron AND the two
  *   detached background tasks (keepalive pulser, pickup waker) — plus pick up
@@ -346,7 +346,7 @@ function probe(port, pathname, timeoutMs = 1500) {
 }
 
 /**
- * A `node "<script>"` prefix that still resolves after an in-session `/ship`.
+ * A `node "<script>"` prefix that still resolves after an in-session `/do-ship`.
  *
  * A cron outlives a plugin rebuild. `ss.plugin.update.rebuildCache` writes the
  * new version under a fresh `.../devops/<version>/` directory and removes the
@@ -372,7 +372,7 @@ function resolveScript(name, baseDir = __dirname) {
 
 /**
  * The combined heartbeat + auto-poll cron body. Canonical definition lives in
- * `skills/concept/deep-knowledge/bridge-server.md` § step 3; this mirrors it so
+ * `skills/auto-concept/deep-knowledge/bridge-server.md` § step 3; this mirrors it so
  * a resumed session re-arms exactly what the original session had.
  *
  * The body used to spell out all three steps inline — 1128 characters of gate,
@@ -440,7 +440,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
   const lines = [];
 
   lines.push(
-    `An open /concept session was found in this project ` +
+    `An open /auto-concept session was found in this project ` +
     `(port ${state.port}, html_path ${state.html_path}, slug ${state.slug || '?'}). ` +
     `The bridge server is alive, but everything that watched it is gone — background Bash tasks ` +
     `are session-scoped just like crons. Re-arm all three now.`
@@ -462,7 +462,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
   if (pendingState === 'pending') {
     lines.push(
       `IMMEDIATELY ALSO process the pending submission BEFORE waiting on any of the above: ` +
-      `curl -s http://localhost:${state.port}/decisions, parse, then run concept SKILL.md Step 5 ` +
+      `curl -s http://localhost:${state.port}/decisions, parse, then run auto-concept SKILL.md Step 5 ` +
       `(rewrite HTML at ${state.html_path}, POST /reload, conditional /reset with the captured _version). ` +
       `The user already submitted and is waiting — do not delay this on a schedule.`
     );
@@ -527,7 +527,7 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
   const server = path.join(__dirname, '..', '..', 'scripts', 'concept-server.py');
   const bg = buildBackgroundTasks(state.port, statePath, state.owner || '');
   return [
-    `An open /concept session was found in this project (port ${state.port}, html_path ${state.html_path}, ` +
+    `An open /auto-concept session was found in this project (port ${state.port}, html_path ${state.html_path}, ` +
     `slug ${state.slug || '?'}), but the bridge does not answer /heartbeat — the previous Claude session took ` +
     `the server and both watchers with it. Nothing is pending on disk. Relaunch the bridge now, on the SAME ` +
     `port so the open tab and the state file stay valid: ` +

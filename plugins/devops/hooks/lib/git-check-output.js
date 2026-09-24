@@ -30,7 +30,7 @@ function issueLine(issue) {
   switch (issue.type) {
     case 'uncommitted':
     case 'unpushed':
-      return `- ${issue.label} → run \`/ship\` to commit, push & create PR`;
+      return `- ${issue.label} → run \`/do-ship\` to commit, push & create PR`;
     case 'stash':
       return `- ${issue.label} → review with \`git stash list\`, then \`git stash pop\` or \`git stash drop\``;
     default:
@@ -52,12 +52,12 @@ function issueLine(issue) {
  *      is not.
  */
 /**
- * A finding the turn itself resolved (a /ship that committed and pushed the
+ * A finding the turn itself resolved (a /do-ship that committed and pushed the
  * changes) is no longer true at the end of the turn. Restating it anyway put
  * a stale "4 uncommitted file(s)" block plus an "this is outdated" note above
  * every post-ship completion card. Only findings that still hold are owed.
  */
-const RESOLVED_CLAUSE = 'Restate only findings that still hold at that point: one this turn resolved (e.g. a /ship landed the changes) is dropped silently — no restatement, no "outdated" note.';
+const RESOLVED_CLAUSE = 'Restate only findings that still hold at that point: one this turn resolved (e.g. a /do-ship landed the changes) is dropped silently — no restatement, no "outdated" note.';
 
 function header(workspace) {
   if (workspace) {
@@ -102,7 +102,7 @@ function askLines(workspace, hasChanges) {
   out.push('Resolution per option:');
   out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
   if (hasChanges) {
-    out.push('  - Ship-first: invoke /ship, then create worktree');
+    out.push('  - Ship-first: invoke /do-ship, then create worktree');
     out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
   }
   if (workspace.type === 'on-main-no-worktree') {

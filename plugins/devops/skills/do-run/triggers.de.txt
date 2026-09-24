@@ -1,0 +1,3 @@
+# German trigger phrases for do-run (autonomous mode — formerly run-autonomous).
+autonomer modus
+mach das alleine

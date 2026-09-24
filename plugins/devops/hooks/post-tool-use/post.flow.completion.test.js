@@ -74,7 +74,7 @@ function cleanup(dir) {
 // feature was built, merged, installed, and never seen. These tests pin the
 // instruction that closes that gap.
 describe("post.flow.completion — completion-card instruction completeness", () => {
-  test("names the `delivery` field, so the pipeline track survives outside /ship", () => {
+  test("names the `delivery` field, so the pipeline track survives outside /do-ship", () => {
     const dir = project();
     // The session id must not itself contain "delivery" — it is echoed into the
     // instruction and would make this assertion pass for the wrong reason.

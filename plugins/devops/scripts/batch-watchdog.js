@@ -3,7 +3,7 @@
  * @script batch-watchdog
  * @version 0.1.0
  * @plugin devops
- * @description Inactivity reminder for `/claude-batch` collect mode. Polls the
+ * @description Inactivity reminder for `/do-batch` collect mode. Polls the
  *   dedicated user-activity clock and fires ONE Windows toast once the user has
  *   been quiet for the configured window, so a collection session started
  *   before a coffee break does not sit forgotten.
@@ -169,8 +169,8 @@ function runLoop(cwd) {
     if (verdict === 'fire') {
       const mins = Math.round((now - lastActivity) / 60_000);
       notifyToast(
-        `claude-batch — ${noteCount} Notiz${noteCount === 1 ? '' : 'en'} offen`,
-        `Seit ${mins} Minuten still. "${cfg.marker} los" startet die Umsetzung, /claude-batch off beendet den Modus.`,
+        `do-batch — ${noteCount} Notiz${noteCount === 1 ? '' : 'en'} offen`,
+        `Seit ${mins} Minuten still. "${cfg.marker} los" startet die Umsetzung, /do-batch off beendet den Modus.`,
       );
       notified = true;
     }

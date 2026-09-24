@@ -433,7 +433,7 @@ function buildResultLines(input, lang, { clamp = true } = {}) {
     let text = String((c && c.description) || '');
     const area = String((c && c.area) || '');
     // A description that starts lowercase is a predicate whose subject is an
-    // identifier-like area ("run-agents" + "nutzt dieselben Schwellen") — keep
+    // identifier-like area ("auto-agents" + "nutzt dieselben Schwellen") — keep
     // the subject. A worded area ("Ship" + "merged ohne Tag", #396 coercion)
     // is still discarded.
     if (area && text && /^[a-zäöü]/.test(text) && /^\S+$/.test(area) && /[-._:/]/.test(area)) text = area + ' ' + text;
@@ -1015,8 +1015,8 @@ function decisionContext(input, key, delivery, state, lang) {
 }
 
 const PROMOTE_LAG = {
-  de: (ch, n, d) => '› ' + ch + ' liegt ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable → `/promote`',
-  en: (ch, n, d) => '› ' + ch + ' is ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable → `/promote`',
+  de: (ch, n, d) => '› ' + ch + ' liegt ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable → `/do-ship promote`',
+  en: (ch, n, d) => '› ' + ch + ' is ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable → `/do-ship promote`',
 };
 
 /** The optional `›` context line under the heading (§ 2.6). */
@@ -1034,12 +1034,12 @@ function buildContextLine(input, key, delivery, lang) {
 }
 
 /**
- * The careful-compact stop before /ship (hooks/lib/ship-compact.js) as a
+ * The careful-compact stop before /do-ship (hooks/lib/ship-compact.js) as a
  * decision block: heading with the context size, the saving as context line,
  * and the full `/compact` command as a point. No button can carry /compact —
  * the host refuses a prefill that starts with "/" — so the command is text in
  * both clients; the widget adds the one "Ohne Kompaktieren shippen" button
- * (`widgetPoints` drops the terminal's "just /ship again" line it replaces).
+ * (`widgetPoints` drops the terminal's "just /do-ship again" line it replaces).
  * Numbers and focus come from the hook's own lib, so the card and the hook can
  * never disagree. null when the field is absent or carries no usable count.
  */
@@ -1059,7 +1059,7 @@ function shipCompactInfo(compact, lang) {
   const command = `/compact ${focus}`.trim();
   const points = [
     '`' + command + '`',
-    en ? 'Without compacting: just `/ship` again' : 'Ohne Kompaktieren: einfach nochmal `/ship`',
+    en ? 'Without compacting: just `/do-ship` again' : 'Ohne Kompaktieren: einfach nochmal `/do-ship`',
   ];
   return { size, context, points, widgetPoints: [command] };
 }
@@ -1799,11 +1799,11 @@ server.registerTool(
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by do-ship's promote mode. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
-      cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links. Also what lets the card read the project's mode state: the open /concept page's URL (.claude/concept-active.json) and an armed /claude-batch collection (.claude/batch-mode.json → 📥 BATCH CTA)."),
+      cwd: z.string().optional().describe("Working directory of the target repo. STRONGLY RECOMMENDED for ship-* variants — without it, getRepoUrl falls back to the MCP server's own cwd (plugin dir) and the card cannot render clickable PR/commit/branch links. Also what lets the card read the project's mode state: the open /auto-concept page's URL (.claude/concept-active.json) and an armed /do-batch collection (.claude/batch-mode.json → 📥 BATCH CTA)."),
       buildId: z.string().optional().describe("Pre-computed build-ID (from ship_build). If provided, skips internal computation. Use this when the worktree/branch state may have changed after building (e.g. post-merge)."),
       session_id: z.string().optional().describe("Session ID for flag writing"),
       changes: z.preprocess(
@@ -1869,7 +1869,7 @@ server.registerTool(
       open: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -1890,14 +1890,14 @@ server.registerTool(
             url: z.string().optional().describe("Override for the page URL shown above the CTA. Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich', where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich', where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
       compact: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
           tokens: z.number().describe("Context size in tokens, from the [ship-compact] block."),
           focus: z.string().optional().describe("The /compact focus. Omit — the default is the hook's own ship focus."),
         }).optional(),
-      ).describe("The [ship-compact] stop before /ship: replaces the decision block with 'Kontext N k — vor dem Ship kompaktieren?', the saving, the full /compact command as text (no button can carry a slash command), and on Desktop one button, Ohne Kompaktieren shippen (puts 'ship --no-compact' in the input box). Pass it exactly as the [ship-compact] block says, with variant 'ship-blocked'."),
+      ).describe("The [ship-compact] stop before /do-ship: replaces the decision block with 'Kontext N k — vor dem Ship kompaktieren?', the saving, the full /compact command as text (no button can carry a slash command), and on Desktop one button, Ohne Kompaktieren shippen (puts 'ship --no-compact' in the input box). Pass it exactly as the [ship-compact] block says, with variant 'ship-blocked'."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -1926,7 +1926,7 @@ server.registerTool(
             channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version reached per channel; null = not reached (renders as —)."),
             current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on — highlighted 🟢 in the ladder."),
             fastTrack: z.boolean().optional().describe("alpha→stable direct: beta renders as ⏭ skipped."),
-            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far the current channel is ahead of stable (from git ls-remote --tags). Renders the promote nudge on the ladder line: '· alpha 8 Versionen / 7 Tage vor stable → `/promote`'. Replaces the old userFinalTest promote item."),
+            stableLag: z.object({ versions: z.number(), days: z.number().optional() }).optional().describe("How far the current channel is ahead of stable (from git ls-remote --tags). Renders the promote nudge on the ladder line: '· alpha 8 Versionen / 7 Tage vor stable → `/do-ship promote`'. Replaces the old userFinalTest promote item."),
           }).nullable().optional().describe("Promote stage: alpha→beta→stable ladder. null = not promoted yet (Promote node ⚪)."),
         }).optional(),
       ).describe("Delivery track (ready / ship-successful / released) — the pipeline through-line PR → Ship → Promote(alpha→beta→stable) showing WHERE this turn sits (✅ done · 🟢 current · ⚪ pending). ship-successful also names the reached channel in its CTA. Populate the stages that happened; leave later ones null/absent."),

@@ -35,7 +35,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
      name — the orchestrator propagates it to other agents, where it fails again.
 3. Create your working branch: `git checkout -b <parent_branch>/core`
 4. Work, then commit per `{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md` and push your branch
-5. Report your branch name in the handoff — the orchestrator runs `/ship` for landing (never call `gh pr create` directly)
+5. Report your branch name in the handoff — the orchestrator runs `/do-ship` for landing (never call `gh pr create` directly)
 
 ## Responsibilities
 

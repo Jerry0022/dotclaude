@@ -194,8 +194,8 @@ describe("detectMention", () => {
     expect(S.detectMention("/claude-strict").route).toBe("status");
   });
   test("another slash command after it stays part of the task", () => {
-    expect(S.detectMention("/claude-strict /concept Rand-Varianten"))
-      .toEqual({ mentioned: true, route: "task", rest: "/concept Rand-Varianten" });
+    expect(S.detectMention("/claude-strict /auto-concept Rand-Varianten"))
+      .toEqual({ mentioned: true, route: "task", rest: "/auto-concept Rand-Varianten" });
   });
   test("mid-sentence mention counts", () => {
     expect(S.detectMention("bitte /claude-strict nur den Rand").mentioned).toBe(true);
@@ -213,7 +213,7 @@ describe("detectMention", () => {
     expect(S.detectMention(x)).toMatchObject({ mentioned: true, route: "on" });
     const y = "<command-name>/devops:claude-strict</command-name><command-args>den Rand dünner</command-args>";
     expect(S.detectMention(y)).toEqual({ mentioned: true, route: "task", rest: "den Rand dünner" });
-    const z = "<command-name>/concept</command-name><command-args>/claude-strict foo</command-args>";
+    const z = "<command-name>/auto-concept</command-name><command-args>/claude-strict foo</command-args>";
     expect(S.detectMention(z).mentioned).toBe(false);
   });
 });
@@ -225,7 +225,7 @@ describe("contract", () => {
     expect(S.CONTRACT_BLOCK.startsWith(S.CONTRACT_OPEN)).toBe(true);
     expect(S.CONTRACT_BLOCK.trimEnd().endsWith(S.CONTRACT_CLOSE)).toBe(true);
     expect(S.CONTRACT_BLOCK.length).toBeLessThanOrEqual(1400);
-    for (const must of ["SCOPE IS LITERAL", "DISCRETION", "TESTS", "PRECEDENCE", "PROPAGATION", "REPORT", "tune-polish", "untouched"]) {
+    for (const must of ["SCOPE IS LITERAL", "DISCRETION", "TESTS", "PRECEDENCE", "PROPAGATION", "REPORT", "auto-polish", "untouched"]) {
       expect(S.CONTRACT_BLOCK).toContain(must);
     }
   });

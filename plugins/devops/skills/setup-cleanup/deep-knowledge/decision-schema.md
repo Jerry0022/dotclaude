@@ -124,7 +124,7 @@ cleanup decisions.
 - `decisions[].kategorie` — `"loeschbar"` or `"untersuchen"`. Combined with
   `options.delete_remote` to decide the full scope of the delete.
 
-- `offenePRs[].ship` — boolean. `true` = land this PR via `/ship` in Step 10b,
+- `offenePRs[].ship` — boolean. `true` = land this PR via `/do-ship` in Step 10b,
   `false` = leave it open. Only valid when `shippable` is one of `yes`,
   `conflict`, `checks-red`; the UI never renders an enabled control for
   `session-dirty` / `draft` / `fremd`, and if `ship: true` arrives for one of

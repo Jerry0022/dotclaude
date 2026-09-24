@@ -113,13 +113,13 @@ const TOPIC_MAP = [
 // Per-prompt delegation nudge (see compose step 4). Mirrors the tier table in
 // deep-knowledge/agent-proactivity.md — keep the two in sync.
 // No slash-command spelling here: the same text is appended to eval prompts,
-// where prompt.skill.enforce would read "/run-agents" as a user invocation.
+// where prompt.skill.enforce would read "/auto-agents" as a user invocation.
 const DELEGATION_NUDGE =
   '[delegation-policy] Classify before the first tool call: Inline (≤~5 files, Q&A, quick fix) · ' +
   '1 background agent (web pages → devops:research; >~10-file sweep → Explore; full tests → devops:qa; ' +
   'high-stakes diff → devops:redteam; "should we X?" trade-off → devops:po, plus devops:research when facts need checking) · ' +
   '2–3 parallel only for two analysis lenses (parallel implementers → offer) · ' +
-  'Complex → offer the run-agents skill, never auto-start. Hard stop (request narrowed: "just/quick/nur/schnell/keine Agents") → Inline; hard go ("agents/full") → as designed.';
+  'Complex → offer the auto-agents skill, never auto-start. Hard stop (request narrowed: "just/quick/nur/schnell/keine Agents") → Inline; hard go ("agents/full") → as designed.';
 
 // Kill-switch variants (lib/delegation.js). `off` emits no nudge at all —
 // the SessionStart line already says so and every copy would only tempt.
@@ -269,7 +269,7 @@ process.stdin.on('end', () => {
   //      fills up mid-session tightens the nudge without a restart.
   //      Inside an unattended run (AUTONOMOUS_* prompts, or the lockout
   //      sentinel armed) the suffix is dropped: a budget question can never
-  //      be answered there, and /run-burn deliberately upgrades models — the
+  //      be answered there, and /do-run burn deliberately upgrades models — the
   //      explicit run-* skill IS the "full" answer (redteam 2026-09-14 #2).
   //   6. Short prompts (< NUDGE_MIN_CHARS: "ja", "weiter", "ok mach") get no
   //      nudge at all — they can never be non-Inline, and every copy sits in

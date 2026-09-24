@@ -5,7 +5,7 @@
  *   subagents launched with run_in_background, backgrounded Bash tasks, and
  *   whole Workflow runs (which fan out to agents of their own).
  *
- *   INFRASTRUCTURE IS NOT WORK. The concept skill keeps three detached Bash
+ *   INFRASTRUCTURE IS NOT WORK. The auto-concept skill keeps three detached Bash
  *   tasks alive for as long as a concept page is open — the bridge server, the
  *   keepalive pulser and the pickup waker. They produce no result the user is
  *   waiting for; they ARE the waiting. Counting them turned every concept card

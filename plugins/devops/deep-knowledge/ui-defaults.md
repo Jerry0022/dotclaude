@@ -5,21 +5,21 @@ The same recurring defects — icon buttons without tooltips, dropdowns left at
 the native look, spacing that differs between two identical cards, actions
 that only a mouse can reach — show up in every new project. This file names
 the outcome each rule expects so that it is in context **while the UI is
-written**, and is checked **after** it is written by `/tune-polish`.
+written**, and is checked **after** it is written by `/auto-polish`.
 
 Three readers, one source:
 
 | Reader | When | What it does with the rules |
 |---|---|---|
 | `post.design.remind` hook + `agents/frontend.md` / `agents/designer.md` | The moment a UI file is written | Prevention — the rules are in context before the element exists |
-| `/tune-polish --invoked-by=ship` (called from `/ship` Step 1d) | Every ship whose diff touches UI files | Measurement — **static** halves only, diff files only, report-only |
-| `/tune-polish` (direct, `/run-agents`, `/run-autonomous`) | A polish pass with a browser | Full check — static **and** runtime halves, whole scope |
+| `/auto-polish --invoked-by=ship` (called from `/do-ship` Step 1d) | Every ship whose diff touches UI files | Measurement — **static** halves only, diff files only, report-only |
+| `/auto-polish` (direct, `/auto-agents`, `/do-run autonomous`) | A polish pass with a browser | Full check — static **and** runtime halves, whole scope |
 
 ## The rules
 
 Each rule has a **static** half (checkable from the diff, no browser) and a
 **runtime** half (needs the rendered app). The ship path checks only the
-static half; the runtime half belongs to a full `/tune-polish` pass.
+static half; the runtime half belongs to a full `/auto-polish` pass.
 
 ### 1 · Tooltips
 
@@ -60,7 +60,7 @@ static half; the runtime half belongs to a full `/tune-polish` pass.
   and ≤ 3 outliers; otherwise report.
 - **Runtime:** interactive targets keep a minimum hit area (44 px on touch
   form factors) and adjacent actions do not touch; verified across the
-  `/tune-polish` viewport matrix.
+  `/auto-polish` viewport matrix.
 
 ### 4 · Hotkeys and keyboard operability
 
@@ -75,24 +75,24 @@ static half; the runtime half belongs to a full `/tune-polish` pass.
 - **Runtime:** every flow is completable without a mouse: sensible focus
   order, Escape closes, Enter confirms, arrow keys move within lists and
   menus, a visible focus ring. Checked by a tab-walk + accessibility snapshot
-  in a full `/tune-polish` pass. The goal is an app that is fully keyboard
+  in a full `/auto-polish` pass. The goal is an app that is fully keyboard
   operable wherever the platform allows.
 
 ## Common rules
 
 - **New or changed elements only** on the ship path. Existing elements are the
-  domain of a full `/tune-polish` (and, for spacing tokens, `/tune-harden`
+  domain of a full `/auto-polish` (and, for spacing tokens, `/auto-harden`
   Step 8). This keeps the check inside the branch's own scope and away from
-  `/tune-harden`'s hard-never rule ("add tooltips where none existed").
+  `/auto-harden`'s hard-never rule ("add tooltips where none existed").
 - **Skip silently** when the diff touches no UI file (§ UI file detection),
   when the project has no UI profile (`test-autonomy.md` profiles `cli-node`,
   `lib`, `generic`), or in `file-only` mode. A skipped check leaves **no**
   card entry.
 - **Priority on conflict:** a more recent project-specific convention from
-  merged PRs (the `/ship` Step 1d purpose-alignment sources) beats a generic
+  merged PRs (the `/do-ship` Step 1d purpose-alignment sources) beats a generic
   rule from this file. "Tooltips removed from the toolbar because they got in
   the way" is a decision, not a defect.
-- **Never blocks a ship.** Findings feed `/ship` Step 1d's semantics:
+- **Never blocks a ship.** Findings feed `/do-ship` Step 1d's semantics:
   mechanically fixable → fixed, listed under `changes`; everything else →
   `userFinalTest`. Under `$SHIP_LOCKOUT` findings are recorded and the ship
   continues.
@@ -115,9 +115,9 @@ replaces them (§ Project override).
 
 ## Project override
 
-Consumers extend or replace any of the above through the `/tune-polish`
-extension — `{project}/.claude/skills/tune-polish/reference.md` (project) or
-`~/.claude/skills/tune-polish/reference.md` (user-global), section `## UI
+Consumers extend or replace any of the above through the `/auto-polish`
+extension — `{project}/.claude/skills/auto-polish/reference.md` (project) or
+`~/.claude/skills/auto-polish/reference.md` (user-global), section `## UI
 rules`. The hook, the ship path and the full polish pass all read the same
 section:
 

@@ -7,7 +7,7 @@
  *   for tool calls that are NOT covered by the current ~/.claude/settings.json
  *   allow-list, and suggests safe additions to reduce mid-run prompts.
  *
- *   Used by /run-autonomous (Step 0.7) and /run-agents (Step 1.5).
+ *   Used by /do-run autonomous (Step 0.7) and /auto-agents (Step 1.5).
  *
  *   Output: JSON to stdout for skill consumption.
  *   Stderr: human-readable summary (suppress with --quiet).

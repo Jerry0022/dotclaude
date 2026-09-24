@@ -41,7 +41,7 @@ function readJson(file) {
 
 /**
  * True when `repoRoot` is the devops plugin's own source repo.
- * Matches the detection contract used by /claude-learn Step 2:
+ * Matches the detection contract used by /do-learn Step 2:
  * `{root}/plugins/devops/.claude-plugin/plugin.json` with `name === 'devops'`.
  * The root marketplace.json is accepted as a secondary signal so a repo layout
  * change does not silently turn the source repo into a "consumer".

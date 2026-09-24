@@ -138,7 +138,7 @@ describe("buildCronBody", () => {
   });
 
   test("resolves the script at run time in the versioned cache layout", () => {
-    // A cron outlives a plugin rebuild: an in-session /ship writes the new
+    // A cron outlives a plugin rebuild: an in-session /do-ship writes the new
     // version under a fresh .../devops/<version>/ and deletes the old one, so
     // a baked-in absolute path fails MODULE_NOT_FOUND once a minute after it.
     const cache = path.join("C:", "cache", "dotclaude", "devops", "0.128.0", "hooks", "session-start");
