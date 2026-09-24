@@ -1,10 +1,13 @@
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import * as R from "./run-contract.js";
+
+const require = createRequire(import.meta.url);
 
 const LIB = fileURLToPath(new URL("./run-contract.js", import.meta.url));
 const T0 = Date.parse("2026-09-24T10:00:00Z");
@@ -222,6 +225,32 @@ describe("state", () => {
   test("record without a contract is a no-op", () => {
     expect(R.record(cwd, edit)).toBeNull();
     expect(fs.existsSync(R.eventsPath(cwd))).toBe(false);
+  });
+
+  test("AUD-009: record retries once after a transient appendFileSync failure", () => {
+    R.arm(cwd, {}, { now: T0 });
+    const spy = vi.spyOn(fs, "appendFileSync").mockImplementationOnce(() => { throw Object.assign(new Error("EBUSY"), { code: "EBUSY" }); });
+    const ev = R.record(cwd, edit, { now: T0 });
+    expect(ev).toMatchObject({ k: "edit" });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(R.events(cwd)).toHaveLength(1);
+    spy.mockRestore();
+  });
+
+  test("AUD-009: record returns null when every attempt fails", () => {
+    R.arm(cwd, {}, { now: T0 });
+    const spy = vi.spyOn(fs, "appendFileSync").mockImplementation(() => { throw Object.assign(new Error("EBUSY"), { code: "EBUSY" }); });
+    expect(R.record(cwd, edit, { now: T0 })).toBeNull();
+    spy.mockRestore();
+  });
+
+  test("AUD-009: close retries the atomic write like arm/update", () => {
+    R.arm(cwd, {}, { now: T0 });
+    const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw Object.assign(new Error("EPERM"), { code: "EPERM" }); });
+    const h = R.close(cwd, "done: test", { now: T0 + 1000 });
+    expect(h).toMatchObject({ closeReason: "done: test" });
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
   });
 
   test("a new arm archives the old contract and starts empty", () => {
@@ -449,7 +478,7 @@ describe("formatBlock", () => {
     expect(msg).toContain("Chosen: Backlog · Autonom · Ship automatisch · Harden + Polish");
     expect(msg).toContain("Open for this item: harden, polish, do-ship");
     expect(msg).toContain('Skill("devops:auto-harden", "--invoked-by=autonomous")');
-    expect(msg).toContain('Skill("devops:do-ship", "--queued=1/6")   ← never the ship_* MCP tools directly');
+    expect(msg).toContain('Skill("devops:do-ship", "--queued=1/6 --keep")   ← never the ship_* MCP tools directly');
     expect(msg).toContain('node "/p/run-contract.js" skip <ob> --reason "<why>"');
     expect(msg).toContain('Only when every chosen step ran: node "/p/run-contract.js" done');
     expect(msg).toContain('Run over with open steps (card shows ✗): node "/p/run-contract.js" abort --reason');
@@ -464,6 +493,16 @@ describe("formatBlock", () => {
     expect(msg).toContain(LIB);
     const r = R.formatBlock(C({ mode: "backlog" }), [{ ob: "refine", item: "473", why: "w", fix: "f" }], "release", { libPath: "L" });
     expect(r).toContain('node "L" skip refine --item 473 --reason');
+  });
+
+  test("AUD-005: the auto-agents hint names --mode, the backlog do-ship hint names --keep", () => {
+    const autonomous = C({ mode: "prompt", flow: "autonomous" });
+    const autoMsg = R.formatBlock(autonomous, R.openObligations(autonomous, [edit], "edit"), "edit");
+    expect(autoMsg).toContain('Skill("devops:auto-agents", "--from=do-run --ship=manual --mode=background <task>")');
+
+    const interactive = C({ mode: "prompt", flow: "interactive" });
+    const interMsg = R.formatBlock(interactive, R.openObligations(interactive, [edit], "edit"), "edit");
+    expect(interMsg).toContain('--mode=interactive <task>');
   });
 });
 
@@ -537,5 +576,13 @@ describe("CLI", () => {
     expect(run().code).toBe(1);
     expect(run("arm", "--mode", "x").code).toBe(1);
     expect(run("arm", "--passes", "harden,rethink").code).toBe(1);
+  });
+});
+
+describe("AUD-015d: OTHER_PLACEHOLDERS is the one list post.ask.answers.js imports", () => {
+  test("run-contract.js exports the placeholder list and post.ask.answers.js uses it verbatim", () => {
+    expect(R.OTHER_PLACEHOLDERS).toEqual(["something else", "other", "etwas anderes", "sonstiges", "andere"]);
+    const postAsk = require("../post-tool-use/post.ask.answers.js");
+    expect([...postAsk.PLACEHOLDERS].sort()).toEqual([...R.OTHER_PLACEHOLDERS].sort());
   });
 });

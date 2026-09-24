@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook post.ask.answers
- * @version 0.1.0
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion
  * @description Answer-check (run-contract spec F): an AskUserQuestion answer
- *   token that equals the Other placeholder (`Something else`, `Other`,
- *   `Etwas anderes`, `Sonstiges`, case-insensitive) and is not an option label
+ *   token that equals the Other placeholder (run-contract.js
+ *   `OTHER_PLACEHOLDERS`: `Something else`, `Other`, `Etwas anderes`,
+ *   `Sonstiges`, `andere`, case-insensitive) and is not an option label
  *   of that question means the user picked Other WITHOUT typing. Injects
  *   `[answer-check]` context so the model asks what, instead of silently
  *   ignoring the answer. Works for every AskUserQuestion, contract or not.
@@ -15,7 +16,10 @@
 
 require('../lib/plugin-guard');
 
-const PLACEHOLDERS = new Set(['something else', 'other', 'etwas anderes', 'sonstiges']);
+// AUD-015d: the ONE placeholder list lives in run-contract.js — never a
+// second copy here that can drift from it.
+const { OTHER_PLACEHOLDERS } = require('../lib/run-contract');
+const PLACEHOLDERS = new Set(OTHER_PLACEHOLDERS.map(s => s.toLowerCase()));
 
 function clean(s) {
   return String(s == null ? '' : s).replace(/\s*\((?:recommended|empfohlen)\)\s*/gi, ' ').replace(/\s+/g, ' ').trim();

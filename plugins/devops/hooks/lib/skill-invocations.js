@@ -1,6 +1,6 @@
 /**
  * @module skill-invocations
- * @version 0.4.0
+ * @version 0.5.0
  * @description Which skills did the transcript already invoke? Shared by
  *   `prompt.skill.enforce` (the trigger router must not re-mandate a skill
  *   that is already running this session), `stop.guide.handoff` (the turn
@@ -271,6 +271,7 @@ module.exports = {
   normalizeSkillName,
   SKILL_INVOKE_RE,
   COMMAND_NAME_RE,
+  COMMAND_ARGS_AFTER_RE,
   commandNamesIn,
   modeKey,
   modeFromArgs,

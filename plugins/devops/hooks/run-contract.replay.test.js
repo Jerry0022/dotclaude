@@ -136,7 +136,7 @@ describe("replay A — backlog session", () => {
     expect(firstLine(rel.stderr)).toBe("[run-contract] BLOCKED at release: the run the user chose is not finished.");
     const open = rel.stderr.split("\n").find(l => l.startsWith("Open for this item:"));
     for (const ob of ["auto-agents", "harden", "polish", "qa", "do-ship", "refine #473", "refine #474"]) expect(open).toContain(ob);
-    expect(rel.stderr).toContain('Skill("devops:do-ship", "--queued=1/6")');
+    expect(rel.stderr).toContain('Skill("devops:do-ship", "--queued=1/6 --keep")');
   });
 });
 

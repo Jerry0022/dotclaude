@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.1.0
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -96,8 +96,10 @@ function main(hook) {
       // A partial router call (only some headers) merges into this session's
       // fresh contract instead of re-arming with defaults (R7).
       if (fields && !RC.mergeRouterAnswers(root, questions, fields, s)) {
-        RC.arm(root, { ...fields, source: 'router', sessionId });
-        RC.clearPendingArm(root);
+        const h = RC.arm(root, { ...fields, source: 'router', sessionId });
+        // A failed write must not delete the marker (AUD-001): keep it so the
+        // next gated call's pre-hook fallback arm can retry.
+        if (h) RC.clearPendingArm(root);
       }
     } else {
       // "Run fortsetzen" answered → the resume path asks no router questions.

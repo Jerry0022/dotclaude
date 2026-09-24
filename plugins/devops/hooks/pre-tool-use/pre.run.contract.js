@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -49,12 +49,23 @@ function gitNames(root, args) {
   return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
+/** A safe git ref/range token: no leading `-` (flag injection), only ref-ish chars. */
+const SAFE_BASE_RE = /^[A-Za-z0-9._/-]+$/;
+function safeBase(explicit) {
+  const b = typeof explicit === 'string' ? explicit.trim() : '';
+  if (!b || b.startsWith('-') || !SAFE_BASE_RE.test(b)) return '';
+  return b;
+}
+
 /**
  * The qa diff base (R9): an explicit base, else origin/HEAD's branch, else
- * `main`, then `master` when that exists locally or on origin.
+ * `main`, then `master` when that exists locally or on origin. An unsafe
+ * explicit base (leading `-`, shell metacharacters) is never trusted — the
+ * base is auto-detected instead (AUD-007).
  */
 function resolveBase(root, explicit, C) {
-  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  const safe = safeBase(explicit);
+  if (safe) return safe;
   const sym = C.gitOut(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
   if (sym) return sym.replace(/^origin\//, '');
   for (const b of ['main', 'master']) {
@@ -132,9 +143,12 @@ function armFromPending(hook, root, RC, C, sessionId) {
     fields = RC.parseRouterAnswers([q4], {}, { doRunArgs: marker.args });
   }
   const h = RC.arm(root, { ...fields, source, sessionId: sessionId || marker.sessionId || null });
+  // A failed write must not delete the marker (AUD-001): keep it so the next
+  // gated call retries this same fallback arm.
+  if (!h) return null;
   RC.clearPendingArm(root);
-  if (h && found) for (const patch of found.followUps) RC.applyFollowUp(root, patch, { sessionId });
-  return h ? { source } : null;
+  if (found) for (const patch of found.followUps) RC.applyFollowUp(root, patch, { sessionId });
+  return { source };
 }
 
 function main(hook) {
@@ -158,6 +172,10 @@ function main(hook) {
 
   const sessionId = hook.session_id || null;
   if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
+    // AUD-004: a refused call leaves a lasting trace. A no-op when no
+    // contract is active yet (record() needs one) — the batch marker itself
+    // is that trace then.
+    RC.record(root, { k: 'block', gate: 'batch', open: [] }, { sessionId });
     process.stderr.write(`${BATCH_BLOCK}\n`);
     return 2;
   }
@@ -186,6 +204,9 @@ function main(hook) {
     }
     const open = RC.openObligations(contract, evs, gate, ctx);
     if (!open.length) continue;
+    // AUD-004: a refused call leaves a lasting trace (`block` never counts as
+    // work or a boundary — it changes neither segments nor obligations).
+    RC.record(croot, { k: 'block', gate, open: open.map(o => o.ob) }, { sessionId });
     let msg = RC.formatBlock(contract, open, gate, { libPath: LIB });
     if (armed && armed.source === 'fallback') {
       msg += `\nNote: this contract was armed from the click-through defaults (the do-run answers were not found). Wrong? node "${LIB}" arm --mode <m> --flow <f> --ship <s> --passes <p>`;

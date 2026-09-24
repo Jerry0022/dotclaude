@@ -64,9 +64,10 @@ Header:
   "v": 1,
   "id": "rc-<ts36>-<rand>",
   "armedAt": "<iso>",
-  "source": "router | machine | cli",
+  "source": "router | machine | cli | fallback",
   "sessionId": "<session id or null>",
   "mode": "prompt | backlog | audit",
+  "modeFrom": "router | machine | cli | default",
   "flow": "interactive | autonomous",
   "ship": "auto | manual",
   "strict": false,
@@ -74,11 +75,17 @@ Header:
   "rethink": false,
   "burn": false,
   "presence": true,
+  "alsoAudit": false,
   "items": ["483", "477"],
   "milestones": [],
   "auditResult": "implement | concept | null",
+  "unresolved": false,
+  "announced": false,
+  "pcAfter": null,
+  "phase": "presence | null",
   "closedAt": null,
-  "closeReason": null
+  "closeReason": null,
+  "aborted": false
 }
 ```
 
@@ -93,12 +100,13 @@ Events (`k` = kind, `t` = iso time):
 | `agent` | `type` (`subagent_type`, default `general-purpose`) | PostToolUse Agent |
 | `edit` | — (only when the previous event is not `edit`) | PostToolUse Edit/Write/NotebookEdit on a gated path |
 | `commit` | — | PostToolUse Bash/PowerShell `git commit` (exit 0) |
-| `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c` / `git worktree add` (exit 0) |
+| `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c` (exit 0) — an ITEM boundary only (R6): not from a subagent, not `git worktree add`, not `--detach`, not a `<current>-*` / `<current>/*` sub-branch. `git worktree add` never writes a `branch` event |
 | `release` | `ok`, `merged`, `closes: ["473"]` (from `Closes #N` in `tool_input.body`) | PostToolUse `ship_release` |
 | `card` | `variant` | PostToolUse `render_completion_card` |
 | `skip` | `ob`, `reason`, `item?` | CLI `skip` |
 | `park` | `item`, `reason` (ends the segment) | CLI `park` |
 | `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate |
+| `block` | `gate`, `open` (obligation names refused) | PreToolUse, right before `return 2` — never counts as work or a segment boundary |
 
 API (CommonJS, pure where possible, every fs error swallowed → "no contract"):
 `readContract(cwd)`, `arm(cwd, header)`, `update(cwd, patch)`,
@@ -291,9 +299,11 @@ blocks.
 ### F. Answers without text — `hooks/post-tool-use/post.ask.answers.js`
 
 After every `AskUserQuestion`: an answer token that equals the Other
-placeholder (`Something else`, `Other`, `Etwas anderes`, `Sonstiges`,
-case-insensitive) and is not an option label of that question means the user
-picked Other without typing. Inject `additionalContext`:
+placeholder (`run-contract.js` `OTHER_PLACEHOLDERS`: `Something else`,
+`Other`, `Etwas anderes`, `Sonstiges`, `andere`, case-insensitive — the one
+list; `post.ask.answers.js` imports it, never keeps its own copy) and is not
+an option label of that question means the user picked Other without typing.
+Inject `additionalContext`:
 
 ```
 [answer-check] "<question>" was answered with "Something else" and no text.
@@ -307,6 +317,16 @@ AskUserQuestion, before acting on this question's answer.
 answers as `key=value` pairs (`ship=`, `passes=`, `strict=`, `queue=`,
 `burnMode=`, `phase=`). Arm (or refresh) the contract from them with
 `source: machine`; `phase=presence` sets `presence: false`.
+
+A user-TYPED devops slash command other than `do-run` / `auto-concept`
+(`/auto-harden`, `/auto-polish`, `/do-ship`, `/auto-agents`, `/auto-issue`,
+with or without the `devops:` prefix, in the typed `/x args` form or the
+harness `<command-name>/devops:x</command-name><command-args>…` form) never
+reaches the Skill tool, so without this hook its obligation would never
+record. This hook writes the same `skill` event PostToolUse's Skill branch
+would (B, table A) onto the active same-session contract. A typed `/do-run`
+or `/auto-concept` also clears a pending `.claude/batch-handoff.json` (E) —
+the same take-over the Skill-tool path already does.
 
 ### H. Recording and closing — `hooks/post-tool-use/post.run.contract.js`
 
@@ -349,6 +369,18 @@ closed / aborted in the last 15 minutes (so the closing card still carries it):
 
 Backlog aggregates over segments with work (`Harden 6/6`). ✓ done · ⚠ skipped
 (reason) · ✗ open. Localized de/en like the rest of the card.
+
+## Limits
+
+A contract exists only after the do-run router answered (B) or a machine
+prompt armed one (G). Work that meets every criterion do-run itself would
+apply — a code change, a ship — but that never went through do-run or a
+machine-prompt run is not gated at all: outside a run, the delegation policy
+(`hooks/lib/delegation.js`) stays an advisory kill switch and
+`prompt.skill.enforce.js` only suggests a skill, it does not refuse the call.
+The one place outside an active run where a mechanism still forces a skill is
+the do-batch hand-off gate (E) — its `.claude/batch-handoff.json` blocks Edit
+/ Write / NotebookEdit and `git commit` regardless of any contract.
 
 ## Acceptance
 
