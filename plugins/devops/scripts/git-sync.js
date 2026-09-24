@@ -42,12 +42,22 @@ function quit(reason, { nothingToDo = false } = {}) {
 // Terminal's default-terminal delegation surfaces each one as a visible,
 // focus-stealing window — one per git call, measured on this machine (same
 // mechanism as documented in hooks/lib/graphify-state.js spawnBgRunner).
+//
+// Per-call budget: 15 s by default. DEVOPS_GIT_SYNC_TIMEOUT_MS raises it for a
+// caller that knows the machine is loaded — the integration suites set it,
+// because under parallel test load a real merge outran 15 s and the sync
+// reported ✗ for a merge that was fine (#475). Clamped to 1 s … 5 min.
+const GIT_TIMEOUT_MS = (() => {
+  const n = Number(process.env.DEVOPS_GIT_SYNC_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.max(n, 1000), 300000) : 15000;
+})();
+
 function git(args) {
   try {
     return execFileSync('git', args, {
       cwd,
       encoding: 'utf8',
-      timeout: 15000,
+      timeout: GIT_TIMEOUT_MS,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     }).trim();
