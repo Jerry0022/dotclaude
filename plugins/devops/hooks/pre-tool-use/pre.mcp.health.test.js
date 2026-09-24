@@ -5,9 +5,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-// Spawns the real hook; the full suite runs many files in parallel.
-vi.setConfig({ testTimeout: 30_000 });
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.mcp.health.js");
 const TOOL = "mcp__plugin_devops_dotclaude-completion__render_completion_card";

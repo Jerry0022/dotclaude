@@ -12,12 +12,6 @@ process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 // started from a Desktop session inherits that entrypoint — pin the terminal.
 process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 
-// Every render() shells out to git (build-ID, repo URL). Under full parallel
-// suite load a single call has exceeded the 5s per-test default, failing
-// whichever tests happened to run first — a flake unrelated to what they
-// assert. These tests check rendering, not speed, so give them real headroom.
-vi.setConfig({ testTimeout: 30_000 });
-
 const captured = vi.hoisted(() => ({ handlers: {} }));
 
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({

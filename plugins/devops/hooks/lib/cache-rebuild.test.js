@@ -5,11 +5,6 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-// This file spawns a real detached process (that IS the contract under test).
-// Process-start tail latency on a loaded machine easily exceeds vitest's 5s
-// default, so give it the same headroom the other spawn-heavy suites use.
-vi.setConfig({ testTimeout: 30_000 });
-
 const require = createRequire(import.meta.url);
 const lib = require("./cache-rebuild.js");
 

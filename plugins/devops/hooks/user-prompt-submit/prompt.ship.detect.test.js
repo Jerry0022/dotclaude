@@ -4,21 +4,31 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { sessionFile, writeSessionFile } from "../lib/session-id.js";
+import { writeSessionFile } from "../lib/session-id.js";
 
 const HOOK = fileURLToPath(new URL("./prompt.ship.detect.js", import.meta.url));
 
 let cwd;
+/** Private tmp dir for the hook's session files (see runHook). */
+let tmp;
 
 /** Run the hook as the harness does: JSON on stdin, a git project as cwd
  *  (the hook is silent outside a work tree), plugin enabled in its settings
- *  so plugin-guard passes whatever the machine's global state is. */
+ *  so plugin-guard passes whatever the machine's global state is.
+ *
+ *  The hook keeps its per-session markers (edit counter, "compact advised")
+ *  in `os.tmpdir()`, which honours TMPDIR/TEMP/TMP. On the shared system tmp
+ *  dir every concurrent run of this file — another session's test run,
+ *  another worktree — used the same fixed session id, so one run consumed or
+ *  unlinked the other's marker and "never twice in a row" failed at random
+ *  (2026-09-24). A private tmp dir per test makes each run its own world, as
+ *  in post.flow.completion.test.js and pre.tokens.guard.bash.test.js. */
 function runHook(payload, env) {
   const res = spawnSync(process.execPath, [HOOK], {
     input: JSON.stringify({ cwd, session_id: "ship-detect-test", ...payload }),
     cwd,
     encoding: "utf8",
-    env: { ...process.env, DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "", ...(env || {}) },
+    env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp, DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "", ...(env || {}) },
   });
   return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
 }
@@ -40,10 +50,19 @@ beforeEach(() => {
   fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
   fs.writeFileSync(path.join(cwd, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
   execFileSync("git", ["init", "-q"], { cwd });
+  // outside the work tree: an untracked marker must never count as unshipped work
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ship-detect-tmp-"));
 });
 
+/** The hook's session file for `prefix` inside the private tmp dir. */
+function privateSessionFile(prefix) {
+  return path.join(tmp, `${prefix}-ship-detect-test`);
+}
+
 afterEach(() => {
-  try { fs.rmSync(cwd, { recursive: true, force: true }); } catch { /* best effort */ }
+  for (const dir of [cwd, tmp]) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
 });
 
 // The ship pipeline re-reads the whole context ~16 times. Above the threshold
@@ -68,7 +87,7 @@ describe("prompt.ship.detect — careful compact", () => {
 
   test("an affirmation after edits is a ship too, and gets the same stop", () => {
     // the edit counter the affirmation path reads lives in the session file store
-    writeSessionFile(sessionFile("dotclaude-devops-edits", "ship-detect-test"), "3");
+    writeSessionFile(privateSessionFile("dotclaude-devops-edits"), "3");
     const r = runHook({ prompt: "ja", transcript_path: transcript(500_000) });
     expect(r.stdout).toContain("[ship-compact]");
   });
@@ -105,12 +124,6 @@ describe("prompt.ship.detect — careful compact", () => {
     const r = runHook({ prompt: "ship", transcript_path: t });
     expect(r.stdout).toContain('Skill("devops:do-ship")');
     expect(r.stdout).not.toContain("[ship-compact]");
-  });
-
-  afterEach(() => {
-    for (const prefix of ["dotclaude-devops-edits", "dotclaude-devops-ship-compact-advised"]) {
-      try { fs.unlinkSync(sessionFile(prefix, "ship-detect-test")); } catch {}
-    }
   });
 
   test("a non-ship prompt is untouched", () => {
@@ -186,10 +199,6 @@ describe("prompt.ship.detect — target channel", () => {
       execFileSync("git", ["remote", "set-head", "origin", "main"], { cwd });
       return origin;
     }
-
-    afterEach(() => {
-      try { fs.unlinkSync(sessionFile("dotclaude-devops-ship-compact-advised", "ship-detect-test")); } catch {}
-    });
 
     test("promotion-only (nothing unshipped): no compact stop on a large context", () => {
       const origin = syncedWithOrigin();

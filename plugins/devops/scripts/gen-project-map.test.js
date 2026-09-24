@@ -13,10 +13,6 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Spawns real `git` + `node` processes; see gen-readme-sections.test.js for why
-// the default 5 s is too tight under a full parallel suite run.
-vi.setConfig({ testTimeout: 30_000 });
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(__dirname, "gen-project-map.mjs");
 

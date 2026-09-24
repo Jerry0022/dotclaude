@@ -6,10 +6,6 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { queryDone } from "../lib/graphify-state.js";
 
-// Spawns the real hook per test — see the timeout note in
-// pre.tokens.guard.graphgate.test.js for why 30s under a full parallel run.
-vi.setConfig({ testTimeout: 30_000 });
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const QUERY_HOOK = path.join(__dirname, "post.graphify.query.js");
 const SEARCH_HOOK = path.join(__dirname, "post.graphify.search.js");
