@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -9,6 +9,7 @@
  *   Ambiguous conflicts are aborted and reported for AI-based semantic
  *   resolution (see deep-knowledge/merge-safety.md).
  *   Standalone: called by prompt.git.sync hook and session-start cron.
+ *   `--explain` (do-batch merge): every no-merge exit names its reason.
  */
 
 const { execFileSync } = require('child_process');
@@ -16,6 +17,24 @@ const { existsSync, readFileSync, writeFileSync } = require('fs');
 const { join } = require('path');
 
 const cwd = process.cwd();
+
+// --explain: a caller that WAITS for the result (the do-batch merge) needs to
+// tell "main is already in" from "the sync stepped aside". Without it, every
+// guard below exits silently and a skipped sync reads as an up-to-date branch.
+// The background spawner never passes it — silence stays its "nothing to say".
+const EXPLAIN = process.argv.includes('--explain');
+
+/**
+ * Exit quietly — or, under --explain, say why nothing was merged.
+ * `=` marks a state with nothing to merge; `– skipped:` a sync that stepped
+ * aside although the branch may well be behind.
+ */
+function quit(reason, { nothingToDo = false } = {}) {
+  if (EXPLAIN) {
+    process.stdout.write(`[git-sync] ${nothingToDo ? `= ${reason}` : `– skipped: ${reason}`}\n`);
+  }
+  process.exit(0);
+}
 
 // argv-form + windowsHide, NEVER a shell string: this script runs as a DETACHED,
 // console-less child (git-sync-bg.js). From such a parent every execSync string
@@ -39,11 +58,11 @@ function git(args) {
 
 // Only run in a git repo
 if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') {
-  process.exit(0);
+  quit('not a git work tree', { nothingToDo: true });
 }
 
 const remotes = (git(['remote']) || '').split('\n').filter(Boolean);
-if (!remotes.length) process.exit(0);
+if (!remotes.length) quit('no remote configured', { nothingToDo: true });
 // A fork checkout has both `origin` and `upstream`; picking the first line
 // alphabetically would sync a branch against somebody else's default branch.
 const origin = remotes.includes('origin') ? 'origin' : remotes[0];
@@ -72,14 +91,15 @@ const MAIN = (() => {
 // worktrees here sit detached between tasks, so this is the common state, not
 // an exotic one.
 const branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
-if (!branch || branch === MAIN) process.exit(0);
+if (!branch) quit('detached HEAD — check out a branch first');
+if (branch === MAIN) quit(`on ${MAIN} itself`, { nothingToDo: true });
 
 // An unfinished merge/rebase/cherry-pick/revert/bisect owns the index. A merge
 // attempted on top of one fails without conflicts of its own, and the recovery
 // path below would then pick up THAT operation's conflicted files, rewrite them
 // and commit them — turning a background convenience into data loss. Wait.
 const gitDir = git(['rev-parse', '--absolute-git-dir']);
-if (!gitDir) process.exit(0);
+if (!gitDir) quit('git dir unreadable');
 
 /**
  * git, with the repo's commit hooks switched off.
@@ -136,7 +156,8 @@ function shipInFlight() {
   }
 }
 
-if (repoBusy() || shipInFlight()) process.exit(0);
+if (repoBusy()) quit('a merge/rebase/cherry-pick is in progress or the index has unmerged entries');
+if (shipInFlight()) quit('a /do-ship run owns this worktree');
 
 // Ensure diff3 is set for meaningful conflict markers
 const conflictStyle = git(['config', '--get', 'merge.conflictstyle']);
@@ -348,12 +369,14 @@ function tryMerge(source) {
   const count = parseInt(behind);
 
   // Work in progress on a file the merge would rewrite → not now, and silently.
-  if (dirtyOverlap(source).length > 0) return null;
+  const overlap = dirtyOverlap(source);
+  if (overlap.length > 0) return { source, skipped: `uncommitted changes overlap the incoming merge: ${overlap.join(', ')}` };
 
   // The gates at the top of this file ran before a fetch per parent, and a
   // fetch takes seconds. A /do-ship or a rebase started in that window would be
   // invisible to them, so ask again with the index about to be written.
-  if (repoBusy() || shipInFlight()) return null;
+  if (repoBusy()) return { source, skipped: 'another git operation started meanwhile' };
+  if (shipInFlight()) return { source, skipped: 'a /do-ship run started meanwhile' };
 
   // Both git calls that write run with hooks disabled: this process is
   // detached and has no console, so a repo hook that prompts cannot be
@@ -471,7 +494,7 @@ for (const p of getParentChain(branch)) {
   sources.push(`${origin}/${p}`);
 }
 
-if (!sources.length) process.exit(0);
+if (!sources.length) quit('no parent branch exists upstream', { nothingToDo: true });
 
 // Best effort, never load-bearing: keep the local main ref in step for repos
 // where nothing has it checked out. Fails silently in the layout above.
@@ -481,7 +504,15 @@ git(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
 const messages = [];
 for (const parent of sources) {
   const result = tryMerge(parent);
-  if (!result) continue;
+  if (!result) {
+    if (EXPLAIN) messages.push(`= ${parent} already in ${branch}`);
+    continue;
+  }
+  if (result.skipped) {
+    // Background mode stays silent: the next window finds the same commits.
+    if (EXPLAIN) messages.push(`– ${parent} → ${branch}: skipped: ${result.skipped}`);
+    continue;
+  }
 
   if (result.failed) {
     messages.push(`✗ ${parent} → ${branch}: ${result.reason || 'merge failed (unknown error)'}`);

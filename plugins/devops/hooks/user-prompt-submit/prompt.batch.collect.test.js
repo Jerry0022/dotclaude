@@ -562,6 +562,22 @@ describe("message builders — 0.4.0", () => {
     expect(lines).not.toContain("Löse ihn ZUERST");
   });
 
+  test("a skipped sync is never reported as 'already contained'", () => {
+    const lines = renderSyncLines({
+      ran: true,
+      output: "[git-sync] – origin/main → feat: skipped: uncommitted changes overlap the incoming merge: a.js",
+    }).join("\n");
+    expect(lines).toContain("NICHT vollständig gemerged");
+    expect(lines).toContain("--explain");
+    expect(lines).not.toContain("bereits enthalten");
+  });
+
+  test("an '=' line reads as nothing to merge", () => {
+    const lines = renderSyncLines({ ran: true, output: "[git-sync] = origin/main already in feat" }).join("\n");
+    expect(lines).toContain("nichts zu mergen");
+    expect(lines).not.toContain("gerade gemerged");
+  });
+
   test("no sync record at all still demands the run", () => {
     expect(renderSyncLines(undefined).join("\n")).toContain("Kein Sync gelaufen");
   });

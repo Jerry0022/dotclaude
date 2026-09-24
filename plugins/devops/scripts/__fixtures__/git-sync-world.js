@@ -91,6 +91,17 @@ export async function runSync(cwd, resultFile, envOverride = {}) {
   }
 }
 
+/** Run git-sync.js the way the do-batch merge does: waited on, --explain, stdout. */
+export async function runSyncExplain(cwd) {
+  const { stdout } = await run(process.execPath, [SCRIPT, "--explain"], {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+    env: GIT_ENV,
+  });
+  return stdout;
+}
+
 export function write(repo, file, content) {
   fs.writeFileSync(path.join(repo, file), content, "utf8");
 }

@@ -1,6 +1,6 @@
 ---
 name: do-batch
-version: 0.6.0
+version: 0.6.1
 description: >-
   Collect mode — a UserPromptSubmit hook parks each prompt in
   `.claude/batch.md` instead of executing it (no model turn), until an
@@ -292,15 +292,23 @@ plan rebuilds what main already has or collides with it at ship time.
   conflict or failure — resolve it (merge-safety.md: never `--ours`/`--theirs`)
   before Step 4.1. "Der Sync konnte im Hook nicht laufen" means: run it yourself
   now.
-- `/do-batch go` path: run it yourself, synchronously, and report the line:
+- `/do-batch go` path (also `los`, `merge`): run it yourself, synchronously,
+  before anything else, and report the line:
 
   ```bash
-  node "{PLUGIN_ROOT}/scripts/git-sync.js"
+  node "{PLUGIN_ROOT}/scripts/git-sync.js" --explain
   ```
 
-  Silent output = nothing to merge (or on main / no remote). Say so in one
-  clause. It merges the parent chain (`origin/main` → … → this branch); it
-  never rebases and never touches main itself.
+  It merges the parent chain (`origin/main` → … → this branch, sub-branches
+  included); it never rebases and never touches main itself. `--explain` makes
+  every no-merge exit speak: `=` = nothing to merge (already in, on main, no
+  remote) — say so in one clause.
+
+**`– skipped:` is not "up to date".** The sync steps aside on uncommitted
+changes that overlap the incoming merge, a detached HEAD, an unfinished
+merge/rebase, or a running `/do-ship` — the branch may still be behind main.
+Fix the named cause (commit the WIP, check out the branch, finish the
+operation), re-run the command, and only then read the notes.
 
 **4.1 Read every note.** `.claude/batch.md`, verbatim. Notes are the user's own
 words — never paraphrase them away before analysing. When the injected context
