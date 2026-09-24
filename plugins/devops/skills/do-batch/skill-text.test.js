@@ -206,3 +206,22 @@ describe("do-batch SKILL.md — hand-off to do-run / auto-concept", () => {
     expect(section("## Rules")).toMatch(/\*\*do-batch never implements\.\*\*/);
   });
 });
+
+describe("do-batch bundle plan — issue #483", () => {
+  const step44 = section("**4.4 Build the bundle plan", "**4.5");
+  const step49 = section("**4.9 Hand off", "## Step 5");
+
+  it("4.4 keeps every note detail, bundles by file ownership, and is no gate", () => {
+    expect(step44).toMatch(/Every concrete detail of every note/);
+    expect(step44).toMatch(/Two bundles never own the same\s+file/);
+    expect(step44).toMatch(/\*\*both\*\* routes/);
+    expect(step44).toMatch(/never\s+asked to approve it/);
+    expect(step44).toMatch(/Verification per bundle/);
+  });
+
+  it("4.9 hand-off carries a Bündel section with owner, interface, order and check", () => {
+    expect(step49).toMatch(/Bündel:/);
+    expect(step49).toMatch(/besitzt .*Schnittstellen: .*nach: .*Prüfung:/);
+    expect(step49).toMatch(/one agent per bundle/);
+  });
+});

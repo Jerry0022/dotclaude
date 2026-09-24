@@ -1,6 +1,6 @@
 ---
 name: auto-concept
-version: 0.2.0
+version: 0.2.1
 description: >-
   Generate an interactive HTML page for analysis, plans, concepts, prototypes,
   comparisons, or creative work — open it in the browser and monitor user
@@ -67,7 +67,9 @@ with dispositions), the plan, and the open decisions that made do-batch
 route here instead of to do-run (do-batch Step 4.6). Iteration 1 is that
 plan with every open decision as a decision item — conflicts ("#2 rot, #6
 blau"), infeasible notes whose dependents need a new direction, analysis
-requests; settled parts are shown as context, not re-asked. The mode
+requests; settled parts are shown as context, not re-asked. The `Bündel:`
+section (bundles, owned files, interfaces, order) is shown as the plan's
+structure and passed unchanged to the implement click. The mode
 follows from the open decisions (all visual → design, none visual →
 decision, both → mixed) — skip the question. Never drop a coverage line:
 the list travels into the page unchanged. Implementation then runs through
