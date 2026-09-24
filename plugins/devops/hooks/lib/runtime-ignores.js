@@ -44,6 +44,7 @@ const CLAUDE_CODE_STATE = Object.freeze([
 /** Written by the devops plugin (and adjacent MCP servers seen dirtying repos). */
 const PLUGIN_STATE = Object.freeze([
   '.claude/batch-activity',
+  '.claude/batch-assets/',
   '.claude/batch-mode.json',
   '.claude/batch-watchdog.lock',
   '.claude/batch.md',
