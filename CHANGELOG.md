@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.197.0] — 2026-09-24
+
+### Added
+- **App style is part of every UI rule.** The new rule R0 in `ui-defaults.md` says everything the app shows uses the app's own tokens (surface, border, radius, type, shadow, motion) in every theme. It applies to every rule, project rules included, unless a rule says otherwise. Native tooltips, bare selects, default scrollbars and `alert()` dialogs are findings.
+- **Scrollbars in the app's style (R5).** Scroll containers get one global skin from the tokens: `scrollbar-color` and `scrollbar-width`, a `::-webkit-scrollbar` fallback and `color-scheme` per theme.
+- **Concept pages have an app tooltip engine.** Every hover hint is `data-tip`, drawn in the page tokens with the two delay tiers. A stray native `title` is converted when it appears. Gate 48b checks that the engine is there. Every scroll container on the page wears the same skin.
+
+### Changed
+- **Tooltips wait by kind (R1).** Info tooltips are the default and open after 1.5 s. Label tooltips open after 0.5 s, and only when the tooltip is the element's only name, shows cut-off text or explains a disabled control. The next tooltip opens instantly within 300 ms, keyboard focus opens it instantly, and Escape closes it. A native `title` no longer counts as a tooltip. A project can change the two values with `tooltip.delay`.
+- **The completion card and the `/auto-guide` overlay use app-styled tooltips.** Neither uses native `title` tooltips any more. The card draws its tooltips from the host tokens, the overlay from its own palette, and the overlay's panel scrollbar matches.
+- **The UI reminder also covers concept pages and opted-in plugin sources.** `post.design.remind` lists R0–R5 and no longer skips `docs/concepts/`. A `files:` glob in the override opts plugin sources in and counts as a UI profile at ship time. This repo opts in its own UI sources.
+
 ## [0.196.0] — 2026-09-24
 
 ### Added

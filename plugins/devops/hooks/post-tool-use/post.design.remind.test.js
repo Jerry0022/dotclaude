@@ -80,7 +80,7 @@ describe("post.design.remind (hook)", () => {
     expect(res.stdout).toBe("");
   });
 
-  test("UI file produces the reminder with R1..R4", () => {
+  test("UI file produces the reminder with R0..R5", () => {
     const dir = project();
     const res = runHook(dir, {
       filePath: path.join(dir, "src", "App.tsx"),
@@ -88,11 +88,45 @@ describe("post.design.remind (hook)", () => {
     });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("[ui-defaults]");
-    expect(res.stdout).toContain("R1");
-    expect(res.stdout).toContain("R2a");
-    expect(res.stdout).toContain("R2b");
-    expect(res.stdout).toContain("R3");
-    expect(res.stdout).toContain("R4");
+    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4", "R5"]) {
+      expect(res.stdout).toContain(`${id} `);
+    }
+    expect(res.stdout).toContain("part of every rule");
+    expect(res.stdout).toContain("never a native title");
+    expect(res.stdout).toContain("Info 1500 ms (default), Label 500 ms");
+    expect(res.stdout).toContain("R5 scrollbars");
+  });
+
+  test("tooltip.delay override changes the R1 tiers; project beats user-global", () => {
+    const dir = project();
+    writeOverride(dir, "- tooltip.delay: info 1200, label 400   # ms");
+    const userRef = path.join(dir, ".home", ".claude", "skills", "auto-polish");
+    fs.mkdirSync(userRef, { recursive: true });
+    fs.writeFileSync(
+      path.join(userRef, "reference.md"),
+      "## UI rules\n- tooltip.delay: info 2000, label 300\n"
+    );
+
+    const res = runHook(dir, {
+      filePath: path.join(dir, "src", "App.tsx"),
+      sessionId: nextSid(),
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("Info 1200 ms (default), Label 400 ms");
+    expect(res.stdout).not.toContain("tooltip.delay");
+  });
+
+  test("a user-global tooltip.delay applies when the project sets none", () => {
+    const dir = project();
+    const userRef = path.join(dir, ".home", ".claude", "skills", "auto-polish");
+    fs.mkdirSync(userRef, { recursive: true });
+    fs.writeFileSync(path.join(userRef, "reference.md"), "## UI rules\n- tooltip.delay: label 400\n");
+
+    const res = runHook(dir, {
+      filePath: path.join(dir, "src", "App.tsx"),
+      sessionId: nextSid(),
+    });
+    expect(res.stdout).toContain("Info 1500 ms (default), Label 400 ms");
   });
 
   test("fires once per session, and again in a different session", () => {
@@ -156,19 +190,36 @@ describe("post.design.remind (hook)", () => {
     expect(res.stdout).not.toContain("disabled by project override: R1");
   });
 
-  test("excludes concept pages and plugin source markdown", () => {
+  test("concept pages get the reminder — the rules apply there too", () => {
     const dir = project();
-    const conceptRes = runHook(dir, {
+    const res = runHook(dir, {
       filePath: path.join(dir, "docs", "concepts", "x.html"),
       sessionId: nextSid(),
     });
-    expect(conceptRes.stdout).toBe("");
+    expect(res.stdout).toContain("[ui-defaults]");
+  });
 
-    const skillRes = runHook(dir, {
+  test("plugin source stays excluded by default, a files: glob opts it in", () => {
+    const dir = project();
+    const templates = path.join(dir, "plugins", "devops", "skills", "auto-concept", "deep-knowledge", "templates.md");
+    expect(runHook(dir, { filePath: templates, sessionId: nextSid() }).stdout).toBe("");
+    expect(runHook(dir, {
       filePath: path.join(dir, "plugins", "devops", "skills", "foo", "SKILL.md"),
       sessionId: nextSid(),
+    }).stdout).toBe("");
+
+    writeOverride(dir, "- files: plugins/devops/skills/auto-concept/deep-knowledge/templates.md");
+    expect(runHook(dir, { filePath: templates, sessionId: nextSid() }).stdout).toContain("[ui-defaults]");
+  });
+
+  test("node_modules stays excluded even when a files: glob matches", () => {
+    const dir = project();
+    writeOverride(dir, "- files: .html");
+    const res = runHook(dir, {
+      filePath: path.join(dir, "node_modules", "pkg", "index.html"),
+      sessionId: nextSid(),
     });
-    expect(skillRes.stdout).toBe("");
+    expect(res.stdout).toBe("");
   });
 
   test("Bash tool produces no reminder", () => {

@@ -239,6 +239,23 @@ describe("cardWidgetHtml", () => {
     expect(html).toContain("62% verbraucht");
   });
 
+  test("tooltips are app-styled data-tip, never the native title (ui-defaults.md R0/R1)", () => {
+    const html = cardWidgetHtml(baseModel({
+      evidence: [{ glyph: "✓", text: "ok", dim: false, tooltip: "npm test · 41s" }],
+      budget: { omitted: false, warn: false, contextHealth: "", bars: [
+        { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "40% verbraucht" },
+      ] },
+    }), "");
+    expect(html).not.toMatch(/\stitle="/);
+    expect(html).toContain('data-tip="npm test · 41s"');
+    expect(html, "the bar names its value only in the tip → Label tier")
+      .toContain('class="card-budget" data-tip="40% verbraucht" data-tip-tier="label"');
+    expect(html).toContain("var TIP = { info: 1500, label: 500 }, SKIP = 300;");
+    expect(html, "drawn from the host tokens").toMatch(/\.card-tip\{[^}]*var\(--surface-popover/);
+    expect(html, "absolute inside the card, never fixed").not.toMatch(/\.card-tip\{[^}]*position:fixed/);
+    expect(html).toMatch(/class="card-surface" style="position:relative;/);
+  });
+
   test("evidence posts carry a tooltip and colour by glyph", () => {
     const html = cardWidgetHtml(baseModel({
       evidence: [{ glyph: "✗", text: "1 Test rot", dim: false, tooltip: "npm test · 41s" }],

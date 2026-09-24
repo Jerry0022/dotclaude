@@ -27,6 +27,7 @@ The Kompass panel already pins the head, the status line and the CTA foot and sc
 
 ### Tooltips / labels
 - Native `title` + `aria-label` on every icon/action (browser default delay); no custom tooltip engine, no first-use label mode. Visible short labels only on the close-out rows and the primary action.
+- > Superseded 2026-09-24: concept pages now use the app tooltip engine (`data-tip`, templates.md § App Tooltips) with the Info/Label delay tiers of `ui-defaults.md` R0/R1 — a native `title` no longer counts as a tooltip.
 
 ### Feedback dock (design template)
 - Order top → bottom: **screen → design (≥2 designs) → general**; with a view active: **view → general**.

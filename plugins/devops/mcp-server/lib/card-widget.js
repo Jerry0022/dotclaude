@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.4.0
+ * @version 0.5.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -219,11 +219,11 @@ function glyphColor(glyph) {
   return COLOR.green;
 }
 
-/** One evidence post as a `<span>` with a ~600 ms hover tooltip. */
+/** One evidence post as a `<span>` with an app-styled Info tooltip (`data-tip`). */
 function evidencePostHtml(post) {
   const color = glyphColor(post.glyph);
-  const title = post.tooltip ? ` title="${escapeHtml(post.tooltip)}"` : "";
-  return `<span class="card-post" data-delay="600" style="color:${color}"${title}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
+  const tip = post.tooltip ? ` data-tip="${escapeHtml(post.tooltip)}"` : "";
+  return `<span class="card-post" style="color:${color}"${tip}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
 }
 
 /** One budget bar (time fill + usage marker + watermark + sheen). */
@@ -232,7 +232,9 @@ function budgetBarHtml(bar) {
   const elapsed = Math.max(0, Math.min(100, Number(bar.elapsedPct) || 0));
   const markerColor = bar.level === "red" ? COLOR.markerRed : bar.level === "yellow" ? COLOR.markerYellow : COLOR.markerWhite;
   return [
-    `<span class="card-budget" data-delay="600" title="${escapeHtml(bar.tooltip || "")}" style="display:inline-flex;align-items:center;gap:8px">`,
+    // Label tier: the bar is a graphic, its tooltip is the only place that
+    // names the value the user is inspecting (ui-defaults.md R1).
+    `<span class="card-budget" data-tip="${escapeHtml(bar.tooltip || "")}" data-tip-tier="label" style="display:inline-flex;align-items:center;gap:8px">`,
     `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
     // Track: time fill with the sweep clipped INSIDE it (the glint runs over
     // elapsed time only — never over time that has not passed), watermark in
@@ -368,7 +370,7 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
       buttons.map((a, i) => {
         const accent = a.primary ? ";border-color:var(--border-accent);color:var(--text-accent)" : "";
-        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt)}" title="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
+        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt)}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
           `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
           `${escapeHtml(a.label)} ↗</span>`;
       }).join("\n  ") +
@@ -392,13 +394,13 @@ export function cardWidgetHtml(model, repoUrl) {
 
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}</style>`,
+    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}</style>`,
     // ONE surface around everything: a faint blue wash (6 % of the accent
     // blue), the same hue as the decision box one step lighter, so the card is
     // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface
     // token: `--surface-1`/`-2` read as grey-on-grey ("too colourless") on the
     // dark page. No border — the tint alone says "one card".
-    `<div class="card-surface" style="background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
+    `<div class="card-surface" style="position:relative;background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
     blockA,
     blockB,
     `</div>`,
@@ -423,6 +425,10 @@ export const SEND_RETRY_WINDOW_MS = 5000;
 export const SEND_RETRY_INTERVAL_MS = 300;
 export const SEND_REPLY_TIMEOUT_MS = 1000;
 
+/** The two tooltip delay tiers and the skip window (ui-defaults.md R1). */
+export const TOOLTIP_DELAY_MS = { info: 1500, label: 500 };
+export const TOOLTIP_SKIP_MS = 300;
+
 /**
  * The button script. How the Desktop Code-tab host handles `ui/message`
  * (read from its bundle, 2026-09-22):
@@ -446,6 +452,14 @@ export const SEND_REPLY_TIMEOUT_MS = 1000;
  * that is already filled refuses. If every attempt fails, the likely cause
  * is a non-empty composer, and the button says so. One click at a time per
  * button (`data-busy`).
+ *
+ * It also draws every `data-tip` as an app-styled tooltip in the host's
+ * tokens (ui-defaults.md R0/R1) — never the native `title`, which ignores the
+ * theme, the delay and keyboard focus. Info 1500 ms by default, Label 500 ms
+ * where `data-tip-tier="label"` (the budget bar); the next tip opens
+ * instantly within 300 ms and on keyboard focus; the pointer can move onto
+ * it; Escape closes it. Positioned absolutely inside `.card-surface`, never
+ * fixed (a fixed element collapses the widget iframe).
  *
  * @param {'de'|'en'} lang
  * @returns {string} plain ES5, no comments (widget streaming rules)
@@ -484,6 +498,50 @@ export function cardWidgetScript(lang = "de") {
     `    b.addEventListener('click', function () { go(b); });`,
     `    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });`,
     `  });`,
+    `  var TIP = { info: ${TOOLTIP_DELAY_MS.info}, label: ${TOOLTIP_DELAY_MS.label} }, SKIP = ${TOOLTIP_SKIP_MS};`,
+    `  var surface = document.querySelector('.card-surface'), tip = document.createElement('div');`,
+    `  var owner = null, openT = 0, closeT = 0, lastClose = 0, viaKey = false;`,
+    `  tip.className = 'card-tip'; tip.id = 'card-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;`,
+    `  if (surface) surface.appendChild(tip);`,
+    `  function place(el) {`,
+    `    var s = surface.getBoundingClientRect(), r = el.getBoundingClientRect();`,
+    `    var top = r.top - s.top - tip.offsetHeight - 6;`,
+    `    if (top < 0) top = r.bottom - s.top + 6;`,
+    `    var left = Math.max(0, Math.min(r.left - s.left + r.width / 2 - tip.offsetWidth / 2, s.width - tip.offsetWidth));`,
+    `    tip.style.top = Math.round(top) + 'px'; tip.style.left = Math.round(left) + 'px';`,
+    `  }`,
+    `  function show(el) {`,
+    `    if (!surface || !el.getAttribute('data-tip')) return;`,
+    `    owner = el; tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(el);`,
+    `    el.setAttribute('aria-describedby', 'card-tip');`,
+    `  }`,
+    `  function hide() {`,
+    `    clearTimeout(openT); clearTimeout(closeT);`,
+    `    if (!owner) return;`,
+    `    owner.removeAttribute('aria-describedby'); owner = null; tip.hidden = true; lastClose = Date.now();`,
+    `  }`,
+    `  function schedule(el, now) {`,
+    `    clearTimeout(openT); clearTimeout(closeT);`,
+    `    if (owner === el) return;`,
+    `    if (owner) hide();`,
+    `    var wait = now || Date.now() - lastClose < SKIP ? 0 : TIP[el.getAttribute('data-tip-tier') === 'label' ? 'label' : 'info'];`,
+    `    openT = setTimeout(function () { show(el); }, wait);`,
+    `  }`,
+    `  function trig(n) { return n && n.closest ? n.closest('[data-tip]') : null; }`,
+    `  document.addEventListener('pointerover', function (e) {`,
+    `    if (tip.contains(e.target)) { clearTimeout(closeT); return; }`,
+    `    var el = trig(e.target); if (el) schedule(el, false);`,
+    `  });`,
+    `  document.addEventListener('pointerout', function (e) {`,
+    `    var to = e.relatedTarget;`,
+    `    if (to && (tip.contains(to) || (owner && owner.contains(to)))) return;`,
+    `    if (!trig(e.target) && !tip.contains(e.target)) return;`,
+    `    clearTimeout(openT); if (owner) closeT = setTimeout(hide, 120);`,
+    `  });`,
+    `  document.addEventListener('focusin', function (e) { var el = trig(e.target); if (el && viaKey) schedule(el, true); });`,
+    `  document.addEventListener('focusout', function () { hide(); });`,
+    `  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); else viaKey = true; }, true);`,
+    `  document.addEventListener('pointerdown', function (e) { viaKey = false; if (!tip.contains(e.target)) hide(); }, true);`,
     `})();`,
   ].join("\n");
 }

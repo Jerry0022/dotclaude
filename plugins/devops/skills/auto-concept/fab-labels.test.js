@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 // ONE component (gate P13, and the shape tests in final-report-wizard.test.js
 // / panel-chrome.test.js): a visible label pill would have changed the box
 // and reintroduced the 56-vs-64px drift. So:
-//   * discoverability for pointer users  → `title` tooltip on BOTH FABs
+//   * discoverability for pointer users  → `data-tip` app tooltip on BOTH FABs
 //   * discoverability for AT users       → `aria-label`, swapped with
 //                                          aria-expanded via data-label-*
 //   * discoverability for the first-time → a one-shot pulse driven by
@@ -73,9 +73,9 @@ function fabTag(id) {
 const FABS = ["panel-toggle", "feedback-toggle"];
 
 describe("both FABs are labelled", () => {
-  test.each(FABS)("#%s carries title and aria-label", (id) => {
+  test.each(FABS)("#%s carries data-tip and aria-label", (id) => {
     const tag = fabTag(id);
-    expect(tag, "hover tooltip for pointer users").toMatch(/\stitle="/);
+    expect(tag, "hover tooltip for pointer users").toMatch(/\sdata-tip="/);
     expect(tag, "accessible name for AT users").toMatch(/\saria-label="/);
   });
 
@@ -84,7 +84,7 @@ describe("both FABs are labelled", () => {
     // Every label-bearing attribute must be a {{locale.key}} placeholder.
     // A literal (the old "Feedback") would ship English into a `de` page and
     // is exactly what the locale table exists to prevent.
-    const labelAttrs = [...tag.matchAll(/(title|aria-label|data-label-open|data-label-close)="([^"]*)"/g)];
+    const labelAttrs = [...tag.matchAll(/(data-tip|aria-label|data-label-open|data-label-close)="([^"]*)"/g)];
     expect(labelAttrs.length, "label attributes on #" + id).toBeGreaterThanOrEqual(4);
     for (const [, name, value] of labelAttrs) {
       // Placeholder-only is what rules out the hard-coded "Feedback": any
@@ -114,16 +114,16 @@ describe("both FABs are labelled", () => {
   });
 });
 
-describe("the label swap moves title and aria-label together", () => {
+describe("the label swap moves data-tip and aria-label together", () => {
   // Both halves matter: aria-label alone leaves the pointer user with the
-  // same unlabelled circle #298 was about, title alone leaves AT users on a
+  // same unlabelled circle #298 was about, data-tip alone leaves AT users on a
   // stale "Open" after the thing is already open.
   for (const fn of ["function openDock(", "function closeDock("]) {
     test(`${fn} sets both on the 💬 FAB`, () => {
       const body = slice(jsSource, fn);
       expect(body).toMatch(/setAttribute\('aria-expanded'/);
       expect(body).toMatch(/setAttribute\('aria-label',\s*LABEL_(OPEN|CLOSE)\)/);
-      expect(body, "tooltip must move with the label").toMatch(/\.title\s*=\s*LABEL_(OPEN|CLOSE)/);
+      expect(body, "tooltip must move with the label").toMatch(/\.dataset\.tip\s*=\s*LABEL_(OPEN|CLOSE)/);
     });
   }
 
@@ -134,7 +134,7 @@ describe("the label swap moves title and aria-label together", () => {
       expect(body, "reads the swap state off the button's dataset")
         .toContain("dataset." + ds);
       expect(body).toMatch(/setAttribute\('aria-label',/);
-      expect(body, "tooltip must move with the label").toMatch(/\.title\s*=/);
+      expect(body, "tooltip must move with the label").toMatch(/\.dataset\.tip\s*=/);
     });
   }
 });
@@ -183,7 +183,7 @@ describe("the gate pins the fix", () => {
   test("validation-gate.md documents the tooltip-only rule", () => {
     const row = gate.split("\n").find((l) => /^\|\s*P13d\s*\|/.test(l));
     expect(row, "a P13d row next to P13").toBeTruthy();
-    expect(row).toContain("title=");
+    expect(row).toContain("data-tip=");
     expect(row).toContain("aria-label=");
     expect(row).toContain("data-untouched");
     expect(row, "tooltip-only, no visible pill").toMatch(/tooltip-only/i);

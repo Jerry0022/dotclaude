@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.2.0
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
  * @description Once per session, when a UI file is written or edited,
  *   reminds Claude of the standing UI rules (deep-knowledge/ui-defaults.md)
- *   so tooltip, dropdown, spacing and hotkey conventions are in context
- *   while the element is written — not only measured afterwards by
- *   `/auto-polish`. Honours a project/user override
+ *   so the app-style, tooltip, dropdown, spacing, hotkey and scrollbar
+ *   conventions are in context while the element is written — not only
+ *   measured afterwards by `/auto-polish`. Honours a project/user override
  *   (`.claude/skills/auto-polish/reference.md` § "## UI rules", falling back
  *   to the pre-PR-2 `.claude/skills/tune-polish/` dir) that can
- *   disable rules and widen the UI-file detection. Never blocks: every
- *   failure path exits 0 silently.
+ *   disable rules, widen the UI-file detection (a `files:` glob also opts in
+ *   plugin source that is excluded by default) and change the two tooltip
+ *   delay tiers. Concept pages get the reminder like any other page. Never
+ *   blocks: every failure path exits 0 silently.
  */
 
 require('../lib/plugin-guard');
@@ -30,29 +32,34 @@ const DEFAULT_UI_EXTENSIONS = [
 ];
 const DEFAULT_UI_BASENAME_PATTERNS = [/\.styled\./i, /\.component\./i];
 
-const EXCLUDE_PATTERNS = [
-  /(^|\/)docs\/concepts\//,
+// Never UI: dependencies and Claude's own config. Concept pages are NOT
+// excluded — the rules apply to them like to any other page.
+const HARD_EXCLUDE_PATTERNS = [
   /(^|\/)node_modules\//,
   /(^|\/)\.claude\//,
+];
+// Plugin source docs are not UI by default; an override `files:` glob that
+// names one (the plugin's own concept templates, say) opts it back in.
+const DEFAULT_EXCLUDE_PATTERNS = [
   /(^|\/)plugins\/[^/]+\/skills\//,
   /(^|\/)plugins\/[^/]+\/deep-knowledge\//,
 ];
 
+// R1's two delay tiers (ms); `tooltip.delay:` in the override changes them.
+const DEFAULT_TOOLTIP_DELAY = { info: 1500, label: 500 };
+
 const RULES = [
-  { id: 'R1', text: 'tooltips on icon-only controls (delay 300-700 ms)' },
+  { id: 'R0', text: "app style everywhere: every element in the app's tokens (surface, border, radius, type, shadow, motion) in every theme, never the browser/OS default look; part of every rule, project rules included" },
+  { id: 'R1', text: (d) => `tooltips through the app's styled tooltip component, never a native title; delay Info ${d.info} ms (default), Label ${d.label} ms only when the tooltip is the only name, shows cut-off content or explains a disabled control; instant on keyboard focus and within 300 ms of the previous tooltip` },
   { id: 'R2a', text: "dropdowns styled with the app's tokens, not native" },
   { id: 'R2b', text: 'uniform item structure within a menu' },
   { id: 'R3', text: 'same component type -> same spacing tokens as siblings' },
   { id: 'R4', text: 'every interaction has a hotkey shown discreetly in the control or tooltip' },
+  { id: 'R5', text: 'scrollbars styled once, globally, from tokens (scrollbar-color/-width, ::-webkit-scrollbar fallback, color-scheme per theme); no local divergence' },
 ];
 
 function normalize(filePath) {
   return String(filePath || '').replace(/\\/g, '/');
-}
-
-function isExcluded(filePath) {
-  const norm = normalize(filePath);
-  return EXCLUDE_PATTERNS.some(re => re.test(norm));
 }
 
 function globToRegex(glob) {
@@ -82,14 +89,15 @@ function matchesExtraGlob(filePath, glob) {
 
 function isUiFile(filePath, extraGlobs) {
   if (!filePath) return false;
-  if (isExcluded(filePath)) return false;
   const norm = normalize(filePath);
+  if (HARD_EXCLUDE_PATTERNS.some(re => re.test(norm))) return false;
+  if ((extraGlobs || []).some(g => matchesExtraGlob(norm, g))) return true;
+  if (DEFAULT_EXCLUDE_PATTERNS.some(re => re.test(norm))) return false;
   const lower = norm.toLowerCase();
   const basename = path.posix.basename(lower);
 
   if (DEFAULT_UI_EXTENSIONS.some(ext => lower.endsWith(ext))) return true;
   if (DEFAULT_UI_BASENAME_PATTERNS.some(re => re.test(basename))) return true;
-  if ((extraGlobs || []).some(g => matchesExtraGlob(norm, g))) return true;
   return false;
 }
 
@@ -131,6 +139,7 @@ function parseUiRules(bullets) {
   const disable = new Set();
   const files = [];
   const extra = [];
+  const delay = {};
 
   for (const raw of bullets) {
     const bullet = stripInlineComment(raw);
@@ -146,10 +155,18 @@ function parseUiRules(bullets) {
         .forEach(g => files.push(g));
       continue;
     }
+    const delayMatch = bullet.match(/^tooltip\.delay:\s*(.*)$/i);
+    if (delayMatch) {
+      const info = delayMatch[1].match(/\binfo\s*[:=]?\s*(\d+)/i);
+      const label = delayMatch[1].match(/\blabel\s*[:=]?\s*(\d+)/i);
+      if (info) delay.info = Number(info[1]);
+      if (label) delay.label = Number(label[1]);
+      continue;
+    }
     if (bullet) extra.push(bullet);
   }
 
-  return { disable, files, extra };
+  return { disable, files, extra, delay };
 }
 
 function loadOverride(cwd) {
@@ -163,18 +180,21 @@ function loadOverride(cwd) {
   const disable = new Set([...project.disable, ...user.disable]);
   const files = [...project.files, ...user.files];
   const extra = [...project.extra, ...user.extra];
+  // Delay values are settings, not additive rules: project beats user-global.
+  const delay = { ...DEFAULT_TOOLTIP_DELAY, ...user.delay, ...project.delay };
 
-  return { disable, files, extra };
+  return { disable, files, extra, delay };
 }
 
-function buildReminder(disable, extra) {
+function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY) {
   const lines = [];
   lines.push(
     '[ui-defaults] UI file touched — standing UI rules apply to the elements you are writing (deep-knowledge/ui-defaults.md):'
   );
   const enabled = RULES.filter(r => !disable.has(r.id));
   for (const r of enabled) {
-    lines.push(`${r.id} ${r.text}`);
+    const text = typeof r.text === 'function' ? r.text(delay) : r.text;
+    lines.push(`${r.id} ${text}`);
   }
   for (const line of extra) {
     lines.push(line);
@@ -214,7 +234,7 @@ function main() {
 
       try { writeSessionFile(markerFile, '1'); } catch {}
 
-      process.stdout.write(buildReminder(override.disable, override.extra));
+      process.stdout.write(buildReminder(override.disable, override.extra, override.delay));
       process.exit(0);
     } catch {
       process.exit(0);

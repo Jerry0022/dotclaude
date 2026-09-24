@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.196.0**
+**Version: 0.197.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -450,8 +450,9 @@ code and UI** — no new features, no fresh scope.
   consistency + regression coverage. Never adds new UI structure.
 - **`/auto-polish`** — UI refinement: visual consistency, state-visuals,
   UI-side functionality checks and the standing UI rules from
-  `deep-knowledge/ui-defaults.md` (tooltips, dropdowns, spacing, hotkeys —
-  extendable per project). Structural UI changes only with approval. `/do-ship`
+  `deep-knowledge/ui-defaults.md` (app style as part of every rule, tooltips
+  with two delay tiers, dropdowns, spacing, hotkeys, scrollbars — extendable
+  per project). Structural UI changes only with approval. `/do-ship`
   runs its rules-only path on every UI diff; the `post.design.remind` hook
   puts the rules in context the moment a UI file is written.
 - **`/do-run rethink`** — strategic reset: code-blind fresh approaches for

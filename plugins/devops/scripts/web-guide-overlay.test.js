@@ -173,8 +173,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.1.1, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1\.1\.1["']/);
+  test("defines VERSION 1.2.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.2.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -205,7 +205,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.1.1");
+    expect(sandbox.window.claudeGuide.version).toBe("1.2.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -222,7 +222,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.1.1", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.2.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -529,5 +529,22 @@ describe("web-guide-overlay — execution", () => {
     expect(sandbox.window._listenerCount("keydown", true)).toBe(0);
     expect(sandbox.window._listenerCount("keypress", true)).toBe(0);
     expect(sandbox.window._listenerCount("keyup", true)).toBe(0);
+  });
+});
+
+describe("web-guide-overlay — app-styled FAB tooltip (ui-defaults.md R0/R1)", () => {
+  test("the FAB has no native title, but a role=tooltip bubble in the overlay's own style", () => {
+    expect(SRC).not.toMatch(/\.title\s*=(?!=)/);
+    expect(SRC).not.toMatch(/setAttribute\("title"/);
+    expect(SRC).toMatch(/fabTip\.setAttribute\("role", "tooltip"\)/);
+    expect(SRC, "Label tier: the tip is the FAB's only visible name").toMatch(/setTimeout\(showFabTip, 500\)/);
+    expect(SRC, "styled in both colour schemes").toMatch(/\.tip\{background:#1e1e24/);
+  });
+
+  test("the scrolling panel wears the overlay's scrollbar skin (ui-defaults.md R5)", () => {
+    expect(SRC).toMatch(/\.panel\{scrollbar-width:thin;scrollbar-color:#ccc transparent\}/);
+    expect(SRC, "WebKit fallback").toMatch(/\.panel::-webkit-scrollbar-thumb\{background:#ccc/);
+    expect(SRC, "dark scheme").toMatch(/\.panel\{background:#1e1e24;scrollbar-color:#444 transparent\}/);
+    expect(SRC, "native parts follow the scheme").toMatch(/:host\{[^}]*color-scheme:light dark/);
   });
 });
