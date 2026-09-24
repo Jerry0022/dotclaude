@@ -120,7 +120,7 @@ const RETIRED = Object.freeze({
   }),
   'claude-strict': Object.freeze({
     doc: 'strict.md',
-    home: 'prompt.strict.enforce / pre.strict.agent-gate / stop.strict.release + do-run Q3 "Nur das" + prompt.knowledge.dispatch pointer',
+    home: 'prompt.strict.enforce / pre.strict.agent-gate / stop.strict.release + do-run Q3 "Strikt" + prompt.knowledge.dispatch pointer',
   }),
   // 2026-09-24 (skill-restructure spec § Addendum)
   'setup-project': Object.freeze({

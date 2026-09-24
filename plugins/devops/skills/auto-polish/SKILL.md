@@ -38,7 +38,7 @@ it is the layer this skill *executes through*.
 2. **From `/do-run`** ("Polish danach") — `--invoked-by=do-run`, a full pass
    scoped to the run's changes, executed through auto-agents (§ Execution).
    Under "Autonom" do-run adds `--autonomous` (no prompts; structural changes
-   always flagged, never auto-applied); under "Nur das" it adds `--strict`.
+   always flagged, never auto-applied); under "Strikt" it adds `--strict`.
    Skip self-spawned qa/redteam when the parent owns those waves. The
    pre-PR-2 values `--invoked-by=agents` and `--invoked-by=autonomous` (the
    latter implies `--autonomous`) are read as `do-run`.
@@ -48,7 +48,7 @@ it is the layer this skill *executes through*.
    findings list to the caller. No test plan, no qa/redteam agents, no
    browser, no fixes, no completion card. See § Rules-only path (ship).
    /do-ship calls `/auto-harden --invoked-by=ship` at the same step.
-4. **Under strict** — `--strict` (do-run "Nur das", /do-ship under strict
+4. **Under strict** — `--strict` (do-run "Strikt", /do-ship under strict
    mode, or the `[claude-strict contract]` in context): only the named scope
    changes; wider findings are reported, never fixed. The ship path is
    report-only anyway — /do-ship then applies none of its mechanical fixes.
