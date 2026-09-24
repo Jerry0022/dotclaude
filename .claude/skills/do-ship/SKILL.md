@@ -38,7 +38,7 @@ automatically sync to every ship.
      this ship is one of several in a `/do-run backlog` queue): the finalizer is deferred
      to the runner's own Step 5, so do not claim a sync yet:
      > `{ action: "devops lokal (alpha) wird nach dem letzten Backlog-Issue auf die geshippte Version synchronisiert — danach Claude einmal neu starten.", afterDeployment: true }`
-   - **Pin is `alpha` AND `.claude/.ship-queue` exists** (a `/setup-cleanup` PR queue):
+   - **Pin is `alpha` AND `.claude/.ship-queue` exists** (an auto-cleanup PR queue):
      same deferral, the cleanup run syncs once after its last PR:
      > `{ action: "devops lokal (alpha) wird nach dem letzten PR der Queue auf die geshippte Version synchronisiert — danach Claude einmal neu starten.", afterDeployment: true }`
    - **Pin is `beta`/`stable`** (the default) — an alpha-only ship does NOT reach this
@@ -88,7 +88,7 @@ card — the card carries it.
   runner runs this finalizer exactly once at its Step 5, after its final card. Use the
   deferred Step 6.5 wording for the card item.
 - **A ship-queue marker exists.** `{project}/.claude/.ship-queue` (written by
-  `/setup-cleanup` Step 10b — or any orchestrator that lands several PRs from one
+  the auto-cleanup skill's Step 10b — or any orchestrator that lands several PRs from one
   session, see the plugin `/do-ship` → *Composed ships*) means the same thing as the
   `backlog-runner` lockout above, without an AFK lockout: the user is present, the
   ships are interactive, but the finalizer would still strand every later `ship_*`

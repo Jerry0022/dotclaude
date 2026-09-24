@@ -131,7 +131,7 @@ describe("do-ship — harden + polish at ship (Step 1e)", () => {
     expect(passes).toMatch(/nothing is applied/);
   });
 
-// Red-team R3: on a composed ship (--cwd, e.g. /setup-cleanup) the passes
+// Red-team R3: on a composed ship (--cwd, e.g. auto-cleanup) the passes
   // diffed and fixed this session's own checkout. The target cwd is forwarded
   // and both skills document that --cwd scopes the diff AND the fixes.
   test("composed ships forward --cwd to both passes; both skills honour it", () => {

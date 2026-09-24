@@ -42,7 +42,7 @@ If a skill name was passed as argument, use it. Otherwise:
 3. Present the list via AskUserQuestion:
    > "Welchen Plugin-Skill möchtest du für dieses Projekt erweitern?"
    >
-   > Options: do-ship, do-run, auto-fix, auto-issue, setup-project, setup-cleanup, ...
+   > Options: do-ship, do-run, auto-fix, auto-issue, auto-cleanup, ...
 
 Validate that the chosen name matches an existing plugin skill. A pre-PR-2
 name (`ship`, `fix`, `run-backlog`, `promote`, … — table in

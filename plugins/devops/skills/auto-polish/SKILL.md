@@ -104,7 +104,7 @@ Scan `$ARGUMENTS` for:
   wider findings go to the report. Also set when the `[claude-strict
   contract]` block is in this turn's context.
 - `--cwd=<path>` → the target checkout (a composed /do-ship `--cwd`, e.g.
-  from /setup-cleanup). It scopes the diff, the files read and every fix the
+  from auto-cleanup). It scopes the diff, the files read and every fix the
   caller applies from the findings: git runs as `git -C <path>`, scope paths
   resolve against `<path>` — never this session's own checkout. Absent → the
   session's cwd.

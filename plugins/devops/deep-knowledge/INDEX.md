@@ -21,6 +21,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
+| [devops-config.md](devops-config.md) | Plugin Settings (devops-config) | How to change devops plugin behaviour when the user asks in plain words — per... |
 | [documentation-maintenance.md](documentation-maintenance.md) | Documentation Maintenance | Keep project docs in their target state as behavior, flows, and architecture ... |
 | [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
@@ -36,6 +37,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [plugin-scope-routing.md](plugin-scope-routing.md) | Plugin Scope Routing — Where a Fix Belongs | Cross-cutting rule for every skill, hook, and agent: a devops-plugin defect f... |
 | [pre-mortem.md](pre-mortem.md) | Pre-Mortem / Red-Team Self-Critique | Cross-cutting rule for reducing blind spots before non-trivial changes. |
 | [preview-testing.md](preview-testing.md) | Claude Preview — Capabilities & Hard Limits | Canonical reference for **Claude Preview** (`preview_*`), the primary localhost |
+| [project-setup.md](project-setup.md) | Project Setup — Repo Hygiene | How to audit or initialize a project's repository structure: .gitignore, LICE... |
 | [readme-standards.md](readme-standards.md) | README Standards | How to create, rewrite or substantially update a README.md: a polished, moder... |
 | [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |

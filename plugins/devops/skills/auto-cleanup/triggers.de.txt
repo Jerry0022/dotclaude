@@ -1,0 +1,10 @@
+# German trigger phrases for auto-cleanup.
+# See auto-extend/triggers.de.txt — one per line, # lines are ignored.
+was liegt noch rum
+git aufräumen
+branches aufräumen
+worktrees aufräumen
+branch hygiene
+offene prs landen
+offene prs shippen
+prs aufräumen

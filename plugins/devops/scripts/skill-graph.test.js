@@ -164,8 +164,7 @@ const { RENAMED, FOLDED, FOLDED_TRIGGERS, RETIRED, RETIRED_TRIGGERS } = require(
 
 const UNITS = {
   "do-batch":      { layer: 0, visibility: "menu",      invokes: ["do-run", "auto-concept"] },
-  "setup-cleanup": { layer: 0, visibility: "user-only", invokes: ["auto-concept", "do-ship"] },
-  "setup-project": { layer: 0, visibility: "user-only", invokes: [] },
+  "auto-cleanup":  { layer: 0, visibility: "hidden",    invokes: ["auto-concept", "do-ship"] },
   "do-run":        { layer: 1, visibility: "menu",      invokes: ["auto-concept", "do-ship", "auto-harden", "auto-polish", "auto-agents", "auto-issue"] },
   "do-learn":      { layer: 1, visibility: "menu",      invokes: ["auto-issue"] },
   "auto-concept":  { layer: 2, visibility: "hidden",    invokes: ["do-ship", "auto-agents", "auto-issue"] },
@@ -276,8 +275,8 @@ const { routeMessage } = require("../hooks/lib/skill-trigger-router.js");
 const DK_DIR = path.join(PLUGIN_ROOT, "deep-knowledge");
 
 describe("retired skills (PR 3): gone from skills/, body in deep-knowledge", () => {
-  test("exactly the four spec names are retired", () => {
-    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-readme"]);
+  test("exactly the spec names are retired (PR 3 + setup-project, spec § Addendum)", () => {
+    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-project", "setup-readme"]);
   });
 
   test.each(Object.entries(RETIRED))("%s → deep-knowledge/%s", (name, entry) => {

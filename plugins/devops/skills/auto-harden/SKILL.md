@@ -103,7 +103,7 @@ Scan `$ARGUMENTS` for:
 - `--base=<branch>` → the diff base (ship path; default: the repo's default
   branch).
 - `--cwd=<path>` → the target checkout (a composed /do-ship `--cwd`, e.g.
-  from /setup-cleanup). It scopes BOTH the diff and the fixes: every git
+  from auto-cleanup). It scopes BOTH the diff and the fixes: every git
   command runs as `git -C <path>`, scope paths resolve against `<path>`, and
   Read/Edit touch only files under `<path>` — never this session's own
   checkout. Absent → the session's cwd.
