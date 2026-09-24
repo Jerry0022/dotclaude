@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.6.0
+ * @version 0.7.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -450,10 +450,18 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
-  // The do-run run-contract line (§ J) — same dim/secondary treatment as the
-  // pipeline line right above it, directly under the pipeline/state row.
+  // The do-run run-contract line (§ J) — dim watermark treatment like the
+  // pipeline line right above it when every step is ✓ (purely informational),
+  // but the body-text colour (`--text-secondary`, same as `card-result`
+  // lines) when it carries an open step (✗) or a caveat (⚠) — AUD-021: the
+  // watermark colour fails WCAG AA contrast on the light card surface, and
+  // this is the one line the user must not miss.
+  const runContractHasOpenStep = /[✗⚠]/.test(model.runContract || "");
+  const runContractColor = runContractHasOpenStep
+    ? "var(--text-secondary)"
+    : COLOR.watermark;
   const runContractHtml = model.runContract
-    ? `<div class="card-run-contract" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.runContract)}</div>`
+    ? `<div class="card-run-contract" style="font-size:13px;color:${runContractColor};padding:4px 0">${escapeHtml(model.runContract)}</div>`
     : "";
 
   const ladderHtml = channelLadderHtml(model.ladder, lang);
