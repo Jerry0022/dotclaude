@@ -5,8 +5,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.issue.guard.js");
 

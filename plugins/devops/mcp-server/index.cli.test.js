@@ -21,10 +21,6 @@ const run = promisify(execFile);
 
 const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "index.js");
 
-// Each case spawns node and shells out to git for the build-ID. Under full
-// parallel suite load that comfortably exceeds the 5s default.
-vi.setConfig({ testTimeout: 30_000 });
-
 // Never spawn the headless usage scraper (Edge) from a unit test. Pin the
 // terminal entrypoint: a run started from a Desktop session inherits
 // `claude-desktop`, where stdout stays empty (the widget is the card, § 4) — the

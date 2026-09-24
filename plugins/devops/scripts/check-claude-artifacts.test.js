@@ -21,10 +21,6 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const PLUGIN_ROOT = path.resolve(__dirname, "..");
 const LIST = path.join(PLUGIN_ROOT, "hooks", "lib", "runtime-ignores.js");
 
-// Spawns a cold `node` while 70 other files do the same — see the note in
-// pre.tokens.guard.graphgate.test.js. 30s catches a hang without flaking.
-vi.setConfig({ testTimeout: 30_000 });
-
 describe("check-claude-artifacts — the ignore list stays complete (#292)", () => {
   test("the repo currently passes its own guard", () => {
     expect(() =>

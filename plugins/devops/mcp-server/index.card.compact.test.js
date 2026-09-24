@@ -6,7 +6,6 @@ import { describe, test, expect, vi, beforeAll } from "vitest";
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 // Terminal markdown is what these tests assert (on Desktop it is the title line only, § 4).
 process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
-vi.setConfig({ testTimeout: 30_000 });
 
 const captured = vi.hoisted(() => ({ handlers: {} }));
 

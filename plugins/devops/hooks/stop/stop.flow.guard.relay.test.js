@@ -74,8 +74,6 @@ function stop(dir, transcriptPath, extra = {}) {
   });
 }
 
-vi.setConfig({ testTimeout: 30_000 });
-
 describe("stop.flow.guard — a rendered card must also be relayed (#449)", () => {
   test("flag set, card markdown relayed as the last text → pass", async () => {
     const dir = project();
