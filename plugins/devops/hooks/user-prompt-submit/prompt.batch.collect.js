@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.6.0
+ * @version 0.7.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -20,6 +20,13 @@
  *     - machine prompts (crons, AUTONOMOUS_*, silent markers)
  *     - expanded slash commands (<command-name> tag)
  *     - prompts carrying attachments or @file mentions
+ *
+ *   A Desktop-app image is the exception (#490): the app sends it as its own
+ *   content block, so the prompt carries no attachment marker and IS
+ *   collected. The harness has saved the image to its per-session images
+ *   folder by then; the hook copies it to `.claude/batch-assets/` and writes
+ *   an `[Anhang-Datei] <copy>` line into the note. At merge time a note still
+ *   without one is matched to this session's images by timestamp.
  *
  *   An attachment-carrying prompt is passed through, but NOT silently: the turn
  *   gets a guard telling it to file the prompt as a note together with a written
@@ -101,12 +108,16 @@ const EXCERPT_CHARS = 200;
  * @param {string} marker configured execute marker
  * @param {boolean} question whether the note reads like a question
  * @param {{expiryHours?:number,maxNotes?:number}} [bounds] pinned mode bounds
+ * @param {number} [images] pasted images kept with this note
  */
-function buildAck(count, marker, question, bounds = {}) {
+function buildAck(count, marker, question, bounds = {}, images = 0) {
   const lines = [
     `[do-batch] ✓ Notiz #${count} gespeichert — alles korrekt, kein Fehler.`,
     'Der Sammelmodus stoppt den Prompt absichtlich, statt ihn zu bearbeiten.',
   ];
+  if (images > 0) {
+    lines.push(`📎 ${images === 1 ? 'Das Bild ist' : `${images} Bilder sind`} mit der Notiz gespeichert — der Merge sieht ${images === 1 ? 'es' : 'sie'}.`);
+  }
   if (question) {
     // Advisory only. The hook never decides what is a question; it just makes a
     // forgotten marker visible instead of silent.
@@ -449,6 +460,76 @@ function buildActivationGuard() {
   ].join('\n');
 }
 
+/** How long a collected prompt waits for the harness to write its pasted
+ *  image. The file lands within milliseconds of the submit (#490), usually
+ *  before this hook has even started. Only sessions that have an images folder
+ *  at all pay the wait; a found image costs one extra read to confirm the set. */
+const IMAGE_WAIT_MS = 300;
+const IMAGE_POLL_MS = 150;
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Copy the images pasted into THIS prompt next to the notes (#490). The
+ * Desktop app sends them as separate content blocks — no `[Image #N]` in the
+ * text, no attachment key in the hook input — so the harness's per-session
+ * images folder is the only place they exist. Never throws: an image problem
+ * must not cost the note.
+ *
+ * @returns {string[]} absolute paths of the copies
+ */
+function captureNoteImages(cwd, sessionId, at) {
+  try {
+    const dirs = B.sessionImageDirs(sessionId);
+    if (!dirs.length) return [];
+    let prev = null;
+    for (let waited = 0; ; waited += IMAGE_POLL_MS) {
+      const hits = B.imagesNear(cwd, sessionId, at, { dirs });
+      const sig = hits.map(h => `${h.file}:${h.size}`).sort().join('|');
+      // Take the set once two reads agree: a second image pasted into the same
+      // prompt joins it, and a file still being written changes its size.
+      if (hits.length && sig === prev) return B.claimImages(cwd, hits, at);
+      if (waited >= IMAGE_WAIT_MS) return B.claimImages(cwd, hits, at);
+      prev = hits.length ? sig : null;
+      sleepSync(IMAGE_POLL_MS);
+    }
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Merge-time fallback (#490): images of this session no note has taken yet —
+ * written after their note's hook looked, or collected by an older plugin —
+ * go to the NEAREST note (`assignImagesToNotes`). A match beyond the certain
+ * window says so on its line, so the merge checks it instead of trusting it.
+ * One scan for all notes. Only the injected copy changes; `.claude/batch.md`
+ * stays as the user left it.
+ */
+function attachLateImages(cwd, sessionId, notes, markerAt) {
+  try {
+    const dirs = B.sessionImageDirs(sessionId);
+    if (!dirs.length || !notes.length) return notes;
+    const byNote = B.assignImagesToNotes(notes, B.unclaimedImages(cwd, dirs), markerAt);
+    return notes.map((note, i) => {
+      const matched = (byNote.get(i) || []).sort((a, b) => a.img.mtimeMs - b.img.mtimeMs);
+      if (!matched.length) return note;
+      const copies = B.claimImages(cwd, matched.map(m => m.img), Date.parse(note.at));
+      const lines = copies.map((copy, k) => {
+        const gap = matched[k].gapMs;
+        return gap <= B.IMAGE_MATCH_WINDOW_MS
+          ? `[Anhang-Datei] ${copy}`
+          : `[Anhang-Datei] ${copy} (per Zeitstempel zugeordnet, ${Math.round(gap / 1000)} s Abstand — prüfen, ob das Bild zu dieser Notiz passt)`;
+      });
+      return { ...note, text: `${note.text}\n${lines.join('\n')}` };
+    });
+  } catch {
+    return notes;
+  }
+}
+
 /**
  * Merge the parent chain (main) into the current branch, synchronously.
  *
@@ -491,10 +572,10 @@ function syncMain(cwd) {
 
 /**
  * Fire the merge: sync main, inject every note, then end collection.
- * @param {{cwd:string,text:string,marker:string,modeActive:boolean}} ctx
+ * @param {{cwd:string,text:string,marker:string,modeActive:boolean,sessionId?:string}} ctx
  */
-function fireMerge({ cwd, text, marker, modeActive }) {
-  const notes = B.readNotes(cwd);
+function fireMerge({ cwd, text, marker, modeActive, sessionId }) {
+  const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd), Date.now());
   if (notes.length === 0) {
     // Nothing parsed. Never a silent exit — see buildEmptyQueueNotice.
     let exists = false;
@@ -549,7 +630,7 @@ process.stdin.on('end', () => {
   if (verdict === 'execute') {
     // Reached with the mode off as well: an expired or note-capped mode must not
     // strand the notes it collected.
-    try { fireMerge({ cwd, text, marker, modeActive }); } catch { /* non-fatal — the turn still runs */ }
+    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id }); } catch { /* non-fatal — the turn still runs */ }
     process.exit(0);
   }
 
@@ -607,10 +688,14 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  // verdict === 'collect' — block the prompt and store it.
+  // verdict === 'collect' — block the prompt and store it, together with any
+  // image pasted into it in the Desktop app (#490).
   try {
-    const count = B.appendNote(cwd, text);
-    process.stderr.write(`${buildAck(count, marker, B.looksLikeQuestion(text), bounds)}\n`);
+    const now = Date.now();
+    const copies = captureNoteImages(cwd, hook.session_id, now);
+    const noteText = copies.length ? `${text}\n${B.attachmentFileLines(copies)}` : text;
+    const count = B.appendNote(cwd, noteText, now);
+    process.stderr.write(`${buildAck(count, marker, B.looksLikeQuestion(text), bounds, copies.length)}\n`);
     process.exit(2);
   } catch (err) {
     // Storing failed — blocking now would erase the prompt with nothing kept.
