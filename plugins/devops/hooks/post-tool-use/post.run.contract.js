@@ -52,11 +52,22 @@ function backlogFinished(h, evs) {
   return h.items.every(n => closed.has(String(n)));
 }
 
-function recordCard(root, variant, final, RC) {
-  const ev = RC.record(root, { k: 'card', variant: variant || null });
+const MACHINE_OPENER = /^\s*(AUTONOMOUS_AUTOSTART|AUTONOMOUS_RESUME|RUN_BACKLOG_AUTOSTART)\s*:/i;
+
+/** Did the current turn open with a machine prompt (R1)? */
+function machineTurn(hook, C) {
+  if (typeof hook.transcript_path !== 'string' || !hook.transcript_path) return false;
+  try {
+    const { lastUserPromptText } = require('../lib/skill-invocations');
+    return MACHINE_OPENER.test(lastUserPromptText(C.readTail(hook.transcript_path)) || '');
+  } catch { return false; }
+}
+
+function recordCard(root, variant, final, RC, s) {
+  const ev = RC.record(root, { k: 'card', variant: variant || null }, s);
   if (!ev || !final) return;
-  const h = RC.readContract(root);
-  if (h && (h.mode === 'prompt' || h.mode === 'audit')) RC.close(root, 'done: final card');
+  const h = RC.readContract(root, s);
+  if (h && (h.mode === 'prompt' || h.mode === 'audit')) RC.close(root, 'done: final card', s);
 }
 
 function main(hook) {
@@ -72,53 +83,61 @@ function main(hook) {
   const C = require('../lib/run-contract-calls');
   const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
   const sessionId = hook.session_id || null;
+  const s = { sessionId };
+  RC.claim(root, sessionId);
 
   if (tool === 'AskUserQuestion') {
     const { questions, answers } = RC.extractAnswers(hook.tool_response, input);
     if (RC.isRouterCall(questions)) {
-      const marker = RC.pendingArm(root);
+      const marker = RC.pendingArm(root, s);
       const fields = RC.parseRouterAnswers(questions, answers, { doRunArgs: marker && marker.args });
       if (fields) {
         RC.arm(root, { ...fields, source: 'router', sessionId });
         RC.clearPendingArm(root);
       }
     } else {
+      // "Run fortsetzen" answered → the resume path asks no router questions.
+      if (RC.hasHeader(questions, 'Fortsetzen') && RC.pendingArm(root, s)) RC.clearPendingArm(root);
       const patch = RC.parseFollowUp(questions, answers);
-      if (patch) RC.update(root, patch);
+      if (patch) RC.applyFollowUp(root, patch, s);
     }
   } else if (tool === 'Skill') {
     const name = RC.skillName(input.skill || input.name);
     const args = typeof input.args === 'string' ? input.args : '';
-    if (name === 'do-run') RC.markPendingArm(root, { sessionId, args });
-    if (name === 'do-run' || name === 'auto-concept') RC.clearBatchHandoff(root);
-    RC.record(root, { k: 'skill', name, args });
+    if (name === 'do-run' && !machineTurn(hook, C)) RC.markPendingArm(root, { sessionId, args });
+    if (name === 'do-run' || name === 'auto-concept') {
+      if (RC.batchHandoffPending(root, s)) RC.clearBatchHandoff(root);
+    }
+    RC.record(root, { k: 'skill', name, args }, s);
   } else if (tool === 'Agent') {
-    RC.record(root, { k: 'agent', type: input.subagent_type || 'general-purpose' });
+    RC.record(root, { k: 'agent', type: input.subagent_type || 'general-purpose' }, s);
   } else if (C.EDIT_TOOLS.has(tool)) {
-    if (C.isGatedPath(root, cwd, C.toolFilePath(tool, input))) RC.record(root, { k: 'edit' });
+    if (C.isGatedPath(root, cwd, C.toolFilePath(tool, input))) RC.record(root, { k: 'edit' }, s);
   } else if (C.SHELL_TOOLS.has(tool)) {
     const f = C.commandFacts(input.command);
-    if (f.commit) RC.record(root, { k: 'commit' });
-    if (f.branch) RC.record(root, { k: 'branch', name: f.branchName });
+    if (f.commit) RC.record(root, { k: 'commit' }, s);
+    if (f.branch && C.isItemBranch(f, hook, hook.agent_id || f.worktree || f.detach ? null : C.baseBranch(root, f.branchName, true))) {
+      RC.record(root, { k: 'branch', name: f.branchName }, s);
+    }
     if (f.renderCard) {
       const payload = C.readCardPayload(f.renderCard, cwd);
-      if (payload) { const cf = C.cardFacts(payload); recordCard(root, cf.variant, cf.final, RC); }
+      if (payload) { const cf = C.cardFacts(payload); recordCard(root, cf.variant, cf.final, RC, s); }
     }
   } else if (tool === C.SHIP_RELEASE) {
     const res = C.releaseResult(hook.tool_response) || { ok: false, merged: false };
-    RC.record(root, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) });
-    const h = RC.readContract(root);
-    if (h && backlogFinished(h, RC.events(root))) RC.close(root, 'done: every queued item shipped');
+    RC.record(root, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) }, s);
+    const h = RC.readContract(root, s);
+    if (h && backlogFinished(h, RC.events(root))) RC.close(root, 'done: every queued item shipped', s);
   } else if (tool === C.RENDER_CARD) {
     const cf = C.cardFacts(input);
-    recordCard(root, cf.variant, cf.final, RC);
+    recordCard(root, cf.variant, cf.final, RC, s);
   } else {
     return null;
   }
 
-  const h = RC.readContract(root);
+  const h = RC.readContract(root, s);
   if (h && (h.source === 'fallback' || h.source === 'machine') && !h.announced) {
-    if (RC.update(root, { announced: true })) {
+    if (RC.update(root, { announced: true }, s)) {
       return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: announcement(h, RC) } });
     }
   }

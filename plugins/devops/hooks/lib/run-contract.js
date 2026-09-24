@@ -85,6 +85,8 @@ const PENDING_MAX_MS = 2 * HOUR;
 const BATCH_MAX_MS = 6 * HOUR;
 const ARCHIVE_EVENTS = 200;
 const ARGS_MAX = 400;
+const FOREIGN_GRACE_MS = 10 * 60_000;
+const MERGE_WINDOW_MS = 30 * 60_000;
 
 const DEFAULT_HEADER = Object.freeze({
   v: 1,
@@ -121,6 +123,20 @@ function pendingPath(cwd) { return fileIn(cwd, FILES.pending); }
 function batchHandoffPath(cwd) { return fileIn(cwd, FILES.batch); }
 
 function nowOf(opts) { return opts && typeof opts.now === 'number' ? opts.now : Date.now(); }
+
+/**
+ * Does a stored object (header or marker) belong to the session asking?
+ * Unknown asking session → yes (CLI, tests). Stored id → must match. No
+ * stored id → only while `at` is < 10 min old (Desktop copies the main
+ * checkout's untracked `.claude/` into every new worktree — R3).
+ */
+function ownedBy(obj, sessionId, at, now) {
+  if (!obj) return false;
+  if (!sessionId) return true;
+  if (obj.sessionId) return obj.sessionId === sessionId;
+  const t = Date.parse(at);
+  return Number.isFinite(t) && now - t < FOREIGN_GRACE_MS;
+}
 
 function readJson(file) {
   try {
@@ -202,7 +218,9 @@ function readContract(cwd, opts = {}) {
   if (disabled()) return null;
   const h = readRawContract(cwd);
   if (!h || h.closedAt) return null;
-  if (isExpired(h, eventsOf(cwd, h), nowOf(opts))) return null;
+  const now = nowOf(opts);
+  if (!ownedBy(h, opts.sessionId, h.armedAt, now)) return null;
+  if (isExpired(h, eventsOf(cwd, h), now)) return null;
   return h;
 }
 
@@ -212,6 +230,7 @@ function readContractForCard(cwd, opts = {}) {
   const h = readRawContract(cwd);
   if (!h) return null;
   const now = nowOf(opts);
+  if (!ownedBy(h, opts.sessionId, h.armedAt, now)) return null;
   if (h.closedAt) {
     const t = Date.parse(h.closedAt);
     return Number.isFinite(t) && now - t <= CARD_GRACE_MS ? h : null;
@@ -294,12 +313,28 @@ function arm(cwd, header = {}, opts = {}) {
 function update(cwd, patch = {}, opts = {}) {
   const now = nowOf(opts);
   archiveIfExpired(cwd, now);
-  const h = readContract(cwd, { now });
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
   const rest = { ...(patch || {}) };
   delete rest.id; delete rest.armedAt; delete rest.v;
-  const next = sanitize({ ...h, ...rest });
+  delete rest.closedAt; delete rest.closeReason; delete rest.aborted;
+  // Re-read right before the write: a parallel post hook may have closed it.
+  const fresh = readRawContract(cwd);
+  if (!fresh || fresh.id !== h.id) return null;
+  const next = sanitize({ ...fresh, ...rest });
   return writeJsonAtomic(contractPath(cwd), next) ? next : null;
+}
+
+/**
+ * Adopt a fresh contract armed without a session id (CLI `arm`) for the
+ * session asking, so it keeps gating that session after the 10-min grace.
+ */
+function claim(cwd, sessionId, opts = {}) {
+  if (!sessionId || disabled()) return null;
+  const h = readRawContract(cwd);
+  if (!h || h.sessionId || h.closedAt) return null;
+  if (!ownedBy(h, sessionId, h.armedAt, nowOf(opts))) return null;
+  return update(cwd, { sessionId }, opts);
 }
 
 /**
@@ -312,7 +347,7 @@ function record(cwd, event, opts = {}) {
   if (!event || typeof event.k !== 'string') return null;
   const now = nowOf(opts);
   archiveIfExpired(cwd, now);
-  const h = readContract(cwd, { now });
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
   const ev = { ...event };
   if (ev.k === 'skill') {
@@ -341,7 +376,7 @@ function record(cwd, event, opts = {}) {
  */
 function close(cwd, reason, opts = {}) {
   const now = nowOf(opts);
-  const h = readContract(cwd, { now });
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
   const next = {
     ...h,
@@ -361,16 +396,18 @@ function markPendingArm(cwd, opts = {}) {
   return writeJsonAtomic(pendingPath(cwd), m) ? m : null;
 }
 
-function freshMarker(file, field, maxMs, opts) {
+function freshMarker(file, field, maxMs, opts = {}) {
   if (disabled()) return null;
   const m = readJson(file);
   if (!m) return null;
   const t = Date.parse(m[field]);
-  if (!Number.isFinite(t) || nowOf(opts) - t > maxMs) {
+  const now = nowOf(opts);
+  if (!Number.isFinite(t) || now - t > maxMs) {
     unlinkQuiet(file);
     return null;
   }
-  return m;
+  // A foreign session's marker is left alone (it expires on its own).
+  return ownedBy(m, opts.sessionId, m[field], now) ? m : null;
 }
 
 /** The arm marker, or null (none, or older than 2 h → removed). */
@@ -456,9 +493,22 @@ function hasRecommended(s) { return /\((?:recommended|empfohlen)\)/i.test(String
 
 function headerOf(q) { return q && typeof q.header === 'string' ? q.header.trim() : (q && q.question ? guessHeader(q.question) : null); }
 
+/** English / alternative router headers → the canonical German key. */
+const HEADER_ALIASES = {
+  what: 'was', flow: 'ablauf', scope: 'umfang', passes: 'durchgänge',
+  result: 'ergebnis', 'audit scope': 'audit-umfang', 'audit-scope': 'audit-umfang', 'pc after': 'pc danach',
+};
+
+/** Header normalised: NFC, trimmed, trailing `?` stripped, case-folded, aliases mapped. */
+function canonHeader(h) {
+  if (typeof h !== 'string') return '';
+  const s = h.normalize('NFC').trim().replace(/\s*\?+$/, '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return HEADER_ALIASES[s] || s;
+}
+
 function findQuestion(questions, header) {
-  const want = header.toLowerCase();
-  return (questions || []).find(q => (headerOf(q) || '').toLowerCase() === want) || null;
+  const want = canonHeader(header);
+  return (questions || []).find(q => canonHeader(headerOf(q)) === want) || null;
 }
 
 function optionLabels(q) {
@@ -567,8 +617,11 @@ function parseRouterAnswers(questions, answers, opts = {}) {
 
   const q1 = findQuestion(questions, 'Was?');
   const q1r = q1 ? parseQ1(answerTokens(answerFor(a, q1), q1), q1) : null;
-  if (q1r) { out.mode = q1r.mode; out.alsoAudit = q1r.alsoAudit; }
-  else if (args.mode) out.mode = args.mode;
+  const hint = followUpModeHint(questions);
+  out.modeFrom = 'default';
+  if (q1r) { out.mode = q1r.mode; out.alsoAudit = q1r.alsoAudit; out.modeFrom = 'q1'; }
+  else if (args.mode) { out.mode = args.mode; out.modeFrom = 'args'; }
+  else if (hint) { out.mode = hint; out.modeFrom = 'follow-up'; }
 
   const q2 = findQuestion(questions, 'Ablauf?');
   const q2t = q2 ? answerTokens(answerFor(a, q2), q2).join(' ') : '';
@@ -605,9 +658,47 @@ function parseRouterAnswers(questions, answers, opts = {}) {
   return out;
 }
 
+/** Mode a follow-up header implies (Q1 was preset away): backlog | audit | null. */
+function followUpModeHint(questions) {
+  let hint = null;
+  for (const q of Array.isArray(questions) ? questions : []) {
+    const h = canonHeader(headerOf(q));
+    if (h === 'milestones' || /^issues/.test(h)) return 'backlog';
+    if (h === 'ergebnis' || h === 'audit-umfang') hint = hint || 'audit';
+  }
+  return hint;
+}
+
+/** Does the call carry a question with this (canonical) header? */
+function hasHeader(questions, key) {
+  return (Array.isArray(questions) ? questions : []).some(q => canonHeader(headerOf(q)) === canonHeader(key));
+}
+
+/**
+ * Apply a follow-up patch to the active contract. Its `modeHint` upgrades a
+ * prompt-mode contract whose mode was only defaulted (no Q1 answer, no do-run
+ * args) and that was armed ≤ 30 min ago in this session (R2).
+ */
+function applyFollowUp(cwd, patch, opts = {}) {
+  if (!patch) return null;
+  const now = nowOf(opts);
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
+  if (!h) return null;
+  const p = { ...patch };
+  const hint = p.modeHint;
+  delete p.modeHint;
+  const armed = Date.parse(h.armedAt);
+  if (hint && h.mode === 'prompt' && h.modeFrom === 'default' && Number.isFinite(armed) && now - armed <= MERGE_WINDOW_MS) {
+    p.mode = hint;
+    p.alsoAudit = false;
+    p.modeFrom = 'follow-up';
+  }
+  return update(cwd, p, { now, sessionId: opts.sessionId });
+}
+
 /**
  * Patch from the router's follow-up call (spec B), or null when the call
- * carries none of its headers.
+ * carries none of its headers. `modeHint` names the mode its headers imply.
  */
 function parseFollowUp(questions, answers) {
   if (!Array.isArray(questions)) return null;
@@ -615,7 +706,7 @@ function parseFollowUp(questions, answers) {
   const patch = {};
   let hit = false;
   for (const q of questions) {
-    const h = (headerOf(q) || '').trim();
+    const h = canonHeader(headerOf(q));
     const tokens = answerTokens(answerFor(a, q), q);
     if (/^ergebnis$/i.test(h)) {
       hit = true;
@@ -633,9 +724,14 @@ function parseFollowUp(questions, answers) {
     } else if (/^pc danach$/i.test(h)) {
       hit = true;
       patch.pcAfter = tokens.join(', ') || null;
+    } else if (/^audit-umfang$/i.test(h)) {
+      hit = true;
     }
   }
-  return hit ? patch : null;
+  if (!hit) return null;
+  const hint = followUpModeHint(questions);
+  if (hint) patch.modeHint = hint;
+  return patch;
 }
 
 // ── machine prompts ────────────────────────────────────────────────────────
@@ -681,6 +777,27 @@ function parseMachinePrompt(text) {
     if (out.phase === 'presence') out.presence = false;
   }
   return out;
+}
+
+/**
+ * Patch for an ACTIVE same-session contract from a machine prompt (R5): only
+ * ship / passes / strict / items / presence are refreshed, the mode never
+ * changes — except `RUN_BACKLOG_AUTOSTART` (forces backlog) and
+ * `mode=analyze` over an audit contract (audit as concept: passes cleared).
+ */
+function machinePatch(active, text) {
+  const fields = parseMachinePrompt(text);
+  if (!fields) return null;
+  const patch = {};
+  for (const k of ['ship', 'passes', 'strict', 'items', 'presence']) {
+    if (fields[k] !== undefined) patch[k] = fields[k];
+  }
+  if (/^\s*RUN_BACKLOG_AUTOSTART\s*:/i.test(text)) patch.mode = 'backlog';
+  else if (active && active.mode === 'audit' && /^analy/i.test(kvPairs(text).mode || '')) {
+    patch.passes = [];
+    patch.auditResult = 'concept';
+  }
+  return patch;
 }
 
 // ── segments / obligations ─────────────────────────────────────────────────
@@ -1053,6 +1170,13 @@ function cli(argv, opts = {}) {
       write({ ok: true, aborted: true, id: h.id, reason });
       return 0;
     }
+    case 'batch-clear': {
+      if (!reason) return fail('batch-clear needs --reason "<why>"');
+      const had = !!readJson(batchHandoffPath(cwd));
+      clearBatchHandoff(cwd);
+      write({ ok: true, cleared: had, reason: short(reason, 200) });
+      return 0;
+    }
     case 'arm': {
       const mode = flags.mode === undefined ? 'prompt' : flags.mode;
       const flow = flags.flow === undefined ? 'interactive' : flags.flow;
@@ -1067,13 +1191,14 @@ function cli(argv, opts = {}) {
         if (passes.some(p => p !== 'harden' && p !== 'polish')) return fail('--passes harden,polish|none');
       }
       const items = typeof flags.items === 'string' ? flags.items.split(',') : [];
-      const h = arm(cwd, { source: 'cli', mode, flow, ship, passes, strict: flags.strict === true || flags.strict === 'on', items }, { now });
+      const sessionId = typeof flags.session === 'string' ? flags.session : null;
+      const h = arm(cwd, { source: 'cli', mode, modeFrom: 'cli', flow, ship, passes, strict: flags.strict === true || flags.strict === 'on', items, sessionId }, { now });
       if (!h) return fail(disabled() ? 'run contract disabled (DOTCLAUDE_RUN_CONTRACT=off)' : 'could not write the contract');
       write({ ok: true, armed: true, contract: h });
       return 0;
     }
     default:
-      return fail('usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--cwd <path>]');
+      return fail('usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]');
   }
 }
 
@@ -1085,6 +1210,8 @@ module.exports = {
   FILES, OBLIGATIONS, GATES, DEFAULT_HEADER,
   EXPIRY_INTERACTIVE_H, EXPIRY_AUTONOMOUS_H, CARD_GRACE_MS, PENDING_MAX_MS, BATCH_MAX_MS,
   disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath,
+  FOREIGN_GRACE_MS, MERGE_WINDOW_MS,
+  ownedBy, claim, applyFollowUp, hasHeader, canonHeader, followUpModeHint, machinePatch,
   readContract, readContractForCard, readRawContract, arm, update, record, close, events,
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   extractAnswers, isRouterCall, parseRouterAnswers, parseFollowUp, parseMachinePrompt,

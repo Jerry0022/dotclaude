@@ -16,6 +16,8 @@
  *   readCardPayload(file, cwd) → object | null
  *   releaseResult(response)    → {ok, merged} | null
  *   routerFromTranscript(transcriptPath, sinceIso) → {questions, answers, followUps[]} | null
+ *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
+ *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
  */
 
 const fs = require('fs');
@@ -50,7 +52,7 @@ const GIT_RE = /^git(?:\s+-[cC]\s+\S+)*\s+(\S+)(.*)$/s;
  * @returns {{commit:boolean, branch:boolean, branchName:string|null, renderCard:string|null}}
  */
 function commandFacts(cmd) {
-  const out = { commit: false, branch: false, branchName: null, renderCard: null };
+  const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false };
   if (typeof cmd !== 'string' || !cmd.trim()) return out;
   const rc = cmd.match(/index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
   if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
@@ -75,6 +77,7 @@ function commandFacts(cmd) {
       name = n ? n[1] : null;
     } else if (sub === 'worktree' && /^\s+add\b/.test(rest)) {
       hit = true;
+      out.worktree = true;
       const b = raw.match(/\s-[bB]\s+(\S+)/);
       if (b) name = b[1];
       else {
@@ -84,10 +87,44 @@ function commandFacts(cmd) {
     }
     if (hit) {
       out.branch = true;
+      if (/(^|\s)--detach\b/.test(rest)) out.detach = true;
       if (name && !out.branchName) out.branchName = name.replace(/^["']|["']$/g, '');
     }
   });
   return out;
+}
+
+function gitOut(root, args) {
+  try {
+    const { execFileSync } = require('child_process');
+    return execFileSync('git', args, {
+      cwd: root, timeout: 3000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+    }).trim() || null;
+  } catch { return null; }
+}
+
+/**
+ * The branch a new branch is created FROM. PreToolUse: HEAD. PostToolUse
+ * (`after`): HEAD already is the new branch → the previous one (`@{-1}`).
+ */
+function baseBranch(root, newName, after) {
+  const head = gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (after && head && newName && head === newName) return gitOut(root, ['rev-parse', '--abbrev-ref', '@{-1}']);
+  return head;
+}
+
+/**
+ * Is a branch creation an ITEM boundary (backlog event + branch gate, R6)?
+ * Not from a subagent (`agent_id`), not `git worktree add`, not `--detach`,
+ * and not a sub-branch `<current>-…` / `<current>/…` (agents' own branches).
+ */
+function isItemBranch(facts, hook, current) {
+  if (!facts || !facts.branch) return false;
+  if (hook && hook.agent_id) return false;
+  if (facts.worktree || facts.detach) return false;
+  const name = facts.branchName;
+  if (name && current && current !== 'HEAD' && (name.startsWith(`${current}-`) || name.startsWith(`${current}/`))) return false;
+  return true;
 }
 
 function toolFilePath(toolName, input) {
@@ -219,5 +256,5 @@ function routerFromTranscript(transcriptPath, sinceIso, RC) {
 module.exports = {
   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS,
   commandFacts, toolFilePath, isGatedPath, closesOf, cardFacts, readCardPayload,
-  releaseResult, routerFromTranscript, stripQuotes,
+  releaseResult, routerFromTranscript, stripQuotes, gitOut, baseBranch, isItemBranch, readTail,
 };

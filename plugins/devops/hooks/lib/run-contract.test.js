@@ -150,8 +150,8 @@ describe("parseFollowUp", () => {
       "Welche Issues?": "#473 Fix login, #477 Card",
       "Und der PC?": "PC an · mit Resume (Recommended)",
     });
-    expect(p).toEqual({ auditResult: "concept", passes: [], milestones: ["v1 (3)"], items: ["473", "477"], pcAfter: "PC an · mit Resume" });
-    expect(R.parseFollowUp([{ header: "Ergebnis", question: "x" }], { x: "Audit umsetzen (Recommended)" })).toEqual({ auditResult: "implement" });
+    expect(p).toEqual({ auditResult: "concept", passes: [], milestones: ["v1 (3)"], items: ["473", "477"], pcAfter: "PC an · mit Resume", modeHint: "backlog" });
+    expect(R.parseFollowUp([{ header: "Ergebnis", question: "x" }], { x: "Audit umsetzen (Recommended)" })).toEqual({ auditResult: "implement", modeHint: "audit" });
     expect(R.parseFollowUp(CURRENT, {})).toBeNull();
   });
 });

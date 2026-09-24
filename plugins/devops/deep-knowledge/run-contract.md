@@ -30,9 +30,14 @@ fallback or a machine prompt is announced once (PostToolUse
 repeated machine prompt of the same mode refreshes the active contract in
 place — its events and segments survive every wake of a loop.
 
-A contract expires — reads as absent, archived to `run-contract.prev.json` —
-after 12 h idle (interactive) or 30 h (autonomous / backlog), so a leftover
-contract never gates an unrelated later session.
+Every header and marker is **session-bound**: it gates, arms and shows on
+the card only for the session whose `session_id` it stores (Claude Desktop
+copies the main checkout's untracked `.claude/` into every new worktree, so
+a copied file must never gate a foreign session). A file without a stored
+session id counts as foreign once it is 10 min old; a fresh one (CLI `arm`)
+is claimed by the first session that touches it. A contract also expires —
+reads as absent, archived to `run-contract.prev.json` — after 12 h idle
+(interactive) or 30 h (autonomous / backlog).
 
 ## Obligations
 

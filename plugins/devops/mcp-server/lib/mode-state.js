@@ -395,14 +395,17 @@ export function batchGuide(batch, lang) {
  *
  * @param {string|undefined} cwd
  * @param {'de'|'en'} [lang]
+ * @param {string|null} [sessionId] the card's `session_id`; a contract of another session → null
  * @returns {string|null}
  */
-export function readRunContractLine(cwd, lang = "de") {
+export function readRunContractLine(cwd, lang = "de", sessionId = null) {
   if (!cwd) return null;
   try {
     const require = createRequire(import.meta.url);
     const RC = require(join(here, "..", "..", "hooks", "lib", "run-contract.js"));
-    const contract = RC.readContractForCard(cwd);
+    // A contract of another session (Desktop copies the untracked `.claude/`
+    // into new worktrees) is never shown.
+    const contract = RC.readContractForCard(cwd, { sessionId: sessionId || null });
     if (!contract) return null;
     const evs = RC.events(cwd);
     return RC.summaryForCard(contract, evs, lang, { codeFilesChanged: null }) || null;

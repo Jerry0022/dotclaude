@@ -37,6 +37,8 @@ const BATCH_BLOCK = [
   'A ready plan goes to Skill("devops:do-run", "--from=do-batch …"), a plan with',
   'open decisions to Skill("devops:auto-concept", "--from=do-batch …") — never',
   'implemented directly. Reading, exploring and planning stay allowed.',
+  `Stale marker / not a do-batch hand-off: node "${LIB}" batch-clear --reason "<why>"`,
+  'Kill switch (every run-contract gate): DOTCLAUDE_RUN_CONTRACT=off',
 ].join('\n');
 
 function gitNames(root, args) {
@@ -71,7 +73,9 @@ function classify(hook, root, cwd, C) {
     const gates = [];
     let batch = false;
     if (f.commit) { gates.push('commit'); batch = true; }
-    if (f.branch) gates.push('branch');
+    if (f.branch && C.isItemBranch(f, hook, hook.agent_id || f.worktree || f.detach ? null : C.baseBranch(root, f.branchName, false))) {
+      gates.push('branch');
+    }
     if (f.renderCard) {
       const payload = C.readCardPayload(f.renderCard, cwd);
       if (payload && C.cardFacts(payload).final) gates.push('card');
@@ -92,9 +96,12 @@ function classify(hook, root, cwd, C) {
 }
 
 /** Spec B: a do-run started but its answers were never recorded — arm now. */
-function armFromPending(hook, root, RC, C) {
-  const marker = RC.pendingArm(root);
+function armFromPending(hook, root, RC, C, sessionId) {
+  const marker = RC.pendingArm(root, { sessionId });
   if (!marker) return null;
+  // R1: a do-run that skipped the router (resume, machine prompt, backlog's
+  // own sub-run) never replaces the contract the user already chose.
+  if (RC.readContract(root, { sessionId })) { RC.clearPendingArm(root); return null; }
   const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC);
   let fields = null;
   let source = 'router';
@@ -106,9 +113,9 @@ function armFromPending(hook, root, RC, C) {
     const q4 = { header: 'Durchgänge?', question: 'Durchgänge?', options: [{ label: 'Harden danach (Recommended)' }, { label: 'Polish danach (Recommended)' }] };
     fields = RC.parseRouterAnswers([q4], {}, { doRunArgs: marker.args });
   }
-  const h = RC.arm(root, { ...fields, source, sessionId: hook.session_id || marker.sessionId || null });
+  const h = RC.arm(root, { ...fields, source, sessionId: sessionId || marker.sessionId || null });
   RC.clearPendingArm(root);
-  if (h && found) for (const patch of found.followUps) RC.update(root, patch);
+  if (h && found) for (const patch of found.followUps) RC.applyFollowUp(root, patch, { sessionId });
   return h ? { source } : null;
 }
 
@@ -127,13 +134,15 @@ function main(hook) {
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return 0;
 
-  if (call.batch && RC.batchHandoffPending(root)) {
+  const sessionId = hook.session_id || null;
+  if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
     process.stderr.write(`${BATCH_BLOCK}\n`);
     return 2;
   }
 
-  const armed = armFromPending(hook, root, RC, C);
-  const contract = RC.readContract(root);
+  const armed = armFromPending(hook, root, RC, C, sessionId);
+  RC.claim(root, sessionId);
+  const contract = RC.readContract(root, { sessionId });
   if (!contract) return 0;
   const evs = RC.events(root);
   const seg = RC.currentSegment(contract, evs);

@@ -139,9 +139,9 @@ describe("branch gate (backlog)", () => {
     ev({ k: "skill", name: "auto-harden", args: "--invoked-by=autonomous" });
     ev({ k: "skill", name: "auto-polish", args: "--invoked-by=autonomous" });
     ev({ k: "release", ok: false });
-    expect(run("Bash", { command: "git worktree add ../wt -b fix/3" }).stderr).toContain("do-ship");
+    expect(run("Bash", { command: "git checkout -b fix/3" }).stderr).toContain("do-ship");
     ev({ k: "card", variant: "ship-blocked" });
-    expect(run("Bash", { command: "git worktree add ../wt -b fix/3" }).code).toBe(0);
+    expect(run("Bash", { command: "git checkout -b fix/3" }).code).toBe(0);
   });
 
   test("harden run by do-ship (--invoked-by=ship) does not count", () => {
