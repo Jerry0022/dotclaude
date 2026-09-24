@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.194.5] — 2026-09-24
+
+### Fixed
+- **The skill-extension guide names the right skill.** Its log-path example lived under `/debug`, a skill that does not exist, so an extension written from it was never read. The example is now `/auto-fix`. The README no longer calls `/debug` an alias: "debug" is a trigger word for `/auto-fix`, not a command (#477).
+
 ## [0.194.4] — 2026-09-24
 
 ### Fixed
