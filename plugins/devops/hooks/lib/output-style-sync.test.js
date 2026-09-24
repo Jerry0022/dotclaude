@@ -122,9 +122,41 @@ describe("Quiet style — a resume is never a quiet tick", () => {
 
   test("the resume rule follows the background-turn rule it carves out of", () => {
     const quiet = template.indexOf("A turn triggered by a background-task notification");
-    const resume = template.indexOf('"Continue from where you left off."');
+    const resume = template.indexOf('"Continue from where you left off." is never such a turn.');
     expect(quiet).toBeGreaterThan(-1);
     expect(resume).toBeGreaterThan(quiet);
+  });
+});
+
+// A German session got English three times: "No response requested." to the
+// app's English resume prompt, a ship-verify hook block relayed "exactly as
+// returned", and a wrap-up written after a run of English tool results and
+// skill bodies. The rule said "the language of the user's latest message" —
+// and in the Desktop app most of what lands in the user's slot is not typed
+// by the user.
+describe("Quiet style — the reply language follows what the user typed", () => {
+  const flat = fs.readFileSync(path.join(REPO_PLUGIN, TEMPLATE_REL), "utf8").replace(/\s+/g, " ");
+
+  test("anchors on the user's own words, not on whatever sits in their slot", () => {
+    expect(flat).toContain("Reply in the language the user writes in — the words they typed");
+    expect(flat).not.toContain("the language of the user's latest message");
+  });
+
+  test("names the app's own English turns as never deciding the language", () => {
+    const rule = flat.slice(0, flat.indexOf("Never narrate"));
+    for (const turn of [
+      '"Continue from where you left off."',
+      '"[Your previous response had no visible output…]"',
+      "the summary after a compaction",
+      "a task notification",
+    ]) expect(rule).toContain(turn);
+    expect(rule).toContain("None of them decides the reply language");
+  });
+
+  test("a relayed block stays complete but speaks the user's language", () => {
+    expect(flat).toContain("every line, number, link, code span and symbol as returned");
+    expect(flat).toContain("Only its words follow the reply language");
+    expect(flat).not.toContain("exactly as returned");
   });
 });
 
