@@ -9,6 +9,9 @@ const {
   RENAMED,
   FOLDED,
   FOLDED_TRIGGERS,
+  RETIRED,
+  RETIRED_TRIGGERS,
+  retiredSkill,
   canonicalSkillName,
   foldedMode,
   legacyNamesOf,
@@ -125,5 +128,35 @@ describe("extension fallback — new name first, old name second", () => {
   test("nothing found / bad base → null", () => {
     expect(resolveExtensionFile(tmpProject([]), "do-ship", "reference.md")).toBeNull();
     expect(resolveExtensionFile("", "do-ship", "reference.md")).toBeNull();
+  });
+});
+
+describe("RETIRED (PR 3) — no skill, a doc and a hook instead", () => {
+  test("the four retired names, each with a deep-knowledge doc", () => {
+    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-readme"]);
+    for (const entry of Object.values(RETIRED)) {
+      expect(entry.doc).toMatch(/^[a-z-]+\.md$/);
+      expect(fs.existsSync(path.join(import.meta.dirname, "..", "..", "deep-knowledge", entry.doc)), entry.doc).toBe(true);
+    }
+  });
+
+  test("retiredSkill reads old names with or without prefix / slash", () => {
+    expect(retiredSkill("/devops:auto-usage")).toMatchObject({ doc: "usage.md" });
+    expect(retiredSkill("claude-strict")).toMatchObject({ doc: "strict.md" });
+    expect(retiredSkill("do-ship")).toBeNull();
+    expect(retiredSkill(null)).toBeNull();
+  });
+
+  test("a retired name is never canonicalized onto a skill", () => {
+    for (const n of Object.keys(RETIRED)) {
+      expect(canonicalSkillName(n)).toBe(n);
+      expect(RENAMED).not.toHaveProperty(n);
+      expect(FOLDED).not.toHaveProperty(n);
+      expect(foldedMode(n)).toBeNull();
+    }
+  });
+
+  test("the trigger snapshot has an entry per retired skill", () => {
+    expect(Object.keys(RETIRED_TRIGGERS).sort()).toEqual(Object.keys(RETIRED).sort());
   });
 });

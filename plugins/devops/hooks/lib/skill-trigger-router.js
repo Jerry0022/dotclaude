@@ -1,6 +1,6 @@
 /**
  * @module skill-trigger-router
- * @version 0.6.0
+ * @version 0.7.0
  * @description Pure trigger-matching core for `prompt.skill.enforce`'s router
  *   half (PR 1 + PR 2 of the skill restructure —
  *   docs/superpowers/specs/2026-09-24-skill-restructure-design.md "Triggers —
@@ -15,8 +15,12 @@
  *      `/claude-learn`, `/run-backlog`, `/promote`, …) mapped to the skill
  *      that now owns them via `ALIAS_MAP` (built from `skill-names.js`);
  *      a folded name also carries its mode (`/run-backlog` → do-run mode
- *      `backlog`). A 1:1 alias of a skill owned by a dedicated hook
- *      (`SKIP_SKILLS`: do-ship, do-batch, claude-strict) emits nothing —
+ *      `backlog`). The PR-3 RETIRED names (`/setup-readme`, `/auto-graph`,
+ *      `/auto-usage`, `/claude-strict`) have no alias at all — they name no
+ *      skill; prompt.knowledge.dispatch points at their docs and
+ *      prompt.strict.enforce owns the strict switch. A 1:1 alias of a skill
+ *      owned by a dedicated hook
+ *      (`SKIP_SKILLS`: do-ship, do-batch) emits nothing —
  *      `prompt.ship.detect` and `prompt.batch.collect` recognise `/ship`
  *      and `/claude-batch` themselves. do-ship is owned WHOLE by its hook
  *      (`HOOK_OWNED_MODES`): its folded `promote` mode (`/promote`,
@@ -92,13 +96,14 @@
 const { RENAMED, FOLDED, modeForPhrase } = require('./skill-names');
 
 /** Skills owned by a dedicated UserPromptSubmit hook: `do-ship`
- *  (prompt.ship.detect), `do-batch` (prompt.batch.collect),
- *  `claude-strict` (prompt.strict.enforce). The router never emits them —
+ *  (prompt.ship.detect), `do-batch` (prompt.batch.collect). Strict is no
+ *  skill any more (PR 3) — prompt.strict.enforce owns it outright. The
+ *  router never emits them —
  *  not from phrases and not from 1:1 aliases — so two hooks never issue
  *  conflicting mandates for one prompt. A phrase or alias of a FOLDED mode
  *  of such a skill still routes, tagged with its mode — unless the skill is
  *  in HOOK_OWNED_MODES. */
-const SKIP_SKILLS = new Set(['do-ship', 'do-batch', 'claude-strict']);
+const SKIP_SKILLS = new Set(['do-ship', 'do-batch']);
 
 /** Dedicated-hook skills whose folded modes the hook owns too. do-ship: the
  *  promote mode became the ship's target channel ("promote stable" = ship if
@@ -117,31 +122,27 @@ const HOOK_OWNED_MODES = new Set(['do-ship']);
  *    "plugin updaten", "self update" — generic consumer-project phrases
  *    ("update plugin settings for eslint", "das vite plugin updaten"), and
  *    auto-update is explicit-only per its description;
- *  - setup-readme "update the readme" — a to-do item ("implement X and
- *    update the readme"), not a README rewrite;
  *  - auto-concept "visualize this" — "visualize this as a bar chart";
  *  - auto-guide "guide me through" — "guide me through this code" is a
  *    code walkthrough, not a website guide;
- *  - auto-graph "graphify" — the user has a global graphify skill;
  *  - auto-agents "use agents" / "parallel agents" — a hard go for the
  *    delegation policy (spawn directly), not a request for the auto-agents
  *    ceremony (deep-knowledge/agent-proactivity.md);
  *  - auto-issue "new issue" / "neues issue" — "that's a new issue after
  *    the merge", "das ist ein neues Issue";
  *  - auto-harden "lint und fix" — "lint und fix, dann ship" is a plain
- *    to-do list, not a hardening pass;
- *  - auto-usage "token budget" — "keep the token budget low".
+ *    to-do list, not a hardening pass.
+ *  (setup-readme, auto-graph and auto-usage had entries here until PR 3
+ *  retired them; their phrases now only point at a deep-knowledge doc,
+ *  lib/knowledge-pointers.js.)
  *  Compared lowercase. */
 const PHRASE_DENYLIST = Object.freeze({
   'do-ship': new Set(['release']),
   'do-run': new Set(['prüf alles']),
   'auto-update': new Set(['neue version', 'update plugin', 'plugin updaten', 'self update']),
-  'auto-graph': new Set(['graphify']),
   'auto-agents': new Set(['use agents', 'parallel agents']),
   'auto-issue': new Set(['new issue', 'neues issue']),
   'auto-harden': new Set(['lint und fix']),
-  'auto-usage': new Set(['token budget']),
-  'setup-readme': new Set(['update the readme']),
   'auto-concept': new Set(['visualize this']),
   'auto-guide': new Set(['guide me through']),
 });

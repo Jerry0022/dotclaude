@@ -1,5 +1,8 @@
 import { describe, test, expect } from "vitest";
-import { detectInlineSkillMentions } from "./prompt.skill.enforce.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { detectInlineSkillMentions, listPluginSkills, run } from "./prompt.skill.enforce.js";
 
 const KNOWN = [
   "auto-agents",
@@ -93,5 +96,32 @@ describe("detectInlineSkillMentions — machine prompts (R1)", () => {
     '<scheduled-task name="x">/auto-concept</scheduled-task>',
   ])("%s → no mentions", (msg) => {
     expect(detectInlineSkillMentions(msg, KNOWN)).toEqual([]);
+  });
+});
+
+describe("PR 3 retired skills — never mandated by the hook", () => {
+  const RETIRED = ["setup-readme", "auto-graph", "auto-usage", "claude-strict"];
+
+  test("they are not skill directories any more, so no inline mention counts", () => {
+    const skills = listPluginSkills();
+    for (const n of RETIRED) expect(skills).not.toContain(n);
+    expect(detectInlineSkillMentions("/claude-strict on und /auto-graph, /auto-usage, /setup-readme", skills)).toEqual([]);
+  });
+
+  test.each([
+    "/claude-strict on",
+    "bitte /claude-strict mach den Rand dünner",
+    "mach das mit /setup-readme",
+    "/auto-usage",
+    "/auto-graph und dann knowledge graph erklären",
+    "create a readme and refresh usage",
+  ])("run(%j) emits no Skill mandate for a retired name", (prompt) => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "enforce-retired-"));
+    try {
+      const out = run({ prompt, cwd, session_id: "vitest-retired" });
+      for (const n of RETIRED) expect(out).not.toContain(`Skill("${n}")`);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

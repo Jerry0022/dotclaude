@@ -175,6 +175,9 @@ to find the right file. This avoids unnecessary reads and saves context tokens.
 - `deep-knowledge/test-strategy.md` → used by hooks AND skills
 
 Hooks reference plugin-level deep-knowledge in their stdout instructions to Claude.
+`prompt.knowledge.dispatch` injects a doc's body when a `TOPIC_MAP` keyword
+matches, or — for the docs in `hooks/lib/knowledge-pointers.js` (the retired
+skills' bodies) — a one-line pointer to the file; both once per session.
 
 ## Skill Conventions
 
@@ -199,6 +202,27 @@ mode table) and puts each flow in `modes/<mode>.md` (supporting files under
 `hooks/lib/skill-names.js` (`RENAMED`, or `FOLDED` + `FOLDED_TRIGGERS` for a
 skill that becomes a mode). That one table drives the router aliases, the
 "already invoked" detection, the extension fallback and the usage scan.
+
+**Retiring a skill** (it stops being a skill — its body is knowledge, its
+triggers belong to a hook or an MCP tool) is a MAJOR change too, done in PR 3
+of the skill restructure for `setup-readme`, `auto-graph`, `auto-usage` and
+`claude-strict`:
+
+- move the body verbatim into `deep-knowledge/<topic>.md` (no frontmatter;
+  first line after the heading ends with "Former `<name>` skill …");
+- add the name to `RETIRED` (+ the frontmatter snapshot to `RETIRED_TRIGGERS`)
+  in `hooks/lib/skill-names.js` — never to `RENAMED`: an old slash name must
+  map to the new mechanism, not to a Skill;
+- give every trigger phrase a home: `hooks/lib/knowledge-pointers.js`
+  (one-line dispatch pointer, cheap enough for single words) and/or a
+  dedicated hook (`prompt.strict.enforce` owns the strict switch,
+  `pre.readme.standards` the first README write);
+- `git rm` the skill dir; `scripts/skill-graph.test.js` then checks the doc,
+  the pointer match of every snapshot phrase and that the router never
+  mandates the old name.
+
+A consumer extension under the old name keeps applying only where the doc
+and its pointer say so (`legacyOverrides`); document which in the doc.
 
 ### Directory Structure
 

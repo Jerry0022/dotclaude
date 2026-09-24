@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.7.0
+ * @version 0.8.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -10,6 +10,9 @@
  *   at most once per session (tracked via session-scoped temp files).
  *   Always-on docs (ss.knowledge.index ALWAYS_ON, e.g. agent-proactivity.md)
  *   are already in context from SessionStart — never list them in TOPIC_MAP.
+ *   The docs of the four retired skills (readme-standards, graphify, usage,
+ *   strict — lib/knowledge-pointers.js) get a one-line pointer instead of
+ *   their body, also once per session.
  */
 
 require('../lib/plugin-guard');
@@ -20,6 +23,7 @@ const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale } = require('../lib/locale');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
+const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
 
 /**
  * Topic-to-file keyword map.
@@ -245,8 +249,20 @@ process.stdin.on('end', () => {
     } catch {}
   }
 
+  // Pointers for the retired skills' docs (one line each, not the body).
+  const pointers = [];
+  try {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    for (const hit of matchPointers(rawMessage)) {
+      if (injected.has(hit.file)) continue;
+      const overrides = hit.extension ? legacyOverrides(hit.legacy, { cwd: hook.cwd, home }) : [];
+      pointers.push(pointerLine(hit, dkDir, overrides));
+      injected.add(hit.file);
+    }
+  } catch { /* a pointer is never worth a failed prompt */ }
+
   // Persist DK injection state (atomic write via session-id lib)
-  if (sections.length > 0) {
+  if (sections.length > 0 || pointers.length > 0) {
     try {
       writeSessionFile(markerFile, [...injected].join('\n'));
     } catch {}
@@ -313,6 +329,8 @@ process.stdin.on('end', () => {
       );
     }
   }
+
+  if (pointers.length > 0) blocks.push(...pointers);
 
   if (sections.length > 0) {
     blocks.push(

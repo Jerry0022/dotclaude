@@ -144,7 +144,7 @@ Every spawned agent MUST receive:
    ceiling override; hooks do not fire inside sub-agents, so the parent must
    pass it down.
 10. **Scope contract** — when a `[claude-strict contract]` block is in context
-   (`/claude-strict` armed for this worktree + branch), it goes **verbatim at
+   (strict mode armed — `deep-knowledge/strict.md`), it goes **verbatim at
    the top** of the prompt, before item 1. The `pre.strict.agent-gate` hook
    refuses a spawn without it. It overrides item 5's "make reasonable decisions
    independently" on the scope axis: decisions cover unnamed attributes only,

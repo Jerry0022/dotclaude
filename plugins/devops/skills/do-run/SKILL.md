@@ -92,7 +92,7 @@ It never reorders the options that remain.
 | `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Weg · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
-| strict already armed for this branch (`node "$CLAUDE_PLUGIN_ROOT/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Nur das (`/claude-strict off` lifts it, not this question). |
+| strict already armed for this branch (`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Nur das (`strict off` lifts it, not this question). |
 
 The remaining tokens of `$ARGUMENTS` (or the prompt itself) are the task,
 the backlog filter or the audit target.
@@ -237,15 +237,19 @@ four-question cap is the only reason for a second follow-up.
 
 - **Mit Umfeld** → nothing to arm.
 - **Nur das** → strict for this run, through the existing strict machinery
-  (`skills/claude-strict/SKILL.md`, `hooks/lib/strict-state.js`). Arm an
-  inline mode exactly as `prompt.strict.enforce` does for `/claude-strict <task>`
-  — never over a branch mode:
+  (`deep-knowledge/strict.md`, `hooks/lib/strict-state.js`). Arm an inline
+  mode exactly as `prompt.strict.enforce` does for `strict: <task>` — never
+  over a branch mode or a mode bound to a running concept / autonomous
+  workflow (the CLI keeps those, `kept: true`):
   ```bash
-  node -e "const S=require(process.env.CLAUDE_PLUGIN_ROOT+'/hooks/lib/strict-state.js');const m=S.readMode(process.cwd());if(!(m&&m.reason==='on'&&S.evaluate(process.cwd()).active))S.activate(process.cwd(),{reason:'inline'})"
-  node "$CLAUDE_PLUGIN_ROOT/hooks/lib/strict-state.js" contract
+  node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline
   ```
+  It prints one JSON line and then the contract block — the block only when
+  the mode is verifiably active. A non-zero exit means strict is NOT on:
+  say so in one line and ask whether to continue without it; never proceed
+  as if strict were armed.
   The printed block is binding for the rest of the run, with the duties of
-  claude-strict Steps 2–4: the block at the top of every Agent prompt
+  `deep-knowledge/strict.md` (contract, execution, report): the block at the top of every Agent prompt
   (`pre.strict.agent-gate` refuses a spawn without it), `--strict` on every
   auto-harden / auto-polish call, `strict=on` in every `AUTONOMOUS_AUTOSTART:`
   / `RUN_BACKLOG_AUTOSTART:` cron prompt, the strict report before the card.

@@ -42,13 +42,18 @@ If a skill name was passed as argument, use it. Otherwise:
 3. Present the list via AskUserQuestion:
    > "Welchen Plugin-Skill möchtest du für dieses Projekt erweitern?"
    >
-   > Options: do-ship, do-run, auto-fix, auto-issue, setup-project, setup-readme, ...
+   > Options: do-ship, do-run, auto-fix, auto-issue, setup-project, setup-cleanup, ...
 
 Validate that the chosen name matches an existing plugin skill. A pre-PR-2
 name (`ship`, `fix`, `run-backlog`, `promote`, … — table in
 `{PLUGIN_ROOT}/hooks/lib/skill-names.js`) is translated to the skill that owns
-it now (`do-ship`, `auto-fix`, `do-run`, `do-ship`, …). If it matches
-nothing, warn and re-ask.
+it now (`do-ship`, `auto-fix`, `do-run`, `do-ship`, …). A PR-3 retired name
+(`RETIRED` in the same table: setup-readme, auto-graph, auto-usage,
+claude-strict) is no skill: say so and name its deep-knowledge doc
+(`RETIRED[name].doc`). An extension under that old name keeps applying only
+where the doc says so (readme-standards, usage and strict name
+`.claude/skills/<old>/reference.md` as an override; graphify never had one).
+If it matches nothing, warn and re-ask.
 
 ## Step 3 — Check for existing extension
 

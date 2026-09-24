@@ -145,7 +145,7 @@ describe("classifyBudget — the budget block get_usage returns", () => {
     }));
     expect(["max5", "max20"]).toContain(block.tier); // the credentials tier of the host beats the label
     expect(block.refreshFailed).toBe("not logged in");
-    expect(block.line).toContain("(refresh failed: not logged in — run /auto-usage)");
+    expect(block.line).toContain('(refresh failed: not logged in — say "refresh usage" to log in once)');
     expect(["free", "ask-before-parallel", "sonnet-only"]).toContain(block.cls);
   });
 

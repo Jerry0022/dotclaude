@@ -1,38 +1,43 @@
----
-name: auto-usage
-version: 0.2.0
-description: >-
-  Fetch live token usage for completion card battery line. Reads the native
-  statusLine-written usage file first (no scrape), falls back to the Edge CDP
-  scraper or cached data. Run silently pre-card, or manually:
-  "refresh usage", "wie viel hab ich verbraucht", "token budget".
-layer: 0
-invokes: []
-triggers:
-  en: ["refresh usage", "token budget"]
-  de: ["wie viel hab ich verbraucht"]
-allowed-tools: Bash(node *), Read
----
+# Usage Data — Live Token Usage
 
-# Refresh Usage Data
+Live token usage (5h + weekly windows, burn rate) for the completion card's battery line and for budget questions. Former `auto-usage` skill (skill restructure PR 3).
 
-Fetch live token usage for the completion card's battery line.
+## How it reaches you
 
-## Step 0 — Load Extensions
+Not a skill any more. The **automatic path is the MCP tool**
+`mcp__plugin_devops_dotclaude-completion__get_usage` (server
+`dotclaude-completion`): it reads the fresh statusLine file first, falls back
+to the headless fetch, never opens a login window, and returns percentages,
+reset times, deltas, staleness (`cached` / `ageMinutes` / `stale`), a
+pre-rendered meter and the delegation `budget` class.
+`render_completion_card` applies the same logic by itself — there is **no
+pre-card usage step**; never refresh usage "silently before the card".
+Skills that need numbers (auto-agents, do-run burn) call `get_usage`.
 
-Check for optional overrides. Use **Glob** to verify each path exists before reading.
-Do NOT call Read on files that may not exist — skip missing files silently (no output).
+`prompt.knowledge.dispatch` points at this document when the user asks for
+usage by hand: "refresh usage", "wie viel hab ich verbraucht", "token budget",
+or the old `/auto-usage`.
 
-1. Global: `~/.claude/skills/auto-usage/SKILL.md` + `reference.md`
-2. Project: `{project}/.claude/skills/auto-usage/SKILL.md` + `reference.md`
-3. Merge: project > global > plugin defaults
+**A manual request:** call `get_usage` first and relay its meter. Only when it
+reports the scraper profile as not logged in (`failureReason`, or the card's
+"Edge fetch offline (not logged in)" line), or the user explicitly wants a
+login or `weeklySonnet`, run the scraper by hand (Step 1a) — that is the one
+path that may open a login window.
+
+## Project overrides (former skill extension)
+
+A consumer extension written for the old skill —
+`{project}/.claude/skills/auto-usage/reference.md` (or `SKILL.md`), or the same
+under `~/.claude/skills/auto-usage/` — applies only to the manual path: the
+dispatch pointer names such a file when one exists; read it and merge
+(project > global > this document). `get_usage` and the card never read it.
 
 ## Step 1 — Fetch data
 
 ### 1·0. Native source first (no scrape)
 
 `~/.claude/usage-live.json` is kept **minute-fresh by the native statusLine
-writer** ([statusline-usage.js](../../scripts/statusline-usage.js), registered by
+writer** ([statusline-usage.js](../scripts/statusline-usage.js), registered by
 `ss.statusline.ensure`) — it maps Claude Code's `rate_limits` JSON onto the
 usage schema with **no browser and no extra Claude turn**. If the file's
 `timestamp` is recent (≤ a couple of minutes), just **read it — you are done**;
@@ -45,10 +50,10 @@ automatically in `get_usage` / `render_completion_card`.
 **Automatic path is zero-interaction.** The MCP fallback always runs the scraper
 with `--no-login`, so the completion card **never opens a login window** — a
 logged-out profile just serves statusLine/cached data. A one-time login is
-offered **only** when you run this skill manually (the command in 1a omits
-`--no-login`). The card itself renders only the 5h + weekly numbers, which the
-native statusLine source already provides token-free; `weeklySonnet` is a
-manual-summary extra, not a card field.
+offered **only** on a manual run (the command in 1a omits `--no-login`). The
+card itself renders only the 5h + weekly numbers, which the native statusLine
+source already provides token-free; `weeklySonnet` is a manual-summary extra,
+not a card field.
 
 ### 1·1. Edge CDP fetcher (fallback)
 
@@ -65,9 +70,9 @@ The script path is `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js` (us
 
 ### 1a. Run the scraper (manual run — login allowed)
 
-This skill is the **manual** entry point (the user explicitly asked for usage /
-weeklySonnet), so the command deliberately omits `--no-login`: a one-time login
-window may open here. The automatic card path uses `--no-login` and never does.
+The **manual** path (the user explicitly asked for usage / a login /
+weeklySonnet) deliberately omits `--no-login`: a one-time login window may
+open here. The automatic card path uses `--no-login` and never does.
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
@@ -127,7 +132,7 @@ ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Haiku empfohlen"
 ## Rules
 
 - **Never touch the user's main Edge.** The scraper always spawns a dedicated, isolated Edge instance with its own user-data-dir (`~/.claude/edge-usage-profile`). It reaps **only that profile's** instances — matched by the `--user-data-dir` on the live command line, not by a stored PID (which dies on Windows when Edge re-execs into its singleton, the bug that let orphan instances pile up). The user's main Edge is never matched.
-- **Login windows only on manual runs.** The automatic card path passes `--no-login`, so it **never** opens a window (a logged-out profile just serves cache). On a manual run (this skill, no `--no-login`) a one-time login is expected, opened at most once: on first run (or after a profile wipe) the scraper profile has no cookies, so the script opens a visible login window, writes a sticky `edge-usage-login-pending.json` marker, and exits code `2`. While that marker is fresh (≤ 30 min) **no** session opens another window — so parallel sessions can't stack login windows. Tell the user inline — do NOT retry silently.
+- **Login windows only on manual runs.** The automatic card path passes `--no-login`, so it **never** opens a window (a logged-out profile just serves cache). On a manual run (Step 1a, no `--no-login`) a one-time login is expected, opened at most once: on first run (or after a profile wipe) the scraper profile has no cookies, so the script opens a visible login window, writes a sticky `edge-usage-login-pending.json` marker, and exits code `2`. While that marker is fresh (≤ 30 min) **no** session opens another window — so parallel sessions can't stack login windows. Tell the user inline — do NOT retry silently.
 - **Silent after first login.** A successful scrape clears the marker immediately; once the profile has cookies, all subsequent runs are invisible and reuse the one hidden instance.
 - **Transient render failures never open a window.** A slow/unrendered page returns a scrape error (cache fallback), not code `2`. Only an explicit `/login` redirect or login UI counts as logged-out.
 - **Playwright fallback is acceptable** — if the scraper fails, opening a browser tab via Playwright to scrape is fine.

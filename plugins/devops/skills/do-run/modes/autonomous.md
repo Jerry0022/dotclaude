@@ -373,7 +373,7 @@ reset boundary, and falls back to a flat 5h only when usage data stays missing/s
 node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-resume-schedule.js"
 ```
 
-The helper self-refreshes — do **not** run `/auto-usage` separately first.
+The helper self-refreshes — do **not** refresh usage separately first.
 
 Parse the JSON: `{ delayMinutes, cron, fireAtLocal, source }`. `cron` is a ready-to-use
 5-field one-shot expression in local time — use it verbatim, no manual date math. Then:

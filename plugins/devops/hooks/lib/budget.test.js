@@ -327,7 +327,7 @@ describe("a failed refresh is reported, never called 'refreshing', and not retri
     const b = read(failed(60_000));
     b.refreshing = true;
     expect(b.refreshFailed).toBe("not logged in");
-    expect(budgetLine(b)).toContain("(refresh failed: not logged in — run /auto-usage)");
+    expect(budgetLine(b)).toContain('(refresh failed: not logged in — say "refresh usage" to log in once)');
     expect(budgetLine(b)).not.toContain("refreshing");
   });
 

@@ -1,17 +1,25 @@
 'use strict';
 /**
  * @module skill-names
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
- * @description The one table of skill names that changed in PR 2 of the skill
- *   restructure (docs/superpowers/specs/2026-09-24-skill-restructure-design.md)
- *   and the helpers every hook, MCP tool and script uses to stay compatible
- *   with the OLD names:
+ * @description The one table of skill names that changed in PR 2 and PR 3 of
+ *   the skill restructure
+ *   (docs/superpowers/specs/2026-09-24-skill-restructure-design.md) and the
+ *   helpers every hook, MCP tool and script uses to stay compatible with the
+ *   OLD names:
  *
  *   - `RENAMED` — 1:1 renames (`ship` → `do-ship`, `fix` → `auto-fix`, …).
  *   - `FOLDED`  — skills whose body became a mode of another skill
  *     (`run-backlog` → `do-run` mode `backlog`, `promote` → `do-ship` mode
  *     `promote`).
+ *   - `RETIRED` — PR 3: skills that are no skill at all any more; their body
+ *     is a deep-knowledge doc and their triggers live in a hook
+ *     (`setup-readme`, `auto-graph`, `auto-usage`, `claude-strict`). An old
+ *     slash name maps to that mechanism, NEVER to a Skill: the router has no
+ *     alias for them (`ALIAS_MAP` is built from RENAMED + FOLDED only), and
+ *     `canonicalSkillName` passes them through unchanged — a name that is
+ *     not in `skills/` is never mandated.
  *   - `canonicalSkillName(name)` — old or new name (with or without a
  *     `devops:` prefix) → the current skill name. A session that straddles
  *     the update recorded `devops:ship`; the router must read that as
@@ -85,6 +93,66 @@ const FOLDED_TRIGGERS = Object.freeze({
 });
 
 /**
+ * Old skill name → where it went (PR 3). `doc` is the deep-knowledge file that
+ * carries the body; `home` names the mechanism that now owns the triggers and
+ * the behaviour. The dispatch pointer table (`hooks/lib/knowledge-pointers.js`)
+ * is keyed by `doc`; `prompt.strict.enforce` owns the strict switch.
+ */
+const RETIRED = Object.freeze({
+  'setup-readme': Object.freeze({
+    doc: 'readme-standards.md',
+    home: 'pre.readme.standards (first README write/edit) + prompt.knowledge.dispatch pointer',
+  }),
+  'auto-graph': Object.freeze({
+    doc: 'graphify.md',
+    home: 'ss.graphify / pre.tokens.guard / post.graphify.* + prompt.knowledge.dispatch pointer',
+  }),
+  'auto-usage': Object.freeze({
+    doc: 'usage.md',
+    home: 'MCP get_usage (dotclaude-completion) + prompt.knowledge.dispatch pointer',
+  }),
+  'claude-strict': Object.freeze({
+    doc: 'strict.md',
+    home: 'prompt.strict.enforce / pre.strict.agent-gate / stop.strict.release + do-run Q3 "Nur das" + prompt.knowledge.dispatch pointer',
+  }),
+});
+
+/**
+ * The `triggers:` frontmatter of every retired skill as it stood at
+ * retirement, plus the German glossary (`triggers.de.txt`) of claude-strict.
+ * `scripts/skill-graph.test.js` asserts every phrase still reaches its new
+ * home (the dispatch pointer, and for strict the hook's switch).
+ */
+const RETIRED_TRIGGERS = Object.freeze({
+  'setup-readme': Object.freeze({
+    en: ['create a readme', 'update the readme', 'improve the readme'],
+    de: ['README erstellen', 'README aktualisieren'],
+  }),
+  'auto-graph': Object.freeze({
+    en: ['knowledge graph', 'graphify', 'code graph', '/auto-graph'],
+  }),
+  'auto-usage': Object.freeze({
+    en: ['refresh usage', 'token budget'],
+    de: ['wie viel hab ich verbraucht'],
+  }),
+  'claude-strict': Object.freeze({
+    en: ['/claude-strict', 'strict'],
+    de: ['strikt', 'genau so und nicht mehr', 'nur das ändern', 'nichts anderes anfassen',
+      'strict modus', 'nur den rand', 'strict an', 'strict aus'],
+  }),
+});
+
+/**
+ * Where a retired skill went (`devops:auto-usage` → `{doc, home}`), else null.
+ * @param {string} raw
+ * @returns {{doc:string, home:string}|null}
+ */
+function retiredSkill(raw) {
+  const name = stripNamespace(raw);
+  return Object.prototype.hasOwnProperty.call(RETIRED, name) ? RETIRED[name] : null;
+}
+
+/**
  * The mode a trigger phrase of `skill` belongs to (from FOLDED_TRIGGERS),
  * else null. Case-insensitive.
  * @param {string} skill current skill name
@@ -115,6 +183,7 @@ function stripNamespace(raw) {
 /**
  * Old or new skill name → current skill name. Unknown names pass through
  * (normalized), so a consumer skill or a third-party one is never renamed.
+ * A RETIRED name passes through too: it names no skill, see `retiredSkill`.
  * @param {string} raw
  * @returns {string}
  */
@@ -204,6 +273,9 @@ module.exports = {
   RENAMED,
   FOLDED,
   FOLDED_TRIGGERS,
+  RETIRED,
+  RETIRED_TRIGGERS,
+  retiredSkill,
   modeForPhrase,
   stripNamespace,
   canonicalSkillName,

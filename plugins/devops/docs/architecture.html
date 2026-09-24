@@ -139,8 +139,8 @@
   <a href="#skill-new-issue">/auto-issue</a>
   <a href="#skill-explain">/devops-explain</a>
   <a href="#skill-project-setup">/setup-project</a>
-  <a href="#skill-readme">/setup-readme</a>
-  <a href="#skill-refresh-usage">/auto-usage</a>
+  <a href="#skill-readme">README standards (knowledge)</a>
+  <a href="#skill-refresh-usage">Usage data (knowledge)</a>
   <a href="#skill-extend-skill">/auto-extend</a>
 
   <h2>MCP Servers</h2>
@@ -168,7 +168,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->19<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->53<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->15<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -179,17 +179,17 @@
 
 <div class="card-grid">
   <div class="card">
-    <h4><!--devops:count:hooks-->52<!--/devops:count:hooks--> Hooks</h4>
+    <h4><!--devops:count:hooks-->53<!--/devops:count:hooks--> Hooks</h4>
     <p style="color:var(--text2);font-size:.85rem">Lifecycle guards across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop</p>
     <span class="badge b-hook">SessionStart &times;<!--devops:count:hooks:ss-->16<!--/devops:count:hooks:ss--></span>
     <span class="badge b-hook">Prompt &times;<!--devops:count:hooks:prompt-->12<!--/devops:count:hooks:prompt--></span>
-    <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->10<!--/devops:count:hooks:pre--></span>
+    <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->11<!--/devops:count:hooks:pre--></span>
     <span class="badge b-hook">Post &times;<!--devops:count:hooks:post-->7<!--/devops:count:hooks:post--></span>
     <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
-    <h4><!--devops:count:skills-->19<!--/devops:count:skills--> Skills</h4>
-    <p style="color:var(--text2);font-size:.85rem">Slash menu: do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit), do-learn, do-batch, setup-project, setup-cleanup, setup-readme, auto-usage, auto-graph, claude-strict · hidden workers: auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue</p>
+    <h4><!--devops:count:skills-->15<!--/devops:count:skills--> Skills</h4>
+    <p style="color:var(--text2);font-size:.85rem">Slash menu: do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit), do-learn, do-batch, setup-project, setup-cleanup · hidden workers: auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue · no longer skills (deep-knowledge + hooks): readme-standards, graphify, usage, strict</p>
   </div>
   <div class="card">
     <h4><!--devops:count:agents-->12<!--/devops:count:agents--> Agents</h4>
@@ -212,13 +212,13 @@
 │   ├── plugin.json            <span style="color:var(--text2)"># Plugin manifest (name, version, mcpServers, hooks)</span>
 │   └── marketplace.json       <span style="color:var(--text2)"># Marketplace registration</span>
 ├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
-├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->38<!--/devops:count:dk--> cross-cutting reference docs</span>
+├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->42<!--/devops:count:dk--> cross-cutting reference docs</span>
 ├── hooks/
 │   ├── hooks.json             <span style="color:var(--purple)"># Hook registry (event &rarr; command mapping)</span>
 │   ├── lib/                   <span style="color:var(--text2)"># plugin-guard, run-once, session-id</span>
 │   ├── session-start/         <span style="color:var(--purple)"># <!--devops:count:hooks:ss-->16<!--/devops:count:hooks:ss--> hooks (ss.*)</span>
 │   ├── user-prompt-submit/    <span style="color:var(--purple)"># <!--devops:count:hooks:prompt-->12<!--/devops:count:hooks:prompt--> hooks (prompt.*)</span>
-│   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->10<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
+│   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->11<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
 │   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->7<!--/devops:count:hooks:post--> hooks (post.*)</span>
 │   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
 ├── mcp-server/
@@ -234,11 +234,11 @@
 │   ├── render-card.js         <span style="color:var(--warn)"># Completion card template engine</span>
 │   ├── build-id.js            <span style="color:var(--text2)"># Deterministic content hash</span>
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
-├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->19<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
+├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
 │   ├── do-ship/ (modes/promote.md)  do-run/ (modes/backlog, autonomous, burn, rethink, audit)
-│   ├── do-learn/  do-batch/  setup-project/  setup-cleanup/  setup-readme/
+│   ├── do-learn/  do-batch/  setup-project/  setup-cleanup/
 │   ├── auto-fix/  auto-concept/  auto-guide/  auto-extend/  auto-update/  auto-issue/
-│   └── auto-harden/  auto-polish/  auto-agents/  auto-usage/  auto-graph/  claude-strict/
+│   └── auto-harden/  auto-polish/  auto-agents/
 ├── templates/                 <span style="color:var(--warn)"># Output format templates</span>
 │   ├── completion-card.md     changelog-entry.md
 │   ├── buildlog-entry.md      github-release.md
@@ -484,8 +484,6 @@
   <tr><td><code>/auto-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
   <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
   <tr><td><code>/setup-project</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
-  <tr><td><code>/setup-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
-  <tr><td><code>/auto-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
   <tr><td><code>/auto-extend</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
 </table>
 </section>
@@ -607,7 +605,7 @@
       <li><strong>Analyze Project</strong> &mdash; Detect tech stack, read .gitignore, check LICENSE/README</li>
       <li><strong>.gitignore</strong> &mdash; Fetch from gitignore.io, merge with Claude tooling rules</li>
       <li><strong>LICENSE</strong> &mdash; Generate if missing (MIT/Apache/GPL/ISC)</li>
-      <li><strong>README</strong> &mdash; Inform user to run <code>/setup-readme</code></li>
+      <li><strong>README</strong> &mdash; Inform the user; README work follows <code>deep-knowledge/readme-standards.md</code></li>
       <li><strong>Additional Files</strong> &mdash; .editorconfig, .gitattributes, AI tooling config</li>
     </ol>
     <p><strong>Audit severity:</strong> CRITICAL (secrets) &rarr; auto-fix. WARNING (missing rules) &rarr; auto-fix. INFO (redundancy) &rarr; report only.</p>
@@ -616,8 +614,9 @@
 </section>
 
 <section id="skill-readme">
-<h3>/setup-readme &mdash; README Generation</h3>
-<p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">--preview / --update</span></p>
+<h3>README standards &mdash; <code>deep-knowledge/readme-standards.md</code></h3>
+<p><span class="badge b-hook">Hook</span> <span class="tag">pre.readme.standards</span> <span class="tag">prompt.knowledge.dispatch</span></p>
+<p>No longer a skill (skill restructure PR 3). The first substantial Write/Edit of a <code>README.*</code> in a session, or a prompt such as "create a readme" / "README erstellen", gets a one-line pointer to the doc; preview and update modes are described there.</p>
 <details>
   <summary>Section Selection &amp; Rendering</summary>
   <div class="detail-body">
@@ -628,8 +627,9 @@
 </section>
 
 <section id="skill-refresh-usage">
-<h3>/auto-usage &mdash; Token Usage Tracking</h3>
-<p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
+<h3>Usage data &mdash; <code>get_usage</code> + <code>deep-knowledge/usage.md</code></h3>
+<p><span class="badge b-hook">MCP</span> <span class="tag">get_usage</span> <span class="tag">prompt.knowledge.dispatch</span></p>
+<p>No longer a skill (skill restructure PR 3). The card and skills call the MCP tool <code>get_usage</code> (no pre-card step); "refresh usage" / "wie viel hab ich verbraucht" point at the doc, which covers the manual scraper run and its one-time login.</p>
 <details>
   <summary>4-Step Fallback Chain</summary>
   <div class="detail-body">
@@ -1015,14 +1015,14 @@
 <div class="interaction-matrix">
   <span class="from">/do-ship</span> <span class="to">&rarr; ship_preflight, ship_build, ship_version_bump, ship_release, ship_cleanup</span>
   <span class="from">/do-ship</span> <span class="to">&rarr; render_completion_card (variant: shipped)</span>
-  <span class="from">/auto-usage</span> <span class="to">&rarr; get_usage (CDP scraping)</span>
+  <span class="from">auto-agents, do-run burn</span> <span class="to">&rarr; get_usage (plan, usage, budget class)</span>
   <span class="from">All skills (post-task)</span> <span class="to">&rarr; render_completion_card (various variants)</span>
 </div>
 
 <h3>Skill &rarr; Skill Transitions</h3>
 <div class="interaction-matrix">
   <span class="from">/auto-fix</span> <span class="to">&rarr; suggests /do-ship &mdash; after fix is applied and changes are ready</span>
-  <span class="from">/setup-project</span> <span class="to">&rarr; informs user to run /setup-readme &mdash; for README generation</span>
+  <span class="from">/setup-project</span> <span class="to">&rarr; reports a missing README &mdash; README work follows deep-knowledge/readme-standards.md</span>
   <span class="from">/auto-extend</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
   <span class="from">/do-ship</span> <span class="to">&rarr; optional /codex:rescue &mdash; pre-ship code review (if codex-plugin-cc installed)</span>
 </div>

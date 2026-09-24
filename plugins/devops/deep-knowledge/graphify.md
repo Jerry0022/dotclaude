@@ -1,30 +1,26 @@
----
-name: auto-graph
-version: 0.7.0
-description: >-
-  Codebase knowledge graph via the external graphify CLI — default-on,
-  opt-out via `{"consent":false}` in `.claude/graphify.json` or
-  `~/.claude/graphify.json`. Auto-installs graphify, keeps the graph fresh
-  windowlessly, answers codebase questions with `graphify query`, and
-  hard-gates broad raw-file searches toward the graph. Triggers: "knowledge
-  graph", "graphify", "code graph", "/auto-graph". Do NOT trigger for simple
-  single-file lookups.
-layer: 0
-invokes: []
-triggers:
-  en: ["knowledge graph", "graphify", "code graph", "/auto-graph"]
-allowed-tools: Bash(node *), Bash(graphify *), Bash(uv *), Bash(pipx *), Read, Glob, Write
----
+# graphify — Codebase Knowledge Graph (default-on, opt-out)
 
-# auto-graph — Codebase Knowledge Graph (default-on, opt-out)
+Codebase knowledge graph via the external graphify CLI: default-on, opt-out via `{"consent":false}` in `.claude/graphify.json` or `~/.claude/graphify.json`. Former `auto-graph` skill (skill restructure PR 3).
 
 Thin orchestration over the real [`graphify`](https://github.com/safishamsi/graphify)
-CLI. graphify stays the single source of truth — this skill reimplements
+CLI. graphify stays the single source of truth — the plugin reimplements
 nothing. It **detects**, **auto-installs** if missing, **freshens the graph**,
 and **queries** it. graphify enforcement is **enabled by default** in every
 project — no consent prompt, no offer to confirm. The graph is kept fresh
 automatically and broad searches are hard-gated toward it — see
 [Enforcement](#enforcement-default-on).
+
+## How it reaches you
+
+Not a skill any more: the hooks do the automatic part (`ss.graphify` —
+install, freshness, the session-start nudge; `pre.tokens.guard` — the
+answer-in-gate; `post.graphify.search` / `post.graphify.query` — telemetry),
+and `prompt.knowledge.dispatch` points at this document when a prompt talks
+about the graph ("knowledge graph", "graphify", "code graph", or the old
+`/auto-graph`). Steps 1–4 below are what to do by hand when the user asks for
+the graph explicitly, or when the automatic path reported a failure. Use it
+for codebase questions; not for simple single-file lookups. The old skill had
+no extension point, so a `.claude/skills/auto-graph/` directory is ignored.
 
 ## Hard rules
 
@@ -144,7 +140,7 @@ The first time graphify auto-enables for a project with no record at all,
 line disclosing that it's on and how to opt out. This is a disclosure, not an
 offer — there is nothing to confirm.
 
-When **enabled**, two things are automatic — no need to invoke this skill:
+When **enabled**, two things are automatic — nothing to run by hand:
 
 **1. Auto-install + auto-build / freshness.** `ss.graphify` ensures graphify
 is installed (best-effort background `uv tool install graphifyy` if missing),

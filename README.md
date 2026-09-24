@@ -208,8 +208,8 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->52<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->19<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; tools setup-project, setup-cleanup; hidden workers auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue; plus setup-readme, auto-usage, auto-graph, claude-strict
+- **<!--devops:count:hooks-->53<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->15<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; tools setup-project, setup-cleanup; hidden workers auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data and strict mode are knowledge + hooks, not skills
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
@@ -219,7 +219,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->53<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -242,7 +242,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
-- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the auto-graph feature.
+- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the graphify integration…
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.ship.resume` — Keep a running /do-ship stable across a compaction or a resume.
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
@@ -258,7 +258,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.issue.detect` — Detect issue references in user messages.
 - `prompt.plugin.scope` — Inject the scope-routing rule when a consumer project's session starts talking about…
 - `prompt.skill.enforce` — Detects inline skill commands (e.g.
-- `prompt.strict.enforce` — Arms and enforces `/claude-strict` — literal scope, discretionary parameters.
+- `prompt.strict.enforce` — Arms and enforces strict mode — literal scope, discretionary parameters.
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('do-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
 - `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
@@ -272,8 +272,9 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.issue.guard` — Block raw GitHub issue writes (gh issue, gh api, MCP) unless auto-issue ran this turn.
 - `pre.plugin.scope` — Block hand-edits of installed devops plugin artifacts from a consumer project.
 - `pre.edit.branch` — Prevent Edit/Write tool calls while HEAD is on local main/master.
+- `pre.readme.standards` — Once per session, before the first substantial write to a README file, points Claude…
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
-- `pre.strict.agent-gate` — While `/claude-strict` is active, refuse an Agent spawn whose prompt does not start w…
+- `pre.strict.agent-gate` — While strict mode is active, refuse an Agent spawn whose prompt does not start with t…
 - `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
 
 #### PostToolUse — runs after each tool call
@@ -293,7 +294,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `stop.flow.guard` — Per-turn completion card + validation enforcement (the validation half of the V&V gate).
 - `stop.guide.handoff` — Offer the auto-guide skill when Claude's own answer hands the user a manual click-thr…
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
-- `stop.strict.release` — Settles the lifetime of an inline `/claude-strict` mode at the end of the turn that a…
+- `stop.strict.release` — Settles the lifetime of an inline strict mode at the end of the turn that armed it.
 - `stop.mcp.reap` — Periodic background reclaim of orphaned Claude Desktop MCP server processes — the "ru…
 <!--/devops:block:hook-lifecycle-->
 
@@ -375,8 +376,6 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/auto-fix` (alias: `/debug`) | Hidden · Router + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/auto-issue` | Hidden · Hook | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
 | `/setup-project` | Explicit | Repo hygiene audit and initialization |
-| `/setup-readme` | Explicit | Modern README generation |
-| `/auto-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
 | `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
 | `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup; open PRs are landed one after another via `/do-ship` |
 | `/auto-update` | Hidden | Update the plugin to the latest version from GitHub |
@@ -388,12 +387,39 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/do-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
 | `/auto-harden` | Hidden · Router | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/auto-polish` | Hidden · Router + `/do-ship` | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
-| `/auto-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
 | `/do-run rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
 | `/do-run audit` | Explicit | Full-spectrum audit (functional, visual, animation, audio, a11y, logging, performance, …) of this chat's work, the last 48h's requirements, or everything; then fixes or a DevOps concept page |
 | `/do-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
 | `/auto-guide` | Hidden · Hook | Live tutorial in the user's Edge tab: step panel overlay for logins, API keys, and settings Claude cannot do itself |
-| `/claude-strict` | Explicit + Hook | Strict mode: the deliverable is exactly what the prompt names, unnamed attributes are chosen and reported; propagates to agents, skills and concept iterations; `on`/`off` binds it to the current worktree + branch |
+
+#### No longer skills — knowledge + hooks
+
+Four former skills are plain knowledge now (`deep-knowledge/`), reached through
+hooks instead of the skill listing. Their old slash names are never mapped to a
+skill; a prompt that mentions them gets a one-line pointer to the doc.
+
+| Former skill | Now | How it reaches Claude |
+|---|---|---|
+| `/setup-readme` | `readme-standards.md` | `pre.readme.standards` on the first substantial README write of a session; "create a readme", "README erstellen" in a prompt |
+| `/auto-graph` | `graphify.md` | the graphify hooks (auto-install, freshness, search gate); "knowledge graph", "graphify" in a prompt |
+| `/auto-usage` | `usage.md` | the `get_usage` MCP tool (the card fetches by itself); "refresh usage", "wie viel hab ich verbraucht" |
+| `/claude-strict` | `strict.md` | the strict hooks and do-run's "Nur das" answer |
+
+**Strict mode** — the deliverable is exactly what the prompt names; unnamed
+attributes are chosen and reported; it propagates to agents, skills and concept
+iterations. Switch it with plain words (the whole prompt):
+
+| Type | Effect |
+|---|---|
+| `strict on` / `strikt an` | on for this worktree + branch, until `off` or a branch switch |
+| `strict off` / `strikt aus` | off |
+| `strict status` | status |
+| `strict: <task>` / `strikt: <task>` | strict for this one task |
+| "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen" in a prompt | strict for this one task |
+
+`/claude-strict on|off|<task>` still works inside a prompt; a prompt that
+*starts* with it may be rejected by Claude Code as an unknown command before
+the hook sees it, so prefer the plain words. A bare "strict" arms nothing.
 
 #### `/do-run` — let Claude execute autonomously
 
@@ -541,8 +567,8 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->19<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->53<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates

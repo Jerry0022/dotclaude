@@ -6,7 +6,7 @@ description: >-
   README, .editorconfig, .gitattributes, and AI tooling config. Also scaffolds
   plugin skill extensions for the project. Triggers on: "set up this project",
   "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene".
-  Do NOT trigger for README generation (/setup-readme), CLAUDE.md edits,
+  Do NOT trigger for README generation (deep-knowledge/readme-standards.md), CLAUDE.md edits,
   or source code changes.
 layer: 0
 invokes: []
@@ -228,7 +228,8 @@ Generate with current year and user name from git config.
 
 ## Step 4 — README check
 
-Do NOT generate — inform user to run `/setup-readme` if missing.
+Do NOT generate — tell the user a README is missing; when they ask for one, it follows
+`deep-knowledge/readme-standards.md` (the `pre.readme.standards` hook points there on the first write).
 
 ## Step 5 — Project Map
 

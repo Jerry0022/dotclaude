@@ -22,7 +22,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-// graphify's default output location (see the auto-graph skill).
+// graphify's default output location (see deep-knowledge/graphify.md).
 const GRAPH_JSON_REL = path.join('graphify-out', 'graph.json');
 
 /** Absolute path to the project's graph.json under `cwd`. */
@@ -116,8 +116,8 @@ function buildGraphNudge(cwd) {
     `[graphify] A knowledge graph exists at ${where}.`,
     'For semantic questions (what defines/calls X, how do A and B relate, where is',
     `Y handled), prefer \`graphify query "<question>"${flag}\` over grepping raw files — it`,
-    'reads the graph, not the code, so it is cheaper. Refresh with /auto-graph if',
-    'the code changed meaningfully.',
+    'reads the graph, not the code, so it is cheaper. Refresh with `graphify update .`',
+    'if the code changed meaningfully (deep-knowledge/graphify.md).',
   ].join('\n');
 }
 

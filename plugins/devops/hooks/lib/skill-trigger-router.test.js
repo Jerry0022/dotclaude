@@ -27,10 +27,8 @@ function skillSet(overrides) {
     "do-ship": { name: "do-ship", triggers: { en: ["ship it", "push and merge", "release", "promote", "promotion", "promote to beta"] } },
     "do-run": { name: "do-run", triggers: { en: ["/run-burn", "backlog runner"], de: ["festgefahren"] } },
     "do-batch": { name: "do-batch", triggers: { en: ["batch mode"], de: ["sammelmodus"] } },
-    "claude-strict": { name: "claude-strict", triggers: { en: ["strict"], de: ["strikt"] } },
     "auto-polish": { name: "auto-polish", triggers: { en: ["polish", "design pass"], de: ["feinschliff"] } },
     "auto-harden": { name: "auto-harden", triggers: { de: ["härten"] } },
-    "auto-graph": { name: "auto-graph", triggers: { en: ["knowledge graph", "graphify"] } },
     "auto-guide": { name: "auto-guide", triggers: { en: ["guide me through"], de: ["führe mich durch"] } },
     "do-learn": { name: "do-learn", triggers: { en: ["capture learning", "/devops-learn", "/do-learn"], de: ["lerne das", "学习这个"] } },
     ...overrides,
@@ -64,6 +62,36 @@ describe("ALIAS_MAP — old names → the skill that owns them after PR 2", () =
     for (const n of ["do-run", "do-ship", "auto-fix", "auto-agents", "auto-update"]) {
       expect(ALIAS_MAP[n], n).toBeUndefined();
     }
+  });
+
+  test("PR-3 retired names have no alias: they name no skill any more", () => {
+    for (const n of ["setup-readme", "auto-graph", "auto-usage", "claude-strict"]) {
+      expect(ALIAS_MAP[n], n).toBeUndefined();
+    }
+  });
+});
+
+describe("PR 3 retired skills — the router never mandates them", () => {
+  test.each([
+    "mach das mit /setup-readme bitte",
+    "/auto-graph",
+    "bitte /auto-usage laufen lassen",
+    "/claude-strict on",
+    "und dann /claude-strict mach den Rand dünner",
+    "create a readme for this repo",
+    "README erstellen und dann ship",
+    "refresh usage please",
+    "wie viel hab ich verbraucht",
+    "show me the knowledge graph for the auth module",
+    "genau so und nicht mehr",
+    "nur das ändern: die Farbe",
+  ])("%j", (msg) => {
+    const routed = routeMessage(msg, REAL_SKILLS).map((e) => e.skill);
+    for (const n of ["setup-readme", "auto-graph", "auto-usage", "claude-strict"]) expect(routed).not.toContain(n);
+  });
+
+  test("the real skill set has none of them, so no fixture can smuggle one back", () => {
+    for (const n of ["setup-readme", "auto-graph", "auto-usage", "claude-strict"]) expect(REAL_SKILLS[n]).toBeUndefined();
   });
 });
 
@@ -170,7 +198,6 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
   test("multi-word phrases are routed; denylisted ones are not", () => {
     expect(phrases("auto-fix")).toContain("this is broken");
     expect(phrases("do-ship")).not.toContain("release");
-    expect(phrases("auto-graph")).not.toContain("graphify");
   });
 
   test("a slash form that is not a skill directory is routed; a real skill name is not", () => {
@@ -180,7 +207,7 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
   });
 
   test("dedicated-hook skills never enter the corpus — do-ship not even with its promote mode", () => {
-    for (const s of ["do-batch", "claude-strict", "do-ship"]) {
+    for (const s of ["do-batch", "do-ship"]) {
       expect(corpus.some((e) => e.skill === s)).toBe(false);
     }
   });
@@ -198,13 +225,11 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
     const c = buildWordTriggerCorpus(REAL_SKILLS);
     const p = (skill) => c.filter((e) => e.skill === skill).map((e) => e.phrase.toLowerCase());
     for (const x of ["update plugin", "plugin updaten", "self update"]) expect(p("auto-update")).not.toContain(x);
-    expect(p("setup-readme")).not.toContain("update the readme");
     expect(p("auto-concept")).not.toContain("visualize this");
     expect(p("auto-guide")).not.toContain("guide me through");
     // the frontmatter itself keeps them (trigger preservation)
     const fm = (skill) => Object.values(REAL_SKILLS[skill].triggers).flat().map((x) => x.toLowerCase());
     expect(fm("auto-update")).toEqual(expect.arrayContaining(["update plugin", "plugin updaten", "self update"]));
-    expect(fm("setup-readme")).toContain("update the readme");
     expect(fm("auto-concept")).toContain("visualize this");
     expect(fm("auto-guide")).toContain("guide me through");
   });

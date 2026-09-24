@@ -4,16 +4,16 @@
  * @version 0.1.0
  * @event Stop
  * @plugin devops
- * @description Settles the lifetime of an inline `/claude-strict` mode at the
+ * @description Settles the lifetime of an inline strict mode at the
  *   end of the turn that armed it. If the turn started a multi-turn workflow
  *   (a concept session — `.claude/concept-active.json`; an autonomous run —
  *   `AUTONOMOUS-LOCKOUT.flag`), the mode is bound to that workflow's state
  *   file and lives exactly as long as the file does. Otherwise the inline mode
- *   is released: the next prompt is normal unless it mentions the skill again.
+ *   is released: the next prompt is normal unless it switches strict again.
  *
  *   Bound modes whose file has disappeared are released here too, so a
  *   finished concept session never leaves a stale strict behind. A branch mode
- *   (`/claude-strict on`) is never touched — only `off` or a branch switch
+ *   (`strict on`) is never touched — only `off` or a branch switch
  *   ends it.
  *
  *   Never blocks the stop. Advisory line on stderr only.

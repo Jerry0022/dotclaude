@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
  * @module strict-state
- * @version 0.1.1
- * @description State, mention detection and the canonical contract text for
- *   `/claude-strict` — literal scope, discretionary parameters.
+ * @version 0.2.0
+ * @description State, switch detection and the canonical contract text for
+ *   strict mode — literal scope, discretionary parameters. Strict is not a
+ *   skill (skill restructure PR 3): the hooks prompt.strict.enforce,
+ *   pre.strict.agent-gate and stop.strict.release do the mechanics, the
+ *   judgment half lives in deep-knowledge/strict.md.
  *
  * The mode file is a WORKTREE file (`.claude/strict-mode.json`): every git
  * worktree has its own `.claude/`, so a mode armed in one worktree never leaks
@@ -16,9 +19,12 @@
  * silently carrying it onto unrelated work.
  *
  * Three ways a mode comes to exist (`reason`):
- *   on          `/claude-strict on` — lives until `off` or a branch switch.
- *   inline      `/claude-strict <task>` — this turn; the Stop hook either binds
- *               it to a workflow that the turn started or releases it.
+ *   on          `strict on` / `strikt an` / `/claude-strict on` — lives until
+ *               `off` or a branch switch.
+ *   inline      `strict: <task>` / `/claude-strict <task>` / a literal-scope
+ *               phrase / do-run "Nur das" (CLI `inline`) — this turn; the
+ *               Stop hook either binds it to a workflow that the turn started
+ *               or releases it.
  *   concept /   bound to a workflow state file (`boundTo`); released the moment
  *   autonomous  that file disappears. Safety expiry 24 h.
  *
@@ -45,8 +51,8 @@ const CONTRACT_OPEN  = '[claude-strict contract]';
 const CONTRACT_CLOSE = '[/claude-strict contract]';
 
 /**
- * The contract. SKILL.md carries the same block verbatim; a skill-text test
- * asserts the two never drift. Keep it under 1 400 characters — it is
+ * The contract. deep-knowledge/strict.md carries the same block verbatim; a
+ * doc-text test (strict-doc.test.js) asserts the two never drift. Keep it under 1 400 characters — it is
  * injected on every strict turn.
  */
 const CONTRACT_BLOCK = [
@@ -159,6 +165,23 @@ function bind(cwd, reason, boundTo, now) {
   const mode = readMode(cwd) || activate(cwd, { reason: 'inline', now });
   const t = typeof now === 'number' ? now : Date.now();
   return writeMode(cwd, { ...mode, reason, boundTo, expiresAt: hoursFrom(t, BOUND_EXPIRY_HOURS) });
+}
+
+/**
+ * Arm an inline mode for this turn — never over an active stronger mode: a
+ * branch mode (`reason: 'on'`) or one bound to a running concept / autonomous
+ * workflow already covers the turn and outlives it, so replacing it with an
+ * inline mode would let the Stop hook release strict at turn end.
+ * @param {string} cwd
+ * @param {{sessionId?:string, now?:number}} [opts]
+ * @returns {{mode:object, kept:boolean}} kept = the existing mode stayed
+ */
+function armInline(cwd, opts = {}) {
+  const existing = readMode(cwd);
+  if (existing && existing.reason && existing.reason !== 'inline' && evaluate(cwd, { now: opts.now }).active) {
+    return { mode: existing, kept: true };
+  }
+  return { mode: activate(cwd, { reason: 'inline', sessionId: opts.sessionId, now: opts.now }), kept: false };
 }
 
 /** First workflow binding whose state file exists in `cwd`, or null. */
@@ -280,13 +303,65 @@ function detectMention(text) {
   return { mentioned: true, ...routeFor(text.slice(end)) };
 }
 
+/**
+ * Plain-word switch — the WHOLE prompt, so prose never flips the mode:
+ * `strict on`, `strikt an`, `strict mode off`, `strikt modus aus`,
+ * `strict status`. These exist because a prompt that STARTS with a slash
+ * name that is no longer a skill (`/claude-strict on`) may be rejected by the
+ * harness before any hook runs (skill-restructure spec § Triggers).
+ */
+const WORD_SWITCH_RE = /^\s*(?:strict|strikt)(?:[\s-]*(?:mode|modus))?\s+(on|an|ein|start|off|aus|stop|status)\s*[.!]?\s*$/i;
+/** Plain-word task: `strict: <task>` / `strikt: <task>` at the prompt start.
+ *  `strict: true …` / `strict: false …` is config talk, not a task. */
+const WORD_TASK_RE = /^\s*(?:strict|strikt)\s*:\s*(?!(?:true|false)\b)(\S[\s\S]*)$/i;
+/** Literal-scope phrases that arm an inline mode wherever they stand in the
+ *  user's prose (outside code and quotes). Former claude-strict triggers. */
+const LITERAL_SCOPE_PHRASES = Object.freeze(['genau so und nicht mehr', 'nur das ändern', 'nichts anderes anfassen']);
+const LITERAL_SCOPE_RE = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:${LITERAL_SCOPE_PHRASES.join('|')})(?![\\p{L}\\p{N}])`, 'iu');
+
+/** Prompt with fenced code, inline code and quoted strings removed. */
+function proseOnly(text) {
+  try { return require('./skill-trigger-router').stripCodeAndQuotes(text); }
+  catch { return text.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' '); }
+}
+
+/**
+ * Every user-facing way to switch strict, in priority order:
+ *   1. `/claude-strict …` (typed or expanded slash form) — detectMention;
+ *   2. the whole prompt is a plain-word switch (`strict on`, `strikt aus`);
+ *   3. `strict: <task>` / `strikt: <task>` at the start → inline task;
+ *   4. a literal-scope phrase in the prose → inline task (the whole prompt).
+ * Another command's expanded slash prompt only counts through (1).
+ * @param {string} text raw user prompt
+ * @returns {{mentioned:boolean, route:'on'|'off'|'status'|'task'|null, rest:string, via:'slash'|'word'|'phrase'|null}}
+ */
+function detectCommand(text) {
+  const none = { mentioned: false, route: null, rest: '', via: null };
+  if (typeof text !== 'string' || !text) return none;
+  const slash = detectMention(text);
+  if (slash.mentioned) return { ...slash, via: 'slash' };
+  if (text.includes('<command-name>')) return none;
+
+  const sw = WORD_SWITCH_RE.exec(text);
+  if (sw) return { mentioned: true, ...routeFor(sw[1]), via: 'word' };
+
+  const task = WORD_TASK_RE.exec(text);
+  if (task) return { mentioned: true, route: 'task', rest: task[1].trim(), via: 'word' };
+
+  if (LITERAL_SCOPE_RE.test(proseOnly(text))) {
+    return { mentioned: true, route: 'task', rest: text.trim(), via: 'phrase' };
+  }
+  return none;
+}
+
 // ── contract ───────────────────────────────────────────────────────────────
 
 function statusLine(mode, branch) {
   const reason = mode && mode.reason ? mode.reason : 'inline';
   const where = branch ? ` · branch ${branch}` : '';
   const bound = mode && mode.boundTo ? ` · bound to ${mode.boundTo}` : '';
-  return `strict: ${reason}${where}${bound} · /claude-strict off`;
+  return `strict: ${reason}${where}${bound} · "strict off" ends it`;
 }
 
 /** Status line + contract block, ready for additionalContext. */
@@ -308,6 +383,27 @@ function cli(argv) {
     case 'on': {
       const mode = activate(cwd, { reason: 'on' });
       out({ ok: true, active: true, reason: mode.reason, branch: mode.branch, path: modePath(cwd) });
+      return 0;
+    }
+    case 'inline': {
+      // do-run "Nur das" (and a model-decided arm): arm for this turn/run,
+      // never over a stronger mode. The contract is printed ONLY when the mode
+      // is verifiably active afterwards — a printed block the model reads as
+      // "strict is armed" while no mode file exists would make the Agent gate
+      // and the Stop hook silently disagree with it.
+      let armed;
+      try { armed = armInline(cwd); } catch (err) {
+        process.stderr.write(`strict-state inline: could not arm strict mode — ${err && err.message ? err.message : err}\n`);
+        return 1;
+      }
+      const ev = evaluate(cwd);
+      if (!ev.active) {
+        process.stderr.write(`strict-state inline: mode not active after arming (${ev.why || 'unknown'}) — strict is NOT on\n`);
+        return 1;
+      }
+      const { mode, kept } = armed;
+      out({ ok: true, active: true, reason: mode.reason, kept, branch: mode.branch, boundTo: mode.boundTo || null, expiresAt: mode.expiresAt, path: modePath(cwd) });
+      process.stdout.write(CONTRACT_BLOCK + '\n');
       return 0;
     }
     case 'off': {
@@ -335,7 +431,7 @@ function cli(argv) {
       return 0;
     }
     default:
-      process.stderr.write('usage: strict-state.js on|off|status|contract\n');
+      process.stderr.write('usage: strict-state.js on|off|status|inline|contract\n');
       return 1;
   }
 }
@@ -347,9 +443,9 @@ if (require.main === module) {
 module.exports = {
   MODE_FILE, BINDINGS, INLINE_EXPIRY_HOURS, BOUND_EXPIRY_HOURS,
   CONTRACT_OPEN, CONTRACT_CLOSE, CONTRACT_BLOCK,
-  modePath, readMode, deactivate, activate, bind, findBinding,
+  modePath, readMode, deactivate, activate, armInline, bind, findBinding,
   currentBranch, mainWorktree, evaluate, isActive, resolveInherited,
   branchNoticed, markBranchNoticed,
-  detectMention, MENTION_RE,
+  detectMention, MENTION_RE, detectCommand, LITERAL_SCOPE_PHRASES,
   statusLine, contractText, hasContract,
 };

@@ -10,7 +10,8 @@ description: >-
   Also auto-suggest when Claude completes analysis, planning, comparison,
   or concept work that would benefit from interactive decision-making.
   Do NOT trigger for: simple code explanations, debugging
-  (use /auto-fix), or static documentation (use /setup-readme).
+  (use /auto-fix), or static documentation (README work follows
+  {PLUGIN_ROOT}/deep-knowledge/readme-standards.md).
 layer: 2
 invokes: [do-ship, auto-agents, auto-issue]
 user-invocable: false

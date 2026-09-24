@@ -1,4 +1,10 @@
-# claude-strict — End-to-End Scenarios
+# Strict Mode — End-to-End Scenarios
+
+Strict is no skill since the skill restructure (PR 3); the judgment half is
+`deep-knowledge/strict.md`, the switch is `prompt.strict.enforce`. The runs
+below use the plain-word forms, which reach the hook in every harness
+(a prompt starting with `/claude-strict` may be rejected as an unknown
+command before any hook runs).
 
 Scripted `claude -p` runs against a throwaway repo. The mechanical parts
 (hook injection, mode file, gate) are covered deterministically by the vitest
@@ -37,7 +43,7 @@ run() { claude -p "$1" --model "${2:-claude-haiku-4-5-20251001}" --plugin-dir "$
 ## S1 — Visual request touches only the named element
 
 ```bash
-run "/claude-strict mach den Rand der Box dünner"
+run "strict: mach den Rand der Box dünner"
 git diff --stat
 ```
 
@@ -49,7 +55,7 @@ untouched, and the response contains a `strict — requested:` line plus an
 ## S2 — Unspecified attribute is chosen and reported
 
 ```bash
-git checkout -q -- . && run "/claude-strict gib der Note einen Rand in einer Akzentfarbe"
+git checkout -q -- . && run "strict: gib der Note einen Rand in einer Akzentfarbe"
 ```
 
 Pass when: only `.note` changed, the response has a `chosen:` line naming

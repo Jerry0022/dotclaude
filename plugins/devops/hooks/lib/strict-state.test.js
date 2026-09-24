@@ -218,6 +218,83 @@ describe("detectMention", () => {
   });
 });
 
+describe("detectCommand — every user-facing switch (strict is no skill since PR 3)", () => {
+  test.each([
+    ["strict on", "on"], ["Strikt an", "on"], ["strict mode on", "on"], ["strikt modus an!", "on"], ["strict ein", "on"],
+    ["strict off", "off"], ["strikt aus", "off"], ["strict mode off.", "off"], ["strict stop", "off"],
+    ["strict status", "status"],
+  ])("whole-prompt word switch %j → %s", (text, route) => {
+    expect(S.detectCommand(text)).toMatchObject({ mentioned: true, route, via: "word" });
+  });
+
+  test("the slash forms still work and win", () => {
+    expect(S.detectCommand("/claude-strict on")).toMatchObject({ route: "on", via: "slash" });
+    expect(S.detectCommand("bitte /claude-strict den Rand")).toMatchObject({ route: "task", rest: "den Rand", via: "slash" });
+    expect(S.detectCommand("<command-name>/claude-strict</command-name><command-args>off</command-args>")).toMatchObject({ route: "off" });
+  });
+
+  test("strict: <task> / strikt: <task> arm an inline task", () => {
+    expect(S.detectCommand("strict: mach den Rand dünner")).toEqual({ mentioned: true, route: "task", rest: "mach den Rand dünner", via: "word" });
+    expect(S.detectCommand("Strikt: nur die Farbe")).toMatchObject({ route: "task", rest: "nur die Farbe" });
+  });
+
+  test("literal-scope phrases in the prose arm an inline task with the whole prompt", () => {
+    for (const phrase of S.LITERAL_SCOPE_PHRASES) {
+      const text = `Rand dünner, ${phrase}.`;
+      expect(S.detectCommand(text)).toEqual({ mentioned: true, route: "task", rest: text, via: "phrase" });
+    }
+  });
+
+  test.each([
+    "strict: true in tsconfig",
+    "set strict: true in tsconfig",
+    "be strict about types",
+    "make the TS config strict on CI",
+    "strict",
+    "strict on the build and then ship",
+    "zitiere `nur das ändern` im Doc",
+    "der Satz \"genau so und nicht mehr\" gehört in die Doku",
+    "<command-name>/do-run</command-name><command-args>nur das ändern</command-args>",
+    "",
+  ])("not a switch: %j", (text) => {
+    expect(S.detectCommand(text).mentioned).toBe(false);
+  });
+
+  test("non-string → none", () => {
+    expect(S.detectCommand(undefined)).toMatchObject({ mentioned: false });
+  });
+});
+
+describe("armInline — never over a stronger mode", () => {
+  test("no mode → inline", () => {
+    expect(S.armInline(cwd)).toMatchObject({ kept: false, mode: { reason: "inline" } });
+  });
+
+  test("an active branch mode is kept", () => {
+    S.activate(cwd, { reason: "on" });
+    expect(S.armInline(cwd)).toMatchObject({ kept: true, mode: { reason: "on" } });
+    expect(S.readMode(cwd).reason).toBe("on");
+  });
+
+  test.each([
+    ["concept", path.join(".claude", "concept-active.json")],
+    ["autonomous", "AUTONOMOUS-LOCKOUT.flag"],
+  ])("an active %s-bound mode is kept (the Stop hook would otherwise release it)", (reason, file) => {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, file), "{}");
+    S.activate(cwd, { reason: "inline" });
+    S.bind(cwd, reason, file);
+    expect(S.armInline(cwd)).toMatchObject({ kept: true, mode: { reason, boundTo: file } });
+    expect(S.readMode(cwd)).toMatchObject({ reason, boundTo: file });
+  });
+
+  test("a stale mode (binding gone) is replaced by a fresh inline one", () => {
+    S.activate(cwd, { reason: "inline" });
+    S.bind(cwd, "concept", path.join(".claude", "concept-active.json"));
+    expect(S.armInline(cwd)).toMatchObject({ kept: false, mode: { reason: "inline", boundTo: null } });
+  });
+});
+
 // ── contract ───────────────────────────────────────────────────────────────
 
 describe("contract", () => {
@@ -232,7 +309,7 @@ describe("contract", () => {
   test("contractText prefixes a status line", () => {
     S.activate(cwd, { reason: "on" });
     const t = S.contractText({ mode: S.readMode(cwd), branch: "feat/x" });
-    expect(t.split("\n")[0]).toMatch(/^strict: on · branch feat\/x · \/claude-strict off/);
+    expect(t.split("\n")[0]).toMatch(/^strict: on · branch feat\/x · "strict off" ends it/);
     expect(t).toContain(S.CONTRACT_OPEN);
   });
   test("hasContract", () => {
@@ -260,5 +337,44 @@ describe("CLI", () => {
   });
   test("unknown subcommand exits 1", () => {
     expect(cli("bogus").status).toBe(1);
+  });
+
+  test("inline arms an inline mode, then prints JSON and the contract (one call for do-run)", () => {
+    const r = cli("inline");
+    expect(r.status).toBe(0);
+    const [first, ...rest] = r.stdout.split("\n");
+    expect(JSON.parse(first)).toMatchObject({ ok: true, active: true, reason: "inline", kept: false, branch: "feat/x" });
+    expect(rest.join("\n")).toContain(S.CONTRACT_BLOCK);
+    expect(S.readMode(cwd)).toMatchObject({ reason: "inline" });
+  });
+
+  test("inline keeps an active branch mode and still prints its contract", () => {
+    S.activate(cwd, { reason: "on" });
+    const r = cli("inline");
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.split("\n")[0])).toMatchObject({ reason: "on", kept: true });
+    expect(r.stdout).toContain(S.CONTRACT_OPEN);
+    expect(S.readMode(cwd).reason).toBe("on");
+  });
+
+  test("inline keeps a concept-bound mode", () => {
+    const file = path.join(".claude", "concept-active.json");
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, file), "{}");
+    S.activate(cwd, { reason: "inline" });
+    S.bind(cwd, "concept", file);
+    const r = cli("inline");
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.split("\n")[0])).toMatchObject({ reason: "concept", kept: true });
+    expect(S.readMode(cwd)).toMatchObject({ reason: "concept", boundTo: file });
+  });
+
+  test("inline that cannot arm exits non-zero and prints NO contract", () => {
+    // `.claude` as a plain file: the mode file cannot be written.
+    fs.writeFileSync(path.join(cwd, ".claude"), "not a dir");
+    const r = cli("inline");
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).not.toContain(S.CONTRACT_OPEN);
+    expect(r.stderr).toMatch(/strict is NOT on|could not arm/);
   });
 });

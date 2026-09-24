@@ -115,6 +115,60 @@ describe("arming by mention", () => {
   });
 });
 
+describe("plain-word switch (strict is no skill since PR 3)", () => {
+  test("strict on / strikt an arm a branch mode and inject the contract", () => {
+    for (const prompt of ["strict on", "strikt an"]) {
+      S.deactivate(cwd);
+      const r = runHook({ prompt });
+      expect(S.readMode(cwd)).toMatchObject({ reason: "on", branch: "feat/x" });
+      expect(r.ctx).toContain(S.CONTRACT_OPEN);
+      expect(r.ctx).toContain('"strict off" ends it');
+    }
+  });
+
+  test("strict off / strikt aus clear it", () => {
+    for (const prompt of ["strict off", "strikt aus"]) {
+      S.activate(cwd, { reason: "on" });
+      const r = runHook({ prompt });
+      expect(S.readMode(cwd)).toBeNull();
+      expect(r.ctx).not.toContain(S.CONTRACT_OPEN);
+    }
+  });
+
+  test("strict: <task> arms inline", () => {
+    const r = runHook({ prompt: "strict: mach den Rand der Box dünner" });
+    expect(S.readMode(cwd)).toMatchObject({ reason: "inline" });
+    expect(r.ctx).toContain(S.CONTRACT_OPEN);
+  });
+
+  test("a literal-scope phrase arms inline", () => {
+    const r = runHook({ prompt: "Rand dünner, nichts anderes anfassen" });
+    expect(S.readMode(cwd)).toMatchObject({ reason: "inline" });
+    expect(r.ctx).toContain(S.CONTRACT_OPEN);
+  });
+
+  test("strict status while off says so in one line, arms nothing", () => {
+    const r = runHook({ prompt: "strict status" });
+    expect(r.ctx).toMatch(/strict status: off/);
+    expect(r.ctx).not.toContain(S.CONTRACT_OPEN);
+    expect(S.readMode(cwd)).toBeNull();
+  });
+
+  test("a bare 'strict' arms nothing", () => {
+    expect(runHook({ prompt: "strict" }).stdout).toBe("");
+    expect(S.readMode(cwd)).toBeNull();
+  });
+
+  test("an inline task never replaces a concept-bound mode", () => {
+    const file = path.join(".claude", "concept-active.json");
+    fs.writeFileSync(path.join(cwd, file), "{}");
+    S.activate(cwd, { reason: "inline" });
+    S.bind(cwd, "concept", file);
+    runHook({ prompt: "strict: noch den Schatten" });
+    expect(S.readMode(cwd)).toMatchObject({ reason: "concept", boundTo: file });
+  });
+});
+
 describe("active mode", () => {
   beforeEach(() => S.activate(cwd, { reason: "on" }));
 

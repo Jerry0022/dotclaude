@@ -158,8 +158,13 @@ describe("base call: Q3 default = last choice, without reordering", () => {
   test("Nur das arms the existing strict machinery, not a reimplementation", () => {
     const umfang = section(skill, "## Step 5 — Umfang", "## Step 6");
     expect(umfang).toMatch(/hooks\/lib\/strict-state\.js/);
-    expect(umfang).toMatch(/reason:'inline'/);
-    expect(umfang).toMatch(/strict-state\.js" contract/);
+    // One CLI call that arms AND prints the contract only on success — no
+    // `node -e` with process.env.CLAUDE_PLUGIN_ROOT (red-team R6).
+    expect(umfang).toContain('node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline');
+    expect(umfang).not.toMatch(/node -e/);
+    expect(umfang).toMatch(/non-zero exit means strict is NOT on/);
+    expect(umfang).toContain("deep-knowledge/strict.md");
+    expect(umfang).not.toContain("skills/claude-strict");
   });
 });
 

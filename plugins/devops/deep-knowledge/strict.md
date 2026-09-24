@@ -1,27 +1,6 @@
----
-name: claude-strict
-version: 0.1.0
-description: >-
-  Strict mode — the deliverable is exactly what the prompt names, nothing
-  wider; attributes the prompt leaves open are Claude's call and every such
-  choice is reported. Propagates to every skill, agent, /auto-concept iteration
-  and autonomous resume the turn starts. `/claude-strict <task>` for one
-  prompt, `/claude-strict on|off` for the current worktree + branch — never
-  project-wide. Triggers on: "/claude-strict", "strict", "strikt", "genau so
-  und nicht mehr", "nur das ändern", "nichts anderes anfassen". Do NOT
-  trigger for: ordinary requests without a literal-scope signal, /auto-harden
-  or /auto-polish scope fences (they stay as they are), or TypeScript
-  `strict` compiler options.
-layer: 0
-invokes: []
-triggers:
-  en: ["/claude-strict", "strict"]
-  de: ["strikt", "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen"]
-argument-hint: "<task> | on | off | status"
-allowed-tools: Bash(node *), Bash(git *), Read, Write, Edit, Glob, Grep, Skill, Agent, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
----
+# Strict Mode — Literal Scope, Discretionary Parameters
 
-# claude-strict — Literal Scope, Discretionary Parameters
+The deliverable is exactly what the prompt names, nothing wider; attributes the prompt leaves open are Claude's call and every such choice is reported. Former `claude-strict` skill (skill restructure PR 3).
 
 Spec: `docs/superpowers/specs/2026-09-04-claude-strict-design.md`
 
@@ -30,34 +9,61 @@ say about it (the colour of the border, the exact pixel value, the wording of
 a label) is yours to decide — and to report, so a wrong guess is a one-word
 correction instead of a wrong diff.
 
-State lives in `.claude/strict-mode.json` of the **current worktree**. The
-hooks `prompt.strict.enforce` (inject), `pre.strict.agent-gate` (refuse agent
-spawns without the block) and `stop.strict.release` (bind or release an
-inline mode) do the mechanical part; this skill does the judgment part.
+Strict is **not a skill** any more. State lives in `.claude/strict-mode.json`
+of the **current worktree**. The hooks `prompt.strict.enforce` (switch +
+inject), `pre.strict.agent-gate` (refuse agent spawns without the block) and
+`stop.strict.release` (bind or release an inline mode) do the mechanical part;
+this document is the judgment part. It propagates to every skill, agent,
+auto-concept iteration and autonomous resume the turn starts, and it is never
+project-wide.
 
-## Step 0 — Load Extensions
+## Switching strict on and off
 
-Silently check (do not surface "not found"):
-1. `~/.claude/skills/claude-strict/SKILL.md` + `reference.md`
-2. `{project}/.claude/skills/claude-strict/SKILL.md` + `reference.md`
-3. Merge: project > global > plugin defaults
+`prompt.strict.enforce` reads the raw prompt. Every form below works; the
+plain-word forms are the reliable ones — a prompt that STARTS with a slash name
+that is no longer a skill (`/claude-strict on`) may be rejected by the harness
+before any hook runs (skill-restructure spec § Triggers; undocumented either
+way). `/claude-strict` anywhere inside a prompt always reaches the hook.
 
-## Step 1 — Route the invocation
-
-Route on the **first token** of `$ARGUMENTS` only. No argument → **status**.
-
-| Argument | Branch |
+| The user types | Effect |
 |---|---|
-| `on`, `an`, `start` | Step 5 — arm the branch mode (`on`) |
-| `off`, `aus`, `stop` | Step 5 — clear the mode |
-| `status`, none | Step 5 — report |
-| *anything else* (free text, including another slash command such as `/do-run …`) | **task** — Step 3, under the contract in Step 2 |
+| `strict on` · `strikt an` · `strict mode on` · `strikt modus an` · `/claude-strict on` | branch mode — this worktree + branch, until `off` or a branch switch |
+| `strict off` · `strikt aus` · `strict mode off` · `/claude-strict off` | clears the mode |
+| `strict status` · `/claude-strict status` · `/claude-strict` | status |
+| `strict: <task>` · `strikt: <task>` · `/claude-strict <task>` | inline — this turn only (bound to a workflow the turn starts) |
+| "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen" anywhere in the prose | inline — this turn only |
+| do-run question 3 "Nur das" | inline — for the run (`strict-state.js inline`) |
+| a bare "strict" / "strikt" | nothing is armed; this document is pointed at, you decide |
 
-A task argument is never filed or deferred: `/claude-strict /do-run audit Rand-Varianten`
-means "run /do-run audit, strictly". The hook has already armed an inline mode for
-this turn (`reason: inline`); you do not arm it again.
+The switch words must be the **whole prompt** (`strict on`, optionally with a
+trailing `.`/`!`), so prose like "make the TS config strict on CI" never flips
+anything. `strict: true …` is config talk, not a task. Words inside code spans
+or quotes never count.
 
-## Step 2 — The contract
+**A bare "strict" or "strikt"** in a prompt is a signal, not a switch. When the
+user plainly asks for literal scope for this task, arm an inline mode yourself
+(`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline`, then print the
+contract with `… contract`) and work under it. Do NOT for: ordinary requests
+without a literal-scope signal, the auto-harden / auto-polish scope fences
+(they stay as they are), or TypeScript / linter `strict` options.
+
+## Routing a turn
+
+When the contract block is in your context, the hook has already done the
+switch. Read the route from the prompt:
+
+| Prompt | Do |
+|---|---|
+| `on`-form | one line: branch name, and that other worktrees are not affected; run `status` (below) to confirm, never assume |
+| `off`-form | one line; nothing else changes |
+| `status`-form | relay the state as one human line (see below) |
+| *anything else* (free text, a literal-scope phrase, or another slash command such as `/do-run …`) | **task** — execute it under the contract below |
+
+A task is never filed or deferred: `strict: /do-run audit Rand-Varianten`
+means "run /do-run audit, strictly". The hook has already armed an inline mode
+for this turn (`reason: inline`); you do not arm it again.
+
+## The contract
 
 This block is the single source of truth, mirrored from
 `hooks/lib/strict-state.js` (`CONTRACT_BLOCK`) — a test keeps the two
@@ -91,6 +97,10 @@ REPORT (≤4 lines, before the card, omit empty lines):
 [/claude-strict contract]
 ```
 
+The marker lines keep the name `claude-strict`: they are the wire format
+`pre.strict.agent-gate` looks for in every Agent prompt, and renaming them
+would refuse agents of a run that started before the rename.
+
 **How to read "vocabulary of the request".** The scope is measured at the
 level the user spoke. "Make the box border thinner" is a visual request: the
 border is the scope, and whether you edit a CSS variable, a class, or add the
@@ -113,11 +123,11 @@ updated the mixin" changes every box — that is not the request).
 | The object is ambiguous ("the border" — there are three) | Interactive: ask with `AskUserQuestion`, the candidates as options. Autonomous (agent directive says no questions, `AUTONOMOUS_*` prompt, lockout flag present): change the single most probable one and make the assumption the first `done` line. |
 | The request is impossible or contradicts the code | Change nothing, report. |
 
-## Step 3 — Execute the task under the contract
+## Executing the task under the contract
 
-1. Read the task text (the remainder after the first token, or the whole
-   prompt when invoked inline). Identify the **objects** (closed set) and the
-   **open attributes** (your call).
+1. Read the task text (the remainder after the switch word, or the whole
+   prompt for a literal-scope phrase). Identify the **objects** (closed set)
+   and the **open attributes** (your call).
 2. Do the work. Apply the pre-mortem as thinking only — its outputs (extra
    guards, extra tests, narrowed scope) are diff and go to `untouched`.
 3. **Propagation — mandatory, mechanical:**
@@ -126,11 +136,11 @@ updated the mixin" changes every box — that is not the request).
      not paraphrase the block. Nested agents inherit the same duty; say so
      in the agent prompt ("forward this block to every agent you spawn").
    - **Skill** tool: invoke the other skill normally; the contract is in
-     context. Where the callee has a flag channel (`/auto-harden`,
-     `/auto-polish`: `--invoked-by=…`), also pass `--strict`. For `/auto-concept`:
+     context. Where the callee has a flag channel (auto-harden,
+     auto-polish: `--invoked-by=…`), also pass `--strict`. For /auto-concept:
      the `implement` action executes the literally selected items only;
      `iterate` is unchanged (it never touches code anyway).
-   - **Autonomous** runners (`/do-run autonomous`, `/do-run backlog`, `/auto-agents`):
+   - **Autonomous** runners (`/do-run autonomous`, `/do-run backlog`, auto-agents):
      include `strict=on` in the task line of any `AUTONOMOUS_AUTOSTART:` /
      `RUN_BACKLOG_AUTOSTART:` cron prompt you create, so a re-launched session
      re-reads the contract from the prompt even before the hook fires.
@@ -141,7 +151,7 @@ updated the mixin" changes every box — that is not the request).
    it happen (the hook writes `[claude-strict] … bound to …` on stderr);
    nothing to arm by hand.
 
-## Step 4 — Strict report, then the card
+## Strict report, then the card
 
 Right before the completion card, ≤ 4 lines, omit empty ones, no prose
 around it:
@@ -166,14 +176,16 @@ untouched: focus ring now overlaps the border; docs/ui.md still says 2px
 
 Then render the completion card as usual (the card is output, not diff).
 
-## Step 5 — `on` / `off` / `status`
+## The state CLI — `on` / `off` / `status` / `inline`
 
-All three go through the state CLI; never edit the mode file by hand:
+All four go through the state CLI; never edit the mode file by hand:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" on
 node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" off
 node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" contract
 ```
 
 - **on** — arms strict for this worktree on the current branch, no expiry.
@@ -184,17 +196,30 @@ node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status
 - **off** — clears the mode. One line.
 - **status** — relay the JSON as one human line: active or not, reason,
   branch, bound workflow, expiry. When `why` is `branch-mismatch`, say which
-  branch armed it and offer `on` / `off`.
+  branch armed it and offer `strict on` / `strict off`.
+- **inline** — arms an inline mode for this turn / run, never over an active
+  branch mode (`kept: true` then). The do-run "Nur das" answer and a
+  model-decided arm (bare "strict", see above) use it.
+- **contract** — prints the block, to prepend to an Agent prompt.
 
-The hook already performed `on`/`off` when the command was typed as a slash
-command, so the CLI call is idempotent — run it anyway and report what it
-returns; never assume.
+The hook already performed `on`/`off` when the switch was typed, so the CLI
+call is idempotent — run `status` anyway and report what it returns; never
+assume.
 
 ## What strict is NOT
 
 - Not a caution mode. Do not ask more questions than the ambiguity rule
   requires; do not add confirmation gates.
 - Not a refusal mode. A request that needs one import gets the import.
-- Not a replacement for `/auto-harden` / `/auto-polish` scope fences; strict
+- Not a replacement for the auto-harden / auto-polish scope fences; strict
   is at least as narrow and composes with them.
 - Not project-wide. `on` binds to the worktree + branch you are in.
+
+## Project overrides (former skill extension)
+
+A consumer extension written for the old skill —
+`{project}/.claude/skills/claude-strict/reference.md` (or `SKILL.md`), or the
+same under `~/.claude/skills/claude-strict/` — is not loaded by any skill any
+more. When `prompt.knowledge.dispatch` points at this document it names such a
+file if one exists; read it and let it override this document (project >
+global > this document). Nothing else reads it.

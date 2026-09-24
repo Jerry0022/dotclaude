@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.strict.enforce
- * @version 0.1.0
+ * @version 0.2.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Arms and enforces `/claude-strict` — literal scope, discretionary
- *   parameters. A prompt that mentions `/claude-strict` arms the mode for this
- *   worktree + branch (`on`), for this turn (`<task>`), or clears it (`off`).
+ * @description Arms and enforces strict mode — literal scope, discretionary
+ *   parameters. `strict on` / `strikt an` arm it for this worktree + branch,
+ *   `strict off` / `strikt aus` clear it, `strict: <task>` or a literal-scope
+ *   phrase arms it for this turn; `/claude-strict on|off|<task>` keeps working.
  *   Whenever the mode is active the contract block is injected as
  *   additionalContext — once per turn, and on machine prompts too (autonomous
  *   resumes, concept-bridge crons), because those are exactly the turns that
- *   must stay strict without the user re-typing the skill.
+ *   must stay strict without the user re-typing the switch.
+ *
+ *   Strict stopped being a skill in the skill restructure (PR 3): this hook
+ *   is where the switch lives. Every form it accepts is in
+ *   strict-state.detectCommand and documented in deep-knowledge/strict.md.
+ *   The plain-word forms exist because a prompt that STARTS with a removed
+ *   slash name may be rejected by the harness before any hook runs.
  *
  *   This hook is the ONLY injector of the contract. The Agent gate
  *   (pre.strict.agent-gate) refuses spawns that lack it but injects nothing,
@@ -22,9 +29,10 @@
  *
  *   Branch switch: a mode armed on branch A is inactive on branch B. The first
  *   prompt on B gets a one-line notice, later ones nothing — the mode file
- *   stays so `/claude-strict on` can re-arm and `off` can clear it.
+ *   stays so `strict on` can re-arm and `strict off` can clear it.
  *
- *   Spec: docs/superpowers/specs/2026-09-04-claude-strict-design.md
+ *   Spec: docs/superpowers/specs/2026-09-04-claude-strict-design.md,
+ *   docs/superpowers/specs/2026-09-24-skill-restructure-design.md (PR 3)
  */
 
 require('../lib/plugin-guard');
@@ -51,23 +59,26 @@ process.stdin.on('end', () => {
   try {
     if (willBeCollected(hook)) process.exit(0);
 
-    const mention = S.detectMention(text);
-    if (mention.mentioned) {
-      const existing = S.readMode(cwd);
-      if (mention.route === 'off') {
+    const command = S.detectCommand(text);
+    if (command.mentioned) {
+      if (command.route === 'off') {
         S.deactivate(cwd);
         emit('[claude-strict] strict mode is off for this worktree. Confirm that in one line; nothing else changes.');
         process.exit(0);
       }
-      if (mention.route === 'on') {
+      if (command.route === 'on') {
         S.activate(cwd, { reason: 'on', sessionId: hook.session_id });
-      } else if (mention.route === 'task') {
+      } else if (command.route === 'task') {
         // A branch mode already covers this turn — never downgrade it to inline.
-        if (!(existing && existing.reason === 'on' && S.evaluate(cwd).active)) {
-          S.activate(cwd, { reason: 'inline', sessionId: hook.session_id });
+        S.armInline(cwd, { sessionId: hook.session_id });
+      } else if (command.route === 'status') {
+        const ev = S.evaluate(cwd);
+        if (!ev.active) {
+          emit(`[claude-strict] strict status: off${ev.why && ev.why !== 'off' ? ` (${ev.why})` : ''}. Tell the user in one line; \`strict on\` arms it for this worktree + branch.`);
+          process.exit(0);
         }
       }
-      // route 'status': the skill reports; the injection below shows the state.
+      // An active mode shows its state in the status line injected below.
     }
 
     const branch = S.currentBranch(cwd);
@@ -82,7 +93,7 @@ process.stdin.on('end', () => {
       emit(
         `[claude-strict] strict was armed on branch \`${ev.mode.branch}\`; this worktree is now on ` +
         `\`${branch}\`, so strict is inactive here. Tell the user in one line. ` +
-        '`/claude-strict on` re-arms for this branch, `/claude-strict off` clears the old mode.',
+        '`strict on` re-arms for this branch, `strict off` clears the old mode.',
       );
     }
   } catch {

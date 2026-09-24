@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 // Extension dirs of the pre-PR-2 names stay valid as FALLBACKS (a consumer
 // extension written before the rename keeps working), so a Step 0 / prose ref
 // to an old name is legitimate — but only for the skill that owns it now.
-const { canonicalSkillName } = require("../hooks/lib/skill-names.js");
+const { canonicalSkillName, retiredSkill } = require("../hooks/lib/skill-names.js");
 
 // Repo-wide contracts every SKILL.md must satisfy. Each of these caught a real
 // defect that was invisible at review time and silent at runtime.
@@ -199,6 +199,11 @@ describe("skill extension paths point at skills that exist", () => {
       const dir = m[1];
       if (dir.startsWith("{") || dir.startsWith("<")) continue; // placeholder
       if (EXEMPT_EXTENSION_DIRS.has(dir)) continue;
+      // A PR-3 retired skill's old dir is legitimate in the doc that replaced
+      // it (it says what happens to such an extension) and in auto-extend,
+      // which explains retired names to the user.
+      const retired = retiredSkill(dir);
+      if (retired && (path.basename(file) === retired.doc || owner === "auto-extend")) continue;
       // An old name is a legitimate fallback dir — in the docs of the skill
       // that owns it now, or in plugin-level prose that says so on the line.
       const legacyOwner = canonicalSkillName(dir);

@@ -36,7 +36,7 @@
  *       or slash command, old or new name), `auto-concept` while a VALID, non-stale
  *       `.claude/concept-active.json` exists (ss.concept.resume's
  *       isValidState + isStale — a leftover copied into a new worktree does
- *       not mute it), auto-polish/auto-harden while claude-strict is active,
+ *       not mute it), auto-polish/auto-harden while strict mode is active,
  *       `auto-fix` in a consumer project when the prompt is about the devops
  *       plugin (prompt.plugin.scope routes that to an upstream issue) → that
  *       entry is dropped.

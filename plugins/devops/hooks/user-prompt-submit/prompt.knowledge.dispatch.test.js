@@ -210,3 +210,31 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
     expect(runHook("Erneut versuchen", h, cwd)).not.toContain("[budget]");
   });
 });
+
+describe("prompt.knowledge.dispatch — pointers for the retired skills (PR 3)", () => {
+  function runSession(prompt, sessionId, home) {
+    const cwd = emptyProject();
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, HOME: home, USERPROFILE: home, TMPDIR: home, TEMP: home, TMP: home };
+    const r = spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ session_id: sessionId, prompt, cwd }), cwd, env, encoding: "utf8",
+    });
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+  }
+
+  test("a README request gets a one-line pointer (not the body), once per session", () => {
+    const h = proHome();
+    const sid = `vitest-pointer-${process.pid}-${Date.now()}`;
+    const first = runSession("please update the readme with the new install steps", sid, h);
+    const line = first.split("\n").find((l) => l.startsWith("[deep-knowledge pointer]"));
+    expect(line).toContain("deep-knowledge/readme-standards.md");
+    expect(first).not.toContain("## Step 2 — Select sections");
+    expect(runSession("and improve the readme intro as well please", sid, h)).not.toContain("[deep-knowledge pointer]");
+  });
+
+  test("usage, graph and strict words point at their docs; no Skill mandate anywhere", () => {
+    const h = proHome();
+    const ctx = runSession("refresh usage und dann strikt: nur den knowledge graph erklären", `vitest-pointer-b-${process.pid}-${Date.now()}`, h);
+    for (const doc of ["usage.md", "strict.md", "graphify.md"]) expect(ctx).toContain(`deep-knowledge/${doc}`);
+    expect(ctx).not.toMatch(/Skill\(/);
+  });
+});

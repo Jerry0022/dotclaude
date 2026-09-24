@@ -32,8 +32,8 @@ Lives in `~/.claude/skills/{skill-name}/`. Applies to ALL your projects.
 ```
 ~/.claude/
 └── skills/
-    └── setup-readme/
-        └── reference.md    ← "Always include a Windows install section"
+    └── do-ship/
+        └── reference.md    ← "Always run the e2e suite before the PR"
 ```
 
 **Use for:** Personal conventions that apply everywhere (documentation style,

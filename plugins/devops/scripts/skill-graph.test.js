@@ -160,7 +160,7 @@ describe("trigger preservation: every quoted description-trigger phrase survives
 // source; this table mirrors it so a frontmatter edit that drifts from the
 // approved design fails here. `visibility`: "menu" = user-invocable (default),
 // "hidden" = `user-invocable: false`, "user-only" = `disable-model-invocation: true`.
-const { RENAMED, FOLDED, FOLDED_TRIGGERS } = require("../hooks/lib/skill-names.js");
+const { RENAMED, FOLDED, FOLDED_TRIGGERS, RETIRED, RETIRED_TRIGGERS } = require("../hooks/lib/skill-names.js");
 
 const UNITS = {
   "do-batch":      { layer: 0, visibility: "menu",      invokes: ["do-run", "auto-concept"] },
@@ -180,9 +180,6 @@ const UNITS = {
   "auto-issue":    { layer: 5, visibility: "hidden",    invokes: [] },
 };
 
-// PR 3 moves these out of skills/; until then they keep their PR-1 frontmatter.
-const PR3_SKILLS = ["setup-readme", "auto-graph", "auto-usage", "claude-strict"];
-
 const MODE_FILES = {
   "do-run": ["backlog", "autonomous", "burn", "rethink", "audit"],
   "do-ship": ["promote"],
@@ -195,8 +192,8 @@ function visibilityOf(meta) {
 }
 
 describe("spec Units table: the exact skill roster", () => {
-  test("skills/ holds exactly the spec units plus the four PR-3 skills", () => {
-    expect([...SKILL_NAMES].sort()).toEqual([...Object.keys(UNITS), ...PR3_SKILLS].sort());
+  test("skills/ holds exactly the spec units", () => {
+    expect([...SKILL_NAMES].sort()).toEqual(Object.keys(UNITS).sort());
   });
 
   test("no pre-PR-2 skill directory survives", () => {
@@ -228,10 +225,6 @@ describe("spec Units table: layer and visibility", () => {
 describe("spec call graph: the exact invokes edges", () => {
   test.each(Object.entries(UNITS))("%s", (name, unit) => {
     expect([...ALL_SKILLS[name].invokes].sort()).toEqual([...unit.invokes].sort());
-  });
-
-  test.each(PR3_SKILLS)("%s (PR 3) invokes nothing", (name) => {
-    expect(ALL_SKILLS[name].invokes).toEqual([]);
   });
 });
 
@@ -268,5 +261,69 @@ describe("folded skills: mode files exist and the old triggers survive", () => {
 
   test("the snapshot is not empty", () => {
     expect(triggerCases.length).toBeGreaterThan(30);
+  });
+});
+
+// ── Spec "No longer skills" (PR 3) ──────────────────────────────────────────
+// setup-readme, auto-graph, auto-usage and claude-strict are no skills any
+// more. Their bodies are deep-knowledge docs, their triggers live in hooks:
+// the dispatch pointer table (hooks/lib/knowledge-pointers.js) for every
+// phrase, and prompt.strict.enforce for the strict switch. This suite reads
+// those new homes, so a trigger that falls out of them fails here.
+const { matchPointers } = require("../hooks/lib/knowledge-pointers.js");
+const { detectCommand } = require("../hooks/lib/strict-state.js");
+const { routeMessage } = require("../hooks/lib/skill-trigger-router.js");
+const DK_DIR = path.join(PLUGIN_ROOT, "deep-knowledge");
+
+describe("retired skills (PR 3): gone from skills/, body in deep-knowledge", () => {
+  test("exactly the four spec names are retired", () => {
+    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-readme"]);
+  });
+
+  test.each(Object.entries(RETIRED))("%s → deep-knowledge/%s", (name, entry) => {
+    expect(fs.existsSync(path.join(SKILLS_DIR, name)), `skills/${name} still exists`).toBe(false);
+    expect(SKILL_NAMES).not.toContain(name);
+    const doc = path.join(DK_DIR, entry.doc);
+    expect(fs.existsSync(doc), doc).toBe(true);
+    const body = fs.readFileSync(doc, "utf8");
+    expect(body.startsWith("---"), `${entry.doc} must not carry skill frontmatter`).toBe(false);
+    expect(body).toContain(`Former \`${name}\` skill`);
+    expect(body.length).toBeGreaterThan(2000);
+  });
+
+  test("no unit invokes a retired name", () => {
+    for (const [name, meta] of Object.entries(ALL_SKILLS)) {
+      for (const callee of meta.invokes) expect(RETIRED, `${name} invokes ${callee}`).not.toHaveProperty(callee);
+    }
+  });
+});
+
+describe("retired skills (PR 3): every trigger phrase survives in its new home", () => {
+  const cases = Object.entries(RETIRED_TRIGGERS).flatMap(([name, byLang]) =>
+    Object.values(byLang).flat().map((phrase) => [name, RETIRED[name].doc, phrase]));
+
+  test("the snapshot covers every retired skill", () => {
+    expect(Object.keys(RETIRED_TRIGGERS).sort()).toEqual(Object.keys(RETIRED).sort());
+    expect(cases.length).toBeGreaterThanOrEqual(20);
+  });
+
+  test.each(cases)("%s → %s: %j points at the doc", (_name, doc, phrase) => {
+    expect(matchPointers(phrase).map((h) => h.file)).toContain(doc);
+  });
+
+  test.each(cases)("%s: %j never mandates a Skill that no longer exists", (name, _doc, phrase) => {
+    expect(routeMessage(phrase, ALL_SKILLS).map((e) => e.skill)).not.toContain(name);
+  });
+
+  // The strict switch itself: words and slash forms reach prompt.strict.enforce.
+  test.each([
+    ["/claude-strict", "status"],
+    ["strict an", "on"],
+    ["strict aus", "off"],
+    ["genau so und nicht mehr", "task"],
+    ["nur das ändern", "task"],
+    ["nichts anderes anfassen", "task"],
+  ])("claude-strict: %j still switches strict (%s) in the hook", (phrase, route) => {
+    expect(detectCommand(phrase)).toMatchObject({ mentioned: true, route });
   });
 });
