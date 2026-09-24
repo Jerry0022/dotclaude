@@ -207,25 +207,20 @@ losing a requirement. Skip this step silently when the invocation was bare.
 If the activating prompt carried an attachment, follow Step 2.6 for it in the
 same note.
 
-**2.5 Confirm with the mode summary — verbatim, nothing else.** Print it and
-relay the output unchanged as the whole confirmation:
-
-```bash
-node -e "console.log(require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').describeMode(process.cwd()))"
-```
-
-It is the same block the hook shows on every collected prompt and on an
-absorbed re-activation, so the user learns one text: what happens to a prompt
-now, how to fire (`<marker> <text>` or `/do-batch go` — main is merged in
-first), how to only stop (`/do-batch off`), and the auto-end bounds. When
-2.4 ran, the note count in its first line already says the first note is
-stored. Do not paraphrase it, do not add a second explanation, and do not tell
-the user to switch the mode on — it is on. Then render an `analysis` completion
-card **with `cwd` set to the project root**: the card reads
-`.claude/batch-mode.json` itself and swaps its CTA for `📥 BATCH sammelt. {n}
-Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}" löst aus — ich WARTE`.
-Nothing else to pass; without `cwd` the card cannot see the mode and ends on a
+**2.5 Confirm with the card — and only the card.** Render an `analysis`
+completion card **with `cwd` set to the project root** and nothing else to
+pass. The card reads `.claude/batch-mode.json` itself and carries the whole
+confirmation: the heading `📥 Batch sammelt — {n} Einträge`, a context line
+(`{n} Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}" löst aus`) and
+three points — how collecting works (the red panel is normal), how to fire
+(`<marker> <text>` or `/do-batch go`), how to only stop (`/do-batch off`) plus
+the auto-end bounds. Without `cwd` the card cannot see the mode and ends on a
 CTA that invites the next prompt as if it would be worked on.
+
+No text block before or after it: do not print `describeMode`, do not
+paraphrase the how-to, do not tell the user to switch the mode on — it is on.
+The long form stays one `/do-batch help` away, and the hook repeats the
+summary on every collected prompt.
 
 **2.6 Attachments are filed by you, because only you can see them.** This is a
 standing rule for the whole collection window, not a one-off part of activation:

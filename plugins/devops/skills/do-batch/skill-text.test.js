@@ -125,9 +125,14 @@ describe("do-batch SKILL.md — 0.4.0: activation ends ON, markers, main sync", 
     expect(step2).toMatch(/MARKER_SUGGESTIONS/);
   });
 
-  it("confirms activation with the shared mode summary, verbatim", () => {
-    expect(step2).toMatch(/describeMode\(process\.cwd\(\)\)/);
-    expect(step2).toMatch(/do not tell\s+the user to switch the mode on — it is on/);
+  // The card carries the how-to itself (mode-state.js#batchGuide). A mode
+  // summary printed before it, then the card, read as two confirmations — and
+  // the text after a widget-only card is what the harness nudge led to.
+  it("confirms activation with the card alone, which carries the how-to", () => {
+    expect(step2).toMatch(/\*\*2\.5 Confirm with the card — and only the card\.\*\*/);
+    expect(step2).toMatch(/with `cwd` set to the project root/);
+    expect(step2).toMatch(/do not print `describeMode`/);
+    expect(step2).toMatch(/do not tell the user to switch the mode on — it is on/);
   });
 
   it("merges main into the branch before any note is read", () => {

@@ -607,3 +607,31 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(text).toMatch(/^› npm run dev auf 5173$/m);
   });
 });
+
+// An armed /do-batch collection: the card is the whole confirmation of the
+// activating turn, so it carries the how-to itself — what happens to the next
+// prompt, how to fire, how to stop — instead of a separate text block before it.
+describe("render_completion_card — armed batch carries the how-to", () => {
+  test("heading, context line and three guide points (de + en)", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { createRequire } = await import("node:module");
+    const B = createRequire(import.meta.url)("../hooks/lib/batch-state.js");
+    const cwd = mkdtempSync(join(tmpdir(), "card-batch-"));
+    try {
+      B.activate(cwd, { marker: ">go", expiryHours: 8, maxNotes: 100 });
+      B.appendNote(cwd, "erste Notiz");
+      const de = await cardText({ variant: "analysis", summary: "x", lang: "de", cwd, session_id: "test-batch-guide-de" });
+      expect(de).toMatch(/^## 📥 Batch sammelt — 1 Eintrag$/m);
+      expect(de).toMatch(/1 Notiz · nächster Prompt wird Notiz #2 · ">go" löst aus/);
+      expect(de).toMatch(/^1\. Sammeln: jeder Prompt ohne Marker wird Notiz/m);
+      expect(de).toMatch(/^2\. Umsetzen: „>go <text>" oder \/do-batch go/m);
+      expect(de).toMatch(/^3\. Stoppen: \/do-batch off \(Notizen bleiben\) · Auto-Ende nach 8 h oder 100 Notizen$/m);
+      const en = await cardText({ variant: "analysis", summary: "x", lang: "en", cwd, session_id: "test-batch-guide-en" });
+      expect(en).toMatch(/^2\. Execute: ">go <text>" or \/do-batch go/m);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
