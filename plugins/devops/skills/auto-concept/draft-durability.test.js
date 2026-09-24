@@ -105,6 +105,24 @@ beforeAll(async () => {
     slug: SLUG, page_version: "v1", iteration: "2", state: ROUND2,
   })).json;
 
+  // Cache headers per method (gate 65). Chromium never completes a `no-store`
+  // answer whose body the page does not read, and a keepalive request stays
+  // booked against a 64 KiB per-page quota until it does — pages on the old
+  // engine went dark after ~27 autosaves. The re-post is the same ROUND2 blob,
+  // so the store's content is unchanged.
+  const header = async (p, init) => {
+    const res = await fetch(`http://127.0.0.1:${port}${p}`, init);
+    await res.text();
+    return res.headers.get("cache-control");
+  };
+  results.postCache = await header("/draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slug: SLUG, page_version: "v1", iteration: "2", state: ROUND2 }),
+  });
+  results.getCache = await header(`/draft?slug=${SLUG}`);
+  results.htmlCache = await header(`/${htmlRel}`);
+
   results.draftsDir = fs.existsSync(path.join(store, "drafts"));
   results.onDisk = fs.existsSync(path.join(store, "drafts", `${SLUG}.jsonl`))
     && fs.existsSync(path.join(store, "drafts", `${SLUG}.json`));
@@ -189,6 +207,15 @@ describe("draft store — unsent comments survive", () => {
 
   it("writes both the append-only log and the latest snapshot", () => {
     expect(results.onDisk).toBe(true);
+  });
+
+  it("answers POSTs without no-store, so an unread answer cannot pin the keepalive quota", () => {
+    expect(results.postCache).toBe("no-cache");
+  });
+
+  it("keeps no-store on GET answers and on the served page", () => {
+    expect(results.getCache).toContain("no-store");
+    expect(results.htmlCache).toContain("no-store");
   });
 
   it("reads the latest state back verbatim", () => {

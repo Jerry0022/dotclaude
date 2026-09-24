@@ -411,7 +411,8 @@ describe("panel anatomy — markup (both skeletons)", () => {
   test("locale table carries the status-line and menu strings in en and de", () => {
     for (const key of [
       "panel.status_saved", "panel.status_saving", "panel.status_connecting",
-      "panel.status_local_only", "panel.status_working", "panel.status_frozen",
+      "panel.status_local_only", "panel.status_local_only_connected",
+      "panel.status_working", "panel.status_frozen",
       "panel.status_detail", "panel.submit_menu", "panel.submit_menu_hint", "panel.here_back",
     ]) {
       const row = md.split("\n").find((l) => l.startsWith("| `" + key + "`"));
@@ -746,6 +747,16 @@ describe("panel anatomy — status line behaviour (reference JS on jsdom)", () =
     p.document.getElementById("connection-status").dataset.state = "connected";
     p.window._setDraftPhase("local");
     expect(p.status()).toBe("local-only");
+    // Same state, but no "· getrennt": the heartbeat vouches for the bridge,
+    // so a failing draft mirror is not a disconnect (gate 65).
+    expect(p.label()).toBe("panel.status_local_only_connected");
+    p.document.getElementById("connection-status").dataset.state = "connecting";
+    p.window.renderPanelStatus();
+    expect(p.label()).toBe("panel.status_local_only_connected");
+    // A real disconnect still says so, whatever the draft mirror reports.
+    p.document.getElementById("connection-status").dataset.state = "disconnected";
+    p.window.renderPanelStatus();
+    expect(p.label()).toBe("panel.status_local_only");
   });
 
   test("after submit: working + one dot per VISIBLE step, list expandable under the line", () => {

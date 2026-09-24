@@ -62,7 +62,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_implement_hint`  | Claude applies the selection as real changes now. | Claude setzt die Auswahl jetzt in echte Änderungen um. |
 | `panel.submit_implement_confirm` | Implement with feedback now? Claude will write code changes. | Mit Feedback jetzt implementieren? Claude schreibt jetzt Code-Änderungen. |
 | `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
-| `panel.submitted_hint`         | Claude is processing your selection. Switch to the **Claude chat** to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum **Claude Chat** um den Fortschritt zu sehen. |
+| `panel.submitted_hint`         | Claude is processing your selection. Switch to the Claude chat to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum Claude-Chat, um den Fortschritt zu sehen. |
 | `panel.step_submitted`         | Submitted                      | Übermittelt |
 | `panel.step_received`          | Claude is processing           | Claude verarbeitet |
 | `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
@@ -93,6 +93,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.status_saving`          | Saving…                        | Speichert… |
 | `panel.status_connecting`      | Saved · connecting…            | Gespeichert · verbinde… |
 | `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
+| `panel.status_local_only_connected` | Saved locally only       | Nur lokal gespeichert |
 | `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
 | `panel.status_frozen`          | read-only                      | nur lesen |
 | `panel.status_detail`          | Progress                       | Fortschritt |
@@ -211,6 +212,7 @@ must see their own language. The locale hint is authoritative.
 | `state.recovered_found`        | Notes from an earlier version of this page were restored. | Notizen aus einer früheren Fassung dieser Seite wurden wiederhergestellt. |
 | `state.recovered_dismiss`      | Dismiss                          | Ausblenden |
 | `state.draft_local_only`       | Notes are saved in this browser only — the bridge is unreachable. | Notizen liegen nur in diesem Browser — die Bridge ist nicht erreichbar. |
+| `state.draft_save_failed`      | Notes are saved in this browser only — the bridge did not store them. | Notizen liegen nur in diesem Browser — die Bridge hat sie nicht gespeichert. |
 | `state.dock_submitted`         | Sent to Claude — read-only until the next round. | An Claude gesendet — schreibgeschützt bis zur nächsten Runde. |
 | `design.viewport_switch`       | View                           | Ansicht |
 | `design.viewport_desktop`      | Desktop                        | Desktop |
@@ -8648,18 +8650,36 @@ function _draftPayload(cleared) {
 function _takeCleared() { return _draftCleared.splice(0); }
 function _returnCleared(keys) { if (keys.length) _draftCleared.unshift(...keys); }
 
+// The strip names the failure truthfully. Only a transport error while the
+// heartbeat does not vouch for the bridge is "unreachable"; an HTTP refusal
+// (507 disk, 413, 400) means the bridge WAS reached, and a transport error
+// under a connected heartbeat is the browser refusing the request, not the
+// bridge being gone. Both used to read "die Bridge ist nicht erreichbar" —
+// over a bridge answering 200 to everything else, which sent the user after
+// a server that was running fine.
+function _draftStripText(why) {
+  let conn = '';
+  try {
+    const line = document.getElementById('connection-status');
+    conn = (line && line.dataset.state) || '';
+  } catch (e) { /* no status line — fall back to the transport verdict */ }
+  return (why === 'unreachable' && conn !== 'connected')
+    ? '{{state.draft_local_only}}'
+    : '{{state.draft_save_failed}}';
+}
+
 // Only after three consecutive failures, so a single blip does not flash a
 // warning at the user; cleared again on the next success.
-function _setDraftHealth(ok) {
+function _setDraftHealth(ok, why) {
   _draftFailures = ok ? 0 : _draftFailures + 1;
   const show = _draftFailures >= 3;
   if (show && !_draftStripEl) {
     _draftStripEl = document.createElement('div');
     _draftStripEl.className = 'draft-offline-strip';
     _draftStripEl.setAttribute('role', 'status');
-    _draftStripEl.textContent = '{{state.draft_local_only}}';
     document.body.appendChild(_draftStripEl);
   }
+  if (show) _draftStripEl.textContent = _draftStripText(why);
   if (_draftStripEl) _draftStripEl.hidden = !show;
   // The status line follows the same three-strike rule: a single blip stays
   // "Gespeichert" (the local copy IS saved), three in a row read "Nur lokal".
@@ -8672,26 +8692,44 @@ function _setDraftHealth(ok) {
   }
 }
 
+// Every /draft response is read to the end, and the live autosave carries no
+// `keepalive`. Chromium books each keepalive request body against a 64 KiB
+// per-page quota and gives it back only once the response has COMPLETED — and
+// under the bridge's `Cache-Control: no-store` a body nobody reads never
+// completes. The old fire-and-forget flush pinned ~2.4 KB per autosave: after
+// ~27 of them every further keepalive fetch failed inside the browser
+// ("TypeError: Failed to fetch", nothing on the wire), the strip announced an
+// unreachable bridge over a bridge answering 200 to everything else, and
+// nothing typed from then on reached disk until a reload reset the quota.
+// A live page does not need its request to outlive it; keepalive belongs to
+// the teardown path (flushDraftBeacon), which drains its response as well.
+function _drainDraftResponse(res) {
+  try { return res.text().catch(() => ''); }
+  catch (e) { return Promise.resolve(''); }
+}
+
 async function flushDraft() {
   if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
   if (!DRAFT_ENABLED) return;
   const cleared = _takeCleared();
+  let res;
   try {
-    const res = await fetch('/draft', {
+    res = await fetch('/draft', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: _draftPayload(cleared),
-      keepalive: true,
     });
-    // A 507 means the bridge could not reach disk. Same rule as POST
-    // /decisions: that is NOT a success, and the local copy stays the only
-    // one — so the user is told rather than left believing it is safe.
-    if (!res.ok) _returnCleared(cleared);
-    _setDraftHealth(res.ok);
   } catch (e) {
     _returnCleared(cleared);
-    _setDraftHealth(false);
+    _setDraftHealth(false, 'unreachable');
+    return;
   }
+  await _drainDraftResponse(res);
+  // A 507 means the bridge could not reach disk. Same rule as POST
+  // /decisions: that is NOT a success, and the local copy stays the only
+  // one — so the user is told rather than left believing it is safe.
+  if (!res.ok) _returnCleared(cleared);
+  _setDraftHealth(res.ok, res.ok ? '' : 'refused');
 }
 
 function queueDraftSync() {
@@ -8704,7 +8742,9 @@ function queueDraftSync() {
 // Teardown path. sendBeacon is queued by the browser itself and survives the
 // document being discarded, which `fetch` — even with keepalive — does not
 // reliably do on every engine; the fetch below is the fallback for browsers
-// that refuse the beacon (payload too large).
+// that refuse the beacon (payload too large). It still drains its response:
+// `visibilitychange` → hidden runs this on a page that lives on, and an
+// undrained keepalive response keeps its body booked against the quota.
 function flushDraftBeacon() {
   if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
   if (!DRAFT_ENABLED) return;
@@ -8721,7 +8761,7 @@ function flushDraftBeacon() {
       headers: { 'Content-Type': 'application/json' },
       body: body,
       keepalive: true,
-    });
+    }).then(_drainDraftResponse, () => { /* the localStorage copy stands */ });
   } catch (e) { /* the localStorage copy stands — nothing else left to try */ }
 }
 window.addEventListener('pagehide', flushDraftBeacon);
@@ -9151,6 +9191,14 @@ document.addEventListener('input', saveState);
   cache; the bridge's append-only draft log is the record that survives a
   wiped profile, a private window, a quota error, a power cut, and a Claude
   that has stopped answering.
+- **The live autosave never uses `keepalive`, and every draft response is
+  read to the end** (`_drainDraftResponse()`). Chromium books a keepalive
+  request's body against a 64 KiB per-page quota until its response
+  completes, and a `no-store` response nobody reads never completes: a
+  fire-and-forget `fetch('/draft', { keepalive: true })` silently stopped
+  mirroring after ~27 autosaves — every later request failed inside the
+  browser while the bridge kept answering 200 — and stayed dead until a
+  reload. `keepalive` is for the teardown fallback only, and that drains too.
 - `restoreState()` never overwrites a field carrying `data-touched` — it is
   re-entrant (the design layout re-runs it; so does the bridge hydrate), and a
   late re-run must not stamp a stored value over newer keystrokes.
@@ -13704,7 +13752,13 @@ function sendTabBye(ev) {
     const body = new Blob([JSON.stringify({ tab: _tabId })], { type: 'application/json' });
     if (navigator.sendBeacon && navigator.sendBeacon('/bye', body)) return;
   } catch (e) { /* fall through */ }
-  try { fetch('/bye', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: _tabId }), keepalive: true }); }
+  // Drained like every keepalive response (§ State Persistence,
+  // _drainDraftResponse): a bfcache-restored page lives on, and an unread
+  // keepalive response keeps its body booked against the 64 KiB quota.
+  try {
+    fetch('/bye', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: _tabId }), keepalive: true })
+      .then(r => r.text(), () => '').catch(() => '');
+  }
   catch (e) { /* the server's TAB_STALE_MS prune is the backstop */ }
 }
 window.addEventListener('pagehide', sendTabBye);
@@ -13773,7 +13827,8 @@ function _setCacheHints(visible) {
 // The one renderer for the pinned .panel-status line. Inputs, in priority:
 //   frozen tab (body.viewing-frozen)        → 🕘 {tab label} · nur lesen
 //   submission in flight (_submittedAt)     → ⏳ Übermittelt · Claude arbeitet  + dots
-//   disconnected OR draft mirror failing    → ⚠ Nur lokal gespeichert · getrennt
+//   disconnected                            → ⚠ Nur lokal gespeichert · getrennt
+//   draft mirror failing, not disconnected  → ⚠ Nur lokal gespeichert
 //   draft flush pending                     → … Speichert
 //   heartbeat still connecting              → ◐ Gespeichert · verbinde…
 //   otherwise                               → ✓ Gespeichert · verbunden
@@ -13798,8 +13853,14 @@ function renderPanelStatus() {
     status = 'frozen'; glyph = '🕘'; text = label + ' · {{panel.status_frozen}}';
   } else if (submitted) {
     status = 'submitted'; glyph = '⏳'; text = '{{panel.status_working}}';
-  } else if (conn === 'disconnected' || draft === 'local') {
+  } else if (conn === 'disconnected') {
     status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only}}';
+  } else if (draft === 'local') {
+    // Same state, no "· getrennt": the heartbeat reports no disconnect, so
+    // the draft mirror failed for another reason (§ State Persistence,
+    // _draftStripText). Claiming a disconnect here is what made a running
+    // bridge look dead.
+    status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only_connected}}';
   } else if (draft === 'saving') {
     status = 'saving'; glyph = '…'; text = '{{panel.status_saving}}';
   } else if (conn === 'connecting') {

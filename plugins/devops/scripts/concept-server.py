@@ -1106,7 +1106,22 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         # No-cache on ALL responses — static HTML files included.
         # Without this, the browser heuristic-caches HTML and Ctrl+F5
         # still serves stale content when Claude updates the file in-place.
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        #
+        # POST answers carry no `no-store`. A browser never reuses a POST
+        # response, so the directive protects nothing there — but Chromium
+        # does not complete a `no-store` response whose body the page never
+        # reads, and a keepalive request keeps its body booked against a
+        # 64 KiB per-page quota until its response completes. Pages built
+        # from an older templates.md POST /draft with keepalive and never
+        # read the answer: ~27 autosaves filled the quota, every later one
+        # failed inside the browser, and the page reported an unreachable
+        # bridge over a bridge answering 200. `no-cache` lets those
+        # responses complete — `no-store` is the one directive that pins
+        # them (measured in Chromium, one directive at a time).
+        if self.command == 'POST':
+            self.send_header('Cache-Control', 'no-cache')
+        else:
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
         super().end_headers()

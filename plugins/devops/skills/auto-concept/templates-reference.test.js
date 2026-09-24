@@ -250,3 +250,31 @@ describe("boot-time dereferences survive every skeleton (#341)", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// A locale value is substituted VERBATIM into the page — into HTML text, into
+// attributes and into JS string literals. Markdown therefore never renders: the
+// submitted panel read "Wechsle zum **Claude Chat** …" with the asterisks on
+// screen. Values are plain text; emphasis belongs in the markup around them.
+describe("locale table — plain-text values", () => {
+  const rows = [];
+  let inTable = false;
+  for (const line of md.split("\n")) {
+    if (/^\| Key \| en \| de \|/.test(line)) { inTable = true; continue; }
+    if (!inTable) continue;
+    if (!line.startsWith("|")) break;
+    if (/^\|[-| ]+\|$/.test(line)) continue;
+    const cells = line.split("|").map((s) => s.trim()).filter(Boolean);
+    if (cells.length === 3) rows.push({ key: cells[0], en: cells[1], de: cells[2] });
+  }
+
+  test("the table is found", () => {
+    expect(rows.length).toBeGreaterThan(150);
+  });
+
+  test("no value carries markdown emphasis or code spans", () => {
+    const offenders = rows
+      .filter((r) => /\*\*|__|`/.test(r.en) || /\*\*|__|`/.test(r.de))
+      .map((r) => r.key);
+    expect(offenders).toEqual([]);
+  });
+});
