@@ -442,6 +442,12 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
+  // The do-run run-contract line (§ J) — same dim/secondary treatment as the
+  // pipeline line right above it, directly under the pipeline/state row.
+  const runContractHtml = model.runContract
+    ? `<div class="card-run-contract" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.runContract)}</div>`
+    : "";
+
   const ladderHtml = channelLadderHtml(model.ladder, lang);
 
   // The title lives in the widget: on Desktop there is no card markdown
@@ -459,6 +465,7 @@ export function cardWidgetHtml(model, repoUrl) {
     resultLinesHtml,
     evidenceHtml,
     pipelineHtml,
+    runContractHtml,
     ladderHtml,
     budgetHtml,
     `</div>`,
