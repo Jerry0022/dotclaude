@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.194.0] — 2026-09-24
+
+### Changed — BREAKING (skill names)
+- **Four doors instead of 24 equal skills.** PR 2 + PR 3 of the skill restructure (`docs/superpowers/specs/2026-09-24-skill-restructure-design.md`). The slash menu now shows `do-ship`, `do-run`, `do-learn`, `do-batch` and the two tools `setup-cleanup` / `setup-project` (you only). Everything else is an `auto-` skill that Claude starts itself: `auto-fix`, `auto-concept`, `auto-guide`, `auto-extend`, `auto-update`, `auto-harden`, `auto-polish`, `auto-agents`, `auto-issue`.
+  - Renamed: ship → `do-ship`, claude-learn → `do-learn`, claude-batch → `do-batch`, fix → `auto-fix`, concept → `auto-concept`, web-guide → `auto-guide`, claude-extend-skill → `auto-extend`, tune-harden → `auto-harden`, tune-polish → `auto-polish`, run-agents → `auto-agents`, setup-issue → `auto-issue`.
+  - Folded: run-backlog, run-autonomous, run-burn, tune-rethink and tune-audit are modes of `do-run`; promote is part of `do-ship`.
+  - Retired into hooks + deep-knowledge: setup-readme (`readme-standards.md` + `pre.readme.standards`), auto-graph (`graphify.md`), auto-usage (`get_usage` + `usage.md`), claude-strict (`strict.md` + the strict hooks; switch with `strict on` / `strikt an` / `strict: <task>`).
+  - Typed words keep working ("ship", "promote stable", "festgefahren", …). Old names map through one table (`hooks/lib/skill-names.js`); project extensions under an old folder name are still read.
+- **`do-run` asks once.** One question block (Was · Ablauf · Umfang · Durchgänge), at most one follow-up; clicking through every first option is a valid run. The folded modes read those answers instead of asking again.
+- **`ship beta` / `ship stable`** ships to alpha if there is unshipped work, then promotes, with one card for both. A promotion that names a version never ships new work; a negated channel ("aber nicht auf stable") stays alpha; card promote buttons carry the version.
+- **Harden at ship.** `do-ship` Step 1e runs `auto-harden` and `auto-polish` diff-scoped and static; they never block a ship.
+- **`auto-agents` is the single execution path.** It invokes no skill, shows a wave · task · model · effort table on start and returns a result to its caller. `do-batch` hands its merged plan to `do-run` or `auto-concept`.
+
+### Fixed
+- Autonomous lockouts expire (6 h for a do-run ship, 24 h for runners), so a crash no longer mutes the router forever. A backlog run under "Dabei" never shuts the PC down. Hook mandates name `devops:<skill>`, so a project skill of the same name is never loaded by mistake.
+
 ## [0.193.1] — 2026-09-24
 
 ### Fixed
