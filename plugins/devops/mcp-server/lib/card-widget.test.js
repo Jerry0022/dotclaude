@@ -152,6 +152,24 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     }
   });
 
+  // The ladder is plain text: no border, no fill — it must never read like
+  // a button next to the promote buttons.
+  test("the channel ladder renders frameless, highest version accented, lag hinted", () => {
+    const ladder = { allEqual: false, groups: [
+      { channels: ["alpha"], version: "0.193.0", top: true },
+      { channels: ["beta"], version: "0.190.2", top: false, lag: { versions: 3 } },
+      { channels: ["stable"], version: "0.188.0", top: false, lag: { versions: 5, days: 7 } },
+    ] };
+    const html = cardWidgetHtml(baseModel({ ladder }), "");
+    const block = html.match(/<div class="card-ladder"[\s\S]*?<\/div>/)[0];
+    expect(block).not.toMatch(/border|background|role="button"/);
+    expect(block).toMatch(/font-weight:500">v0\.193\.0</);
+    expect(block).toContain("−3");
+    expect(block).toContain("−5 · 7 d");
+    expect(html.indexOf("card-pipeline")).toBeLessThan(html.indexOf("card-ladder"));
+    expect(cardWidgetHtml(baseModel({ ladder: null }), "")).not.toContain("card-ladder");
+  });
+
   test("the widget HTML puts the versioned prompt on the promote button", () => {
     const html = cardWidgetHtml({ lang: "de", heading: "x", buttonsKey: "released-beta", promoteVersion: "0.193.0" }, "");
     expect(html).toContain('data-prompt="promote stable 0.193.0"');

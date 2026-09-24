@@ -149,7 +149,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       delivery: { promote: { channels: { alpha: "0.1.0" }, current: "alpha" } },
     });
     expect(text).toContain("✓ commit → ✓ push → ✓ PR #416 → ✓ merge");
-    expect(text).toContain("✓ alpha → ○ beta → ○ stable");
+    expect(text).toContain("alpha **v0.1.0** › beta — › stable —");
     expect(text).toContain("Build abc1234");
   });
 
@@ -347,7 +347,8 @@ describe("render_completion_card — ship + promote in one run (released)", () =
     expect(text).toContain("3462 Tests grün");
     expect(text).toContain("Tags stable/v0.171.0/v0.171.0");
     expect(text).toContain("bit-identisch — deadbee");
-    expect(text).toMatch(/✓ merge {3}main → ✓ alpha → ✓ beta → ✓ stable/);
+    expect(text).toMatch(/✓ merge {3}main · Build/);
+    expect(text).toContain("alpha · beta · stable **v0.171.0** ✓");
     expect(text).not.toMatch(/Shipped v0\.171\.0/);
   });
 
@@ -446,15 +447,31 @@ describe("render_completion_card — every input. field lands somewhere", () => 
     expect(text).toContain("› ℹ️ **Variante auf `ready` korrigiert**");
   });
 
-  test("delivery.promote.stableLag renders the promote-distance context line", async () => {
+  // The channel ladder carries every version once: the highest leads, the
+  // lagging channels follow with their distance; no separate lag context line.
+  test("delivery.promote renders the channel ladder with per-channel versions and lag", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "x", lang: "de", session_id: "test-fields-lag",
       state: { pushed: true, merged: "main" },
-      delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha", stableLag: { versions: 3, days: 5 } } },
+      delivery: { ship: { version: "0.193.0" }, promote: {
+        channels: { alpha: "0.193.0", beta: "0.190.2", stable: "0.188.0" }, current: "alpha",
+        betaLag: { versions: 3 }, stableLag: { versions: 5, days: 7 } } },
     });
-    // The command names the shipped version: typed later, it stays a
-    // promotion-only run and never ships edits made after this card (R2b).
-    expect(text).toContain("› alpha liegt 3 Versionen / 5 Tage vor stable → `/do-ship promote 0.1.0`");
+    expect(text).toContain("alpha **v0.193.0** › beta v0.190.2 (−3) › stable v0.188.0 (−5 · 7 d)");
+    expect(text).not.toContain("vor stable →");
+  });
+
+  test("channels on the same version merge on the ladder; all equal gets a tick", async () => {
+    const onBeta = await cardText({
+      variant: "released", summary: "x", lang: "de", session_id: "test-fields-ladder-beta",
+      delivery: { promote: { channels: { alpha: "0.193.0", beta: "0.193.0", stable: "0.188.0" }, current: "beta", stableLag: { versions: 5 } } },
+    });
+    expect(onBeta).toContain("alpha · beta **v0.193.0** › stable v0.188.0 (−5)");
+    const onStable = await cardText({
+      variant: "released", summary: "x", lang: "de", session_id: "test-fields-ladder-stable",
+      delivery: { promote: { channels: { alpha: "0.193.0", beta: "0.193.0", stable: "0.193.0" }, current: "stable" } },
+    });
+    expect(onStable).toContain("alpha · beta · stable **v0.193.0** ✓");
   });
 
   test("pending overrides evidence with a provisional-evidence post and the block's items as points", async () => {
@@ -592,14 +609,16 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(text).toMatch(/^› merged ohne Tag$/m);
   });
 
-  test("ring pipeline ticks only the channels THIS version reached", async () => {
+  test("ring ladder highlights only the channel on the highest version", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Ring", lang: "de", session_id: "test-ev-7",
       state: { branch: "claude/x", pushed: true, merged: "main", commit: "a91c3e2" },
       delivery: { pr: { number: 416, title: "f" }, ship: { version: "0.179.0", base: "main" },
         promote: { current: "alpha", channels: { alpha: "0.179.0", beta: "0.176.0", stable: "0.170.0" } } },
     });
-    expect(text).toContain("→ ✓ alpha → ○ beta → ○ stable");
+    expect(text).toContain("alpha **v0.179.0** › beta v0.176.0 › stable v0.170.0");
+    // The version lives on the ladder, not a second time on the pipeline line.
+    expect(text).not.toMatch(/merge.*· v0.179.0/);
   });
 
   test("test-minimal carries the started thing as its one › line", async () => {

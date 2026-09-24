@@ -1151,17 +1151,20 @@ git ls-remote --tags origin
 ```
 
 - Latest alpha version = highest `alpha/vX.Y.Z` (numeric compare, never lexicographic).
+- Latest beta version = highest `beta/vX.Y.Z`.
 - Latest stable version = highest of `stable/vX.Y.Z` ∪ bare `vX.Y.Z`.
 - No channel tags at all (pre-migration repo) → skip silently.
 
-When alpha > stable, pass the gap as `delivery.promote.stableLag`:
-- `{ versions: N }` — gap < 3 versions AND last stable tag younger than 7 days
+Pass every channel's latest version in `delivery.promote.channels`
+(`{ alpha, beta, stable }`, null for a channel without tags). When alpha is
+ahead of beta or stable, pass each gap — `betaLag` and `stableLag`, same shape:
+- `{ versions: N }` — gap < 3 versions AND that channel's last tag younger than 7 days
   (annotated taggerdate via
-  `git for-each-ref --format='%(taggerdate:iso)' 'refs/tags/stable/*'`).
+  `git for-each-ref --format='%(taggerdate:iso)' 'refs/tags/<channel>/*'`).
 - `{ versions: N, days: D }` — gap ≥ 3 versions OR ≥ 7 days.
 
-The card renders it on the channel ladder line
-(`🟢 alpha \`v0.27.0\` · ⚪ beta · ✅ stable \`v0.19.0\` · alpha 8 Versionen / 7 Tage vor stable → \`/do-ship promote\``).
+The card renders them on the channel ladder line
+(`alpha **v0.27.0** › beta v0.25.0 (−2) › stable v0.19.0 (−8 · 7 d)`).
 It is NOT a `userFinalTest` item — it is not a test — and NOT an `open` item.
 Visible lag is the ring model working; the nudge just keeps it visible.
 
@@ -1192,7 +1195,8 @@ render_completion_card({
   delivery: {
     pr: { number: <ship_release.pr.number>, title: <PR title> },
     ship: { version: <ship_version_bump.vNew>, base: "main" },
-    promote: { channels: { alpha: <ship_version_bump.vNew>, stable: <latest stable or null> }, current: "alpha",
+    promote: { channels: { alpha: <ship_version_bump.vNew>, beta: <latest beta or null>, stable: <latest stable or null> }, current: "alpha",
+               betaLag: <from the promotion-gap nudge above, omit when alpha == beta>,
                stableLag: <from the promotion-gap nudge above, omit when alpha == stable> }
   }
 })

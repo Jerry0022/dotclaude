@@ -82,11 +82,11 @@ Single-step promotion:
 ship_promote({ version: "0.117.0", from: "alpha", to: "beta", cwd: "<cwd>" })
 ```
 
-**Fast-track** = TWO sequential calls so the ring invariant
-(stable ⊆ beta ⊆ alpha) always holds:
+**Fast-track** = ONE call from alpha: `ship_promote` keeps the ring invariant
+(stable ⊆ beta ⊆ alpha) itself — it tags `beta/vN` first (unless beta already
+serves this version or a newer one), then `stable/vN` and the bare `vN`:
 
-1. `ship_promote({ version, from: "alpha", to: "beta", cwd })`
-2. `ship_promote({ version, from: "beta", to: "stable", releaseNotes: "<CHANGELOG entry for the version>", cwd })`
+`ship_promote({ version, from: "alpha", to: "stable", releaseNotes: "<CHANGELOG entry for the version>", cwd })`
 
 For any promotion to `stable`, pass `releaseNotes` (read the version's
 CHANGELOG.md entry) — used as fallback notes if release.yml did not create

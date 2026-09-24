@@ -300,6 +300,20 @@ export async function handler(params) {
     //       Ordered + individually idempotent = deterministic partial-failure
     //       recovery (spec §4.1.5 / R7).
     const plan = [{ tag: `${to}/v${version}`, payload: { from, to, version } }];
+    // alpha → stable pulls beta along (ring invariant stable ⊆ beta ⊆ alpha):
+    // beta/vN goes first, unless beta already serves this version or a newer one.
+    if (from === "alpha" && to === "stable") {
+      const betaTags = remoteTags.filter((t) => t.channel === "beta");
+      const betaExisting = betaTags.find((t) => t.version === version) || null;
+      if (betaExisting && betaExisting.sha !== sha) {
+        return { ...result, success: false, error: `tag beta/v${version} already exists on a different SHA — published tags are immutable` };
+      }
+      const betaAhead = betaTags.some((t) => compareVersions(t.version, version) > 0);
+      if (!betaAhead) {
+        plan.unshift({ tag: `beta/v${version}`, payload: { from: "alpha", to: "beta", version } });
+        result.betaTag = `beta/v${version}`;
+      }
+    }
     if (to === "stable") {
       plan.push({ tag: `v${version}`, payload: { from: "stable", to: "bare", version } });
     }
@@ -318,7 +332,7 @@ export async function handler(params) {
         break; // keep ordering guarantee — don't create bare before stable succeeded
       }
     }
-    result.tag = plan[0].tag;
+    result.tag = `${to}/v${version}`;
     if (to === "stable") result.bareTag = `v${version}`;
     if (failed.length) {
       // #251: never declare a tag missing without one last look at the remote.
