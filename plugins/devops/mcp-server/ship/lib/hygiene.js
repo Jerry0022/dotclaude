@@ -398,7 +398,7 @@ function plural(n, one, many) {
 
 /**
  * Ready-made card lines: a `tests` entry for a cleanup that ran, an `open`
- * item for the nudge — `{ text, reply }`, so the card's "Offenes abarbeiten"
+ * item for the nudge — `{ text, reply }`, so the card's „Nachbessern"
  * button pre-fills the answer that opens the cleanup page (#495).
  */
 export function cardLines(result, lang = "de") {

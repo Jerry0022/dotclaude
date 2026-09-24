@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.200.0] — 2026-09-24
+
+### Added
+- **Old branches and worktrees clean themselves up after a ship.** After every successful ship, the new `ship_hygiene` step removes leftovers whose content is provably in main: local branches (git ancestor, the head of a merged PR, or every file they touched identical in main) and clean, idle session worktrees under `.claude/worktrees/` together with their branch. It acts only once such a leftover is older than 30 days, and then removes every removable one older than 7 days; younger leftovers stay for the cleanup page. Unshipped work, uncommitted changes, locked worktrees, worktrees outside `.claude/worktrees/`, the current worktree, the default branch and remote branches are never touched. Every removal re-checks its subject right before it runs, and the card's **Geprüft** line says what went ("Aufräumen (auto) → 3 Branches · 1 Worktree entfernt").
+- **The card suggests the cleanup page when too much piles up.** After a successful ship or promote, more than 50 leftover branches/worktrees put an open point on the card, at most once a week. It carries the answer „Ja, branches aufräumen.", so „Nachbessern" opens the page with one Enter.
+- **Plugin settings in plain words.** Tell Claude how the plugin should behave („Aufräum-Hinweis erst ab 80, nur hier", „nie automatisch aufräumen, überall") and it changes the setting with `scripts/devops-config.js`, for this project (the clone and all its worktrees) or for every project. The six `cleanup.*` values are the first settings: auto-clean on/off, age gate, minimum age, hint on/off, threshold and cooldown. `deep-knowledge/devops-config.md` lists them.
+- **Plugin runtime files stay out of git by themselves.** At every session start `ss.project.setup` writes the plugin's runtime ignore list into the clone's `.git/info/exclude`: shared by every worktree, never a diff in the repo. A release that adds a runtime file no longer dirties the repos that install it. A new repository (no commit yet, or no `.gitignore`) gets a one-time offer of the project setup.
+
+### Changed
+- **Cleanup and setup left the slash menu.** `setup-cleanup` is now the hidden `auto-cleanup` skill: say „branches aufräumen", „worktrees aufräumen" or „branch cleanup", or accept the card's hint. It always works on the current project; the all-projects mode is gone. The trigger router used to demand `setup-cleanup` on these phrases although Claude was not allowed to load it — that works now.
+- **`setup-project` is no longer a skill.** Its instructions live in `deep-knowledge/project-setup.md`. „set up this project", „fix gitignore", „add license" and its other phrases point there, and a project extension under `.claude/skills/setup-project/` still applies. `scripts/check-claude-artifacts.js` checks against `hooks/lib/runtime-ignores.js` now.
+
 ## [0.199.0] — 2026-09-24
 
 ### Added
