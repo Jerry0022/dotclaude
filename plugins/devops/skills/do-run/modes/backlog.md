@@ -319,18 +319,29 @@ Loop the queue, **one issue at a time**:
 ```
 for each issue in queue:
   1. WORKTREE  → branch for the issue
-  2. IMPLEMENT → /auto-agents --from=do-run --mode=background --ship=<$SHIP>
-                 (agent-orchestration.md — Single-Agent Shortcut / waves;
-                 Autonomous directive, no AskUserQuestion). May delegate one heavy
-                 item to a /do-run autonomous implement sub-run (never ships).
-  3. TEST/QA   → pin the profile per deep-knowledge/test-plan.md; devops:qa agent; verify
-                 per test-strategy.md (browser verification MANDATORY for web tech)
-  3b. PASSES   → the router's Q4 passes over this issue's diff: /auto-harden,
-                 then /auto-polish, each --invoked-by=autonomous (+ --strict
-                 under "Strikt"); skipped when none were chosen
-  4. SHIP      → $SHIP=auto: /do-ship (MCP ship tools) — this skill's own
-                 authority. $SHIP=manual: commit on the issue branch, no
-                 push/PR, item → ready; skip 5
+  2. IMPLEMENT → Skill("devops:auto-agents", "--from=do-run --mode=background
+                 --ship=<$SHIP> <issue>") — gated: the run contract's
+                 `auto-agents` obligation refuses an Edit/commit on this branch
+                 without it (agent-orchestration.md — Single-Agent Shortcut /
+                 waves; Autonomous directive, no AskUserQuestion). May delegate
+                 one heavy item to a /do-run autonomous implement sub-run
+                 (never ships).
+  3. TEST/QA   → pin the profile per deep-knowledge/test-plan.md; a
+                 `devops:qa` agent — gated when the diff changes ≥1 code file
+                 (browsertest-guard.isCodeChange); verify per test-strategy.md
+                 (browser verification MANDATORY for web tech)
+  3b. PASSES   → the router's Q4 passes over this issue's diff:
+                 Skill("devops:auto-harden", "--invoked-by=autonomous"), then
+                 Skill("devops:auto-polish", "--invoked-by=autonomous")
+                 (+ --strict under "Strikt") — each gated when chosen;
+                 skipped when none were chosen (or via `run-contract.js skip
+                 harden|polish --reason "<why>"` for a conscious skip)
+  4. SHIP      → $SHIP=auto: Skill("devops:do-ship", "--queued=<n>/<N>
+                 --keep") — NEVER the ship_* MCP tools directly; the
+                 run-contract `do-ship` obligation refuses `ship_release`
+                 without a prior do-ship call in this segment, and this is
+                 also this skill's own ship authority. $SHIP=manual: commit
+                 on the issue branch, no push/PR, item → ready; skip 5
   5. CLOSE     → close the issue; when ALL issues of a milestone are done,
                  close the milestone
   ── special cases ──
@@ -340,6 +351,13 @@ for each issue in queue:
     a park-branch; emit a non-blocking "⏸ Rückfrage" status message into the
     chat thread (see Step 5); continue with the next issue
 ```
+
+Step 2's triage (pre-triage agents) and refine (`/auto-issue` per issue) are
+gated too: the first `auto-agents` call of the contract is refused without a
+prior triage agent, and a ship that closes `#N` is refused without a prior
+`auto-issue` refine of `#N` — both are `presence`-only obligations
+(`deep-knowledge/run-contract.md`), so a walked-away timeout run (Step 0.1
+`phase=presence`) never hits them.
 
 **Guardrails (per `autonomous-execution.md`, with the ship carve-out only):**
 ship **only** via the MCP ship tools, **own repo only**, **no force-push**, no
@@ -389,6 +407,11 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    shutdown choice. **Never** auto-shutdown while the aggregate run status is
    BLOCKED. Write `BACKLOG-DONE.flag` for every terminal status so the watchdog
    stands down.
+6. **Close the run contract** — the queue is done (every item shipped, parked
+   or skipped), not just this issue's segment:
+   ```bash
+   node "$CLAUDE_PLUGIN_ROOT/hooks/lib/run-contract.js" done
+   ```
 
 ## Artifacts
 

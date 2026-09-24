@@ -1,6 +1,6 @@
 ---
 name: do-run
-version: 0.2.0
+version: 0.3.0
 description: >-
   Door for every run of work bigger than one edit. Asks one short question
   set (what · how · scope · passes), then implements the prompt through the
@@ -178,6 +178,11 @@ Q4  header: "Durchgänge?"   multiSelect: true
   **description** of that option. Label, marker and order stay unchanged;
   the user's last choice is one keypress away and visibly flagged.
 
+**Reading Q1.** A free-text Q1 answer that names several options by number
+("1 und 2") runs them in order — first "Prompt umsetzen" (implement the
+chat's own work), then "Audit" (over that work) — never just the first
+number read and the rest dropped.
+
 **Reading Q4.** `AskUserQuestion` has no pre-selection: an option can be
 marked, never pre-ticked, so opt-out checkboxes are impossible. The
 question text therefore names the set an empty answer runs — the user sees
@@ -260,6 +265,40 @@ four-question cap is the only reason for a second follow-up.
   (`AUTONOMOUS-LOCKOUT.flag`, `.claude/concept-active.json`) or releases it
   at turn end.
 
+## Step 5b — Run contract
+
+**Armed automatically — no action needed here.** A PostToolUse hook reads
+this router's own answers (Q1–Q4, the follow-up) straight from the
+`AskUserQuestion` result and writes them to `.claude/run-contract.json`. From
+that point on, a PreToolUse hook refuses the tool call that would walk past a
+chosen pass, a skipped `auto-agents` classification, an unrefined issue, or a
+ship that bypasses `devops:do-ship` — with the exact call that satisfies it.
+Mechanism, obligations and gates: `deep-knowledge/run-contract.md`.
+
+| Gate hits… | Applies to |
+|---|---|
+| `auto-agents` | every `prompt` / `backlog` run — the tier decision is never skipped |
+| `harden` / `polish` | a chosen pass, once the segment has real work |
+| `qa` | code changes past the size threshold |
+| `do-ship` | `Ship automatisch` — a `ship_release` call is refused without a prior `Skill("devops:do-ship")` |
+| `refine` / `triage` | backlog mode's Präsenz obligations |
+
+A conscious deviation is one CLI call, never a silent skip — the completion
+card shows it as ⚠:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" skip <ob> --reason "<why>"
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" done
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" status
+```
+
+`done` closes the contract when the run is genuinely over (`prompt` / `audit`:
+after the final card; `backlog`: on `done` or when every queued item shipped
+or was skipped). `abort` closes an interrupted or blocked run before its
+card — the card still shows it, with the open obligations. `status` prints
+the header and what is still open for the current segment.
+
 ## Step 6 — Run the mode
 
 Read the mode file completely before acting; it replaces this skill's flow
@@ -282,9 +321,9 @@ the single execution path: `Skill("devops:auto-agents")` with args
 (Interaktiv → `interactive`, Autonom → `background`). It shows its own start table,
 returns a result block (`tier`, `done`, `open`, `needs-decision`, `ship`)
 and never ships or renders a card — this router acts on the block and
-renders the card. **Inline shortcut:** when the router's own check already
-lands on the Inline tier (one domain, ≤ ~5 files), apply the change directly
-without loading auto-agents.
+renders the card. Inside a do-run run `auto-agents` always decides the
+tier, Inline included — it reports Inline in one line, never a shortcut
+around loading the skill (run-contract's `auto-agents` obligation, Step 5b).
 
 | Q1 | Ablauf | Runs | Mode questions answered here (the mode skips them) |
 |---|---|---|---|
@@ -305,6 +344,13 @@ Runs after implementation, in this order. Autonom runs reach it from
 `modes/autonomous.md` Step 6.5 (before that mode's report and Step 8);
 backlog runs apply items 1–2 per issue inside its loop and its own ship
 step for item 3.
+
+**Gated.** The run contract (Step 5b) refuses a `ship_release` call, and
+refuses the final completion card, while a chosen pass is still open for the
+segment being closed — the block names the exact `Skill(...)` call that
+satisfies it. Ship through `Skill("devops:do-ship")` only, never the
+`ship_*` MCP tools directly: `do-ship` is what runs the diff passes and the
+Codex review, and the gate cannot see a ship it never ran.
 
 1. **Harden danach** → `Skill("devops:auto-harden")`, args
    `--invoked-by=do-run` (Interaktiv) or `--invoked-by=autonomous` (Autonom), plus
@@ -348,5 +394,7 @@ this router's (or do-run's composed do-ship's), never auto-agents'.
   usage or on the literal `burn` argument.
 - Ship authority lives in this router (Q2) and in backlog mode's per-issue
   loop. The autonomous engine itself still never ships.
+- Every chosen pass runs, or is skipped with a reason that the card shows —
+  never silently dropped (Step 5b, `deep-knowledge/run-contract.md`).
 - When the request fits no mode and is not an implementation task, say so
   and stop.

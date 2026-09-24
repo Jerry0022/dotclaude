@@ -1,6 +1,6 @@
 ---
 name: auto-agents
-version: 0.11.0
+version: 0.12.0
 description: >-
   The single execution path for everything that implements — do-run,
   auto-concept (implement), auto-fix, auto-harden, auto-polish — and for a
@@ -115,11 +115,16 @@ Hard stop ("nur", "schnell", "keine Agents") → Inline; hard go ("mit
 Agents", "full") → as designed. Both come from the user's words, never from
 the caller.
 
-**A caller may skip this skill for Inline.** When the caller's own
-classification already lands on Inline (one domain, ≤ ~5 files — a typo, a
-one-file fix, a copy change), it applies the change itself: the Inline tier
-has no table, no agent and no result contract, so loading this skill would
-only add a round of reading. Everything above Inline goes through here.
+**A caller may skip this skill for Inline — except inside a do-run run.**
+When the caller's own classification already lands on Inline (one domain,
+≤ ~5 files — a typo, a one-file fix, a copy change), it applies the change
+itself: the Inline tier has no table, no agent and no result contract, so
+loading this skill would only add a round of reading. **Not when the caller
+is a do-run run** (`--from=do-run`): the run contract's `auto-agents`
+obligation requires this skill for every `prompt` / `backlog` run, Inline
+included, so the tier decision — and that it was made — is always visible
+(`deep-knowledge/run-contract.md`). Everything above Inline goes through
+here regardless of caller.
 
 ### 2.2 Agent selection
 
@@ -272,6 +277,9 @@ asks for one, otherwise right after Step 2 — for the **1 agent**,
 **parallel** and **full ceremony** tiers. **Not for Inline**: nothing is
 spawned, the model is the session's own, and a one-row table would only
 repeat what the user already sees; the tier is named in the result instead.
+Inline still prints one line, so the tier decision itself stays visible even
+without a table: `▶ Inline · <reason: domains, ~files>`.
+
 Shown again only when the run changes shape (a wave added or dropped, a
 scope-cut, a sub-split) — the full table, not a diff.
 
