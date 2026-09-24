@@ -461,10 +461,10 @@ function buildActivationGuard() {
 }
 
 /** How long a collected prompt waits for the harness to write its pasted
- *  image. The file lands within milliseconds of the submit (#490), but not
- *  always before this hook reads the folder. Only sessions that have an
- *  images folder at all pay the wait, and only when no image is there yet. */
-const IMAGE_WAIT_MS = 600;
+ *  image. The file lands within milliseconds of the submit (#490), usually
+ *  before this hook has even started. Only sessions that have an images folder
+ *  at all pay the wait; a found image costs one extra read to confirm the set. */
+const IMAGE_WAIT_MS = 300;
 const IMAGE_POLL_MS = 150;
 
 function sleepSync(ms) {
@@ -482,10 +482,17 @@ function sleepSync(ms) {
  */
 function captureNoteImages(cwd, sessionId, at) {
   try {
-    if (!B.sessionImageDirs(sessionId).length) return [];
+    const dirs = B.sessionImageDirs(sessionId);
+    if (!dirs.length) return [];
+    let prev = null;
     for (let waited = 0; ; waited += IMAGE_POLL_MS) {
-      const copies = B.captureSessionImages(cwd, sessionId, at);
-      if (copies.length || waited >= IMAGE_WAIT_MS) return copies;
+      const hits = B.imagesNear(cwd, sessionId, at, { dirs });
+      const sig = hits.map(h => `${h.file}:${h.size}`).sort().join('|');
+      // Take the set once two reads agree: a second image pasted into the same
+      // prompt joins it, and a file still being written changes its size.
+      if (hits.length && sig === prev) return B.claimImages(cwd, hits, at);
+      if (waited >= IMAGE_WAIT_MS) return B.claimImages(cwd, hits, at);
+      prev = hits.length ? sig : null;
       sleepSync(IMAGE_POLL_MS);
     }
   } catch {
@@ -494,21 +501,33 @@ function captureNoteImages(cwd, sessionId, at) {
 }
 
 /**
- * Merge-time fallback (#490): a note without an `[Anhang-Datei]` line whose
- * timestamp matches an image of this session gets that image now — covers a
- * note stored while the image was still being written, or by an older plugin.
- * Only the injected copy changes; `.claude/batch.md` stays as the user left it.
+ * Merge-time fallback (#490): images of this session no note has taken yet —
+ * written after their note's hook looked, or collected by an older plugin —
+ * go to the NEAREST note (`assignImagesToNotes`). A match beyond the certain
+ * window says so on its line, so the merge checks it instead of trusting it.
+ * One scan for all notes. Only the injected copy changes; `.claude/batch.md`
+ * stays as the user left it.
  */
-function attachLateImages(cwd, sessionId, notes) {
-  return notes.map((note) => {
-    if (note.text.includes('[Anhang-Datei]')) return note;
-    try {
-      const copies = B.captureSessionImages(cwd, sessionId, Date.parse(note.at));
-      return copies.length ? { ...note, text: `${note.text}\n${B.attachmentFileLines(copies)}` } : note;
-    } catch {
-      return note;
-    }
-  });
+function attachLateImages(cwd, sessionId, notes, markerAt) {
+  try {
+    const dirs = B.sessionImageDirs(sessionId);
+    if (!dirs.length || !notes.length) return notes;
+    const byNote = B.assignImagesToNotes(notes, B.unclaimedImages(cwd, dirs), markerAt);
+    return notes.map((note, i) => {
+      const matched = (byNote.get(i) || []).sort((a, b) => a.img.mtimeMs - b.img.mtimeMs);
+      if (!matched.length) return note;
+      const copies = B.claimImages(cwd, matched.map(m => m.img), Date.parse(note.at));
+      const lines = copies.map((copy, k) => {
+        const gap = matched[k].gapMs;
+        return gap <= B.IMAGE_MATCH_WINDOW_MS
+          ? `[Anhang-Datei] ${copy}`
+          : `[Anhang-Datei] ${copy} (per Zeitstempel zugeordnet, ${Math.round(gap / 1000)} s Abstand — prüfen, ob das Bild zu dieser Notiz passt)`;
+      });
+      return { ...note, text: `${note.text}\n${lines.join('\n')}` };
+    });
+  } catch {
+    return notes;
+  }
 }
 
 /**
@@ -556,7 +575,7 @@ function syncMain(cwd) {
  * @param {{cwd:string,text:string,marker:string,modeActive:boolean,sessionId?:string}} ctx
  */
 function fireMerge({ cwd, text, marker, modeActive, sessionId }) {
-  const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd));
+  const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd), Date.now());
   if (notes.length === 0) {
     // Nothing parsed. Never a silent exit — see buildEmptyQueueNotice.
     let exists = false;

@@ -821,3 +821,34 @@ describe("sessionImageDirs — the harness images folder of one session (#490)",
     }
   });
 });
+
+describe("assignImagesToNotes — the nearest note wins, never the first match (#490)", () => {
+  const at = (ms) => new Date(ms).toISOString();
+  const T = Date.parse("2026-09-24T17:21:56.000Z");
+
+  test("of two notes 2 s apart, the image goes to the one it was pasted with", async () => {
+    const { assignImagesToNotes } = await import("./batch-state.js");
+    const notes = [{ at: at(T) }, { at: at(T + 2000) }];
+    const byNote = assignImagesToNotes(notes, [{ file: "2.png", mtimeMs: T + 1990 }], T + 60_000);
+    expect(byNote.has(0)).toBe(false);
+    expect(byNote.get(1).map(m => m.img.file)).toEqual(["2.png"]);
+  });
+
+  test("an image nearer to the marker prompt than to any note stays with the marker", async () => {
+    const { assignImagesToNotes } = await import("./batch-state.js");
+    const byNote = assignImagesToNotes([{ at: at(T) }], [{ file: "3.png", mtimeMs: T + 2500 }], T + 2600);
+    expect(byNote.size).toBe(0);
+  });
+
+  test("an image far from every note is not guessed at", async () => {
+    const { assignImagesToNotes, IMAGE_LATE_MATCH_MAX_MS } = await import("./batch-state.js");
+    const byNote = assignImagesToNotes([{ at: at(T) }], [{ file: "4.png", mtimeMs: T - IMAGE_LATE_MATCH_MAX_MS - 1 }], T + 600_000);
+    expect(byNote.size).toBe(0);
+  });
+
+  test("a late match reports its gap", async () => {
+    const { assignImagesToNotes } = await import("./batch-state.js");
+    const byNote = assignImagesToNotes([{ at: at(T) }], [{ file: "5.png", mtimeMs: T - 10_000 }], T + 600_000);
+    expect(byNote.get(0)[0].gapMs).toBe(10_000);
+  });
+});

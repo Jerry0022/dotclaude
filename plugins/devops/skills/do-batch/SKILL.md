@@ -329,8 +329,11 @@ index it carries is a checksum, not a substitute.
 **A note's `[Anhang]` / `[Anhang-Datei]` lines belong to that note and to no
 other.** Where an `[Anhang-Datei]` path still exists, open it before judging the
 note. The injected merge context already carries `[Anhang-Datei]` lines the
-hook matched late: a note without one whose timestamp matches an image of this
-session (±3 s) gets it at merge time — `batch.md` itself is not rewritten.
+hook matched late: every image of this session that no note took goes to the
+note nearest to it in time (up to 60 s; an image nearer to the marker prompt
+stays with that prompt), and `batch.md` itself is not rewritten. A line ending
+in "per Zeitstempel zugeordnet, N s Abstand — prüfen …" is a guess: open the
+image and check it fits the note before relying on it.
 Where a note refers to an image ("siehe Bild", "Screenshot") and neither
 path nor description exists, say so in its coverage line instead of guessing. Where only the `[Anhang]` description survives, that description IS the
 evidence — do not silently drop the note for lacking the image.

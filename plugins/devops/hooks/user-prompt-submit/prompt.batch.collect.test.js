@@ -713,3 +713,34 @@ describe("mode on — a pasted Desktop image is kept with its note (#490)", () =
     expect(readNotes(cwd)[0].text).toBe("kein Bild");
   });
 });
+
+describe("merge fallback marks an uncertain image match (#490)", () => {
+  const SID = "0f1e2d3c-aaaa-bbbb-cccc-490490490491";
+  let tmpRoot;
+
+  beforeEach(() => {
+    activate(cwd, { marker: ">>" });
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-img-tmp-"));
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
+
+  test("an image 10 s from its nearest note is attached with a check-this hint", () => {
+    const imagesDir = path.join(tmpRoot, "claude", "C--some-project", SID, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+    const at = Date.now() - 120_000;
+    appendNote(cwd, "siehe Bild", at);
+    const img = path.join(imagesDir, "1.png");
+    fs.writeFileSync(img, "png-bytes");
+    fs.utimesSync(img, new Date(at - 10_000), new Date(at - 10_000));
+    const r = runHook(
+      { prompt: ">> leg los", session_id: SID },
+      { TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot, DEVOPS_BATCH_NO_SYNC: "1" },
+    );
+    expect(r.stdout).toContain("[Anhang-Datei] ");
+    expect(r.stdout).toContain("10 s Abstand");
+    expect(r.stdout).toContain("prüfen");
+  });
+});
