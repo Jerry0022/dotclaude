@@ -62,3 +62,58 @@ claude plugin eval . --runs 1 --ablation none --trust-plugin --no-publish --scaf
 
 Runs call the model with your credentials and count against your usage
 (≈ $0.3–0.8 per case).
+
+## triggers/
+
+Pins whether a hidden (`user-invocable: false`) worker skill gets invoked from
+a natural prompt alone — no slash command, no hook forcing it — in the top 10
+languages (en, zh, hi, es, fr, ar, bn, pt, ru, ja) plus German. Every case is a
+`Skill` tool-call grader (`tool_used`, `input_match` on `"skill":"<name>"`,
+`min: 1`), tolerant of both the pre-PR2 and post-PR2 skill name (e.g.
+`fix`/`auto-fix`) so the same cases survive the rename in PR 2.
+
+- **Data, not 100+ hand-written directories**: `evals/triggers/cases.json`
+  holds one entry per bug report / trigger phrase, each with a `translations`
+  map keyed by language (or `languageIndependent: true` for the one pasted
+  stack trace, which is a single case — error patterns route to `auto-fix`
+  regardless of prompt language, so it is not translated).
+- **Regenerate** after editing `cases.json`:
+  ```bash
+  node plugins/devops/scripts/gen-trigger-evals.js
+  ```
+  The script is idempotent (rerunning with unchanged `cases.json` writes
+  nothing) and owns every directory under `evals/triggers/` except
+  `cases.json` and this README section — it deletes stale case directories
+  that no longer appear in `cases.json`. `gen-trigger-evals.test.js` fails the
+  suite if the checked-in directories drift from `cases.json`
+  (`node plugins/devops/scripts/gen-trigger-evals.js --check`).
+- **Run a language subset**: `--tag lang-de`, or a skill subset with
+  `--tag skill-fix`. Every case also carries the plain `trigger` tag.
+  ```bash
+  claude plugin eval . --runs 1 --ablation none --trust-plugin --no-publish --scaffold --allow-tools Write,Edit,Bash --tag lang-de
+  ```
+- **Cost note**: 100 generated cases at ≈$0.3–0.8 each is real money — run a
+  `--tag skill-<x>` or `--tag lang-<xx>` slice, not the whole set, unless a
+  full trigger-preservation sweep is actually needed (e.g. before PR 3 shortens
+  descriptions).
+- **What the eval runner does NOT fire, unlike a real session**: in a real
+  session `prompt.skill.enforce` turns the unambiguous part of the
+  `triggers:` frontmatter (multi-word phrases, slash forms, a curated
+  single-word allowlist) into a mandatory invoke before the model even sees
+  the prompt — for those, the router decides, not the model. Generic single
+  words ("error", "audit", "polish") never pass the router, so for them these
+  cases are the ONLY coverage. The eval runner
+  fires no `UserPromptSubmit` hooks (same constraint noted in delegation/
+  above), so a passing case here means the model chooses the skill from its
+  description/training alone. That is a stronger, not weaker, signal than the
+  router path, which is why these cases exist separately from the router's own
+  unit tests.
+- **`web-guide` is intentionally absent here**: its trigger is
+  `stop.guide.handoff`, a Stop hook on Claude's *own* answer (it fires when
+  Claude hands a web step to the user), not on the user's prompt. There is no
+  natural user prompt that should trigger it, so it has no case in this
+  directory — coverage lives in the hook's own unit tests.
+- Every prompt carries the same `[delegation-policy]` nudge line as
+  `delegation/`, for the same reason: the eval runner injects no
+  `prompt.knowledge.dispatch` SessionStart/UserPromptSubmit output, and the
+  generator pins the line verbatim from that hook.

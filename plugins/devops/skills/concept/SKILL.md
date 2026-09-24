@@ -11,6 +11,10 @@ description: >-
   or concept work that would benefit from interactive decision-making.
   Do NOT trigger for: simple code explanations, debugging
   (use /fix), or static documentation (use /setup-readme).
+layer: 1
+invokes: [setup-issue, ship]
+triggers:
+  en: ["concept", "concept page", "interactive plan", "show me this as a page", "visualize this"]
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
 allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---

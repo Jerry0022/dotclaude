@@ -41,15 +41,29 @@ const PATTERNS = [
  * @returns {string}
  */
 function stripQuoted(s) {
+  return replaceQuoted(s, () => ' ');
+}
+
+/**
+ * Like stripQuoted, but each removed span becomes the same number of spaces,
+ * so offsets in the result are offsets in the original command.
+ * @param {string} s
+ * @returns {string}
+ */
+function maskQuoted(s) {
+  return replaceQuoted(s, (m) => ' '.repeat(m.length));
+}
+
+function replaceQuoted(s, fill) {
   let out = s;
   // PowerShell here-strings: @"..."@ and @'...'@ (may span lines)
-  out = out.replace(/@"[\s\S]*?"@/g, ' ');
-  out = out.replace(/@'[\s\S]*?'@/g, ' ');
+  out = out.replace(/@"[\s\S]*?"@/g, fill);
+  out = out.replace(/@'[\s\S]*?'@/g, fill);
   // Bash heredocs: <<['"]?TAG ... \n TAG  (optional <<- dash, quoted/unquoted tag)
-  out = out.replace(/<<-?\s*(['"]?)([A-Za-z_]\w*)\1[\s\S]*?\n[ \t]*\2\b/g, ' ');
+  out = out.replace(/<<-?\s*(['"]?)([A-Za-z_]\w*)\1[\s\S]*?\n[ \t]*\2\b/g, fill);
   // Remaining double- then single-quoted spans
-  out = out.replace(/"[^"]*"/g, ' ');
-  out = out.replace(/'[^']*'/g, ' ');
+  out = out.replace(/"[^"]*"/g, fill);
+  out = out.replace(/'[^']*'/g, fill);
   return out;
 }
 
@@ -63,4 +77,4 @@ function isManualShipCommand(cmd) {
   return PATTERNS.some((re) => re.test(stripped));
 }
 
-module.exports = { isManualShipCommand, stripQuoted };
+module.exports = { isManualShipCommand, stripQuoted, maskQuoted };

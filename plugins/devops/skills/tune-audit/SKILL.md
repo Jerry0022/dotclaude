@@ -15,6 +15,11 @@ description: >-
   Do NOT trigger for: a single known bug (use /fix), a pure consistency or
   UI pass (/tune-harden, /tune-polish), a security-only review
   (/security-review), or repo/branch hygiene (/setup-project, /setup-cleanup).
+layer: 0
+invokes: [concept]
+triggers:
+  en: ["audit", "full audit"]
+  de: ["voller Audit", "auditiere", "auditieren", "prüf alles", "komplett durchchecken", "health check der App", "Qualitätsaudit"]
 argument-hint: "[--scope=chat|48h|all] [--mode=implement|concept] [--dimensions=a,b,...] [--autonomous] [optional target: app section, path or URL]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__ccd_session_mgmt__*, mcp__Claude_Preview__*, mcp__Claude_Browser__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-issues__match_issues, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

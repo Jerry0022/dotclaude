@@ -10,6 +10,10 @@ description: >-
   "multi-agent", "delegate to agents", "agent workflow", or the user saying
   yes to Claude's offer. Do NOT trigger for: simple edits, quick fixes,
   explanations, or single-agent research.
+layer: 0
+invokes: [tune-polish, tune-harden]
+triggers:
+  en: ["run agents", "use agents", "orchestrate", "parallel agents", "multi-agent", "delegate to agents", "agent workflow"]
 argument-hint: "[task description or goal]"
 allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---

@@ -9,6 +9,11 @@ description: >-
   Also triggers on pasted error/stack traces
   or when post.flow.debug hook detects repeated Bash failures.
   Do NOT trigger for general code questions.
+layer: 0
+invokes: []
+triggers:
+  en: ["debug", "this is broken", "doesn't work", "error", "crash", "blank screen"]
+  de: ["warum geht das nicht", "funktioniert nicht"]
 argument-hint: "[optional: describe the symptom or paste error]"
 allowed-tools: Read, Grep, Glob, Bash(git log *), Bash(git diff *), Bash(git bisect *), Bash(npm *), Bash(node *), AskUserQuestion, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

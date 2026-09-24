@@ -7,6 +7,11 @@ description: >-
   substantially update a README.md. Triggers on: "create a readme", "update the
   readme", "improve the readme", "README erstellen", "README aktualisieren".
   Do NOT trigger for minor one-line edits like bumping a version number.
+layer: 0
+invokes: []
+triggers:
+  en: ["create a readme", "update the readme", "improve the readme"]
+  de: ["README erstellen", "README aktualisieren"]
 argument-hint: "[--preview] [--update]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

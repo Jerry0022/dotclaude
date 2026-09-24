@@ -1,0 +1,185 @@
+{
+  "$comment": "Data file for scripts/gen-trigger-evals.js. Do not hand-edit the generated case directories under evals/triggers/ — edit this file and rerun the generator. `languages` is the default set expanded per translated case; `languageIndependent` cases generate exactly one dir (id only, no language suffix).",
+  "languages": ["en", "zh", "hi", "es", "fr", "ar", "bn", "pt", "ru", "ja", "de"],
+  "cases": [
+    {
+      "id": "fix-blurry-square",
+      "skill": "fix",
+      "expectedSkillNames": ["fix", "auto-fix"],
+      "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
+      "translations": {
+        "de": "schau mal, irgendwas ist da mächtig kaputt, irgendwie gibt es einen doppeltes weißes blurry quadrat um das brett herum",
+        "en": "hey, something's badly broken here, there's like a duplicate white blurry square around the board",
+        "es": "oye, algo está muy roto aquí, hay como un cuadrado blanco borroso duplicado alrededor del tablero",
+        "fr": "regarde, un truc est vraiment cassé, il y a comme un carré blanc flou en double autour du plateau",
+        "zh": "你看,这里坏得挺严重的,棋盘周围好像出现了一个重复的白色模糊方块",
+        "hi": "देखो, यहाँ कुछ बुरी तरह टूटा हुआ है, बोर्ड के चारों ओर एक डुप्लिकेट सफ़ेद धुंधला वर्ग जैसा दिख रहा है",
+        "ar": "شوف، في شي مكسور بشكل كبير هنا، فيه كأنه مربع أبيض ضبابي مكرر حول اللوحة",
+        "bn": "দেখো তো, এখানে কিছু একটা মারাত্মকভাবে ভেঙে গেছে, বোর্ডের চারপাশে একটা ডুপ্লিকেট সাদা ঝাপসা বর্গক্ষেত্র দেখা যাচ্ছে",
+        "pt": "olha, algo está muito quebrado aqui, tem tipo um quadrado branco borrado duplicado ao redor do tabuleiro",
+        "ru": "смотри, тут что-то серьёзно сломалось, вокруг доски появился как будто дублирующийся белый размытый квадрат",
+        "ja": "ねえ、なんかここ結構壊れてる、ボードの周りに白いぼやけた四角が二重に出てる感じ"
+      }
+    },
+    {
+      "id": "fix-items-not-collected",
+      "skill": "fix",
+      "expectedSkillNames": ["fix", "auto-fix"],
+      "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
+      "translations": {
+        "de": "Viel besser! Allerdings wenn ich von A1 zu A2 wandere, dann fährt auch das schiff, aber items werden nicht mehr eingesammelt",
+        "en": "Much better! But when I move from A1 to A2, the ship moves too, but items aren't being collected anymore",
+        "es": "¡Mucho mejor! Pero cuando me muevo de A1 a A2, el barco también se mueve, pero los items ya no se recogen",
+        "fr": "Bien mieux ! Mais quand je me déplace de A1 à A2, le navire bouge aussi, mais les objets ne sont plus ramassés",
+        "zh": "好多了!不过当我从A1移动到A2时,船也会移动,但是道具不再被收集了",
+        "hi": "बहुत बेहतर! लेकिन जब मैं A1 से A2 पर जाता हूँ, तो जहाज़ भी चलता है, पर आइटम अब इकट्ठा नहीं हो रहे",
+        "ar": "أفضل بكثير! لكن عندما أنتقل من A1 إلى A2، تتحرك السفينة أيضًا، لكن العناصر لم تعد تُجمع",
+        "bn": "অনেক ভালো হয়েছে! তবে আমি যখন A1 থেকে A2 তে যাই, তখন জাহাজও চলে, কিন্তু আইটেমগুলো আর সংগ্রহ হচ্ছে না",
+        "pt": "Muito melhor! Mas quando eu me movo de A1 para A2, o navio também se move, mas os itens não estão mais sendo coletados",
+        "ru": "Гораздо лучше! Но когда я перехожу с A1 на A2, корабль тоже двигается, но предметы больше не собираются",
+        "ja": "だいぶ良くなった!でもA1からA2に移動すると船も動くんだけど、アイテムが回収されなくなった"
+      }
+    },
+    {
+      "id": "fix-ship-button-noop",
+      "skill": "fix",
+      "expectedSkillNames": ["fix", "auto-fix"],
+      "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
+      "translations": {
+        "de": "Also wenn ich auf Ship klicke passiert gar nix",
+        "en": "So when I click Ship, literally nothing happens",
+        "es": "Bueno, cuando hago clic en Ship no pasa absolutamente nada",
+        "fr": "Bon, quand je clique sur Ship il ne se passe absolument rien",
+        "zh": "我点了Ship按钮之后什么反应都没有",
+        "hi": "जब मैं Ship पर क्लिक करता हूँ तो कुछ भी नहीं होता",
+        "ar": "عندما أضغط على Ship لا يحدث أي شيء إطلاقًا",
+        "bn": "আমি Ship এ ক্লিক করলে একদম কিছুই হয় না",
+        "pt": "Então quando eu clico em Ship não acontece absolutamente nada",
+        "ru": "В общем, когда я нажимаю Ship, вообще ничего не происходит",
+        "ja": "Shipをクリックしても本当に何も起きないんだけど"
+      }
+    },
+    {
+      "id": "fix-vercel-error",
+      "skill": "fix",
+      "expectedSkillNames": ["fix", "auto-fix"],
+      "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
+      "translations": {
+        "de": "das sieht gut aus, aber vercel scheint einen fehler aufzuzeigen, check das nochmal",
+        "en": "this looks good, but vercel seems to be showing an error, check that again",
+        "es": "esto se ve bien, pero vercel parece estar mostrando un error, revísalo de nuevo",
+        "fr": "ça a l'air bien, mais vercel semble afficher une erreur, revérifie ça",
+        "zh": "看起来不错,但是vercel好像显示了一个错误,再检查一下",
+        "hi": "यह अच्छा लग रहा है, लेकिन vercel में कोई एरर दिख रहा है, इसे दोबारा चेक करो",
+        "ar": "هذا يبدو جيدًا، لكن يبدو أن vercel يعرض خطأ، تحقق من ذلك مرة أخرى",
+        "bn": "এটা দেখতে ভালোই লাগছে, কিন্তু vercel একটা এরর দেখাচ্ছে মনে হচ্ছে, আবার চেক করো",
+        "pt": "isso está com boa aparência, mas o vercel parece estar mostrando um erro, verifique isso de novo",
+        "ru": "выглядит неплохо, но vercel вроде показывает ошибку, проверь это ещё раз",
+        "ja": "見た目はいいけど、vercelがエラーを表示してるみたいだから、もう一回確認して"
+      }
+    },
+    {
+      "id": "fix-check-and-fix-errors",
+      "skill": "fix",
+      "expectedSkillNames": ["fix", "auto-fix"],
+      "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
+      "translations": {
+        "de": "check ob es jetzt wieder alles runder läuft oder es fehler gibt, fix diese",
+        "en": "check if everything runs smoothly again or if there are errors, fix those",
+        "es": "revisa si ahora todo funciona de nuevo sin problemas o si hay errores, corrígelos",
+        "fr": "vérifie si tout tourne à nouveau correctement ou s'il y a des erreurs, corrige-les",
+        "zh": "检查一下现在是不是一切都恢复正常了,还是有错误,把这些错误修一下",
+        "hi": "चेक करो कि अब सब कुछ फिर से ठीक चल रहा है या कोई एरर है, उन्हें फिक्स कर दो",
+        "ar": "تحقق مما إذا كان كل شيء يعمل بسلاسة مرة أخرى أو إذا كانت هناك أخطاء، وأصلحها",
+        "bn": "চেক করো এখন সবকিছু আবার ঠিকমতো চলছে কিনা নাকি কোনো এরর আছে, সেগুলো ফিক্স করো",
+        "pt": "verifique se tudo está rodando bem de novo ou se há erros, corrija-os",
+        "ru": "проверь, всё ли снова работает гладко или есть ошибки, исправь их",
+        "ja": "今すべてがまたスムーズに動いているか、エラーがあるか確認して、あれば直して"
+      }
+    },
+    {
+      "id": "fix-stacktrace",
+      "skill": "fix",
+      "expectedSkillNames": ["fix", "auto-fix"],
+      "languageIndependent": true,
+      "sourceNote": "Pasted stack trace — language-independent per spec (error patterns route to auto-fix regardless of prompt language).",
+      "prompt": "Traceback (most recent call last):\n  File \"app.py\", line 42, in process\n    result = compute(data)\n  File \"app.py\", line 17, in compute\n    return data[\"value\"] / count\nKeyError: 'value'"
+    },
+    {
+      "id": "setup-issue-dont-forget",
+      "skill": "setup-issue",
+      "expectedSkillNames": ["setup-issue", "auto-issue"],
+      "sourceNote": "\"leg dafür ein Issue an\" style prompt.",
+      "translations": {
+        "de": "Können wir dafür bitte ein Issue anlegen, damit wir es nicht vergessen?",
+        "en": "Can we please create an issue for this so we don't forget?",
+        "es": "¿Podemos crear un issue para esto para que no se nos olvide?",
+        "fr": "On peut créer une issue pour ça pour ne pas l'oublier ?",
+        "zh": "我们能为这个建一个issue吗,免得忘了",
+        "hi": "क्या हम इसके लिए एक issue बना सकते हैं ताकि हम इसे न भूलें?",
+        "ar": "هل يمكننا إنشاء issue لهذا حتى لا ننساه؟",
+        "bn": "আমরা কি এটার জন্য একটা issue তৈরি করতে পারি যাতে আমরা ভুলে না যাই?",
+        "pt": "Podemos criar uma issue para isso para não esquecermos?",
+        "ru": "Можем мы завести issue по этому поводу, чтобы не забыть?",
+        "ja": "忘れないようにこれのissueを作ってもらえる?"
+      }
+    },
+    {
+      "id": "concept-before-implement",
+      "skill": "concept",
+      "expectedSkillNames": ["concept", "auto-concept"],
+      "sourceNote": "\"mach mir dazu ein concept\" style prompt.",
+      "translations": {
+        "de": "Kannst du mir dazu mal ein concept machen, bevor wir das umsetzen?",
+        "en": "Can you put together a concept for this before we implement it?",
+        "es": "¿Puedes hacerme un concept sobre esto antes de que lo implementemos?",
+        "fr": "Tu peux me faire un concept là-dessus avant qu'on l'implémente ?",
+        "zh": "在我们实现之前,你能先给我做一个concept吗?",
+        "hi": "क्या तुम इसके लिए एक concept बना सकते हो, इससे पहले कि हम इसे लागू करें?",
+        "ar": "هل يمكنك إعداد concept لهذا قبل أن ننفذه؟",
+        "bn": "আমরা এটা বাস্তবায়ন করার আগে তুমি কি এর জন্য একটা concept বানাতে পারবে?",
+        "pt": "Você pode montar um concept sobre isso antes de implementarmos?",
+        "ru": "Можешь сделать concept по этому, прежде чем мы это реализуем?",
+        "ja": "実装する前にこれのconceptを作ってもらえる?"
+      }
+    },
+    {
+      "id": "tune-harden-edge-cases",
+      "skill": "tune-harden",
+      "expectedSkillNames": ["tune-harden", "auto-harden"],
+      "sourceNote": "\"härte das mal / stabilize this\" style prompt.",
+      "translations": {
+        "de": "Härte das mal ab, das läuft noch zu instabil in Edge Cases.",
+        "en": "Harden this up, it's still too unstable in edge cases.",
+        "es": "Endurece esto, todavía es demasiado inestable en casos límite.",
+        "fr": "Durcis ça, c'est encore trop instable dans les cas limites.",
+        "zh": "把这个加固一下,遇到边界情况还是太不稳定了",
+        "hi": "इसे थोड़ा harden करो, edge cases में यह अभी भी बहुत अस्थिर है",
+        "ar": "قوّ هذا الجزء، ما زال غير مستقر جدًا في الحالات الحدية",
+        "bn": "এটা একটু harden করো, এখনও edge case-এ খুব অস্থির চলছে",
+        "pt": "Deixa isso mais robusto, ainda está instável demais em casos extremos.",
+        "ru": "Укрепи это, всё ещё слишком нестабильно в крайних случаях.",
+        "ja": "エッジケースでまだ不安定だから、ここを堅牢にして"
+      }
+    },
+    {
+      "id": "claude-extend-skill-ship",
+      "skill": "claude-extend-skill",
+      "expectedSkillNames": ["claude-extend-skill", "auto-extend"],
+      "sourceNote": "\"ich will den ship-skill für dieses Projekt erweitern / projektspezifisch festlegen\" style prompt.",
+      "translations": {
+        "de": "Ich will den ship-skill für dieses Projekt erweitern und projektspezifisch festlegen.",
+        "en": "I want to extend the ship skill for this project and pin it project-specifically.",
+        "es": "Quiero extender la skill de ship para este proyecto y fijarla de forma específica para el proyecto.",
+        "fr": "Je veux étendre la skill ship pour ce projet et la fixer de façon spécifique au projet.",
+        "zh": "我想为这个项目扩展ship这个skill,并针对该项目做特定设置",
+        "hi": "मैं इस प्रोजेक्ट के लिए ship skill को extend करना चाहता हूँ और इसे प्रोजेक्ट-specific तरीके से सेट करना चाहता हूँ",
+        "ar": "أريد توسيع مهارة ship لهذا المشروع وتثبيتها بشكل خاص بهذا المشروع",
+        "bn": "আমি এই প্রজেক্টের জন্য ship skill-টা extend করতে চাই এবং প্রজেক্ট-নির্দিষ্টভাবে সেট করতে চাই",
+        "pt": "Quero estender a skill de ship para este projeto e fixá-la de forma específica para o projeto.",
+        "ru": "Я хочу расширить навык ship для этого проекта и зафиксировать его именно для этого проекта.",
+        "ja": "このプロジェクト用にship skillを拡張して、プロジェクト固有に設定したい"
+      }
+    }
+  ]
+}

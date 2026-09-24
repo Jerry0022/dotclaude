@@ -11,6 +11,11 @@ description: >-
   up on <site>". Do NOT trigger for testing the project's own app (use the
   browser tools directly), for scraping/reading a page, or for local-app
   tutorials.
+layer: 0
+invokes: []
+triggers:
+  en: ["guide me through", "web guide", "walk me through the site", "help me set up on <site>"]
+  de: ["führe mich durch", "zeig mir auf der Website", "ich muss das auf der Website machen", "API key anlegen"]
 argument-hint: "[what the user has to achieve on which website, and what must come back]"
 allowed-tools: Read, Glob, Bash(node *), AskUserQuestion, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__javascript_tool, mcp__plugin_devops_dotclaude-completion__*
 ---

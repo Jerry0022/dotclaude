@@ -21,7 +21,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["plugins/**/*.test.js"],
+    include: ["plugins/**/*.test.js", ".claude/skill-usage/*.test.js"],
     maxWorkers: HEAVY_SPAWN_WORKERS,
     // That cap assumes one full run per machine; parallel sessions each
     // running `npm test` broke it (4 suites at once → git-sync tests at

@@ -41,6 +41,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.issue.guard.js" }
+        ],
+        "matcher": "Bash|PowerShell|mcp__.*github.*__(issue_write|create_issue|update_issue)"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.plugin.scope.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.edit.branch.js" }
         ],
@@ -70,7 +76,7 @@
         "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.debug.js" }
         ],
-        "matcher": "Bash"
+        "matcher": "Bash|PowerShell"
       },
       {
         "hooks": [
@@ -103,12 +109,21 @@
         "matcher": "Edit|Write"
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.debug.js" }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
     "Stop": [
       {
         "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.git.sync.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.browsertest.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.guard.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.guide.handoff.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.selfcalibration.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.strict.release.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.mcp.reap.js" }

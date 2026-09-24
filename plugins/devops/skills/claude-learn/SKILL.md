@@ -14,6 +14,11 @@ description: >-
   "merk dir das fürs Projekt", "remember this for the project", "capture
   learning". Do NOT trigger for one-off conversational corrections or for
   personal feedback memory.
+layer: 0
+invokes: [setup-issue]
+triggers:
+  en: ["/claude-learn", "devops learn", "devos learn", "/devops-learn", "remember this for the project", "capture learning"]
+  de: ["lerne das", "merk dir das fürs Projekt"]
 argument-hint: "[learning text — omitted: mines the last prompts for the surprise]"
 allowed-tools: Bash(git *), AskUserQuestion, Read, Write, Edit, Glob, Grep, Skill, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

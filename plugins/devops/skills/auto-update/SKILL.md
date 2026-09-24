@@ -6,6 +6,11 @@ description: >-
   ss.plugin.update hook (pull + cache + registry), then adds changelog and
   verification report. Triggers on: "update plugin", "plugin updaten",
   "self update", "devops update", "neue version". Explicit user request only.
+layer: 0
+invokes: []
+triggers:
+  en: ["update plugin", "self update", "devops update"]
+  de: ["plugin updaten", "neue version"]
 allowed-tools: Bash(git *), Bash(node *), Read, Glob
 ---
 
