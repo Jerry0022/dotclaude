@@ -99,8 +99,9 @@ Silently read and internalize plugin knowledge.
 file paths directly in its prompt — just read them silently.
 
 What the hook handles deterministically:
-- Discovers `{PLUGIN_ROOT}/deep-knowledge/*.md` and
-  `{PLUGIN_ROOT}/skills/*/deep-knowledge/*.md`, sorted alphabetically
+- Discovers `{PLUGIN_ROOT}/deep-knowledge/*.md` and every
+  `{PLUGIN_ROOT}/skills/**/deep-knowledge/*.md` — including the folded
+  modes' `skills/<skill>/modes/<mode>/deep-knowledge/` — sorted alphabetically
 - Computes `batchSize = ceil(total * 0.25)` and
   `startIndex = (cycle * batchSize) % total` (wraps around)
 - Reads + advances + persists the cycle index in

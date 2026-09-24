@@ -47,7 +47,7 @@ describe("refuses to run unless the repo is quiescent", () => {
   test("does nothing while a merge is unfinished", async () => {
     const { root, wt, other } = await makeWorld();
 
-    // Park the worktree in a conflicted merge, the way a /ship rebase would.
+    // Park the worktree in a conflicted merge, the way a /do-ship rebase would.
     await git(wt, ["checkout", "--quiet", "-b", "side"]);
     write(wt, "base.txt", "side\n");
     await commitAll(wt, "side edits base.txt");

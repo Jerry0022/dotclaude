@@ -1,8 +1,8 @@
 /**
  * Mode state the card reads off the project — not off the caller.
  *
- * Two devops modes turn a session into a waiting room: an open /concept page
- * and an armed /claude-batch collection. Both already leave a state file in the
+ * Two devops modes turn a session into a waiting room: an open /auto-concept page
+ * and an armed /do-batch collection. Both already leave a state file in the
  * project's `.claude/` (the bridge's `concept-active.json`, the collect hook's
  * `batch-mode.json`), and both prefix the session title with the same emoji the
  * card carries here (🧭 / 📥), so a user who wanders back into the session sees
@@ -28,7 +28,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  *  stripped by them on the way out. `concept` means "the page waits for
  *  you": it is re-stated by every card that carries a `waiting` `concept`
  *  field, and replaced by the hourglass whenever Claude works (a user
- *  prompt, a picked-up submission). `shipping` is set by /ship Pre-Step C,
+ *  prompt, a picked-up submission). `shipping` is set by /do-ship Pre-Step C,
  *  `work` by prompt.flow.title-work on the first prompt of a session and on
  *  the first prompt after every card — a new prompt turns any outcome
  *  prefix (and the compass) back into the hourglass. The
@@ -228,7 +228,7 @@ export function titleInstruction(prefix) {
 /**
  * The URL the open concept page lives at, or '' when it cannot be resolved.
  * An explicit `concept.url` wins; otherwise `{cwd}/.claude/concept-active.json`
- * (`port` + `html_path`, written by /concept Step 3) yields the bridge URL the
+ * (`port` + `html_path`, written by /auto-concept Step 3) yields the bridge URL the
  * page was opened with.
  *
  * @param {string|undefined} cwd project root the card is rendered for

@@ -8,7 +8,7 @@
  *   frontmatter shapes the devops skills use:
  *     - plain scalars:        `name: ship`
  *     - folded block scalars: `description: >-` followed by indented lines
- *     - flow lists:           `invokes: [tune-polish, ship]` / `invokes: []`
+ *     - flow lists:           `invokes: [auto-polish, do-ship]` / `invokes: []`
  *     - nested flow-list maps: `triggers:` / `  en: ["a", "b"]` / `triggers: {}`
  *     - booleans:              `user-invocable: false`
  *
@@ -61,7 +61,7 @@ function splitFlowItems(body) {
   return items;
 }
 
-/** Parse a flow-list scalar value, e.g. "[tune-polish, ship]" or "[]". */
+/** Parse a flow-list scalar value, e.g. "[auto-polish, do-ship]" or "[]". */
 function parseFlowList(value) {
   const trimmed = value.trim();
   const m = trimmed.match(/^\[(.*)\]$/s);

@@ -107,15 +107,15 @@ describe("prompt.flow.title-work", () => {
     expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
   });
 
-  // Observed 2026-09-21: "/ship" after a change left "⏳" on the title for
+  // Observed 2026-09-21: "/do-ship" after a change left "⏳" on the title for
   // the whole pipeline — the hook only knew the hourglass and the ship
   // skill's own rename is a courtesy the model sometimes skips. A process
   // outranks the fallback: a ship prompt is marked 🚀 Shipping by the hook
   // itself, and a title already on 🚀 Shipping is never downgraded.
   test("a ship prompt gets the Shipping prefix, anything else the bare hourglass", () => {
     expect(SHIPPING_PREFIX).toBe(SESSION_PREFIX.shipping);
-    expect(prefixFor("/ship")).toBe(SHIPPING_PREFIX);
-    expect(prefixFor("/devops:ship --keep")).toBe(SHIPPING_PREFIX);
+    expect(prefixFor("/do-ship")).toBe(SHIPPING_PREFIX);
+    expect(prefixFor("/devops:do-ship --keep")).toBe(SHIPPING_PREFIX);
     expect(prefixFor("ab damit")).toBe(SHIPPING_PREFIX);
     expect(prefixFor("fix the login bug")).toBe(WORK_PREFIX);
     expect(prefixFor("")).toBe(WORK_PREFIX);

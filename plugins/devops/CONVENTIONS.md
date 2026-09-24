@@ -15,7 +15,7 @@ PATCH  → Bug fixes, doc updates, internal improvements
 Current version is tracked in `.claude-plugin/plugin.json` → `"version"`.
 
 **Release channels (ring model):** every ship to main creates the annotated
-tag `alpha/vX.Y.Z` automatically. Promotion (`/promote`) re-tags the
+tag `alpha/vX.Y.Z` automatically. Promotion (`ship beta` / `ship stable`, or `/do-ship promote`) re-tags the
 SAME commit as `beta/vX.Y.Z`, then `stable/vX.Y.Z` + bare `vX.Y.Z` (stable
 alias, triggers the Release workflow). Version files never carry a channel;
 published tags are never moved or deleted. Consumers pin a channel per
@@ -111,9 +111,9 @@ session makes. Any file a hook, script or MCP tool keeps in the project's
 `hooks/lib/project-root.js` (the git work-tree root — a linked worktree's own
 root), never `path.join(cwd, '.claude', …)`. A cwd-rooted writer drops
 `<subdir>/.claude/<file>` wherever the session stands: untracked, not covered
-by the root-anchored ignore block, fails /ship preflight's clean-tree check.
+by the root-anchored ignore block, fails /do-ship preflight's clean-tree check.
 `scripts/check-claude-artifacts.js` fails on a cwd-rooted runtime path; the
-only exception is `/concept` state, which is keyed to the session cwd by design.
+only exception is `/auto-concept` state, which is keyed to the session cwd by design.
 
 ### User-Relay Marker
 
@@ -171,17 +171,58 @@ deep-knowledge/
 to find the right file. This avoids unnecessary reads and saves context tokens.
 
 **vs. skill-level deep-knowledge:**
-- `skills/ship/deep-knowledge/versioning.md` → only used by `/ship`
+- `skills/do-ship/deep-knowledge/versioning.md` → only used by `/do-ship`
 - `deep-knowledge/test-strategy.md` → used by hooks AND skills
 
 Hooks reference plugin-level deep-knowledge in their stdout instructions to Claude.
+`prompt.knowledge.dispatch` injects a doc's body when a `TOPIC_MAP` keyword
+matches, or — for the docs in `hooks/lib/knowledge-pointers.js` (the retired
+skills' bodies) — a one-line pointer to the file; both once per session.
 
 ## Skill Conventions
 
 ### Naming
 
-Skill directory names use kebab-case: `ship`, `new-issue`, `repo-health`.
+Skill directory names use kebab-case with a role prefix
+(docs/superpowers/specs/2026-09-24-skill-restructure-design.md → Units):
+
+- `do-*` — doors the user opens (`do-ship`, `do-run`, `do-learn`, `do-batch`); in the slash menu.
+- `setup-*` — tools only the user starts (`disable-model-invocation: true`).
+- `auto-*` — workers, passes and hands Claude invokes itself
+  (`user-invocable: false`): hidden from the slash menu, reached through the
+  model, the trigger router (`prompt.skill.enforce`) or a hook.
+
 Skills are invoked as: `/devops:{skill-name}` (plugin-prefixed).
+
+A skill whose body grew into several flows keeps ONE `SKILL.md` (frontmatter,
+mode table) and puts each flow in `modes/<mode>.md` (supporting files under
+`modes/<mode>/`); mode files carry no frontmatter — they are not skills.
+
+**Renaming a skill** is a MAJOR change: add the old → new pair to
+`hooks/lib/skill-names.js` (`RENAMED`, or `FOLDED` + `FOLDED_TRIGGERS` for a
+skill that becomes a mode). That one table drives the router aliases, the
+"already invoked" detection, the extension fallback and the usage scan.
+
+**Retiring a skill** (it stops being a skill — its body is knowledge, its
+triggers belong to a hook or an MCP tool) is a MAJOR change too, done in PR 3
+of the skill restructure for `setup-readme`, `auto-graph`, `auto-usage` and
+`claude-strict`:
+
+- move the body verbatim into `deep-knowledge/<topic>.md` (no frontmatter;
+  first line after the heading ends with "Former `<name>` skill …");
+- add the name to `RETIRED` (+ the frontmatter snapshot to `RETIRED_TRIGGERS`)
+  in `hooks/lib/skill-names.js` — never to `RENAMED`: an old slash name must
+  map to the new mechanism, not to a Skill;
+- give every trigger phrase a home: `hooks/lib/knowledge-pointers.js`
+  (one-line dispatch pointer, cheap enough for single words) and/or a
+  dedicated hook (`prompt.strict.enforce` owns the strict switch,
+  `pre.readme.standards` the first README write);
+- `git rm` the skill dir; `scripts/skill-graph.test.js` then checks the doc,
+  the pointer match of every snapshot phrase and that the router never
+  mandates the old name.
+
+A consumer extension under the old name keeps applying only where the doc
+and its pointer say so (`legacyOverrides`); document which in the doc.
 
 ### Directory Structure
 
@@ -224,7 +265,7 @@ skill-call graph:
 
 ```yaml
 layer: 3                     # integer, 0 = top; assigned by the call graph rule below
-invokes: [tune-polish]       # devops skills this skill actually calls; [] when none
+invokes: [auto-polish]       # devops skills this skill actually calls; [] when none
 triggers:                    # every trigger phrase from the description, verbatim, per language
   de: ["ship", "und dann ship"]
   en: ["ship it", "push and merge"]
@@ -296,11 +337,17 @@ Silently check for optional overrides (do not surface "not found" in output):
 3. Merge: project > global > plugin defaults
 ```
 
+A renamed skill adds one line after item 2: where the new directory does not
+exist, read the pre-rename one (`{project}/.claude/skills/<old-name>/`) —
+consumer extensions written before the rename keep working. JS that reads an
+extension file itself uses `resolveExtensionFile()` from
+`hooks/lib/skill-names.js` (new name first, old name second).
+
 **This pattern is mandatory for every new skill.** When creating skills
 (via `/skill-creator` or manually), always include the Step 0 extension
 load sequence. Skills that skip this step are non-compliant.
 
-**Example: A user extends `/ship` for their own project:**
+**Example: A user extends `/do-ship` for their own project:**
 
 ```
 my-project/
@@ -311,10 +358,10 @@ my-project/
             └── reference.md    ← "Deploy via SSH to <internal-host>"
 ```
 
-The plugin's `/ship` reads these before executing and integrates the rules.
+The plugin's `/do-ship` reads these before executing and integrates the rules.
 
 **Eat-your-own-dogfood:** This plugin's own repo (`devops/`) uses
-the same mechanism. Project-specific ship rules live in `.claude/skills/ship/`
+the same mechanism. Project-specific ship rules live in `.claude/skills/do-ship/`
 within this repo — no separate `/ship-dotclaude` skill needed.
 
 ## Script Conventions
@@ -400,7 +447,7 @@ preflight verify (catches the un-generated tables) → session nudge (catches
 The markers above cover **machine facts only**. The **content** layer — prose,
 flows, folder structure, curated descriptions — is kept current by people and
 agents, not generators: implementation agents update affected docs as part of
-their change, and `/ship` Step 2.6 (Docs-Sync) reconciles living docs
+their change, and `/do-ship` Step 2.6 (Docs-Sync) reconciles living docs
 against the shipped diff before the version bump. Proportional (trivial changes
 need none), non-blocking, and it never rewrites dated specs/concepts. Rules and
 the trigger matrix: `deep-knowledge/documentation-maintenance.md`.

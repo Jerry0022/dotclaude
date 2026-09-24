@@ -38,7 +38,7 @@ function runHook(userMessage, home, cwd, field = "prompt") {
   // Always hand the hook a project dir of its own: it falls back to
   // process.cwd() for the delegation mode and the AFK lockout sentinel, and a
   // vitest run from the repo root would otherwise leak the repo's own state in
-  // (an armed AUTONOMOUS-LOCKOUT.flag during /run-backlog silenced the budget
+  // (an armed AUTONOMOUS-LOCKOUT.flag during /do-run backlog silenced the budget
   // line and failed the reset tests, 2026-09-22).
   cwd ??= emptyProject();
   const r = spawnSync(process.execPath, [HOOK], {
@@ -71,7 +71,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
 
   test("nudge is short and names every tier", () => {
     expect(Buffer.byteLength(nudge, "utf8")).toBeLessThan(600);
-    for (const needle of ["Inline", "devops:research", "devops:qa", "devops:redteam", "devops:po", "2–3 parallel", "run-agents", "Hard stop"]) {
+    for (const needle of ["Inline", "devops:research", "devops:qa", "devops:redteam", "devops:po", "2–3 parallel", "auto-agents", "Hard stop"]) {
       expect(nudge).toContain(needle);
     }
   });
@@ -151,7 +151,7 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
    * Incident 2026-09-20: the session had hit the weekly limit; "Erneut
    * versuchen" (16 chars) the next morning got only `[ui-locale: en]` — no
    * nudge (short prompt), no suffix (free is silent), no SessionStart — and
-   * the model wrote "Wochenbudget ~100 %" into its own /run-agents args. The
+   * the model wrote "Wochenbudget ~100 %" into its own /auto-agents args. The
    * full line must go out on that prompt, naming the reset.
    */
   const homeWith = (usage) => {
@@ -208,5 +208,33 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
     const cwd = emptyProject();
     fs.writeFileSync(path.join(cwd, "AUTONOMOUS-LOCKOUT.flag"), JSON.stringify({ owner: "vitest", since: new Date().toISOString() }));
     expect(runHook("Erneut versuchen", h, cwd)).not.toContain("[budget]");
+  });
+});
+
+describe("prompt.knowledge.dispatch — pointers for the retired skills (PR 3)", () => {
+  function runSession(prompt, sessionId, home) {
+    const cwd = emptyProject();
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, HOME: home, USERPROFILE: home, TMPDIR: home, TEMP: home, TMP: home };
+    const r = spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ session_id: sessionId, prompt, cwd }), cwd, env, encoding: "utf8",
+    });
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+  }
+
+  test("a README request gets a one-line pointer (not the body), once per session", () => {
+    const h = proHome();
+    const sid = `vitest-pointer-${process.pid}-${Date.now()}`;
+    const first = runSession("please update the readme with the new install steps", sid, h);
+    const line = first.split("\n").find((l) => l.startsWith("[deep-knowledge pointer]"));
+    expect(line).toContain("deep-knowledge/readme-standards.md");
+    expect(first).not.toContain("## Step 2 — Select sections");
+    expect(runSession("and improve the readme intro as well please", sid, h)).not.toContain("[deep-knowledge pointer]");
+  });
+
+  test("usage, graph and strict words point at their docs; no Skill mandate anywhere", () => {
+    const h = proHome();
+    const ctx = runSession("refresh usage und dann strikt: nur den knowledge graph erklären", `vitest-pointer-b-${process.pid}-${Date.now()}`, h);
+    for (const doc of ["usage.md", "strict.md", "graphify.md"]) expect(ctx).toContain(`deep-knowledge/${doc}`);
+    expect(ctx).not.toMatch(/Skill\(/);
   });
 });

@@ -148,7 +148,7 @@ const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 /**
  * Did a ship_release response report a merge? MCP results arrive as
  * `{ content: [{ type: 'text', text: '<json>' }] }`; tolerate a bare object or
- * string too. `merged` is the field the ship skill itself gates on — never
+ * string too. `merged` is the field the do-ship skill itself gates on — never
  * `success`, which the skipped shapes (file-only, no-remote) also set.
  */
 function shipReleaseMerged(toolResponse) {
@@ -383,6 +383,7 @@ process.stdin.on('end', () => {
     '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
     '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
     'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
+    '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
     '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
     '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
     'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
@@ -456,7 +457,7 @@ process.stdin.on('end', () => {
   if (editCount >= 5) {
     lines.push(
       '',
-      `SHIP: ${editCount} code edits this session. Recommend /ship when task is done.`,
+      `SHIP: ${editCount} code edits this session. Recommend /do-ship when task is done.`,
     );
     // Desktop-takeover question — only inject if profile lists packaged_electron_final_test as must-ask
     const lang = getLocale(hook.session_id);

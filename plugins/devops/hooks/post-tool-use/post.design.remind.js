@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.1.0
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
@@ -9,8 +9,9 @@
  *   reminds Claude of the standing UI rules (deep-knowledge/ui-defaults.md)
  *   so tooltip, dropdown, spacing and hotkey conventions are in context
  *   while the element is written — not only measured afterwards by
- *   `/tune-polish`. Honours a project/user override
- *   (`.claude/skills/tune-polish/reference.md` § "## UI rules") that can
+ *   `/auto-polish`. Honours a project/user override
+ *   (`.claude/skills/auto-polish/reference.md` § "## UI rules", falling back
+ *   to the pre-PR-2 `.claude/skills/tune-polish/` dir) that can
  *   disable rules and widen the UI-file detection. Never blocks: every
  *   failure path exits 0 silently.
  */
@@ -21,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
+const { resolveExtensionFile } = require('../lib/skill-names');
 
 const DEFAULT_UI_EXTENSIONS = [
   '.tsx', '.jsx', '.vue', '.svelte', '.html', '.css', '.scss', '.sass',
@@ -151,8 +153,9 @@ function parseUiRules(bullets) {
 }
 
 function loadOverride(cwd) {
-  const projectPath = path.join(cwd, '.claude', 'skills', 'tune-polish', 'reference.md');
-  const userPath = path.join(os.homedir(), '.claude', 'skills', 'tune-polish', 'reference.md');
+  // New extension dir first, the pre-PR-2 `tune-polish` dir as fallback.
+  const projectPath = resolveExtensionFile(cwd, 'auto-polish', 'reference.md');
+  const userPath = resolveExtensionFile(os.homedir(), 'auto-polish', 'reference.md');
 
   const project = parseUiRules(readUiRulesSection(projectPath));
   const user = parseUiRules(readUiRulesSection(userPath));

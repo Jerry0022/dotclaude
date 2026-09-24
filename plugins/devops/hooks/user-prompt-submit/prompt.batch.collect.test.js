@@ -112,7 +112,7 @@ describe("mode on — what is never collected", () => {
 
   test("an expanded slash command passes through — the escape hatch holds", () => {
     const r = runHook({
-      prompt: "<command-name>/claude-batch</command-name>\n<command-args>off</command-args>",
+      prompt: "<command-name>/do-batch</command-name>\n<command-args>off</command-args>",
     });
     expect(r.code).toBe(0);
     expect(readNotes(cwd)).toEqual([]);
@@ -324,7 +324,7 @@ describe("message builders", () => {
     const ack = buildAck(3, ">>", false);
     expect(ack).toContain("Notiz #3 gespeichert");
     expect(ack).toContain('">> <text>"');
-    expect(ack).toContain("/claude-batch off");
+    expect(ack).toContain("/do-batch off");
     expect(ack).not.toContain("Frage");
   });
 
@@ -362,6 +362,21 @@ describe("message builders", () => {
     expect(ctx).toMatch(/still überspringen/);
   });
 
+  test("the merge context hands the plan to auto-concept or do-run, never implements", () => {
+    // The marker path never loads the skill, so the Step 4.6 hand-off rule has
+    // to ride along: do-batch plans, the receiving skill runs.
+    const ctx = buildMergeContext([{ at: "2026-08-16T10:00:00.000Z", text: "x" }], "", "/tmp/p/.claude/batch.md");
+    expect(ctx).toContain("Skill devops:auto-concept mit --from=do-batch");
+    expect(ctx).toContain("Skill devops:do-run mit --from=do-batch");
+    expect(ctx).toContain("GENAU EINEN Skill");
+    expect(ctx).toContain("OHNE eigene Freigabefrage");
+    expect(ctx).toContain("du setzt selbst nichts um");
+    expect(ctx).toContain("Im Zweifel auto-concept");
+    expect(ctx).toContain("archiveNotes(cwd)");
+    // The old inline path ("direkt in die Umsetzung") is gone.
+    expect(ctx).not.toMatch(/direkt in die Umsetzung/);
+  });
+
   test("a truncated index says so instead of looking complete", () => {
     const notes = Array.from({ length: 400 }, (_, i) => ({
       at: "2026-08-16T10:00:00.000Z",
@@ -390,11 +405,11 @@ describe("mode off — the activating prompt gets a guard, not a turn of work", 
   test("an activation carrying notes injects the guard", () => {
     const r = runHook({
       prompt:
-        "<command-name>/claude-batch</command-name>" +
+        "<command-name>/do-batch</command-name>" +
         "<command-args>on der Header ist rot und die Filter-API fehlt</command-args>",
     });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("[claude-batch]");
+    expect(r.stdout).toContain("[do-batch]");
     expect(r.stdout).toContain("NOTIZ, nicht Auftrag");
     // Nothing is stored: the mode is not on yet, and a note written here for a
     // prompt that turns out to be a question would be corruption.
@@ -403,7 +418,7 @@ describe("mode off — the activating prompt gets a guard, not a turn of work", 
 
   test("a bare activation stays silent", () => {
     const r = runHook({
-      prompt: "<command-name>/claude-batch</command-name><command-args>on</command-args>",
+      prompt: "<command-name>/do-batch</command-name><command-args>on</command-args>",
     });
     expect(r.code).toBe(0);
     expect(r.stdout).toBe("");
@@ -425,11 +440,11 @@ describe("mode off — the activating prompt gets a guard, not a turn of work", 
 
 describe("mode on — a re-activation is absorbed, never a turn", () => {
   const expanded = (args) =>
-    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+    `<command-name>/do-batch</command-name><command-args>${args}</command-args>`;
 
   beforeEach(() => activate(cwd, { marker: ">>" }));
 
-  test.each(["", "on", "an", "start"])("`/claude-batch %s` is blocked with the mode summary", (args) => {
+  test.each(["", "on", "an", "start"])("`/do-batch %s` is blocked with the mode summary", (args) => {
     // The user forgot the mode is on. The answer they need is the summary —
     // paying a turn for "already active" is the cost the mode exists to avoid.
     const r = runHook({ prompt: expanded(args) });
@@ -437,8 +452,8 @@ describe("mode on — a re-activation is absorbed, never a turn", () => {
     expect(r.stderr).toContain("läuft bereits");
     expect(r.stderr).toContain("kein Fehler");
     expect(r.stderr).toContain("Sammelmodus AKTIV");
-    expect(r.stderr).toContain("/claude-batch off");
-    expect(r.stderr).toContain("/claude-batch go");
+    expect(r.stderr).toContain("/do-batch off");
+    expect(r.stderr).toContain("/do-batch go");
     expect(readNotes(cwd)).toEqual([]);
     expect(isModeActive(cwd)).toBe(true);
   });
@@ -485,7 +500,7 @@ describe("the collected-prompt panel carries the mode summary", () => {
     expect(r.stderr).toContain("Notiz #1 gespeichert");
     expect(r.stderr).toContain("Sammelmodus AKTIV · 1 Notiz(en) · Marker \">go\"");
     expect(r.stderr).toContain("\">go <text>\"");
-    expect(r.stderr).toContain("/claude-batch off");
+    expect(r.stderr).toContain("/do-batch off");
     expect(r.stderr).toContain("3 Stunden oder 50 Notizen");
   });
 });
@@ -531,7 +546,7 @@ describe("message builders — 0.4.0", () => {
     const ack = buildAck(2, ">start", false, { expiryHours: 8, maxNotes: 100 });
     expect(ack.split("\n")[0]).toContain("kein Fehler");
     expect(ack).toContain("\">start <text>\"");
-    expect(ack).toContain("/claude-batch off");
+    expect(ack).toContain("/do-batch off");
     expect(ack).toContain("8 Stunden oder 100 Notizen");
   });
 
@@ -566,9 +581,9 @@ describe("message builders — 0.4.0", () => {
 
 describe("help — the long form, free of charge while collecting", () => {
   const expanded = (args) =>
-    `<command-name>/claude-batch</command-name><command-args>${args}</command-args>`;
+    `<command-name>/do-batch</command-name><command-args>${args}</command-args>`;
 
-  test("`/claude-batch help` while active prints both step lists and stores nothing", () => {
+  test("`/do-batch help` while active prints both step lists and stores nothing", () => {
     activate(cwd, { marker: ">start" });
     const r = runHook({ prompt: expanded("help") });
     expect(r.code).toBe(2);
@@ -580,7 +595,7 @@ describe("help — the long form, free of charge while collecting", () => {
     expect(isModeActive(cwd)).toBe(true);
   });
 
-  test("`/claude-batch help` while off reaches the skill", () => {
+  test("`/do-batch help` while off reaches the skill", () => {
     const r = runHook({ prompt: expanded("help") });
     expect(r.code).toBe(0);
     expect(r.stderr).toBe("");

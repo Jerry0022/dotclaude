@@ -2,11 +2,11 @@
  * @script web-guide-overlay
  * @version 1.1.0
  * @plugin devops
- * @description In-page overlay for /web-guide. Injected verbatim via the
+ * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
  *   draggable FAB + panel in a closed Shadow DOM host, collects one event
  *   per step (next/help/abort/timeout), exposes window.claudeGuide per
- *   plugins/devops/skills/web-guide/deep-knowledge/protocol.md. Idempotent
+ *   plugins/devops/skills/auto-guide/deep-knowledge/protocol.md. Idempotent
  *   (same version -> "already-injected"; newer -> tear down + replace). No
  *   imports/eval/network — last expression is the IIFE call, so
  *   Runtime.evaluate returns "injected"/"already-injected".

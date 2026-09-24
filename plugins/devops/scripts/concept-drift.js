@@ -3,7 +3,7 @@
  * @script concept-drift
  * @version 0.1.0
  * @plugin devops
- * @description The reality check behind `/concept`'s implement gate: has the
+ * @description The reality check behind `/auto-concept`'s implement gate: has the
  *   default branch moved under this concept while the user was iterating on it?
  *
  *   A concept session lives for hours or days. `main` keeps moving — other
@@ -15,7 +15,7 @@
  *   This script does NOT decide whether that matters. It produces the FACTS —
  *   which commits landed, which paths they touched, which of them intersect the
  *   paths the concept references — and Claude applies the force classes from
- *   `skills/concept/deep-knowledge/reality-check.md` to them. Splitting it that
+ *   `skills/auto-concept/deep-knowledge/reality-check.md` to them. Splitting it that
  *   way is deliberate: the half that must be deterministic (git plumbing, and
  *   above all the fail-safe behaviour) is code, and the half that needs judgment
  *   stays with the model.

@@ -134,14 +134,14 @@
 
   <h2>Skills</h2>
   <a href="#skills">Skills Overview (20)</a>
-  <a href="#skill-ship">/ship</a>
-  <a href="#skill-flow">/fix</a>
-  <a href="#skill-new-issue">/setup-issue</a>
+  <a href="#skill-ship">/do-ship</a>
+  <a href="#skill-flow">/auto-fix</a>
+  <a href="#skill-new-issue">/auto-issue</a>
   <a href="#skill-explain">/devops-explain</a>
   <a href="#skill-project-setup">/setup-project</a>
-  <a href="#skill-readme">/setup-readme</a>
-  <a href="#skill-refresh-usage">/auto-usage</a>
-  <a href="#skill-extend-skill">/claude-extend-skill</a>
+  <a href="#skill-readme">README standards (knowledge)</a>
+  <a href="#skill-refresh-usage">Usage data (knowledge)</a>
+  <a href="#skill-extend-skill">/auto-extend</a>
 
   <h2>MCP Servers</h2>
   <a href="#mcp">MCP Servers (2)</a>
@@ -168,7 +168,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->24<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->53<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->15<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -179,17 +179,17 @@
 
 <div class="card-grid">
   <div class="card">
-    <h4><!--devops:count:hooks-->52<!--/devops:count:hooks--> Hooks</h4>
+    <h4><!--devops:count:hooks-->53<!--/devops:count:hooks--> Hooks</h4>
     <p style="color:var(--text2);font-size:.85rem">Lifecycle guards across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop</p>
     <span class="badge b-hook">SessionStart &times;<!--devops:count:hooks:ss-->16<!--/devops:count:hooks:ss--></span>
     <span class="badge b-hook">Prompt &times;<!--devops:count:hooks:prompt-->12<!--/devops:count:hooks:prompt--></span>
-    <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->10<!--/devops:count:hooks:pre--></span>
+    <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->11<!--/devops:count:hooks:pre--></span>
     <span class="badge b-hook">Post &times;<!--devops:count:hooks:post-->7<!--/devops:count:hooks:post--></span>
     <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
-    <h4><!--devops:count:skills-->24<!--/devops:count:skills--> Skills</h4>
-    <p style="color:var(--text2);font-size:.85rem">Slash commands: ship, release, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, tune-audit, auto-graph</p>
+    <h4><!--devops:count:skills-->15<!--/devops:count:skills--> Skills</h4>
+    <p style="color:var(--text2);font-size:.85rem">Slash menu: do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit), do-learn, do-batch, setup-project, setup-cleanup · hidden workers: auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue · no longer skills (deep-knowledge + hooks): readme-standards, graphify, usage, strict</p>
   </div>
   <div class="card">
     <h4><!--devops:count:agents-->12<!--/devops:count:agents--> Agents</h4>
@@ -212,13 +212,13 @@
 │   ├── plugin.json            <span style="color:var(--text2)"># Plugin manifest (name, version, mcpServers, hooks)</span>
 │   └── marketplace.json       <span style="color:var(--text2)"># Marketplace registration</span>
 ├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
-├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->38<!--/devops:count:dk--> cross-cutting reference docs</span>
+├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->42<!--/devops:count:dk--> cross-cutting reference docs</span>
 ├── hooks/
 │   ├── hooks.json             <span style="color:var(--purple)"># Hook registry (event &rarr; command mapping)</span>
 │   ├── lib/                   <span style="color:var(--text2)"># plugin-guard, run-once, session-id</span>
 │   ├── session-start/         <span style="color:var(--purple)"># <!--devops:count:hooks:ss-->16<!--/devops:count:hooks:ss--> hooks (ss.*)</span>
 │   ├── user-prompt-submit/    <span style="color:var(--purple)"># <!--devops:count:hooks:prompt-->12<!--/devops:count:hooks:prompt--> hooks (prompt.*)</span>
-│   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->10<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
+│   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->11<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
 │   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->7<!--/devops:count:hooks:post--> hooks (post.*)</span>
 │   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
 ├── mcp-server/
@@ -234,11 +234,11 @@
 │   ├── render-card.js         <span style="color:var(--warn)"># Completion card template engine</span>
 │   ├── build-id.js            <span style="color:var(--text2)"># Deterministic content hash</span>
 │   └── lib/usage-meter.js     <span style="color:var(--text2)"># Usage bar renderer</span>
-├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->24<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
-│   ├── ship/  release/  commit/  fix/  setup-issue/  setup-project/  setup-readme/
-│   ├── auto-usage/  claude-extend-skill/  setup-cleanup/  auto-update/
-│   ├── concept/  run-agents/  run-autonomous/  run-burn/  run-backlog/  claude-learn/
-│   └── tune-harden/  tune-polish/  tune-rethink/  tune-audit/  auto-graph/
+├── skills/                    <span style="color:var(--accent)"># <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md + deep-knowledge/)</span>
+│   ├── do-ship/ (modes/promote.md)  do-run/ (modes/backlog, autonomous, burn, rethink, audit)
+│   ├── do-learn/  do-batch/  setup-project/  setup-cleanup/
+│   ├── auto-fix/  auto-concept/  auto-guide/  auto-extend/  auto-update/  auto-issue/
+│   └── auto-harden/  auto-polish/  auto-agents/
 ├── templates/                 <span style="color:var(--warn)"># Output format templates</span>
 │   ├── completion-card.md     changelog-entry.md
 │   ├── buildlog-entry.md      github-release.md
@@ -273,14 +273,14 @@
 </details>
 
 <details>
-  <summary>Extension Example: /ship for an Angular Project</summary>
+  <summary>Extension Example: /do-ship for an Angular Project</summary>
   <div class="detail-body">
-<pre><code># {project}/.claude/skills/ship/SKILL.md
+<pre><code># {project}/.claude/skills/do-ship/SKILL.md
 ## Project-Specific Quality Gates
 - Run `ng build --prod` before PR
 - Run `ng test --watch=false`
 
-# {project}/.claude/skills/ship/reference.md
+# {project}/.claude/skills/do-ship/reference.md
 ## Version files
 - package.json -> "version" field
 - projects/myapp/package.json -> "version" field
@@ -376,12 +376,12 @@
 <details>
   <summary><span class="badge b-hook">POST</span> post.flow.debug.js &mdash; Failure Detector</summary>
   <div class="detail-body">
-    <p>Counts consecutive shell failures per session and agent. A failed call arrives as <code>PostToolUseFailure</code> (exit 1 of grep/rg/test/diff probes excused); a success on <code>PostToolUse</code> resets the streak. After 2+ consecutive failures it mandates the <code>/fix</code> skill for root-cause analysis, unless fix already ran this turn.</p>
+    <p>Counts consecutive shell failures per session and agent. A failed call arrives as <code>PostToolUseFailure</code> (exit 1 of grep/rg/test/diff probes excused); a success on <code>PostToolUse</code> resets the streak. After 2+ consecutive failures it mandates the <code>/auto-fix</code> skill for root-cause analysis, unless fix already ran this turn.</p>
     <table>
       <tr><th>Trigger</th><td>PostToolUse (reset) + PostToolUseFailure (count)</td></tr>
       <tr><th>Matcher</th><td><code>Bash|PowerShell</code></td></tr>
       <tr><th>Threshold</th><td>2+ consecutive failures</td></tr>
-      <tr><th>Output</th><td><code>additionalContext</code>: mandatory Skill('fix'); subagents hand the diagnosis back</td></tr>
+      <tr><th>Output</th><td><code>additionalContext</code>: mandatory Skill('auto-fix'); subagents hand the diagnosis back</td></tr>
     </table>
   </div>
 </details>
@@ -405,11 +405,11 @@
 <details>
   <summary><span class="badge b-hook">PROMPT</span> prompt.ship.detect.js &mdash; Ship Intent Router</summary>
   <div class="detail-body">
-    <p>Detects shipping keywords ("ship", "ab damit", "fertig", "merge it") and affirmations after a completion card ("ja", "yes", "go"). Routes to the <code>/ship</code> skill via stdout instruction. Enforces that shipping always goes through the skill, never manually.</p>
+    <p>Detects shipping keywords ("ship", "ab damit", "fertig", "merge it") and affirmations after a completion card ("ja", "yes", "go"). Routes to the <code>/do-ship</code> skill via stdout instruction. Enforces that shipping always goes through the skill, never manually.</p>
     <table>
       <tr><th>Direct keywords</th><td>ship, ab damit, fertig, merge it, das kann rein, release</td></tr>
       <tr><th>Affirmations</th><td>ja, yes, mach, go, klar (after completion card)</td></tr>
-      <tr><th>Output</th><td><code>Skill('ship')</code> instruction</td></tr>
+      <tr><th>Output</th><td><code>Skill('do-ship')</code> instruction</td></tr>
     </table>
   </div>
 </details>
@@ -448,7 +448,7 @@
   │
   ├─ prompt.git.sync.js ─────── Periodic rebase (every 15m)
   ├─ prompt.issue.detect.js ──── Detect #NNN references
-  ├─ prompt.ship.detect.js ───── Route "ship" → Skill('ship')
+  ├─ prompt.ship.detect.js ───── Route "ship" → Skill('do-ship')
   └─ prompt.flow.appstart.js ── Guard: complete before running
   │
   ▼
@@ -460,7 +460,7 @@
   │  ── tool executes ──
   │
   ├─ <span class="ok">POST</span> post.flow.completion.js  Track code edits
-  └─ <span class="ok">POST</span> post.flow.debug.js ───── Shell failures → /fix
+  └─ <span class="ok">POST</span> post.flow.debug.js ───── Shell failures → /auto-fix
          (only Bash)
   │
   ▼
@@ -479,21 +479,19 @@
 
 <table>
   <tr><th>Skill</th><th>Purpose</th><th>Trigger Examples</th><th>Context</th></tr>
-  <tr><td><code>/ship</code></td><td>Full shipping pipeline</td><td>"ship it", "fertig", "ab damit"</td><td>Normal</td></tr>
-  <tr><td><code>/fix</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
-  <tr><td><code>/setup-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
+  <tr><td><code>/do-ship</code></td><td>Full shipping pipeline</td><td>"ship it", "fertig", "ab damit"</td><td>Normal</td></tr>
+  <tr><td><code>/auto-fix</code></td><td>Root-cause analysis</td><td>"debug", "doesn't work"</td><td>Normal</td></tr>
+  <tr><td><code>/auto-issue</code></td><td>GitHub issue creation</td><td>"new issue", "mach ein Issue"</td><td>Normal</td></tr>
   <tr><td><code>/devops-explain</code></td><td>Code explanation</td><td>"explain", "how does X work"</td><td>Normal</td></tr>
   <tr><td><code>/setup-project</code></td><td>Repo hygiene audit</td><td>"set up project", "audit gitignore"</td><td>Normal</td></tr>
-  <tr><td><code>/setup-readme</code></td><td>README generation</td><td>"create a readme"</td><td>Normal</td></tr>
-  <tr><td><code>/auto-usage</code></td><td>Token usage scraping</td><td>"refresh usage", silently pre-card</td><td>Normal</td></tr>
-  <tr><td><code>/claude-extend-skill</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
+  <tr><td><code>/auto-extend</code></td><td>Skill extension scaffolding</td><td>"extend skill", "customize skill"</td><td>Normal</td></tr>
 </table>
 </section>
 
 <!-- Individual skills -->
 
 <section id="skill-ship">
-<h3>/ship &mdash; Full Shipping Pipeline</h3>
+<h3>/do-ship &mdash; Full Shipping Pipeline</h3>
 <p><span class="badge b-skill">Skill</span> <span class="badge b-mcp">5 MCP Tools</span> <span class="tag">v0.2.0</span></p>
 
 <details>
@@ -543,7 +541,7 @@
 </section>
 
 <section id="skill-flow">
-<h3>/fix &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
+<h3>/auto-fix &mdash; Root-Cause Analysis &amp; Diagnostics</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">alias: /debug</span></p>
 
 <details>
@@ -565,7 +563,7 @@
 </section>
 
 <section id="skill-new-issue">
-<h3>/setup-issue &mdash; GitHub Issue &amp; Milestone Management</h3>
+<h3>/auto-issue &mdash; GitHub Issue &amp; Milestone Management</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>4-Step Flow</summary>
@@ -607,7 +605,7 @@
       <li><strong>Analyze Project</strong> &mdash; Detect tech stack, read .gitignore, check LICENSE/README</li>
       <li><strong>.gitignore</strong> &mdash; Fetch from gitignore.io, merge with Claude tooling rules</li>
       <li><strong>LICENSE</strong> &mdash; Generate if missing (MIT/Apache/GPL/ISC)</li>
-      <li><strong>README</strong> &mdash; Inform user to run <code>/setup-readme</code></li>
+      <li><strong>README</strong> &mdash; Inform the user; README work follows <code>deep-knowledge/readme-standards.md</code></li>
       <li><strong>Additional Files</strong> &mdash; .editorconfig, .gitattributes, AI tooling config</li>
     </ol>
     <p><strong>Audit severity:</strong> CRITICAL (secrets) &rarr; auto-fix. WARNING (missing rules) &rarr; auto-fix. INFO (redundancy) &rarr; report only.</p>
@@ -616,8 +614,9 @@
 </section>
 
 <section id="skill-readme">
-<h3>/setup-readme &mdash; README Generation</h3>
-<p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span> <span class="tag">--preview / --update</span></p>
+<h3>README standards &mdash; <code>deep-knowledge/readme-standards.md</code></h3>
+<p><span class="badge b-hook">Hook</span> <span class="tag">pre.readme.standards</span> <span class="tag">prompt.knowledge.dispatch</span></p>
+<p>No longer a skill (skill restructure PR 3). The first substantial Write/Edit of a <code>README.*</code> in a session, or a prompt such as "create a readme" / "README erstellen", gets a one-line pointer to the doc; preview and update modes are described there.</p>
 <details>
   <summary>Section Selection &amp; Rendering</summary>
   <div class="detail-body">
@@ -628,8 +627,9 @@
 </section>
 
 <section id="skill-refresh-usage">
-<h3>/auto-usage &mdash; Token Usage Tracking</h3>
-<p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
+<h3>Usage data &mdash; <code>get_usage</code> + <code>deep-knowledge/usage.md</code></h3>
+<p><span class="badge b-hook">MCP</span> <span class="tag">get_usage</span> <span class="tag">prompt.knowledge.dispatch</span></p>
+<p>No longer a skill (skill restructure PR 3). The card and skills call the MCP tool <code>get_usage</code> (no pre-card step); "refresh usage" / "wie viel hab ich verbraucht" point at the doc, which covers the manual scraper run and its one-time login.</p>
 <details>
   <summary>4-Step Fallback Chain</summary>
   <div class="detail-body">
@@ -652,7 +652,7 @@
 </section>
 
 <section id="skill-extend-skill">
-<h3>/claude-extend-skill &mdash; Extension Scaffolding</h3>
+<h3>/auto-extend &mdash; Extension Scaffolding</h3>
 <p><span class="badge b-skill">Skill</span> <span class="tag">v0.1.0</span></p>
 <details>
   <summary>Interactive Scaffolding Flow</summary>
@@ -943,8 +943,8 @@
 <table>
   <tr><th>Template</th><th>Used By</th><th>Purpose</th></tr>
   <tr><td><code>completion-card.md</code></td><td>render-card.js</td><td>Master card template (8 variants, 3-block layout)</td></tr>
-  <tr><td><code>buildlog-entry.md</code></td><td>/ship</td><td>Build log entry format</td></tr>
-  <tr><td><code>changelog-entry.md</code></td><td>/ship (version bump)</td><td>CHANGELOG.md entry format</td></tr>
+  <tr><td><code>buildlog-entry.md</code></td><td>/do-ship</td><td>Build log entry format</td></tr>
+  <tr><td><code>changelog-entry.md</code></td><td>/do-ship (version bump)</td><td>CHANGELOG.md entry format</td></tr>
   <tr><td><code>github-release.md</code></td><td>ship_release MCP</td><td>GitHub release notes format</td></tr>
 </table>
 </section>
@@ -960,7 +960,7 @@
 <span class="hl">1. SESSION START</span>
    │
    ├─ <span class="ok">ss.tokens.scan</span> ─── "Project is 2.3 MB, 14 large files"
-   ├─ <span class="ok">ss.git.check</span> ──── "3 unpushed commits → run /ship"
+   ├─ <span class="ok">ss.git.check</span> ──── "3 unpushed commits → run /do-ship"
    └─ <span class="ok">ss.flow.selfcal</span> ─ Register 30-min cron + immediate self-audit
    │
 <span class="hl">2. USER WORKS (coding, debugging, researching)</span>
@@ -968,9 +968,9 @@
    ├─ Every prompt: <span class="wr">prompt.git.sync</span> (rebase), <span class="wr">prompt.issue.detect</span> (#NNN)
    ├─ Every tool:   <span class="wr">pre.tokens.guard</span> (budget check)
    ├─ After tools:  <span class="ok">post.flow.completion</span> (track edits)
-   ├─ Bash fails:   <span class="er">post.flow.debug</span> → mandates /fix after 2+ failures
+   ├─ Bash fails:   <span class="er">post.flow.debug</span> → mandates /auto-fix after 2+ failures
    │
-   ├─ User says "debug this" → <span class="hl">/fix</span> skill (root-cause analysis)
+   ├─ User says "debug this" → <span class="hl">/auto-fix</span> skill (root-cause analysis)
    ├─ User says "explain X"  → <span class="hl">/devops-explain</span> skill
    ├─ User says "research Y" → <span class="hl">research</span> agent (isolated context)
    │
@@ -981,7 +981,7 @@
    │
 <span class="hl">4. USER SAYS "ship" / "ja" / "fertig"</span>
    │
-   ├─ <span class="wr">prompt.ship.detect</span> → routes to <span class="hl">/ship</span> skill
+   ├─ <span class="wr">prompt.ship.detect</span> → routes to <span class="hl">/do-ship</span> skill
    │
    ├─ <span class="hl">ship_preflight</span> ─── Clean tree? Versions consistent? All pushed?
    ├─ <span class="hl">ship_build</span> ─────── Build + lint + tests + build-ID
@@ -1005,26 +1005,26 @@
 
 <h3>Hook &rarr; Skill Routing</h3>
 <div class="interaction-matrix">
-  <span class="from">prompt.ship.detect</span> <span class="to">&rarr; Skill('ship') &mdash; on "ship", "fertig", "ab damit", or affirmation after card</span>
-  <span class="from">post.flow.debug</span> <span class="to">&rarr; mandates /fix &mdash; after 2+ consecutive shell failures (PostToolUseFailure)</span>
+  <span class="from">prompt.ship.detect</span> <span class="to">&rarr; Skill('do-ship') &mdash; on "ship", "fertig", "ab damit", or affirmation after card</span>
+  <span class="from">post.flow.debug</span> <span class="to">&rarr; mandates /auto-fix &mdash; after 2+ consecutive shell failures (PostToolUseFailure)</span>
   <span class="from">prompt.flow.appstart</span> <span class="to">&rarr; enforces completion card &mdash; before allowing app start</span>
   <span class="from">stop.flow.guard</span> <span class="to">&rarr; carry-over instruction &mdash; render card as first output next turn</span>
 </div>
 
 <h3>Skill &rarr; MCP Tool Dependencies</h3>
 <div class="interaction-matrix">
-  <span class="from">/ship</span> <span class="to">&rarr; ship_preflight, ship_build, ship_version_bump, ship_release, ship_cleanup</span>
-  <span class="from">/ship</span> <span class="to">&rarr; render_completion_card (variant: shipped)</span>
-  <span class="from">/auto-usage</span> <span class="to">&rarr; get_usage (CDP scraping)</span>
+  <span class="from">/do-ship</span> <span class="to">&rarr; ship_preflight, ship_build, ship_version_bump, ship_release, ship_cleanup</span>
+  <span class="from">/do-ship</span> <span class="to">&rarr; render_completion_card (variant: shipped)</span>
+  <span class="from">auto-agents, do-run burn</span> <span class="to">&rarr; get_usage (plan, usage, budget class)</span>
   <span class="from">All skills (post-task)</span> <span class="to">&rarr; render_completion_card (various variants)</span>
 </div>
 
 <h3>Skill &rarr; Skill Transitions</h3>
 <div class="interaction-matrix">
-  <span class="from">/fix</span> <span class="to">&rarr; suggests /ship &mdash; after fix is applied and changes are ready</span>
-  <span class="from">/setup-project</span> <span class="to">&rarr; informs user to run /setup-readme &mdash; for README generation</span>
-  <span class="from">/claude-extend-skill</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
-  <span class="from">/ship</span> <span class="to">&rarr; optional /codex:rescue &mdash; pre-ship code review (if codex-plugin-cc installed)</span>
+  <span class="from">/auto-fix</span> <span class="to">&rarr; suggests /do-ship &mdash; after fix is applied and changes are ready</span>
+  <span class="from">/setup-project</span> <span class="to">&rarr; reports a missing README &mdash; README work follows deep-knowledge/readme-standards.md</span>
+  <span class="from">/auto-extend</span> <span class="to">&rarr; reads all skills &mdash; to list available extension targets</span>
+  <span class="from">/do-ship</span> <span class="to">&rarr; optional /codex:rescue &mdash; pre-ship code review (if codex-plugin-cc installed)</span>
 </div>
 
 <h3>Hook &rarr; Hook Chains</h3>
@@ -1040,20 +1040,20 @@
   <div class="detail-body">
     <table>
       <tr><th>Document</th><th>Topic</th><th>Used By</th></tr>
-      <tr><td><code>agent-proactivity.md</code></td><td>Always-on delegation tiers (injected at SessionStart, nudged per prompt; kill-switch <code>.claude/delegation.json</code> auto|ask|off)</td><td>Every session, /run-agents</td></tr>
+      <tr><td><code>agent-proactivity.md</code></td><td>Always-on delegation tiers (injected at SessionStart, nudged per prompt; kill-switch <code>.claude/delegation.json</code> auto|ask|off)</td><td>Every session, /auto-agents</td></tr>
       <tr><td><code>agent-collaboration.md</code></td><td>Multi-agent wave orchestration</td><td>All agents, /feature</td></tr>
-      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/claude-extend-skill, all skills</td></tr>
-      <tr><td><code>codex-integration.md</code></td><td>Optional Codex plugin</td><td>/ship</td></tr>
+      <tr><td><code>skill-extension-guide.md</code></td><td>3-layer extension model</td><td>/auto-extend, all skills</td></tr>
+      <tr><td><code>codex-integration.md</code></td><td>Optional Codex plugin</td><td>/do-ship</td></tr>
       <tr><td><code>agent-conventions.md</code></td><td>Agent naming, branching</td><td>All agents</td></tr>
       <tr><td><code>claude-directory-structure.md</code></td><td>.claude/ canonical layout</td><td>/setup-project</td></tr>
       <tr><td><code>code-defaults.md</code></td><td>Coding style conventions</td><td>All code-writing skills</td></tr>
       <tr><td><code>decision-format.md</code></td><td>Decision presentation</td><td>All skills with AskUserQuestion</td></tr>
       <tr><td><code>fact-verification.md</code></td><td>Research integrity</td><td>research agent</td></tr>
-      <tr><td><code>git-hygiene.md</code></td><td>Git best practices</td><td>/ship, role agents</td></tr>
-      <tr><td><code>commit-conventions.md</code></td><td>Commit format &amp; granularity</td><td>/ship, role agents</td></tr>
-      <tr><td><code>issue-trust.md</code></td><td>Who may fill an autonomous queue</td><td>/run-backlog, /run-burn</td></tr>
+      <tr><td><code>git-hygiene.md</code></td><td>Git best practices</td><td>/do-ship, role agents</td></tr>
+      <tr><td><code>commit-conventions.md</code></td><td>Commit format &amp; granularity</td><td>/do-ship, role agents</td></tr>
+      <tr><td><code>issue-trust.md</code></td><td>Who may fill an autonomous queue</td><td>/do-run backlog, /do-run burn</td></tr>
       <tr><td><code>plugin-behavior.md</code></td><td>Plugin integration</td><td>Self-calibration</td></tr>
-      <tr><td><code>test-strategy.md</code></td><td>When/how to test</td><td>/ship (quality gates)</td></tr>
+      <tr><td><code>test-strategy.md</code></td><td>When/how to test</td><td>/do-ship (quality gates)</td></tr>
       <tr><td><code>tool-selection.md</code></td><td>Tool choice guidance</td><td>All agents</td></tr>
       <tr><td><code>visual-verification.md</code></td><td>Screenshot/simulation</td><td>QA agent, /frontend</td></tr>
     </table>

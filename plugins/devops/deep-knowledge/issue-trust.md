@@ -1,7 +1,7 @@
 # Issue Trust — Who May Fill an Autonomous Queue
 
 Cross-cutting rule for every skill that turns GitHub issues into **autonomously
-executed work** (`/run-backlog`, `/run-burn`). Anyone on the internet can open an
+executed work** (`/do-run backlog`, `/do-run burn`). Anyone on the internet can open an
 issue on a public repo. An unsupervised runner that takes its queue from
 `gh issue list` therefore lets a stranger dictate what gets built, tested, and
 merged into `main` while the maintainer is asleep.
@@ -74,7 +74,8 @@ Reacting to it is outward-facing communication with a third party.
 If a specific outside contributor should count, add them as a repo collaborator
 with write access — the filter then picks them up automatically on the next run.
 Per-project deviations belong in a skill extension
-(`{project}/.claude/skills/run-backlog/reference.md`), never in the plugin.
+(`{project}/.claude/skills/do-run/reference.md`; the pre-PR-2
+`run-backlog/` dir still works), never in the plugin.
 
 ## Why this is a security boundary, not a preference
 

@@ -99,7 +99,7 @@ Notes on cells:
     Review: approved / changes requested / keine
     Age: "erstellt vor 3 Tagen, letzte Änderung vor 2 Stunden"
     Shippability label (from SKILL.md Step 5b table), e.g.
-      "bereit — via /ship landen" / "in Session <title> shippen — uncommittete Änderungen"
+      "bereit — via /do-ship landen" / "in Session <title> shippen — uncommittete Änderungen"
     Action controls:
       [x] Shippen  (checkbox; PRE-CHECKED only for shippable=yes with clean/behind
                     merge state; DISABLED for session-dirty / draft / fremd — the
@@ -201,7 +201,7 @@ Notes on cells:
   Submit button label: "Aufraeumen starten"
 
   On Submit: show Dry-Run-Confirm before executing anything:
-    "Shippt P PRs (jeder via /ship), löscht N lokal, M remote, entfernt K Worktrees.
+    "Shippt P PRs (jeder via /do-ship), löscht N lokal, M remote, entfernt K Worktrees.
     Merges und Löschungen sind NICHT rückgängig zu machen.
     Fortfahren?" [Ja] [Abbrechen]
 ```
@@ -215,8 +215,8 @@ Every action control and global option MUST have an explanatory tooltip
 |---------|-------------|
 | Löschen checkbox (Löschbar Git-Session) | "Branch lokal loeschen. Arbeit ist bereits in main (merged/squash-merged)." |
 | Löschen checkbox (Untersuchen Git-Session) | "Branch lokal loeschen. ACHTUNG: Aenderungen sind moeglicherweise NICHT in main!" |
-| Shippen checkbox (enabled) | "PR via /ship landen: Rebase auf main, Build, Tests, Versions-Bump, CI-Gate, Squash-Merge. Branch und ggf. temporärer Worktree werden danach entfernt." |
-| Shippen checkbox (disabled: session-dirty) | "Der Worktree dieser Session hat uncommittete Änderungen — dort /ship aufrufen, nicht von hier." |
+| Shippen checkbox (enabled) | "PR via /do-ship landen: Rebase auf main, Build, Tests, Versions-Bump, CI-Gate, Squash-Merge. Branch und ggf. temporärer Worktree werden danach entfernt." |
+| Shippen checkbox (disabled: session-dirty) | "Der Worktree dieser Session hat uncommittete Änderungen — dort /do-ship aufrufen, nicht von hier." |
 | Shippen checkbox (disabled: draft) | "Draft-PR — erst als bereit markieren (gh pr ready), dann shippen." |
 | Shippen checkbox (disabled: fremd) | "PR eines anderen Autors — wird von hier nie gemergt." |
 | Löschen checkbox (disabled: PR wird geshippt) | "Wird beim Shippen entfernt — Shippen abwählen, um den Branch stattdessen zu löschen." |
@@ -248,4 +248,4 @@ Keep text concise — one sentence max, no jargon.
   the submit payload for logging purposes only.
 - Open-PR cards have exactly **one checkbox** (Shippen). There is no merge button,
   no "close PR" control and no per-PR strategy choice — every selected PR goes
-  through `/ship` unchanged. Bulk select never touches PR checkboxes.
+  through `/do-ship` unchanged. Bulk select never touches PR checkboxes.

@@ -1,6 +1,6 @@
 # Commit Conventions
 
-How commits are written in projects using this plugin. Referenced by `/ship`,
+How commits are written in projects using this plugin. Referenced by `/do-ship`,
 the role agents, and any inline commit. Staging, branch, and worktree rules live
 in [git-hygiene.md](git-hygiene.md) — not repeated here.
 

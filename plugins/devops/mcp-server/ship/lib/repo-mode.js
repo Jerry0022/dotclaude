@@ -34,7 +34,7 @@ function gitOut(args, cwd) {
 
 /**
  * The error callers surface when a probe timed out. Names the cause and the
- * remedy, so the ship skill retries instead of believing a skipped result.
+ * remedy, so the do-ship skill retries instead of believing a skipped result.
  */
 export function probeTimeoutError(cwd) {
   return (

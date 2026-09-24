@@ -1,0 +1,3 @@
+# German trigger phrases for auto-extend.
+Skill erweitern
+Skill anpassen

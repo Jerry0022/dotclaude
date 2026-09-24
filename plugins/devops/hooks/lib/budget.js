@@ -42,7 +42,7 @@
  *   blocks on Edge, the per-prompt re-read picks the fresh file up. Rate-
  *   limited by a tmp marker (REFRESH_COOLDOWN_MS) so parallel sessions and
  *   every prompt of a session don't stack scrapers; skipped where the
- *   scraper profile does not exist (a host that never ran /auto-usage, the
+ *   scraper profile does not exist (a host that never ran a manual usage refresh, the
  *   eval sandbox) or DEVOPS_COMPLETION_NO_USAGE=1 (tests, CI).
  *
  *   The class is read at SessionStart and on every prompt (cheap JSON). The
@@ -54,7 +54,7 @@
  *   the weekly limit was retried after the reset with a 16-char prompt; no
  *   suffix (short prompt), no SessionStart (the process never restarted),
  *   and the model carried "weekly limit hit" from the transcript into its
- *   own /run-agents args. So a window that reset since the previous reading
+ *   own /auto-agents args. So a window that reset since the previous reading
  *   is a POSITIVE signal (`announce`): the full line goes out on every prompt
  *   while the snapshot is past its reset or the window reset recently
  *   (RECENT_RESET_*), regardless of prompt length, and names the reset so it
@@ -305,7 +305,7 @@ function maybeRefreshUsage(b, { home = os.homedir(), nowMs = Date.now(), env = p
   if (b.refreshFailed && b.failedAgeMs != null && b.failedAgeMs < FAILURE_BACKOFF_MS) return false;
   if (env.DEVOPS_COMPLETION_NO_USAGE === '1') return false;
   // Only where the scraper has run before — a host without the dedicated
-  // Edge profile (never ran /auto-usage; the eval sandbox's fresh HOME) must
+  // Edge profile (never ran a manual usage refresh; the eval sandbox's fresh HOME) must
   // not start launching browsers from a hook.
   try { if (!fs.statSync(path.join(home, '.claude', 'edge-usage-profile')).isDirectory()) return false; } catch { return false; }
   try {
@@ -343,7 +343,7 @@ function budgetLine(b) {
       (b.weeklyResetInMinutes != null && b.binding === 'week' ? ` (reset ${Math.round(b.weeklyResetInMinutes / 60)} h)` : '');
   const note = resetNote(b);
   const parts = [`[budget] ${planTxt}${note ? ' · ' + note : ''} · ${usage}${b.stale && b.fivePct != null ? ' · stale' : ''} → ${b.cls}`];
-  if (b.refreshFailed) parts.push(`(refresh failed: ${b.refreshFailed} — run /auto-usage)`);
+  if (b.refreshFailed) parts.push(`(refresh failed: ${b.refreshFailed} — say "refresh usage" to log in once)`);
   else if (b.refreshing) parts.push('(snapshot refreshing — the per-prompt budget line has the live class)');
   if (b.override) parts.push('(env override)');
   else if (b.tier === 'unknown') parts.push('(no plan info — asks once before parallel)');

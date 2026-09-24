@@ -11,7 +11,7 @@
  *   the number of tokens the model was handed on that call — i.e. the
  *   context size at that moment. The newest assistant line in the file is
  *   therefore the best available estimate of what the NEXT call will cost,
- *   no API needed (measured 2026-09-21: a /ship at session end ran 16 calls
+ *   no API needed (measured 2026-09-21: a /do-ship at session end ran 16 calls
  *   × Ø 434 k tokens — 99 % of it cache reads — and made up ~24 % of the
  *   whole session's tokens).
  *

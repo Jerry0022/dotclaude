@@ -1,7 +1,7 @@
 # Merge Safety — Parallel Development
 
 Cross-cutting reference for preventing silent overwrites when multiple developers
-(humans or agents) work in parallel. Referenced by `git-sync`, `/ship`,
+(humans or agents) work in parallel. Referenced by `git-sync`, `/do-ship`,
 and agent collaboration flows.
 
 ## Core Principle
@@ -17,7 +17,7 @@ resolve **every** file edit against the worktree root — never the bare main-re
 root (`…/<repo>/plugins/…`). They are separate working directories on separate
 branches.
 
-**Why:** the main checkout may run a parallel `/ship` or `git-sync` that
+**Why:** the main checkout may run a parallel `/do-ship` or `git-sync` that
 does `git reset --hard` / `git checkout`. Uncommitted edits made to the main
 checkout's files are silently wiped by that reset — the Edit tool reports
 success, you see confusing "file modified since read" races, and the change is
@@ -105,7 +105,7 @@ unsupported or unparseable files.
 
 - background `git-sync` merging parent branches into the current working branch
 - Feature agent merging sub-agent branches at integration
-- `/ship` when base branch has diverged
+- `/do-ship` when base branch has diverged
 - Any `git merge` or `git rebase` during collaborative work
 
 ## Conflict Resolution Protocol
@@ -171,13 +171,13 @@ After all textual conflicts are resolved (or after a clean merge):
 3. **If the project has build/lint/typecheck** → run it to catch compilation errors
 4. If semantic issues found → fix them as part of the merge resolution
 5. **Purpose-level verification (ship flow only):** code-semantic checks catch
-   broken wiring, not broken *intent*. During `/ship`, the Purpose
+   broken wiring, not broken *intent*. During `/do-ship`, the Purpose
    Alignment Gate additionally verifies that the merged result honors the
    goals and cross-cutting conventions of recently merged branches — in both
    directions (e.g. "all elements get hotkeys" must cover an element the
    other branch added, and a convention introduced on the shipping branch is
    retro-applied to existing artifacts).
-   See `skills/ship/deep-knowledge/purpose-alignment.md`. The background
+   See `skills/do-ship/deep-knowledge/purpose-alignment.md`. The background
    git-sync resolves code-level conflicts only — purpose alignment runs at
    ship time.
 
@@ -206,7 +206,7 @@ Before touching the index, the sync refuses to run at all when:
   matters on its own: a conflicted `git stash pop` leaves no marker file, and a
   merge attempted on top of it would pick up that operation's conflicted files
   and commit them.
-- **A `/ship` is in flight** — checked at spawn time by the hooks and again
+- **A `/do-ship` is in flight** — checked at spawn time by the hooks and again
   immediately before the merge, so a ship started mid-fetch is still caught.
 - **The incoming change touches a path with uncommitted work** — untracked files
   and renames included. The sync stays silent and merges at a later window.
@@ -251,7 +251,7 @@ overwrite — regardless of merge strategy.
 1. `git fetch origin <base>` — get latest base
 2. `isRebasedOnto(origin/<base>)` — verify HEAD includes all base commits
 3. If not rebased → return `rebaseRequired: true` with overlap analysis
-4. The ship skill (Step 1 loop) handles rebase + AI conflict resolution + test
+4. The do-ship skill (Step 1 loop) handles rebase + AI conflict resolution + test
 
 ### Phase 2 — pre-merge re-check (the critical one)
 

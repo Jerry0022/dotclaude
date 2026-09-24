@@ -18,11 +18,11 @@ Standard coding conventions enforced across all projects using the devops plugin
 - Don't design for hypothetical future requirements.
 - Don't add backwards-compatibility hacks for removed code.
 
-## Strict Mode (`/claude-strict`)
+## Strict Mode (`strict on` / `strict: <task>`)
 
 The rules above are the always-on baseline. When a `[claude-strict contract]`
-block is in context — injected by `prompt.strict.enforce` while
-`/claude-strict` is armed for this worktree + branch, or carried at the top of
+block is in context — injected by `prompt.strict.enforce` while strict mode
+is armed for this worktree + branch or this turn, or carried at the top of
 an agent prompt — it is the **hard, reported, propagated** form of the same
 idea and takes precedence on the scope axis:
 
@@ -33,8 +33,9 @@ idea and takes precedence on the scope axis:
   tests, narrowed scope) and "make reasonable decisions independently" do not
   widen the diff; what they would have changed goes to the strict report's
   `untouched` line instead.
-- Unaffected: the completion card, `/ship` Step 2.6 docs-sync, the
-  `/tune-polish` approval rule.
+- Unaffected: the completion card, `/do-ship` Step 2.6 docs-sync, the
+  `/auto-polish` approval rule.
 
 Every spawned agent inherits the block verbatim (`pre.strict.agent-gate`
-refuses a spawn without it). Skill: `skills/claude-strict/SKILL.md`.
+refuses a spawn without it). Full rules and every switch form:
+`deep-knowledge/strict.md`.

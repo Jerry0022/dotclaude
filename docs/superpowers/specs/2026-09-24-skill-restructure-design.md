@@ -55,6 +55,24 @@ Folded: `promote` → do-ship mode; `run-backlog`, `run-autonomous`, `run-burn`,
 Consumer extensions (`{project}/.claude/skills/<name>/`) keep working: the
 extension loader falls back from the new name to the old one.
 
+Decided while implementing (PR 3) — what "no longer a skill" means for each:
+
+| Old skill | Body | Triggers / behaviour now | Old extension dir |
+|---|---|---|---|
+| `setup-readme` | `deep-knowledge/readme-standards.md` | new hook `pre.readme.standards` (first substantial Write/Edit of a `README.*` per session; a one-line Edit is exempt) + dispatch pointer on "create a readme", "README erstellen", … and `/setup-readme` | still applies: both pointers name `.claude/skills/setup-readme/reference.md` / `SKILL.md` (project, home) as an override |
+| `auto-graph` | `deep-knowledge/graphify.md` | the existing graphify hooks (`ss.graphify`, `pre.tokens.guard`, `post.graphify.*`; their texts name `graphify update .` and the doc) + dispatch pointer on "knowledge graph", "graphify", "code graph", `/auto-graph` | dropped — the skill never had an extension step |
+| `auto-usage` | `deep-knowledge/usage.md` | MCP `get_usage` (automatic; the card fetches by itself — there is no pre-card usage step) + dispatch pointer on "refresh usage", "wie viel hab ich verbraucht", "token budget", `/auto-usage`; user-facing "reconnect" texts say `say "refresh usage"` | manual path only: the pointer names it |
+| `claude-strict` | `deep-knowledge/strict.md` | `prompt.strict.enforce` switches on `strict on` / `strikt an`, `strict off` / `strikt aus`, `strict status`, `strict: <task>`, a literal-scope phrase ("genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen") and — unchanged — `/claude-strict on\|off\|<task>`; do-run Q3 "Nur das" arms via `strict-state.js inline` (arms first, prints the contract only on success, never replaces a branch- or workflow-bound mode); a bare "strict"/"strikt" only gets the dispatch pointer | still applies: the pointer names it |
+
+The plain-word strict forms exist because of the open question under
+§ Triggers: a prompt that STARTS with `/claude-strict` may be rejected by the
+harness as an unknown command before any hook runs; mid-prompt mentions always
+reach the hook. The `[claude-strict contract]` marker keeps its name — it is
+the wire format the Agent gate checks. `hooks/lib/skill-names.js` `RETIRED`
+maps the four old names to their doc and hook, never to a Skill; the router
+has no alias for them and `scripts/skill-graph.test.js` asserts every
+`RETIRED_TRIGGERS` phrase still reaches its new home.
+
 ### Call graph
 
 Calls go strictly to a lower layer, so a cycle is impossible by construction.
@@ -100,6 +118,17 @@ milestone selection (Backlog), audit scope + output (Audit), desktop /
 shutdown / auto-resume (Weg). Resume of an interrupted autonomous or burn run
 is asked before the base call, only when a resume state exists.
 
+Decided while implementing (phase B1): the `(Recommended)` marker of a
+single-select question always sits on the first, agnostic option — it marks
+what click-through picks. The user's last Q3 answer in this chat shows as the
+description suffix "zuletzt gewählt" on that option; it moves neither marker
+nor order. An empty Q4 submit means the recommended set (Harden + Polish,
+plus Rethink when marked); "keine" in the free-text field means no passes.
+Shutdown and auto-resume fold into one follow-up question ("PC an · mit
+Resume" · "PC an · ohne Resume" · "PC aus · ohne Resume"), so the
+autonomous HARD GATE holds without a second call. The contract is pinned by
+`plugins/devops/skills/do-run/do-run-questions.test.js`.
+
 ### auto-agents
 
 The single execution path for everything that implements (do-run,
@@ -137,13 +166,32 @@ own choice:
    - **multi-word phrases** from `triggers:` (minus a small denylist of
      phrases that are everyday speech, e.g. "prüf alles", "neue version",
      or generic in a consumer project: "update plugin", "plugin updaten",
-     "self update", "update the readme", "visualize this", "guide me
-     through" — `PHRASE_DENYLIST` in `hooks/lib/skill-trigger-router.js`
+     "self update", "visualize this", "guide me through" — `PHRASE_DENYLIST` in `hooks/lib/skill-trigger-router.js`
      is the full list),
-   - **slash forms** — typed `/name` of a real skill, PR-2 aliases
-     (`/do-learn`, `/auto-fix`, …; aliases of ship/batch/strict stay with
-     their dedicated hooks), and `triggers:` slash forms that are not a
-     skill name (`/devops-learn`),
+   - **slash forms** — typed `/name` of a real skill, the pre-PR-2 names
+     as aliases (`/fix` → auto-fix, `/claude-learn` → do-learn,
+     `/run-backlog` → do-run mode `backlog`, `/promote` → do-ship mode
+     `promote`; the 1:1 aliases `/ship` and `/claude-batch` stay with their
+     dedicated hooks, which accept old and new names), and `triggers:`
+     slash forms that are not a skill name (`/devops-learn`). One table,
+     `hooks/lib/skill-names.js`, drives the aliases, the "already invoked"
+     check (a session that ran `devops:ship` counts as having run
+     `do-ship`) and the extension fallback.
+     **Reach of an alias (checked 2026-09-24 with the claude-code-guide
+     agent against code.claude.com/docs):** the docs state that a
+     `UserPromptSubmit` hook receives the raw prompt text, and that
+     `user-invocable: false` means "only Claude can invoke the skill". They
+     do NOT say whether a typed `/unknown-name` at the start of a prompt, or
+     a typed `/name` of a `user-invocable: false` skill, is rejected by the
+     harness before any hook runs, and no local check was possible (the
+     standalone CLI is not authenticated in Desktop sessions). So the
+     router only promises what it can see: an old name mentioned inside a
+     prompt ("mach das mit /fix", "und dann /run-backlog") reaches the hook
+     and is routed; a prompt that STARTS with a removed slash name may never
+     reach it. Typed words ("ship", "promote to stable", "arbeite den
+     backlog ab") are plain prompts and unaffected. Texts that tell the
+     USER what to type therefore name the trigger words of a hidden skill
+     ("ask for a polish pass", "extend skill"), not `/auto-…`.
    - a **curated single-word allowlist** (festgefahren, unstuck,
      auditiere/auditieren, Qualitätsaudit, stabilisieren, härten,
      feinschliff). A bare "concept" is NOT on it — only verb-object phrases
@@ -160,8 +208,9 @@ own choice:
    (there, "der backlog runner parkt zu früh" talks about the component) or
    when a meta word (skill, hook, runner, guard, hint, trigger, router,
    extension, agent) stands within three tokens of the phrase.
-   Generic single words ("error", "debug", "audit", "polish", "stuck",
-   "strict") are left to the model, which reads the full description
+   Generic single words ("error", "debug", "audit", "polish", "stuck") are
+   left to the model (a bare "strict" only gets the strict.md pointer since
+   PR 3), which reads the full description
    including its "Do NOT trigger" negations. Code, quotes and machine
    prompts (cron, autonomous loop, AFK resume, scheduled task, task
    notification) never trigger. The router stays silent while batch mode is
@@ -172,7 +221,11 @@ own choice:
    about the plugin itself (that routes to an upstream issue).
 3. **Descriptions** stay in the model listing and are shortened only when the
    trigger evals prove no loss. Every trigger phrase of today's description is
-   kept verbatim in `triggers:`.
+   kept verbatim in `triggers:`. PR 3 shortened NONE: the trigger evals could
+   not run (`claude plugin eval` is gone from the installed CLI 2.1.175, and
+   the standalone CLI is not authenticated in Desktop sessions), so there is
+   no proof of "no loss". The listing budget still gains the four retired
+   skills' descriptions.
 4. **Evals** per trigger path in the top 10 languages (en, zh, hi, es, fr, ar,
    bn, pt, ru, ja) plus German; the ~10 real bug prompts and the four real web
    hand-offs from the scan are cases.
@@ -204,4 +257,8 @@ survives a machine loss — and is not shipped to plugin consumers.
 |---|---|
 | 1 | Frontmatter `layer` / `invokes` / `triggers` on all current skills (layers of today's graph), `hooks/lib/skill-meta.js`, graph + trigger-preservation tests, router over `triggers:`, auto-fix trigger paths, `stop.guide.handoff`, `pre.issue.guard`, trigger evals (11 languages), measuring extension. No renames. |
 | 2 | Renames + visibility flags + aliases + extension fallback; do-run router with the question design above; promote into do-ship; harden at ship; do-batch → auto-concept / do-run; auto-agents as the single execution path with the start table; target layers. |
-| 3 | setup-readme, auto-graph, auto-usage, claude-strict out of `skills/`; README hook; descriptions shortened where the evals allow. |
+| 3 | setup-readme, auto-graph, auto-usage, claude-strict out of `skills/`; README hook; descriptions shortened where the evals allow (none — see § Triggers item 3). |
+
+PR 2 and PR 3 ship together (one branch, one release): between them the
+four retired skills would sit in `skills/` with PR-1 layers the PR-2 graph
+test had to special-case.

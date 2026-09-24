@@ -4,9 +4,11 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   ALIAS_MAP,
+  HOOK_OWNED_MODES,
   SINGLE_WORD_ALLOWLIST,
   PHRASE_DENYLIST,
   detectAliasMentions,
+  detectAliasHits,
   buildWordTriggerCorpus,
   matchWordTriggers,
   stripCodeAndQuotes,
@@ -21,69 +23,122 @@ const REAL_SKILLS = loadAllSkills(path.join(process.cwd(), "plugins", "devops", 
 
 function skillSet(overrides) {
   return {
-    fix: { name: "fix", triggers: { en: ["error", "crash", "this is broken", "doesn't work"], de: ["funktioniert nicht"] } },
-    ship: { name: "ship", triggers: { en: ["ship it", "push and merge"] } },
-    promote: { name: "promote", triggers: { en: ["release", "promote", "promotion", "promote to beta"] } },
-    "claude-batch": { name: "claude-batch", triggers: { en: ["batch mode"], de: ["sammelmodus"] } },
-    "claude-strict": { name: "claude-strict", triggers: { en: ["strict"], de: ["strikt"] } },
-    "tune-polish": { name: "tune-polish", triggers: { en: ["polish", "design pass"], de: ["feinschliff"] } },
-    "tune-harden": { name: "tune-harden", triggers: { de: ["härten"] } },
-    "run-burn": { name: "run-burn", triggers: { en: ["/run-burn"] } },
-    "auto-graph": { name: "auto-graph", triggers: { en: ["knowledge graph", "graphify"] } },
-    "web-guide": { name: "web-guide", triggers: { en: ["guide me through"], de: ["führe mich durch"] } },
-    "claude-learn": { name: "claude-learn", triggers: { en: ["capture learning", "/devops-learn", "/claude-learn"], de: ["lerne das", "学习这个"] } },
+    "auto-fix": { name: "auto-fix", triggers: { en: ["error", "crash", "this is broken", "doesn't work"], de: ["funktioniert nicht"] } },
+    "do-ship": { name: "do-ship", triggers: { en: ["ship it", "push and merge", "release", "promote", "promotion", "promote to beta"] } },
+    "do-run": { name: "do-run", triggers: { en: ["/run-burn", "backlog runner"], de: ["festgefahren"] } },
+    "do-batch": { name: "do-batch", triggers: { en: ["batch mode"], de: ["sammelmodus"] } },
+    "auto-polish": { name: "auto-polish", triggers: { en: ["polish", "design pass"], de: ["feinschliff"] } },
+    "auto-harden": { name: "auto-harden", triggers: { de: ["härten"] } },
+    "auto-guide": { name: "auto-guide", triggers: { en: ["guide me through"], de: ["führe mich durch"] } },
+    "do-learn": { name: "do-learn", triggers: { en: ["capture learning", "/devops-learn", "/do-learn"], de: ["lerne das", "学习这个"] } },
     ...overrides,
   };
 }
 
 const routedSkills = (msg) => routeMessage(msg, REAL_SKILLS).map((e) => e.skill);
 
-describe("ALIAS_MAP", () => {
-  test("maps every PR-2 rename with a 1:1 current equivalent", () => {
-    expect(ALIAS_MAP["do-ship"]).toBe("ship");
-    expect(ALIAS_MAP["do-learn"]).toBe("claude-learn");
-    expect(ALIAS_MAP["do-batch"]).toBe("claude-batch");
-    expect(ALIAS_MAP["auto-concept"]).toBe("concept");
-    expect(ALIAS_MAP["auto-fix"]).toBe("fix");
-    expect(ALIAS_MAP["auto-issue"]).toBe("setup-issue");
-    expect(ALIAS_MAP["auto-polish"]).toBe("tune-polish");
-    expect(ALIAS_MAP["auto-harden"]).toBe("tune-harden");
-    expect(ALIAS_MAP["auto-guide"]).toBe("web-guide");
-    expect(ALIAS_MAP["auto-extend"]).toBe("claude-extend-skill");
-    expect(ALIAS_MAP["auto-update"]).toBe("auto-update");
+describe("ALIAS_MAP — old names → the skill that owns them after PR 2", () => {
+  test("every 1:1 rename maps to its new skill without a mode", () => {
+    const expected = {
+      ship: "do-ship", "claude-learn": "do-learn", "claude-batch": "do-batch", concept: "auto-concept",
+      fix: "auto-fix", "setup-issue": "auto-issue", "tune-polish": "auto-polish", "tune-harden": "auto-harden",
+      "web-guide": "auto-guide", "claude-extend-skill": "auto-extend", "run-agents": "auto-agents",
+    };
+    for (const [oldName, skill] of Object.entries(expected)) {
+      expect(ALIAS_MAP[oldName], oldName).toEqual({ skill, mode: null });
+    }
   });
 
-  test("names without a 1:1 current equivalent are absent (do-run, auto-agents)", () => {
-    expect(ALIAS_MAP["do-run"]).toBeUndefined();
-    expect(ALIAS_MAP["auto-agents"]).toBeUndefined();
+  test("every folded skill maps to its owner AND its mode", () => {
+    expect(ALIAS_MAP["run-backlog"]).toEqual({ skill: "do-run", mode: "backlog" });
+    expect(ALIAS_MAP["run-autonomous"]).toEqual({ skill: "do-run", mode: "autonomous" });
+    expect(ALIAS_MAP["run-burn"]).toEqual({ skill: "do-run", mode: "burn" });
+    expect(ALIAS_MAP["tune-rethink"]).toEqual({ skill: "do-run", mode: "rethink" });
+    expect(ALIAS_MAP["tune-audit"]).toEqual({ skill: "do-run", mode: "audit" });
+    expect(ALIAS_MAP.promote).toEqual({ skill: "do-ship", mode: "promote" });
+  });
+
+  test("new names are real skills, not aliases (the inline-mention path owns them)", () => {
+    for (const n of ["do-run", "do-ship", "auto-fix", "auto-agents", "auto-update"]) {
+      expect(ALIAS_MAP[n], n).toBeUndefined();
+    }
+  });
+
+  test("PR-3 retired names have no alias: they name no skill any more", () => {
+    for (const n of ["setup-readme", "auto-graph", "auto-usage", "claude-strict"]) {
+      expect(ALIAS_MAP[n], n).toBeUndefined();
+    }
   });
 });
 
-describe("detectAliasMentions", () => {
-  test("/do-learn maps to claude-learn", () => {
-    expect(detectAliasMentions("bitte /do-learn das hier")).toEqual(["claude-learn"]);
+describe("PR 3 retired skills — the router never mandates them", () => {
+  test.each([
+    "mach das mit /setup-readme bitte",
+    "/auto-graph",
+    "bitte /auto-usage laufen lassen",
+    "/claude-strict on",
+    "und dann /claude-strict mach den Rand dünner",
+    "create a readme for this repo",
+    "README erstellen und dann ship",
+    "refresh usage please",
+    "wie viel hab ich verbraucht",
+    "show me the knowledge graph for the auth module",
+    "genau so und nicht mehr",
+    "nur das ändern: die Farbe",
+  ])("%j", (msg) => {
+    const routed = routeMessage(msg, REAL_SKILLS).map((e) => e.skill);
+    for (const n of ["setup-readme", "auto-graph", "auto-usage", "claude-strict"]) expect(routed).not.toContain(n);
   });
 
-  test("aliases of skills owned by a dedicated hook emit nothing (do-ship, do-batch)", () => {
-    expect(detectAliasMentions("bitte /do-ship jetzt")).toEqual([]);
-    expect(detectAliasMentions("/do-batch an")).toEqual([]);
+  test("the real skill set has none of them, so no fixture can smuggle one back", () => {
+    for (const n of ["setup-readme", "auto-graph", "auto-usage", "claude-strict"]) expect(REAL_SKILLS[n]).toBeUndefined();
+  });
+});
+
+describe("detectAliasMentions / detectAliasHits", () => {
+  test("/claude-learn maps to do-learn, /fix to auto-fix", () => {
+    expect(detectAliasMentions("bitte /claude-learn das hier")).toEqual(["do-learn"]);
+    expect(detectAliasMentions("mach das mit /fix")).toEqual(["auto-fix"]);
   });
 
-  test("dedupes and keeps order of first appearance", () => {
-    expect(detectAliasMentions("/auto-fix dann /auto-fix nochmal, danach /auto-polish")).toEqual([
-      "fix",
-      "tune-polish",
+  test("a folded old name carries its mode", () => {
+    expect(detectAliasHits("bitte /run-backlog heute")).toEqual([{ skill: "do-run", mode: "backlog", alias: "run-backlog" }]);
+    expect(detectAliasHits("und dann /tune-audit")).toEqual([{ skill: "do-run", mode: "audit", alias: "tune-audit" }]);
+  });
+
+  test("1:1 aliases of skills owned by a dedicated hook emit nothing (/ship, /claude-batch)", () => {
+    expect(detectAliasMentions("bitte /ship jetzt")).toEqual([]);
+    expect(detectAliasMentions("/claude-batch an")).toEqual([]);
+  });
+
+  // Skill restructure PR 2: promote is do-ship's target channel now, parsed
+  // by prompt.ship.detect (lib/ship-intent.js) — the router must not add a
+  // second, conflicting mandate (args "promote" next to the hook's "stable").
+  test("/promote belongs to prompt.ship.detect — the router emits nothing for it", () => {
+    expect(detectAliasHits("jetzt /promote stable")).toEqual([]);
+    expect(HOOK_OWNED_MODES.has("do-ship")).toBe(true);
+  });
+
+  test("dedupes by skill and keeps order of first appearance", () => {
+    expect(detectAliasMentions("/fix dann /fix nochmal, danach /tune-polish")).toEqual([
+      "auto-fix",
+      "auto-polish",
+    ]);
+    expect(detectAliasHits("/run-backlog und /tune-rethink")).toEqual([
+      { skill: "do-run", mode: "backlog", alias: "run-backlog" },
     ]);
   });
 
   test("an alias inside code or quotes is not a mention", () => {
-    expect(detectAliasMentions("the hook says `/auto-fix` there")).toEqual([]);
-    expect(detectAliasMentions('the doc names "/auto-fix" as the new name')).toEqual([]);
-    expect(detectAliasMentions("```\n/auto-fix\n```")).toEqual([]);
+    expect(detectAliasMentions("the hook says `/fix` there")).toEqual([]);
+    expect(detectAliasMentions('the doc names "/fix" as the old name')).toEqual([]);
+    expect(detectAliasMentions("```\n/fix\n```")).toEqual([]);
   });
 
-  test("unknown alias is ignored", () => {
+  test("new names and unknown slashes are not aliases", () => {
     expect(detectAliasMentions("/do-run bitte")).toEqual([]);
+    expect(detectAliasMentions("/auto-fix bitte")).toEqual([]);
+    expect(detectAliasMentions("/oder so")).toEqual([]);
   });
 });
 
@@ -120,20 +175,20 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
   const phrases = (skill) => corpus.filter((e) => e.skill === skill).map((e) => e.phrase);
 
   test("generic single words are NOT routed (error, crash, polish, promote, strict …)", () => {
-    expect(phrases("fix")).not.toContain("error");
-    expect(phrases("fix")).not.toContain("crash");
-    expect(phrases("tune-polish")).not.toContain("polish");
-    expect(phrases("promote")).not.toContain("promote");
-    expect(phrases("promote")).not.toContain("promotion");
+    expect(phrases("auto-fix")).not.toContain("error");
+    expect(phrases("auto-fix")).not.toContain("crash");
+    expect(phrases("auto-polish")).not.toContain("polish");
+    expect(phrases("do-ship")).not.toContain("promote");
+    expect(phrases("do-ship")).not.toContain("promotion");
   });
 
   test("allowlisted single words are routed", () => {
-    expect(phrases("tune-polish")).toContain("feinschliff");
-    expect(phrases("tune-harden")).toContain("härten");
+    expect(phrases("auto-polish")).toContain("feinschliff");
+    expect(phrases("auto-harden")).toContain("härten");
   });
 
   test("bare 'concept' is not routed; the router-only verb-object phrases are (R1)", () => {
-    const c = buildWordTriggerCorpus({ concept: { name: "concept", triggers: { en: ["concept", "concept page"] } } });
+    const c = buildWordTriggerCorpus({ "auto-concept": { name: "auto-concept", triggers: { en: ["concept", "concept page"] } } });
     const p = c.map((e) => e.phrase);
     expect(p).not.toContain("concept");
     expect(p).toContain("concept page");
@@ -141,41 +196,42 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
   });
 
   test("multi-word phrases are routed; denylisted ones are not", () => {
-    expect(phrases("fix")).toContain("this is broken");
-    expect(phrases("promote")).toContain("promote to beta");
-    expect(phrases("promote")).not.toContain("release");
-    expect(phrases("auto-graph")).not.toContain("graphify");
+    expect(phrases("auto-fix")).toContain("this is broken");
+    expect(phrases("do-ship")).not.toContain("release");
   });
 
   test("a slash form that is not a skill directory is routed; a real skill name is not", () => {
-    expect(phrases("claude-learn")).toContain("/devops-learn");
-    expect(phrases("claude-learn")).not.toContain("/claude-learn");
-    expect(phrases("run-burn")).toEqual([]);
+    expect(phrases("do-learn")).toContain("/devops-learn");
+    expect(phrases("do-learn")).not.toContain("/do-learn");
+    expect(phrases("do-run")).toContain("/run-burn");
   });
 
-  test("dedicated-hook skills never enter the corpus", () => {
-    for (const s of ["ship", "claude-batch", "claude-strict"]) {
+  test("dedicated-hook skills never enter the corpus — do-ship not even with its promote mode", () => {
+    for (const s of ["do-batch", "do-ship"]) {
       expect(corpus.some((e) => e.skill === s)).toBe(false);
     }
   });
 
+  test("a folded mode's phrase carries the mode", () => {
+    expect(corpus.find((e) => e.phrase === "backlog runner")).toMatchObject({ skill: "do-run", mode: "backlog" });
+    expect(corpus.find((e) => e.phrase === "festgefahren")).toMatchObject({ skill: "do-run", mode: "rethink" });
+  });
+
   test("a CJK phrase of 3+ characters counts as a phrase", () => {
-    expect(phrases("claude-learn")).toContain("学习这个");
+    expect(phrases("do-learn")).toContain("学习这个");
   });
 
   test("generic consumer-project phrases are denied for the router only", () => {
     const c = buildWordTriggerCorpus(REAL_SKILLS);
     const p = (skill) => c.filter((e) => e.skill === skill).map((e) => e.phrase.toLowerCase());
     for (const x of ["update plugin", "plugin updaten", "self update"]) expect(p("auto-update")).not.toContain(x);
-    expect(p("setup-readme")).not.toContain("update the readme");
-    expect(p("concept")).not.toContain("visualize this");
-    expect(p("web-guide")).not.toContain("guide me through");
+    expect(p("auto-concept")).not.toContain("visualize this");
+    expect(p("auto-guide")).not.toContain("guide me through");
     // the frontmatter itself keeps them (trigger preservation)
     const fm = (skill) => Object.values(REAL_SKILLS[skill].triggers).flat().map((x) => x.toLowerCase());
     expect(fm("auto-update")).toEqual(expect.arrayContaining(["update plugin", "plugin updaten", "self update"]));
-    expect(fm("setup-readme")).toContain("update the readme");
-    expect(fm("concept")).toContain("visualize this");
-    expect(fm("web-guide")).toContain("guide me through");
+    expect(fm("auto-concept")).toContain("visualize this");
+    expect(fm("auto-guide")).toContain("guide me through");
   });
 
   test("denylist phrases all exist in the real frontmatter (no dead entries)", () => {
@@ -198,13 +254,13 @@ describe("matchWordTriggers", () => {
 
   test("German multi-word phrase matches", () => {
     expect(matchWordTriggers("das funktioniert nicht mehr", corpus)).toEqual([
-      { skill: "fix", phrase: "funktioniert nicht" },
+      { skill: "auto-fix", phrase: "funktioniert nicht" },
     ]);
   });
 
   test("apostrophe phrase matches (doesn't work)", () => {
     expect(matchWordTriggers("the login doesn't work since yesterday", corpus)).toEqual([
-      { skill: "fix", phrase: "doesn't work" },
+      { skill: "auto-fix", phrase: "doesn't work" },
     ]);
   });
 
@@ -214,7 +270,7 @@ describe("matchWordTriggers", () => {
 
   test("umlaut allowlisted word matches as a standalone token", () => {
     expect(matchWordTriggers("wir sollten das jetzt härten", corpus)).toEqual([
-      { skill: "tune-harden", phrase: "härten" },
+      { skill: "auto-harden", phrase: "härten" },
     ]);
   });
 
@@ -224,13 +280,13 @@ describe("matchWordTriggers", () => {
 
   test("sentence punctuation does not block a match", () => {
     expect(matchWordTriggers("Zeit für Feinschliff.", corpus)).toEqual([
-      { skill: "tune-polish", phrase: "feinschliff" },
+      { skill: "auto-polish", phrase: "feinschliff" },
     ]);
   });
 
   test("CJK phrase matches via substring", () => {
     const r = matchWordTriggers("请帮我学习这个东西", corpus);
-    expect(r.some((m) => m.skill === "claude-learn")).toBe(true);
+    expect(r.some((m) => m.skill === "do-learn")).toBe(true);
   });
 });
 
@@ -303,13 +359,13 @@ describe("looksLikeBugReport — error-pattern routing", () => {
 describe("capAndDedupe", () => {
   test("dedupes by skill, first occurrence wins", () => {
     const entries = [
-      { skill: "fix", reason: "a" },
-      { skill: "fix", reason: "b" },
-      { skill: "concept", reason: "c" },
+      { skill: "auto-fix", reason: "a" },
+      { skill: "auto-fix", reason: "b" },
+      { skill: "auto-concept", reason: "c" },
     ];
     expect(capAndDedupe(entries)).toEqual([
-      { skill: "fix", reason: "a" },
-      { skill: "concept", reason: "c" },
+      { skill: "auto-fix", reason: "a" },
+      { skill: "auto-concept", reason: "c" },
     ]);
   });
 
@@ -321,15 +377,26 @@ describe("capAndDedupe", () => {
 
 describe("routeMessage — combined router", () => {
   test("alias + phrase for the same skill are deduped; the alias is marked explicit", () => {
-    const out = routeMessage("/auto-polish und danach feinschliff", skillSet());
-    expect(out.filter((e) => e.skill === "tune-polish")).toEqual([
-      { skill: "tune-polish", reason: "alias mention", explicit: true },
+    const out = routeMessage("/tune-polish und danach feinschliff", skillSet());
+    expect(out.filter((e) => e.skill === "auto-polish")).toEqual([
+      { skill: "auto-polish", reason: "alias /tune-polish", explicit: true },
     ]);
   });
 
-  test("error pattern only fires when 'fix' exists in the skill set", () => {
-    const out = routeMessage("Traceback (most recent call last):", skillSet({ fix: undefined }));
-    expect(out.some((e) => e.skill === "fix")).toBe(false);
+  test("a folded alias and a folded phrase carry their mode", () => {
+    expect(routeMessage("bitte /run-backlog", skillSet())).toEqual([
+      { skill: "do-run", reason: "alias /run-backlog (mode backlog)", explicit: true, mode: "backlog" },
+    ]);
+    expect(routeMessage("ich bin festgefahren", skillSet())).toEqual([
+      { skill: "do-run", reason: 'trigger phrase "festgefahren" (mode rethink)', phrase: true, mode: "rethink" },
+    ]);
+    // promote phrases are prompt.ship.detect's (HOOK_OWNED_MODES)
+    expect(routeMessage("jetzt promote to beta bitte", skillSet())).toEqual([]);
+  });
+
+  test("error pattern only fires when 'auto-fix' exists in the skill set", () => {
+    const out = routeMessage("Traceback (most recent call last):", skillSet({ "auto-fix": undefined }));
+    expect(out.some((e) => e.skill === "auto-fix")).toBe(false);
   });
 
   test("empty / non-string message routes nothing", () => {
@@ -346,6 +413,10 @@ describe("routeMessage — combined router", () => {
 // mandatory skill load through the router.
 const NEGATIVE_PROMPTS = [
   "ship",
+  // promote is do-ship's target channel — prompt.ship.detect owns these
+  "promote to stable bitte",
+  "jetzt /promote",
+  "auf stable heben",
   "weiter",
   "fix auch X und dann ship",
   "merge main hierrein",
@@ -398,23 +469,25 @@ describe("routeMessage — negative table (real skill set)", () => {
 });
 
 const POSITIVE_PROMPTS = [
-  ["mach mir dazu ein concept", "concept"],
-  ["ich bin festgefahren", "tune-rethink"],
-  ["wir drehen uns im Kreis", "tune-rethink"],
-  ["kannst du das härten", "tune-harden"],
-  ["Zeit für Feinschliff", "tune-polish"],
-  ["bitte einmal auditieren", "tune-audit"],
-  ["der button funktioniert nicht", "fix"],
-  ["TypeError: Cannot read properties of undefined (reading 'map')\n    at Foo (bar.js:12:5)\ngeht nicht", "fix"],
-  ["Traceback (most recent call last):\n  File \"app.py\", line 3, in <module>\ncrash beim Start", "fix"],
-  ["/do-learn das hier", "claude-learn"],
-  ["/devops-learn remember the port", "claude-learn"],
-  ["/auto-fix bitte", "fix"],
-  ["führe mich durch das Supabase Setup", "web-guide"],
-  ["show me this as a page", "concept"],
-  ["kannst du das als concept aufbereiten", "concept"],
-  ["ein concept für die neue Navigation bitte", "concept"],
-  ["bau mir eine concept-seite dazu", "concept"],
+  ["mach mir dazu ein concept", "auto-concept"],
+  ["ich bin festgefahren", "do-run"],
+  ["wir drehen uns im Kreis", "do-run"],
+  ["kannst du das härten", "auto-harden"],
+  ["Zeit für Feinschliff", "auto-polish"],
+  ["bitte einmal auditieren", "do-run"],
+  ["arbeite den backlog ab", "do-run"],
+  ["der button funktioniert nicht", "auto-fix"],
+  ["TypeError: Cannot read properties of undefined (reading 'map')\n    at Foo (bar.js:12:5)\ngeht nicht", "auto-fix"],
+  ["Traceback (most recent call last):\n  File \"app.py\", line 3, in <module>\ncrash beim Start", "auto-fix"],
+  ["mach das mit /claude-learn", "do-learn"],
+  ["/devops-learn remember the port", "do-learn"],
+  ["bitte /fix", "auto-fix"],
+  ["und dann /run-backlog", "do-run"],
+  ["führe mich durch das Supabase Setup", "auto-guide"],
+  ["show me this as a page", "auto-concept"],
+  ["kannst du das als concept aufbereiten", "auto-concept"],
+  ["ein concept für die neue Navigation bitte", "auto-concept"],
+  ["bau mir eine concept-seite dazu", "auto-concept"],
 ];
 
 describe("routeMessage — positive table (real skill set)", () => {
@@ -427,23 +500,23 @@ describe("routeMessage — meta-word proximity (R2)", () => {
   const byskill = (msg) => Object.fromEntries(routeMessage(msg, REAL_SKILLS).map((e) => [e.skill, e]));
 
   test("a meta word next to the phrase marks the entry nearMeta", () => {
-    expect(byskill("der web guide hint nervt")["web-guide"]).toMatchObject({ phrase: true, nearMeta: true });
-    expect(byskill("the backlog runner hook parks too early")["run-backlog"]).toMatchObject({ nearMeta: true });
+    expect(byskill("der web guide hint nervt")["auto-guide"]).toMatchObject({ phrase: true, nearMeta: true });
+    expect(byskill("the backlog runner hook parks too early")["do-run"]).toMatchObject({ nearMeta: true });
   });
 
   test("no meta word nearby → a plain phrase entry", () => {
-    const e = byskill("bitte arbeite den backlog ab")["run-backlog"];
+    const e = byskill("bitte arbeite den backlog ab")["do-run"];
     expect(e).toMatchObject({ phrase: true });
     expect(e.nearMeta).toBeUndefined();
   });
 
   test("a meta word further than the window away does not count", () => {
-    const e = byskill("skill eins zwei drei vier ich bin festgefahren")["tune-rethink"];
+    const e = byskill("skill eins zwei drei vier ich bin festgefahren")["do-run"];
     expect(e.nearMeta).toBeUndefined();
   });
 
   test("alias and error-pattern entries never carry phrase/nearMeta", () => {
-    const out = routeMessage("/auto-fix the fix hook\nTypeError: x\n  at f (a.js:1:2)", REAL_SKILLS);
+    const out = routeMessage("/fix the fix hook\nTypeError: x\n  at f (a.js:1:2)", REAL_SKILLS);
     for (const e of out) expect(e.phrase).toBeUndefined();
   });
 });

@@ -4,7 +4,7 @@
  * @version 0.1.0
  * @event PreToolUse
  * @plugin devops
- * @description While `/claude-strict` is active, refuse an Agent spawn whose
+ * @description While strict mode is active, refuse an Agent spawn whose
  *   prompt does not start with the contract block, and tell the caller how to
  *   fix it. This is how strict reaches every subagent — recursively, because
  *   plugin hooks also run inside subagents, so an agent spawning an agent hits

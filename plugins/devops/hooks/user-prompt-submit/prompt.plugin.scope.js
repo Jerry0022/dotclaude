@@ -34,18 +34,21 @@ const PLUGIN_SIGNALS = [
   /\bdotclaude\b/i,
   /\bdevops[- ]?plugin\b/i,
   /\bdevops\s+(skill|hook|agent|command|mcp)\b/i,
-  // "devops learn" is how /claude-learn is invoked in practice (19 of the
+  // "devops learn" is how /do-learn is invoked in practice (19 of the
   // first 23 recorded invocations, typos included); the routing note has to
   // be in context before the capture decides where the rule goes.
   /\bdev(o|op)s[- ]?learn\b/i,
   // Plugin slash commands, enumerated by name. A `/(setup|run|auto)-\w+`
   // wildcard would also swallow a project's own /run-tests or /setup-db.
+  // Current names (skill restructure PR 2) plus every pre-PR-2 name — users
+  // keep typing the old ones.
+  /(^|\s)\/do-(ship|run|learn|batch)\b/,
   /(^|\s)\/(ship|promote|fix|concept)\b/,
   /(^|\s)\/setup-(issue|project|readme|cleanup)\b/,
   /(^|\s)\/run-(agents|autonomous|backlog|burn)\b/,
   /(^|\s)\/tune-(harden|polish|rethink)\b/,
   /(^|\s)\/claude-(learn|lint|extend-skill|batch|strict)\b/,
-  /(^|\s)\/auto-(update|usage|graph)\b/,
+  /(^|\s)\/auto-(update|usage|graph|concept|fix|guide|extend|harden|polish|agents|issue)\b/,
   /\bcompletion[- ]card\b/i,
   // Hook filenames: {event}.{domain}.{action}.js — action segments may be
   // hyphenated (prompt.flow.silent-turn.js, pre.worktree.split-guard.js).
@@ -93,10 +96,10 @@ if (require.main === module) {
       `Scope routing is therefore mandatory before any fix:\n` +
       `1. Defect/gap in the devops plugin itself (skill, hook, agent, MCP server, ` +
       `convention, installed copy under ~/.claude/plugins/**) → do NOT fix it here and ` +
-      `do NOT hand-edit the installed copy. Invoke the /setup-issue skill and file it ` +
+      `do NOT hand-edit the installed copy. Invoke Skill("devops:auto-issue") and file it ` +
       `against ${slug}: [BUG] for a defect, [FEATURE] for a gap, body = symptom + affected ` +
       `plugin part + "Captured from a session in ${project}." + a mandatory ` +
-      `"**User value:**" line (setup-issue rejects issues without one).\n` +
+      `"**User value:**" line (auto-issue rejects issues without one).\n` +
       `2. Anything about THIS project (its build, architecture, conventions, or a ` +
       `deliberate deviation from a plugin default) → persist it in this project's own ` +
       `.claude/ instructions (deep-knowledge > skill extension > CLAUDE.md).\n` +

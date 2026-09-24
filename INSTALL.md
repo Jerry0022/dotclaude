@@ -16,7 +16,7 @@ claude plugin add devops@Jerry0022
 
 > **Note:** The Desktop App marketplace UI may not list third-party plugins for installation. If the plugin tab appears empty, use the CLI command above or see [Troubleshooting](#troubleshooting) below.
 
-Start a new session for hooks to take effect. Skills (`/ship`, `/fix`, `/concept`, etc.) are available immediately.
+Start a new session for hooks to take effect. Skills are available immediately: type `/do-ship` (or just "ship it"), or say what you need — "funktioniert nicht" / "this is broken" reaches the debugging skill, "concept page" / "ein concept für …" the interactive concept page.
 
 ## Update
 
@@ -28,10 +28,10 @@ claude plugin update devops@Jerry0022
 
 Or enable auto-update via **Settings** → **Plugins** → **Marketplaces**.
 
-Alternatively, use the built-in plugin-update skill:
+Alternatively, ask Claude to run the built-in plugin-update skill (it is hidden from the slash menu — this phrase is its trigger):
 
 ```
-/auto-update
+devops update
 ```
 
 ## Project-specific extensions (optional)
@@ -44,7 +44,7 @@ your-project/.claude/skills/{skill-name}/
 └── reference.md    ← project-specific context
 ```
 
-Run `/setup-project` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Run `/claude-extend-skill` to interactively scaffold an extension for a specific skill.
+Run `/setup-project` in any project to auto-scaffold extensions based on the project's build system, CI config, and conventions. Say "extend skill" (or "customize skill") to interactively scaffold an extension for a specific skill.
 
 ## Optional: Codex Integration
 
@@ -87,7 +87,7 @@ No extra configuration needed — install both and all skills are available.
 
 Typical combined workflows:
 
-- **Ship with review:** `/codex:rescue` for pre-ship code review → `/ship`
+- **Ship with review:** `/codex:rescue` for pre-ship code review → `/do-ship`
 - **Delegate investigation:** `/codex:rescue` for parallel research and investigation
 
 ### Troubleshooting

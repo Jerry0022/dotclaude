@@ -13,7 +13,7 @@
  *   to avoid deadlocks if cleanup never ran.
  *
  *   The sentinel is authoritatively cleared by ship_cleanup on EVERY exit path
- *   of the pipeline (success, keep-mode, AND — per the ship skill — every
+ *   of the pipeline (success, keep-mode, AND — per the do-ship skill — every
  *   ship-blocked/abort return, which calls ship_cleanup({ keep: true }) before
  *   rendering the card). The TTL is only the deadlock backstop for the rare case
  *   where cleanup never runs at all (crash / killed session).

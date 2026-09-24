@@ -772,7 +772,7 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
 
   test("every engine anchor exists in templates.md — the list cannot drift from the reference", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const md = fs.readFileSync(path.join(here, "..", "..", "skills", "concept", "deep-knowledge", "templates.md"), "utf8");
+    const md = fs.readFileSync(path.join(here, "..", "..", "skills", "auto-concept", "deep-knowledge", "templates.md"), "utf8");
     for (const e of ENGINE) expect(md, e.token).toContain(e.token);
   });
 
@@ -846,7 +846,7 @@ describe("findStaleEngine — engine blocks gutted after generation (#430)", () 
 
   test("every template-scoped anchor exists in templates.md — the lists cannot drift from the reference", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const md = fs.readFileSync(path.join(here, "..", "..", "skills", "concept", "deep-knowledge", "templates.md"), "utf8");
+    const md = fs.readFileSync(path.join(here, "..", "..", "skills", "auto-concept", "deep-knowledge", "templates.md"), "utf8");
     for (const e of [...ENGINE_DESIGN, ...ENGINE_DOCUMENT]) {
       expect(md, e.token).toContain(e.token);
       if (e.re) expect(md, e.token).toMatch(e.re);
@@ -909,7 +909,7 @@ describe("findChromeCollisions (P32, #400)", () => {
   });
 
   test("ENGINE_CLASSES names only classes the templates actually use", () => {
-    const templates = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "concept", "deep-knowledge", "templates.md"), "utf8");
+    const templates = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "auto-concept", "deep-knowledge", "templates.md"), "utf8");
     for (const c of ENGINE_CLASSES) expect(templates, c).toMatch(new RegExp(`class="[^"]*\\b${c}\\b|\\.${c}\\b`));
     expect(templates).not.toContain('class="concept-decision-panel overlay"');
   });

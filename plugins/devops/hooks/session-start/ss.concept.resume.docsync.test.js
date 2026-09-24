@@ -21,7 +21,7 @@ import { pendingInstruction, cleanupInstruction } from "../../scripts/concept-ti
 // is now short enough to compare byte-for-byte in full, and the procedure it
 // used to inline is pinned against the script that inherited it.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILLDIR = path.join(__dirname, "..", "..", "skills", "concept");
+const SKILLDIR = path.join(__dirname, "..", "..", "skills", "auto-concept");
 const BRIDGE = fs.readFileSync(path.join(SKILLDIR, "deep-knowledge", "bridge-server.md"), "utf8");
 
 const PORT = 8883;

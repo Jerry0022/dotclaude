@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.193.1**
+**Version: 0.194.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -28,7 +28,7 @@ Complete DevOps automation plugin for Claude Code. Hooks, skills, agents, and te
 | Prompt guards (per message) | ~150K–250K | Ship detection, issue tracking, git sync — most exit silently |
 | Tool guards (per tool call) | ~100K–200K | Token budget + ship enforcement — early-exit when clean |
 | Self-calibration (every 10 min) | ~200K–400K | Deep-knowledge rotation, skill internalization |
-| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /ship, /fix, etc. |
+| Skill invocations (~15–25/week) | ~15K–30K | Only when you call /do-ship, /auto-fix, etc. |
 | **Total** | **~500K–900K** | **~0.7M tokens/week on average** |
 
 ### Percentage of your plan
@@ -52,9 +52,9 @@ Based on ~0.7M tokens/week plugin overhead:
 |---|---|
 | "Wait, did I push that?" | Git state checked on every session start |
 | `git push --force` to main at 2 AM | Blocked before it happens |
-| Forgetting to bump the version | /ship handles version, PR, merge, cleanup |
+| Forgetting to bump the version | /do-ship handles version, PR, merge, cleanup |
 | "Why is my context window gone?" | Token guard kills expensive reads before they land |
-| Debugging the same error 4 times | /fix kicks in after the second failure |
+| Debugging the same error 4 times | /auto-fix kicks in after the second failure |
 | Writing commit messages by hand | Conventional commits enforced by shared conventions |
 
 **Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
@@ -152,15 +152,15 @@ your-project/.claude/skills/{skill-name}/
 The plugin reads your extensions before executing and merges them. Your rules win on conflict.
 Both files are optional — create only what you need.
 
-**Example** — extending `/ship` with project-specific quality gates and deploy targets:
+**Example** — extending `/do-ship` with project-specific quality gates and deploy targets:
 
 ```
-your-project/.claude/skills/ship/
+your-project/.claude/skills/do-ship/
 ├── SKILL.md        ← "Before PR: run ng build --prod"
 └── reference.md    ← "Deploy via SSH to 192.168.178.32"
 ```
 
-Run `/claude-extend-skill` to interactively scaffold an extension for any plugin skill.
+Say "extend skill" (the hidden `auto-extend` skill) to interactively scaffold an extension for any plugin skill.
 It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
@@ -169,7 +169,7 @@ For the full extension guide with examples per skill, see `deep-knowledge/skill-
 
 Claude narrates a lot — what it is reading, what it is about to do, a recap
 at the end. None of that is needed with this plugin: decisions arrive as
-`AskUserQuestion` dialogs, long analyses as `/concept` pages, results as the
+`AskUserQuestion` dialogs, long analyses as `/auto-concept` pages, results as the
 completion card. The rest is noise that pulls you out of your own work.
 
 The fix is Claude Code's built-in **output style** — a personal setting, not
@@ -208,18 +208,18 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->52<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->24<!--/devops:count:skills--> Skills** — ship, promote, commit, fix, setup-issue, setup-project, setup-readme, auto-usage, claude-extend-skill, setup-cleanup, auto-update, concept, run-agents, run-autonomous, run-burn, run-backlog, claude-learn, tune-harden, tune-polish, tune-rethink, tune-audit, auto-graph, claude-batch, claude-strict, web-guide
+- **<!--devops:count:hooks-->53<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->15<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; tools setup-project, setup-cleanup; hidden workers auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data and strict mode are knowledge + hooks, not skills
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
-- **Ship Enforcement** — intent detection, PR command blocking, automatic /ship skill routing
+- **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
 
 ## What it does
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->53<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -242,15 +242,15 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
-- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the auto-graph feature.
+- `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the graphify integration…
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
-- `ss.ship.resume` — Keep a running /ship stable across a compaction or a resume.
+- `ss.ship.resume` — Keep a running /do-ship stable across a compaction or a resume.
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
 - `ss.team.changelog` — Show a summary of changes made by other contributors on remote main since the last ti…
 
 #### UserPromptSubmit — runs when the user sends a message
 
-- `prompt.batch.collect` — Collect mode for `/claude-batch`: while active, blocks the user prompt (exit 2 — the…
+- `prompt.batch.collect` — Collect mode for `/do-batch`: while active, blocks the user prompt (exit 2 — the harn…
 - `prompt.flow.silent-turn` — Detects background/cron-injected prompts and marks the turn as "silent" so post.flow.…
 - `prompt.flow.title-work` — Marks a session as "being worked on" in the sidebar: on the first real prompt of a se…
 - `prompt.knowledge.dispatch` — On-demand deep-knowledge injection based on prompt keywords.
@@ -258,8 +258,8 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.issue.detect` — Detect issue references in user messages.
 - `prompt.plugin.scope` — Inject the scope-routing rule when a consumer project's session starts talking about…
 - `prompt.skill.enforce` — Detects inline skill commands (e.g.
-- `prompt.strict.enforce` — Arms and enforces `/claude-strict` — literal scope, discretionary parameters.
-- `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('ship') instruction.
+- `prompt.strict.enforce` — Arms and enforces strict mode — literal scope, discretionary parameters.
+- `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
 - `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
 
@@ -269,17 +269,18 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.ship.guard` — Block manual PR creation/merging via Bash.
 - `pre.main.guard` — Prevent accidental writes on local main/master.
 - `pre.worktree.split-guard` — WARN (never block) on git-mutating work driven from the main repo root while an agent…
-- `pre.issue.guard` — Block raw GitHub issue writes (gh issue, gh api, MCP) unless setup-issue ran this turn.
+- `pre.issue.guard` — Block raw GitHub issue writes (gh issue, gh api, MCP) unless auto-issue ran this turn.
 - `pre.plugin.scope` — Block hand-edits of installed devops plugin artifacts from a consumer project.
 - `pre.edit.branch` — Prevent Edit/Write tool calls while HEAD is on local main/master.
+- `pre.readme.standards` — Once per session, before the first substantial write to a README file, points Claude…
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
-- `pre.strict.agent-gate` — While `/claude-strict` is active, refuse an Agent spawn whose prompt does not start w…
+- `pre.strict.agent-gate` — While strict mode is active, refuse an Agent spawn whose prompt does not start with t…
 - `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
 
 #### PostToolUse — runs after each tool call
 
 - `post.flow.completion` — After EVERY tool call: inject the completion-card reminder so Claude always has the i…
-- `post.flow.debug` — After 2+ consecutive shell failures: MANDATE the devops `fix` skill (target name `aut…
+- `post.flow.debug` — After 2+ consecutive shell failures: MANDATE the devops `auto-fix` skill before the n…
 - `post.graphify.query` — When Claude runs `graphify query ...`, record a per-session flag (`markQueryDone` — k…
 - `post.graphify.search` — Telemetry only: record every Grep/Glob that actually RAN (`search_ran`) with its resu…
 - `post.concept.gate` — Deterministic backstop for concept pages.
@@ -291,9 +292,9 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `stop.git.sync` — Throttled background git sync at turn end.
 - `stop.flow.browsertest` — Light-verification enforcement gate (the "V" of the V&V gate).
 - `stop.flow.guard` — Per-turn completion card + validation enforcement (the validation half of the V&V gate).
-- `stop.guide.handoff` — Offer the web-guide skill when Claude's own answer hands the user a manual click-thro…
+- `stop.guide.handoff` — Offer the auto-guide skill when Claude's own answer hands the user a manual click-thr…
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
-- `stop.strict.release` — Settles the lifetime of an inline `/claude-strict` mode at the end of the turn that a…
+- `stop.strict.release` — Settles the lifetime of an inline strict mode at the end of the turn that armed it.
 - `stop.mcp.reap` — Periodic background reclaim of orphaned Claude Desktop MCP server processes — the "ru…
 <!--/devops:block:hook-lifecycle-->
 
@@ -317,15 +318,15 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### ship — enforce the shipping pipeline
 
 - `pre.ship.guard` — Block manual PR/merge via Bash *(PreToolUse)*
-- `prompt.ship.detect` — Detect ship intent, enforce /ship skill; above `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (200 k tokens) hands the user a `/compact` command instead *(UserPromptSubmit)*
+- `prompt.ship.detect` — Detect ship intent, enforce /do-ship skill; above `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (200 k tokens) hands the user a `/compact` command instead *(UserPromptSubmit)*
 - `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
 - `ss.ship.resume` — Re-enter a ship that was mid-pipeline when the context compacted or the session paused: verify git/gh state first, never a second PR or tag *(SessionStart)*
 
 #### flow — track progress toward completion
 
 - `post.flow.completion` — Track code edits, inject completion reminder *(PostToolUse)*
-- `post.flow.debug` — Mandate /fix after 2+ consecutive shell failures *(PostToolUse + PostToolUseFailure)*
-- `prompt.batch.collect` — Collect prompts instead of executing them, in `/claude-batch` mode *(UserPromptSubmit)*
+- `post.flow.debug` — Mandate /auto-fix after 2+ consecutive shell failures *(PostToolUse + PostToolUseFailure)*
+- `prompt.batch.collect` — Collect prompts instead of executing them, in `/do-batch` mode *(UserPromptSubmit)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 - `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
 - `stop.flow.guard` — Enforce completion card before response ends *(Stop)*
@@ -360,75 +361,108 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 ### Skills (invoked explicitly or by hooks)
 
+Doors (`do-*`) and tools (`setup-*`) are in the slash menu. Workers
+(`auto-*`) are hidden from it (`user-invocable: false`): Claude invokes them
+from your words, the trigger router or a hook. Old names from before the
+restructure (`/ship`, `/fix`, `/concept`, `/run-backlog`, `/promote`, …)
+are mapped to the new skill when they appear in a prompt, and project
+extensions under an old name (`.claude/skills/ship/`) keep loading.
+
 | Skill | Invocation | Purpose |
 |---|---|---|
-| `/ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
-| `/promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
-| `/fix` (alias: `/debug`) | Explicit + Hook | Root-cause analysis, diagnostics, and fix cycle |
-| `/setup-issue` | Explicit | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
+| `/do-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
+| `/do-ship promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
+| `/do-run` | Explicit + Router | Door for every run: picks the mode (backlog, autonomous, burn, rethink, audit) or implements the prompt through `auto-agents` |
+| `/auto-fix` (alias: `/debug`) | Hidden · Router + Hook | Root-cause analysis, diagnostics, and fix cycle |
+| `/auto-issue` | Hidden · Hook | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
 | `/setup-project` | Explicit | Repo hygiene audit and initialization |
-| `/setup-readme` | Explicit | Modern README generation |
-| `/auto-usage` | Explicit + Hook | Token usage tracking (CLI + CDP) |
-| `/claude-extend-skill` | Explicit | Scaffold or adapt project-level skill extensions |
-| `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup; open PRs are landed one after another via `/ship` |
-| `/auto-update` | Explicit | Update the plugin to the latest version from GitHub |
-| `/concept` | Explicit | Interactive HTML page for analysis, plans, concepts, and prototypes |
-| `/run-agents` | Explicit | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
-| `/run-autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
-| `/run-burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
-| `/run-backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
-| `/claude-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
-| `/tune-harden` | Explicit | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
-| `/tune-polish` | Explicit | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
-| `/auto-graph` | Explicit + Hook | On-demand code knowledge graph via graphify, with opt-in auto-build + hard-gate enforcement |
-| `/tune-rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
-| `/tune-audit` | Explicit | Full-spectrum audit (functional, visual, animation, audio, a11y, logging, performance, …) of this chat's work, the last 48h's requirements, or everything; then fixes or a DevOps concept page |
-| `/claude-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
-| `/web-guide` | Explicit | Live tutorial in the user's Edge tab: step panel overlay for logins, API keys, and settings Claude cannot do itself |
-| `/claude-strict` | Explicit + Hook | Strict mode: the deliverable is exactly what the prompt names, unnamed attributes are chosen and reported; propagates to agents, skills and concept iterations; `on`/`off` binds it to the current worktree + branch |
+| `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
+| `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup; open PRs are landed one after another via `/do-ship` |
+| `/auto-update` | Hidden | Update the plugin to the latest version from GitHub |
+| `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, and prototypes |
+| `/auto-agents` | Hidden | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
+| `/do-run autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
+| `/do-run burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
+| `/do-run backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
+| `/do-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
+| `/auto-harden` | Hidden · Router | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
+| `/auto-polish` | Hidden · Router + `/do-ship` | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
+| `/do-run rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
+| `/do-run audit` | Explicit | Full-spectrum audit (functional, visual, animation, audio, a11y, logging, performance, …) of this chat's work, the last 48h's requirements, or everything; then fixes or a DevOps concept page |
+| `/do-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
+| `/auto-guide` | Hidden · Hook | Live tutorial in the user's Edge tab: step panel overlay for logins, API keys, and settings Claude cannot do itself |
 
-#### The `run-*` family — let Claude execute autonomously
+#### No longer skills — knowledge + hooks
+
+Four former skills are plain knowledge now (`deep-knowledge/`), reached through
+hooks instead of the skill listing. Their old slash names are never mapped to a
+skill; a prompt that mentions them gets a one-line pointer to the doc.
+
+| Former skill | Now | How it reaches Claude |
+|---|---|---|
+| `/setup-readme` | `readme-standards.md` | `pre.readme.standards` on the first substantial README write of a session; "create a readme", "README erstellen" in a prompt |
+| `/auto-graph` | `graphify.md` | the graphify hooks (auto-install, freshness, search gate); "knowledge graph", "graphify" in a prompt |
+| `/auto-usage` | `usage.md` | the `get_usage` MCP tool (the card fetches by itself); "refresh usage", "wie viel hab ich verbraucht" |
+| `/claude-strict` | `strict.md` | the strict hooks and do-run's "Nur das" answer |
+
+**Strict mode** — the deliverable is exactly what the prompt names; unnamed
+attributes are chosen and reported; it propagates to agents, skills and concept
+iterations. Switch it with plain words (the whole prompt):
+
+| Type | Effect |
+|---|---|
+| `strict on` / `strikt an` | on for this worktree + branch, until `off` or a branch switch |
+| `strict off` / `strikt aus` | off |
+| `strict status` | status |
+| `strict: <task>` / `strikt: <task>` | strict for this one task |
+| "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen" in a prompt | strict for this one task |
+
+`/claude-strict on|off|<task>` still works inside a prompt; a prompt that
+*starts* with it may be rejected by Claude Code as an unknown command before
+the hook sees it, so prefer the plain words. A bare "strict" arms nothing.
+
+#### `/do-run` — let Claude execute autonomously
 
 When you want Claude to **run autonomously or semi-autonomously to implement
-something**, reach for a `run-*` skill. There are two ways in:
+something**, reach for `/do-run`. There are two ways in:
 
-- **`/run-backlog` — Claude picks the topics itself.** It pulls the planned
+- **`/do-run backlog` — Claude picks the topics itself.** It pulls the planned
   backlog (open milestones, else loose issues), then refines → implements → tests →
   **ships** each item unsupervised. An optional **budget mode** (asked at the gate,
-  default *no*) runs it in `run-burn` style. Under the hood it composes the other
+  default *no*) runs it in burn-mode style. Under the hood it composes the other
   runs, so you don't invoke them separately.
 - **You pick the topic** with the other three:
-  - **`/run-autonomous`** — one ad-hoc task, fully AFK (never ships).
-  - **`/run-agents`** — multi-agent orchestration while you stay present.
-  - **`/run-burn`** — budget-driven: maximize the remaining weekly token
-    window (explicit `/run-burn` only).
+  - **`/do-run autonomous`** — one ad-hoc task, fully AFK (never ships).
+  - **`/auto-agents`** — multi-agent orchestration while you stay present.
+  - **`/do-run burn`** — budget-driven: maximize the remaining weekly token
+    window (explicit `/do-run burn` only).
 
-`run-backlog` uses `run-autonomous` (implementation) and the same role-agent
-orchestration as `run-agents` in the background — plus `run-burn` when budget mode
+Backlog mode uses autonomous mode (implementation) and the same role-agent
+orchestration as `auto-agents` in the background — plus burn mode when budget mode
 is on — so those are listed once here, not repeated per run.
 
-#### The `tune-*` family — let Claude improve what exists
+#### Improve what exists — harden, polish, rethink, audit
 
-The counterpart to `run-*`: instead of building new work, these **refine existing
+The counterpart to building: instead of building new work, these **refine existing
 code and UI** — no new features, no fresh scope.
 
-- **`/tune-harden`** — stabilization: full test suite, autonomous bug fixes,
+- **`/auto-harden`** — stabilization: full test suite, autonomous bug fixes,
   consistency + regression coverage. Never adds new UI structure.
-- **`/tune-polish`** — UI refinement: visual consistency, state-visuals,
+- **`/auto-polish`** — UI refinement: visual consistency, state-visuals,
   UI-side functionality checks and the standing UI rules from
   `deep-knowledge/ui-defaults.md` (tooltips, dropdowns, spacing, hotkeys —
-  extendable per project). Structural UI changes only with approval. `/ship`
+  extendable per project). Structural UI changes only with approval. `/do-ship`
   runs its rules-only path on every UI diff; the `post.design.remind` hook
   puts the rules in context the moment a UI file is written.
-- **`/tune-rethink`** — strategic reset: code-blind fresh approaches for
+- **`/do-run rethink`** — strategic reset: code-blind fresh approaches for
   stuck development, decided on a concept page, then implemented.
-- **`/tune-audit`** — full-spectrum audit: functional requirements traced to
+- **`/do-run audit`** — full-spectrum audit: functional requirements traced to
   evidence plus visual, animation, audio, accessibility, logging, performance,
   resilience, security basics, tests and build. Asks the scope (this chat's
   work / functional requirements of the last 48h / everything incl. 48h) and
   the output (audit + implementation, or a DevOps concept page).
 
-Something actually **broken**? That's **`/fix`** (alias `/debug`) —
+Something actually **broken**? That's **`/auto-fix`** (alias `/debug`) —
 standalone root-cause analysis and repair, not a refinement pass.
 
 ### Agents (spawned for parallel work)
@@ -437,7 +471,7 @@ Spawning is governed by the always-on delegation policy
 (`deep-knowledge/agent-proactivity.md`, injected at every session start): inline
 for single-domain work, one background agent when the deliverable is a conclusion
 (research, test runs, redteam), 2–3 parallel agents for independent domains, and
-`/run-agents` only offered — never auto-started — for Complex-tier work.
+`/auto-agents` only offered — never auto-started — for Complex-tier work.
 A budget class (plan × 5h window × week, read from the local usage snapshot)
 keeps that honest on small plans: `free` / `ask-before-parallel` (a Pro plan
 from 0 % — single agents run on sonnet, a parallel spawn asks one question per
@@ -533,8 +567,8 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->24<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->53<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates

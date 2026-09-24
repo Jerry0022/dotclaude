@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { shipCompactAdvice, threshold, shipCostEstimate, shipSavingEstimate, DEFAULT_THRESHOLD, POST_COMPACT_FLOOR, COMPACT_FOCUS } from "./ship-compact.js";
 
-// A /ship at session end re-reads a ~434 k context ~16 times (measured over
+// A /do-ship at session end re-reads a ~434 k context ~16 times (measured over
 // 10 sessions, 2026-09-21) — a quarter of the session's tokens. Only the user
 // can compact, so the hook has to stop the ship BEFORE the pipeline pays and
 // hand over the exact /compact command. Careful: threshold, one-shot opt-out,
@@ -10,12 +10,12 @@ describe("ship-compact", () => {
   const env = {};
 
   test("below the threshold the ship just runs", () => {
-    expect(shipCompactAdvice({ tokens: 120_000, prompt: "/ship", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 120_000, prompt: "/do-ship", env })).toBeNull();
     expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD - 1, prompt: "ship it", env })).toBeNull();
   });
 
   test("at or above the threshold the advice replaces the ship", () => {
-    const out = shipCompactAdvice({ tokens: 434_000, prompt: "/ship", env });
+    const out = shipCompactAdvice({ tokens: 434_000, prompt: "/do-ship", env });
     expect(out).toContain("[ship-compact]");
     expect(out).toContain("434 k");
     expect(out).toContain("Do NOT start the ship pipeline");
@@ -25,7 +25,7 @@ describe("ship-compact", () => {
     expect(out).toContain("compact: { tokens: 434000 }");
     expect(out).toContain("Ohne Kompaktieren shippen");
     expect(out).toContain("ship --no-compact");
-    expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD, prompt: "/ship", env })).not.toBeNull();
+    expect(shipCompactAdvice({ tokens: DEFAULT_THRESHOLD, prompt: "/do-ship", env })).not.toBeNull();
   });
 
   test("the focus keeps what the user asked to keep", () => {
@@ -36,17 +36,22 @@ describe("ship-compact", () => {
   });
 
   test("--no-compact skips the stop for this one ship", () => {
-    expect(shipCompactAdvice({ tokens: 700_000, prompt: "/ship --no-compact", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "/do-ship --no-compact", env })).toBeNull();
     expect(shipCompactAdvice({ tokens: 700_000, prompt: "ship it --no-compact bitte", env })).toBeNull();
-    expect(shipCompactAdvice({ tokens: 700_000, prompt: "/ship --no-compaction", env })).not.toBeNull();
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "/do-ship --no-compaction", env })).not.toBeNull();
   });
 
   test("never twice in a row: the ship prompt after an advice runs", () => {
     // 2026-09-22: advice, "ship", advice again, /compact, advice again (stale
-    // size), /compact, advice again, then "/ship --no-compact". The second
+    // size), /compact, advice again, then "/do-ship --no-compact". The second
     // ship prompt is the user's informed answer.
-    expect(shipCompactAdvice({ tokens: 434_000, prompt: "/ship", advisedBefore: true, env })).toBeNull();
-    expect(shipCompactAdvice({ tokens: 434_000, prompt: "/ship", advisedBefore: false, env })).not.toBeNull();
+    expect(shipCompactAdvice({ tokens: 434_000, prompt: "/do-ship", advisedBefore: true, env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 434_000, prompt: "/do-ship", advisedBefore: false, env })).not.toBeNull();
+  });
+
+  test("a promotion-only run (nothing unshipped) is never stopped — it is ~4 calls, not ~16", () => {
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "promote stable", promotionOnly: true, env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "promote stable", promotionOnly: false, env })).not.toBeNull();
   });
 
   test("the default is high enough that compacting pays: ≥ 4 M saved", () => {
@@ -58,8 +63,8 @@ describe("ship-compact", () => {
   });
 
   test("an unknown context size never stops a ship", () => {
-    expect(shipCompactAdvice({ tokens: null, prompt: "/ship", env })).toBeNull();
-    expect(shipCompactAdvice({ tokens: undefined, prompt: "/ship", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: null, prompt: "/do-ship", env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: undefined, prompt: "/do-ship", env })).toBeNull();
   });
 
   test("DOTCLAUDE_SHIP_COMPACT_THRESHOLD overrides, 0 disables, garbage falls back", () => {
@@ -68,8 +73,8 @@ describe("ship-compact", () => {
     expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" })).toBe(0);
     expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "lots" })).toBe(DEFAULT_THRESHOLD);
     expect(threshold({ DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "-5" })).toBe(DEFAULT_THRESHOLD);
-    expect(shipCompactAdvice({ tokens: 900_000, prompt: "/ship", env: { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" } })).toBeNull();
-    expect(shipCompactAdvice({ tokens: 250_000, prompt: "/ship", env: { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "300000" } })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 900_000, prompt: "/do-ship", env: { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" } })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 250_000, prompt: "/do-ship", env: { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "300000" } })).toBeNull();
   });
 
   test("cost estimate is ~16 re-reads", () => {

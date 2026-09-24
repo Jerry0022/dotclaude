@@ -18,14 +18,14 @@ describe("classify", () => {
     ["/repo/CLAUDE.md", "claude-md"],
     ["/repo/.claude/CLAUDE.md", "claude-md"],
     ["/home/u/.claude/CLAUDE.md", "claude-md"],
-    ["plugins/devops/skills/ship/SKILL.md", "skill"],
-    ["/repo/.claude/skills/ship/SKILL.md", "skill"],
+    ["plugins/devops/skills/do-ship/SKILL.md", "skill"],
+    ["/repo/.claude/skills/do-ship/SKILL.md", "skill"],
     ["plugins/devops/agents/po.md", "agent"],
     ["/repo/.claude/agents/reviewer.md", "agent"],
-    ["plugins/devops/skills/ship/reference.md", "reference"],
-    ["/repo/.claude/skills/ship/reference.md", "reference"],
+    ["plugins/devops/skills/do-ship/reference.md", "reference"],
+    ["/repo/.claude/skills/do-ship/reference.md", "reference"],
     ["plugins/devops/deep-knowledge/merge-safety.md", "deep-knowledge"],
-    ["plugins/devops/skills/concept/deep-knowledge/templates.md", "deep-knowledge"],
+    ["plugins/devops/skills/auto-concept/deep-knowledge/templates.md", "deep-knowledge"],
   ])("%s → %s", (file, kind) => {
     expect(classify(file)).toBe(kind);
   });
@@ -197,7 +197,7 @@ describe("evaluate", () => {
 });
 
 describe("messages", () => {
-  const file = "/repo/plugins/devops/skills/ship/SKILL.md";
+  const file = "/repo/plugins/devops/skills/do-ship/SKILL.md";
   const result = evaluate({ file, content: lines(300), delta: 40 });
 
   test("summary carries file, size, budget and growth", () => {

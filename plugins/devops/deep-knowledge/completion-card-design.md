@@ -272,11 +272,11 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   3. It also refuses while the composer is not empty (text, attachments, or
      an upload in progress).
   4. It refuses a prompt whose text starts with `/` — a leading space does
-     not help (observed live 2026-09-23: ` /compact …` and `/devops:ship …`
+     not help (observed live 2026-09-23: ` /compact …` and `/devops:do-ship …`
      red, `ship --no-compact` and plain sentences green). A button can
      therefore never carry a slash command. Button prompts are plain text
      that reaches the skill by its trigger words: `ship` (prompt.ship.detect),
-     `promote` / `promote stable` (promote skill), `Debug …` (fix skill).
+     `promote` / `ship stable` (prompt.ship.detect → do-ship with the channel), `Debug …` (auto-fix).
      Built-in commands like `/compact` have no such route — the card shows
      them as text. `card-widget.test.js` rejects any slash prompt.
 
@@ -349,7 +349,7 @@ alone (it may end without a card). Concretely:
 `prompt.flow.title-work` leaves `🚀 Shipping – ` / `📥 Batch – ` titles
 untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same
 classifier `prompt.ship.detect` uses) is marked `🚀 Shipping – ` by the hook
-itself, so `/ship` after a change never sits on `⏳` for the length of the
+itself, so `/do-ship` after a change never sits on `⏳` for the length of the
 pipeline. Outcome prefixes (`🚀 Shipped – `, `📦 Ready – `, …) are what a new
 prompt outdates — those the hook strips. Observed 2026-09-21.
 

@@ -137,9 +137,9 @@ describe("ensureLocale", () => {
     expect(getLocale(sid)).toBe("en");
   });
 
-  test("a session opened with /ship switches to de on the first German prompt", () => {
+  test("a session opened with /do-ship switches to de on the first German prompt", () => {
     const sid = TEST_SESSION_BASE + "-switch-de";
-    expect(ensureLocale(sid, "/ship").lang).toBe("en");
+    expect(ensureLocale(sid, "/do-ship").lang).toBe("en");
     const res = ensureLocale(sid, "Warum antwortest du mir nicht auf Deutsch?");
     expect(res).toEqual({ lang: "de", isFresh: false });
     expect(getLocale(sid)).toBe("de");
@@ -148,7 +148,7 @@ describe("ensureLocale", () => {
   test("short acknowledgements never flip the cached locale", () => {
     const sid = TEST_SESSION_BASE + "-ack";
     ensureLocale(sid, "ich kann das nicht");
-    for (const p of ["ok", "yes", "go", "/ship", "weiter"]) {
+    for (const p of ["ok", "yes", "go", "/do-ship", "weiter"]) {
       expect(ensureLocale(sid, p).lang).toBe("de");
     }
   });
@@ -165,7 +165,7 @@ describe("detectSignal", () => {
 
   test("no clear signal → null", () => {
     expect(detectSignal("ok")).toBeNull();
-    expect(detectSignal("/ship")).toBeNull();
+    expect(detectSignal("/do-ship")).toBeNull();
     expect(detectSignal("plugins/devops/hooks/lib/locale.js")).toBeNull();
     expect(detectSignal(null)).toBeNull();
   });

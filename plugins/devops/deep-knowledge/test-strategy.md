@@ -4,7 +4,7 @@
 > This file retains Web Tech browser-test rules, Electron split, 3rd-party mock-first protocol.
 
 Cross-cutting rules for when and how to test. Referenced by the completion flow
-hook and the ship skill.
+hook and the do-ship skill.
 
 ## Non-runtime changes — skip preview
 
@@ -114,7 +114,7 @@ CI runs without live credentials, autonomous/background sessions. The mock step 
 ## Completion-Card Handoff (for any caller)
 
 When work is done and `render_completion_card` is called — **whether inline, via
-agents, or from `/run-autonomous`** — the caller MUST populate `userFinalTest`
+agents, or from `/do-run autonomous`** — the caller MUST populate `userFinalTest`
 whenever one of the rules above applies:
 
 - Packaged Electron/Tauri + no desktop takeover → one item per flow, `afterDeployment: false`
@@ -142,7 +142,7 @@ Run only tests directly related to the current task:
 
 ## Full regression suite (run only at ship time)
 
-The full test suite runs as part of the ship skill's quality gates.
+The full test suite runs as part of the do-ship skill's quality gates.
 Do NOT run full suite after every change — burns tokens on context.
 
 ## Test deduplication

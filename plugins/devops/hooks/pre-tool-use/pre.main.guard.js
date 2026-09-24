@@ -115,8 +115,8 @@ process.stdin.on('end', () => {
   // local-only equivalent instead of a command that is guaranteed to fail.
   const remote = hasRemote(cwd);
   const rule = remote
-    ? `Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /ship.`
-    : `Never commit directly on ${branch}. Work on a feature branch and land it via /ship.`;
+    ? `Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /do-ship.`
+    : `Never commit directly on ${branch}. Work on a feature branch and land it via /do-ship.`;
   const fix = remote
     ? `git fetch origin && git switch -c <feat/topic> origin/${branch}`
     : `git switch -c <feat/topic>   (no origin remote — branches from local ${branch})`;

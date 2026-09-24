@@ -319,6 +319,69 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
   }
 });
 
+// Skill restructure PR 2: "ship stable" ships to alpha, then promotes — and
+// the run ends with ONE card, the released one, which must still carry what
+// the ship did (tests, manual checks, harden/polish findings).
+describe("render_completion_card — ship + promote in one run (released)", () => {
+  const combined = {
+    variant: "released",
+    summary: "Promote in do-ship",
+    lang: "de",
+    buildId: "abc1234",
+    changes: [{ area: "Ship", description: "ship stable shippt erst nach alpha, dann stable" }],
+    tests: [{ method: "npm test", result: "3462 grün" }],
+    userFinalTest: ["Harden (ship): leerer catch in lib/x.js:12 prüfen", { action: "Consumer-Maschine pinnt auf stable/v0.171.0", afterDeployment: true }],
+    state: { branch: "main", commit: "deadbee", pushed: true, pr: { number: 480, title: "feat: x" }, merged: "main" },
+    cta: { vOld: "0.170.0", vNew: "0.171.0", bump: "minor" },
+    delivery: {
+      pr: { number: 480, title: "feat: x" },
+      ship: { version: "0.171.0", base: "main" },
+      promote: { channels: { alpha: "0.171.0", beta: "0.171.0", stable: "0.171.0" }, current: "stable", fastTrack: true },
+    },
+    promotion: { from: "alpha", to: "stable", sha: "deadbeefcafe", tags: ["stable/v0.171.0", "v0.171.0"], release: true },
+  };
+
+  test("the released heading, the ship's tests AND the promotion facts on one card", async () => {
+    const text = await cardText({ ...combined, session_id: "test-combo-1" });
+    expect(text).toMatch(/^## 🎊 Released v0\.171\.0 LIVE — stable\.$/m);
+    expect(text).toContain("3462 Tests grün");
+    expect(text).toContain("Tags stable/v0.171.0/v0.171.0");
+    expect(text).toContain("bit-identisch — deadbee");
+    expect(text).toMatch(/✓ merge {3}main → ✓ alpha → ✓ beta → ✓ stable/);
+    expect(text).not.toMatch(/Shipped v0\.171\.0/);
+  });
+
+  test("userFinalTest items become the released card's points (ship findings are never dropped)", async () => {
+    const text = await cardText({ ...combined, session_id: "test-combo-2" });
+    expect(text).toContain("Harden (ship): leerer catch in lib/x.js:12 prüfen");
+    expect(text).toContain("Consumer-Maschine pinnt auf stable/v0.171.0 — nach Deployment");
+  });
+
+  test("a skipped promotion leaves ship-successful with the reason as an open point", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "x", lang: "de", session_id: "test-combo-4",
+      state: { branch: "main", pushed: true, merged: "main", commit: "deadbee" },
+      delivery: { ship: { version: "0.171.0", base: "main" }, promote: { channels: { alpha: "0.171.0" }, current: "alpha" } },
+      open: ["Promotion auf stable ausgesetzt — erst deployen, dann promote stable"],
+      userFinalTest: ["Login prüfen"],
+    });
+    expect(text).toMatch(/^## 🚀 Released v0\.171\.0 alpha/m);
+    expect(text).toContain("Promotion auf stable ausgesetzt — erst deployen, dann promote stable");
+    expect(text).toContain("🧪 Login prüfen");
+  });
+
+  test("a promotion-only released card shows only the promotion facts", async () => {
+    const text = await cardText({
+      variant: "released", summary: "x", lang: "en", session_id: "test-combo-3",
+      delivery: { promote: { channels: { beta: "0.1.0" }, current: "beta" }, ship: { version: "0.1.0" } },
+      promotion: { from: "alpha", to: "beta", sha: "abcdef1234", tags: ["beta/v0.1.0"] },
+    });
+    expect(text).toMatch(/^## 🎊 Promoted v0\.1\.0 BETA — to stable\?$/m);
+    expect(text).toContain("tags beta/v0.1.0");
+    expect(text).not.toMatch(/Tests? (green|grün)/);
+  });
+});
+
 describe("render_completion_card — out-of-band deploy gate (#243)", () => {
   const baseParams = {
     variant: "ship-successful",
@@ -389,7 +452,9 @@ describe("render_completion_card — every input. field lands somewhere", () => 
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha", stableLag: { versions: 3, days: 5 } } },
     });
-    expect(text).toContain("› alpha liegt 3 Versionen / 5 Tage vor stable → `/promote`");
+    // The command names the shipped version: typed later, it stays a
+    // promotion-only run and never ships edits made after this card (R2b).
+    expect(text).toContain("› alpha liegt 3 Versionen / 5 Tage vor stable → `/do-ship promote 0.1.0`");
   });
 
   test("pending overrides evidence with a provisional-evidence post and the block's items as points", async () => {
@@ -521,9 +586,9 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
   test("an identifier-like area keeps its subject on a lowercase description; a worded area is dropped", async () => {
     const text = await cardText({
       variant: "ready", summary: "Subjekt", lang: "de", session_id: "test-ev-6",
-      changes: [{ area: "run-agents", description: "nutzt dieselben Schwellen" }, { area: "Ship", description: "merged ohne Tag" }],
+      changes: [{ area: "auto-agents", description: "nutzt dieselben Schwellen" }, { area: "Ship", description: "merged ohne Tag" }],
     });
-    expect(text).toMatch(/^› run-agents nutzt dieselben Schwellen$/m);
+    expect(text).toMatch(/^› auto-agents nutzt dieselben Schwellen$/m);
     expect(text).toMatch(/^› merged ohne Tag$/m);
   });
 

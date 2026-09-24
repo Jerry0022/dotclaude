@@ -5,7 +5,7 @@
  * @event PostToolUse, PostToolUseFailure
  * @plugin devops
  * @matcher Bash|PowerShell
- * @description After 2+ consecutive shell failures: MANDATE the devops `fix` skill (target name `auto-fix`) before the next retry.
+ * @description After 2+ consecutive shell failures: MANDATE the devops `auto-fix` skill before the next retry.
  *   Usage data: `fix` was invoked 0 times for ~10 real bug reports in the
  *   last 200 sessions — the model debugged without it instead (37-137 tool
  *   calls each).
@@ -27,7 +27,7 @@
  *   Counter: a session file keyed per session AND agent_id, so a subagent's
  *   failures never add to the main thread's (or another agent's) streak.
  *   Resets on a success; an excused probe or an interrupt leaves it alone.
- *   Silent when the fix skill already ran this turn. Output goes out as
+ *   Silent when the auto-fix skill already ran this turn. Output goes out as
  *   `hookSpecificOutput.additionalContext` — plain stdout of a PostToolUse*
  *   hook only shows in transcript mode and never reaches the model.
  *   Subagents without the Skill tool are told to return the diagnosis to the
@@ -108,13 +108,15 @@ function classify(hook) {
   return 'fail';
 }
 
-/** Did the fix skill (or its PR-2 name auto-fix) already run this turn? */
+/** Did the devops auto-fix (or `devops:fix`) already run this turn? A bare
+ *  `fix` is a consumer skill/extension under the old name, not auto-fix. */
 function fixActiveThisTurn(transcriptPath) {
   try {
     const { safeReadTranscript } = require('../lib/card-guard');
     const { skillInvokedThisTurn } = require('../lib/skill-invocations');
+    const { isDevopsSkill } = require('../lib/skill-names');
     const transcript = safeReadTranscript(transcriptPath, TRANSCRIPT_TAIL_BYTES);
-    return skillInvokedThisTurn(transcript, (_input, name) => name === 'fix' || name === 'auto-fix');
+    return skillInvokedThisTurn(transcript, (input) => isDevopsSkill(input && input.skill, 'auto-fix'));
   } catch {
     return false;
   }
@@ -123,9 +125,9 @@ function fixActiveThisTurn(transcriptPath) {
 function buildMessage(failures) {
   return (
     `Repeated shell failure detected (${failures} consecutive). ` +
-    'Invoke the devops `fix` skill (target name `auto-fix`) via the Skill tool ' +
+    'Invoke Skill("devops:auto-fix") ' +
     'NOW, before retrying anything else: check recent git changes, read error ' +
-    'logs, and perform root-cause analysis per skills/fix/SKILL.md. This is ' +
+    'logs, and perform root-cause analysis per skills/auto-fix/SKILL.md. This is ' +
     'mandatory, not a suggestion — free-form retry loops without it have run ' +
     '37-137 tool calls on real bugs that fix would have diagnosed directly. ' +
     'If you cannot invoke skills (you are a subagent without the Skill tool): stop ' +

@@ -31,9 +31,9 @@
  *   worked on" and never replaces a running process — so a title that already
  *   says Shipping keeps it, and a prompt that IS a ship (lib/ship-intent.js,
  *   the same classifier prompt.ship.detect uses) gets `🚀 Shipping – ` right
- *   here instead of the hourglass. Observed 2026-09-21: `/ship` after a
+ *   here instead of the hourglass. Observed 2026-09-21: `/do-ship` after a
  *   change left `⏳` on the title for the whole pipeline whenever the model
- *   skipped the ship skill's own courtesy rename (Pre-Step C).
+ *   skipped the do-ship skill's own courtesy rename (Pre-Step C).
  *
  *   Guarded by runOnce: the marker is taken here and given back by
  *   stop.flow.guard at every non-silent turn end (card or no card — since
@@ -66,7 +66,7 @@ const WORK_PREFIX = '⏳ ';
  *  `LEGACY_PREFIXES` in mode-state.js. */
 const LEGACY_PENDING_PREFIX = '⏳ Working – ';
 
-/** The process prefix /ship owns while the pipeline runs — mirrors
+/** The process prefix /do-ship owns while the pipeline runs — mirrors
  *  `SESSION_PREFIX.shipping`. Shares the 🚀 with the `🚀 Shipped – ` OUTCOME,
  *  so it is matched as a whole string, never on the emoji. */
 const SHIPPING_PREFIX = '🚀 Shipping – ';
@@ -120,7 +120,7 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
       '  (that worded form is a legacy of older versions — only the bare icon counts as already-marked).',
     ];
   const tail = shipping
-    ? 'The word is exactly "Shipping" — this is the ship skill\'s Pre-Step C done early; the skill finds the title marked and leaves it.'
+    ? 'The word is exactly "Shipping" — this is the do-ship skill\'s Pre-Step C done early; the skill finds the title marked and leaves it.'
     : 'The icon is icon-only — no word after it, the title text stays as it is.';
   const examples = machine
     ? `"🧪 Test – ", "📦 Ready – ", "🚀 Shipped – ", "${LEGACY_PENDING_PREFIX}", "🎊 Released Stable – "`

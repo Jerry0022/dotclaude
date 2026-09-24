@@ -3,7 +3,7 @@
  * @version 0.3.0
  * @description Pure matcher for pre.issue.guard — decides whether a Bash or
  *   PowerShell command contains a REAL issue write that must instead go
- *   through the setup-issue skill (target name `auto-issue`), the single
+ *   through the auto-issue skill (formerly setup-issue), the single
  *   owner of every issue write (deep-knowledge/plugin-behavior.md "Issue
  *   Creation & Editing — Always Delegate"). Two write shapes:
  *     - `gh issue create` / `gh issue edit`;
@@ -28,12 +28,12 @@
  *        `gh.exe`), gh's global flags (`-R owner/repo`, `--repo=x`) before
  *        or after `issue` / `api`.
  *
- *   Marker: setup-issue appends `# via setup-issue` to every issue write it
+ *   Marker: auto-issue appends `# via auto-issue` to every issue write it
  *   runs. The marker only counts on the SAME command segment as the gh call —
  *   the shell comment that ends that very command (before the next
  *   separator or newline). Every write in a command must carry its own
  *   marker. A marker inside quotes never counts. The marker alone is not
- *   enough: pre.issue.guard also requires setup-issue / auto-issue to have
+ *   enough: pre.issue.guard also requires auto-issue (or the old name setup-issue) to have
  *   been invoked in the current turn.
  */
 
@@ -60,8 +60,10 @@ const API_METHOD_RE = /(?:^|\s)(?:-X|--method)(?:[ \t]+|=)?([A-Za-z]+)/;
 const API_WRITE_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 const API_FIELD_RE = /(?:^|\s)(?:-[fF]|--field|--raw-field|--input)/;
 
-/** The marker setup-issue appends to every issue write it performs. */
-const MARKER_RE = /#\s*via\s+setup-issue\b/i;
+/** The marker auto-issue appends to every issue write it performs. The
+ *  pre-PR-2 skill wrote `# via setup-issue`; both stay valid so an old
+ *  extension or a cached skill body still passes. */
+const MARKER_RE = /#\s*via\s+(?:auto|setup)-issue\b/i;
 
 /** Separators that end a command segment (after quote masking). */
 const SEGMENT_END_RE = /[\n;|&]/;

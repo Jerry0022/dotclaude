@@ -154,3 +154,176 @@ describe("trigger preservation: every quoted description-trigger phrase survives
     ).toContain(phrase);
   });
 });
+
+// ── Spec "Units" + "Call graph" (PR 2 of the skill restructure) ─────────────
+// docs/superpowers/specs/2026-09-24-skill-restructure-design.md is the single
+// source; this table mirrors it so a frontmatter edit that drifts from the
+// approved design fails here. `visibility`: "menu" = user-invocable (default),
+// "hidden" = `user-invocable: false`, "user-only" = `disable-model-invocation: true`.
+const { RENAMED, FOLDED, FOLDED_TRIGGERS, RETIRED, RETIRED_TRIGGERS } = require("../hooks/lib/skill-names.js");
+
+const UNITS = {
+  "do-batch":      { layer: 0, visibility: "menu",      invokes: ["do-run", "auto-concept"] },
+  "setup-cleanup": { layer: 0, visibility: "user-only", invokes: ["auto-concept", "do-ship"] },
+  "setup-project": { layer: 0, visibility: "user-only", invokes: [] },
+  "do-run":        { layer: 1, visibility: "menu",      invokes: ["auto-concept", "do-ship", "auto-harden", "auto-polish", "auto-agents", "auto-issue"] },
+  "do-learn":      { layer: 1, visibility: "menu",      invokes: ["auto-issue"] },
+  "auto-concept":  { layer: 2, visibility: "hidden",    invokes: ["do-ship", "auto-agents", "auto-issue"] },
+  "auto-fix":      { layer: 2, visibility: "hidden",    invokes: ["auto-agents"] },
+  "auto-guide":    { layer: 2, visibility: "hidden",    invokes: [] },
+  "auto-extend":   { layer: 2, visibility: "hidden",    invokes: [] },
+  "auto-update":   { layer: 2, visibility: "hidden",    invokes: [] },
+  "do-ship":       { layer: 3, visibility: "menu",      invokes: ["auto-harden", "auto-polish"] },
+  "auto-harden":   { layer: 4, visibility: "hidden",    invokes: ["auto-agents"] },
+  "auto-polish":   { layer: 4, visibility: "hidden",    invokes: ["auto-agents"] },
+  "auto-agents":   { layer: 5, visibility: "hidden",    invokes: [] },
+  "auto-issue":    { layer: 5, visibility: "hidden",    invokes: [] },
+};
+
+const MODE_FILES = {
+  "do-run": ["backlog", "autonomous", "burn", "rethink", "audit"],
+  "do-ship": ["promote"],
+};
+
+function visibilityOf(meta) {
+  if (meta.disableModelInvocation === true) return "user-only";
+  if (meta.userInvocable === false) return "hidden";
+  return "menu";
+}
+
+describe("spec Units table: the exact skill roster", () => {
+  test("skills/ holds exactly the spec units", () => {
+    expect([...SKILL_NAMES].sort()).toEqual(Object.keys(UNITS).sort());
+  });
+
+  test("no pre-PR-2 skill directory survives", () => {
+    for (const oldName of [...Object.keys(RENAMED), ...Object.keys(FOLDED)]) {
+      expect(SKILL_NAMES, `old skill dir still present: ${oldName}`).not.toContain(oldName);
+    }
+  });
+
+  test.each(Object.keys(UNITS))("%s: frontmatter name equals its directory", (name) => {
+    expect(ALL_SKILLS[name].name).toBe(name);
+  });
+});
+
+describe("spec Units table: layer and visibility", () => {
+  test.each(Object.entries(UNITS))("%s", (name, unit) => {
+    const meta = ALL_SKILLS[name];
+    expect(meta, `${name} missing`).toBeTruthy();
+    expect(meta.layer, `${name} layer`).toBe(unit.layer);
+    expect(visibilityOf(meta), `${name} visibility`).toBe(unit.visibility);
+  });
+
+  test("every auto-* unit is hidden from the slash menu", () => {
+    for (const name of Object.keys(UNITS).filter((n) => n.startsWith("auto-"))) {
+      expect(ALL_SKILLS[name].userInvocable, name).toBe(false);
+    }
+  });
+});
+
+describe("spec call graph: the exact invokes edges", () => {
+  test.each(Object.entries(UNITS))("%s", (name, unit) => {
+    expect([...ALL_SKILLS[name].invokes].sort()).toEqual([...unit.invokes].sort());
+  });
+});
+
+describe("folded skills: mode files exist and the old triggers survive", () => {
+  const modeCases = Object.entries(MODE_FILES).flatMap(([skill, modes]) => modes.map((m) => [skill, m]));
+
+  test.each(modeCases)("%s/modes/%s.md exists and carries a body", (skill, mode) => {
+    const file = path.join(SKILLS_DIR, skill, "modes", `${mode}.md`);
+    expect(fs.existsSync(file), file).toBe(true);
+    const body = fs.readFileSync(file, "utf8");
+    expect(body.startsWith("---"), `${file} must not carry skill frontmatter (it is not a skill)`).toBe(false);
+    expect(body.length).toBeGreaterThan(500);
+  });
+
+  test("every folded skill has a mode file in its owner", () => {
+    for (const [oldName, fold] of Object.entries(FOLDED)) {
+      expect(MODE_FILES[fold.skill], `${oldName} → ${fold.skill}`).toContain(fold.mode);
+    }
+  });
+
+  test("the owner's SKILL.md points at every mode file", () => {
+    for (const [skill, modes] of Object.entries(MODE_FILES)) {
+      const body = fs.readFileSync(path.join(SKILLS_DIR, skill, "SKILL.md"), "utf8");
+      for (const mode of modes) expect(body, `${skill} → modes/${mode}.md`).toContain(`modes/${mode}.md`);
+    }
+  });
+
+  const triggerCases = Object.entries(FOLDED_TRIGGERS).flatMap(([oldName, byLang]) =>
+    Object.values(byLang).flat().map((phrase) => [oldName, FOLDED[oldName].skill, phrase]));
+
+  test.each(triggerCases)("%s → %s keeps %j", (_old, owner, phrase) => {
+    expect(Object.values(ALL_SKILLS[owner].triggers).flat()).toContain(phrase);
+  });
+
+  test("the snapshot is not empty", () => {
+    expect(triggerCases.length).toBeGreaterThan(30);
+  });
+});
+
+// ── Spec "No longer skills" (PR 3) ──────────────────────────────────────────
+// setup-readme, auto-graph, auto-usage and claude-strict are no skills any
+// more. Their bodies are deep-knowledge docs, their triggers live in hooks:
+// the dispatch pointer table (hooks/lib/knowledge-pointers.js) for every
+// phrase, and prompt.strict.enforce for the strict switch. This suite reads
+// those new homes, so a trigger that falls out of them fails here.
+const { matchPointers } = require("../hooks/lib/knowledge-pointers.js");
+const { detectCommand } = require("../hooks/lib/strict-state.js");
+const { routeMessage } = require("../hooks/lib/skill-trigger-router.js");
+const DK_DIR = path.join(PLUGIN_ROOT, "deep-knowledge");
+
+describe("retired skills (PR 3): gone from skills/, body in deep-knowledge", () => {
+  test("exactly the four spec names are retired", () => {
+    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-readme"]);
+  });
+
+  test.each(Object.entries(RETIRED))("%s → deep-knowledge/%s", (name, entry) => {
+    expect(fs.existsSync(path.join(SKILLS_DIR, name)), `skills/${name} still exists`).toBe(false);
+    expect(SKILL_NAMES).not.toContain(name);
+    const doc = path.join(DK_DIR, entry.doc);
+    expect(fs.existsSync(doc), doc).toBe(true);
+    const body = fs.readFileSync(doc, "utf8");
+    expect(body.startsWith("---"), `${entry.doc} must not carry skill frontmatter`).toBe(false);
+    expect(body).toContain(`Former \`${name}\` skill`);
+    expect(body.length).toBeGreaterThan(2000);
+  });
+
+  test("no unit invokes a retired name", () => {
+    for (const [name, meta] of Object.entries(ALL_SKILLS)) {
+      for (const callee of meta.invokes) expect(RETIRED, `${name} invokes ${callee}`).not.toHaveProperty(callee);
+    }
+  });
+});
+
+describe("retired skills (PR 3): every trigger phrase survives in its new home", () => {
+  const cases = Object.entries(RETIRED_TRIGGERS).flatMap(([name, byLang]) =>
+    Object.values(byLang).flat().map((phrase) => [name, RETIRED[name].doc, phrase]));
+
+  test("the snapshot covers every retired skill", () => {
+    expect(Object.keys(RETIRED_TRIGGERS).sort()).toEqual(Object.keys(RETIRED).sort());
+    expect(cases.length).toBeGreaterThanOrEqual(20);
+  });
+
+  test.each(cases)("%s → %s: %j points at the doc", (_name, doc, phrase) => {
+    expect(matchPointers(phrase).map((h) => h.file)).toContain(doc);
+  });
+
+  test.each(cases)("%s: %j never mandates a Skill that no longer exists", (name, _doc, phrase) => {
+    expect(routeMessage(phrase, ALL_SKILLS).map((e) => e.skill)).not.toContain(name);
+  });
+
+  // The strict switch itself: words and slash forms reach prompt.strict.enforce.
+  test.each([
+    ["/claude-strict", "status"],
+    ["strict an", "on"],
+    ["strict aus", "off"],
+    ["genau so und nicht mehr", "task"],
+    ["nur das ändern", "task"],
+    ["nichts anderes anfassen", "task"],
+  ])("claude-strict: %j still switches strict (%s) in the hook", (phrase, route) => {
+    expect(detectCommand(phrase)).toMatchObject({ mentioned: true, route });
+  });
+});

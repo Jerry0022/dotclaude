@@ -1,6 +1,6 @@
 # Git Hygiene
 
-Cross-cutting git rules referenced by `/ship`, the role agents, and hooks.
+Cross-cutting git rules referenced by `/do-ship`, the role agents, and hooks.
 Commit message format and granularity: [commit-conventions.md](commit-conventions.md).
 
 ## Main-branch protection (hard rule)
@@ -9,9 +9,9 @@ Commit message format and granularity: [commit-conventions.md](commit-convention
   starts from a branch derived from `origin/main`:
   `git fetch origin && git switch -c <feat/topic> origin/main`.
 - **Never commit, merge, push, rebase, cherry-pick, reset --hard, revert, apply or
-  am on main/master directly.** The only path back to `main` is `/ship`.
+  am on main/master directly.** The only path back to `main` is `/do-ship`.
 - **Never create PRs manually** (`gh pr create` / `gh pr merge`). Always via
-  `/ship` so build-ID, version bump, tag and completion card stay consistent.
+  `/do-ship` so build-ID, version bump, tag and completion card stay consistent.
 - Enforcement: `pre.main.guard` (Bash) and `pre.edit.branch` (Edit/Write/NotebookEdit)
   block these actions unless a sentinel file `.claude/.ship-in-progress` is present
   (written by `ship_preflight`, cleared by `ship_cleanup`) or `DEVOPS_ALLOW_MAIN=1`

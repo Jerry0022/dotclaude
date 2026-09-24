@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.7.0
+ * @version 0.8.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -10,6 +10,9 @@
  *   at most once per session (tracked via session-scoped temp files).
  *   Always-on docs (ss.knowledge.index ALWAYS_ON, e.g. agent-proactivity.md)
  *   are already in context from SessionStart — never list them in TOPIC_MAP.
+ *   The docs of the four retired skills (readme-standards, graphify, usage,
+ *   strict — lib/knowledge-pointers.js) get a one-line pointer instead of
+ *   their body, also once per session.
  */
 
 require('../lib/plugin-guard');
@@ -20,6 +23,7 @@ const { sessionFile, writeSessionFile } = require('../lib/session-id');
 const { ensureLocale } = require('../lib/locale');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
+const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
 
 /**
  * Topic-to-file keyword map.
@@ -113,13 +117,13 @@ const TOPIC_MAP = [
 // Per-prompt delegation nudge (see compose step 4). Mirrors the tier table in
 // deep-knowledge/agent-proactivity.md — keep the two in sync.
 // No slash-command spelling here: the same text is appended to eval prompts,
-// where prompt.skill.enforce would read "/run-agents" as a user invocation.
+// where prompt.skill.enforce would read "/auto-agents" as a user invocation.
 const DELEGATION_NUDGE =
   '[delegation-policy] Classify before the first tool call: Inline (≤~5 files, Q&A, quick fix) · ' +
   '1 background agent (web pages → devops:research; >~10-file sweep → Explore; full tests → devops:qa; ' +
   'high-stakes diff → devops:redteam; "should we X?" trade-off → devops:po, plus devops:research when facts need checking) · ' +
   '2–3 parallel only for two analysis lenses (parallel implementers → offer) · ' +
-  'Complex → offer the run-agents skill, never auto-start. Hard stop (request narrowed: "just/quick/nur/schnell/keine Agents") → Inline; hard go ("agents/full") → as designed.';
+  'Complex → offer the auto-agents skill, never auto-start. Hard stop (request narrowed: "just/quick/nur/schnell/keine Agents") → Inline; hard go ("agents/full") → as designed.';
 
 // Kill-switch variants (lib/delegation.js). `off` emits no nudge at all —
 // the SessionStart line already says so and every copy would only tempt.
@@ -245,8 +249,20 @@ process.stdin.on('end', () => {
     } catch {}
   }
 
+  // Pointers for the retired skills' docs (one line each, not the body).
+  const pointers = [];
+  try {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    for (const hit of matchPointers(rawMessage)) {
+      if (injected.has(hit.file)) continue;
+      const overrides = hit.extension ? legacyOverrides(hit.legacy, { cwd: hook.cwd, home }) : [];
+      pointers.push(pointerLine(hit, dkDir, overrides));
+      injected.add(hit.file);
+    }
+  } catch { /* a pointer is never worth a failed prompt */ }
+
   // Persist DK injection state (atomic write via session-id lib)
-  if (sections.length > 0) {
+  if (sections.length > 0 || pointers.length > 0) {
     try {
       writeSessionFile(markerFile, [...injected].join('\n'));
     } catch {}
@@ -269,7 +285,7 @@ process.stdin.on('end', () => {
   //      fills up mid-session tightens the nudge without a restart.
   //      Inside an unattended run (AUTONOMOUS_* prompts, or the lockout
   //      sentinel armed) the suffix is dropped: a budget question can never
-  //      be answered there, and /run-burn deliberately upgrades models — the
+  //      be answered there, and /do-run burn deliberately upgrades models — the
   //      explicit run-* skill IS the "full" answer (redteam 2026-09-14 #2).
   //   6. Short prompts (< NUDGE_MIN_CHARS: "ja", "weiter", "ok mach") get no
   //      nudge at all — they can never be non-Inline, and every copy sits in
@@ -313,6 +329,8 @@ process.stdin.on('end', () => {
       );
     }
   }
+
+  if (pointers.length > 0) blocks.push(...pointers);
 
   if (sections.length > 0) {
     blocks.push(

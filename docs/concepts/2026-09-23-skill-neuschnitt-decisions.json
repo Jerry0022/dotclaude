@@ -1,0 +1,1005 @@
+[
+  {
+    "iteration": 1,
+    "submitted": true,
+    "template": "free",
+    "decisions": [
+      {
+        "id": "g_hooks",
+        "label": "Ebene 1 · Hooks mit echtem Signal",
+        "evaluation": "include"
+      },
+      {
+        "id": "g_router",
+        "label": "Ebene 2 · Trigger-Router",
+        "evaluation": "include"
+      },
+      {
+        "id": "g_desc",
+        "label": "Ebene 3 · Schlanke Beschreibungen",
+        "evaluation": "include"
+      },
+      {
+        "id": "g_measure",
+        "label": "Ebene 4 · Messen statt hoffen",
+        "evaluation": "include"
+      },
+      {
+        "id": "p_order",
+        "label": "Umsetzung in drei PRs",
+        "evaluation": "include"
+      }
+    ],
+    "comments": {
+      "general": {
+        "text": "",
+        "attachments": []
+      },
+      "items": [
+        {
+          "id": "map-skill_map-note-cat.to_run",
+          "text": "das was wir jetzt dort rein mergen, gern als user questions in dem skill!",
+          "attachments": []
+        },
+        {
+          "id": "map-skill_map-note",
+          "text": "Btw, es geht nicht darum, dass wir skill inhalte verlieren, nur von wo sie aufgerufen werden.",
+          "attachments": []
+        },
+        {
+          "id": "name-claude_strict",
+          "text": "eher als user question von do-run ob es strikt sein soll oder nicht",
+          "attachments": []
+        },
+        {
+          "id": "name-claude_batch",
+          "text": "do-batch (der skill sollte dann do run nutzen",
+          "attachments": []
+        },
+        {
+          "id": "name-claude_extend_skill",
+          "text": "das passt nicht, der sollte bleiben aber nur implizit aufgerufen werden wenn der nutzer von skill extenden oder projektspeiziifsch festlegen spricht und damit ein devops skill berührt => der extended werden soll",
+          "attachments": []
+        },
+        {
+          "id": "name-run_backlog",
+          "text": "hier muss auf jeden fall die frage ob do-run backlog (nur angeboten wenn >=1 issue im repo) oder es nur um die umsetzung der anweisungen geht",
+          "attachments": []
+        },
+        {
+          "id": "name-run_autonomous",
+          "text": "sollte min. eine frage von do-run sein!",
+          "attachments": []
+        },
+        {
+          "id": "name-run_burn",
+          "text": "sollte mindestens eine frage von do-run sein!",
+          "attachments": []
+        },
+        {
+          "id": "name-run_agents",
+          "text": "do-run ssollte auch auto-agents benutzen immer!",
+          "attachments": []
+        },
+        {
+          "id": "name-tune_polish",
+          "text": "von wem alles aufgerufen, mach dir nochmal einen Kopf über die relative skill struktur / hooks die das hier aufrufen!",
+          "attachments": []
+        },
+        {
+          "id": "name-tune_harden",
+          "text": "von wem alles aufgerufen, mach dir nochmal einen Kopf über die relative skill struktur / hooks die das hier aufrufen!",
+          "attachments": []
+        },
+        {
+          "id": "name-tune_audit",
+          "text": "eher do-audit und nutzer invoked",
+          "attachments": []
+        },
+        {
+          "id": "name-tune_rethink",
+          "text": "sollte eine frage sein von do-run ob rethink oder nicht",
+          "attachments": []
+        },
+        {
+          "id": "name-fix",
+          "text": "sollte automatisch aber wie invoked werden?",
+          "attachments": []
+        },
+        {
+          "id": "name-concept",
+          "text": "wenn ich im prompt von concept spreche explizit, kann dann der skill trotzdem invoked werden? Ansonsten natürlich wie schon besprochen automatisiert wie ddie agents auch",
+          "attachments": []
+        },
+        {
+          "id": "name-setup_issue",
+          "text": "wie wird der automatisch getriggered? Save, wenn man ein issue erstelllt oder aktualisiert?!",
+          "attachments": []
+        },
+        {
+          "id": "name-web_guide",
+          "text": "Was macht der?",
+          "attachments": []
+        },
+        {
+          "id": "name-setup_readme",
+          "text": "genau!",
+          "attachments": []
+        },
+        {
+          "id": "name-auto_update",
+          "text": "sollte nur automatisch sein!",
+          "attachments": []
+        },
+        {
+          "id": "g_hooks-note",
+          "text": "ist ein hook für auto-fix wirklich gut genug?! hmmm",
+          "attachments": []
+        },
+        {
+          "id": "g_desc-note",
+          "text": "aber wirklich keine relevanten details verlieren! AUßer wenn die robustheit nicht leidet!",
+          "attachments": []
+        },
+        {
+          "id": "g_measure-note",
+          "text": "das klingt grandios! So können wir das dotclaude repo sich selbst opitimieren lassen und dabei messen wie ich hier programmiere. Das ist allerdings für andere als mich plugin consumer nicht relevant!",
+          "attachments": []
+        },
+        {
+          "id": "p_order-note",
+          "text": "Definitiv in der nächsten Runde erst nochmal alle changes. Ich habe a) Angst irgendwelche Details zu vcerlieren b) das nicht user skills nie oder von falschen oder unvollständigen aufgerufen werden c) das skill loops entstehen, skill a ruft b auf, b ruft a auf..",
+          "attachments": []
+        }
+      ]
+    },
+    "mappings": [
+      {
+        "id": "skill_map",
+        "label": "Zuordnung: Kategorie & Auslöser",
+        "mode": "matrix",
+        "assigned": {
+          "cat": [
+            [
+              "ship",
+              "cat.do_"
+            ],
+            [
+              "promote",
+              "cat.to_ship"
+            ],
+            [
+              "claude_learn",
+              "cat.do_"
+            ],
+            [
+              "run_autonomous",
+              "cat.to_run"
+            ],
+            [
+              "run_burn",
+              "cat.to_run"
+            ],
+            [
+              "run_agents",
+              "cat.auto_"
+            ],
+            [
+              "tune_polish",
+              "cat.auto_"
+            ],
+            [
+              "tune_harden",
+              "cat.auto_"
+            ],
+            [
+              "tune_audit",
+              "cat.auto_"
+            ],
+            [
+              "tune_rethink",
+              "cat.auto_"
+            ],
+            [
+              "fix",
+              "cat.auto_"
+            ],
+            [
+              "concept",
+              "cat.auto_"
+            ],
+            [
+              "setup_issue",
+              "cat.auto_"
+            ],
+            [
+              "web_guide",
+              "cat.auto_"
+            ],
+            [
+              "setup_readme",
+              "cat.hook"
+            ],
+            [
+              "setup_cleanup",
+              "cat.setup_"
+            ],
+            [
+              "setup_project",
+              "cat.setup_"
+            ],
+            [
+              "auto_update",
+              "cat.setup_"
+            ],
+            [
+              "auto_graph",
+              "cat.hook"
+            ],
+            [
+              "auto_usage",
+              "cat.mcp"
+            ],
+            [
+              "claude_strict",
+              "cat.do_"
+            ],
+            [
+              "claude_batch",
+              "cat.do_"
+            ],
+            [
+              "claude_extend_skill",
+              "cat.auto_"
+            ],
+            [
+              "run_backlog",
+              "cat.to_run"
+            ]
+          ],
+          "trig": [
+            [
+              "ship",
+              "trig.t_word"
+            ],
+            [
+              "ship",
+              "trig.t_slash"
+            ],
+            [
+              "ship",
+              "trig.t_hook"
+            ],
+            [
+              "ship",
+              "trig.t_skill"
+            ],
+            [
+              "promote",
+              "trig.t_word"
+            ],
+            [
+              "claude_learn",
+              "trig.t_word"
+            ],
+            [
+              "claude_learn",
+              "trig.t_slash"
+            ],
+            [
+              "claude_strict",
+              "trig.t_slash"
+            ],
+            [
+              "claude_strict",
+              "trig.t_hook"
+            ],
+            [
+              "claude_batch",
+              "trig.t_slash"
+            ],
+            [
+              "claude_extend_skill",
+              "trig.t_slash"
+            ],
+            [
+              "run_backlog",
+              "trig.t_word"
+            ],
+            [
+              "run_backlog",
+              "trig.t_slash"
+            ],
+            [
+              "run_autonomous",
+              "trig.t_word"
+            ],
+            [
+              "run_burn",
+              "trig.t_slash"
+            ],
+            [
+              "run_agents",
+              "trig.t_model"
+            ],
+            [
+              "run_agents",
+              "trig.t_word"
+            ],
+            [
+              "tune_polish",
+              "trig.t_skill"
+            ],
+            [
+              "tune_polish",
+              "trig.t_hook"
+            ],
+            [
+              "tune_polish",
+              "trig.t_word"
+            ],
+            [
+              "tune_harden",
+              "trig.t_word"
+            ],
+            [
+              "tune_harden",
+              "trig.t_skill"
+            ],
+            [
+              "tune_audit",
+              "trig.t_word"
+            ],
+            [
+              "tune_rethink",
+              "trig.t_word"
+            ],
+            [
+              "tune_rethink",
+              "trig.t_model"
+            ],
+            [
+              "fix",
+              "trig.t_hook"
+            ],
+            [
+              "fix",
+              "trig.t_model"
+            ],
+            [
+              "fix",
+              "trig.t_word"
+            ],
+            [
+              "concept",
+              "trig.t_model"
+            ],
+            [
+              "concept",
+              "trig.t_hook"
+            ],
+            [
+              "concept",
+              "trig.t_word"
+            ],
+            [
+              "setup_issue",
+              "trig.t_skill"
+            ],
+            [
+              "setup_issue",
+              "trig.t_word"
+            ],
+            [
+              "web_guide",
+              "trig.t_model"
+            ],
+            [
+              "web_guide",
+              "trig.t_word"
+            ],
+            [
+              "setup_readme",
+              "trig.t_hook"
+            ],
+            [
+              "setup_cleanup",
+              "trig.t_slash"
+            ],
+            [
+              "setup_project",
+              "trig.t_slash"
+            ],
+            [
+              "auto_update",
+              "trig.t_slash"
+            ],
+            [
+              "auto_update",
+              "trig.t_hook"
+            ],
+            [
+              "auto_graph",
+              "trig.t_hook"
+            ],
+            [
+              "auto_usage",
+              "trig.t_hook"
+            ]
+          ]
+        },
+        "order": {},
+        "diff": [
+          {
+            "item": "claude_strict",
+            "target": "cat.do_",
+            "proposed": false,
+            "now": true
+          },
+          {
+            "item": "claude_strict",
+            "target": "cat.setup_",
+            "proposed": true,
+            "now": false
+          },
+          {
+            "item": "claude_batch",
+            "target": "cat.do_",
+            "proposed": false,
+            "now": true
+          },
+          {
+            "item": "claude_batch",
+            "target": "cat.setup_",
+            "proposed": true,
+            "now": false
+          },
+          {
+            "item": "claude_extend_skill",
+            "target": "cat.auto_",
+            "proposed": false,
+            "now": true
+          },
+          {
+            "item": "claude_extend_skill",
+            "target": "cat.to_project",
+            "proposed": true,
+            "now": false
+          },
+          {
+            "item": "run_backlog",
+            "target": "cat.do_",
+            "proposed": true,
+            "now": false
+          },
+          {
+            "item": "run_backlog",
+            "target": "cat.to_run",
+            "proposed": false,
+            "now": true
+          }
+        ],
+        "unassigned": [],
+        "violations": [
+          {
+            "target": "cat.do_",
+            "kind": "max",
+            "have": 4,
+            "want": 3
+          }
+        ],
+        "adhocItems": [],
+        "note": "Btw, es geht nicht darum, dass wir skill inhalte verlieren, nur von wo sie aufgerufen werden.",
+        "slotNotes": {
+          "cat.to_run": "das was wir jetzt dort rein mergen, gern als user questions in dem skill!"
+        }
+      }
+    ],
+    "action": "iterate",
+    "_version": 1,
+    "_processed_at": "",
+    "_picked_up_at": "2026-09-23T21:36:43.955Z",
+    "_phase": ""
+  },
+  {
+    "iteration": 2,
+    "submitted": true,
+    "template": "free",
+    "decisions": [
+      {
+        "id": "q_order",
+        "label": "Fragenfolge so übernehmen",
+        "evaluation": "include"
+      },
+      {
+        "id": "q_loop",
+        "label": "Loop-Schutz: invokes-Feld + Graph-Test + Laufzeit-Stack",
+        "evaluation": "include"
+      },
+      {
+        "id": "q_detail",
+        "label": "Schutz vor Detailverlust",
+        "evaluation": "include"
+      },
+      {
+        "id": "q_invoke",
+        "label": "Aufruf-Garantie der versteckten Skills",
+        "evaluation": "include"
+      },
+      {
+        "id": "q_measure",
+        "label": "Messen nur fürs dotclaude-Repo",
+        "evaluation": "include"
+      },
+      {
+        "id": "q_plan",
+        "label": "Umsetzung erst nach dieser Runde",
+        "evaluation": "include"
+      }
+    ],
+    "comments": {
+      "general": {
+        "text": "",
+        "attachments": []
+      },
+      "items": [
+        {
+          "id": "map-skill_map2-note",
+          "text": "batch sollte dann nach dem sammeln bei start der ausführung entwerder concept oder do-run nutzen!\nGerade auto agents sollte wirklich überall wo möglich aufgerufen werden, denn es enthält ja auch die logik ob überhaupt agents gebraucht werden (oder war die in einem hook oder so, anyway dort auch gut, falls kein devops skill genutzt wird, aber natürlich auch wenn einer agents referenziert), den aktuellen tarif, nutzugnsvolumen etc. Das sind ja sozusagen die hände und beine jeglicher umsetzung.",
+          "attachments": []
+        },
+        {
+          "id": "chg-run_backlog",
+          "text": "genau, aber die inhalte logik von backlog muss ggf. angepasst werden bzw. dann durch do-run abfragen gemachtr werden",
+          "attachments": []
+        },
+        {
+          "id": "chg-tune_rethink",
+          "text": "ich denke das ddarf ruhig immer bei do-run als auswahlfeld kommen mit chefckboxes, nebst polish harden. Default alle angeklickt außer rethink (je nach promptkontext darf das aber default ändern von claude ai).",
+          "attachments": []
+        },
+        {
+          "id": "chg-tune_audit",
+          "text": "gern auch raus und bei do-run rein bei der frage ob der nutzer den prompt machen will (default) oder audit oder (falls >1 issue verfügbar) backlog. Der nutzer darf nur eins davon wählen.",
+          "attachments": []
+        },
+        {
+          "id": "chg-run_agents",
+          "text": "die agents im Rahmen ihrer delegation policy greift ja auch immer, right? egal ob ich im prompt do-run referenziere oder keinen claude skill. Das ist nämlcih sehr wichtig. \nDaneben bei do-run einfach nutzen, dort brauchst du keine abfrage an den nutzer (nur natürlich nach start des do-run dann informativ auflisten welche agnets sich für was an die arbeit machen, dazu gern ein einheitliches wiedererkennbares wie completion card style als mini tabelle mit wave, auftrag, modell (inkl. automatisch neusten trainingsversion, z. B. Opus 5.5)  und effort level, aber ohne cta)",
+          "attachments": []
+        },
+        {
+          "id": "chg-fix",
+          "text": "scanne die letzten 20 sessions, wurde der wirklich gut aufgerufen, ggf. verbessern!",
+          "attachments": []
+        },
+        {
+          "id": "chg-web_guide",
+          "text": "super, aber der router, naja, verfeinere den nochmal, ich bin mir noch nicht sicher ob web guide gut greift, habe ihn kein mal bekommmen, als claude sagte, jetzt musst du nur noch in supabase xyz konfigurieren oder das secret eintragen usw.... dort wurde nie web guide invoked uhnd ich geführt im com claude monitored tab geguided....",
+          "attachments": []
+        },
+        {
+          "id": "chg-claude_extend_skill",
+          "text": "ok, aber ist die gefahr nicht das in anderen Sprachen die router nicht greifen, auch hierfür nicht? Was ist mit ienem inder der das plugin konsumiert....",
+          "attachments": []
+        },
+        {
+          "id": "chg-auto_graph",
+          "text": "das heißt die hooks könnenn direkt knowledge in voken? und es braucht keinen skill dazwischen, ja dann perfekt!",
+          "attachments": []
+        },
+        {
+          "id": "q_order-note",
+          "text": "das mit genau eine askuserquestions mit x Fragen finde ich gut, weil der nutzer dann konzentreiert ist und danach ggf. weg geht oder im schlimmsten fall ins bett geht, nmaja wen autonomous modus, dann muss er ja noch in den nächsten 5 minuten ebrechtigugnen erteilen, aber das ist ok .",
+          "attachments": []
+        },
+        {
+          "id": "q_loop-note",
+          "text": "Aber ist das invokes exklusiv? Was ist mit anderen skills des plugin consumers? Erscheint mir zu strikt?!",
+          "attachments": []
+        },
+        {
+          "id": "q_detail-note",
+          "text": "Ja genau, wobei wenn z. B. devops autonomous mehrere user questions fragt und burn auch, aber wir beides im rahmen von dem do-run jetzt abfragen, dann sollte sowas natürlcihs chon gechekckt und adaptiert werdedn.",
+          "attachments": []
+        },
+        {
+          "id": "q_measure-note",
+          "text": "genau, damit sind sie trotzdem gegen computer ausfall gesichert wenn ich irgendwo anders weiter mache das repo zu entwickeln.",
+          "attachments": []
+        },
+        {
+          "id": "q_plan-note",
+          "text": "mach mir nochmal eine ziel auflistung mit den verknüpfungen...\ndie ursprungssituation benötige ich nicht mehr, die passt dann. \nso wie polish auch bei ship invoked wird, soll es auch harden sein!",
+          "attachments": []
+        }
+      ]
+    },
+    "mappings": [
+      {
+        "id": "skill_map2",
+        "label": "Zuordnung v2",
+        "mode": "matrix",
+        "assigned": {
+          "cat": [
+            [
+              "ship",
+              "cat.do_"
+            ],
+            [
+              "promote",
+              "cat.to_ship"
+            ],
+            [
+              "claude_learn",
+              "cat.do_"
+            ],
+            [
+              "claude_strict",
+              "cat.to_run"
+            ],
+            [
+              "claude_batch",
+              "cat.do_"
+            ],
+            [
+              "claude_extend_skill",
+              "cat.auto_"
+            ],
+            [
+              "run_backlog",
+              "cat.to_run"
+            ],
+            [
+              "run_autonomous",
+              "cat.to_run"
+            ],
+            [
+              "run_burn",
+              "cat.to_run"
+            ],
+            [
+              "run_agents",
+              "cat.auto_"
+            ],
+            [
+              "tune_polish",
+              "cat.auto_"
+            ],
+            [
+              "tune_harden",
+              "cat.auto_"
+            ],
+            [
+              "tune_audit",
+              "cat.do_"
+            ],
+            [
+              "tune_rethink",
+              "cat.to_run"
+            ],
+            [
+              "fix",
+              "cat.auto_"
+            ],
+            [
+              "concept",
+              "cat.auto_"
+            ],
+            [
+              "setup_issue",
+              "cat.auto_"
+            ],
+            [
+              "web_guide",
+              "cat.auto_"
+            ],
+            [
+              "setup_readme",
+              "cat.hook"
+            ],
+            [
+              "setup_cleanup",
+              "cat.setup_"
+            ],
+            [
+              "setup_project",
+              "cat.setup_"
+            ],
+            [
+              "auto_update",
+              "cat.auto_"
+            ],
+            [
+              "auto_graph",
+              "cat.hook"
+            ],
+            [
+              "auto_usage",
+              "cat.mcp"
+            ]
+          ],
+          "trig": [
+            [
+              "ship",
+              "trig.t_word"
+            ],
+            [
+              "ship",
+              "trig.t_slash"
+            ],
+            [
+              "ship",
+              "trig.t_hook"
+            ],
+            [
+              "ship",
+              "trig.t_skill"
+            ],
+            [
+              "promote",
+              "trig.t_word"
+            ],
+            [
+              "claude_learn",
+              "trig.t_word"
+            ],
+            [
+              "claude_learn",
+              "trig.t_slash"
+            ],
+            [
+              "claude_learn",
+              "trig.t_hook"
+            ],
+            [
+              "claude_strict",
+              "trig.t_skill"
+            ],
+            [
+              "claude_strict",
+              "trig.t_hook"
+            ],
+            [
+              "claude_batch",
+              "trig.t_word"
+            ],
+            [
+              "claude_batch",
+              "trig.t_slash"
+            ],
+            [
+              "claude_extend_skill",
+              "trig.t_model"
+            ],
+            [
+              "claude_extend_skill",
+              "trig.t_word"
+            ],
+            [
+              "run_backlog",
+              "trig.t_skill"
+            ],
+            [
+              "run_autonomous",
+              "trig.t_skill"
+            ],
+            [
+              "run_burn",
+              "trig.t_skill"
+            ],
+            [
+              "run_agents",
+              "trig.t_skill"
+            ],
+            [
+              "run_agents",
+              "trig.t_model"
+            ],
+            [
+              "tune_polish",
+              "trig.t_skill"
+            ],
+            [
+              "tune_polish",
+              "trig.t_word"
+            ],
+            [
+              "tune_harden",
+              "trig.t_skill"
+            ],
+            [
+              "tune_harden",
+              "trig.t_word"
+            ],
+            [
+              "tune_audit",
+              "trig.t_word"
+            ],
+            [
+              "tune_audit",
+              "trig.t_slash"
+            ],
+            [
+              "tune_rethink",
+              "trig.t_skill"
+            ],
+            [
+              "tune_rethink",
+              "trig.t_word"
+            ],
+            [
+              "tune_rethink",
+              "trig.t_model"
+            ],
+            [
+              "fix",
+              "trig.t_hook"
+            ],
+            [
+              "fix",
+              "trig.t_word"
+            ],
+            [
+              "fix",
+              "trig.t_model"
+            ],
+            [
+              "concept",
+              "trig.t_model"
+            ],
+            [
+              "concept",
+              "trig.t_hook"
+            ],
+            [
+              "concept",
+              "trig.t_word"
+            ],
+            [
+              "concept",
+              "trig.t_skill"
+            ],
+            [
+              "setup_issue",
+              "trig.t_skill"
+            ],
+            [
+              "setup_issue",
+              "trig.t_hook"
+            ],
+            [
+              "setup_issue",
+              "trig.t_word"
+            ],
+            [
+              "web_guide",
+              "trig.t_model"
+            ],
+            [
+              "web_guide",
+              "trig.t_word"
+            ],
+            [
+              "setup_readme",
+              "trig.t_hook"
+            ],
+            [
+              "setup_cleanup",
+              "trig.t_slash"
+            ],
+            [
+              "setup_project",
+              "trig.t_slash"
+            ],
+            [
+              "auto_update",
+              "trig.t_hook"
+            ],
+            [
+              "auto_graph",
+              "trig.t_hook"
+            ],
+            [
+              "auto_usage",
+              "trig.t_hook"
+            ]
+          ]
+        },
+        "order": {},
+        "diff": [],
+        "unassigned": [],
+        "violations": [],
+        "adhocItems": [],
+        "note": "batch sollte dann nach dem sammeln bei start der ausführung entwerder concept oder do-run nutzen!\nGerade auto agents sollte wirklich überall wo möglich aufgerufen werden, denn es enthält ja auch die logik ob überhaupt agents gebraucht werden (oder war die in einem hook oder so, anyway dort auch gut, falls kein devops skill genutzt wird, aber natürlich auch wenn einer agents referenziert), den aktuellen tarif, nutzugnsvolumen etc. Das sind ja sozusagen die hände und beine jeglicher umsetzung.",
+        "slotNotes": {}
+      }
+    ],
+    "action": "iterate",
+    "_version": 2,
+    "_processed_at": "2026-09-23T21:45:14.182Z",
+    "_picked_up_at": "2026-09-23T22:18:50.414Z",
+    "_phase": ""
+  },
+  {
+    "iteration": 3,
+    "submitted": true,
+    "template": "free",
+    "decisions": [
+      {
+        "id": "z_layers",
+        "label": "Ebenen-Regel statt freier invokes-Liste",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_dorun",
+        "label": "do-run-Abfrage so übernehmen",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_harden",
+        "label": "Harden beim Ship, diff-eng wie Polish",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_batch",
+        "label": "do-batch führt über auto-concept oder do-run aus",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_agents",
+        "label": "auto-agents als einziger Ausführungsweg + Start-Tabelle",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_fix",
+        "label": "auto-fix: drei Wege + Evals aus echten Fällen",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_guide",
+        "label": "auto-guide: Stop-Hook auf Claudes Antwort",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_lang",
+        "label": "Sprachstrategie: Ereignis-Hooks zuerst, Evals in 3 Fremdsprachen",
+        "evaluation": "include"
+      },
+      {
+        "id": "z_go",
+        "label": "Zielbild ist reif für die Umsetzung",
+        "evaluation": "include"
+      }
+    ],
+    "comments": {
+      "general": {
+        "text": "bzgfl. nachfragen, bei audit auswahl im ersten schritt sollte nachgefragt werden ob der audit nur concept oder direktee implementierung sein soll. Beides ist möglich. \n\nSchaue das die fragen titel und antworten ein gleiches muster haben, bzgl. wo steht das Verb oder ja/ nein antowrten. `Ja nein würde ich vermeiden, die varianten sollten knackige kurze klar gleich aufgebaute antowrten haben, z. B. \"Ship nicht automatisch\" oder \"Ship automatisch\"",
+        "attachments": []
+      },
+      "items": [
+        {
+          "id": "z_layers-note",
+          "text": "Ok, aber extensions etc. von consumernn egal bei welchen user oder nicht skill, bleibt trotzdem. \nIn der grafik bin ich etwas verwirrt über agents, der kann ja auch bei der umssetuzng schon eine rolle speieln etc. ist der wirklich korrekt einsortiert?  Und hooks etc. isnd ja extra nicht in dieser abbildung, sondern es geht ja nur um skills zusammenhänge, nicht wodurch sie noch getriggert werden können.",
+          "attachments": []
+        },
+        {
+          "id": "z_dorun-note",
+          "text": "schritt 2 in der grundabfrage von do-run hmmm. Budget verbrennen ist eher für mich was für schritt 4 als letzten punkt, nie angehakt, und nur sichtbar wenn nutzungsvolumen >80% ist. \n\nschritt 3 sollte default mit sinnvollen umfeld sein, bzw. das letzte was der nutzer in diesem chat ausgewählt hat. \nAchte darauf,k dass die auswahlen nicht durcheinander sind bei verschiedenen aufrufen, immer gleiche reihenfolge und der agnositische  empfehlungswert (den wir hier gerade festlegen) immer oben auch wenn durch prompts oder nutzerverahlten default anderes angewählt oder reocmmended sein sollte. \nDem nutzer sollte möglich sein normalerweise sich einfach durchzuklicken ohne irgendwas anklicken zu müssen.\n\nVllt. noch schirtt 5 mit ship ja nein einfügen, wobei ship nein default iist.",
+          "attachments": []
+        },
+        {
+          "id": "z_lang-note",
+          "text": "mach evals in den top 10 sprachen! ansontren gut, wie du schreibst!",
+          "attachments": []
+        }
+      ]
+    },
+    "mappings": [],
+    "action": "implement",
+    "_version": 3,
+    "_processed_at": "2026-09-23T22:24:48.892Z",
+    "_picked_up_at": "2026-09-23T22:48:07.166Z",
+    "_phase": ""
+  }
+]

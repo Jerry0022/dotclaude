@@ -1,14 +1,26 @@
 /**
  * @module skill-invocations
- * @version 0.2.0
+ * @version 0.4.0
  * @description Which skills did the transcript already invoke? Shared by
  *   `prompt.skill.enforce` (the trigger router must not re-mandate a skill
  *   that is already running this session), `stop.guide.handoff` (the turn
- *   already invoked web-guide / auto-guide), `post.flow.debug` (fix is
- *   already active this turn) and `pre.issue.guard` (setup-issue / auto-issue
+ *   already invoked auto-guide), `post.flow.debug` (auto-fix is
+ *   already active this turn) and `pre.issue.guard` (auto-issue
  *   ran this turn). Both a Skill tool_use and a slash-started skill
  *   (`<command-name>/devops:x</command-name>`, with or without the plugin
  *   prefix) count.
+ *
+ *   Old names count only when namespaced (PR 2 renames, `skill-names.js`):
+ *   a session that invoked `devops:ship` before the update reads as having
+ *   run `do-ship`, but a BARE old name (`fix`, `setup-issue`) is a consumer
+ *   project/user skill — an extension directory still under the old name —
+ *   and never stands for the devops skill (`isDevopsSkill`). The session-wide
+ *   set holds the recorded name (namespace stripped) and, for a devops
+ *   invocation, its current name plus `<skill>#<mode>` when a mode is known
+ *   (folded old name `devops:tune-audit` → `do-run#audit`; `args` / slash
+ *   `<command-args>` whose first token is a mode of the skill → `do-run#audit`),
+ *   so the router can tell a do-run audit from a do-run rethink.
+ *   `skillInvokedThisTurn` predicates compare with `isDevopsSkill`.
  *
  *   Two scans, deliberately different in cost:
  *     - `invokedSkillsInTranscript` — session-wide, a single regex pass over
@@ -19,9 +31,23 @@
  *       only the lines it visits.
  *
  *   Transcript shape (verified against real Claude Code transcripts):
- *   `{"type":"tool_use","id":…,"name":"Skill","input":{"skill":"devops:concept",…}}`
+ *   `{"type":"tool_use","id":…,"name":"Skill","input":{"skill":"devops:auto-concept",…}}`
  *   — the skill name may carry a `plugin:` namespace, which is stripped.
  */
+
+const { canonicalSkillName, foldedMode, isOldName, namespaceOf, FOLDED } = require('./skill-names');
+
+/** Current skill → its folded modes (`do-run` → backlog, autonomous, …). */
+const MODES_BY_SKILL = (() => {
+  const out = {};
+  for (const f of Object.values(FOLDED)) (out[f.skill] = out[f.skill] || new Set()).add(f.mode);
+  return out;
+})();
+
+/** Router key for a skill + mode (`do-run#audit`). */
+function modeKey(skill, mode) {
+  return `${skill}#${mode}`;
+}
 
 /** The Skill tool — bare or under a connector namespace (`…__Skill`). */
 function isSkillTool(name) {
@@ -39,7 +65,7 @@ function isPromptEntry(entry) {
   return content.some(b => b && b.type !== 'tool_result');
 }
 
-/** `devops:concept` → `concept`; lowercased; '' for anything non-string. */
+/** `devops:auto-concept` → `auto-concept`; lowercased; '' for anything non-string. */
 function normalizeSkillName(raw) {
   if (typeof raw !== 'string') return '';
   const s = raw.trim().toLowerCase();
@@ -48,14 +74,14 @@ function normalizeSkillName(raw) {
 }
 
 const SKILL_INVOKE_RE =
-  /"name"\s*:\s*"(?:[\w.-]+__)?Skill"\s*,\s*"input"\s*:\s*\{\s*"skill"\s*:\s*"([^"\\]+)"/g;
+  /"name"\s*:\s*"(?:[\w.-]+__)?Skill"\s*,\s*"input"\s*:\s*\{\s*"skill"\s*:\s*"([^"\\]+)"(?:\s*,\s*"args"\s*:\s*"((?:[^"\\]|\\.)*)")?/g;
 
 /** A slash-started skill: the harness records `<command-name>/devops:x</command-name>`
  *  (or `/x`, or no slash) in the user entry instead of a Skill tool_use. */
 const COMMAND_NAME_RE = /<command-name>\s*\/?([\w.:-]+)\s*<\/command-name>/g;
 
 /**
- * Raw names of every slash command recorded in a text (`devops:concept`, `fix`).
+ * Raw names of every slash command recorded in a text (`devops:auto-concept`, `auto-fix`).
  * @param {string} text
  * @returns {string[]}
  */
@@ -64,22 +90,65 @@ function commandNamesIn(text) {
   return [...text.matchAll(COMMAND_NAME_RE)].map(m => m[1]);
 }
 
+/** `<command-args>…</command-args>` right after a `<command-name>` (JSONL-escaped newlines allowed). */
+const COMMAND_ARGS_AFTER_RE =
+  /^(?:\s|\\n|<command-message>[^<]*<\/command-message>)*<command-args>([^<]*)<\/command-args>/;
+
+/** Mode named by an args string: its first token, when that is a folded mode of `skill`. */
+function modeFromArgs(skill, args) {
+  if (typeof args !== 'string') return null;
+  const first = args.replace(/\\n/g, ' ').trim().split(/\s+/)[0] || '';
+  const token = first.toLowerCase().replace(/^--(?:mode=)?/, '');
+  const modes = MODES_BY_SKILL[skill];
+  return modes && modes.has(token) ? token : null;
+}
+
+/**
+ * Add the keys one recorded invocation contributes to the invoked set.
+ * @param {Set<string>} out
+ * @param {string} raw recorded name (`devops:tune-audit`, `fix`, `do-run`)
+ * @param {string|null} args Skill args / slash `<command-args>`
+ */
+function addInvocation(out, raw, args) {
+  const name = normalizeSkillName(raw);
+  if (!name) return;
+  const ns = namespaceOf(raw);
+  if (ns && ns !== 'devops') {
+    // Another plugin's skill — never the devops skill of the same bare name.
+    out.add(`${ns}:${name}`);
+    return;
+  }
+  out.add(name);
+  // A bare old name is a consumer skill (an extension under the old name).
+  if (!ns && isOldName(name)) return;
+  const current = canonicalSkillName(name);
+  out.add(current);
+  const mode = foldedMode(name) || modeFromArgs(current, args);
+  if (mode) out.add(modeKey(current, mode));
+}
+
 /**
  * Every skill name invoked anywhere in the (tail of the) transcript — via
  * the Skill tool or as a slash command.
  * @param {string} transcriptContent raw JSONL
- * @returns {Set<string>} normalized skill names
+ * @returns {Set<string>} normalized names: the recorded name, and for a
+ *   devops invocation its current name and `<skill>#<mode>` when a mode is
+ *   known (`devops:ship` → `ship` + `do-ship`; `devops:tune-audit` →
+ *   `tune-audit` + `do-run` + `do-run#audit`). A bare old name (`fix`) adds
+ *   only itself; another plugin's skill adds only `<ns>:<name>`.
  */
 function invokedSkillsInTranscript(transcriptContent) {
   const out = new Set();
   if (typeof transcriptContent !== 'string' || !transcriptContent) return out;
   for (const m of transcriptContent.matchAll(SKILL_INVOKE_RE)) {
-    const name = normalizeSkillName(m[1]);
-    if (name) out.add(name);
+    addInvocation(out, m[1], m[2] === undefined ? null : m[2]);
   }
-  for (const raw of commandNamesIn(transcriptContent)) {
-    const name = normalizeSkillName(raw);
-    if (name) out.add(name);
+  if (transcriptContent.includes('<command-name>')) {
+    for (const m of transcriptContent.matchAll(COMMAND_NAME_RE)) {
+      const after = transcriptContent.slice(m.index + m[0].length, m.index + m[0].length + 2000);
+      const a = COMMAND_ARGS_AFTER_RE.exec(after);
+      addInvocation(out, m[1], a ? a[1] : null);
+    }
   }
   return out;
 }
@@ -203,6 +272,8 @@ module.exports = {
   SKILL_INVOKE_RE,
   COMMAND_NAME_RE,
   commandNamesIn,
+  modeKey,
+  modeFromArgs,
   invokedSkillsInTranscript,
   skillInvokedThisTurn,
   lastUserPromptText,

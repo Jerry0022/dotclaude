@@ -49,11 +49,13 @@ describe("hasGraph — graph.json detection", () => {
 });
 
 describe("buildGraphNudge — ambient hint text", () => {
-  test("names the query command, the graph path, and the refresh skill", () => {
+  test("names the query command, the graph path, the refresh command and the doc (no skill)", () => {
     const t = buildGraphNudge();
     expect(t).toContain("graphify query");
     expect(t).toContain("graphify-out/graph.json");
-    expect(t).toContain("/auto-graph");
+    expect(t).toContain("graphify update .");
+    expect(t).toContain("deep-knowledge/graphify.md");
+    expect(t).not.toContain("/auto-graph");
   });
 });
 

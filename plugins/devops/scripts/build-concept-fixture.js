@@ -4,7 +4,7 @@
  * @version 0.1.0
  * @plugin devops
  * @description Assemble a standalone concept page from the reference blocks in
- *   `skills/concept/deep-knowledge/templates.md` — the same fenced HTML / CSS
+ *   `skills/auto-concept/deep-knowledge/templates.md` — the same fenced HTML / CSS
  *   / JS a generated page is copied from — with a synthetic history of N
  *   rounds, so the Kompass decision panel (archive fold, TOC groups, the six
  *   status-line states, the split button, the mobile bottom bar, the FAB
@@ -37,7 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const TEMPLATES = path.join(__dirname, '..', 'skills', 'concept', 'deep-knowledge', 'templates.md');
+const TEMPLATES = path.join(__dirname, '..', 'skills', 'auto-concept', 'deep-knowledge', 'templates.md');
 
 function parseArgs(argv) {
   const out = { out: '', rounds: 8, entries: 14, mode: 'decision', locale: 'en', mapping: false, designs: 1 };
@@ -128,7 +128,7 @@ function variantSection(id, label, { discard = false, disabled = false } = {}) {
 }
 
 // --- Information mapping (--mapping) ------------------------------------------
-// The two specs of skills/concept/mapping-harness.js (VEHICLE_SPEC, TRAINS_SPEC),
+// The two specs of skills/auto-concept/mapping-harness.js (VEHICLE_SPEC, TRAINS_SPEC),
 // copied: the harness is an ES module, this script is CommonJS. Keep them in
 // step by hand — they are test data, not a contract.
 const VEHICLE_SPEC = {

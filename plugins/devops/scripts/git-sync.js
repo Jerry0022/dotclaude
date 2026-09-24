@@ -114,11 +114,11 @@ function repoBusy() {
 }
 
 /**
- * True while /ship owns this worktree.
+ * True while /do-ship owns this worktree.
  *
  * The spawning hooks check this too, but they check it at spawn time — and the
  * dangerous child is the one spawned by the Stop just BEFORE the user types
- * /ship: its gates have already passed and its merge would land inside the
+ * /do-ship: its gates have already passed and its merge would land inside the
  * pipeline's rebase. Asking again here, immediately before the index is
  * written, closes that window.
  */
@@ -351,7 +351,7 @@ function tryMerge(source) {
   if (dirtyOverlap(source).length > 0) return null;
 
   // The gates at the top of this file ran before a fetch per parent, and a
-  // fetch takes seconds. A /ship or a rebase started in that window would be
+  // fetch takes seconds. A /do-ship or a rebase started in that window would be
   // invisible to them, so ask again with the index about to be written.
   if (repoBusy() || shipInFlight()) return null;
 

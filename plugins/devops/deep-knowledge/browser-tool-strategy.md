@@ -28,7 +28,7 @@ extension** running in Edge (or the Preview/Playwright fallback chain).
 
 **Exception:** Computer-use (`mcp__computer-use__*`) MAY be used for browser
 interaction **only** when the user explicitly requests desktop takeover:
-- User chooses "Desktop übernehmen" in `/run-autonomous` Step 2
+- User chooses "Desktop übernehmen" in `/do-run autonomous` Step 2
 - User explicitly asks for computer-use / desktop control
 - User explicitly invokes a flow that requires mouse/keyboard on the browser
 
@@ -85,7 +85,7 @@ logins continue to work without per-service re-authentication.
 These rules apply identically regardless of execution context:
 - **Foreground** (user is present, interactive)
 - **Background** (concept monitoring, autonomous testing, burn mode)
-- **Autonomous** (user is AFK, `/run-autonomous`)
+- **Autonomous** (user is AFK, `/do-run autonomous`)
 - **Headless/silent** (refresh-usage CDP scraping, health checks)
 
 Background mode does NOT mean "use a different browser" or "use computer-use
@@ -222,7 +222,7 @@ duplicate tab groups in Edge.
   Instead, ignore the duplicate group and let the user clean it up
 
 **Concurrent agents (known limitation):** When multiple agents (e.g., from
-`/run-burn` or `/run-autonomous`) open browser tabs simultaneously, a
+`/do-run burn` or `/do-run autonomous`) open browser tabs simultaneously, a
 race condition can occur: both agents probe, find no group, and each creates
 one. Mitigation: in multi-agent sessions, designate one agent as the tab
 manager, or add a short jitter (1-2 seconds) and re-probe before creating.
@@ -275,7 +275,7 @@ URL of different extension".
 The waterfall probe (`tabs_context_mcp`) only tests connectivity — it does NOT
 validate JS eval capability. Skills that need eval (concept monitoring, heartbeat
 injection) MUST run a test eval immediately after the waterfall and fall through
-to the next tool's eval if it fails. See concept skill's `monitoring.md`
+to the next tool's eval if it fails. See auto-concept skill's `monitoring.md`
 § Pre-Monitoring Setup step 5 for the implementation.
 
 ## Mid-Session Reconnection Protocol

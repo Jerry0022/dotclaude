@@ -3,9 +3,9 @@
   "languages": ["en", "zh", "hi", "es", "fr", "ar", "bn", "pt", "ru", "ja", "de"],
   "cases": [
     {
-      "id": "fix-blurry-square",
-      "skill": "fix",
-      "expectedSkillNames": ["fix", "auto-fix"],
+      "id": "auto-fix-blurry-square",
+      "skill": "auto-fix",
+      "expectedSkillNames": ["auto-fix", "fix"],
       "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
       "translations": {
         "de": "schau mal, irgendwas ist da mächtig kaputt, irgendwie gibt es einen doppeltes weißes blurry quadrat um das brett herum",
@@ -22,9 +22,9 @@
       }
     },
     {
-      "id": "fix-items-not-collected",
-      "skill": "fix",
-      "expectedSkillNames": ["fix", "auto-fix"],
+      "id": "auto-fix-items-not-collected",
+      "skill": "auto-fix",
+      "expectedSkillNames": ["auto-fix", "fix"],
       "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
       "translations": {
         "de": "Viel besser! Allerdings wenn ich von A1 zu A2 wandere, dann fährt auch das schiff, aber items werden nicht mehr eingesammelt",
@@ -41,9 +41,9 @@
       }
     },
     {
-      "id": "fix-ship-button-noop",
-      "skill": "fix",
-      "expectedSkillNames": ["fix", "auto-fix"],
+      "id": "auto-fix-ship-button-noop",
+      "skill": "auto-fix",
+      "expectedSkillNames": ["auto-fix", "fix"],
       "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
       "translations": {
         "de": "Also wenn ich auf Ship klicke passiert gar nix",
@@ -60,9 +60,9 @@
       }
     },
     {
-      "id": "fix-vercel-error",
-      "skill": "fix",
-      "expectedSkillNames": ["fix", "auto-fix"],
+      "id": "auto-fix-vercel-error",
+      "skill": "auto-fix",
+      "expectedSkillNames": ["auto-fix", "fix"],
       "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
       "translations": {
         "de": "das sieht gut aus, aber vercel scheint einen fehler aufzuzeigen, check das nochmal",
@@ -79,9 +79,9 @@
       }
     },
     {
-      "id": "fix-check-and-fix-errors",
-      "skill": "fix",
-      "expectedSkillNames": ["fix", "auto-fix"],
+      "id": "auto-fix-check-and-fix-errors",
+      "skill": "auto-fix",
+      "expectedSkillNames": ["auto-fix", "fix"],
       "sourceNote": "Real user bug report from session history (2026-09), German original in `de`.",
       "translations": {
         "de": "check ob es jetzt wieder alles runder läuft oder es fehler gibt, fix diese",
@@ -98,17 +98,17 @@
       }
     },
     {
-      "id": "fix-stacktrace",
-      "skill": "fix",
-      "expectedSkillNames": ["fix", "auto-fix"],
+      "id": "auto-fix-stacktrace",
+      "skill": "auto-fix",
+      "expectedSkillNames": ["auto-fix", "fix"],
       "languageIndependent": true,
       "sourceNote": "Pasted stack trace — language-independent per spec (error patterns route to auto-fix regardless of prompt language).",
       "prompt": "Traceback (most recent call last):\n  File \"app.py\", line 42, in process\n    result = compute(data)\n  File \"app.py\", line 17, in compute\n    return data[\"value\"] / count\nKeyError: 'value'"
     },
     {
-      "id": "setup-issue-dont-forget",
-      "skill": "setup-issue",
-      "expectedSkillNames": ["setup-issue", "auto-issue"],
+      "id": "auto-issue-dont-forget",
+      "skill": "auto-issue",
+      "expectedSkillNames": ["auto-issue", "setup-issue"],
       "sourceNote": "\"leg dafür ein Issue an\" style prompt.",
       "translations": {
         "de": "Können wir dafür bitte ein Issue anlegen, damit wir es nicht vergessen?",
@@ -125,9 +125,9 @@
       }
     },
     {
-      "id": "concept-before-implement",
-      "skill": "concept",
-      "expectedSkillNames": ["concept", "auto-concept"],
+      "id": "auto-concept-before-implement",
+      "skill": "auto-concept",
+      "expectedSkillNames": ["auto-concept", "concept"],
       "sourceNote": "\"mach mir dazu ein concept\" style prompt.",
       "translations": {
         "de": "Kannst du mir dazu mal ein concept machen, bevor wir das umsetzen?",
@@ -144,9 +144,9 @@
       }
     },
     {
-      "id": "tune-harden-edge-cases",
-      "skill": "tune-harden",
-      "expectedSkillNames": ["tune-harden", "auto-harden"],
+      "id": "auto-harden-edge-cases",
+      "skill": "auto-harden",
+      "expectedSkillNames": ["auto-harden", "tune-harden"],
       "sourceNote": "\"härte das mal / stabilize this\" style prompt.",
       "translations": {
         "de": "Härte das mal ab, das läuft noch zu instabil in Edge Cases.",
@@ -163,9 +163,9 @@
       }
     },
     {
-      "id": "claude-extend-skill-ship",
-      "skill": "claude-extend-skill",
-      "expectedSkillNames": ["claude-extend-skill", "auto-extend"],
+      "id": "auto-extend-ship",
+      "skill": "auto-extend",
+      "expectedSkillNames": ["auto-extend", "claude-extend-skill"],
       "sourceNote": "\"ich will den ship-skill für dieses Projekt erweitern / projektspezifisch festlegen\" style prompt.",
       "translations": {
         "de": "Ich will den ship-skill für dieses Projekt erweitern und projektspezifisch festlegen.",

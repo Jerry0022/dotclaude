@@ -9,6 +9,16 @@ describe("hasPluginSignal — plugin-topic detector", () => {
   });
 
   test("references a plugin slash command", () => {
+    expect(hasPluginSignal("/do-ship bricht beim preflight ab")).toBe(true);
+    expect(hasPluginSignal("nach /do-ship promote fehlt die Karte")).toBe(true);
+    expect(hasPluginSignal("/auto-issue nimmt das Milestone nicht")).toBe(true);
+    expect(hasPluginSignal("/auto-harden läuft ins Leere")).toBe(true);
+    expect(hasPluginSignal("/do-learn schreibt in die falsche Datei")).toBe(true);
+    expect(hasPluginSignal("/do-run bleibt im backlog hängen")).toBe(true);
+    expect(hasPluginSignal("/auto-fix findet den Fehler nicht")).toBe(true);
+  });
+
+  test("the pre-PR-2 slash names still signal", () => {
     expect(hasPluginSignal("/ship bricht beim preflight ab")).toBe(true);
     expect(hasPluginSignal("nach /promote fehlt die Karte")).toBe(true);
     expect(hasPluginSignal("/setup-issue nimmt das Milestone nicht")).toBe(true);
@@ -16,7 +26,7 @@ describe("hasPluginSignal — plugin-topic detector", () => {
     expect(hasPluginSignal("/claude-learn schreibt in die falsche Datei")).toBe(true);
   });
 
-  test("the spoken form of /claude-learn signals, typos included", () => {
+  test("the spoken form of /do-learn signals, typos included", () => {
     expect(hasPluginSignal("devops learn warum ship nicht funktioniert")).toBe(true);
     expect(hasPluginSignal("Nur die drei Sprachen, devops learn für dieses Projekt")).toBe(true);
     expect(hasPluginSignal("devos learn bzgl. der Routine")).toBe(true);
@@ -24,7 +34,7 @@ describe("hasPluginSignal — plugin-topic detector", () => {
     expect(hasPluginSignal("wir wollen devops-Prozesse lernen")).toBe(false);
   });
 
-  test("the spoken form of /claude-learn signals, typos included", () => {
+  test("the spoken form of /do-learn signals, typos included", () => {
     expect(hasPluginSignal("devops learn warum ship nicht funktioniert")).toBe(true);
     expect(hasPluginSignal("Nur die drei Sprachen, devops learn für dieses Projekt")).toBe(true);
     expect(hasPluginSignal("devos learn bzgl. der Routine")).toBe(true);

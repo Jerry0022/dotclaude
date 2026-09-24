@@ -251,13 +251,13 @@ describe("the git-exclude idiom is guarded in every skill that uses it", () => {
   // Outside a repo the command substitution is empty, so the unguarded form
   // resolved to "/info/exclude" and wrote at the FILESYSTEM ROOT.
   const users = [
-    "run-autonomous",
-    "run-backlog",
-    "claude-batch",
+    ["do-run/modes/autonomous.md"],
+    ["do-run/modes/backlog.md"],
+    ["do-batch/SKILL.md"],
   ];
 
-  test.each(users)("%s guards git-common-dir before using it", (skill) => {
-    const file = join(HOOKS_DIR, "..", "skills", skill, "SKILL.md");
+  test.each(users)("%s guards git-common-dir before using it", (rel) => {
+    const file = join(HOOKS_DIR, "..", "skills", ...rel.split("/"));
     const body = readFileSync(file, "utf8");
     expect(body).toMatch(/--git-common-dir/);
     // Never interpolated straight into a path that is then created.

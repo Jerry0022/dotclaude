@@ -18,7 +18,7 @@ import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
-  outOfBandGlobs: z.array(z.string()).nullable().default(null).describe("Override globs for out-of-band deploy detection (#243). Paths that a code merge does NOT deploy — DB migrations, edge/serverless functions. Omit/null to use the stack-agnostic defaults (**/migrations/**, supabase/migrations/**, supabase/functions/**). The ship skill passes these from the project ship-extension reference.md `outOfBandDeploy:` field."),
+  outOfBandGlobs: z.array(z.string()).nullable().default(null).describe("Override globs for out-of-band deploy detection (#243). Paths that a code merge does NOT deploy — DB migrations, edge/serverless functions. Omit/null to use the stack-agnostic defaults (**/migrations/**, supabase/migrations/**, supabase/functions/**). The do-ship skill passes these from the project ship-extension reference.md `outOfBandDeploy:` field."),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
 });
 
@@ -309,7 +309,7 @@ export async function handler(params) {
     checks.push({ name: "out-of-band-deploys", ok: true, deploy: false });
   }
 
-  // 10. Git config check (warning — auto-fixed by ship skill)
+  // 10. Git config check (warning — auto-fixed by the do-ship skill)
   const conflictStyle = getConfig("merge.conflictstyle", opts);
   if (conflictStyle !== "diff3" && conflictStyle !== "zdiff3") {
     checks.push({ name: "config-conflictstyle", ok: false, current: conflictStyle, recommended: "diff3", warning: "Will be set automatically before rebase" });
@@ -414,7 +414,7 @@ export async function handler(params) {
   // `config-conflictstyle` check is a purely LOCAL git setting and was not
   // gated behind `noRemote`, and since `merge.conflictstyle` is unset by
   // default every no-remote repo reported `needsRebase: true`. That drove the
-  // ship skill straight into `git fetch origin <base>` / `git rebase
+  // do-ship skill straight into `git fetch origin <base>` / `git rebase
   // origin/<base>` — the mechanism that turned "no remote" into a fatal.
   const needsRebase = !noRemote && checks.some(c =>
     !c.ok && (c.name === "base-ahead" || c.name === "file-overlap" || c.name === "config-conflictstyle")

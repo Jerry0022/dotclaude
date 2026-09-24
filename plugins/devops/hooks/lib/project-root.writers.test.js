@@ -3,7 +3,7 @@
  * the session's cwd is a SUBDIRECTORY. Observed 2026-09-23: a session sitting in
  * `plugins/devops/scripts` created `plugins/devops/.claude/batch-activity` and
  * `plugins/devops/scripts/.claude/batch-activity` — untracked, not ignored,
- * failing /ship preflight's clean-tree check and blocking Desktop archiving.
+ * failing /do-ship preflight's clean-tree check and blocking Desktop archiving.
  */
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";

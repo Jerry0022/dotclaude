@@ -9,7 +9,7 @@ the skill-creator plugin reads). Results land in `evals/results/` (ignored).
 Pins the always-on delegation policy (`deep-knowledge/agent-proactivity.md`):
 simple prompts spawn no devops role agent, a question that needs the web
 spawns one background `research` agent, a two-lens question spawns 2–3
-parallel role agents, and Complex-tier work only *offers* `/run-agents`.
+parallel role agents, and Complex-tier work only *offers* `/auto-agents`.
 
 Two things about how the graders are written:
 
@@ -20,7 +20,7 @@ Two things about how the graders are written:
   no sandbox backend — so the spawns are expected there.)
 - "Said X" graders regex the assistant text inside `trace`, not
   `last_message` (that is the card) and not the whole trace (the injected
-  policy itself mentions `/run-agents`).
+  policy itself mentions `/auto-agents`).
 - Every prompt ends with the `[delegation-policy] …` nudge line that
   `prompt.knowledge.dispatch` injects per prompt in a real session — the
   eval runner fires no UserPromptSubmit hooks, so the case carries it.
@@ -108,7 +108,7 @@ languages (en, zh, hi, es, fr, ar, bn, pt, ru, ja) plus German. Every case is a
   description/training alone. That is a stronger, not weaker, signal than the
   router path, which is why these cases exist separately from the router's own
   unit tests.
-- **`web-guide` is intentionally absent here**: its trigger is
+- **`auto-guide` is intentionally absent here**: its trigger is
   `stop.guide.handoff`, a Stop hook on Claude's *own* answer (it fires when
   Claude hands a web step to the user), not on the user's prompt. There is no
   natural user prompt that should trigger it, so it has no case in this

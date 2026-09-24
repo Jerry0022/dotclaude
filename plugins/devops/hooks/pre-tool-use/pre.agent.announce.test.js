@@ -213,7 +213,7 @@ describe("pre.agent.announce (hook)", () => {
   });
 });
 
-describe("pre.agent.announce under /claude-strict", () => {
+describe("pre.agent.announce under strict mode", () => {
   const GIT_ENV = {
     ...process.env,
     GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t",

@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.4.0
+ * @version 0.5.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Collect mode for `/claude-batch`: while active, blocks the user
+ * @description Collect mode for `/do-batch`: while active, blocks the user
  *   prompt (exit 2 — the harness erases it, so it never reaches the model) and
  *   appends it to `.claude/batch.md`. A prompt starting with the configured
  *   execute marker instead fires the merge: the whole note list is injected as
- *   context and Claude works the collected intent as ONE plan.
+ *   context and Claude merges the collected intent into ONE plan, which it
+ *   hands to auto-concept (open decisions) or do-run (--from=do-batch, ready).
  *
  *   Why: eight observations sent one by one are eight turns, each paying the
  *   full accumulated context. Worse, observation five routinely supersedes
@@ -26,8 +27,8 @@
  *   to is gone by merge time, and the note reads as "make it like the image"
  *   with no image anywhere.
  *
- *   A re-activation while already collecting (`/claude-batch`, `/claude-batch
- *   on`, or `/claude-batch <text>`) is absorbed here: any residue is stored as a
+ *   A re-activation while already collecting (`/do-batch`, `/do-batch
+ *   on`, or `/do-batch <text>`) is absorbed here: any residue is stored as a
  *   note and the user gets the mode summary — the same block the activation
  *   ends with — instead of paying a turn for "already active". The exits
  *   (`off`, `go`, `status`, `marker`) always pass through.
@@ -103,7 +104,7 @@ const EXCERPT_CHARS = 200;
  */
 function buildAck(count, marker, question, bounds = {}) {
   const lines = [
-    `[claude-batch] ✓ Notiz #${count} gespeichert — alles korrekt, kein Fehler.`,
+    `[do-batch] ✓ Notiz #${count} gespeichert — alles korrekt, kein Fehler.`,
     'Der Sammelmodus stoppt den Prompt absichtlich, statt ihn zu bearbeiten.',
   ];
   if (question) {
@@ -119,7 +120,7 @@ function buildAck(count, marker, question, bounds = {}) {
 }
 
 /**
- * Shown when a `/claude-batch` invocation arrives that would only switch on a
+ * Shown when a `/do-batch` invocation arrives that would only switch on a
  * mode that is already on. Blocking it is the point: the user forgot the mode
  * is running, and the answer they need is the summary — not a turn.
  *
@@ -131,8 +132,8 @@ function buildAck(count, marker, question, bounds = {}) {
 function buildRearmAck(count, marker, stored, bounds = {}) {
   const lines = [
     stored
-      ? `[claude-batch] Sammelmodus läuft bereits — der Text wurde als Notiz #${count} gespeichert, kein Fehler.`
-      : '[claude-batch] Sammelmodus läuft bereits — Aufruf ignoriert, kein Fehler.',
+      ? `[do-batch] Sammelmodus läuft bereits — der Text wurde als Notiz #${count} gespeichert, kein Fehler.`
+      : '[do-batch] Sammelmodus läuft bereits — Aufruf ignoriert, kein Fehler.',
     'Ein erneutes Einschalten ist nicht nötig; alles Weitere wird weiter gesammelt.',
     '',
     B.renderModeSummary({ marker, count, ...bounds }),
@@ -205,7 +206,7 @@ function noteIndexLine(note, i) {
 function buildMergeContext(notes, rest, notesFile, opts = {}) {
   const n = notes.length;
   const head = [
-    `[claude-batch] Der Nutzer hat ${n} Notiz(en) gesammelt und löst jetzt die Umsetzung aus.`,
+    `[do-batch] Der Nutzer hat ${n} Notiz(en) gesammelt und löst jetzt die Umsetzung aus.`,
     `Notizdatei: ${notesFile}`,
   ];
   if (opts.stale) {
@@ -235,15 +236,22 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     '3. Liste Widersprüche EINZELN auf ("#2 wollte rot, #6 blau") statt sie still',
     '   nach "später gewinnt" aufzulösen. Unmögliche Punkte werden benannt,',
     '   nicht umgangen.',
-    '4. Lege den Plan zur Freigabe vor. Danach: /concept wenn die Konflikte eine',
-    '   Entscheidungsseite rechtfertigen, sonst direkt in die Umsetzung.',
+    '4. Lege Abdeckungsliste und Plan vor und übergib ihn OHNE eigene Freigabefrage an',
+    '   GENAU EINEN Skill (do-batch Step 4.6) — du setzt selbst nichts um:',
+    '   - Skill devops:auto-concept mit --from=do-batch, wenn noch eine Entscheidung offen ist:',
+    '     2+ Konflikte oder einer ohne vertretbaren Default, eine Notiz will Analyse/',
+    '     Vergleich/Concept statt Änderung, eine offene Design-Wahl, ein unmachbarer',
+    '     Punkt mit abhängigen Punkten, 2+ Ansatz-Gabelungen. Im Zweifel auto-concept.',
+    '   - sonst Skill devops:do-run mit --from=do-batch (do-run überspringt dann "Was?").',
+    '   Vorher: archiveNotes(cwd) aus hooks/lib/batch-state.js (archivieren, nie',
+    '   löschen) und den archivierten Pfad in die Übergabe schreiben.',
     '',
     'Umsetzung ist breit gemeint — Code, Concepting, UI-Concepting, oder auch nur',
     'ein erster Schritt.',
     '',
     'Der Sammelmodus ist mit diesem Prompt automatisch BEENDET. Folgeprompts sind',
     'die Unterhaltung über die Umsetzung und laufen wieder normal — frage NICHT,',
-    'ob der Modus aktiv bleiben soll. Nur ein neues /claude-batch on sammelt wieder.',
+    'ob der Modus aktiv bleiben soll. Nur ein neues /do-batch on sammelt wieder.',
     '',
     // The skill's own Step 4.8 says the same, but this path never loads the
     // skill — the marker prompt is the whole trigger. Without this line the
@@ -310,7 +318,7 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
  */
 function buildEmptyQueueNotice(notesFile, exists, bytes, marker) {
   const lines = [
-    `[claude-batch] Der Ausführungs-Marker "${marker}" wurde erkannt, aber aus der`,
+    `[do-batch] Der Ausführungs-Marker "${marker}" wurde erkannt, aber aus der`,
     `Notizdatei ließ sich KEINE Notiz lesen: ${notesFile}`,
     `Datei vorhanden: ${exists ? `ja (${bytes} Bytes)` : 'nein'}`,
     '',
@@ -351,7 +359,7 @@ function buildEmptyQueueNotice(notesFile, exists, bytes, marker) {
  */
 function buildAttachmentGuard(marker, refs) {
   const lines = [
-    '[claude-batch] Sammelmodus ist AKTIV, aber dieser Prompt trägt einen Anhang',
+    '[do-batch] Sammelmodus ist AKTIV, aber dieser Prompt trägt einen Anhang',
     '(Bild, eingefügten Text oder @Datei) und konnte deshalb nicht automatisch',
     'abgelegt werden: ein blockierter Prompt wird aus der UI gelöscht, ein',
     'Screenshot wäre unwiederbringlich weg.',
@@ -400,13 +408,13 @@ function buildAttachmentGuard(marker, refs) {
  */
 function buildActivationGuard() {
   return [
-    '[claude-batch] Dieser Prompt startet den Sammelmodus UND trägt zusätzlichen Inhalt.',
+    '[do-batch] Dieser Prompt startet den Sammelmodus UND trägt zusätzlichen Inhalt.',
     '',
     'Der Inhalt neben der Aktivierung ist NOTIZ, nicht Auftrag:',
     '1. Setze nichts davon um. Nicht planen, nicht recherchieren, nicht den Code',
     '   dafür lesen — der Modus existiert genau dafür, dass das später und',
     '   gebündelt passiert.',
-    '2. Überspringe KEINEN Schritt des claude-batch-Skills. Die Marker-Rückfrage',
+    '2. Überspringe KEINEN Schritt des do-batch-Skills. Die Marker-Rückfrage',
     '   (AskUserQuestion, Step 2.1) kommt zuerst, auch wenn der Prompt schon',
     '   Arbeit beschreibt. Ein Prompt voller Aufgaben ist kein Grund, den Dialog',
     '   zu überspringen — er ist der Grund, warum es ihn gibt.',
@@ -417,7 +425,7 @@ function buildActivationGuard() {
     '   nicht mehr sichtbar.',
     '',
     'Falls dieser Prompt den Modus gar nicht aktiviert — eine Frage ÜBER den',
-    'Modus, ein Status, /claude-batch off, oder einfach ein Satz, in dem der',
+    'Modus, ein Status, /do-batch off, oder einfach ein Satz, in dem der',
     'Sammelmodus nur vorkommt —, ignoriere diesen Hinweis vollständig und',
     'bearbeite den Prompt normal. Die Erkennung ist eine Heuristik.',
   ].join('\n');
@@ -488,7 +496,7 @@ function fireMerge({ cwd, text, marker, modeActive }) {
   // Firing the merge ENDS collection. What follows is the conversation about
   // the implementation — approvals, answers to Claude's questions, course
   // corrections — and collecting those is actively wrong: they are blocked,
-  // erased and answered by nobody. Re-arming is an explicit `/claude-batch on`.
+  // erased and answered by nobody. Re-arming is an explicit `/do-batch on`.
   B.deactivate(cwd);
 }
 
@@ -539,7 +547,7 @@ process.stdin.on('end', () => {
   } catch { /* defaults */ }
 
   if (verdict === 'rearm') {
-    // `/claude-batch`, `/claude-batch on` or `/claude-batch <text>` while the
+    // `/do-batch`, `/do-batch on` or `/do-batch <text>` while the
     // mode is already on. Store the residue (if any) and answer with the mode
     // summary — blocked, so it costs nothing. The exits never land here.
     try {
@@ -555,7 +563,7 @@ process.stdin.on('end', () => {
       process.exit(2);
     } catch (err) {
       // Could not store — let the skill handle it, as before this branch existed.
-      process.stderr.write(`[claude-batch] Aufruf konnte nicht abgefangen werden (${err.message}) — Skill übernimmt.\n`);
+      process.stderr.write(`[do-batch] Aufruf konnte nicht abgefangen werden (${err.message}) — Skill übernimmt.\n`);
       process.exit(0);
     }
   }
@@ -588,7 +596,7 @@ process.stdin.on('end', () => {
   } catch (err) {
     // Storing failed — blocking now would erase the prompt with nothing kept.
     // Let it through instead; a lost prompt is worse than a missed collection.
-    process.stderr.write(`[claude-batch] Notiz konnte nicht gespeichert werden (${err.message}) — Prompt läuft normal weiter.\n`);
+    process.stderr.write(`[do-batch] Notiz konnte nicht gespeichert werden (${err.message}) — Prompt läuft normal weiter.\n`);
     process.exit(0);
   }
 });

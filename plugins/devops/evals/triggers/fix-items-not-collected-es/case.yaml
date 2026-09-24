@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: fix-items-not-collected-es
-context:
-  scaffold_script: scaffold.sh

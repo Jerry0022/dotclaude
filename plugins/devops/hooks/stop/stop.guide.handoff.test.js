@@ -70,13 +70,13 @@ function pendingFile(dir) {
 vi.setConfig({ testTimeout: 30_000 });
 
 describe("stop.guide.handoff", () => {
-  test("web hand-off without a card and without web-guide → block once", async () => {
+  test("web hand-off without a card and without auto-guide → block once", async () => {
     const dir = project();
     try {
       const out = await stop(dir, transcript(dir, UPSTASH));
       expect(out).toContain('"decision":"block"');
       expect(out).toContain("Upstash");
-      expect(out).toContain("web-guide");
+      expect(out).toContain("auto-guide");
       expect(out).toContain("auto-guide");
     } finally { cleanup(dir); }
   });
@@ -166,7 +166,7 @@ describe("stop.guide.handoff", () => {
     } finally { cleanup(dir); }
   });
 
-  test("turn already invoked web-guide → silent", async () => {
+  test("turn already invoked auto-guide → silent", async () => {
     const dir = project();
     try {
       const file = path.join(dir, "t.jsonl");

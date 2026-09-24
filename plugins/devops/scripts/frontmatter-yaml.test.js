@@ -137,6 +137,6 @@ describe("findColonHazards detector", () => {
   });
 
   test("accepts colons not followed by whitespace (URLs, /plugin:skill)", () => {
-    expect(findColonHazards("description: see https://x.io and /devops:ship\n")).toEqual([]);
+    expect(findColonHazards("description: see https://x.io and /devops:do-ship\n")).toEqual([]);
   });
 });
