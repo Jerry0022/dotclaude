@@ -24,7 +24,7 @@ import {
 // Kompass panel skeleton, § Section Navigation JS and § Claude Connection
 // Heartbeat; the gate only greps for the tokens.
 const ENGINE_STUB = `<div class="panel-here"><div id="panel-status"></div></div>
-<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} async function submitWithAction(){} async function retryPendingSubmission(){}</script>`;
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){}</script>`;
 // The engine's head stylesheet (#430 integrity anchor). Lives in <head> like
 // the real engine CSS — a <style> after the live section would be attributed
 // to that round by the P32 collision scan.
@@ -779,6 +779,15 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
   test("a partially re-synced page is still stale — one anchor is enough to block", () => {
     const html = VALID.replace("function recoverFromFreeze(){}", "");
     expect(findStaleEngine(html).map(e => e.token)).toEqual(["recoverFromFreeze"]);
+    expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
+  });
+
+  test("a page on the pre-gate-65 draft engine is stale — its autosave dies after ~27 saves", () => {
+    // The keepalive flush that never read its answer: Chromium's 64 KiB
+    // keepalive quota filled and the page claimed an unreachable bridge over
+    // a bridge answering 200. Blocking the write forces the engine re-sync.
+    const html = VALID.replace("function _drainDraftResponse(){}", "");
+    expect(findStaleEngine(html).map(e => e.token)).toEqual(["_drainDraftResponse"]);
     expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
   });
 });

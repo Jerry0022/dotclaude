@@ -94,6 +94,7 @@ describe("draft-offline strip — retry timer", () => {
       [
         "let _draftFailures = 0; let _draftStripEl = null; let _draftRetryTimer = null;",
         consts[0],
+        fnSource("_draftStripText"),
         fnSource("_setDraftHealth"),
       ].join("\n"),
       ctx,

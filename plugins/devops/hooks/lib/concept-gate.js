@@ -52,6 +52,10 @@ const ENGINE = [
   { token: 'buildRoundsChip', why: 'rounds chip builder — § Section Navigation JS' },
   { token: 'buildIterationTree', why: 'section list builder — § Section Navigation JS' },
   { token: 'recoverFromFreeze', why: 'freeze-aware connection verdict — § Claude Connection Heartbeat (gate 3d)' },
+  // A page whose draft flush still posts with keepalive and never reads the
+  // answer stops mirroring after ~27 autosaves (Chromium's 64 KiB keepalive
+  // quota) and then claims an unreachable bridge over a bridge answering 200.
+  { token: '_drainDraftResponse', why: 'drained, non-keepalive draft autosave — § State Persistence (gate 65)' },
   // Engine-integrity anchors (#430). The entries above prove the page was
   // generated from the CURRENT templates.md; these prove the engine blocks
   // are still INTACT afterwards. Round 11 of a design concept lost the whole

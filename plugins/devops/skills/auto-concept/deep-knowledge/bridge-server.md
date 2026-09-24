@@ -624,6 +624,16 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    autosave and flushes it with `sendBeacon` on `pagehide`, and the server
    fsyncs it before acking, exactly like a submission.
 
+   **POST answers carry `Cache-Control: no-cache`, never `no-store`.** GET
+   answers and the served HTML keep `no-store`. Chromium does not complete a
+   `no-store` response whose body the page never reads, and a `keepalive`
+   request's body stays booked against a 64 KiB per-page quota until its
+   response completes — so a page that fired `POST /draft` with keepalive and
+   ignored the answer went dark after ~27 autosaves, every later request
+   refused inside the browser while this server kept answering 200. The page
+   engine no longer does that (templates.md `_drainDraftResponse`, gate 65);
+   the header rule keeps pages built from an older engine working too.
+
    The log is **append-only on purpose**. `GET /draft?slug=<slug>` returns the
    latest revision *and* `recovered`: the per-key union of the last non-empty
    value ever posted, minus keys the page reported as deliberately cleared. So
