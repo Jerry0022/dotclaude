@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.201.1] — 2026-09-24
+
+### Fixed
+- **Claude answers in your language, not in the language of what lands in your slot.** A German session got English three times: "No response requested." to the app's English "Continue from where you left off.", a ship-verify block relayed "exactly as returned", and a wrap-up written after a stretch of English tool results and skill bodies. The Quiet output style said "the language of the user's latest message", and in the Desktop app most of what arrives there is not typed by the user. It now follows the words you typed and names the app's own turns — the resume prompt, the no-output nudge, the summary after a compaction, a task notification — as never deciding the language. A block marked for you is still relayed complete, every line, number and link kept, but in your language.
+
 ## [0.201.0] — 2026-09-24
 
 ### Changed
