@@ -280,7 +280,7 @@ function openButtonHtml(url, lang) {
   const prompt = `${OPEN_URL_PREFIX[lang] || OPEN_URL_PREFIX.de} ${url}`;
   return `<span class="card-open">` +
     `<span role="button" tabindex="0" class="card-link" data-prompt="${escapeHtml(prompt)}" data-sent="${escapeHtml(t.sent)}" data-tip="${escapeHtml(t.tooltip)}" style="color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer">${escapeHtml(url)}<span aria-hidden="true" style="user-select:none"> ↗</span></span>` +
-    `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:6px"></span>` +
+    `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span>` +
     `</span>`;
 }
 
