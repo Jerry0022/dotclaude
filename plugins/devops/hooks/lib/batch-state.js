@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.4.1
+ * @version 0.5.0
  * @description State and classification for the `/do-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -20,6 +20,7 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { projectClaudeDir } = require('./project-root');
+const { parseOpenUrlPrompt } = require('./open-url');
 
 /**
  * First characters the harness claims before a prompt exists.
@@ -750,10 +751,14 @@ function detectActivation(text) {
  * repeating the activation never costs a turn. The exits (`off`, `go`,
  * `status`, `marker`) and anything with an attachment stay `passthrough`.
  *
+ * A card's open prompt (`Im Standardbrowser öffnen: <url>`) is never a note:
+ * prompt.flow.open-url opens the page and blocks it itself.
+ *
  * @returns {'passthrough'|'collect'|'execute'|'rearm'}
  */
 function classify({ text, hookInput, marker, modeActive }) {
   if (isMachinePrompt(text)) return 'passthrough';
+  if (parseOpenUrlPrompt(text)) return 'passthrough';
   const inv = parseBatchCommand(text);
   if (inv) {
     if (modeActive && REARM_ROUTES.has(inv.route) && !hasAttachment(text, hookInput)) return 'rearm';
@@ -780,6 +785,9 @@ function classify({ text, hookInput, marker, modeActive }) {
  * goes nowhere, but the state change sticks — a silent degradation with no
  * error anywhere.
  *
+ * A card's open prompt counts too, mode on or off: prompt.flow.open-url blocks
+ * it the same way (it only lets it through when the browser cannot start).
+ *
  * Fails open: any error means "not collected", so a bug here can never suppress
  * a hook on an ordinary turn.
  *
@@ -789,9 +797,10 @@ function classify({ text, hookInput, marker, modeActive }) {
 function willBeCollected(hookInput) {
   try {
     if (!hookInput || typeof hookInput !== 'object') return false;
+    const text = hookInput.prompt || hookInput.user_message || hookInput.message || '';
+    if (parseOpenUrlPrompt(text)) return true;
     const cwd = hookInput.cwd || process.cwd();
     if (!isModeActive(cwd)) return false;
-    const text = hookInput.prompt || hookInput.user_message || hookInput.message || '';
     const verdict = classify({ text, hookInput, marker: effectiveMarker(cwd), modeActive: true });
     return verdict === 'collect' || verdict === 'rearm';
   } catch {

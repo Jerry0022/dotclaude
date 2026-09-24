@@ -505,6 +505,19 @@ describe("willBeCollected — the guard sibling hooks use", () => {
     expect(willBeCollected("not an object")).toBe(false);
     expect(willBeCollected({})).toBe(false);
   });
+
+  // prompt.flow.open-url blocks a card's open prompt the same way, with the
+  // mode on or off — so the siblings must skip it, and it is never a note.
+  test("true for a card open prompt, mode on or off — and the prompt is never collected", () => {
+    const prompt = "Im Standardbrowser öffnen: http://localhost:8776/docs/concepts/plan.html";
+    expect(willBeCollected({ cwd, prompt })).toBe(true);
+    activate(cwd, { marker: ">>" });
+    expect(willBeCollected({ cwd, prompt })).toBe(true);
+    expect(willBeCollected({ cwd, prompt: "Open in default browser: http://127.0.0.1:5173/" })).toBe(true);
+    expect(classify({ text: prompt, hookInput: {}, marker: ">>", modeActive: true })).toBe("passthrough");
+    // Only the exact prompt: a note that mentions the phrase is still a note.
+    expect(classify({ text: `${prompt} geht nicht`, hookInput: {}, marker: ">>", modeActive: true })).toBe("collect");
+  });
 });
 
 describe("question hint is advisory only", () => {

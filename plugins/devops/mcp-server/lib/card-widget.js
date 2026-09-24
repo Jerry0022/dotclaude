@@ -233,19 +233,82 @@ function escapeHtml(s) {
 }
 
 /**
- * Escape a text line and turn every http(s) URL in it into a link. The
- * visualize host opens any `<a href>` with an http(s) URL itself (its
- * open-link script posts `ui/open-link`), so a plain anchor is all a widget
- * needs. Trailing sentence punctuation stays outside the link.
+ * Prefix of the prompt that opens a local page in the default browser — the
+ * whole prompt is `<prefix> <url>`. Mirrors OPEN_URL_PREFIX in
+ * hooks/lib/open-url.js, whose prompt.flow.open-url hook acts on it;
+ * card-widget.test.js pins the two equal.
  */
-function linkifyHtml(s) {
+export const OPEN_URL_PREFIX = {
+  de: "Im Standardbrowser öffnen:",
+  en: "Open in default browser:",
+};
+
+/** Texts of the open button: its tooltip and its status after a click. */
+const OPEN_TEXT = {
+  de: {
+    tooltip: "Öffnet die Seite im Standardbrowser: Der Klick legt den Befehl ins Eingabefeld, Enter öffnet sie ohne Turn.",
+    sent: "Im Eingabefeld, Enter öffnet die Seite",
+  },
+  en: {
+    tooltip: "Opens the page in your default browser: the click puts the command in the input box, Enter opens it without a turn.",
+    sent: "In the input box, Enter opens the page",
+  },
+};
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * An http(s) URL on this machine (localhost, *.localhost, 127.x.x.x, [::1]).
+ * Same rule as isLoopbackHttpUrl in hooks/lib/open-url.js — the hook opens
+ * exactly what the card turns into an open button.
+ */
+export function isLoopbackHttpUrl(value) {
+  let u;
+  try { u = new URL(String(value)); } catch { return false; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  if (u.username || u.password) return false;
+  const host = u.hostname.toLowerCase();
+  return LOOPBACK_HOSTS.has(host) || host.endsWith(".localhost") || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
+/**
+ * A loopback page as an open button: the URL stays visible (and copyable),
+ * the click prefills the open prompt, and its status line sits beside it.
+ */
+function openButtonHtml(url, lang) {
+  const t = OPEN_TEXT[lang] || OPEN_TEXT.de;
+  const prompt = `${OPEN_URL_PREFIX[lang] || OPEN_URL_PREFIX.de} ${url}`;
+  return `<span class="card-open">` +
+    `<span role="button" tabindex="0" class="card-link" data-prompt="${escapeHtml(prompt)}" data-sent="${escapeHtml(t.sent)}" title="${escapeHtml(t.tooltip)}" style="color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer">${escapeHtml(url)}<span aria-hidden="true" style="user-select:none"> ↗</span></span>` +
+    `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:6px"></span>` +
+    `</span>`;
+}
+
+/**
+ * Escape a text line and make every http(s) URL in it clickable. Trailing
+ * sentence punctuation stays outside the link.
+ *
+ * How the Desktop Code tab treats a widget link (app bundle, Claude 2.7032,
+ * 2026-09-24): the widget script sends an `<a href>` as `ui/open-link`, and
+ * the host opens only https — after a confirmation dialog, in the default
+ * browser. An http link is dropped without a trace, and the widget frame may
+ * not open popups. So an https URL stays an anchor, and a loopback page
+ * (concept page, dev server) becomes an open button: it prefills
+ * `Im Standardbrowser öffnen: <url>`, and prompt.flow.open-url opens the page
+ * on Enter without a turn. Any other http URL stays an anchor — dead on the
+ * Desktop app, but still a visible, copyable address.
+ */
+function linkifyHtml(s, lang = "de") {
   return String(s == null ? "" : s)
     .split(/(https?:\/\/[^\s<>"'`]+)/)
     .map((part, i) => {
       if (i % 2 === 0) return escapeHtml(part);
       const url = part.replace(/[.,;:!?)\]]+$/, "");
       const tail = part.slice(url.length);
-      return `<a href="${escapeHtml(url)}" class="card-link" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${escapeHtml(url)}</a>${escapeHtml(tail)}`;
+      const link = isLoopbackHttpUrl(url)
+        ? openButtonHtml(url, lang)
+        : `<a href="${escapeHtml(url)}" class="card-link" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${escapeHtml(url)}</a>`;
+      return link + escapeHtml(tail);
     })
     .join("");
 }
@@ -364,7 +427,7 @@ export function cardWidgetHtml(model, repoUrl) {
   const glyphLine = (cls, inner, extra = "") =>
     `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
   const resultLinesHtml = (model.resultLines || [])
-    .map((l) => glyphLine("card-result", linkifyHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
+    .map((l) => glyphLine("card-result", linkifyHtml(l, lang).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
     .join("\n  ");
 
   const evidenceHtml = (model.evidence || []).length
@@ -408,10 +471,10 @@ export function cardWidgetHtml(model, repoUrl) {
   // numbers in the widget — the terminal markdown keeps "1." for the same
   // points), so both blocks speak the same language.
   const contextHtml = model.context
-    ? glyphLine("card-context", linkifyHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
+    ? glyphLine("card-context", linkifyHtml(model.context.replace(/^›\s*/, ""), lang), ";font-size:13px;margin:0 0 4px")
     : "";
   const pointsHtml = (model.points || []).length
-    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p))).join("")}</div>`
+    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p, lang))).join("")}</div>`
     : "";
 
   const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies });
@@ -544,7 +607,7 @@ export function cardWidgetScript(lang = "de") {
     `    b.setAttribute('data-busy', '1'); b.style.opacity = '0.6';`,
     `    deliver(b.getAttribute('data-prompt'), function (success) {`,
     `      b.removeAttribute('data-busy'); b.style.opacity = '';`,
-    `      mark(b, success ? T.sent : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');`,
+    `      mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');`,
     `    });`,
     `  }`,
     `  document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {`,
