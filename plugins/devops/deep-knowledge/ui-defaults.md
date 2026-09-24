@@ -174,7 +174,9 @@ No rule repeats it.
 - **Skip silently** when the diff touches no UI file (§ UI file detection),
   when the project has no UI profile (`test-autonomy.md` profiles `cli-node`,
   `lib`, `generic`), or in `file-only` mode. A skipped check leaves **no**
-  card entry.
+  card entry. A `files:` glob in the project override counts as a UI profile
+  for the files it names — that is how a CLI or plugin repo opts its own UI
+  sources in.
 - **Priority on conflict:** a more recent project-specific convention from
   merged PRs (the `/do-ship` Step 1d purpose-alignment sources) beats a generic
   rule from this file. "Tooltips removed from the toolbar because they got in

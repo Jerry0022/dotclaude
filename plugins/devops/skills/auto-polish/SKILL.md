@@ -236,7 +236,10 @@ polish pass (agents, browser, viewports).
    resolved against `--cwd` when given (else the session's cwd). Empty
    scope → return `{ applicable: false, reason: "no UI files in diff" }` and
    stop. No UI profile (`test-autonomy.md` profiles `cli-node`, `lib`,
-   `generic`) → same, reason `"no UI profile"`.
+   `generic`) → same, reason `"no UI profile"` — unless a `files:` glob of
+   the override names a scope file: that explicit opt-in counts as a UI
+   profile for the files it names (how a CLI or plugin repo checks its own UI
+   sources).
 2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4, R5),
    inline — no Explore agents, no browser, no screenshots. Runtime halves
    are never attempted here; they are listed once as
