@@ -56,7 +56,7 @@ function buildResumeInstruction({ cwd, source }) {
       + ` (sentinel ${path.join('.claude', '.ship-in-progress')}${age == null ? '' : `, written ${age} min ago`}) and ${when}.`,
     'Before anything ship-related: re-establish the REAL state, never trust the summary or memory.',
     '  git -C "<cwd>" status --short && git -C "<cwd>" log -1 --oneline && gh pr list --head "$(git -C "<cwd>" branch --show-current)" --state all --json number,state,mergedAt',
-    'Then re-enter Skill("do-ship"): preflight → build → bump → release → cleanup, each step is idempotent —',
+    'Then re-enter Skill("devops:do-ship"): preflight → build → bump → release → cleanup, each step is idempotent —',
     'an existing open PR is reused, a merged PR ends the release, a bump that already landed is not repeated.',
     'Never create a second PR or a second tag for the same branch. If the ship had already finished',
     '(PR merged, branch gone), call ship_cleanup({ keep: true, cwd }) to clear the sentinel and render the card.',

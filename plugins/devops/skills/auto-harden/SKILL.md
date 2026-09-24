@@ -19,7 +19,7 @@ user-invocable: false
 triggers:
   en: ["harden", "stabilize", "bug pass", "consistency pass"]
   de: ["härten", "stabilisieren", "lint und fix"]
-argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [--base=<branch>] [optional scope: file/dir path]"
+argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [--base=<branch>] [--cwd=<path>] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -43,7 +43,7 @@ it is the layer this skill *executes through*. Four ways in:
    `--strict`. The pre-PR-2 values `--invoked-by=agents` and
    `--invoked-by=autonomous` (the latter implies `--autonomous`) are read as
    `do-run`.
-3. **From `/do-ship`** — `--invoked-by=ship --base=<base> <files of the diff>`.
+3. **From `/do-ship`** — `--invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>`.
    The **ship path**: static checks on the diff's added lines, mechanical
    fixes only, no agents, no browser, no card. See § Ship path.
 4. **Under strict** — `--strict` (from do-run "Nur das", from /do-ship when
@@ -102,6 +102,11 @@ Scan `$ARGUMENTS` for:
   `[claude-strict contract]` block is in this turn's context.
 - `--base=<branch>` → the diff base (ship path; default: the repo's default
   branch).
+- `--cwd=<path>` → the target checkout (a composed /do-ship `--cwd`, e.g.
+  from /setup-cleanup). It scopes BOTH the diff and the fixes: every git
+  command runs as `git -C <path>`, scope paths resolve against `<path>`, and
+  Read/Edit touch only files under `<path>` — never this session's own
+  checkout. Absent → the session's cwd.
 - `--parent-mode=background|interactive` → pre-PR-2 flag, still read:
   background acts like `--autonomous`.
 - Any remaining tokens → treat as scope path(s). If present, restrict the
@@ -116,8 +121,9 @@ without the full pass's cost (Explore/qa/redteam agents, test plan, coverage
 writing). Mirrors `/auto-polish` § Rules-only path.
 
 1. **Scope** = the files /do-ship passed, and inside them only the added or
-   changed lines: `git diff -U0 origin/<base>...HEAD -- <files>` plus the
-   uncommitted diff of the same files. Deleted files and generated/vendor
+   changed lines: `git -C <cwd> diff -U0 origin/<base>...HEAD -- <files>` plus
+   the uncommitted diff of the same files (`<cwd>` = `--cwd`, else the
+   session's cwd; the fixes of step 4 edit files under that same `<cwd>`). Deleted files and generated/vendor
    paths drop out. Empty → return `{ applicable: false, reason: "empty diff" }`.
 2. **Static, inline, bounded.** Read the hunks, grep the added lines — no
    agents, no browser, no network, no test run (the ship's `ship_build`

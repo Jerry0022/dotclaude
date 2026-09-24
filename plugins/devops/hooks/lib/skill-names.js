@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module skill-names
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description The one table of skill names that changed in PR 2 and PR 3 of
  *   the skill restructure
@@ -24,6 +24,9 @@
  *     `devops:` prefix) → the current skill name. A session that straddles
  *     the update recorded `devops:ship`; the router must read that as
  *     `do-ship` and not re-nudge.
+ *   - `isDevopsSkill(raw, name)` — did a recorded invocation run the DEVOPS
+ *     skill `name`? `devops:<old|new>` and a bare NEW name count; a bare OLD
+ *     name does not (it can only be a consumer skill of that name now).
  *   - `legacyNamesOf(name)` — every old name that now lands on `name`.
  *   - `extensionNameCandidates(name, mode)` / `resolveExtensionFile(...)` —
  *     consumer extensions live at `{project}/.claude/skills/<name>/` and
@@ -221,8 +224,47 @@ function legacyNamesOf(name) {
   return out;
 }
 
-/** Is `raw` (old or new, with or without prefix) the skill `name`? */
+/** Is `raw` (old or new, with or without prefix) the skill `name`? Name
+ *  arithmetic only — for "did the DEVOPS skill run?" use `isDevopsSkill`. */
 function isSkill(raw, name) {
+  return canonicalSkillName(raw) === canonicalSkillName(name);
+}
+
+/** Is `name` (namespace stripped) a pre-PR-2 name (renamed or folded)? */
+function isOldName(raw) {
+  const name = stripNamespace(raw);
+  return Object.prototype.hasOwnProperty.call(RENAMED, name)
+    || Object.prototype.hasOwnProperty.call(FOLDED, name);
+}
+
+/** `devops:do-ship` → 'devops'; `do-ship` → ''. Lowercased, slash dropped. */
+function namespaceOf(raw) {
+  if (typeof raw !== 'string') return '';
+  const s = raw.trim().toLowerCase().replace(/^\//, '');
+  const idx = s.lastIndexOf(':');
+  return idx === -1 ? '' : s.slice(0, idx);
+}
+
+/**
+ * Does a recorded invocation name (`Skill` input or `<command-name>`) stand
+ * for the DEVOPS plugin's skill `name`?
+ *   - `devops:<old|new>` → yes when it canonicalizes to `name` (a session that
+ *     straddles the update recorded `devops:fix`);
+ *   - bare NEW name (`auto-fix`) → yes;
+ *   - bare OLD name (`fix`, `setup-issue`) → NO: after the rename the plugin
+ *     has no skill of that name, so a bare old name is a consumer project/user
+ *     skill — typically an extension directory still under the old name
+ *     (`.claude/skills/fix/`) — not the devops skill;
+ *   - any other namespace (`other:auto-fix`) → no.
+ * @param {string} raw
+ * @param {string} name current skill name
+ * @returns {boolean}
+ */
+function isDevopsSkill(raw, name) {
+  if (typeof raw !== 'string' || !raw.trim()) return false;
+  const ns = namespaceOf(raw);
+  if (ns && ns !== 'devops') return false;
+  if (!ns && isOldName(raw)) return false;
   return canonicalSkillName(raw) === canonicalSkillName(name);
 }
 
@@ -282,6 +324,9 @@ module.exports = {
   foldedMode,
   legacyNamesOf,
   isSkill,
+  isOldName,
+  namespaceOf,
+  isDevopsSkill,
   extensionNameCandidates,
   resolveExtensionFile,
 };

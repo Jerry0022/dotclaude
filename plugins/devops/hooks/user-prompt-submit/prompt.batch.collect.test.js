@@ -366,8 +366,8 @@ describe("message builders", () => {
     // The marker path never loads the skill, so the Step 4.6 hand-off rule has
     // to ride along: do-batch plans, the receiving skill runs.
     const ctx = buildMergeContext([{ at: "2026-08-16T10:00:00.000Z", text: "x" }], "", "/tmp/p/.claude/batch.md");
-    expect(ctx).toContain("Skill auto-concept mit --from=do-batch");
-    expect(ctx).toContain("Skill do-run mit --from=do-batch");
+    expect(ctx).toContain("Skill devops:auto-concept mit --from=do-batch");
+    expect(ctx).toContain("Skill devops:do-run mit --from=do-batch");
     expect(ctx).toContain("GENAU EINEN Skill");
     expect(ctx).toContain("OHNE eigene Freigabefrage");
     expect(ctx).toContain("du setzt selbst nichts um");

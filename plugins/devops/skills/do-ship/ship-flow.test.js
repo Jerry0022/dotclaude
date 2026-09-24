@@ -69,6 +69,32 @@ describe("do-ship — target channel (promote folded in)", () => {
     expect(compact).toMatch(/has to ship first is a ship/);
   });
 
+// Red-team R2(a)/(d): a named version is promotion-only (a stale card
+  // click never ships later edits), and a stable run that skips the beta
+  // soak says so on the card.
+  test("a named version is promotion-only, whatever the tree holds", () => {
+    expect(target).toMatch(/names a \*\*version\*\*.*never ship first, even with unshipped work/);
+    const step = section(SKILL, "## Step 5d — Promote", "## Step 6");
+    expect(step).toMatch(/A named version never triggers a ship/);
+    const step2 = section(PROMOTE, "## Step 2", "## Step 3");
+    expect(step2).toMatch(/\*\*A named version\*\*.*promotes exactly that version/s);
+    expect(step2).toMatch(/never\s+ships first, even when the branch has unshipped work/);
+  });
+
+  test("a negated channel is a plain ship — the parser is named", () => {
+    expect(target).toMatch(/\*\*negated\*\* channel/);
+    expect(target).toContain("hooks/lib/ship-intent.js");
+  });
+
+  test("skipping the beta soak is an open item on the card, never silent", () => {
+    const step = section(SKILL, "## Step 5d — Promote", "## Step 6");
+    expect(step).toMatch(/\*\*Beta soak skipped\*\*/);
+    expect(step).toContain("Beta übersprungen");
+    expect(step).toContain("fastTrack: true");
+    const step3 = section(PROMOTE, "## Step 3", "## Step 4");
+    expect(step3).toContain("Beta übersprungen");
+  });
+
   test("no phase-B placeholder is left", () => {
     expect(SKILL).not.toContain("PR2-phaseB");
     expect(PROMOTE).not.toContain("PR2-phaseB");
@@ -88,8 +114,8 @@ describe("do-ship — harden + polish at ship (Step 1e)", () => {
   const passes = section(SKILL, "### 1e. Ship passes", "### Merge strategy decision");
 
   test("both passes are called with --invoked-by=ship, diff-scoped", () => {
-    expect(passes).toContain("/auto-harden --invoked-by=ship --base=<base> <files of the diff>");
-    expect(passes).toContain("/auto-polish --invoked-by=ship <ui files of the diff>");
+    expect(passes).toContain("/auto-harden --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>");
+    expect(passes).toContain("/auto-polish --invoked-by=ship [--cwd=<path>] <ui files of the diff>");
   });
 
   test("findings: mechanical → fix, the rest → userFinalTest; never blocks", () => {
@@ -103,6 +129,22 @@ describe("do-ship — harden + polish at ship (Step 1e)", () => {
     expect(passes).toMatch(/\*\*Strict mode\*\*/);
     expect(passes).toContain("--strict");
     expect(passes).toMatch(/nothing is applied/);
+  });
+
+// Red-team R3: on a composed ship (--cwd, e.g. /setup-cleanup) the passes
+  // diffed and fixed this session's own checkout. The target cwd is forwarded
+  // and both skills document that --cwd scopes the diff AND the fixes.
+  test("composed ships forward --cwd to both passes; both skills honour it", () => {
+    expect(passes).toMatch(/pass the SAME `--cwd=<path>` to both\s+passes/);
+    expect(passes).toContain("git -C <path>");
+    const composed = section(SKILL, "## Composed ships", "## Pre-Step 0");
+    expect(composed).toContain("both Step 1e passes get `--cwd=<path>`");
+    for (const name of ["auto-harden", "auto-polish"]) {
+      const text = fs.readFileSync(path.join(__dirname, "..", name, "SKILL.md"), "utf8");
+      expect(text, name).toMatch(/argument-hint: .*\[--cwd=<path>\]/);
+      expect(text, name).toMatch(/`--cwd=<path>` → the target checkout/);
+      expect(text, name).toMatch(/never this session's own\s+checkout/);
+    }
   });
 
   test("the frontmatter declares both calls", () => {

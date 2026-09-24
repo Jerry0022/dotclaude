@@ -67,7 +67,7 @@ process.stdin.on('end', () => {
     `Rule: this session is NOT the plugin source repo, so a plugin fix does not belong here.\n` +
     `      Managed install trees are overwritten on the next sync — the edit would be lost\n` +
     `      and the real defect would stay unfixed for every other project.\n` +
-    `Fix: invoke the /auto-issue skill and file the defect against ${slug}\n` +
+    `Fix: invoke Skill("devops:auto-issue") and file the defect against ${slug}\n` +
     `     ([BUG]/[FEATURE], body = symptom + which skill/hook/agent + "captured from a session in <this project>"\n` +
     `      + a mandatory "**User value:**" line — auto-issue rejects issues without one).\n` +
     `     Anything that is genuinely about THIS project belongs in this project's own\n` +

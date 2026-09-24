@@ -62,7 +62,16 @@ describe("auto-harden — ship path (diff-scoped, like polish's rules-only path)
   test("static, inline, bounded — no agents, no browser, no test run", () => {
     expect(ship).toMatch(/no\s+agents, no browser, no network, no test run/);
     expect(ship).toMatch(/Budget ~60 s/);
-    expect(ship).toContain("git diff -U0 origin/<base>...HEAD");
+    expect(ship).toContain("git -C <cwd> diff -U0 origin/<base>...HEAD");
+  });
+
+  // Red-team R3: a composed /do-ship --cwd=<path> must diff AND fix the
+  // target checkout, never this session's own.
+  test("--cwd scopes the diff and the fixes to the target checkout", () => {
+    expect(ship).toMatch(/`<cwd>` = `--cwd`, else the\s+session's cwd; the fixes of step 4 edit files under that same `<cwd>`/);
+    const parse = section(HARDEN, "## Step 1 — Parse Arguments", "## Ship path");
+    expect(parse).toMatch(/`--cwd=<path>` → the target checkout/);
+    expect(parse).toMatch(/scopes BOTH the diff and the fixes/);
   });
 
   test("mechanical fixes only; strict applies none; returns a structure, no card", () => {

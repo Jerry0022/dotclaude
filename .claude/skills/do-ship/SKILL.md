@@ -33,7 +33,7 @@ automatically sync to every ship.
 
      When the loop gives up (the clone still reports vOld after three attempts), say so
      instead — never claim a sync that did not happen:
-     > `{ action: "devops lokal (alpha) steht noch auf v<vOld> — der Sync-Hook hat das Tag alpha/v<vNew> nicht gesehen. /auto-update ausführen, dann Claude einmal neu starten.", afterDeployment: true }`
+     > `{ action: "devops lokal (alpha) steht noch auf v<vOld> — der Sync-Hook hat das Tag alpha/v<vNew> nicht gesehen. Claude »devops update« sagen, dann Claude einmal neu starten.", afterDeployment: true }`
    - **Pin is `alpha` AND a `backlog-runner` lockout is active** (Step 8 guard below —
      this ship is one of several in a `/do-run backlog` queue): the finalizer is deferred
      to the runner's own Step 5, so do not claim a sync yet:
@@ -43,7 +43,7 @@ automatically sync to every ship.
      > `{ action: "devops lokal (alpha) wird nach dem letzten PR der Queue auf die geshippte Version synchronisiert — danach Claude einmal neu starten.", afterDeployment: true }`
    - **Pin is `beta`/`stable`** (the default) — an alpha-only ship does NOT reach this
      install. Do **not** claim any local sync; point to promotion:
-     > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. /do-ship promote promoten (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
+     > `{ action: "v<vNew> ist auf alpha veröffentlicht; dein <pin>-Install bleibt auf v<installed>. »promote <pin> <vNew>« an Claude promotet genau diese Version (alpha→<pin>), danach zieht der Install v<vNew> beim nächsten Start.", afterDeployment: true }`
 
 **Never assert "lokal auf vNew synchronisiert" on a beta/stable pin.** The finalizer
 (Step 8) correctly holds the install on its pinned channel tag, so an alpha-only ship

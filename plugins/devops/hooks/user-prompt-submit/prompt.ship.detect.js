@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.6.0
+ * @version 0.7.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Detect ship intent in user prompts and inject Skill('do-ship') instruction.
+ * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
  *   Triggers on keywords like "ship", "shippen", "ab damit", "mach nen PR",
  *   "merge it", "das kann rein", "fertig", and affirmations after a completion
  *   card ("ja", "yes", "mach", "go", "do it"). The keyword list lives in
@@ -17,12 +17,15 @@
  *   Target channel (promote folded into do-ship, skill restructure PR 2):
  *   "ship stable", "promote to beta", "release beta", "auf stable heben",
  *   `/promote stable` — lib/ship-intent.js parses the channel and the hook
- *   passes it as the skill argument (`Skill("do-ship") with args "stable"`):
+ *   passes it as the skill argument (`Skill("devops:do-ship") with args "stable"`):
  *   do-ship ships any unshipped work to alpha, then promotes. A bare
  *   "promote" passes `promote` (do-ship asks which promotion). This hook
  *   owns every do-ship prompt; the trigger router stays silent on them.
  *   A promotion-only prompt (nothing unshipped, lib/ship-unshipped.js) never
  *   gets the compact advice — the run is ~4 calls, not ~16.
+ *   A promotion that names a version ("promote stable 0.193.0", the card's
+ *   promote buttons) is promotion-only by definition: the mandate forbids
+ *   shipping new work, so a stale button click never ships later edits.
  */
 
 require('../lib/plugin-guard');
@@ -139,9 +142,10 @@ process.stdin.on('end', () => {
     prompt: hook.prompt || hook.user_message || hook.message || '',
     advisedBefore,
   });
-  // A promotion with nothing to ship first is cheap — no stop. The git probe
-  // runs only here, when the advice would otherwise fire.
-  if (advice && isDirectShipIntent && request.promote && !hasUnshippedWork(process.cwd())) {
+  // A promotion with nothing to ship first is cheap — no stop. A promotion
+  // that names its version never ships (promotion-only by definition). The
+  // git probe runs only here, when the advice would otherwise fire.
+  if (advice && isDirectShipIntent && request.promote && (request.version || !hasUnshippedWork(process.cwd()))) {
     advice = null;
   }
   if (advice) {
@@ -160,14 +164,18 @@ process.stdin.on('end', () => {
   const promoteArgs = isDirectShipIntent && request.promote
     ? [request.channel && request.channel !== 'alpha' ? request.channel : 'promote', request.version].filter(Boolean).join(' ')
     : '';
+  const aboveAlpha = request.channel === 'beta' || request.channel === 'stable';
+  let promoteNote;
+  if (request.version) {
+    promoteNote = `Promotion ONLY of v${request.version}${aboveAlpha ? ` to ${request.channel}` : ' (do-ship asks which channel)'} — do NOT ship any unshipped work of this branch, not even when there is some: a named version is promotion-only (skills/do-ship/modes/promote.md).`;
+  } else if (aboveAlpha) {
+    promoteNote = `Target channel: ${request.channel}. do-ship ships any unshipped work of this branch to alpha first, then promotes to ${request.channel} (skills/do-ship/modes/promote.md) and ends with ONE card.`;
+  } else {
+    promoteNote = 'A promotion without a channel: do-ship asks which promotion (skills/do-ship/modes/promote.md).';
+  }
   const mandate = promoteArgs
-    ? [
-      `MANDATORY: Use Skill("do-ship") with args "${promoteArgs}".`,
-      request.channel === 'beta' || request.channel === 'stable'
-        ? `Target channel: ${request.channel}. do-ship ships any unshipped work of this branch to alpha first, then promotes to ${request.channel} (skills/do-ship/modes/promote.md) and ends with ONE card.`
-        : 'A promotion without a channel: do-ship asks which promotion (skills/do-ship/modes/promote.md).',
-    ]
-    : ['MANDATORY: Use Skill("do-ship") to execute the full shipping pipeline.'];
+    ? [`MANDATORY: Use Skill("devops:do-ship") with args "${promoteArgs}".`, promoteNote]
+    : ['MANDATORY: Use Skill("devops:do-ship") to execute the full shipping pipeline.'];
 
   const instruction = [
     ...(cacheWarning ? [cacheWarning, ''] : []),

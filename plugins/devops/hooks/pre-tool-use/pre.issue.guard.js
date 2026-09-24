@@ -23,9 +23,11 @@
  *
  *   Pass condition (both): every shell write carries its own same-segment
  *   `# via auto-issue` marker comment (the old `# via setup-issue` stays valid),
- *   AND the auto-issue (or old setup-issue)
- *   skill was invoked in the current turn (Skill tool or slash command —
- *   lib/skill-invocations.skillInvokedThisTurn; the transcript is read only
+ *   AND the devops auto-issue skill was invoked in the current turn (Skill
+ *   tool or slash command — lib/skill-invocations.skillInvokedThisTurn +
+ *   skill-names.isDevopsSkill: `devops:auto-issue`, bare `auto-issue`, or the
+ *   namespaced old `devops:setup-issue`; a BARE `setup-issue` is a consumer
+ *   skill/extension under the old name and does not count; the transcript is read only
  *   once a marked write is detected). A GitHub MCP issue-write tool has no
  *   marker and passes on the "invoked this turn" condition alone. The deny
  *   text never names the marker, so the model cannot retry the raw command
@@ -64,7 +66,7 @@ const DENY_TEXT =
   '      write in this plugin — it enforces title format, labels, the user-value\n' +
   '      gate, and optional milestone/board integration. A direct write bypasses\n' +
   '      all of that.\n' +
-  'Fix: invoke the auto-issue skill via the Skill tool and let it perform the\n' +
+  'Fix: invoke Skill("devops:auto-issue") and let it perform the\n' +
   '     write — pass the title/type/body (create) or the issue number +\n' +
   '     refinement (edit). Do not retry the raw command.\n' +
   'If you cannot invoke skills (you are a subagent without the Skill tool): do NOT\n' +
@@ -106,14 +108,14 @@ function callerTranscriptPath(hook) {
   return path.join(path.dirname(hook.transcript_path), sessionId, 'subagents', `agent-${agentId}.jsonl`);
 }
 
-/** Did auto-issue (or its pre-PR-2 name setup-issue) run in the current turn? */
+/** Did the devops auto-issue (or `devops:setup-issue`) run in the current turn? */
 function setupIssueInvokedThisTurn(transcriptPath) {
   try {
     const { safeReadTranscript } = require('../lib/card-guard');
     const { skillInvokedThisTurn } = require('../lib/skill-invocations');
-    const { isSkill } = require('../lib/skill-names');
+    const { isDevopsSkill } = require('../lib/skill-names');
     const transcript = safeReadTranscript(transcriptPath, TRANSCRIPT_TAIL_BYTES);
-    return skillInvokedThisTurn(transcript, (_input, name) => isSkill(name, 'auto-issue'));
+    return skillInvokedThisTurn(transcript, (input) => isDevopsSkill(input && input.skill, 'auto-issue'));
   } catch {
     return false;
   }

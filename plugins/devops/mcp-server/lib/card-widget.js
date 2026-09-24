@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.3.0
+ * @version 0.4.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -44,7 +44,7 @@ export function isDesktopSession(env = process.env) {
  * No prompt may start with "/": the host refuses a prefill whose text starts
  * with a slash — a leading space does not help (live 2026-09-23) — while plain
  * text lands. Skills are reached by their trigger words instead: "ship" hits
- * prompt.ship.detect, "promote" / "promote stable" do-ship's promotion (prompt.ship.detect parses the channel), "Debug …" auto-fix.
+ * prompt.ship.detect, "promote <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
  *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
@@ -148,15 +148,32 @@ export const BUTTONS = {
  * The buttons a card offers, or [] when nothing is clickable (pending /
  * concept / batch overrides, test-minimal, states with nothing to decide).
  *
+ * A promote button carries the card's version ("promote 0.193.0", "promote
+ * stable 0.193.0"): prompt.ship.detect treats a named version as
+ * promotion-only, so a stale click on an old card promotes exactly that
+ * build and never ships edits made after it. Without a known version the
+ * promote button is dropped — a bare "promote" could ship later work.
+ *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
+ * @param {{ version?: string|null }} [opts] the version the card is about
  * @returns {Array<{ label: string, icon: string, prompt: string, primary?: boolean, tooltip: string }>}
  */
-export function buttonsFor(buttonsKey, lang = "de") {
+export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
   if (!buttonsKey) return [];
   const table = BUTTONS[lang] || BUTTONS.de;
   const list = table[buttonsKey] || BUTTONS.de[buttonsKey];
-  return Array.isArray(list) ? list.map((a) => ({ ...a })) : [];
+  if (!Array.isArray(list)) return [];
+  const version = String((opts && opts.version) || "").trim().replace(/^v/, "");
+  const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version) ? version : "";
+  return list
+    .filter((a) => !isPromotePrompt(a.prompt) || semver)
+    .map((a) => (isPromotePrompt(a.prompt) ? { ...a, prompt: `${a.prompt} ${semver}` } : { ...a }));
+}
+
+/** A promote button's prompt ("promote", "promote stable"). */
+function isPromotePrompt(prompt) {
+  return /^promote\b/i.test(String(prompt || ""));
 }
 
 function escapeHtml(s) {
@@ -314,7 +331,7 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p))).join("")}</div>`
     : "";
 
-  const buttons = buttonsFor(model.buttonsKey, lang);
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion });
   const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
   const buttonsHtml = buttons.length
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +

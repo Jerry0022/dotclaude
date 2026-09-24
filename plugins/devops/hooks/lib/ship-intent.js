@@ -1,8 +1,8 @@
 /**
  * @module ship-intent
- * @version 0.3.0
+ * @version 0.4.0
  * @description The one ship-intent classifier for user prompts. Shared by
- *   `prompt.ship.detect` (which turns the intent into a Skill('do-ship')
+ *   `prompt.ship.detect` (which turns the intent into a Skill('devops:do-ship')
  *   instruction) and `prompt.flow.title-work` (which marks the sidebar with
  *   `🚀 Shipping – ` instead of the bare `⏳ ` when the prompt IS a ship).
  *   One list, so the two hooks can never disagree about what a ship prompt is.
@@ -20,7 +20,12 @@
  *   OBJECT of a ship/promote/release/heben verb (or after "auf/nach/to" in a
  *   prompt that already orders a ship) and only when a sentence boundary or a
  *   filler word follows it — "the stable API", "stable release notes" and
- *   "promote the idea to the team" stay silent.
+ *   "promote the idea to the team" stay silent. A NEGATED channel ("ship,
+ *   aber nicht auf stable", "don't promote to stable", "ohne promote",
+ *   "/do-ship not stable") is no channel — a plain ship to alpha; stable
+ *   tags are irreversible, so a doubt resolves downwards. A version counts
+ *   only adjacent to the promotion phrase ("promote stable 0.170.2",
+ *   "0.170.2 auf stable") and makes the run promotion-only.
  */
 
 /** A slash invocation of the do-ship skill — `/do-ship`, `/devops:do-ship` or the
@@ -88,24 +93,70 @@ function isQuestion(trimmed) {
   return /[?？]\s*$/.test(trimmed);
 }
 
-/** Highest channel among the matches of `re` in `text` (group 1), or null. */
+/** A negation word (de + en). "bloß nicht" / "lieber nicht" carry "nicht". */
+const NEGATION_TOKEN = /^(?:nicht|kein|keine|keinen|keinem|keiner|keines|ohne|nie|niemals|nein|not|no|never|without|nope|dont|don[’']t|doesn[’']t|didn[’']t|shouldn[’']t|mustn[’']t|won[’']t|can[’']t)$/;
+/** How many words before a channel mention may carry its negation. */
+const NEGATION_WINDOW = 4;
+/** A negation right after the channel mention: "auf stable heben — lieber
+ *  nicht", "ship to stable, not yet", "promote stable, doch nicht". */
+const TRAILING_NEGATION = /^[\s,—–-]*(?:(?:lieber|doch|besser|bitte|noch|aber|but|oh|well|ach|hmm|—|–|-)\s+)*(?:nicht|not|no|nein|never|nie|nope)\b(?!\s+(?:(?:auf|nach|to|into|in)\s+)?(?:alpha|beta|stable)\b)/;
+
+/** Words of `s`, punctuation stripped from their edges. */
+function words(s) {
+  return s.split(/\s+/).map((w) => w.replace(/^[^\p{L}\p{N}’']+|[^\p{L}\p{N}’']+$/gu, '')).filter(Boolean);
+}
+
+/**
+ * Is the channel mention at [start, end) negated? A negation in the last
+ * NEGATION_WINDOW words of its clause before it ("ship, aber nicht auf
+ * stable", "don't promote to stable", "ship it, not to stable", "ohne
+ * promote auf stable"), or right after it ("stable promoten, lieber nicht").
+ * A clause ends at , ; : . ! and newlines — "don't wait, ship to stable" is
+ * not negated. Stable tags are irreversible: a doubt resolves to alpha.
+ */
+function isNegated(text, start, end) {
+  const before = text.slice(0, start).split(/[,;:.!\n]/).pop();
+  if (words(before).slice(-NEGATION_WINDOW).some((w) => NEGATION_TOKEN.test(w))) return true;
+  return TRAILING_NEGATION.test(text.slice(end));
+}
+
+/**
+ * Highest channel among the matches of `regexes` in `text` (group 1), or
+ * null. A negated mention vetoes its channel for the whole prompt — "ship,
+ * aber nicht auf stable" must never reach stable through a second mention.
+ */
 function highestChannel(text, ...regexes) {
-  let best = -1;
+  const named = new Set();
+  const vetoed = new Set();
   for (const re of regexes) {
     re.lastIndex = 0;
     for (const m of text.matchAll(re)) {
-      const i = CHANNELS.indexOf(m[1]);
-      if (i > best) best = i;
+      const at = m.index + m[0].search(new RegExp(`\\b${m[1]}\\b`));
+      const end = m.index + m[0].length;
+      // The part of the match before the channel counts as "before" too:
+      // "don't promote to stable" starts the match at "promote".
+      if (isNegated(text, m.index, end) || isNegated(text, at, end)) vetoed.add(m[1]);
+      else named.add(m[1]);
     }
+  }
+  let best = -1;
+  for (const ch of named) {
+    if (vetoed.has(ch)) continue;
+    best = Math.max(best, CHANNELS.indexOf(ch));
   }
   return best === -1 ? null : CHANNELS[best];
 }
 
-/** The channel named in slash arguments ("promote stable", "beta --keep"). */
+/** The channel named in slash arguments ("promote stable", "beta --keep");
+ *  a negated one ("/do-ship not stable", "/promote nicht stable") is none. */
 function channelFromArgs(args) {
-  for (const tok of String(args || '').toLowerCase().split(/[\s,]+/)) {
-    const t = tok.replace(/^--?(?:channel=|to=)?/, '');
-    if (CHANNELS.includes(t)) return t;
+  const toks = String(args || '').toLowerCase().split(/[\s,]+/).filter(Boolean);
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i].replace(/^--?(?:channel=|to=)?/, '');
+    if (!CHANNELS.includes(t)) continue;
+    const prev = toks.slice(Math.max(0, i - 2), i).map((w) => w.replace(/[^\p{L}’']/gu, ''));
+    if (prev.some((w) => NEGATION_TOKEN.test(w))) return null;
+    return t;
   }
   return null;
 }
@@ -174,20 +225,41 @@ function classify(prompt) {
   return none;
 }
 
-/** A semver the user names with a promotion ("promote v0.171.0 to stable"). */
-const VERSION_RE = /(?:^|[\s(])v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)(?=$|[\s,.;:!)])/;
+/** A semver ("0.170.2", "v0.171.0", "1.0.0-rc.1"); group 1 = bare version. */
+const SEMVER_CORE = 'v?(\\d+\\.\\d+\\.\\d+(?:-[0-9a-z.]+)?)';
+/** The version right AFTER the promotion phrase: "promote 0.170.2",
+ *  "promote stable 0.170.2", "stable v0.170.2", "/do-ship stable 0.170.2",
+ *  "/promote 0.170.2", "promote version 0.170.2". */
+const VERSION_AFTER_RE = new RegExp(`(?:\\b${VERB}|\\b(?:beta|stable)|\\/(?:devops:)?(?:do-)?ship|\\/(?:devops:)?promote)\\s+(?:(?:version|die|the|den)\\s+)?${SEMVER_CORE}(?=$|[\\s,.;:!)])`, 'i');
+/** The version right BEFORE the channel: "0.170.2 auf stable",
+ *  "v0.171.0 to stable", "0.170.2 stable". */
+const VERSION_BEFORE_RE = new RegExp(`(?:^|[\\s(])${SEMVER_CORE}\\s+(?:${PREP}\\s+)?(?:beta|stable)\\b`, 'i');
+
+/**
+ * The version a promotion names — only a semver ADJACENT to the promotion
+ * phrase (the verb, the channel word, the slash command). A version
+ * elsewhere in the prompt is context, not the target: "promote stable,
+ * fixes 0.170.2 regression" names none (= the latest alpha / just-shipped).
+ */
+function promotionVersion(prompt) {
+  const text = stripCode(String(prompt || ''));
+  const m = VERSION_AFTER_RE.exec(text) || VERSION_BEFORE_RE.exec(text);
+  return m ? m[1] : null;
+}
 
 /**
  * Classify a user prompt (see `classify`) and, for a promotion, the version
  * it names (`version`: bare semver without "v", else null = the latest alpha).
+ * A named version makes the run promotion-only: do-ship promotes exactly
+ * that version and never ships new work first (a stale card button must not
+ * ship later edits).
  *
  * @param {string} prompt the user's prompt as submitted
  * @returns {{ ship: boolean, promote: boolean, channel: string|null, version: string|null }}
  */
 function parseShipRequest(prompt) {
   const r = classify(prompt);
-  const m = r.promote ? VERSION_RE.exec(String(prompt || '')) : null;
-  return { ...r, version: m ? m[1] : null };
+  return { ...r, version: r.promote ? promotionVersion(prompt) : null };
 }
 
 /**

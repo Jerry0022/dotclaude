@@ -47,8 +47,12 @@ Otherwise branch on `phase`:
   autonom."**, skip Steps 1–3, jump to the Step 4 loop.
 - **`phase=presence`** — the user left **before** finishing the gate. Timeout
   defaults apply and are not renegotiable:
-  - **`shutdown=yes` always.** It is the only sensible default for a walked-away
-    user (a report-only run nobody returns to just idles the PC all night).
+  - **`shutdown` = what the cron carries — never forced.** The cron encodes
+    the do-run router's Q2 answer (Step 1a): **Dabei → `shutdown=no`**, always
+    — the user said they stay at the PC, and a timeout must never power it
+    down under them. **Weg** → the F6 "PC danach" answer once given, else
+    `shutdown=yes` (a walked-away user's report-only run would otherwise idle
+    the PC all night). No router answer (legacy direct entry) → `yes`.
   - **`burnMode=no` always.** The presence default is the normal sequential run;
     budget mode is a deliberate opt-in, never auto-enabled on a timeout.
   - **`queue`** = the default encoded at arm time: every open milestone's issues
@@ -58,12 +62,14 @@ Otherwise branch on `phase`:
     GitHub (presence-only). Park every `needs-decision` / `oversized` item as a
     `⏸ Rückfrage` for the report; run only the `ready` / plain issues.
   - **Run Step 3 non-interactively:** permission audit + artifact hygiene, then arm
-    the lockout and the watchdog with `shutdown=yes`. **Skip the permission-audit
+    the lockout and the watchdog with the cron's `shutdown` value (`action=shutdown`
+    only for `yes`). **Skip the permission-audit
     question** — proceed with already-granted permissions; anything not in
     `settings.json` cannot be primed AFK and falls to the per-issue late-permission
     protocol (`deep-knowledge/autonomous-execution.md`).
   Output once **"Timeout in Präsenz-Phase — starte mit Defaults (alle offenen
-  Milestones, Shutdown)."**, then jump to the Step 4 loop.
+  Milestones, <Shutdown | PC bleibt an>)."** — the wording follows the cron's
+  `shutdown` value — then jump to the Step 4 loop.
 
 The Post-Confirmation Lockout is active from this moment in **both** cases.
 
@@ -112,14 +118,21 @@ CronCreate({ recurring: false, cron: "<now+3min>",
   prompt: "RUN_BACKLOG_AUTOSTART: presence timeout. phase=presence,
   queue=<all trusted open milestone issue numbers; or all trusted open loose
   issue numbers when there are no milestones>, milestones=<all open titles>,
-  shutdown=yes, autoResume=no, burnMode=no, ship=<router $SHIP>,
+  shutdown=<presence default below>, autoResume=no, burnMode=no, ship=<router $SHIP>,
   passes=<router $PASSES>, strict=<on|off>, branch=<current-branch>." })
 ```
 
+**`shutdown` in this cron follows the do-run router's Q2 answer** (already
+given when this cron is armed — the router asks Q1/Q2 before F3/F4):
+- **Dabei** → `shutdown=no`, in every arm and re-arm. The user said they stay;
+  a presence timeout never powers the PC down under them.
+- **Weg** → `shutdown=yes` until F6 "PC danach" is answered, then F6's value
+  (`PC aus` → `yes`, `PC an · …` → `no`).
+- No router answer (legacy direct entry) → `shutdown=yes`.
+
 **Re-arm** it (delete + recreate at a fresh `now + 3min`) after **every** answered
-presence question, updating `queue`/`milestones` to the actual choices so a stale
-default never fires once the user has started deciding. Keep `shutdown=yes` as the
-timeout default throughout — a walked-away user wants the PC to power down after.
+presence question, updating `queue`/`milestones`/`shutdown` to the actual
+choices so a stale default never fires once the user has started deciding.
 The final re-arm is Step 3.4 with `phase=gate`. If the cron fires while a question
 is still on screen, apply the Step 0.1 pending-question guard (re-arm + wait).
 
@@ -280,7 +293,9 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm backlog-runner
 `/do-ship` reads this in its Pre-Step A and turns each interactive gate
 (ambiguous merge, security finding, major-version bump) into a clean park/block:
 a blocked ship surfaces as a `⏸ Rückfrage` and the queue moves on. Step 5 clears
-the lockout.
+the lockout. The lockout expires 24 h after it was armed, so re-run the same
+`arm backlog-runner` command at the start of every issue — it refreshes `since`
+and a night run longer than a day never loses it mid-queue.
 
 Then, if shutdown=yes, arm the fail-safe shutdown timer
 (`scripts/autonomous-shutdown-timer.js arm`). Read
@@ -404,7 +419,8 @@ git-exclude entries (Step 3). Semantics mirror the `AUTONOMOUS-*` family.
   halts the queue, it becomes a `⏸ Rückfrage` and the loop moves on.
 - **Presence phase is timeout-safe** — the autostart is armed from the FIRST
   question (Step 1a), not just the gate, so a user who walks away early still
-  starts with safe defaults (all open milestones, `shutdown=yes`); undecided
+  starts with safe defaults (all open milestones; `shutdown` per the router's
+  Q2 — Dabei never shuts down, Weg defaults to `yes` until F6 answers); undecided
   `needs-decision`/`oversized` items are parked, never guessed.
 - **Composed ships never prompt** — Step 4 arms the autonomous lockout, so
   `/do-ship` parks/blocks at every gate that would otherwise raise a modal.

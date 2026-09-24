@@ -115,13 +115,32 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
       for (const key of ["ready", "test"]) {
         expect(parseShipRequest(buttonsFor(key, lang)[0].prompt)).toMatchObject({ ship: true, promote: false });
       }
-      expect(parseShipRequest(buttonsFor("ship-successful", lang)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: null });
-      expect(parseShipRequest(buttonsFor("released-beta", lang)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable" });
+      const v = { version: "0.193.0" };
+      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: null, version: "0.193.0" });
+      expect(parseShipRequest(buttonsFor("released-beta", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
       expect(isShipIntent(buttonsFor("ship-blocked", lang)[0].prompt), `${lang}/ship-blocked`).toBe(false);
-      expect(buttonsFor("ship-successful", lang)[0].prompt).toMatch(/^promote\b/);
-      expect(buttonsFor("released-beta", lang)[0].prompt).toMatch(/^promote\b.*stable/);
+      expect(buttonsFor("ship-successful", lang, v)[0].prompt).toBe("promote 0.193.0");
+      expect(buttonsFor("released-beta", lang, v)[0].prompt).toBe("promote stable 0.193.0");
       expect(buttonsFor("ship-blocked", lang)[0].prompt).toMatch(/^Debug\b/);
     }
+  });
+
+  // Red-team R2(b): a stale click on an old card must never ship edits made
+  // after it — the promote button names its version (promotion-only in
+  // prompt.ship.detect), and without a known version there is no button.
+  test("promote buttons carry the card's version; without one they are dropped", () => {
+    for (const lang of ["de", "en"]) {
+      expect(buttonsFor("ship-successful", lang, { version: "v0.193.0" })[0].prompt).toBe("promote 0.193.0");
+      expect(buttonsFor("ship-successful", lang)).toEqual([]);
+      expect(buttonsFor("released-beta", lang, { version: "not-a-version" })).toEqual([]);
+      // non-promote buttons are untouched by the version
+      expect(buttonsFor("ready", lang, { version: "0.193.0" })[0].prompt).toBe("ship");
+    }
+  });
+
+  test("the widget HTML puts the versioned prompt on the promote button", () => {
+    const html = cardWidgetHtml({ lang: "de", heading: "x", buttonsKey: "released-beta", promoteVersion: "0.193.0" }, "");
+    expect(html).toContain('data-prompt="promote stable 0.193.0"');
   });
 
   test("every button in every language carries a tooltip and a Tabler icon name", () => {

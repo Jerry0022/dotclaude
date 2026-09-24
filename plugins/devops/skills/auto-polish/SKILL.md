@@ -19,7 +19,7 @@ user-invocable: false
 triggers:
   en: ["polish", "ui polish", "design pass"]
   de: ["ui angleichen", "design konsistenz", "feinschliff", "visuell aufräumen"]
-argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [optional scope: file/dir path]"
+argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [--cwd=<path>] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -103,6 +103,11 @@ Scan `$ARGUMENTS` for:
 - `--strict` → set `$STRICT=1`: nothing outside the named scope changes;
   wider findings go to the report. Also set when the `[claude-strict
   contract]` block is in this turn's context.
+- `--cwd=<path>` → the target checkout (a composed /do-ship `--cwd`, e.g.
+  from /setup-cleanup). It scopes the diff, the files read and every fix the
+  caller applies from the findings: git runs as `git -C <path>`, scope paths
+  resolve against `<path>` — never this session's own checkout. Absent → the
+  session's cwd.
 - `--parent-mode=background|interactive` → pre-PR-2 flag, still read:
   background acts like `--autonomous`.
 - Any remaining tokens → treat as scope path(s).
@@ -236,7 +241,8 @@ to its item #8, run inline). It exists so /do-ship can
 measure the standing UI rules on every UI ship without paying for a full
 polish pass (agents, browser, viewports).
 
-1. **Scope** = the files /do-ship passed (its diff filtered to UI files). Empty
+1. **Scope** = the files /do-ship passed (its diff filtered to UI files),
+   resolved against `--cwd` when given (else the session's cwd). Empty
    scope → return `{ applicable: false, reason: "no UI files in diff" }` and
    stop. No UI profile (`test-autonomy.md` profiles `cli-node`, `lib`,
    `generic`) → same, reason `"no UI profile"`.

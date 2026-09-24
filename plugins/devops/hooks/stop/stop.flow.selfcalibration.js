@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.selfcalibration
- * @version 1.2.0
+ * @version 1.3.0
  * @event Stop
  * @plugin devops
  * @description Run self-calibration when Claude finishes a response turn.
@@ -23,6 +23,11 @@
  *   one batch repeats — no crash, no data loss). On unwritable tmpdir the
  *   cooldown silently degrades to "fire every turn" — acceptable for a
  *   calibration loop, surfaced in SKILL.md.
+ *
+ *   Discovery walks every `deep-knowledge/` dir under `skills/` at any depth
+ *   (≤ SKILL_DK_MAX_DEPTH): since the skill restructure PR 2 the folded modes
+ *   keep theirs under `skills/<skill>/modes/<mode>/deep-knowledge/`, which the
+ *   old one-level `skills/<skill>/deep-knowledge` scan silently dropped.
  */
 
 require('../lib/plugin-guard');
@@ -35,6 +40,8 @@ const os = require('os');
 const PLUGIN_DIR = path.resolve(__dirname, '..', '..');
 const COOLDOWN_MS = 10 * 60 * 1000;
 const CYCLE_FILE = path.join(os.tmpdir(), 'dotclaude-devops-calibration-cycle.json');
+/** skills/ → <skill> → modes → <mode> → deep-knowledge is depth 3. */
+const SKILL_DK_MAX_DEPTH = 4;
 
 function worktreeKey() {
   const cwd = process.cwd().replace(/\\/g, '/');
@@ -70,19 +77,26 @@ function discoverDeepKnowledge() {
     }
   } catch {}
 
-  const skillsDir = path.join(PLUGIN_DIR, 'skills');
-  try {
-    for (const skill of fs.readdirSync(skillsDir)) {
-      const skillDk = path.join(skillsDir, skill, 'deep-knowledge');
-      try {
-        for (const f of fs.readdirSync(skillDk)) {
-          if (f.endsWith('.md')) {
-            files.push(path.join(skillDk, f));
+  // skills/<skill>/deep-knowledge and skills/<skill>/modes/<mode>/deep-knowledge
+  // (any depth up to SKILL_DK_MAX_DEPTH) — never node_modules or dot dirs.
+  const walk = (dir, depth) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const sub = path.join(dir, e.name);
+      if (e.name === 'deep-knowledge') {
+        try {
+          for (const f of fs.readdirSync(sub)) {
+            if (f.endsWith('.md')) files.push(path.join(sub, f));
           }
-        }
-      } catch {}
+        } catch {}
+      } else if (depth < SKILL_DK_MAX_DEPTH) {
+        walk(sub, depth + 1);
+      }
     }
-  } catch {}
+  };
+  walk(path.join(PLUGIN_DIR, 'skills'), 0);
 
   return files.sort();
 }
@@ -112,6 +126,9 @@ function pickBatch(files, cycle) {
   return { batch, total, batchSize, startIndex };
 }
 
+module.exports = { discoverDeepKnowledge };
+
+if (require.main === module) {
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', () => {});
 process.stdin.on('end', () => {
@@ -155,3 +172,4 @@ process.stdin.on('end', () => {
     `${CYCLE_FILE.replace(/\\/g, '/')} — just silently read the listed files for Step 4.\n`
   );
 });
+}

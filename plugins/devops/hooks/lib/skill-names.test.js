@@ -16,6 +16,7 @@ const {
   foldedMode,
   legacyNamesOf,
   isSkill,
+  isDevopsSkill,
   modeForPhrase,
   extensionNameCandidates,
   resolveExtensionFile,
@@ -60,6 +61,21 @@ describe("folds and legacy names", () => {
     expect(isSkill("devops:setup-issue", "auto-issue")).toBe(true);
     expect(isSkill("auto-issue", "setup-issue")).toBe(true);
     expect(isSkill("fix", "auto-issue")).toBe(false);
+  });
+
+  test("isDevopsSkill: devops:<old|new> and bare NEW names count, bare OLD names never (R8)", () => {
+    expect(isDevopsSkill("devops:auto-issue", "auto-issue")).toBe(true);
+    expect(isDevopsSkill("devops:setup-issue", "auto-issue")).toBe(true);
+    expect(isDevopsSkill("/devops:fix", "auto-fix")).toBe(true);
+    expect(isDevopsSkill("auto-issue", "auto-issue")).toBe(true);
+    // a bare old name is a consumer skill — an extension still under the old dir name
+    expect(isDevopsSkill("setup-issue", "auto-issue")).toBe(false);
+    expect(isDevopsSkill("fix", "auto-fix")).toBe(false);
+    expect(isDevopsSkill("tune-audit", "do-run")).toBe(false);
+    // another plugin's skill of the same name
+    expect(isDevopsSkill("other:auto-fix", "auto-fix")).toBe(false);
+    expect(isDevopsSkill("", "auto-fix")).toBe(false);
+    expect(isDevopsSkill(undefined, "auto-fix")).toBe(false);
   });
 
   test("every FOLDED_TRIGGERS entry is a folded skill", () => {

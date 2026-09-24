@@ -168,6 +168,19 @@ describe("pre.issue.guard — marker needs auto-issue in the turn (R3)", () => {
     expect(run(dir, { command: marked }, "Bash", { transcript_path: t }).code).toBe(0);
   });
 
+  test("a BARE setup-issue (a consumer extension under the old name) does not satisfy the guard (R8)", () => {
+    const dir = project();
+    const t = transcript(dir, [userLine("x"), skillLine("setup-issue")]);
+    expect(run(dir, { command: marked }, "Bash", { transcript_path: t }).code).toBe(2);
+    const slash = transcript(dir, [userLine("<command-message>setup-issue</command-message>\n<command-name>/setup-issue</command-name>")]);
+    expect(run(dir, { command: marked }, "Bash", { transcript_path: slash }).code).toBe(2);
+  });
+
+  test("the deny text mandates the namespaced devops skill (R8)", () => {
+    const r = run(project(), { command: "gh issue create --title x" });
+    expect(r.stderr).toContain('Skill("devops:auto-issue")');
+  });
+
   test("the new marker # via auto-issue passes like the old one", () => {
     const dir = project();
     const t = transcript(dir, [userLine("x"), skillLine("auto-issue")]);

@@ -33,10 +33,10 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
   test("multiple mentions, deduplicated, in order of first appearance", () => {
     expect(
       detectInlineSkillMentions(
-        "erst /do-ship, dann nochmal /do-ship und zum Schluss /auto-polish",
+        "erst /auto-harden, dann nochmal /auto-harden und zum Schluss /auto-polish",
         KNOWN,
       ),
-    ).toEqual(["do-ship", "auto-polish"]);
+    ).toEqual(["auto-harden", "auto-polish"]);
   });
 
   test("adjacent punctuation does not break detection", () => {
@@ -70,9 +70,16 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
   });
 
   test("case-insensitive, normalized to lowercase", () => {
-    expect(detectInlineSkillMentions("Bitte /Do-Ship ausführen", KNOWN)).toEqual([
-      "do-ship",
+    expect(detectInlineSkillMentions("Bitte /Auto-Harden ausführen", KNOWN)).toEqual([
+      "auto-harden",
     ]);
+  });
+
+  test("hook-owned skills (do-ship, do-batch) are never an inline mention (R7)", () => {
+    // prompt.ship.detect / prompt.batch.collect own them — a second,
+    // argument-less mandate from here would contradict "/do-ship stable".
+    expect(detectInlineSkillMentions("jetzt /do-ship stable", KNOWN)).toEqual([]);
+    expect(detectInlineSkillMentions("bitte /do-batch und /auto-fix", [...KNOWN, "do-batch"])).toEqual(["auto-fix"]);
   });
 
   test("no mentions → empty list", () => {
@@ -119,7 +126,7 @@ describe("PR 3 retired skills — never mandated by the hook", () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "enforce-retired-"));
     try {
       const out = run({ prompt, cwd, session_id: "vitest-retired" });
-      for (const n of RETIRED) expect(out).not.toContain(`Skill("${n}")`);
+      for (const n of RETIRED) expect(out).not.toContain(`Skill("devops:${n}")`);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }

@@ -96,7 +96,7 @@ if (require.main === module) {
       `Scope routing is therefore mandatory before any fix:\n` +
       `1. Defect/gap in the devops plugin itself (skill, hook, agent, MCP server, ` +
       `convention, installed copy under ~/.claude/plugins/**) → do NOT fix it here and ` +
-      `do NOT hand-edit the installed copy. Invoke the /auto-issue skill and file it ` +
+      `do NOT hand-edit the installed copy. Invoke Skill("devops:auto-issue") and file it ` +
       `against ${slug}: [BUG] for a defect, [FEATURE] for a gap, body = symptom + affected ` +
       `plugin part + "Captured from a session in ${project}." + a mandatory ` +
       `"**User value:**" line (auto-issue rejects issues without one).\n` +

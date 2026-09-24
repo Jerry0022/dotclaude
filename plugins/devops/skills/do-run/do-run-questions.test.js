@@ -265,3 +265,18 @@ describe("folded questions are answered by the router, not asked by the modes", 
     expect(skill).toMatch(/--from=do-run --mode=<interactive\|background> --ship=<auto\|manual>/);
   });
 });
+
+describe("Step 7 ship lockout (red-team R5)", () => {
+  const step7 = () => section(skill, "## Step 7", "## Rules");
+
+  test("arms the do-run lockout and clears it on every exit path", () => {
+    const s = step7();
+    expect(s).toContain('autonomous-lockout.js" arm do-run');
+    expect(s).toMatch(/clear runs on every\s+exit/);
+    for (const exit of ["ship succeeded", "ship blocked", "ship aborted"]) expect(s, exit).toContain(exit);
+  });
+
+  test("names the TTL fallback for a lockout a crash leaves behind", () => {
+    expect(step7()).toMatch(/stale after 6 h/);
+  });
+});

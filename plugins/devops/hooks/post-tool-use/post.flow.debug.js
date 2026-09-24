@@ -108,14 +108,15 @@ function classify(hook) {
   return 'fail';
 }
 
-/** Did auto-fix (or its pre-PR-2 name fix) already run this turn? */
+/** Did the devops auto-fix (or `devops:fix`) already run this turn? A bare
+ *  `fix` is a consumer skill/extension under the old name, not auto-fix. */
 function fixActiveThisTurn(transcriptPath) {
   try {
     const { safeReadTranscript } = require('../lib/card-guard');
     const { skillInvokedThisTurn } = require('../lib/skill-invocations');
-    const { isSkill } = require('../lib/skill-names');
+    const { isDevopsSkill } = require('../lib/skill-names');
     const transcript = safeReadTranscript(transcriptPath, TRANSCRIPT_TAIL_BYTES);
-    return skillInvokedThisTurn(transcript, (_input, name) => isSkill(name, 'auto-fix'));
+    return skillInvokedThisTurn(transcript, (input) => isDevopsSkill(input && input.skill, 'auto-fix'));
   } catch {
     return false;
   }
@@ -124,7 +125,7 @@ function fixActiveThisTurn(transcriptPath) {
 function buildMessage(failures) {
   return (
     `Repeated shell failure detected (${failures} consecutive). ` +
-    'Invoke the devops `auto-fix` skill via the Skill tool ' +
+    'Invoke Skill("devops:auto-fix") ' +
     'NOW, before retrying anything else: check recent git changes, read error ' +
     'logs, and perform root-cause analysis per skills/auto-fix/SKILL.md. This is ' +
     'mandatory, not a suggestion — free-form retry loops without it have run ' +

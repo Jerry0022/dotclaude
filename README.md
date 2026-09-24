@@ -259,7 +259,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.plugin.scope` — Inject the scope-routing rule when a consumer project's session starts talking about…
 - `prompt.skill.enforce` — Detects inline skill commands (e.g.
 - `prompt.strict.enforce` — Arms and enforces strict mode — literal scope, discretionary parameters.
-- `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('do-ship') instruction.
+- `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
 - `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
 

@@ -313,7 +313,19 @@ step for item 3.
      run on a modal, ship, clear it:
      `node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm do-run` →
      `Skill("devops:do-ship")` → `… autonomous-lockout.js clear`. A blocked
-     ship is reported, never retried interactively.
+     ship is reported, never retried interactively. **The clear runs on every
+     exit of this step**, before anything else is reported:
+     - ship succeeded (`ship-successful` / `ready` card) → clear;
+     - ship blocked (`ship-blocked`, a parked gate, a failed MCP step) → clear,
+       then report the block;
+     - ship aborted (do-ship errored or was skipped, the run is interrupted,
+       a pass before it stopped the run) → clear before handing back to
+       `modes/autonomous.md` Step 7.
+     After a compaction or a resumed session, run `… autonomous-lockout.js
+     check` first; `active:true` with `owner:"do-run"` and no ship running
+     → clear it. A lockout that still slips through (crash) expires on its
+     own: `do-run` lockouts are stale after 6 h and are ignored and removed
+     by every reader (`readLockout`, `check` reports `stale:true`).
    - `$SHIP=manual` → no ship. Dabei: render the `ready` card via
      `render_completion_card`; Weg: `modes/autonomous.md` Step 7 renders it.
 

@@ -998,7 +998,9 @@ function headingReservation(open, lang) {
 }
 
 function decisionContext(input, key, delivery, state, lang) {
-  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
+  const promote = delivery.promote || {};
+  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version)
+    || (promote.current && promote.channels && promote.channels[promote.current]) || '';
   // "N roten Tests" counts the red tests the results NAME ("3462 grün · 2 rot"
   // → 2), falling back to one per failing entry when no number is given.
   const redCount = (Array.isArray(input.tests) ? input.tests : [])
@@ -1026,8 +1028,8 @@ function decisionContext(input, key, delivery, state, lang) {
 }
 
 const PROMOTE_LAG = {
-  de: (ch, n, d) => '› ' + ch + ' liegt ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable → `/do-ship promote`',
-  en: (ch, n, d) => '› ' + ch + ' is ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable → `/do-ship promote`',
+  de: (ch, n, d, v) => '› ' + ch + ' liegt ' + n + (n === 1 ? ' Version' : ' Versionen') + (d ? ' / ' + d + ' Tage' : '') + ' vor stable → `/do-ship promote' + (v ? ' ' + v : '') + '`',
+  en: (ch, n, d, v) => '› ' + ch + ' is ' + n + (n === 1 ? ' version' : ' versions') + (d ? ' / ' + d + ' days' : '') + ' ahead of stable → `/do-ship promote' + (v ? ' ' + v : '') + '`',
 };
 
 /** The optional `›` context line under the heading (§ 2.6). */
@@ -1037,7 +1039,10 @@ function buildContextLine(input, key, delivery, lang) {
     const lag = delivery.promote.stableLag;
     if (Number(lag.versions) > 0) {
       const fn = PROMOTE_LAG[lang] || PROMOTE_LAG.de;
-      return fn(delivery.promote.current || 'alpha', Number(lag.versions), lag.days ? Number(lag.days) : 0);
+      // The version the lag line names — the one this card shipped — so the
+      // suggested command stays promotion-only when typed later.
+      const v = String((delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '').replace(/^v/, '');
+      return fn(delivery.promote.current || 'alpha', Number(lag.versions), lag.days ? Number(lag.days) : 0, v);
     }
   }
   if (key === 'aborted' && input.cta && input.cta.info) return '› ' + input.cta.info;
@@ -1136,7 +1141,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
-  return { heading, context, points: shown, buttonsKey };
+  // The version rides on the promote buttons (card-widget.js#buttonsFor): a
+  // stale click on an old card promotes THAT version and never ships edits
+  // made after it (prompt.ship.detect: a named version is promotion-only).
+  return { heading, context, points: shown, buttonsKey, version: ctx.version || null };
 }
 
 function readToolCallCount(sessionId) {
@@ -1234,6 +1242,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     // button replaces one of the terminal's lines).
     points: decision.widgetPoints || decision.points,
     buttonsKey: decision.buttonsKey,
+    promoteVersion: decision.version || null,
   };
 }
 

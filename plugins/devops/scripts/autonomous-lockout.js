@@ -12,14 +12,31 @@
  *
  * The sentinel is a single well-known file in the project root, so ANY caller
  * and ANY sub-skill agree on it without threading state through prompts:
- *   <project>/AUTONOMOUS-LOCKOUT.flag   → { owner, since }
+ *   <project>/AUTONOMOUS-LOCKOUT.flag   → { owner, since, session }
+ *
+ * Staleness (TTL): a run that crashes or compacts between `arm` and `clear`
+ * would otherwise leave the sentinel behind forever — the trigger router stays
+ * muted (prompt.skill.enforce) and every later /do-ship silently takes its
+ * non-interactive defaults. So a lockout older than its owner's TTL is STALE:
+ * `readLockout` ignores it and removes it (best effort), `check` reports it as
+ * `{ active:false, stale:true }`. TTLs (`ttlFor`):
+ *   - `do-run` — one composed ship (do-run Step 7): 6 h, the same horizon as
+ *     do-ship's `.claude/.ship-queue` stale rule;
+ *   - everything else (`backlog-runner`, `autonomous`, unknown/corrupt) — a
+ *     whole AFK run: 24 h, the ceiling `autonomous-watchdog.js register`
+ *     enforces on an unattended run. A long runner may re-`arm` to refresh
+ *     `since`.
+ * `since` falls back to the file's mtime when it is missing or unparseable.
  *
  * Subcommands (stdout: JSON):
- *   arm [owner]   Create/refresh the sentinel; self-registers it in
+ *   arm [owner] [--session=<id>]
+ *                 Create/refresh the sentinel; self-registers it in
  *                 .git/info/exclude so it never surfaces as an untracked change.
- *                 → { ok, active:true, path, owner, since }
- *   check         Report whether a lockout is active in the cwd.
- *                 → { ok, active, owner?, since? }   (exit 0 always)
+ *                 `session` defaults to $CLAUDE_SESSION_ID / $CLAUDE_CODE_SESSION_ID.
+ *                 → { ok, active:true, path, owner, since, session }
+ *   check         Report whether a lockout is active in the cwd; a stale one is
+ *                 removed and reported.
+ *                 → { ok, active, owner?, since?, session?, stale?, removed? }  (exit 0 always)
  *   clear         Remove the sentinel. → { ok, cleared }
  *
  * Cross-platform; no Windows dependency.
@@ -31,6 +48,18 @@ const { execFileSync } = require('child_process');
 
 const LOCKOUT_FILE = 'AUTONOMOUS-LOCKOUT.flag';
 
+const HOUR_MS = 60 * 60 * 1000;
+/** One composed ship under the do-run lockout (see header). */
+const SHIP_TTL_MS = 6 * HOUR_MS;
+/** A whole AFK run — the autonomous-watchdog's 24 h ceiling. */
+const RUN_TTL_MS = 24 * HOUR_MS;
+const OWNER_TTL_MS = Object.freeze({ 'do-run': SHIP_TTL_MS });
+
+/** TTL of a lockout armed by `owner`. */
+function ttlFor(owner) {
+  return Object.prototype.hasOwnProperty.call(OWNER_TTL_MS, owner) ? OWNER_TTL_MS[owner] : RUN_TTL_MS;
+}
+
 function lockoutPathFor(dir) {
   return path.join(dir, LOCKOUT_FILE);
 }
@@ -40,19 +69,63 @@ function out(obj) {
 }
 
 /**
- * Read the lockout sentinel for a project dir.
- * @returns {null|{owner:string, since:string|null}} null when absent. A present
- *   but unparseable sentinel resolves to a truthy "unknown" owner — under an AFK
- *   run we fail toward non-interactive, never toward a modal.
+ * Inspect the sentinel without acting on it.
+ * @param {string} dir project dir
+ * @param {number} [now] epoch ms (tests)
+ * @returns {null|{owner:string, since:string|null, session:string|null, ageMs:number|null, stale:boolean}}
+ *   null when absent. A present but unparseable sentinel resolves to owner
+ *   "unknown" — under an AFK run we fail toward non-interactive, never toward
+ *   a modal — and ages by the file's mtime.
  */
-function readLockout(dir) {
+function inspectLockout(dir, now = Date.now()) {
   const p = lockoutPathFor(dir);
-  if (!fs.existsSync(p)) return null;
+  let text;
+  let mtimeMs = null;
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    text = fs.readFileSync(p, 'utf8');
+    mtimeMs = fs.statSync(p).mtimeMs;
   } catch {
-    return { owner: 'unknown', since: null };
+    return null;
   }
+  let data = null;
+  try { data = JSON.parse(text); } catch { data = null; }
+  if (!data || typeof data !== 'object') data = {};
+  const owner = typeof data.owner === 'string' && data.owner ? data.owner : 'unknown';
+  const since = typeof data.since === 'string' ? data.since : null;
+  const session = typeof data.session === 'string' && data.session ? data.session : null;
+  let t = since ? Date.parse(since) : NaN;
+  if (!Number.isFinite(t)) t = mtimeMs;
+  const ageMs = Number.isFinite(t) ? Math.max(0, now - t) : null;
+  const stale = ageMs !== null && ageMs > ttlFor(owner);
+  return { owner, since, session, ageMs, stale };
+}
+
+/** Delete the sentinel; true when a file was removed. Never throws. */
+function removeLockout(dir) {
+  try {
+    fs.unlinkSync(lockoutPathFor(dir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Read the ACTIVE lockout for a project dir. A stale sentinel (older than its
+ * owner's TTL) is ignored and removed, so a crashed run cannot mute the router
+ * or force non-interactive ships forever.
+ * @param {string} dir
+ * @param {number} [now] epoch ms (tests)
+ * @returns {null|{owner:string, since:string|null, session:string|null}}
+ */
+function readLockout(dir, now = Date.now()) {
+  const info = inspectLockout(dir, now);
+  if (!info) return null;
+  if (info.stale) {
+    removeLockout(dir);
+    return null;
+  }
+  return { owner: info.owner, since: info.since, session: info.session };
 }
 
 /**
@@ -79,22 +152,41 @@ function registerExclude(dir) {
   }
 }
 
+/** `arm` arguments: `[owner] [--session=<id>]`. */
+function parseArmArgs(args, env = process.env) {
+  let owner = null;
+  let session = null;
+  for (const a of args || []) {
+    const m = /^--session=(.+)$/.exec(String(a));
+    if (m) session = m[1];
+    else if (!owner && a) owner = String(a);
+  }
+  if (!session) session = env.CLAUDE_SESSION_ID || env.CLAUDE_CODE_SESSION_ID || null;
+  return { owner: owner || 'autonomous', session };
+}
+
 function runArm(args) {
   const dir = process.cwd();
-  const owner = args[0] || 'autonomous';
+  const { owner, session } = parseArmArgs(args);
   const since = new Date().toISOString();
-  fs.writeFileSync(lockoutPathFor(dir), JSON.stringify({ owner, since }, null, 2));
+  fs.writeFileSync(lockoutPathFor(dir), JSON.stringify({ owner, since, session }, null, 2));
   registerExclude(dir);
-  out({ ok: true, active: true, path: lockoutPathFor(dir), owner, since });
+  out({ ok: true, active: true, path: lockoutPathFor(dir), owner, since, session });
 }
 
 function runCheck() {
-  const data = readLockout(process.cwd());
-  if (!data) {
+  const dir = process.cwd();
+  const info = inspectLockout(dir);
+  if (!info) {
     out({ ok: true, active: false });
     return;
   }
-  out({ ok: true, active: true, owner: data.owner, since: data.since });
+  if (info.stale) {
+    const removed = removeLockout(dir);
+    out({ ok: true, active: false, stale: true, removed, owner: info.owner, since: info.since, session: info.session });
+    return;
+  }
+  out({ ok: true, active: true, owner: info.owner, since: info.since, session: info.session });
 }
 
 function runClear() {
@@ -122,4 +214,14 @@ if (require.main === module) {
   }
 }
 
-module.exports = { lockoutPathFor, readLockout, LOCKOUT_FILE };
+module.exports = {
+  lockoutPathFor,
+  readLockout,
+  inspectLockout,
+  removeLockout,
+  parseArmArgs,
+  ttlFor,
+  LOCKOUT_FILE,
+  SHIP_TTL_MS,
+  RUN_TTL_MS,
+};

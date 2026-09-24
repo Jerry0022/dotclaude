@@ -132,6 +132,20 @@ describe("post.flow.debug — real payload shapes", () => {
     } finally { cleanup(dir); }
   });
 
+  test("a BARE fix (consumer extension under the old name) is not auto-fix — still mandates (R8)", () => {
+    const dir = project();
+    try {
+      const t = path.join(dir, "t.jsonl");
+      fs.writeFileSync(t, [
+        { type: "user", message: { role: "user", content: [{ type: "text", text: "build is broken" }] } },
+        { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Skill", input: { skill: "fix" } }] } },
+      ].map((l) => JSON.stringify(l)).join("\n") + "\n");
+      run(dir, failure("npm run build", 1, { transcript_path: t }));
+      const out = run(dir, failure("npm run build", 1, { transcript_path: t })).stdout;
+      expect(out).toContain('Skill(\\"devops:auto-fix\\")');
+    } finally { cleanup(dir); }
+  });
+
   test("PowerShell failures count as well", () => {
     const dir = project();
     try {

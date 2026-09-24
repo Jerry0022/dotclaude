@@ -170,6 +170,22 @@ describe("--render-card CLI fallback", () => {
     }
   });
 
+  // Red-team R2(b): the promote button names the card's version, so a stale
+  // click on an old card is promotion-only and never ships later edits.
+  test("the Desktop promote button carries the shipped / promoted version", async () => {
+    const shipped = await renderCardFull({
+      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-version",
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
+    }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(shipped.stderr).toContain('data-prompt="promote 0.193.0"');
+    const released = await renderCardFull({
+      variant: "released", summary: "Beta", session_id: "cli-test-promote-version-beta",
+      delivery: { promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
+    }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(released.stderr).toContain('data-prompt="promote stable 0.193.0"');
+  });
+
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {
     const desktop = await renderCardFull(
       { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-md", cta: { description: "läuft auf Port 3000" } },

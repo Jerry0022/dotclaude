@@ -54,6 +54,12 @@ the version is the one named, else `vNew` of the ship that just ran (Step
 fast-track (Step 3). Only when that promotion is not meaningful (the version
 already sits on the target or higher) say so and stop — no question.
 
+**A named version** ("promote stable 0.193.0", the card's promote buttons
+carry one) promotes exactly that version and nothing else: this run never
+ships first, even when the branch has unshipped work — a click on an old
+card must not ship edits made after it. Unshipped work is named as an `open`
+item on the card, never shipped.
+
 **A bare "promote"** (no channel) asks. Precompute only the **meaningful**
 promotions (source strictly ahead of target). Present via AskUserQuestion,
 recommended option first:
@@ -85,6 +91,12 @@ ship_promote({ version: "0.117.0", from: "alpha", to: "beta", cwd: "<cwd>" })
 For any promotion to `stable`, pass `releaseNotes` (read the version's
 CHANGELOG.md entry) — used as fallback notes if release.yml did not create
 the GitHub Release.
+
+**Every fast-track names the skipped beta soak** on the card (Step 4): an
+`open` item "Beta übersprungen — v<version> ging direkt alpha→stable, ohne
+Beta-Phase" (en: "Beta skipped — v<version> went straight alpha→stable, no
+beta soak") plus `delivery.promote.fastTrack: true`. Stable tags are
+irreversible; the skipped soak is never silent.
 
 **Partial failure recovery:** re-run the SAME call(s). Every step is
 skip-if-exists idempotent; an already-completed step returns

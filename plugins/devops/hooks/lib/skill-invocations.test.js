@@ -23,10 +23,35 @@ describe("invokedSkillsInTranscript", () => {
     expect([...invokedSkillsInTranscript(t)].sort()).toEqual(["auto-concept", "auto-fix"]);
   });
 
-  test("a pre-PR-2 name also counts as its new name (session straddling the update)", () => {
-    const t = [user("a"), skill("devops:ship"), user("b"), skill("fix"), skill("devops:run-backlog")].join("\n");
+  test("a NAMESPACED pre-PR-2 name also counts as its new name (session straddling the update)", () => {
+    const t = [user("a"), skill("devops:ship"), user("b"), skill("devops:fix"), skill("devops:run-backlog")].join("\n");
     const got = invokedSkillsInTranscript(t);
-    for (const n of ["ship", "do-ship", "fix", "auto-fix", "run-backlog", "do-run"]) expect(got.has(n), n).toBe(true);
+    for (const n of ["ship", "do-ship", "fix", "auto-fix", "run-backlog", "do-run", "do-run#backlog"]) expect(got.has(n), n).toBe(true);
+  });
+
+  test("a BARE pre-PR-2 name is a consumer skill (old-name extension), never the devops skill (R8)", () => {
+    const got = invokedSkillsInTranscript([user("a"), skill("fix"), skill("setup-issue"), skill("tune-audit")].join("\n"));
+    for (const n of ["fix", "setup-issue", "tune-audit"]) expect(got.has(n), n).toBe(true);
+    for (const n of ["auto-fix", "auto-issue", "do-run", "do-run#audit"]) expect(got.has(n), n).toBe(false);
+  });
+
+  test("another plugin's skill of the same bare name does not count as devops", () => {
+    const got = invokedSkillsInTranscript(skill("other:auto-fix"));
+    expect(got.has("auto-fix")).toBe(false);
+    expect(got.has("other:auto-fix")).toBe(true);
+  });
+
+  test("the mode of a folded skill is keyed from args and from slash <command-args> (R10)", () => {
+    const tool = (n, args) => line({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t", name: "Skill", input: { skill: n, args } }] } });
+    const got = invokedSkillsInTranscript([tool("devops:do-run", "audit --scope=all"), tool("do-ship", "promote stable")].join("\n"));
+    expect(got.has("do-run#audit")).toBe(true);
+    expect(got.has("do-run#rethink")).toBe(false);
+    expect(got.has("do-ship#promote")).toBe(true);
+    expect(invokedSkillsInTranscript(tool("devops:do-run", "mach das schneller")).has("do-run")).toBe(true);
+    const slash = user("<command-message>do-run</command-message>\n<command-name>/devops:do-run</command-name>\n<command-args>rethink</command-args>");
+    const got2 = invokedSkillsInTranscript(slash);
+    expect(got2.has("do-run")).toBe(true);
+    expect(got2.has("do-run#rethink")).toBe(true);
   });
 
   test("connector-namespaced Skill tool counts", () => {
@@ -92,11 +117,17 @@ describe("slash-started skills (R5)", () => {
     ["/devops:auto-concept", "auto-concept"],
     ["/auto-concept", "auto-concept"],
     ["devops:tune-rethink", "do-run"],
-    ["/fix", "auto-fix"],
+    ["/devops:fix", "auto-fix"],
     ["/devops:ship", "do-ship"],
   ])("invokedSkillsInTranscript collects <command-name>%s</command-name>", (raw, name) => {
     expect(invokedSkillsInTranscript([cmd(raw), user("later")].join("\n")).has(name)).toBe(true);
     expect(invokedSkillsInTranscript(cmdString(raw)).has(name)).toBe(true);
+  });
+
+  test("a bare old-name slash command (/fix → consumer extension) is not auto-fix (R8)", () => {
+    const got = invokedSkillsInTranscript(cmd("/fix"));
+    expect(got.has("fix")).toBe(true);
+    expect(got.has("auto-fix")).toBe(false);
   });
 
   test("skillInvokedThisTurn counts a slash command that opened the turn", () => {

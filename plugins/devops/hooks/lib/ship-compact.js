@@ -3,7 +3,7 @@
  * @version 0.4.0
  * @plugin devops
  * @description The "careful compact before /do-ship" advice, shared by
- *   `prompt.ship.detect` (which emits it instead of the Skill('do-ship')
+ *   `prompt.ship.detect` (which emits it instead of the Skill('devops:do-ship')
  *   instruction) and its test.
  *
  *   Why: a /do-ship runs ~16 API calls, each re-reading the WHOLE context, and

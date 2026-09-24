@@ -34,11 +34,12 @@ function writeClaude(name, data) {
   fs.writeFileSync(path.join(cwd, ".claude", name), JSON.stringify(data));
 }
 
-function transcriptWithSkill(skill) {
+function transcriptWithSkill(skill, args) {
   const file = path.join(cwd, "t.jsonl");
+  const input = args === undefined ? { skill } : { skill, args };
   fs.writeFileSync(file, [
     { type: "user", message: { role: "user", content: [{ type: "text", text: "earlier" }] } },
-    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "x", name: "Skill", input: { skill } }] } },
+    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "x", name: "Skill", input }] } },
   ].map((l) => JSON.stringify(l)).join("\n") + "\n");
   return file;
 }
@@ -64,12 +65,12 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
   test("inline /name mention still forces a mandatory Skill load (pre-existing behaviour)", () => {
     const r = runHook({ prompt: "/auto-concept lass uns das machen und dann direkt umsetzen" });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Skill("auto-concept")');
+    expect(r.stdout).toContain('Skill("devops:auto-concept")');
     expect(r.stdout).toContain("MANDATORY");
   });
 
   test("an already-expanded slash command is skipped entirely", () => {
-    const r = runHook({ prompt: "<command-name>concept</command-name> args… error TypeError: x" });
+    const r = runHook({ prompt: "<command-name>auto-concept</command-name> args… error TypeError: x" });
     expect(r.stdout).toBe("");
     expect(r.code).toBe(0);
   });
@@ -88,20 +89,20 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
   });
 
   test("pre-PR-2 alias mention (/fix) maps to the new skill (auto-fix)", () => {
-    expect(runHook({ prompt: "kannst du /fix laufen lassen" }).stdout).toContain('Skill("auto-fix")');
+    expect(runHook({ prompt: "kannst du /fix laufen lassen" }).stdout).toContain('Skill("devops:auto-fix")');
   });
 
   test("a new name is a real skill → inline mention (/auto-fix, /do-learn)", () => {
-    expect(runHook({ prompt: "kannst du /auto-fix laufen lassen" }).stdout).toContain('Skill("auto-fix")');
-    expect(runHook({ prompt: "/do-learn der Port ist 3000" }).stdout).toContain('Skill("do-learn")');
+    expect(runHook({ prompt: "kannst du /auto-fix laufen lassen" }).stdout).toContain('Skill("devops:auto-fix")');
+    expect(runHook({ prompt: "/do-learn der Port ist 3000" }).stdout).toContain('Skill("devops:do-learn")');
   });
 
   test("/claude-learn alias → do-learn", () => {
-    expect(runHook({ prompt: "bitte /claude-learn der Port ist 3000" }).stdout).toContain('Skill("do-learn")');
+    expect(runHook({ prompt: "bitte /claude-learn der Port ist 3000" }).stdout).toContain('Skill("devops:do-learn")');
   });
 
   test("a folded alias carries its mode as the skill args", () => {
-    expect(runHook({ prompt: "und dann /run-backlog" }).stdout).toContain('Skill("do-run") with args "backlog"');
+    expect(runHook({ prompt: "und dann /run-backlog" }).stdout).toContain('Skill("devops:do-run") with args "backlog"');
   });
 
   test("the old /ship alias emits nothing (prompt.ship.detect owns ship)", () => {
@@ -111,7 +112,7 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
   // promote is do-ship's target channel since the skill restructure PR 2 —
   // prompt.ship.detect parses it and passes the channel as the skill args.
   test("the old /promote alias emits nothing either (prompt.ship.detect owns it)", () => {
-    expect(runHook({ prompt: "jetzt /promote bitte" }).stdout).not.toContain('Skill("do-ship")');
+    expect(runHook({ prompt: "jetzt /promote bitte" }).stdout).not.toContain('Skill("devops:do-ship")');
   });
 
   test("a mention inside backticks or quotes is not an invocation", () => {
@@ -123,12 +124,12 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
     const r = runHook({
       prompt: "geht nicht:\nTypeError: Cannot read properties of undefined (reading 'map')\n  at Foo (bar.js:12:5)",
     });
-    expect(r.stdout).toContain('Skill("auto-fix")');
+    expect(r.stdout).toContain('Skill("devops:auto-fix")');
   });
 
   test("Traceback + crash routes to fix", () => {
     const r = runHook({ prompt: 'crash beim Start\nTraceback (most recent call last):\n  File "app.py", line 3' });
-    expect(r.stdout).toContain('Skill("auto-fix")');
+    expect(r.stdout).toContain('Skill("devops:auto-fix")');
   });
 
   test.each([
@@ -143,12 +144,12 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
     ["mach mir dazu ein concept", "auto-concept"],
     ["ich bin festgefahren", "do-run"],
   ])("%s → %s", (prompt, skill) => {
-    expect(runHook({ prompt }).stdout).toContain(`Skill("${skill}")`);
+    expect(runHook({ prompt }).stdout).toContain(`Skill("devops:${skill}")`);
   });
 
   test("ship / batch wording is left to the dedicated hooks", () => {
-    expect(runHook({ prompt: "ship it" }).stdout).not.toContain('Skill("do-ship")');
-    expect(runHook({ prompt: "lass uns erstmal sammelmodus nutzen" }).stdout).not.toContain('Skill("do-batch")');
+    expect(runHook({ prompt: "ship it" }).stdout).not.toContain('Skill("devops:do-ship")');
+    expect(runHook({ prompt: "lass uns erstmal sammelmodus nutzen" }).stdout).not.toContain('Skill("devops:do-batch")');
   });
 
   test("burn mode (explicit-only) never fires from wording", () => {
@@ -158,8 +159,57 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
 
 describe("prompt.skill.enforce — context filters (R3, R10)", () => {
   test("a skill already invoked this session is not re-mandated by the router", () => {
-    const t = transcriptWithSkill("devops:do-run");
+    const t = transcriptWithSkill("devops:do-run", "rethink");
     expect(runHook({ prompt: "ich bin festgefahren", transcript_path: t }).stdout).toBe("");
+  });
+
+  test("do-run is muted per MODE: an audit run does not mute a later rethink route (R10)", () => {
+    const audit = transcriptWithSkill("devops:do-run", "audit --scope=all");
+    expect(runHook({ prompt: "ich bin festgefahren", transcript_path: audit }).stdout)
+      .toContain('Skill("devops:do-run") with args "rethink"');
+    const oldAudit = transcriptWithSkill("devops:tune-audit");
+    expect(runHook({ prompt: "ich bin festgefahren", transcript_path: oldAudit }).stdout)
+      .toContain('Skill("devops:do-run") with args "rethink"');
+  });
+
+  test("a bare pre-PR-2 name in the transcript is a consumer skill, not the devops one (R8)", () => {
+    // `.claude/skills/tune-rethink/` (an old-name extension) ran — do-run did not.
+    const t = transcriptWithSkill("tune-rethink");
+    expect(runHook({ prompt: "ich bin festgefahren", transcript_path: t }).stdout).toContain('Skill("devops:do-run")');
+  });
+
+  test("hook-owned do-ship is not mandated from an inline mention (R7)", () => {
+    const out = runHook({ prompt: "jetzt /do-ship stable" }).stdout;
+    expect(out).not.toMatch(/Skill\("(?:devops:)?do-ship"\)/);
+  });
+
+  test("a typed bare old name that loaded an old-name EXTENSION gets the devops skill (R8)", () => {
+    const ext = path.join(cwd, ".claude", "skills", "fix");
+    fs.mkdirSync(ext, { recursive: true });
+    fs.writeFileSync(path.join(ext, "reference.md"), "# project context for fix\n");
+    const prompt = "<command-message>fix</command-message>\n<command-name>/fix</command-name>\n<command-args>crash</command-args>";
+    const out = runHook({ prompt }).stdout;
+    expect(out).toContain("MANDATORY");
+    expect(out).toContain('Skill("devops:auto-fix")');
+  });
+
+  test("a typed bare old name of an unrelated consumer skill only gets a soft hint (R8)", () => {
+    const prompt = "<command-message>tune-audit</command-message>\n<command-name>/tune-audit</command-name>";
+    const out = runHook({ prompt }).stdout;
+    expect(out).toContain("NOT mandatory");
+    expect(out).toContain('Skill("devops:do-run") with args "audit"');
+    expect(out).not.toContain("MANDATORY");
+  });
+
+  test("an expanded devops slash command stays silent", () => {
+    expect(runHook({ prompt: "<command-name>/devops:auto-fix</command-name>" }).stdout).toBe("");
+    expect(runHook({ prompt: "<command-name>/do-ship</command-name>" }).stdout).toBe("");
+  });
+
+  test("every mandate names the namespaced devops skill (R8)", () => {
+    const out = runHook({ prompt: "kannst du /auto-fix laufen lassen" }).stdout;
+    expect(out).toContain('Skill("devops:auto-fix")');
+    expect(out).not.toContain('Skill("auto-fix")');
   });
 
   test("a skill invoked under its pre-PR-2 name counts as already running", () => {
@@ -169,7 +219,7 @@ describe("prompt.skill.enforce — context filters (R3, R10)", () => {
 
   test("…but an explicit /name mention still is", () => {
     const t = transcriptWithSkill("devops:auto-concept");
-    expect(runHook({ prompt: "/auto-concept nochmal neu", transcript_path: t }).stdout).toContain('Skill("auto-concept")');
+    expect(runHook({ prompt: "/auto-concept nochmal neu", transcript_path: t }).stdout).toContain('Skill("devops:auto-concept")');
   });
 
   const conceptState = (overrides = {}) => ({
@@ -188,19 +238,22 @@ describe("prompt.skill.enforce — context filters (R3, R10)", () => {
     ["bad port", conceptState({ port: "abc" })],
   ])("a %s leftover concept-active.json does NOT mute concept routing (R9)", (_name, state) => {
     writeClaude("concept-active.json", state);
-    expect(runHook({ prompt: "mach mir dazu ein concept" }).stdout).toContain('Skill("auto-concept")');
+    expect(runHook({ prompt: "mach mir dazu ein concept" }).stdout).toContain('Skill("devops:auto-concept")');
   });
 
   test("unparseable concept-active.json does not mute either (R9)", () => {
     fs.writeFileSync(path.join(cwd, ".claude", "concept-active.json"), "{nope");
-    expect(runHook({ prompt: "mach mir dazu ein concept" }).stdout).toContain('Skill("auto-concept")');
+    expect(runHook({ prompt: "mach mir dazu ein concept" }).stdout).toContain('Skill("devops:auto-concept")');
   });
 
   test("a skill started as a slash command earlier this session is not re-mandated (R5)", () => {
-    for (const name of ["/devops:do-run", "/do-run", "/devops:tune-rethink", "tune-rethink"]) {
+    // do-run is keyed per mode (R10): the slash command must carry the mode;
+    // a bare old name (`tune-rethink`) is a consumer skill (R8) and does not count.
+    for (const [name, args] of [["/devops:do-run", "rethink"], ["/do-run", "rethink"], ["/devops:tune-rethink", ""]]) {
       const file = path.join(cwd, "t.jsonl");
+      const argTag = args ? `\n<command-args>${args}</command-args>` : "";
       fs.writeFileSync(file, [
-        { type: "user", message: { role: "user", content: `<command-message>tune-rethink</command-message>\n<command-name>${name}</command-name>` } },
+        { type: "user", message: { role: "user", content: `<command-message>tune-rethink</command-message>\n<command-name>${name}</command-name>${argTag}` } },
         { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
       ].map((l) => JSON.stringify(l)).join("\n") + "\n");
       expect(runHook({ prompt: "ich bin festgefahren", transcript_path: file }).stdout).toBe("");
@@ -229,7 +282,7 @@ describe("prompt.skill.enforce — context filters (R3, R10)", () => {
 
   test("consumer project talking about the devops plugin → no fix mandate", () => {
     const r = runHook({ prompt: "the devops plugin hook breaks:\nTypeError: x is undefined\n  at f (a.js:1:2)\ngeht nicht" });
-    expect(r.stdout).not.toContain('Skill("auto-fix")');
+    expect(r.stdout).not.toContain('Skill("devops:auto-fix")');
   });
 });
 
@@ -249,7 +302,7 @@ describe("prompt.skill.enforce — concept phrases and soft hints (R1, R2)", () 
     expect(r.stdout).toContain("auto-guide");
     expect(r.stdout).toContain("NOT mandatory");
     expect(r.stdout).not.toContain("MANDATORY");
-    expect(r.stdout).not.toContain('Skill("auto-guide")');
+    expect(r.stdout).not.toContain('Skill("devops:auto-guide")');
   });
 
   describe("in the plugin source repo", () => {
@@ -268,16 +321,16 @@ describe("prompt.skill.enforce — concept phrases and soft hints (R1, R2)", () 
       const r = runHook({ prompt });
       expect(r.stdout).toContain(skill);
       expect(r.stdout).toContain("NOT mandatory");
-      expect(r.stdout).not.toContain(`Skill("${skill}")`);
+      expect(r.stdout).not.toContain(`Skill("devops:${skill}")`);
     });
 
     test("an explicit /name mention stays mandatory", () => {
-      expect(runHook({ prompt: "/auto-concept bitte" }).stdout).toContain('Skill("auto-concept")');
+      expect(runHook({ prompt: "/auto-concept bitte" }).stdout).toContain('Skill("devops:auto-concept")');
     });
 
     test("an error pattern stays mandatory", () => {
       const r = runHook({ prompt: "geht nicht:\nTypeError: x\n  at f (a.js:1:2)" });
-      expect(r.stdout).toContain('Skill("auto-fix")');
+      expect(r.stdout).toContain('Skill("devops:auto-fix")');
     });
   });
 });
@@ -321,11 +374,11 @@ describe("prompt.skill.enforce — odd stdin", () => {
   test("BOM + CRLF payload still works", () => {
     const r = runRaw("\uFEFF{\r\n\"prompt\": \"ich bin festgefahren\",\r\n\"session_id\": \"x\"\r\n}");
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Skill("do-run")');
+    expect(r.stdout).toContain('Skill("devops:do-run")');
   });
 
   test("missing transcript file does not break the already-invoked check", () => {
     const r = runHook({ prompt: "ich bin festgefahren", transcript_path: path.join(cwd, "nope.jsonl") });
-    expect(r.stdout).toContain('Skill("do-run")');
+    expect(r.stdout).toContain('Skill("devops:do-run")');
   });
 });

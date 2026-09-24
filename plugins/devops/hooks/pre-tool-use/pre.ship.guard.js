@@ -87,7 +87,7 @@ process.stdin.on('end', () => {
       '',
       'If ToolSearch returns NO matches, the ship server genuinely failed to register.',
       'Recovery: restart Claude Code (MCP servers spawn only at session init; ss.plugin.update',
-      'self-heals the cache on the next start). If it persists, ask Claude to update the plugin (auto-update).',
+      'self-heals the cache on the next start). If it persists, ask Claude "devops update" (runs the hidden auto-update skill).',
       'Last resort: set DOTCLAUDE_ALLOW_MANUAL_SHIP=1 to allow a one-off manual ship this session.',
     );
   }

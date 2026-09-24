@@ -145,6 +145,66 @@ describe("parseShipRequest — target channel", () => {
     expect(parseShipRequest(prose).ship).toBe(false);
   });
 
+  // Red-team R1: stable tags are irreversible, and a negated channel used to
+  // resolve to stable — prompt.ship.detect mandated args "stable" and do-ship
+  // promoted without asking. A negation near the channel or the promote verb
+  // means no channel: a plain ship to alpha (or no ship at all).
+  test.each([
+    "ship, aber nicht auf stable",
+    "ship it but don't promote to stable",
+    "ship it but do not promote to stable",
+    "ship it, not to stable",
+    "ship, kein stable",
+    "ship, keine Promotion auf stable",
+    "ship ohne promote",
+    "ship ohne promote auf stable",
+    "ship, no promotion",
+    "ship it, no promotion to stable",
+    "ship, bloß nicht nach stable",
+    "ship und nie auf stable",
+    "ship it, never to stable",
+    "ship without promoting to stable",
+    "ship to stable, not yet",
+    "ship to stable — lieber nicht",
+    "/do-ship not stable",
+    "/do-ship nicht stable",
+  ])("negated channel → plain ship to alpha: %s", (p) => {
+    expect(parseShipRequest(p)).toMatchObject({ ship: true, promote: false, channel: null });
+  });
+
+  test("negated channel without a ship keyword → no order at all", () => {
+    for (const p of ["nicht auf stable heben", "auf stable heben, lieber nicht", "don't promote to stable", "kein stable"]) {
+      expect(parseShipRequest(p), p).toMatchObject({ promote: false, channel: null });
+    }
+    // a negated slash channel falls back to a bare promotion — do-ship asks
+    expect(parseShipRequest("/promote nicht stable")).toMatchObject({ promote: true, channel: null });
+  });
+
+  test("positives survive the negation guard", () => {
+    expect(parseShipRequest("promote stable, nicht beta")).toMatchObject({ promote: true, channel: "stable" });
+    expect(parseShipRequest("don't wait, ship to stable")).toMatchObject({ promote: true, channel: "stable" });
+    expect(parseShipRequest("promote to stable and don't forget the changelog")).toMatchObject({ promote: true, channel: "stable" });
+    expect(parseShipRequest("ship und dann auf stable")).toMatchObject({ promote: true, channel: "stable" });
+  });
+
+  // Red-team R2(c): only a semver ADJACENT to the promotion phrase is the
+  // target — a version elsewhere is context ("fixes the 0.170.2 regression").
+  test.each([
+    ["promote stable 0.170.2", "0.170.2"],
+    ["promote stable v0.170.2", "0.170.2"],
+    ["promote 0.170.2 auf stable", "0.170.2"],
+    ["ship 0.170.2 to stable", "0.170.2"],
+    ["Promote v0.171.0 to stable", "0.171.0"],
+    ["/do-ship stable 0.170.2", "0.170.2"],
+    ["/promote 0.170.2", "0.170.2"],
+    ["promote 0.193.0", "0.193.0"],
+    ["promote stable, fixes 0.170.2 regression", null],
+    ["promote stable — the 0.170.2 bug is fixed", null],
+    ["auf stable heben, 0.170.2 war kaputt", null],
+  ])("version adjacency: %s → %s", (p, v) => {
+    expect(parseShipRequest(p).version).toBe(v);
+  });
+
   test("isShipIntent counts a promotion — the title hook marks it like a ship", () => {
     expect(isShipIntent("promote stable")).toBe(true);
     expect(isShipIntent("auf beta heben")).toBe(true);

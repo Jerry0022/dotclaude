@@ -50,10 +50,17 @@ API" is no request). Several named → the highest.
 
 | Unshipped work on this branch? | Channel | Run |
 |---|---|---|
+| any | a promotion that names a **version** (`stable 0.193.0`, `promote 0.193.0`, every card button) | **promotion only** of exactly that version — never ship first, even with unshipped work (a stale card click must not ship edits made after the card); unshipped work stays and is named as an `open` item "Ungeshippte Änderungen nicht mitgenommen — Promotion von v<version> ohne Ship" |
 | yes | none / alpha | the pipeline below, unchanged |
 | yes | beta / stable | the pipeline below to alpha, then **Step 5d** promotes the version just shipped; ONE `released` card (Step 6) |
 | no | beta / stable / bare `promote` | **promotion only**: Pre-Step A, then `modes/promote.md` Steps 0–4 — no preflight, no build, no passes |
 | no | none / alpha | the pipeline below (preflight reports "nothing to ship", as before) |
+
+A **negated** channel ("ship, aber nicht auf stable", "don't promote to
+stable", "ohne promote") is no channel — a plain ship to alpha
+(`hooks/lib/ship-intent.js` is the parser). A version counts only next to
+the promotion phrase ("promote stable 0.170.2", "0.170.2 auf stable");
+"promote stable, fixes 0.170.2 regression" names none.
 
 "Unshipped" = tracked changes, or commits whose files still differ from the
 default branch (`git diff --name-only origin/<base>...HEAD` non-empty AND
@@ -78,7 +85,7 @@ that safe; a plain `/do-ship` with no arguments behaves exactly as before.
 
 | Signal | Effect on this run |
 |---|---|
-| `--cwd=<path>` | **Target directory override.** Every `ship_*` MCP call passes this path as `cwd`, every git/gh command runs with `git -C <path>` / inside it. The branch that ships is the one checked out THERE, not this session's own. Pre-Step B (session activity) and Pre-Step C (sidebar title) still refer to this session; `ExitWorktree` is **never** called (it would act on this session's worktree, not the target) — the orchestrator owns the target's teardown, so `--cwd` implies `--keep`. |
+| `--cwd=<path>` | **Target directory override.** Every `ship_*` MCP call passes this path as `cwd`, every git/gh command runs with `git -C <path>` / inside it, and both Step 1e passes get `--cwd=<path>`. The branch that ships is the one checked out THERE, not this session's own. Pre-Step B (session activity) and Pre-Step C (sidebar title) still refer to this session; `ExitWorktree` is **never** called (it would act on this session's worktree, not the target) — the orchestrator owns the target's teardown, so `--cwd` implies `--keep`. |
 | `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel. |
 | `--queued` | This ship is one of several in a queue. Informational: the card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, and a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
@@ -448,13 +455,19 @@ graph: `do-ship → auto-harden, auto-polish`, both `--invoked-by=ship`). Both
 are static, diff-only, run no agents and no browser, return a findings
 structure and no card — the Skill tool, one call each, then continue:
 
-1. `/auto-harden --invoked-by=ship --base=<base> <files of the diff>` — every
+1. `/auto-harden --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>` — every
    changed file; checks H1–H7 on the added lines (`auto-harden` § Ship path).
-2. `/auto-polish --invoked-by=ship <ui files of the diff>` — only when the
+2. `/auto-polish --invoked-by=ship [--cwd=<path>] <ui files of the diff>` — only when the
    diff has UI files (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § UI file
    detection, plus the project's `## UI rules` override in
    `.claude/skills/auto-polish/reference.md`, pre-PR-2 fallback `tune-polish/`);
    the static halves of the standing UI rules (`auto-polish` § Rules-only path).
+
+**Composed ships (`--cwd=<path>`):** pass the SAME `--cwd=<path>` to both
+passes, and compute the diff with `git -C <path>`. Both skills scope the diff
+AND their fixes to that checkout; a mechanical polish fix you apply yourself
+edits the file under `<path>` too. Without it the passes would diff and fix
+this session's own checkout instead of the branch that ships.
 
 Treat what they return like the other 1d findings:
 - `applicable: false` → nothing; no card entry.
@@ -1073,6 +1086,13 @@ question is already answered by the channel the user named:
 - **stable** → fast-track, two sequential calls (alpha→beta, then
   beta→stable with `releaseNotes` = this version's CHANGELOG entry), unless
   the version is already on beta — then only beta→stable.
+- **Beta soak skipped** — whenever the version goes to stable without having
+  sat on beta before this run (every ship + "stable" run, every fast-track),
+  the card MUST say so: an `open` item "Beta übersprungen — v<version> ging
+  direkt alpha→stable, ohne Beta-Phase" (en: "Beta skipped — v<version> went
+  straight alpha→stable, no beta soak") and `delivery.promote.fastTrack: true`.
+  Never silent: stable tags are irreversible, and the skipped soak is the
+  one risk the user did not see happen.
 - Guard errors are final (`modes/promote.md` Step 3): no retry around
   monotonicity/ancestry/immutability. A failed promotion never undoes the
   ship — the card stays `ship-successful` with the guard error as an `open`
@@ -1081,9 +1101,10 @@ question is already answered by the channel the user named:
 Carry the result into Step 6: `promotion: { from, to, sha, tags: <pushed>, release }`
 and the re-read channel ladder (`git ls-remote --tags origin`).
 
-**Promotion-only runs** (§ Target channel, nothing unshipped) do exactly
-this and nothing else — `modes/promote.md` Steps 0–4, the version = latest
-alpha unless one was named; a bare "promote" asks its Step 2 question.
+**Promotion-only runs** (§ Target channel: nothing unshipped, or a version
+named) do exactly this and nothing else — `modes/promote.md` Steps 0–4, the
+version = latest alpha unless one was named; a bare "promote" asks its Step
+2 question. A named version never triggers a ship, whatever the tree holds.
 
 ## Step 6 — Completion Card
 
