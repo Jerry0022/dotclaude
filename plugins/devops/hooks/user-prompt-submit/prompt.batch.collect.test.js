@@ -362,6 +362,15 @@ describe("message builders", () => {
     expect(ctx).toMatch(/still überspringen/);
   });
 
+  test("the merge context demands the full-detail bundle plan on both routes (#483)", () => {
+    const ctx = buildMergeContext([{ at: "2026-08-16T10:00:00.000Z", text: "x" }], "", "/tmp/p/.claude/batch.md");
+    expect(ctx).toContain("Bündel-Plan");
+    expect(ctx).toContain("JEDES konkrete Detail jeder Notiz");
+    expect(ctx).toContain("keine Datei");
+    expect(ctx).toContain("BEIDE Wege");
+    expect(ctx).toContain('"Bündel:"');
+  });
+
   test("the merge context hands the plan to auto-concept or do-run, never implements", () => {
     // The marker path never loads the skill, so the Step 4.6 hand-off rule has
     // to ride along: do-batch plans, the receiving skill runs.

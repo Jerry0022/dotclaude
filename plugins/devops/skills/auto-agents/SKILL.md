@@ -1,6 +1,6 @@
 ---
 name: auto-agents
-version: 0.10.0
+version: 0.11.0
 description: >-
   The single execution path for everything that implements — do-run,
   auto-concept (implement), auto-fix, auto-harden, auto-polish — and for a
@@ -57,6 +57,13 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 | `--mode=interactive\|background` | the caller | The execution mode — the former Step 4 question. `do-run` answers it with its question 2 ("Ablauf?"): **Dabei · …** → `interactive`, **Weg · …** → `background`. `auto-concept` passes `background` (its main session keeps the heartbeat and `/status` posts). `auto-fix`, `auto-harden`, `auto-polish` pass `background` under `--autonomous`, else `interactive`. |
 | `--ship=auto\|manual` | `do-run` (question 2) | Echoed in the result, never acted on. Missing = `manual`. |
 | rest | the caller | The task or the approved plan, verbatim — decisions, file paths, the concept file, the root cause. Never a paraphrase. |
+
+**A `Bündel:` section in the task** (a do-batch plan, via do-run or the concept
+implement click) is the parallel split already made. Build the waves from it:
+one agent per bundle, each owning the files it lists, a bundle with `nach: Bx`
+in a wave after Bx. Keep the bundle's note details in that agent's prompt
+word for word. Split again only where a bundle is still too large for one agent,
+and never give two agents the same file.
 
 A missing `--mode` with a `--from` means the caller does not care →
 `background`. A missing `--mode` **without** `--from` is the only case that

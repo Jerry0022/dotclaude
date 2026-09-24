@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.5.0
+ * @version 0.6.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -245,6 +245,11 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     'Arbeite NICHT die Notizen einzeln ab. Gehe so vor:',
     '1. Führe die Notizen zu EINEM Gesamtvorhaben zusammen.',
     '2. Prüfe die Machbarkeit gegen den echten Code, bevor du planst.',
+    '2b. Baue daraus still (keine Freigabefrage) einen Bündel-Plan (do-batch 4.4):',
+    '   JEDES konkrete Detail jeder Notiz bleibt drin (Schwellen, Beispiele, Timings,',
+    '   Wortlaut). Die Arbeit wird in Bündel geteilt, die parallel laufen und keine Datei',
+    '   teilen. Jedes Bündel nennt Notizen, eigene Dateien, Schnittstellen, Reihenfolge und',
+    '   Prüfung. Das gilt für BEIDE Wege, Concept wie Umsetzung.',
     '3. Liste Widersprüche EINZELN auf ("#2 wollte rot, #6 blau") statt sie still',
     '   nach "später gewinnt" aufzulösen. Unmögliche Punkte werden benannt,',
     '   nicht umgangen.',
@@ -256,7 +261,8 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     '     Punkt mit abhängigen Punkten, 2+ Ansatz-Gabelungen. Im Zweifel auto-concept.',
     '   - sonst Skill devops:do-run mit --from=do-batch (do-run überspringt dann "Was?").',
     '   Vorher: archiveNotes(cwd) aus hooks/lib/batch-state.js (archivieren, nie',
-    '   löschen) und den archivierten Pfad in die Übergabe schreiben.',
+    '   löschen) und den archivierten Pfad in die Übergabe schreiben. Die Übergabe',
+    '   trägt den Abschnitt "Bündel:" (do-batch 4.9).',
     '',
     'Umsetzung ist breit gemeint — Code, Concepting, UI-Concepting, oder auch nur',
     'ein erster Schritt.',

@@ -1,6 +1,6 @@
 ---
 name: do-batch
-version: 0.6.1
+version: 0.7.0
 description: >-
   Collect mode — a UserPromptSubmit hook parks each prompt in
   `.claude/batch.md` instead of executing it (no model turn), until an
@@ -342,8 +342,35 @@ step that pays for the whole mode: the notes were written blind, without Claude
 looking at anything. Some of them will be impossible, and later notes may depend
 on those. Check the substantive ones against the codebase.
 
-**4.4 Merge into ONE plan.** Not a list of n tasks executed in sequence — one
-coherent piece of work. Where notes describe the same surface, they merge.
+**4.4 Build the bundle plan — full detail, parallel, never a gate.** One
+coherent piece of work, not a list of n tasks executed one after another.
+Where notes describe the same surface, they merge. Build this plan on
+**both** routes (4.6): a concept page needs it as much as an implementation
+run. It is written silently as the execution basis, and the user is never
+asked to approve it (see 4.6).
+
+The plan must carry:
+
+1. **Every concrete detail of every note.** Thresholds, examples, edge cases,
+   timings, the user's wording where it is precise. A coverage line is not
+   enough: "85 von 85 erst wenn das Item auf einem FREIEN Platz gelandet ist,
+   dann ~1 s Delay, in dieser 1 s kein Abwerfen" goes into the plan as
+   written, never as "Zähler-Timing anpassen". A detail missing from the plan
+   is lost, because the receiving skill never sees the notes.
+2. **Bundles that own separate files.** Group the work into bundles that can
+   run in parallel without editing the same files. Each bundle names the notes
+   it covers and the files or surfaces it owns. Two bundles never own the same
+   file. If a file cannot be split, the notes that touch it go into one
+   bundle.
+3. **Named interfaces and order.** Where bundles meet, name the contract, e.g.
+   "engine emits a spawn event at turn end, UI animates it". Where one bundle
+   needs another first, say so ("B2 after B1"). No dependency means the
+   bundles run in parallel.
+4. **Verification per bundle.** How each bundle is shown to work: the test,
+   the check, the screen.
+
+One bundle is fine when everything touches one surface. Do not split work
+just to have more bundles.
 
 **4.5 Surface conflicts individually — never resolve them silently.**
 
@@ -411,7 +438,10 @@ answers to your own questions.
 --from=do-batch
 Notizen: <archived path from 4.7>
 Abdeckung: #1 … #N, one line each, dispositions as in 4.2
-Plan: <the merged plan>
+Plan: <the merged plan, every note detail kept (4.4.1)>
+Bündel:
+  B1 <name> — Notizen #…; besitzt <files/surfaces>; Schnittstellen: <contract with Bx>; nach: <Bx | —>; Prüfung: <verification>
+  B2 …
 Konflikte / nicht machbar: <each one named, with the default taken or "offen">
 Offene Entscheidungen: <auto-concept only — the forks that made 4.6 route here>
 ```
@@ -422,6 +452,9 @@ Offene Entscheidungen: <auto-concept only — the forks that made 4.6 route here
   `auto-agents`.
 - **auto-concept** opens with this plan as iteration 1 and every open
   decision as a decision item (its Step 0.5 § Started from do-batch).
+- The `Bündel:` section travels unchanged on both routes. `auto-agents` uses
+  it for its waves: one agent per bundle, file ownership as given, a bundle
+  with `nach:` in a later wave. It does not work the split out again.
 
 Never both, and never implement anything here before the hand-off: the
 receiving skill owns the run from this point.
@@ -495,6 +528,8 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
   route word becomes note #1 (Step 2.4). Acting on it defeats the mode in the
   very turn that starts it, and it is how the marker dialog gets skipped.
 - **Never resolve a contradiction silently.** Name it, then decide.
+- **The plan keeps every detail and splits into bundles** (4.4), on both
+  routes, silently. It is the execution basis, not a question.
 - **do-batch never implements.** The merged plan goes to exactly one skill —
   do-run (`--from=do-batch`, ready plan) or auto-concept (`--from=do-batch`,
   open decisions) — per the Step 4.6 decision rule.

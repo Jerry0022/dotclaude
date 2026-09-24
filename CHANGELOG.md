@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.195.0] — 2026-09-24
+
+### Added
+- **A batch reaches implementation with every detail and a parallel split.** When a batch fires, `/do-batch` Step 4.4 builds a plan in the background on both routes, concept and implementation, and never asks for approval. The plan keeps every concrete detail of every note: thresholds, examples, timings, the user's precise wording. It splits the work into bundles that own separate files, and names the interface and order between bundles plus a check for each one. The hand-off carries a `Bündel:` section. `auto-agents` builds its waves from it, one agent per bundle and no file shared. `auto-concept` shows it and passes it on to the implement click (#483).
+
 ## [0.194.7] — 2026-09-24
 
 ### Fixed
