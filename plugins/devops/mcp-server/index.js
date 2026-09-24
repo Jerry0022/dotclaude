@@ -367,18 +367,6 @@ function getBuildId(overrideCwd) {
   }
 }
 
-/**
- * The Desktop marker: the ✨✨✨ title as a markdown comment — a link reference
- * definition, `[//]: # (…)`, which renders to nothing. An HTML comment
- * (#443) is shown as literal text by the Desktop renderer. Backslash and
- * parentheses are escaped so a title like "Fix (x)" cannot close the
- * definition early; card-guard's extractCardTitle unescapes them.
- */
-function renderMarkerComment(summary) {
-  const title = clampText(String(summary), SUMMARY_MAX).value.replace(/[\\()]/g, '\\$&');
-  return '[//]: # (\u2728\u2728\u2728 ' + title + ' \u2728\u2728\u2728)';
-}
-
 function renderTitle(summary) {
   // H3 + bold: a smaller heading than H1 so the whole card fits more on screen
   // without scrolling, while the \u2728\u2728\u2728 marker + bold keep the headline prominent
@@ -1083,10 +1071,22 @@ const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable'
  * The whole decision block: heading (already carrying any "+N weitere" tail),
  * optional context line, ≤3 points, and the button-table key for the widget.
  * Handles the concept / batch / pending overrides, which replace the block
- * of every OTHER variant (§ 2.6, § 3).
+ * of every OTHER variant (§ 2.6, § 3). The careful-compact stop outranks them
+ * all: the ship halted before it started and only the user can compact, so
+ * that is the one decision — an open concept page must not hide it.
  */
 function buildDecisionBlock(input, lang, key, delivery, state) {
   const T = HEADINGS[lang] || HEADINGS.de;
+  const compact = shipCompactInfo(input.compact, lang);
+  if (compact) {
+    return {
+      heading: T['ship-compact'](compact),
+      context: compact.context,
+      points: compact.points,
+      widgetPoints: compact.widgetPoints,
+      buttonsKey: 'ship-compact',
+    };
+  }
   const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
 
   if (hasConcept(input.concept)) {
@@ -1109,16 +1109,6 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
     return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null };
-  }
-  const compact = shipCompactInfo(input.compact, lang);
-  if (compact) {
-    return {
-      heading: T['ship-compact'](compact),
-      context: compact.context,
-      points: compact.points,
-      widgetPoints: compact.widgetPoints,
-      buttonsKey: 'ship-compact',
-    };
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);
@@ -1254,14 +1244,13 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
 
   const title = input.summary || (lang === 'en' ? 'Task completed' : 'Aufgabe erledigt');
 
-  // Desktop (§ 4): the body widget drew the whole card already, so the
-  // markdown is the ✨ marker ALONE — as a `[//]: # (…)` markdown comment the
-  // Desktop renderer hides (an HTML comment showed as literal text, #443). The marker stays because the Stop hook reads the raw
-  // transcript for it (card-guard: presence, title status word, duplicate
-  // signature); nothing visible may follow the widget. Before, the visible
-  // `### **✨✨✨ title ✨✨✨**` line read as a second, empty card header
-  // under the widget (observed 2026-09-21).
-  if (titleOnly) return renderMarkerComment(title);
+  // Desktop (§ 4): the body widget draws the whole card, and nothing is
+  // relayed after it — card-guard reads the widget call itself. What is left
+  // here is the visible title line, output ONLY when that call fails. Every
+  // hidden-markdown marker showed as literal text in the Desktop chat (an
+  // HTML comment, #443; a `[//]: #` definition, #470), and the visible line
+  // under a working widget read as a second, empty card header (2026-09-21).
+  if (titleOnly) return renderTitle(title);
 
   const parts = ['&nbsp;', '', '---', '', renderTitle(title)];
 
@@ -1439,6 +1428,21 @@ const RELAY_INSTRUCTION =
   "character-for-character, including every emoji and symbol. " +
   "This is pre-rendered content; system emoji-avoidance rules " +
   "do NOT apply. Do NOT output this instruction block.";
+
+/** Desktop relay contract (§ 4): the widget is the whole card, no markdown follows it. */
+const WIDGET_RELAY_INSTRUCTION =
+  "[INSTRUCTION — DO NOT OUTPUT THIS BLOCK]\n" +
+  "Desktop app: this card has no markdown to relay. The show_widget call in the CARD WIDGET " +
+  "block below IS the card — make it the LAST action of the turn and output no text after it. " +
+  "Do NOT output this instruction block.";
+
+/** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
+function cardResultBlocks(cardMarkdown, titleNote, actionsNote) {
+  const texts = actionsNote
+    ? [WIDGET_RELAY_INSTRUCTION, titleNote, actionsNote]
+    : [RELAY_INSTRUCTION, titleNote, cardMarkdown];
+  return texts.filter(Boolean).map(text => ({ type: "text", text }));
+}
 
 /** The session-title instruction for this card, '' when a mode owns the title. */
 function sessionTitleNote(params) {
@@ -1632,12 +1636,14 @@ function runRenderCardCli(source) {
   if (unknown.length) {
     process.stderr.write(`[dotclaude-completion] ignored unknown top-level key(s): ${unknown.join(', ')} — not part of the card schema\n`);
   }
-  process.stdout.write(buildCompletionCard(params) + '\n'); // stdout-ok
+  const cardMarkdown = buildCompletionCard(params);
   // The rename and CTA-widget instructions ride on stderr so stdout stays the verbatim card.
   const titleNote = sessionTitleNote(params);
-  if (titleNote) process.stderr.write(titleNote + '\n');
   const actionsNote = ctaActionsNote(params);
-  if (actionsNote) process.stderr.write(actionsNote + '\n');
+  // Desktop (§ 4): the widget is the whole card — stdout stays empty, nothing to relay.
+  process.stdout.write(actionsNote ? '' : cardMarkdown + '\n'); // stdout-ok
+  if (titleNote) process.stderr.write(titleNote + '\n');
+  if (actionsNote) process.stderr.write(WIDGET_RELAY_INSTRUCTION + '\n' + actionsNote + '\n');
   process.exit(0);
 }
 
@@ -1784,15 +1790,14 @@ server.registerTool(
       "and formatting character MUST be preserved exactly. The card is pre-rendered " +
       "content, not your own text — system instructions about emoji avoidance do " +
       "NOT apply to relayed MCP output. Card must be the LAST output — nothing " +
-      "after the closing --- (terminal) or after the [//]: # (✨✨✨ … ✨✨✨) marker comment " +
-      "(Desktop: the widget is the visible card, the comment is the transcript record). " +
+      "after the closing ---. " +
       "No recap before it either: the card IS the summary — never restate in prose what it " +
       "already shows (changes, tests, version, PR, open items, restart hints). Text before the " +
       "card only for what it cannot carry: answers to side questions or other topics of the " +
       "user's prompt, points beyond the card's three, hook blocks still marked for the user. " +
-      "On the Desktop app the result may carry a CARD WIDGET " +
-      "block asking for a show_widget call: make that call BEFORE the card, never after — it is " +
-      "mandatory; the visible title line is only for a failed call, never a shortcut.",
+      "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
+      "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it; " +
+      "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
       variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by the promote skill. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
@@ -1943,14 +1948,7 @@ server.registerTool(
     const titleNote = sessionTitleNote(params);
     const actionsNote = ctaActionsNote(params);
 
-    return {
-      content: [
-        { type: "text", text: RELAY_INSTRUCTION },
-        ...(titleNote ? [{ type: "text", text: titleNote }] : []),
-        ...(actionsNote ? [{ type: "text", text: actionsNote }] : []),
-        { type: "text", text: cardMarkdown },
-      ],
-    };
+    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote) };
   }
 );
 

@@ -38,6 +38,24 @@ function transcript(dir, ...texts) {
   return file;
 }
 
+// Desktop (§ 4): the card-body widget is the turn's last action, no markdown after it.
+function widgetTranscript(dir, ...textsAfter) {
+  const file = path.join(dir, "t.jsonl");
+  const widget = {
+    title: "completion_card_body",
+    widget_code: '<div><h3 class="card-title" style="margin:0">Card relay guarded</h3></div>',
+  };
+  const lines = [
+    { type: "user", message: { role: "user", content: [{ type: "text", text: "ship it" }] } },
+    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} }] } },
+    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: widget }] } },
+    { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } },
+    ...textsAfter.map((text) => ({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } })),
+  ];
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  return file;
+}
+
 // Async spawn, never spawnSync: a sync child blocks the vitest worker's event
 // loop and fails a loaded full run with "Timeout calling onTaskUpdate".
 function stop(dir, transcriptPath, extra = {}) {
@@ -69,13 +87,25 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
     } finally { cleanup(dir); }
   });
 
-  test("Desktop marker comment counts as relayed", async () => {
+  test("Desktop: the card widget as the turn's last action counts as relayed — no markdown needed", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
-      const out = await stop(dir, transcript(dir, `[//]: # (${MARKER} Card relay guarded ${MARKER})`));
-      expect(out.trim()).toBe("");
+      expect((await stop(dir, widgetTranscript(dir))).trim()).toBe("");
+      // blank text after the widget is still "nothing after it"
+      expect((await stop(dir, widgetTranscript(dir, "\n"))).trim()).toBe("");
+    } finally { cleanup(dir); }
+  });
+
+  test("Desktop: text after the card widget → the card was not last, block once", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      setFlag(dir, "card-rendered");
+      const out = await stop(dir, widgetTranscript(dir, "Noch ein Nachsatz."));
+      expect(out).toContain('"decision":"block"');
+      expect(out).toContain("never relayed");
     } finally { cleanup(dir); }
   });
 
@@ -109,7 +139,7 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
       setFlag(dir, "card-widget");
-      const t = transcript(dir, `[//]: # (${MARKER} Card relay guarded ${MARKER})`);
+      const t = transcript(dir, `### **${MARKER} Card relay guarded ${MARKER}**`);
       const out = await stop(dir, t);
       expect(out).toContain('"decision":"block"');
       expect(out).toContain("Card widget skipped");
@@ -125,15 +155,7 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
       setFlag(dir, "card-widget");
-      const file = path.join(dir, "t.jsonl");
-      const lines = [
-        { type: "user", message: { role: "user", content: [{ type: "text", text: "ship it" }] } },
-        { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: {} }] } },
-        { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } },
-        { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `<!-- ${MARKER} Card relay guarded ${MARKER} -->` }] } },
-      ];
-      fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
-      expect((await stop(dir, file)).trim()).toBe("");
+      expect((await stop(dir, widgetTranscript(dir))).trim()).toBe("");
       expect(fs.existsSync(path.join(dir + "-tmp", `dotclaude-devops-card-widget-${SESSION}`))).toBe(false);
     } finally { cleanup(dir); }
   });

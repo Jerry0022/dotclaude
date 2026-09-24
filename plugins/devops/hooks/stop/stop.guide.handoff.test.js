@@ -136,11 +136,19 @@ describe("stop.guide.handoff", () => {
     } finally { cleanup(dir); }
   });
 
-  test("Desktop marker-comment card counts as a card too", async () => {
+  test("a Desktop card widget ending the turn counts as a card too", async () => {
     const dir = project();
     try {
-      const text = `${UPSTASH}\n\n[//]: # (${CARD} Upstash vorbereitet ${CARD})`;
-      const out = await stop(dir, transcript(dir, text));
+      const file = path.join(dir, "t.jsonl");
+      const lines = [
+        { type: "user", message: { role: "user", content: [{ type: "text", text: "help me set this up" }] } },
+        { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: UPSTASH }] } },
+        { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget",
+          input: { title: "completion_card_body", widget_code: '<h3 class="card-title">Upstash vorbereitet</h3>' } }] } },
+        { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } },
+      ];
+      fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+      const out = await stop(dir, file);
       expect(out.trim()).toBe("");
       expect(fs.existsSync(pendingFile(dir))).toBe(true);
     } finally { cleanup(dir); }

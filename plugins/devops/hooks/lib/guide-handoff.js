@@ -28,9 +28,9 @@
  *     Prose that merely mentions a service plus a verb does not count.
  *
  *   The completion card is out of scope: only the text BEFORE the first
- *   ✨✨✨ marker of each entry (card-guard.CARD_MARKER — both the terminal title and the
- *   Desktop `[//]: # (✨✨✨ …)` / `<!-- ✨✨✨` marker comment contain it) is
- *   scanned.
+ *   ✨✨✨ marker of each entry (card-guard.CARD_MARKER — the terminal title, or
+ *   the stand-in card-guard.lastAssistantCardText builds for a Desktop card
+ *   widget) is scanned.
  *
  *   Pending hint: when the hand-off sits in a turn that already ends with
  *   the card, stop.guide.handoff must not block (that would force a second

@@ -164,10 +164,9 @@ describe("step shapes", () => {
 });
 
 describe("containsCompletionCard", () => {
-  test("terminal title and Desktop marker comment both count", () => {
+  test("terminal title and the Desktop widget stand-in both count", () => {
     expect(containsCompletionCard(`### **${CARD} Fertig ${CARD}**`)).toBe(true);
-    expect(containsCompletionCard(`[//]: # (${CARD} Fertig ${CARD})`)).toBe(true);
-    expect(containsCompletionCard(`<!-- ${CARD} Fertig ${CARD} -->`)).toBe(true);
+    expect(containsCompletionCard(`${CARD} Fertig ${CARD}`)).toBe(true);
     expect(containsCompletionCard("no card")).toBe(false);
   });
 });

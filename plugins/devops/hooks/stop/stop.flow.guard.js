@@ -56,7 +56,7 @@ const {
   decideAction,
   isSubstantialAnswer,
   lastAssistantContainsCard,
-  lastAssistantText,
+  lastAssistantCardText,
   lastUserEntryIsNotification,
   safeReadTranscript,
   showWidgetCalledThisTurn,
@@ -147,7 +147,7 @@ process.stdin.on('end', () => {
   // the relay gate stays out of the way instead of blocking blind.
   const cardRelayed = (silent || !transcript) ? undefined : lastAssistantContainsCard(transcript);
   const cardRendered = flagCardRendered || cardRelayed === true;
-  const cardText = (!silent && cardRendered) ? lastAssistantText(transcript) : '';
+  const cardText = (!silent && cardRendered) ? lastAssistantCardText(transcript) : '';
   const widgetFile = widgetResult ? String(widgetResult.filePath).replace(/\\/g, '/') : '';
   const widgetCalled = (widgetFile && transcript) ? showWidgetCalledThisTurn(transcript) : undefined;
   // Both probes are only needed on the paths that read them: the tree check

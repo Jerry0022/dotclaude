@@ -163,6 +163,24 @@ function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+/**
+ * Escape a text line and turn every http(s) URL in it into a link. The
+ * visualize host opens any `<a href>` with an http(s) URL itself (its
+ * open-link script posts `ui/open-link`), so a plain anchor is all a widget
+ * needs. Trailing sentence punctuation stays outside the link.
+ */
+function linkifyHtml(s) {
+  return String(s == null ? "" : s)
+    .split(/(https?:\/\/[^\s<>"'`]+)/)
+    .map((part, i) => {
+      if (i % 2 === 0) return escapeHtml(part);
+      const url = part.replace(/[.,;:!?)\]]+$/, "");
+      const tail = part.slice(url.length);
+      return `<a href="${escapeHtml(url)}" class="card-link" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${escapeHtml(url)}</a>${escapeHtml(tail)}`;
+    })
+    .join("");
+}
+
 const COLOR = {
   green: "#8fae8f",
   red: "#e0a0a0",
@@ -249,7 +267,7 @@ export function cardWidgetHtml(model, repoUrl) {
   const glyphLine = (cls, inner, extra = "") =>
     `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
   const resultLinesHtml = (model.resultLines || [])
-    .map((l) => glyphLine("card-result", escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
+    .map((l) => glyphLine("card-result", linkifyHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
     .join("\n  ");
 
   const evidenceHtml = (model.evidence || []).length
@@ -264,9 +282,9 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
-  // The title lives in the widget: on Desktop the markdown under it is the ✨
-  // marker only, as a markdown comment (§ 4), so the whole card is drawn
-  // once and nothing visible follows the widget. h3 = the contract's
+  // The title lives in the widget: on Desktop there is no card markdown
+  // (§ 4), so the whole card is drawn once and nothing follows the widget.
+  // card-guard reads this h3 as the card title. h3 = the contract's
   // 16px/500 — one step below h2, which read too large in the chat column.
   const titleHtml = model.title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.title)}</h3>` : "";
 
@@ -290,10 +308,10 @@ export function cardWidgetHtml(model, repoUrl) {
   // numbers in the widget — the terminal markdown keeps "1." for the same
   // points), so both blocks speak the same language.
   const contextHtml = model.context
-    ? glyphLine("card-context", escapeHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
+    ? glyphLine("card-context", linkifyHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
     : "";
   const pointsHtml = (model.points || []).length
-    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", escapeHtml(p))).join("")}</div>`
+    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p))).join("")}</div>`
     : "";
 
   const buttons = buttonsFor(model.buttonsKey, lang);
@@ -447,20 +465,21 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     : "";
   return (
     "[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]\n" +
-    "Desktop app only, once, immediately BEFORE outputting the card markdown (the card stays " +
-    "the last text of the turn; never call it after the card): call mcp__visualize__show_widget with " +
+    "Desktop app only, once, as the LAST action of the turn: call mcp__visualize__show_widget with " +
     `title "completion_card_body", loading_messages ["Card wird geladen"] and widget_code set to ` +
     "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It draws both card blocks " +
-    "— what happened and what to decide, including the buttons — right above the markdown card, and " +
-    "it IS the card the user sees: the markdown under it is only a hidden marker comment.\n" +
-    "No prose between the widget and the marker comment that restates the card (changes, tests, " +
-    "version, PR, open items, restart hints) — only answers to side questions or other topics of " +
-    "the user's prompt, and hook blocks still marked for the user, may stand there.\n" +
+    "— what happened and what to decide, including the buttons — and it IS the whole card: there is " +
+    "no card markdown to output. Output NO text after the call — any line under the widget shows " +
+    "as a stray line in the chat, and the Stop gate reads text after the widget as a card that was " +
+    "not last.\n" +
+    "No prose before the widget that restates the card (changes, tests, version, PR, open items, " +
+    "restart hints) — only answers to side questions or other topics of the user's prompt, and hook " +
+    "blocks still marked for the user, may stand there.\n" +
     "The widget call is mandatory, never optional: never grep, filter or skip the HTML to save tokens. " +
     "ONLY when the call itself fails, or the tool does not exist in this session: no retry, no note — " +
-    "output the visible title line `### **✨✨✨ {title} ✨✨✨**` (the title from the marker comment) " +
-    "instead of the comment, so the turn still ends on the card headline. That line is the error " +
-    "path, never a shortcut — the Stop gate blocks a card turn on which show_widget was not called.\n" +
+    `output the visible title line \`### **✨✨✨ ${model.title || ""} ✨✨✨**\` so the turn still ends ` +
+    "on the card headline. That line is the error path, never a shortcut — the Stop gate blocks a " +
+    "card turn on which show_widget was not called.\n" +
     fileLine +
     "----- widget_code -----\n" +
     html + "\n" +

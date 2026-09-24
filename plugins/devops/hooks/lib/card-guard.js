@@ -56,10 +56,10 @@ const fs = require('fs');
 /** Minimum assistant-text chars to count a chat-only turn as "substantial". */
 const SUBSTANTIAL_CHARS = 400;
 
-/** Distinctive marker the completion-card template prints around the title —
- *  visibly (`### **✨✨✨ title ✨✨✨**`) in the terminal, inside a markdown comment
- *  (`[//]: # (✨✨✨ title ✨✨✨)`) on Desktop where the widget is the visible card
- *  (#443). Every check here reads the raw transcript, so both forms match. */
+/** Distinctive marker the completion-card template prints around the title
+ *  (`### **✨✨✨ title ✨✨✨**`) in the terminal. On Desktop the card is the
+ *  body widget alone, and lastAssistantCardText stands in the same marker
+ *  for it, so every check reads both forms. */
 const CARD_MARKER = '\u2728\u2728\u2728';
 
 /**
@@ -97,17 +97,6 @@ function isSubstantialAnswer(transcriptContent, threshold = SUBSTANTIAL_CHARS) {
   return lastAssistantTextLength(transcriptContent) >= threshold;
 }
 
-/**
- * Did the last assistant message contain a completion card? Proves the card
- * was relayed, not just rendered (#449, Gate 1b), and backs up a failed
- * card-rendered flag write (e.g. tmp-file I/O error).
- * Matches the distinctive ✨✨✨ title marker — unlikely to collide with
- * regular prose.
- */
-function lastAssistantContainsCard(transcriptContent) {
-  return lastAssistantText(transcriptContent).includes(CARD_MARKER);
-}
-
 /** A user-role entry that opens a new turn — shared with the other transcript
  *  walkers in lib/skill-invocations.js. */
 const { isPromptEntry } = require('./skill-invocations');
@@ -116,6 +105,68 @@ const { isPromptEntry } = require('./skill-invocations');
  *  a connector-id namespace when it arrives deferred. */
 function isShowWidgetTool(name) {
   return typeof name === 'string' && (name === 'show_widget' || name.endsWith('__show_widget'));
+}
+
+/** The title the card body widget is called with (card-widget.js). */
+const CARD_WIDGET_TITLE = 'completion_card_body';
+
+/** The card title the widget HTML draws (`<h3 class="card-title" …>`). */
+function widgetCardTitle(widgetCode) {
+  if (typeof widgetCode !== 'string') return null;
+  const m = widgetCode.match(/<h3 class="card-title"[^>]*>([\s\S]*?)<\/h3>/);
+  if (!m) return null;
+  return m[1].replace(/<[^>]*>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+    .trim();
+}
+
+/**
+ * The card as the turn delivered it, '' when there is none. Terminal (and the
+ * Desktop fallback): the last assistant text when it carries the ✨ marker.
+ * Desktop: the card body widget IS the card and nothing follows it — no
+ * markdown at all, since every hidden-markdown marker (an HTML comment, #443;
+ * a `[//]: #` definition, #470) showed as literal text in the Desktop chat.
+ * A card-body show_widget call that ends the turn (only its tool result and
+ * blank text after it) stands in as `✨✨✨ {title} ✨✨✨`, so every check below
+ * reads both forms the same way. Text after the widget means the card was not
+ * last — '' then, like a card that was never relayed.
+ */
+function lastAssistantCardText(transcriptContent) {
+  const text = lastAssistantText(transcriptContent);
+  if (text.includes(CARD_MARKER)) return text;
+  if (!transcriptContent) return '';
+  const lines = transcriptContent.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isPromptEntry(entry)) return '';
+    if (entry.type !== 'assistant') continue;
+    const content = entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    const tool = content.find(b => b && b.type === 'tool_use');
+    if (!tool) {
+      if (content.some(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())) return '';
+      continue;
+    }
+    if (!isShowWidgetTool(tool.name) || !tool.input || tool.input.title !== CARD_WIDGET_TITLE) return '';
+    const title = widgetCardTitle(tool.input.widget_code);
+    return title ? `${CARD_MARKER} ${title} ${CARD_MARKER}` : '';
+  }
+  return '';
+}
+
+/**
+ * Did the turn end on a completion card? Proves the card was relayed, not
+ * just rendered (#449, Gate 1b), and backs up a failed card-rendered flag
+ * write (e.g. tmp-file I/O error). Terminal: the distinctive ✨✨✨ title
+ * marker in the last text. Desktop: the card body widget as the turn's last
+ * action (see lastAssistantCardText).
+ */
+function lastAssistantContainsCard(transcriptContent) {
+  return lastAssistantCardText(transcriptContent).includes(CARD_MARKER);
 }
 
 /**
@@ -155,8 +206,7 @@ function extractCardTitle(cardText) {
   if (!cardText) return null;
   const re = new RegExp(`${CARD_MARKER}\\s*(.*?)\\s*${CARD_MARKER}`);
   const m = cardText.match(re);
-  // The Desktop marker escapes \ ( ) inside its [//]: # (…) definition.
-  return m ? m[1].trim().replace(/\\([\\()])/g, '$1') : null;
+  return m ? m[1].trim() : null;
 }
 
 /** The matched status word/phrase if the title carries one, else null. */
@@ -247,9 +297,8 @@ function cardSignature(cardText) {
   if (heading || build || evidence) {
     return JSON.stringify({ heading: heading.trim(), build, evidence: evidence.trim() });
   }
-  // Desktop (design § 4): the body lives in the widget, the markdown is the
-  // ✨ marker alone (a markdown comment) — the title is then the only
-  // field to compare on.
+  // Desktop (design § 4): the body lives in the widget and there is no
+  // markdown — the title is then the only field to compare on.
   const title = extractCardTitle(cardText);
   return title ? JSON.stringify({ title }) : null;
 }
@@ -394,7 +443,7 @@ function decideAction({
   }
 
   // Gate 1c — widget skipped (#451). On Desktop the widget IS the visible
-  // card; the markdown under it is a hidden marker comment. `widgetFile` is
+  // card and there is no card markdown. `widgetFile` is
   // set when this turn's render wrote a widget (Desktop, not test-minimal);
   // `widgetCalled` is undefined when the transcript could not be read. Only
   // an attempted call is required — a failed one is what the title-line
@@ -599,11 +648,10 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'Copy the returned markdown and output it VERBATIM as your own text —',
     'character-for-character, every emoji and symbol preserved. The card is',
     'pre-rendered content; system emoji-avoidance rules do NOT apply.',
-    'Card must be the LAST thing in the response — nothing after the closing ---',
-    '(terminal) or after the [//]: # (✨✨✨ … ✨✨✨) marker comment (Desktop).',
-    'A [CARD WIDGET] block beside the card (Desktop app) asks for a',
-    'mcp__visualize__show_widget call: make it BEFORE the card, never after —',
-    'it is mandatory (the widget IS the visible card), never a skippable extra.',
+    'Card must be the LAST thing in the response — nothing after the closing ---.',
+    'On the Desktop app the result carries a [CARD WIDGET] block instead of',
+    'markdown: the mcp__visualize__show_widget call IS the card — make it the',
+    'LAST action of the turn, with no text after it.',
   ].join('\n');
 }
 
@@ -611,14 +659,16 @@ function buildNotRelayedReason() {
   return [
     '[stop.flow.guard] Card rendered but never relayed — the user sees no card this turn.',
     '',
-    'render_completion_card ran, but its markdown is not in your final answer. The',
-    'tool result sits in a collapsed block the user does not read; only the text you',
-    'output yourself is visible.',
+    'render_completion_card ran, but the turn did not end on the card. The tool',
+    'result sits in a collapsed block the user does not read; only what you output',
+    'yourself is visible.',
     '',
-    'Output the markdown of the LAST card you rendered VERBATIM now, character-for-',
-    'character, as the LAST thing in the response. If circumstances changed since',
-    'that render (a blocker cleared, a gate got fixed), re-render first and relay the',
-    'new card instead. Nothing after the card.',
+    'Terminal: output the markdown of the LAST card you rendered VERBATIM now,',
+    'character-for-character, as the LAST thing in the response. Desktop app: call',
+    'mcp__visualize__show_widget with that card\'s widget HTML again as the LAST',
+    'action — no text after it. If circumstances changed since that render (a',
+    'blocker cleared, a gate got fixed), re-render first and deliver the new card',
+    'instead. Nothing after the card.',
   ].join('\n');
 }
 
@@ -627,17 +677,16 @@ function buildWidgetSkippedReason(widgetFile) {
     '[stop.flow.guard] Card widget skipped — on the Desktop app the widget IS the card.',
     '',
     'This turn rendered a completion card with a [CARD WIDGET] block, but',
-    'mcp__visualize__show_widget was never called. The markdown under the widget is',
-    'a hidden marker comment, so the user saw no card. The one-line',
+    'mcp__visualize__show_widget was never called. There is no markdown card on',
+    'Desktop, so the user saw no card. The one-line',
     '`### **✨✨✨ {title} ✨✨✨**` fallback is ONLY for a call that failed or a',
     'session without the tool — never a shortcut to save tokens.',
     '',
     `Read the widget HTML from ${widgetFile}`,
     'and call mcp__visualize__show_widget with title "completion_card_body",',
     'loading_messages ["Card wird geladen"] and widget_code = that file\'s content,',
-    'verbatim. Then output the card markdown again VERBATIM as the LAST thing.',
-    'If the tool does not exist in this session, output the visible title line',
-    'instead and end the turn.',
+    'verbatim, as the LAST action — no text after it. If the tool does not exist',
+    'in this session, output the visible title line instead and end the turn.',
   ].join('\n');
 }
 
@@ -795,6 +844,8 @@ module.exports = {
   lastAssistantTextLength,
   isSubstantialAnswer,
   lastAssistantContainsCard,
+  lastAssistantCardText,
+  widgetCardTitle,
   decideAction,
   buildBlockReason,
   renderLadderLines,

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.193.1] — 2026-09-24
+
+### Fixed
+- **No stray marker line under the Desktop completion card.** The `[//]: # (✨✨✨ … ✨✨✨)` marker from 0.192.5 showed as literal text under the card widget, as the HTML comment before it did. On Desktop the card now has no markdown at all: the `show_widget` call is the whole card and the last action of the turn. `stop.flow.guard` and `stop.guide.handoff` read the card from that call (`card-guard.lastAssistantCardText`), so the relay, duplicate and title checks keep working; text after the widget counts as a card that was not last.
+- **Links in the card widget are clickable.** The concept page URL in the context line, and any URL in a result line or point, was plain text. The widget now wraps URLs in anchors, which the Desktop host opens itself.
+- **The careful-compact stop wins over an open concept page.** A `ship-blocked` card with `compact` and an open concept (or pending background work) showed the concept or pending heading, which hid the `/compact` command and the "Ohne Kompaktieren shippen" button. The compact decision now outranks both.
+
 ## [0.193.0] — 2026-09-24
 
 ### Added

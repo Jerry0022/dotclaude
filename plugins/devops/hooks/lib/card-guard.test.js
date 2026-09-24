@@ -4,6 +4,8 @@ import {
   lastAssistantTextLength,
   isSubstantialAnswer,
   lastAssistantContainsCard,
+  lastAssistantCardText,
+  widgetCardTitle,
   lastUserEntryIsNotification,
   showWidgetCalledThisTurn,
   decideAction,
@@ -818,12 +820,11 @@ describe("cardSignature / isDuplicateNotificationCard", () => {
     const c = cardSignature(`&nbsp;\n\n---\n\n### **${CARD_MARKER} Etwas anderes ${CARD_MARKER}**\n\n---`);
     expect(a).toBe(JSON.stringify({ title: "Sanduhr nur Fallback" }));
     expect(isDuplicateNotificationCard(a, b)).toBe(true);
-    // The Desktop marker is a markdown comment — same signature, same
-    // duplicate verdict, and identical to the older visible title line.
-    const d = cardSignature(`[//]: # (${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER})`);
+    // The Desktop widget stand-in signs the same as the visible title line.
+    const d = cardSignature(`${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER}`);
     expect(d).toBe(JSON.stringify({ title: "Sanduhr nur Fallback" }));
     expect(isDuplicateNotificationCard(a, d)).toBe(true);
-    expect(isDuplicateNotificationCard(d, cardSignature(`[//]: # (${CARD_MARKER} Etwas anderes ${CARD_MARKER})`))).toBe(false);
+    expect(isDuplicateNotificationCard(d, cardSignature(`${CARD_MARKER} Etwas anderes ${CARD_MARKER}`))).toBe(false);
     expect(isDuplicateNotificationCard(a, c)).toBe(false);
   });
 });
@@ -1095,19 +1096,39 @@ describe("lastAssistantContainsCard", () => {
     expect(lastAssistantContainsCard(tx)).toBe(true);
   });
 
-  // On Desktop the card markdown is the marker inside a [//]: # (…) markdown
-  // comment — invisible in the rendered turn, present in the transcript the
-  // hook reads. (An HTML comment, #443, rendered as literal text.)
-  test("returns true for the Desktop marker comment, and the title is still extracted", () => {
-    const text = `[//]: # (${CARD_MARKER} Sanduhr nur Fallback ${CARD_MARKER})`;
-    const tx = jsonl(assistantMsg({ type: "text", text }));
+  // On Desktop there is no card markdown (§ 4): every hidden marker showed as
+  // literal text in the chat (#443, #470). The card-body widget call that
+  // ends the turn is the card.
+  const cardWidget = (title) => assistantMsg({
+    type: "tool_use", id: "w1", name: "mcp__visualize__show_widget",
+    input: { title: "completion_card_body", widget_code: `<div><h3 class="card-title" style="x">${title}</h3></div>` },
+  });
+  const widgetResult = { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } };
+
+  test("Desktop: a card widget that ends the turn counts, with its title as the card text", () => {
+    const tx = jsonl(userMsg("go"), cardWidget("Fix (x) &amp; mehr"), widgetResult);
     expect(lastAssistantContainsCard(tx)).toBe(true);
-    expect(extractCardTitle(text)).toBe("Sanduhr nur Fallback");
+    expect(lastAssistantCardText(tx)).toBe(`${CARD_MARKER} Fix (x) & mehr ${CARD_MARKER}`);
+    expect(extractCardTitle(lastAssistantCardText(tx))).toBe("Fix (x) & mehr");
   });
 
-  test("unescapes parentheses and backslashes in the Desktop marker title", () => {
-    const text = `[//]: # (${CARD_MARKER} Fix \\(x\\) in a\\\\b ${CARD_MARKER})`;
-    expect(extractCardTitle(text)).toBe("Fix (x) in a\\b");
+  test("Desktop: blank text after the widget still counts; real text after it does not", () => {
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
+      assistantMsg({ type: "text", text: "\n" })))).toBe(true);
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
+      assistantMsg({ type: "text", text: "Nachsatz" })))).toBe(false);
+  });
+
+  test("Desktop: another widget, another tool after the card, or a widget of an earlier turn → no card", () => {
+    const other = assistantMsg({ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: { title: "chart", widget_code: '<h3 class="card-title">T</h3>' } });
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), other, widgetResult))).toBe(false);
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult, toolUse("Bash"), toolResult()))).toBe(false);
+    expect(lastAssistantContainsCard(jsonl(userMsg("a"), cardWidget("T"), widgetResult, userMsg("b")))).toBe(false);
+  });
+
+  test("widgetCardTitle reads the h3 and decodes entities", () => {
+    expect(widgetCardTitle('<h3 class="card-title" style="a">A &lt;b&gt; &quot;c&quot;</h3>')).toBe('A <b> "c"');
+    expect(widgetCardTitle("<div>no title</div>")).toBe(null);
   });
 
   test("returns false when no marker present", () => {
