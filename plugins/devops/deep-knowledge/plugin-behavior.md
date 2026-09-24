@@ -144,8 +144,9 @@ Subagents inherit all output contracts:
   link above the CTA, read from `.claude/concept-active.json`.
 - **A card rendered while `/do-batch` is collecting says so by itself**:
   with `cwd` passed, the card reads `.claude/batch-mode.json` and swaps its CTA
-  for "📥 BATCH sammelt. {n} Notizen · nächster Prompt wird Notiz #{n+1} ·
-  "{marker}" löst aus — ich WARTE". No card field — the state file is the truth.
+  for "📥 Batch sammelt — {n} Einträge", with the next prompt's fate as context
+  line and three how-to points (collect · fire · stop). No card field — the
+  state file is the truth.
 - **The session title names the state the last card left the session in.**
   `render_completion_card` returns a `[SESSION TITLE]` block beside the card
   (stderr on the CLI path), one per variant with the CTA emoji: `🚀 Shipped – `
