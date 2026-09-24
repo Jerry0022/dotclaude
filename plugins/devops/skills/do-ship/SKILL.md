@@ -44,7 +44,7 @@ anything is unshipped, then promote" — promote is no longer a separate skill
 passes it (`beta`, `stable`, `promote`, optionally a version: `stable 0.171.0`)
 — else from the user's own prompt: "ship stable", "promote to beta",
 "release beta", "auf stable heben", "stable promoten", `/do-ship stable`,
-`/do-ship promote`, the pre-PR-2 `/promote`, the card's Promote button. A
+`/do-ship promote`, the pre-PR-2 `/promote`, the card's Promote beta / Promote stable buttons. A
 channel counts only as the object of ship/promote/release/heben ("the stable
 API" is no request). Several named → the highest.
 

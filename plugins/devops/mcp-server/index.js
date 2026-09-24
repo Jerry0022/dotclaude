@@ -1140,6 +1140,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
 
   let buttonsKey = key;
   if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
+  // The ladder already sits above alpha: beta offers only stable, stable nothing.
+  const landed = delivery.promote && delivery.promote.current;
+  if (key === 'ship-successful' && landed === 'beta') buttonsKey = 'released-beta';
+  if (key === 'ship-successful' && landed === 'stable') buttonsKey = null;
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a

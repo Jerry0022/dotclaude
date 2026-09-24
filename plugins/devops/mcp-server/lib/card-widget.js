@@ -44,7 +44,7 @@ export function isDesktopSession(env = process.env) {
  * No prompt may start with "/": the host refuses a prefill whose text starts
  * with a slash — a leading space does not help (live 2026-09-23) — while plain
  * text lands. Skills are reached by their trigger words instead: "ship" hits
- * prompt.ship.detect, "promote <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
+ * prompt.ship.detect, "promote beta <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
  *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
@@ -65,7 +65,8 @@ export const BUTTONS = {
       { label: "Skip", icon: "player-skip-forward", prompt: "Blocker bewusst überspringen: Ship erneut mit skipChecks (Hot-fix-Bypass) durchführen.", tooltip: "Überspringt den Blocker bewusst (Hot-fix-Bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotet den aktuellen Build in den nächsten Channel." },
+      { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotet den aktuellen Build von alpha nach beta." },
+      { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotet den aktuellen Build direkt nach stable (beta wird übersprungen)." },
     ],
     "ship-successful-kept": [
       { label: "Weiter", icon: "arrow-right", prompt: "Ich mache auf diesem Branch weiter — was ist der nächste Schritt?", primary: true, tooltip: "Setzt die Arbeit auf dem offen gehaltenen Branch fort." },
@@ -74,7 +75,7 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploye jetzt die ausstehenden Out-of-band-Artefakte aus dem Deploy-Gate der letzten Card.", primary: true, tooltip: "Deployt die ausstehenden Migrationen/Functions." },
     ],
     "released-beta": [
-      { label: "Nach stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
+      { label: "Promote stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
@@ -112,7 +113,8 @@ export const BUTTONS = {
       { label: "Skip", icon: "player-skip-forward", prompt: "Deliberately skip the blocker: run the ship again with skipChecks (hot-fix bypass).", tooltip: "Deliberately skips the blocker (hot-fix bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotes the current build to the next channel." },
+      { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotes the current build from alpha to beta." },
+      { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotes the current build straight to stable (skips beta)." },
     ],
     "ship-successful-kept": [
       { label: "Continue", icon: "arrow-right", prompt: "I'll continue on this branch — what's the next step?", primary: true, tooltip: "Continues the work on the branch kept open." },
@@ -121,7 +123,7 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploy the pending out-of-band artifacts from the last card's deploy gate now.", primary: true, tooltip: "Deploys the pending migrations/functions." },
     ],
     "released-beta": [
-      { label: "To stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
+      { label: "Promote stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test was fine — ship now." },
@@ -148,8 +150,8 @@ export const BUTTONS = {
  * The buttons a card offers, or [] when nothing is clickable (pending /
  * concept / batch overrides, test-minimal, states with nothing to decide).
  *
- * A promote button carries the card's version ("promote 0.193.0", "promote
- * stable 0.193.0"): prompt.ship.detect treats a named version as
+ * A promote button carries the card's version ("promote beta 0.193.0",
+ * "promote stable 0.193.0"): prompt.ship.detect treats a named version as
  * promotion-only, so a stale click on an old card promotes exactly that
  * build and never ships edits made after it. Without a known version the
  * promote button is dropped — a bare "promote" could ship later work.
@@ -171,7 +173,7 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
     .map((a) => (isPromotePrompt(a.prompt) ? { ...a, prompt: `${a.prompt} ${semver}` } : { ...a }));
 }
 
-/** A promote button's prompt ("promote", "promote stable"). */
+/** A promote button's prompt ("promote beta", "promote stable"). */
 function isPromotePrompt(prompt) {
   return /^promote\b/i.test(String(prompt || ""));
 }
