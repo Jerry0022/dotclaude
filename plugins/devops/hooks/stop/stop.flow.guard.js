@@ -57,7 +57,6 @@ const {
   isSubstantialAnswer,
   lastAssistantContainsCard,
   lastAssistantCardText,
-  lastAssistantText,
   lastUserEntryIsNotification,
   safeReadTranscript,
   showWidgetCalledThisTurn,
