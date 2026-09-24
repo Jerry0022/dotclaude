@@ -97,6 +97,8 @@ Events (`k` = kind, `t` = iso time):
 | `release` | `ok`, `merged`, `closes: ["473"]` (from `Closes #N` in `tool_input.body`) | PostToolUse `ship_release` |
 | `card` | `variant` | PostToolUse `render_completion_card` |
 | `skip` | `ob`, `reason`, `item?` | CLI `skip` |
+| `park` | `item`, `reason` (ends the segment) | CLI `park` |
+| `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate |
 
 API (CommonJS, pure where possible, every fs error swallowed → "no contract"):
 `readContract(cwd)`, `arm(cwd, header)`, `update(cwd, patch)`,
@@ -118,8 +120,25 @@ CLI (`node hooks/lib/run-contract.js …`, prints one JSON line):
 - `skip <ob> [--item <N>] --reason "<why>"` — records a conscious skip.
   `<ob>` ∈ `auto-agents | harden | polish | qa | do-ship | refine | triage`.
   Refuses without a reason.
-- `done [--reason "<why>"]` — closes the contract (run finished).
+- `park <item> --reason "<why>"` — one `park` event for a blocked / parked
+  backlog item: satisfies every obligation of the current segment (not
+  `triage`), counts as the item's refine, and ends the segment.
+- `done [--reason "<why>"]` — closes the contract, only when every chosen step
+  ran. With open obligations (card-gate set) it refuses without `--reason`
+  and closes as `aborted: true` with one (card: ✗ + reason).
 - `abort --reason "<why>"` — closes it as aborted (card shows it).
+- `batch-clear --reason "<why>"` — deletes a stale batch hand-off marker.
+- `arm … [--session <id>]` — manual arm; without `--session` the first
+  session hook that sees the fresh contract claims it.
+
+Session binding: every header and marker stores `sessionId`; gates, arming,
+recording and the card line apply only when it equals the hook's
+`session_id` (when both are known). No stored id → foreign once the file is
+10 min old (Claude Desktop copies the untracked `.claude/` into new
+worktrees). A machine prompt over an active same-session contract refreshes
+ship / passes / strict / items / presence only — never the mode, except
+`RUN_BACKLOG_AUTOSTART` (→ backlog) and `mode=analyze` over audit (passes
+cleared). A pending marker never replaces an active same-session contract.
 
 ### B. Parsing the router answers
 
@@ -134,15 +153,28 @@ exact option label is split on `,` (older runtimes joined multi-select).
 | `Was?` | `Prompt umsetzen` → `prompt` · `Audit` → `audit` · `Backlog` → `backlog` |
 | `Ablauf?` | starts `Interaktiv` or legacy `Dabei` → `interactive`; `Autonom` / legacy `Weg` → `autonomous`; contains `Ship automatisch` → `auto`, `Ship manuell` → `manual` |
 | `Umfang?` | `Strikt` / legacy `Nur das` → `strict: true`; `Flexibel` / legacy `Mit Umfeld` → false |
-| `Durchgänge?` | empty → every option whose label carries `(Recommended)`; `Harden danach` → harden · `Polish danach` → polish · `Rethink vorher` → rethink · `Budget verbrennen` → burn; free text `keine` / `none` → no passes |
+| `Durchgänge?` | empty → every option whose label carries `(Recommended)`; `Harden danach` → harden · `Polish danach` → polish · `Rethink vorher` → rethink · `Budget verbrennen` → burn; free text `keine` / `none` → no passes; `ohne X` / `kein X` / `without X` / `no X` excludes X; an unrecognised or Other-placeholder token → the recommended set plus `unresolved: true` (card: `Durchgänge ?`) |
+
+Headers are normalised (NFC, trimmed, trailing `?` stripped, case-folded) and
+English aliases are accepted: `What`, `Flow`, `Scope`, `Passes`; follow-ups
+`Result`, `Audit scope`, `Milestones`, `Issues`, `PC after`. A later
+router-shaped call of the same session within 30 min that lacks one of
+`Ablauf` / `Umfang` / `Durchgänge` merges only its answered fields.
 
 Q1 missing (preset): mode = first token of the last `do-run` Skill args in
 the transcript (`backlog`, `audit`; `autonomous` / `burn` / `rethink` keep
-`prompt` and set flow / flags); `--from=do-batch` → `prompt`; default `prompt`.
+`prompt` and set flow / flags); `--from=do-batch` → `prompt`; else the
+follow-up headers of the same call (`Milestones` / `Issues*` → backlog,
+`Ergebnis` / `Audit-Umfang` → audit); default `prompt` (`modeFrom: default`),
+which a later follow-up of the same session within 30 min upgrades to the
+mode its headers imply. A user-typed `/do-run …` makes no Skill call:
+`prompt.run.contract.js` writes the arm marker with its args instead.
 
 **Arming must not fail silently.** PostToolUse Skill `do-run` writes a
-`.claude/run-contract.pending` marker (runtime-ignored). The AskUserQuestion
-arm deletes it. If it still exists when the PreToolUse hook sees a gated call
+`.claude/run-contract.pending` marker (runtime-ignored) — not in a turn opened
+by a machine prompt; an answered `Fortsetzen` (resume) question deletes it.
+The AskUserQuestion arm deletes it; an active same-session contract makes the
+PreToolUse hook delete it without re-arming. If it still exists when the PreToolUse hook sees a gated call
 (D), the hook scans the transcript tail once (`transcript_path`, last ~2 MB)
 for the newest `toolUseResult` carrying router headers, arms from it and
 deletes the marker; no such result → it arms the click-through defaults
@@ -189,11 +221,20 @@ hook pays — the early exit only keeps the hook from adding work on top.
 |---|---|
 | Edit / Write / NotebookEdit on a path inside the work tree that is not exempt | `auto-agents`; batch handoff (E) |
 | Bash / PowerShell `git commit` | `auto-agents`; batch handoff |
-| Bash / PowerShell branch creation, backlog mode, segment has work | `harden`, `polish`, `qa`, `do-ship` of the segment being left |
+| Bash / PowerShell branch creation, backlog mode, segment has work — only an item branch: no `agent_id`, not `git worktree add` / `--detach`, not `<current>-*` / `<current>/*` | `harden`, `polish`, `qa`, `do-ship` of the segment being left |
 | Skill `auto-agents`, backlog, first of the contract | `triage` |
 | `mcp__plugin_devops_dotclaude-ship__ship_release` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`, `refine` |
 | `mcp__plugin_devops_dotclaude-completion__render_completion_card`, variant ∈ `ship-successful · ready · ready-files · released · test`, no non-empty `pending`, no `concept` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship` |
-| Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file |
+| Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file; an unreadable payload (`-`, `$var`) counts as final |
+| Bash / PowerShell `gh pr merge` or `git push` onto `main` / `master`, contract `ship: auto` | same as `ship_release` |
+| final card, backlog, `presence`, `ship: manual` | additionally `refine` of every item in `items` |
+
+Commands are normalised before matching (`&`, `git.exe`, git's global flags
+such as `--no-pager`, `-C`, `-c`). Release / card gates look up the contract
+in the session root first, then `projectRoot(tool_input.cwd)`, and run the qa
+diff there; the base is `tool_input.base`, else `origin/HEAD`, else `main`,
+else `master`. The gate records a `measure` event `{codeFiles:n|null}` before
+deciding; the card shows `QA ?` when it is unknown.
 
 An interrupted or blocked run ends with `run-contract.js abort --reason
 "<status>: <why>"` before its card; an aborted contract passes the card gate
@@ -217,7 +258,9 @@ Do now:
   Skill("devops:auto-polish", "--invoked-by=autonomous")
   Skill("devops:do-ship", "--queued=<n>/<N>")   ← never the ship_* MCP tools directly
 Conscious skip (shown on the card as ⚠): node "<lib>" skip <ob> --reason "<why>"
-Run finished or this is not part of it: node "<lib>" done
+Item parked (blocked ship / ⏸ Rückfrage): node "<lib>" park <item> --reason "<why>"   (backlog only)
+Run over with open steps (card shows ✗): node "<lib>" abort --reason "<why>"
+Only when every chosen step ran: node "<lib>" done
 ```
 
 `--invoked-by` in the hint follows the contract: `autonomous` for an
@@ -237,9 +280,13 @@ gated paths and `git commit` with:
 A ready plan goes to Skill("devops:do-run", "--from=do-batch …"), a plan with
 open decisions to Skill("devops:auto-concept", "--from=do-batch …") — never
 implemented directly. Reading, exploring and planning stay allowed.
+Stale marker / not a do-batch hand-off: node "<lib>" batch-clear --reason "<why>"
+Kill switch (every run-contract gate): DOTCLAUDE_RUN_CONTRACT=off
 ```
 
-PostToolUse Skill `do-run` or `auto-concept` deletes the marker.
+PostToolUse Skill `do-run` or `auto-concept` deletes the marker. The marker is
+session-bound like every other state file: another session's marker never
+blocks.
 
 ### F. Answers without text — `hooks/post-tool-use/post.ask.answers.js`
 

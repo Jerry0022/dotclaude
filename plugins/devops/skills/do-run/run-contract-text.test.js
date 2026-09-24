@@ -100,4 +100,30 @@ describe("deep-knowledge/run-contract.md", () => {
     expect(runContractDoc).toMatch(/run-contract\.js" abort/);
     expect(runContractDoc).toMatch(/DOTCLAUDE_RUN_CONTRACT=off/);
   });
+
+  it("D-docs: names park, batch-clear and session binding, and stays short", () => {
+    expect(runContractDoc).toMatch(/run-contract\.js" park <N> --reason/);
+    expect(runContractDoc).toMatch(/run-contract\.js" batch-clear --reason/);
+    expect(runContractDoc).toMatch(/session-bound/);
+    expect(runContractDoc.split("\n").length).toBeLessThanOrEqual(145);
+  });
+});
+
+describe("D-docs: do-run Step 5b CLI list and the spec", () => {
+  const spec = read(join(here, "..", "..", "..", "..", "docs", "superpowers", "specs", "2026-09-24-run-contract-design.md"));
+
+  it("Step 5b lists status, skip, park, abort, done and batch-clear; done only when clean", () => {
+    const step5b = doRunSkill.slice(doRunSkill.indexOf("## Step 5b"), doRunSkill.indexOf("## Step 6"));
+    for (const verb of ["status", "skip <ob>", "park <N>", "abort --reason", "done", "batch-clear --reason"]) {
+      expect(step5b).toContain(`run-contract.js" ${verb}`);
+    }
+    expect(step5b).toMatch(/`done` only when every chosen step ran/);
+  });
+
+  it("the spec drops the ~30 ms claim and documents the new CLI verbs", () => {
+    expect(spec).not.toMatch(/~30 ms/);
+    expect(spec).toMatch(/`park <item> --reason/);
+    expect(spec).toMatch(/`batch-clear --reason/);
+    expect(spec).toMatch(/Only when every chosen step ran/);
+  });
 });
