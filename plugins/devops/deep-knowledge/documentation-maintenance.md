@@ -6,7 +6,7 @@ Cross-cutting rule for every implementation agent and for `/do-ship`. It covers
 the **content** layer of documentation — prose, flows, folder structure, curated
 descriptions — which no generator maintains. The mechanical roster layer (counts,
 hook lifecycle, skill/agent table rows) is handled separately by
-`gen-readme-sections.js` and friends; see `CONVENTIONS.md` §
+`gen-readme-sections.mjs` and friends; see `CONVENTIONS.md` §
 Auto-Maintained Documentation. The two are complementary: generators keep *facts*
 in sync, this keeps *meaning* in sync.
 

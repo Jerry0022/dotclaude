@@ -237,7 +237,7 @@ Generate `.claude/project-map.md` — a compact index of the project's file stru
 Run the plugin's generator script:
 
 ```bash
-node {PLUGIN_ROOT}/scripts/gen-project-map.js {project-root}
+node {PLUGIN_ROOT}/scripts/gen-project-map.mjs {project-root}
 ```
 
 This creates a tree overview with directory descriptions and key file highlights.

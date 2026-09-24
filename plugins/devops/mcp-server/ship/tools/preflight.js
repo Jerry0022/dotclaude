@@ -59,7 +59,7 @@ function docSyncChecks(cwd) {
   const out = [];
 
   // 1. Marker staleness via the generator's --check mode
-  const genScript = join(pluginDir, "scripts", "gen-readme-sections.js");
+  const genScript = join(pluginDir, "scripts", "gen-readme-sections.mjs");
   if (existsSync(genScript)) {
     try {
       execFileSync(process.execPath, [genScript, "--check", cwd], { stdio: "pipe" });

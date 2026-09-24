@@ -70,7 +70,7 @@ const BUDGETS = {
     remedy:
       'Depth is the point here, so there is no hard ceiling — but a doc read in full\n' +
       '  costs its whole length every time. Split by topic and regenerate the index:\n' +
-      '  `node {PLUGIN_ROOT}/scripts/gen-dk-index.js <dir>`.',
+      '  `node {PLUGIN_ROOT}/scripts/gen-dk-index.mjs <dir>`.',
   },
 };
 

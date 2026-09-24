@@ -14,8 +14,8 @@
  *   markers is rewritten. Files without markers are left untouched.
  *
  *   Usage:
- *     node scripts/gen-readme-sections.js [project-root]   # rewrite in place
- *     node scripts/gen-readme-sections.js --check [root]    # exit 1 if stale
+ *     node scripts/gen-readme-sections.mjs [project-root]   # rewrite in place
+ *     node scripts/gen-readme-sections.mjs --check [root]    # exit 1 if stale
  *
  *   No-ops silently when [project-root]/plugins/devops/ is absent (i.e. this
  *   is a consumer repo, not the plugin source repo).
@@ -189,7 +189,7 @@ function generate() {
 
   if (checkOnly && stale.length) {
     console.error(
-      "[gen-readme-sections] STALE — run `node plugins/devops/scripts/gen-readme-sections.js` to refresh:\n  " +
+      "[gen-readme-sections] STALE — run `node plugins/devops/scripts/gen-readme-sections.mjs` to refresh:\n  " +
         stale.map((p) => p.replace(projectRoot, ".")).join("\n  "),
     );
     process.exit(1);

@@ -57,7 +57,7 @@ describe("ship_build — script-path resolution", () => {
     await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: null, buildIdOnly: false });
     const cmds = execCommands();
     // The plugin deep-knowledge index generator ran with a resolved path.
-    expect(cmds.some((c) => c.includes("scripts/gen-dk-index.js"))).toBe(true);
+    expect(cmds.some((c) => c.includes("scripts/gen-dk-index.mjs"))).toBe(true);
     // The build-id script ran (getBuildId).
     expect(cmds.some((c) => c.includes("scripts/build-id.js"))).toBe(true);
     // Every resolved command points under the pinned plugin root.
@@ -76,12 +76,12 @@ describe("ship_build — project deep-knowledge index (F5 regression)", () => {
     await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: null, buildIdOnly: false });
 
     const projectDkCall = execCommands().find(
-      (c) => c.includes("deep-knowledge") && c.includes("gen-dk-index.js"),
+      (c) => c.includes("deep-knowledge") && c.includes("gen-dk-index.mjs"),
     );
     // The project deep-knowledge index MUST be regenerated (existsSync → true).
     expect(projectDkCall).toBeDefined();
     // F5: `${DK_INDEX_SCRIPT}` (no parens) stringified the arrow function into
-    // the command (`() => scriptPath("gen-dk-index.js")`). The fix `${DK_INDEX_SCRIPT()}`
+    // the command (`() => scriptPath("gen-dk-index.mjs")`). The fix `${DK_INDEX_SCRIPT()}`
     // substitutes the resolved path — so the command must contain NEITHER the
     // arrow token NOR the accessor name.
     expect(projectDkCall).not.toContain("=>");
@@ -94,7 +94,7 @@ describe("ship_build — project deep-knowledge index (F5 regression)", () => {
     existsSync.mockImplementation((p) => norm(p) === PLUGIN_ROOT); // no deep-knowledge dir
     await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: null, buildIdOnly: false });
     const projectDkCall = execCommands().find(
-      (c) => c.includes("deep-knowledge") && c.includes("gen-dk-index.js"),
+      (c) => c.includes("deep-knowledge") && c.includes("gen-dk-index.mjs"),
     );
     expect(projectDkCall).toBeUndefined();
   });
@@ -103,7 +103,7 @@ describe("ship_build — project deep-knowledge index (F5 regression)", () => {
 describe("ship_build — generator failures surfaced, not swallowed", () => {
   test("a failing deep-knowledge generator produces a warning in the result", async () => {
     execSync.mockImplementation((cmd) => {
-      if (String(cmd).includes("gen-dk-index.js")) throw new Error("generator boom");
+      if (String(cmd).includes("gen-dk-index.mjs")) throw new Error("generator boom");
       return "";
     });
 

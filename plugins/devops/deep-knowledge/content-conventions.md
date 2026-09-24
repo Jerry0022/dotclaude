@@ -47,7 +47,7 @@ When adding new content would push a file past its budget:
 - **Agent over budget** → move reference material to plugin-level
   deep-knowledge and point at it by name; keep the agent's own behavior inline.
 - **deep-knowledge over budget** → split by topic, then regenerate the index:
-  `node {PLUGIN_ROOT}/scripts/gen-dk-index.js <dir>`.
+  `node {PLUGIN_ROOT}/scripts/gen-dk-index.mjs <dir>`.
 
 The cap is stylistic. If the rule itself is short and the file is already over
 budget for unrelated reasons, just append — size-rebalancing is a separate
@@ -83,7 +83,7 @@ documentation rather than as an index is over budget even when it is short.
 4. Replace the original section with a one-line pointer:
    `- <Topic>: see <path>`.
 5. Regenerate the index if a deep-knowledge file was created:
-   `node {PLUGIN_ROOT}/scripts/gen-dk-index.js <dir>`.
+   `node {PLUGIN_ROOT}/scripts/gen-dk-index.mjs <dir>`.
 6. Verify: re-count the source file, and confirm every pointer resolves.
    An extraction that leaves a dead pointer is worse than the overage — the
    content is now both missing from the index and unreachable.
