@@ -262,3 +262,40 @@ survives a machine loss — and is not shipped to plugin consumers.
 PR 2 and PR 3 ship together (one branch, one release): between them the
 four retired skills would sit in `skills/` with PR-1 layers the PR-2 graph
 test had to special-case.
+
+## Addendum — setup-* out of the slash menu (2026-09-24, after PR 3)
+
+The two `setup-*` tools left the slash menu; the prefix is gone.
+
+| Before | After |
+|---|---|
+| `setup-cleanup` — layer 0, user-only | `auto-cleanup` — layer 0, hidden (`user-invocable: false`), same invokes (`auto-concept`, `do-ship`); `RENAMED` alias `setup-cleanup` → `auto-cleanup`. No cross-repo mode any more — always the current project. |
+| `setup-project` — layer 0, user-only | retired: body in `deep-knowledge/project-setup.md`, `RETIRED` + `RETIRED_TRIGGERS` entry, dispatch pointer for its phrases. |
+
+Deterministic paths (the rule of § Triggers — every hidden unit needs one
+besides the model's own choice):
+
+- **`ship_hygiene`** (ship MCP server, `mcp-server/ship/lib/hygiene.js`),
+  called by do-ship Step 6 after a merged ship (`trigger: "ship"`) and by
+  `modes/promote.md` Step 4 after a promotion-only run (`trigger: "promote"`);
+  never for `--queued` or blocked runs.
+  - *Auto-clean* (ship only): opens when a **removable** leftover is older
+    than 30 days, then removes every removable leftover older than 7 days.
+    Removable = content provably in the default branch (git ancestor, head of
+    a merged PR, or every touched file identical) and, for a worktree: a
+    session worktree under `.claude/worktrees/`, clean, not locked, idle for
+    that long. Each removal re-checks its subject first. The card's `tests`
+    gets "Aufräumen (auto) → N Branches · M Worktrees entfernt".
+  - *Nudge* (ship and promote): more than 50 leftovers and 7 days since the
+    last hint → the card's `open` gets a line pointing to the auto-cleanup
+    page. Leftovers younger than 7 days are only ever removed on that page.
+  - Defaults calibrated on this repo: 19/25/32 PRs in the ISO weeks 36–38,
+    52 in the first four days of week 39 — the hint comes at most weekly.
+- **`ss.project.setup`** (SessionStart): writes `hooks/lib/runtime-ignores.js`
+  into the clone's `.git/info/exclude` (common dir — every worktree, no repo
+  diff) and offers the project setup once in a new repository.
+  `scripts/check-claude-artifacts.js` now checks against that list.
+- **Settings** (`hooks/lib/devops-config.js`, CLI `scripts/devops-config.js`,
+  runbook `deep-knowledge/devops-config.md`): the six `cleanup.*` thresholds
+  are changeable in plain words, per clone (`<main checkout>/.claude/devops-config.json`)
+  or globally (`~/.claude/devops-config.json`); project > global > default.

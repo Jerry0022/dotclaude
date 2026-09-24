@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module project-root
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Anchor for every PROJECT-rooted `.claude/` runtime file.
  *
@@ -73,4 +73,30 @@ function projectClaudeDir(cwd) {
   return path.join(projectRoot(cwd), '.claude');
 }
 
-module.exports = { findRepoRoot, projectRoot, projectClaudeDir, samePath };
+/**
+ * The git common dir of the work tree enclosing `cwd` — the main checkout's
+ * `.git`, also from a linked worktree (its `.git` file names the worktree's
+ * admin dir, whose `commondir` file points back). What every worktree of a
+ * clone shares: `info/exclude`, refs, config. Pure fs, never throws.
+ * @returns {string|null} absolute path, or null outside a work tree
+ */
+function gitCommonDir(cwd) {
+  const root = findRepoRoot(cwd);
+  if (!root) return null;
+  const dotGit = path.join(root, '.git');
+  try {
+    if (fs.statSync(dotGit).isDirectory()) return dotGit;
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
+    if (!m) return null;
+    const gitDir = path.resolve(root, m[1]);
+    try {
+      return path.resolve(gitDir, fs.readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim());
+    } catch {
+      return gitDir; // no commondir file: the admin dir is the common dir itself
+    }
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { findRepoRoot, projectRoot, projectClaudeDir, samePath, gitCommonDir };

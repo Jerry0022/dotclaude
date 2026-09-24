@@ -159,7 +159,7 @@ unambiguous source confirms it exists under exactly that name and location:
   Befunde"). A candidate set that has not passed the audit is not rendered.
 - **Same rule for every other subject class:** a worktree entry must be in
   `git worktree list --porcelain`, a "verwaister Ordner" must *not* be, and
-  both must still be on disk — `/setup-cleanup` Step 10 re-reads both before
+  both must still be on disk — auto-cleanup Step 10 re-reads both before
   acting, exactly like the branch audit.
 
 ### A half-done worktree removal is Claude's to finish

@@ -10,9 +10,10 @@
  *   at most once per session (tracked via session-scoped temp files).
  *   Always-on docs (ss.knowledge.index ALWAYS_ON, e.g. agent-proactivity.md)
  *   are already in context from SessionStart — never list them in TOPIC_MAP.
- *   The docs of the four retired skills (readme-standards, graphify, usage,
- *   strict — lib/knowledge-pointers.js) get a one-line pointer instead of
- *   their body, also once per session.
+ *   The docs of the retired skills (readme-standards, graphify, usage,
+ *   strict, project-setup) and plain topic docs such as devops-config —
+ *   lib/knowledge-pointers.js — get a one-line pointer instead of their
+ *   body, also once per session.
  */
 
 require('../lib/plugin-guard');

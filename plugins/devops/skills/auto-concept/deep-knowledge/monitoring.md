@@ -530,4 +530,4 @@ non-`iterate` branches. See SKILL.md Step 5b.
 - Never execute arbitrary JavaScript from the page — only read known elements
 - The HTML file is local-only — no data leaves the machine
 - Decision JSON is never sent to external services
-- Clean up HTML files periodically (suggest during `/setup-cleanup`)
+- Clean up HTML files periodically (suggest during an auto-cleanup run)

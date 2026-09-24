@@ -25,6 +25,7 @@ mcp__plugin_devops_dotclaude-ship__ship_build
 mcp__plugin_devops_dotclaude-ship__ship_version_bump
 mcp__plugin_devops_dotclaude-ship__ship_release
 mcp__plugin_devops_dotclaude-ship__ship_cleanup
+mcp__plugin_devops_dotclaude-ship__ship_hygiene
 mcp__plugin_devops_dotclaude-issues__match_issues
 ```
 
@@ -36,8 +37,8 @@ Use `ToolSearch` with the `select:` prefix. Load ALL tools needed for the curren
 
 ```
 ToolSearch({
-  query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup",
-  max_results: 5
+  query: "select:mcp__plugin_devops_dotclaude-ship__ship_preflight,mcp__plugin_devops_dotclaude-ship__ship_build,mcp__plugin_devops_dotclaude-ship__ship_version_bump,mcp__plugin_devops_dotclaude-ship__ship_release,mcp__plugin_devops_dotclaude-ship__ship_cleanup,mcp__plugin_devops_dotclaude-ship__ship_hygiene",
+  max_results: 6
 })
 ```
 

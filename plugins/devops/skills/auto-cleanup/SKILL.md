@@ -1,55 +1,57 @@
 ---
-name: setup-cleanup
-version: 0.6.1
+name: auto-cleanup
+version: 0.7.0
 description: >-
-  Analyze repository branch hygiene: unmerged branches, stale locals with deleted
-  remotes, active sessions (worktrees), open PRs that still need to land, verify
-  work landed in main. Results: interactive concept page with filters, 2-state
-  delete controls, a ship queue for open PRs (each landed via /do-ship, one after
-  another, as if shipped from its own session), inline detail expand, and an
-  Apply-Manifest + Dry-Run-Confirm before executing anything.
-  Triggers on: "repo health", "branch cleanup", "branch hygiene", "offene PRs
-  landen", "open PRs shippen".
-  Explicit user request only.
+  Repository branch hygiene of the current project on an interactive concept
+  page: unmerged branches, stale locals with deleted remotes, active sessions
+  (worktrees), open PRs that still need to land, verify work landed in main.
+  Filters, 2-state delete controls, a ship queue for open PRs (each landed via
+  do-ship, one after another, as if shipped from its own session), inline
+  detail expand, and an Apply-Manifest + Dry-Run-Confirm before executing
+  anything. Offered by the completion card after a successful ship or promote
+  when too many branches/worktrees pile up (ship_hygiene); old leftovers that
+  provably landed are removed by ship_hygiene without this page.
+  Triggers on: "repo health", "branch cleanup", "branch hygiene", "branches
+  aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen",
+  or a yes to the card's cleanup hint. Do NOT trigger for: code cleanup or
+  refactoring, project setup (.gitignore, LICENSE), or the branch the current
+  ship removes anyway.
 layer: 0
 invokes: [auto-concept, do-ship]
-disable-model-invocation: true
+user-invocable: false
 triggers:
   en: ["repo health", "branch cleanup", "branch hygiene"]
-  de: ["offene PRs landen", "open PRs shippen"]
+  de: ["branches aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen"]
 argument-hint: "[optional: focus area — branches, sessions, PRs]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__plugin_devops_dotclaude-ship__*, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
 ---
 
-# Repo Health Check
+# Auto-Cleanup — Repo Health
 
-Analyze the repository for branch hygiene, unmerged work, and cleanup opportunities.
-Present results as an interactive concept page with filters and decision controls.
+Analyze the current project's repository for branch hygiene, unmerged work, and
+cleanup opportunities. Present results as an interactive concept page with
+filters and decision controls.
 
-## Step 0 — Scope selection (AskUserQuestion)
+## Where this skill sits
 
-Before any git command, ask the user for scope:
+The cleanup has an automatic half and this interactive half:
 
-```
-Welches Repository soll analysiert werden?
+| Part | Runs | Removes |
+|---|---|---|
+| `ship_hygiene` auto-clean (`mcp-server/ship/lib/hygiene.js`) | after every successful ship, only once a removable leftover is older than 30 days | every leftover older than 7 days whose content provably landed (clean session worktrees, their branches, plain branches) — no page, no question; the card's **Geprüft** line reports it |
+| `ship_hygiene` nudge | after every successful ship or promote, when more than 50 leftovers lie around, at most weekly | nothing — the card gets an ⚠ OFFEN item pointing here |
+| **this skill** | on a yes to that item, or a trigger phrase | whatever the user ticks on the page, recent items included |
 
-  (●) Aktuelles Projekt — <repo-name> (<local-path>)   ← vorausgewählt
-  ( ) Alle Projekte — aus ~/.claude/projects/ Registry
+The numbers are user settings (`{PLUGIN_ROOT}/deep-knowledge/devops-config.md`,
+section `cleanup`). Scope is always the current project — there is no
+cross-repo mode.
 
-"Alle": zeigt zuerst eine Repo-Übersicht (welches Repo hat wie viel
-aufzuräumen), dann Drill-down in einzelne Repos — KEIN globales
-übergreifendes Bulk-Delete.
-```
+A session worktree the automatic half removes is by definition abandoned, not
+active: clean, content in main, and no git activity for longer than the minimum
+age. Everything else about sessions follows the HARD RULE below — on this page a
+worktree only goes when the user ticks it.
 
-DEFAULT = current project (pre-selected). "Alle" is the explicit opt-in.
-If "Alle" is selected: first generate a repo-overview page showing per-repo
-counts, then let the user pick one repo for the standard single-repo flow.
-Discovery: read `~/.claude/projects/` registry, dedupe (many entries are
-worktree subdirs or dead paths — skip paths where `git rev-parse --show-toplevel`
-fails or is a subdirectory of another already-listed root), fetch in parallel,
-lazy. NO global cross-repo select-all.
-
-## Step 0b — Repo-mode check
+## Step 0 — Repo-mode check
 
 Before any git command, verify this directory is a git repository:
 
@@ -541,7 +543,7 @@ earlier one's merge instead of the other way round.
 **Arm the queue marker once, before the first ship:**
 
 ```bash
-node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-queue',JSON.stringify({owner:'setup-cleanup',since:new Date().toISOString()}))"
+node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-queue',JSON.stringify({owner:'auto-cleanup',since:new Date().toISOString()}))"
 ```
 
 Project ship extensions read this marker and defer their post-ship

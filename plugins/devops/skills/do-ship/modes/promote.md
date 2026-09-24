@@ -16,10 +16,10 @@ do-ship runs these steps in two situations (`../SKILL.md` § Target channel):
 
 ## Step 0 — Load deferred MCP schema
 
-`ship_promote` may be deferred. Load it first:
+`ship_promote` and `ship_hygiene` may be deferred. Load them first:
 
 ```
-ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_promote", max_results: 5 })
+ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_promote,mcp__plugin_devops_dotclaude-ship__ship_hygiene", max_results: 5 })
 ```
 
 If the tool is not registered → STOP and report (do NOT fall back to manual
@@ -126,6 +126,13 @@ error names it and the remedy (`git tag -d <tag>`) — delete it, then re-run.
 - `... published tags are immutable` → never delete/move tags to "fix" this.
 
 ## Step 4 — Report
+
+**Promotion-only run:** first call `ship_hygiene({ cwd, trigger: "promote", lang })`
+and pass its `card.open` line (when present) into the card's `open` array —
+the cleanup nudge after a promotion (`../SKILL.md` Step 6 § Post-ship hygiene;
+a promote run never removes anything). After a ship in the same run, the
+ship's own `ship_hygiene` call (trigger `ship`) already covers it — no second
+call.
 
 Render the completion card (`render_completion_card`, variant **`released`**,
 summary e.g. "vX.Y.Z auf <channel> promotet"). After a ship in the same run

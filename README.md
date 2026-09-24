@@ -208,8 +208,8 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->54<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
-- **<!--devops:count:skills-->15<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; tools setup-project, setup-cleanup; hidden workers auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data and strict mode are knowledge + hooks, not skills
+- **<!--devops:count:hooks-->55<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
@@ -219,7 +219,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->54<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->55<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -240,6 +240,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.mcp.verify` — Verify every MCP server declared in this plugin's .mcp.json has its entry file presen…
 - `ss.mcp.reap` — Reclaim orphaned Claude Desktop MCP server processes leaked by previously-closed sess…
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
+- `ss.project.setup` — The automatic part of project setup (the former /setup-project skill; its interactive…
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
 - `ss.git.sync` — Starts ONE detached background git sync for this worktree.
 - `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the graphify integration…
@@ -362,7 +363,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 ### Skills (invoked explicitly or by hooks)
 
-Doors (`do-*`) and tools (`setup-*`) are in the slash menu. Workers
+Doors (`do-*`) are in the slash menu. Workers
 (`auto-*`) are hidden from it (`user-invocable: false`): Claude invokes them
 from your words, the trigger router or a hook. Old names from before the
 restructure (`/ship`, `/fix`, `/concept`, `/run-backlog`, `/promote`, …)
@@ -376,9 +377,8 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/do-run` | Explicit + Router | Door for every run: picks the mode (backlog, autonomous, burn, rethink, audit) or implements the prompt through `auto-agents` |
 | `/auto-fix` (trigger: "debug") | Hidden · Router + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/auto-issue` | Hidden · Hook | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
-| `/setup-project` | Explicit | Repo hygiene audit and initialization |
 | `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
-| `/setup-cleanup` | Explicit | Repository branch hygiene analysis and cleanup; open PRs are landed one after another via `/do-ship` |
+| `/auto-cleanup` (trigger: "branch cleanup") | Hidden · Card hint + Router | Branch/worktree/PR hygiene page; open PRs are landed one after another via `/do-ship`. After each ship, `ship_hygiene` removes old leftovers that provably landed and suggests the page when too much piles up (thresholds: "devops settings") |
 | `/auto-update` | Hidden | Update the plugin to the latest version from GitHub |
 | `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/auto-agents` | Hidden | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
@@ -569,8 +569,8 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->54<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
-├── skills/                        ← <!--devops:count:skills-->15<!--/devops:count:skills--> skill definitions (SKILL.md)
+├── hooks/                         ← <!--devops:count:hooks-->55<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates

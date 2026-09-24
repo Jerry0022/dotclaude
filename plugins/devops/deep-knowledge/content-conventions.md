@@ -1,7 +1,7 @@
 # Content Conventions — Sizing & Self-Reference
 
 How to size and structure project-persistent content (CLAUDE.md, skills,
-agents, deep-knowledge). Referenced by `/do-learn`, `/setup-project`, the
+agents, deep-knowledge). Referenced by `/do-learn`, `project-setup.md`, the
 `post.claude.budget` hook, and all skill authoring.
 
 These are **soft caps** — they bias routing decisions, they don't hard-fail.
@@ -163,7 +163,7 @@ duplicate.** Examples:
   re-list the pipeline steps
 - "open issues with the right labels" → reference `/auto-issue`, do NOT
   duplicate the label rules
-- "check branch hygiene before shipping" → reference `/setup-cleanup`,
+- "check branch hygiene before shipping" → reference auto-cleanup,
   do NOT re-document the cleanup steps
 - Generic conventions (browser tools, MCP deferred tools, code defaults,
   merge safety, …) → reference the existing `deep-knowledge/*.md` file by

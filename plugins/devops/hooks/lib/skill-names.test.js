@@ -54,7 +54,8 @@ describe("folds and legacy names", () => {
   test("legacyNamesOf lists renames and folds", () => {
     expect(legacyNamesOf("do-ship").sort()).toEqual(["promote", "ship"]);
     expect(legacyNamesOf("do-run").sort()).toEqual(["run-autonomous", "run-backlog", "run-burn", "tune-audit", "tune-rethink"]);
-    expect(legacyNamesOf("setup-project")).toEqual([]);
+    expect(legacyNamesOf("auto-cleanup")).toEqual(["setup-cleanup"]);
+    expect(legacyNamesOf("do-learn")).toEqual(["claude-learn"]);
   });
 
   test("isSkill treats old and new names alike", () => {
@@ -148,8 +149,8 @@ describe("extension fallback — new name first, old name second", () => {
 });
 
 describe("RETIRED (PR 3) — no skill, a doc and a hook instead", () => {
-  test("the four retired names, each with a deep-knowledge doc", () => {
-    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-readme"]);
+  test("the retired names, each with a deep-knowledge doc", () => {
+    expect(Object.keys(RETIRED).sort()).toEqual(["auto-graph", "auto-usage", "claude-strict", "setup-project", "setup-readme"]);
     for (const entry of Object.values(RETIRED)) {
       expect(entry.doc).toMatch(/^[a-z-]+\.md$/);
       expect(fs.existsSync(path.join(import.meta.dirname, "..", "..", "deep-knowledge", entry.doc)), entry.doc).toBe(true);

@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-ship-mcp
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
- * @description MCP server with five ship pipeline tools:
+ * @description MCP server with the ship pipeline tools:
  *   - ship_preflight    — pre-flight safety checks
  *   - ship_build        — build, lint, test, build-ID
  *   - ship_version_bump — bump + verify all version files
  *   - ship_release      — commit, push, PR, merge, tag, release
+ *   - ship_promote      — re-tag a shipped version onto beta/stable
  *   - ship_cleanup      — delete branch, prune worktrees
+ *   - ship_hygiene      — post-ship auto-clean of old leftovers + cleanup nudge
  *   - health_check      — boot diagnostics (#324)
  *
  *   Registered in plugin.json → started automatically by Claude Code.
@@ -26,9 +28,10 @@ import { schema as versionBumpSchema, handler as versionBumpHandler } from "./to
 import { schema as releaseSchema, handler as releaseHandler } from "./tools/release.js";
 import { schema as promoteSchema, handler as promoteHandler } from "./tools/promote.js";
 import { schema as cleanupSchema, handler as cleanupHandler } from "./tools/cleanup.js";
+import { schema as hygieneSchema, handler as hygieneHandler } from "./tools/hygiene.js";
 
 const SERVER_NAME = "dotclaude-ship";
-const SERVER_VERSION = "0.2.1";
+const SERVER_VERSION = "0.3.0";
 
 const server = new McpServer({
   name: SERVER_NAME,
@@ -131,6 +134,19 @@ registerTool(
   "and leaves the worktree + branch intact — safe to call from inside the worktree.",
   cleanupSchema,
   cleanupHandler,
+);
+
+registerTool(
+  "ship_hygiene",
+  "Ship Hygiene",
+  "After a SUCCESSFUL ship (trigger 'ship') or promotion-only run (trigger 'promote'): " +
+  "removes old leftover branches/worktrees whose content provably landed — only after a ship, only once one is older " +
+  "than the age gate (default 30 days), then everything removable older than 7 days — and decides whether the card " +
+  "suggests the cleanup page (more than 50 leftovers, at most weekly). Thresholds are user settings (devops-config). " +
+  "Returns ready-made card lines: card.tests → the card's tests array, card.open → its open array. " +
+  "Never call it for a blocked ship or a queued ship (--queued).",
+  hygieneSchema,
+  hygieneHandler,
 );
 
 // ---------------------------------------------------------------------------

@@ -187,10 +187,13 @@ Skill directory names use kebab-case with a role prefix
 (docs/superpowers/specs/2026-09-24-skill-restructure-design.md → Units):
 
 - `do-*` — doors the user opens (`do-ship`, `do-run`, `do-learn`, `do-batch`); in the slash menu.
-- `setup-*` — tools only the user starts (`disable-model-invocation: true`).
 - `auto-*` — workers, passes and hands Claude invokes itself
   (`user-invocable: false`): hidden from the slash menu, reached through the
   model, the trigger router (`prompt.skill.enforce`) or a hook.
+
+The former `setup-*` prefix (tools only the user starts) is gone:
+`setup-cleanup` became `auto-cleanup` and `setup-project` was retired into
+`deep-knowledge/project-setup.md` + `ss.project.setup` (spec § Addendum).
 
 Skills are invoked as: `/devops:{skill-name}` (plugin-prefixed).
 

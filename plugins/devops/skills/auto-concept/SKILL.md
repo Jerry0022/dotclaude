@@ -51,7 +51,7 @@ concept the user wants. Three modes exist:
 mode, or it can be derived unambiguously — "design me the settings page"
 → design; "which auth library should we take" → decision; "concept for the
 onboarding: the flow, the screens and which state library" → mixed; a
-caller skill (e.g. `/do-run rethink`, `/setup-cleanup`) that pins the
+caller skill (e.g. `/do-run rethink`, auto-cleanup) that pins the
 template → that — **skip the question and proceed.** Otherwise ask exactly
 ONE `AskUserQuestion` with the three modes, **mixed first and marked
 "(Recommended)"**, one line of description each (what the page will

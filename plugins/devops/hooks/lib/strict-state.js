@@ -12,7 +12,7 @@
  * worktree has its own `.claude/`, so a mode armed in one worktree never leaks
  * into another worktree of the same repo — exactly the "this branch only, not
  * project-wide" scope the user asked for. It is gitignored via the
- * `/setup-project` runtime block, like `batch-mode.json`.
+ * runtime ignore list (hooks/lib/runtime-ignores.js), like `batch-mode.json`.
  *
  * The stored `branch` is compared against the checked-out branch on every
  * read: switching branches inside the worktree deactivates the mode instead of
