@@ -168,8 +168,10 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
   triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
   Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
-- **Prepared answer (`ready`)**: when the card has open points, the second
-  button is `Offenes abarbeiten` instead of `Ändern`. It puts the answer to
+- **Prepared answer (`ready`, `test`, `ship-successful`)**: when the card has
+  open points, `ready`'s second button is `Offenes abarbeiten` instead of
+  `Ändern`; `test` and `ship-successful` (ring or plain merge) get it as an
+  extra button after their own verbs. It puts the answer to
   EVERY open point (also those folded into `+N weitere`) into the input box,
   assuming the user wants them all tackled: each point's `reply`
   (`open: [{ text, reply }]`, written as the user — "Ja, die Änderung bitte
@@ -187,13 +189,13 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 | `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Offenes abarbeiten) | |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
-| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | final tests | Promote / none | context line = distance to beta |
+| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote / none (+ Offenes abarbeiten with open points) | context line = distance to beta |
 | `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter | |
 | `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy | replaces the 🚨 DEPLOY block |
 | `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Nach stable | evidence = promotion facts |
 | `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
 | `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
-| `test` | `🧪 Erst testen, dann shippen?` | userTest steps | Ship · Nachbessern | unverified part = `◐` post |
+| `test` | `🧪 Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (+ Offenes abarbeiten with open points) | unverified part = `◐` post |
 | `test-minimal` | `▶️ Läuft — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget |
 | `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage | pipeline = `➖ keine Änderungen` |
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |

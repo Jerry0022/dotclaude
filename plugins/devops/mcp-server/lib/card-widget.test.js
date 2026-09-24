@@ -65,23 +65,38 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(one[0].prompt).toBe("ship");
     const en = buttonsFor("ready", "en", { replies: ["A.", "B."] });
     expect(en[1].label).toBe("Work through open points");
-    expect(en[1].prompt).toBe("Please tackle all open points before the ship:\n\n- A.\n- B.");
+    expect(en[1].prompt).toBe("Please tackle all open points:\n\n- A.\n- B.");
     // no replies → the generic button, unchanged
     expect(buttonsFor("ready", "de", { replies: [] })[1].label).toBe("Ändern");
     expect(buttonsFor("ready", "de", { replies: ["  "] })[1].label).toBe("Ändern");
+  });
+
+  test("test and ship-successful keep their verbs and append Offenes abarbeiten after them", () => {
+    const replies = ["Ja, bitte."];
+    expect(buttonsFor("test", "de", { replies }).map((a) => a.label)).toEqual(["Ship", "Nachbessern", "Offenes abarbeiten"]);
+    const ring = buttonsFor("ship-successful", "de", { replies, version: "0.193.0" });
+    expect(ring.map((a) => a.label)).toEqual(["Promote", "Offenes abarbeiten"]);
+    expect(ring[0].prompt).toBe("promote 0.193.0");
+    expect(ring[1]).toMatchObject({ prompt: "Ja, bitte.", icon: "list-check" });
+    expect(ring[1].primary).toBeUndefined();
+    // plain merge: nothing to promote, the conclude button alone
+    expect(buttonsFor("ship-successful-plain", "en", { replies }).map((a) => a.label)).toEqual(["Work through open points"]);
+    expect(buttonsFor("ship-successful-plain", "de")).toEqual([]);
+    // without replies nothing is appended
+    expect(buttonsFor("test", "de").map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
   });
 
   test("conclusionPrompt: one answer alone, several as an ordered bullet list, never a leading slash", () => {
     expect(conclusionPrompt([], "de")).toBe("");
     expect(conclusionPrompt(["Nur das."], "de")).toBe("Nur das.");
     expect(conclusionPrompt(["Erstens.", "Zweitens.", "Drittens."], "de"))
-      .toBe("Bitte vor dem Ship noch alle offenen Punkte angehen:\n\n- Erstens.\n- Zweitens.\n- Drittens.");
-    expect(conclusionPrompt(["/compact jetzt"], "de")).toMatch(/^Bitte vor dem Ship/);
+      .toBe("Bitte noch alle offenen Punkte angehen:\n\n- Erstens.\n- Zweitens.\n- Drittens.");
+    expect(conclusionPrompt(["/compact jetzt"], "de")).toMatch(/^Bitte noch alle offenen Punkte/);
   });
 
   test("the widget keeps a multi-line conclusion's line breaks as &#10;", () => {
     const html = cardWidgetHtml(baseModel({ replies: ["A.", "B."] }), "");
-    expect(html).toContain('data-prompt="Bitte vor dem Ship noch alle offenen Punkte angehen:&#10;&#10;- A.&#10;- B."');
+    expect(html).toContain('data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;- A.&#10;- B."');
   });
 
   test("ready-red offers Fix and Trotzdem shippen — worded for red findings, not only red tests", () => {

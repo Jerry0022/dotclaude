@@ -69,6 +69,9 @@ export const BUTTONS = {
     "ship-successful": [
       { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotet den aktuellen Build in den nächsten Channel." },
     ],
+    // A plain merge has nothing to promote; it only carries the conclude
+    // button when the card has open points (see buttonsFor).
+    "ship-successful-plain": [],
     "ship-successful-kept": [
       { label: "Weiter", icon: "arrow-right", prompt: "Ich mache auf diesem Branch weiter — was ist der nächste Schritt?", primary: true, tooltip: "Setzt die Arbeit auf dem offen gehaltenen Branch fort." },
     ],
@@ -116,6 +119,7 @@ export const BUTTONS = {
     "ship-successful": [
       { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotes the current build to the next channel." },
     ],
+    "ship-successful-plain": [],
     "ship-successful-kept": [
       { label: "Continue", icon: "arrow-right", prompt: "I'll continue on this branch — what's the next step?", primary: true, tooltip: "Continues the work on the branch kept open." },
     ],
@@ -150,11 +154,12 @@ export const BUTTONS = {
  * The `conclude` button once the card has open points: instead of "ask me
  * what", it puts the prepared answer to those points into the composer —
  * assuming the user wants every one of them tackled — so Enter is all that is
- * left. `intro` heads a list of two or more answers.
+ * left. `intro` heads a list of two or more answers. Worded for both sides of
+ * a ship: the ready and test cards ask before it, ship-successful after it.
  */
 export const CONCLUDE = {
-  de: { label: "Offenes abarbeiten", icon: "list-check", tooltip: "Legt die Antwort auf die offenen Punkte ins Eingabefeld: alle angehen, dann shippen.", intro: "Bitte vor dem Ship noch alle offenen Punkte angehen:" },
-  en: { label: "Work through open points", icon: "list-check", tooltip: "Puts the answer to the open points into the input box: tackle all of them, then ship.", intro: "Please tackle all open points before the ship:" },
+  de: { label: "Offenes abarbeiten", icon: "list-check", tooltip: "Legt die vorbereitete Antwort auf die offenen Punkte ins Eingabefeld — alle angehen, Enter sendet.", intro: "Bitte noch alle offenen Punkte angehen:" },
+  en: { label: "Work through open points", icon: "list-check", tooltip: "Puts the prepared answer to the open points into the input box — tackle all of them, Enter sends.", intro: "Please tackle all open points:" },
 };
 
 /**
@@ -186,7 +191,9 @@ export function conclusionPrompt(replies, lang = "de") {
  * promote button is dropped — a bare "promote" could ship later work.
  *
  * With `replies` (one prepared answer per open point) the `conclude` button
- * becomes `CONCLUDE` and carries `conclusionPrompt(replies)`.
+ * becomes `CONCLUDE` and carries `conclusionPrompt(replies)`; a key without
+ * one (test, ship-successful) gets `CONCLUDE` appended after its own verbs.
+ * index.js#buildDecisionBlock decides which cards pass replies at all.
  *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
@@ -202,13 +209,16 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
   const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version) ? version : "";
   const conclusion = conclusionPrompt(opts && opts.replies, lang);
   const conclude = CONCLUDE[lang] || CONCLUDE.de;
-  return list
+  const concludeButton = { label: conclude.label, icon: conclude.icon, prompt: conclusion, tooltip: conclude.tooltip };
+  const buttons = list
     .filter((a) => !isPromotePrompt(a.prompt) || semver)
     .map(({ conclude: isConclude, ...a }) => {
       if (isPromotePrompt(a.prompt)) return { ...a, prompt: `${a.prompt} ${semver}` };
-      if (isConclude && conclusion) return { ...a, label: conclude.label, icon: conclude.icon, tooltip: conclude.tooltip, prompt: conclusion };
+      if (isConclude && conclusion) return { ...a, ...concludeButton };
       return a;
     });
+  if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
+  return buttons;
 }
 
 /** A promote button's prompt ("promote", "promote stable"). */

@@ -960,8 +960,9 @@ function pointsForKey(input, key, lang) {
     case 'released-beta':
     case 'released-stable':
       return [...open, ...finalTest.map(testTag)];
+    // Open points ride on the test card too — its conclude button answers them.
     case 'test':
-      return userTest;
+      return [...open, ...userTest.map(testTag)];
     case 'vv-unverified':
       return [lang === 'en'
         ? 'npm test did not run — run it first, or ship anyway.'
@@ -1117,6 +1118,9 @@ function shipCompactInfo(compact, lang) {
 /** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
 const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback']);
 
+/** Decision keys whose widget offers "Offenes abarbeiten" for the card's open points. */
+const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
+
 /**
  * The whole decision block: heading (already carrying any "+N weitere" tail),
  * optional context line, ≤3 points, and the button-table key for the widget.
@@ -1172,16 +1176,19 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
 
   const context = buildContextLine(input, key, delivery, lang);
 
+  // The replies ride on the conclude button of the ready, test and
+  // ship-successful cards — all open points, also those folded into
+  // "+N weitere"; the (final) tests are the user's own to run.
+  const replies = CONCLUDE_KEYS.has(key) ? openReplies(input, lang) : [];
+
   let buttonsKey = key;
-  if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
+  // Plain merge — nothing to promote, only the conclude button when open points exist.
+  if (key === 'ship-successful' && !ctx.ring) buttonsKey = replies.length ? 'ship-successful-plain' : null;
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
-  // The replies ride on ready's conclude button — all open points, also those
-  // folded into "+N weitere"; the final tests are the user's own to run.
-  const replies = key === 'ready' ? openReplies(input, lang) : [];
   return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies };
 }
 
@@ -1933,7 +1940,7 @@ server.registerTool(
           z.string(),
           z.object({
             text: z.string().describe("The open point as the card shows it."),
-            reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'feat/x bitte committen.'). The ready card's Desktop button puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
+            reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'feat/x bitte committen.'). The Desktop button 'Offenes abarbeiten' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
           }),
         ])).optional(),
       ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),

@@ -208,7 +208,7 @@ describe("--render-card CLI fallback", () => {
     expect(stderr).toContain("Offenes abarbeiten ↗");
     expect(stderr).not.toContain("Ändern ↗");
     expect(stderr).toContain(
-      'data-prompt="Bitte vor dem Ship noch alle offenen Punkte angehen:&#10;&#10;' +
+      'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;' +
       "- Ja, die Änderung bitte auch im Terminal-Renderer machen.&#10;" +
       "- Doku zur Card nachziehen? Ja, bitte.&#10;" +
       "- Alten Branch feat/x aufräumen — bitte angehen.&#10;" +
@@ -219,6 +219,37 @@ describe("--render-card CLI fallback", () => {
     const term = await renderCard(payload);
     expect(term).toMatch(/^1\. Soll die Änderung auch im Terminal-Renderer rein\?$/m);
     expect(term).toMatch(/^## 📦 Shippen trotz 4 Vorbehalten \+2 weitere\?$/m);
+  });
+
+  test("test and ship-successful cards answer their open points too (Desktop)", async () => {
+    const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
+    const open = [{ text: "Auch im Terminal?", reply: "Ja, bitte auch im Terminal." }, "Doku nachziehen?"];
+    const answer = 'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;- Ja, bitte auch im Terminal.&#10;- Doku nachziehen? Ja, bitte."';
+
+    const test = { variant: "test", summary: "Testen", lang: "de", session_id: "cli-test-conclude-test", open, userTest: ["Seite öffnen"] };
+    const testWidget = (await renderCardFull(test, desktop)).stderr;
+    expect(testWidget).toContain("Nachbessern ↗");
+    expect(testWidget).toContain("Offenes abarbeiten ↗");
+    expect(testWidget).toContain(answer);
+    // the open points show on the test card, the steps tagged 🧪
+    const testTerm = await renderCard(test);
+    expect(testTerm).toMatch(/^1\. Auch im Terminal\?$/m);
+    expect(testTerm).toMatch(/^3\. 🧪 Seite öffnen$/m);
+
+    const ring = (await renderCardFull({
+      variant: "ship-successful", summary: "Ship", lang: "de", session_id: "cli-test-conclude-ring", open,
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
+    }, desktop)).stderr;
+    expect(ring).toContain('data-prompt="promote 0.193.0"');
+    expect(ring).toContain(answer);
+
+    const plain = { variant: "ship-successful", summary: "Merge", lang: "de", session_id: "cli-test-conclude-plain", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.193.0" } } };
+    const plainOpen = (await renderCardFull({ ...plain, open }, desktop)).stderr;
+    expect(plainOpen).toContain("Offenes abarbeiten ↗");
+    expect(plainOpen).not.toContain("Promote ↗");
+    const plainNone = (await renderCardFull({ ...plain, session_id: "cli-test-conclude-plain-none" }, desktop)).stderr;
+    expect(plainNone).not.toContain('<span role="button"');
   });
 
   test("ready without open points keeps the plain Ändern button", async () => {
