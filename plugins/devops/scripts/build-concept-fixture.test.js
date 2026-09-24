@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { build, parseArgs } from "./build-concept-fixture.js";
 import { findMappingIssues, findStructural, evaluate, findStaleEngine } from "../hooks/lib/concept-gate.js";
@@ -168,7 +168,16 @@ describe("build-concept-fixture --designs", () => {
   });
 
   test("--designs 1 (the default) leaves the design-mode output as it was", () => {
-    expect(build({ ...BASE, mode: 'design', designs: 1 })).toBe(build({ ...BASE, mode: 'design' }));
+    // Every build stamps the page with the wall clock, to the second. Pin it:
+    // on a loaded machine the two builds straddle a second and the pages then
+    // differ by their stamp alone — a red full run over identical output.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-24T12:00:00Z'));
+    try {
+      expect(build({ ...BASE, mode: 'design', designs: 1 })).toBe(build({ ...BASE, mode: 'design' }));
+    } finally {
+      vi.useRealTimers();
+    }
     expect(dom(build({ ...BASE, mode: 'design' })).querySelectorAll('section[data-iteration][data-active] > section[data-design]').length).toBe(1);
   });
 });

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.197.1] — 2026-09-24
+
+### Fixed
+- **Concept pages keep mirroring your notes to the bridge.** After about 27 autosaves a concept page stopped saving its notes to the bridge and showed "die Bridge ist nicht erreichbar" and "Nur lokal gespeichert · getrennt", while the bridge was running and answering. The autosave sent each draft with `keepalive` and never read the answer. Chromium keeps a keepalive request's body on a 64 KiB per-page budget until its answer completes, and an unread `no-store` answer never completes. Once the budget was full, the browser refused every further autosave before sending it, until the tab was reloaded. Now the autosave is a plain request and every answer is read; only the teardown fallbacks keep `keepalive`, and they read their answers too. The bridge answers POSTs with `no-cache` instead of `no-store`, so a page built from an older template recovers once its bridge restarts. Gate 65 marks such a page as a stale engine, so its next round re-syncs the fix.
+- **A failed save is named truthfully.** "Bridge nicht erreichbar" and "getrennt" now appear only when the heartbeat does not vouch for the bridge. A save the bridge refused (disk full, bad payload) reads "die Bridge hat sie nicht gespeichert", and the status line reads "Nur lokal gespeichert".
+- **No literal asterisks in the submitted panel.** "Wechsle zum Claude-Chat, um den Fortschritt zu sehen" showed the Markdown `**` around "Claude Chat". Locale values are plain text, and a test keeps them that way.
+
 ## [0.197.0] — 2026-09-24
 
 ### Added
