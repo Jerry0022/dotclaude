@@ -124,7 +124,7 @@ runtime). Rule ids and the default allowlists: `deep-knowledge/ui-defaults.md`.
 - Never queue issues labelled `discussion`
 ```
 
-### /debug
+### /auto-fix
 ```markdown
 # reference.md
 ## Log locations
