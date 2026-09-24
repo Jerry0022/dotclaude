@@ -90,6 +90,20 @@ function hasRemote(dir) {
 }
 
 /**
+ * Is there provably no `origin` — the same test ship_preflight's repo-mode
+ * uses for `git-no-remote`? A failed or timed-out probe is NOT "no origin":
+ * it keeps the default /do-ship CTA instead of claiming the repo is local-only.
+ */
+function lacksOrigin(dir) {
+  try {
+    const names = execSync('git remote', { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: GIT_TIMEOUT_MS });
+    return !names.split(/\r?\n/).map(s => s.trim()).includes('origin');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Detect whether `dir` is a linked worktree (not the main working tree).
  */
 function isLinkedWorktree(dir) {
@@ -142,8 +156,8 @@ function checkRepo(dir) {
       type: 'uncommitted',
       count: lines.length,
       label: `${lines.length} uncommitted file(s)`,
-      // No remote → /do-ship cannot run here; the CTA says "commit locally" (#500).
-      noRemote: !remote,
+      // No origin → nothing to push, PR or merge; the CTA says "commit locally" (#500).
+      noRemote: lacksOrigin(dir),
     });
   }
 

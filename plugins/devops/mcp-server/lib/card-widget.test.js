@@ -52,9 +52,10 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
   });
 
   test("noShip drops every ship button — a repo without a remote cannot ship (#500)", () => {
-    expect(buttonsFor("ready", "de", { noShip: true }).map((a) => a.label)).toEqual(["Ändern"]);
+    const ready = buttonsFor("ready", "de", { noShip: true });
+    expect(ready.map((a) => a.label)).toEqual(["Ändern"]);
+    expect(ready[0].primary).toBe(true); // the row keeps its accented verb
     expect(buttonsFor("test", "en", { noShip: true }).map((a) => a.label)).toEqual(["Rework"]);
-    expect(buttonsFor("ready-red", "de", { noShip: true }).map((a) => a.label)).toEqual(["Fix"]);
     for (const key of Object.keys(BUTTONS.de)) {
       for (const lang of ["de", "en"]) {
         expect(buttonsFor(key, lang, { noShip: true }).some((a) => /^ship\b/i.test(a.prompt))).toBe(false);

@@ -199,7 +199,7 @@ export function conclusionPrompt(replies, lang = "de") {
  *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
- * @param {{ version?: string|null, replies?: string[], noShip?: boolean }} [opts] the version the card is about, the prepared answers to its open points, and whether the repo has no remote (every ship button is dropped, #500)
+ * @param {{ version?: string|null, replies?: string[], noShip?: boolean }} [opts] the version the card is about, the prepared answers to its open points, and whether a no-remote ready/test card drops its ship buttons (#500)
  * @returns {Array<{ label: string, icon: string, prompt: string, primary?: boolean, tooltip: string }>}
  */
 export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
@@ -221,6 +221,8 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
       return a;
     });
   if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
+  // Dropping the Ship button must not leave a row without its accented verb.
+  if (opts && opts.noShip && buttons.length && !buttons.some((a) => a.primary)) buttons[0] = { ...buttons[0], primary: true };
   return buttons;
 }
 

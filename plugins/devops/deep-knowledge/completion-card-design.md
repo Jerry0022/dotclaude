@@ -147,7 +147,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 - `ready-files`: `📂 9 Dateien geändert · kein Repo · H:\notes\budget`.
 - `analysis` / no changes: `➖ keine Änderungen im Repo · branch`.
 - No remote (`state.mode: "git-no-remote"`): `✓ commit · nur lokal, kein
-  Remote · main · Build abc1234` — the track ends at the local commit; no
+  Remote · main · v1.2.3 · Build abc1234` — the track ends at the local commit; no
   `push → PR → merge` steps, since there is nowhere to ship to (#500).
 - The variant-guard downgrade note ("ship-successful → ready, weil …") is a
   `›` context line under the decision heading, not a block.
@@ -198,7 +198,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
 | `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Nachbessern) | |
-| `ready` / `test`, no remote | `📦 Lokal fertig trotz {reservation} — noch etwas?` / `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | every ship button dropped (Ändern / Nachbessern stay) | `state.mode: "git-no-remote"` — /do-ship needs a remote (#500) |
+| `ready` / `test`, no remote | `📦 Lokal fertig trotz {reservation} — noch etwas?` / `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified, ship-compact) keep their buttons: a local ship still commits. `ship-successful` downgrades to this row with its own note. |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
 | `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points | context line = distance to beta |

@@ -175,6 +175,36 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(test).toMatch(/^## 🧪 Test first\?$/m);
   });
 
+  test("no remote is detected from cwd when the caller passes no state.mode (#500)", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "card-no-remote-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+      const text = await cardText({
+        variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8d", cwd: repo,
+        state: { commit: "abc1234", branch: "main" },
+        delivery: { ship: { version: "1.2.3" } },
+      });
+      expect(text).toContain("✓ commit · nur lokal, kein Remote · main · v1.2.3");
+      expect(text).toMatch(/^## 📦 Lokal fertig — noch etwas\?$/m);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test("ship-successful without a remote downgrades with a note that asks for nothing impossible (#500)", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8e",
+      state: { mode: "git-no-remote", commit: "abc1234", branch: "main" },
+    });
+    expect(text).toContain("kein Remote");
+    expect(text).not.toContain("pushed:true");
+    expect(text).toMatch(/^## 📦 Lokal fertig/m);
+  });
+
   test("analysis pipeline says no changes to the repo", async () => {
     const text = await cardText({ variant: "analysis", summary: "Nur gelesen", lang: "de", session_id: "test-anatomy-9" });
     expect(text).toContain("➖ keine Änderungen im Repo");
