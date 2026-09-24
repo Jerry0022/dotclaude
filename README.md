@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.194.4**
+**Version: 0.194.5**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -373,7 +373,7 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/do-ship` | Explicit + Hook | Full shipping pipeline: build, version, PR, merge, cleanup |
 | `/do-ship promote` | Explicit | Channel promotion (alpha→beta→stable): re-tag the same SHA, no rebuild |
 | `/do-run` | Explicit + Router | Door for every run: picks the mode (backlog, autonomous, burn, rethink, audit) or implements the prompt through `auto-agents` |
-| `/auto-fix` (alias: `/debug`) | Hidden · Router + Hook | Root-cause analysis, diagnostics, and fix cycle |
+| `/auto-fix` (trigger: "debug") | Hidden · Router + Hook | Root-cause analysis, diagnostics, and fix cycle |
 | `/auto-issue` | Hidden · Hook | GitHub issue creation and refinement with labels and milestones — the single owner of every issue write |
 | `/setup-project` | Explicit | Repo hygiene audit and initialization |
 | `/auto-extend` | Hidden | Scaffold or adapt project-level skill extensions |
@@ -462,7 +462,7 @@ code and UI** — no new features, no fresh scope.
   work / functional requirements of the last 48h / everything incl. 48h) and
   the output (audit + implementation, or a DevOps concept page).
 
-Something actually **broken**? That's **`/auto-fix`** (alias `/debug`) —
+Something actually **broken**? That's **`/auto-fix`** (say "debug") —
 standalone root-cause analysis and repair, not a refinement pass.
 
 ### Agents (spawned for parallel work)
