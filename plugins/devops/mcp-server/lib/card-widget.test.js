@@ -312,17 +312,19 @@ describe("cardWidgetInstruction", () => {
     expect(cardWidgetInstruction(null, "", desktop)).toBe("");
   });
 
-  test("names the widget tool, the BEFORE-the-card order, the visible-title fallback, and carries the HTML verbatim", () => {
-    const model = baseModel();
+  test("names the widget tool, the last-action rule, the visible-title fallback, and carries the HTML verbatim", () => {
+    const model = baseModel({ title: "Fertig" });
     const text = cardWidgetInstruction(model, "", desktop);
     expect(text.startsWith("[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
     expect(text).toContain("mcp__visualize__show_widget");
-    expect(text).toMatch(/BEFORE outputting the card markdown/);
-    expect(text).toMatch(/never call it after the card/);
-    // #443: the markdown under the widget is a marker comment, so a failed
-    // widget call must not leave the turn with nothing visible.
+    // The widget is the whole card: last action, no markdown after it (#443, #470).
+    expect(text).toMatch(/as the LAST action of the turn/);
+    expect(text).toMatch(/there is no card markdown to output/);
+    expect(text).toMatch(/Output NO text after the call/);
+    // A failed widget call must not leave the turn with nothing visible.
     expect(text).toMatch(/no retry, no note/);
     expect(text).toMatch(/output the visible title line/);
+    expect(text).toContain(`### **✨✨✨ ${model.title} ✨✨✨**`);
     expect(text).not.toMatch(/skip silently/);
     const html = cardWidgetHtml(model, "");
     expect(text).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
@@ -336,9 +338,9 @@ describe("cardWidgetInstruction", () => {
     expect(text).toMatch(/never a shortcut/);
   });
 
-  test("forbids a prose recap of the card between widget and marker, keeps room for side questions", () => {
+  test("forbids a prose recap of the card before the widget, keeps room for side questions", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
-    expect(text).toMatch(/No prose between the widget and the marker comment that restates the card/);
+    expect(text).toMatch(/No prose before the widget that restates the card/);
     expect(text).toMatch(/only answers to side questions or other topics of the user's prompt/);
   });
 

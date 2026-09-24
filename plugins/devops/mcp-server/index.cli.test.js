@@ -27,7 +27,7 @@ vi.setConfig({ testTimeout: 30_000 });
 
 // Never spawn the headless usage scraper (Edge) from a unit test. Pin the
 // terminal entrypoint: a run started from a Desktop session inherits
-// `claude-desktop`, where the markdown is the title line only (§ 4) — the
+// `claude-desktop`, where stdout stays empty (the widget is the card, § 4) — the
 // Desktop cases override it explicitly.
 const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", CLAUDE_CODE_ENTRYPOINT: "cli" };
 
@@ -132,21 +132,17 @@ describe("--render-card CLI fallback", () => {
     const terminal = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "cli" });
     expect(terminal.stderr).not.toContain("CARD WIDGET");
     // The terminal gets the whole markdown body; on Desktop the widget draws
-    // the whole card, so the markdown is the ✨ marker alone — as a [//]: # (…)
-    // markdown comment the renderer hides (§ 4; an HTML comment, #443, showed as text). 2026-09-21: widget + full
-    // markdown showed the card twice; then widget + visible title line read
-    // as a second, empty card header under the widget.
+    // the whole card and nothing is relayed under it (§ 4). 2026-09-21: widget
+    // + full markdown showed the card twice; widget + visible title line read
+    // as a second, empty card header; every hidden marker (HTML comment #443,
+    // `[//]: #` definition #470) showed as a literal stray line.
     expect(terminal.stdout).toMatch(/^› y$/m);
     expect(terminal.stdout).toMatch(/^## 📦 Shippen\?$/m);
     expect(terminal.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
-    expect(desktop.stdout).not.toMatch(/^› /m);
-    expect(desktop.stdout).not.toMatch(/^## /m);
-    expect(desktop.stdout).not.toMatch(/^### /m);
-    expect(desktop.stdout).not.toContain("&nbsp;");
-    expect(desktop.stdout).not.toContain("---");
-    expect(desktop.stdout.trim().split("\n").filter(Boolean)).toEqual(["[//]: # (✨✨✨ CTA-Test ✨✨✨)"]);
-    const parens = await renderCardFull({ ...payload, summary: "Fix (x)" }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(parens.stdout.trim()).toBe("[//]: # (✨✨✨ Fix \\(x\\) ✨✨✨)");
+    expect(desktop.stdout.trim()).toBe("");
+    expect(desktop.stderr).toContain("this card has no markdown to relay");
+    // The failed-call fallback line names the title.
+    expect(desktop.stderr).toContain("`### **✨✨✨ CTA-Test ✨✨✨**`");
     // The widget carries the title and the body instead.
     expect(desktop.stderr).toContain('<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">CTA-Test</h3>');
     expect(desktop.stderr).toContain("Shippen?");

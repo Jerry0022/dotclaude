@@ -43,10 +43,10 @@ Two visual blocks. Nothing between them, nothing under the second one.
 
 - `### **✨✨✨ … ✨✨✨**` stays exactly as today in the terminal — it is the
   marker the card-guard detects. Bold H3. On Desktop, where the widget is the
-  visible card, the same marker is emitted as a markdown comment
-  (`[//]: # (✨✨✨ … ✨✨✨)`, § 4): invisible in the turn, present in the
-  transcript the guard reads. (An HTML comment, #443, rendered as literal
-  text on Desktop.)
+  whole card, no markdown is output at all (§ 4): the guard reads the
+  card-body `show_widget` call instead. (Both hidden markers tried before —
+  an HTML comment, #443, and a `[//]: #` definition, #470 — rendered as
+  literal text in the Desktop chat.)
 - Content: the **outcome** of the turn, ≤ 60 chars. Never status ("agents
   running", "waiting", "pending", "noch nicht") — status belongs in the
   decision heading. Never a version or pipeline word ("gemergt", "shipped").
@@ -201,19 +201,20 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 ## 4. Desktop widget vs. terminal
 
 - **Desktop:** the whole card is ONE `mcp__visualize__show_widget` call (the
-  "card body widget"), rendered immediately before the markdown is output —
-  and that markdown is the **marker alone, as a markdown comment**
-  (`[//]: # (✨✨✨ {title} ✨✨✨)` — a link reference definition, which renders
-  to nothing; `\`, `(`, `)` in the title are backslash-escaped. The HTML
-  comment of #443 showed as literal text): it is the card-guard marker and the
-  transcript record, and the Desktop renderer hides it, so the widget is the
-  one visible rendering of the card. (Until 0.184.0 the markdown was the
-  visible title line — `&nbsp;` · `---` · `### **✨✨✨ {title} ✨✨✨**` ·
-  `---` — which read as a second, empty card header under the widget on
-  every turn.) The visible ✨ line is suppressed ONLY on this widget path:
-  a variant without a widget body, or a widget call that fails (Claude then
-  prints the visible `### **✨✨✨ {title} ✨✨✨**` line instead of the
-  comment), keeps the ✨ headline as before. That title line is the error
+  "card body widget"), made as the **last action of the turn, with no card
+  markdown at all** — the tool result carries no markdown block, and no text
+  may follow the widget. card-guard reads the card from that call instead
+  (`lastAssistantCardText`: a card-body `show_widget` that ends the turn
+  stands in as `✨✨✨ {title} ✨✨✨`, the title taken from the widget's h3).
+  Every hidden-markdown marker tried before showed as a stray literal line
+  under the widget in the Desktop chat: an HTML comment (#443) and a
+  `[//]: # (…)` link reference definition (#470). (Until 0.184.0 the
+  markdown was the visible title line — `&nbsp;` · `---` ·
+  `### **✨✨✨ {title} ✨✨✨**` · `---` — which read as a second, empty card
+  header under the widget on every turn.) The visible ✨ line stays ONLY
+  off this widget path: a variant without a widget body, or a widget call
+  that fails (Claude then prints the visible `### **✨✨✨ {title} ✨✨✨**`
+  line), keeps the ✨ headline as before. That title line is the error
   path only, never a shortcut (#451): every Desktop render also saves the
   widget HTML to `<tmp>/dotclaude-devops-card-widget-<session>` and names
   it in the `[CARD WIDGET]` block, and `stop.flow.guard` blocks a card turn
