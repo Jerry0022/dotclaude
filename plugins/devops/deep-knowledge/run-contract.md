@@ -37,6 +37,13 @@ prompts arm from their `key=value` pairs; over an active contract they only
 refresh ship / passes / strict / items / presence — never the mode (except
 `RUN_BACKLOG_AUTOSTART` → backlog), so events and segments survive every wake.
 
+A devops skill the user TYPES as a slash command — `/auto-harden`,
+`/auto-polish`, `/do-ship`, `/auto-agents`, `/auto-issue`, with or without the
+`devops:` prefix — never reaches the Skill tool, so `prompt.run.contract.js`
+records it as the same `skill` event the Skill-tool path would; a typed
+`/do-run` or `/auto-concept` also clears a pending do-batch hand-off marker,
+the same take-over the Skill-tool path already does.
+
 Every header and marker is **session-bound**: it gates, arms and shows on
 the card only for the session whose `session_id` it stores (Claude Desktop
 copies the main checkout's untracked `.claude/` into every new worktree, so
@@ -83,7 +90,18 @@ Commands are normalised first (`&`, `git.exe`, `--no-pager`, `-C`, `-c`).
 Release / card gates use the contract of the session root, else of
 `tool_input.cwd`. The check exits fast (existence checks only) when no
 contract and no marker exist; the remaining cost is the one `node` spawn
-every matched call pays.
+every matched call pays. A refused call writes a `block` event (`gate`, the
+open obligation names) before it exits 2 — a lasting trace beyond the stderr
+message; it counts as neither work nor a segment boundary.
+
+## Limits
+
+A contract exists only after do-run's router answered, or a machine prompt
+armed one. Work that meets do-run's own criteria but that never went through
+do-run (or a machine-prompt run) is not gated at all — outside an active run
+the delegation policy stays advisory (a kill switch, not a gate) and the
+trigger router only suggests a skill. The one place outside a run that still
+forces a skill is the do-batch hand-off gate below.
 
 ## CLI: status, skip, park, abort, done, batch-clear
 
@@ -120,11 +138,12 @@ goes with `batch-clear --reason`, which the block names with the kill switch.
 ## The answer-check
 
 After every `AskUserQuestion`, `hooks/post-tool-use/post.ask.answers.js`
-checks for an answer token that equals an "Other" placeholder (`Something
-else`, `Sonstiges`, …) with no typed text — that combination means the user
-wanted something the options did not offer, not that they picked nothing.
-It injects a context note telling the model to ask what, in one more
-question, before acting on that answer.
+checks for an answer token that equals an "Other" placeholder (the one list,
+`run-contract.js` `OTHER_PLACEHOLDERS`: `Something else`, `Other`, `Etwas
+anderes`, `Sonstiges`, `andere`, …) with no typed text — that combination
+means the user wanted something the options did not offer, not that they
+picked nothing. It injects a context note telling the model to ask what, in
+one more question, before acting on that answer.
 
 ## Kill switch and state
 

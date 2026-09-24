@@ -314,3 +314,49 @@ describe("batch hand-off gate (spec E)", () => {
     expect(run("Edit", { file_path: f("src/a.ts") }).code).toBe(0);
   });
 });
+
+describe("AUD-001: a failed fallback arm keeps the pending marker", () => {
+  test("arm() write failure (rename onto an existing directory) leaves the marker for the next call to retry", () => {
+    RC.markPendingArm(dir, { args: "" });
+    // Force arm()'s temp+rename write to fail: the target path is a directory.
+    fs.mkdirSync(path.join(dir, ".claude", "run-contract.json"));
+    const r = run("Edit", { file_path: f("src/a.js") });
+    expect(r.code).toBe(0); // no contract could be armed → not gated (yet)
+    expect(fs.existsSync(path.join(dir, ".claude", "run-contract.pending"))).toBe(true);
+    expect(RC.readRawContract(dir)).toBeNull();
+  });
+});
+
+describe("AUD-004: a refused call records a block event", () => {
+  test("a gate refusal writes a `block` event that changes neither segments nor obligations", () => {
+    armPrompt();
+    const before = RC.segments(RC.readContract(dir), RC.events(dir)).length;
+    const r = run("Edit", { file_path: f("src/a.js") });
+    expect(r.code).toBe(2);
+    const evs = RC.events(dir);
+    const blockEv = evs.find((e) => e.k === "block");
+    expect(blockEv).toMatchObject({ gate: "edit", open: ["auto-agents"] });
+    const after = RC.segments(RC.readContract(dir), evs).length;
+    expect(after).toBe(before);
+    expect(RC.segmentHasWork(RC.currentSegment(RC.readContract(dir), evs))).toBe(false);
+  });
+
+  test("the batch hand-off block also records a `block` event when a contract is active", () => {
+    armPrompt();
+    RC.markBatchHandoff(dir, {});
+    const r = run("Edit", { file_path: f("src/a.ts") });
+    expect(r.code).toBe(2);
+    expect(RC.events(dir).some((e) => e.k === "block" && e.gate === "batch")).toBe(true);
+  });
+});
+
+describe("AUD-007: an unsafe qa diff base is never trusted", () => {
+  test("a base starting with `-` (flag injection) is rejected — auto-detected base used instead, no file written", () => {
+    armPrompt({ ship: "auto" });
+    ev({ k: "edit" });
+    const evil = f("evil-output.txt");
+    const r = run(SHIP, { body: "", base: `--output=${evil}` });
+    expect(r.code).toBe(2); // still gated (auto-agents/harden/polish/qa/do-ship open) — the point is nothing was written
+    expect(fs.existsSync(evil)).toBe(false);
+  });
+});

@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @module run-contract
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description State, answer parsing, obligations and CLI of the do-run RUN
  *   CONTRACT: what the user chose in the do-run router (passes, ship mode,
@@ -21,17 +21,19 @@
  *   Every fs error is swallowed and behaves as "no contract".
  *   Kill switch: DOTCLAUDE_RUN_CONTRACT=off → no contract, no marker, no gate.
  *
- * Exports (the hook wave imports these names):
- *   FILES, OBLIGATIONS, GATES, DEFAULT_HEADER               constants
+ * Exports (the hook wave imports these names; AUD-015c: kept in sync with the
+ * bottom `module.exports` — grep there for the full, exact list):
+ *   FILES, OBLIGATIONS, GATES, DEFAULT_HEADER, OTHER_PLACEHOLDERS   constants
  *   disabled()                                    → boolean  kill switch on
  *   contractPath(cwd) / eventsPath(cwd) / prevPath(cwd) / pendingPath(cwd) / batchHandoffPath(cwd) → string
  *   readContract(cwd, {now})                      → header | null (active only)
  *   readContractForCard(cwd, {now})               → header | null (active, or closed ≤ 15 min ago)
  *   readRawContract(cwd)                          → header | null (as on disk, no checks)
+ *   claim(cwd, sessionId, {now})                  → header | null (adopts a session-less fresh contract)
  *   arm(cwd, header, {now})                       → header | null (archives an existing one)
  *   update(cwd, patch, {now})                     → header | null
- *   record(cwd, event, {now})                     → event | null (adds t, c; dedupes edit runs)
- *   close(cwd, reason, {aborted, now})            → header | null
+ *   record(cwd, event, {now})                     → event | null (adds t, c; dedupes edit/measure runs; retries once)
+ *   close(cwd, reason, {aborted, now})             → header | null
  *   events(cwd)                                   → event[] of the current contract
  *   markPendingArm(cwd, {sessionId, args, now}) / pendingArm(cwd, {now}) / clearPendingArm(cwd)
  *   markBatchHandoff(cwd, {sessionId, now}) / batchHandoffPending(cwd, {now}) / clearBatchHandoff(cwd)
@@ -40,6 +42,7 @@
  *   parseRouterAnswers(questions, answers, {doRunArgs}) → header fields | null
  *   parseFollowUp(questions, answers)             → patch | null
  *   parseMachinePrompt(text)                      → header fields | null
+ *   machinePatch(active, text)                    → patch (a machine prompt over an active contract)
  *   skillName(raw)                                → current skill name
  *   segments(contract, events)                    → event[][]
  *   currentSegment(contract, events)              → event[]
@@ -379,11 +382,21 @@ function record(cwd, event, opts = {}) {
   }
   ev.t = new Date(now).toISOString();
   ev.c = h.id;
+  const line = JSON.stringify(ev) + '\n';
+  const file = eventsPath(cwd);
   try {
-    fs.mkdirSync(path.dirname(eventsPath(cwd)), { recursive: true });
-    fs.appendFileSync(eventsPath(cwd), JSON.stringify(ev) + '\n', 'utf8');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, line, 'utf8');
     return ev;
-  } catch { return null; }
+  } catch {
+    // One retry after a short sleep (AUD-009: Windows EPERM/EBUSY from AV /
+    // indexer must not silently drop a skill event).
+    try {
+      sleepSync(50);
+      fs.appendFileSync(file, line, 'utf8');
+      return ev;
+    } catch { return null; }
+  }
 }
 
 /**
@@ -403,7 +416,7 @@ function close(cwd, reason, opts = {}) {
     closeReason: reason ? String(reason) : (opts.aborted ? 'aborted' : 'done'),
     aborted: !!opts.aborted,
   };
-  return writeJsonAtomic(contractPath(cwd), next) ? next : null;
+  return writeJsonRetry(contractPath(cwd), next) ? next : null;
 }
 
 // ── markers ────────────────────────────────────────────────────────────────
@@ -674,7 +687,10 @@ function parseRouterAnswers(questions, answers, opts = {}) {
   return out;
 }
 
-const PLACEHOLDER_RE = /^(something else|other|etwas anderes|sonstiges|andere)$/i;
+// AUD-015d: the ONE list of "Other" placeholder tokens — post.ask.answers.js
+// (spec F) imports this instead of keeping its own, so the two never drift.
+const OTHER_PLACEHOLDERS = Object.freeze(['something else', 'other', 'etwas anderes', 'sonstiges', 'andere']);
+const PLACEHOLDER_RE = new RegExp(`^(${OTHER_PLACEHOLDERS.join('|')})$`, 'i');
 const NONE_RE = /^(keine?|none|nichts|no|no passes)(\s+(durchgänge|passes))?$/i;
 const NEG_RE = /^(?:ohne|kein(?:e|en)?|without|no)\s+(.+)$/i;
 
@@ -1032,14 +1048,16 @@ function queuedArg(contract, allEvs) {
 
 function fixFor(contract, ob, allEvs, item) {
   switch (ob) {
-    case 'auto-agents':
-      return `Skill("devops:auto-agents", "--from=do-run --ship=${contract.ship} <task>")`;
+    case 'auto-agents': {
+      const mode = contract.flow === 'autonomous' ? 'background' : 'interactive';
+      return `Skill("devops:auto-agents", "--from=do-run --ship=${contract.ship} --mode=${mode} <task>")`;
+    }
     case 'harden': return `Skill("devops:auto-harden", "${invokedBy(contract)}")`;
     case 'polish': return `Skill("devops:auto-polish", "${invokedBy(contract)}")`;
     case 'qa': return 'Agent({ subagent_type: "devops:qa", prompt: "<verify this item\'s change>" })';
     case 'do-ship':
       return (contract.mode === 'backlog'
-        ? `Skill("devops:do-ship", "${queuedArg(contract, allEvs)}")`
+        ? `Skill("devops:do-ship", "${queuedArg(contract, allEvs)} --keep")`
         : 'Skill("devops:do-ship")') + '   ← never the ship_* MCP tools directly';
     case 'refine': return `Skill("devops:auto-issue", "#${item} <refine before shipping>")`;
     case 'triage': return 'Agent(...) pre-triage agents per do-run modes/backlog.md Step 2';
@@ -1345,7 +1363,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  FILES, OBLIGATIONS, GATES, DEFAULT_HEADER,
+  FILES, OBLIGATIONS, GATES, DEFAULT_HEADER, OTHER_PLACEHOLDERS,
   EXPIRY_INTERACTIVE_H, EXPIRY_AUTONOMOUS_H, CARD_GRACE_MS, PENDING_MAX_MS, BATCH_MAX_MS,
   disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath,
   FOREIGN_GRACE_MS, MERGE_WINDOW_MS,

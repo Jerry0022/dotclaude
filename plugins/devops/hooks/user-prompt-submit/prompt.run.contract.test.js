@@ -67,3 +67,55 @@ describe("prompt.run.contract", () => {
     expect(RC.readRawContract(dir)).toBeNull();
   });
 });
+
+describe("AUD-002: a typed devops slash command records a skill event", () => {
+  test("typed /auto-harden on an active contract records a skill event", () => {
+    RC.arm(dir, { mode: "prompt" }, { sessionId: "s" });
+    const r = run("/auto-harden --invoked-by=do-run");
+    expect(r).toMatchObject({ code: 0, stdout: "" });
+    const evs = RC.events(dir);
+    expect(evs).toContainEqual(expect.objectContaining({ k: "skill", name: "auto-harden", args: "--invoked-by=do-run" }));
+  });
+
+  test("devops:do-ship prefix form and the harness <command-name> form both record", () => {
+    RC.arm(dir, { mode: "backlog" }, { sessionId: "s" });
+    run("/devops:do-ship --queued=1/1");
+    expect(RC.events(dir)).toContainEqual(expect.objectContaining({ k: "skill", name: "do-ship" }));
+
+    RC.arm(dir, { mode: "backlog" }, { sessionId: "s" });
+    run("<command-name>/devops:auto-agents</command-name><command-args>--from=do-run #473</command-args>");
+    expect(RC.events(dir)).toContainEqual(expect.objectContaining({ k: "skill", name: "auto-agents", args: "--from=do-run #473" }));
+  });
+
+  test("no active contract → no event, no crash", () => {
+    const r = run("/auto-polish");
+    expect(r.code).toBe(0);
+    expect(RC.readRawContract(dir)).toBeNull();
+  });
+
+  test("a non-devops typed slash command is ignored", () => {
+    const r = run("/help");
+    expect(r).toMatchObject({ code: 0, stdout: "", stderr: "" });
+    expect(fs.readdirSync(path.join(dir, ".claude"))).toEqual([]);
+  });
+});
+
+describe("AUD-003: a typed do-run / auto-concept clears a pending batch hand-off", () => {
+  test("typed /do-run clears the marker", () => {
+    RC.markBatchHandoff(dir, { sessionId: "s" });
+    run("/do-run backlog");
+    expect(RC.batchHandoffPending(dir, { sessionId: "s" })).toBeNull();
+  });
+
+  test("typed /auto-concept clears the marker", () => {
+    RC.markBatchHandoff(dir, { sessionId: "s" });
+    run("/auto-concept --from=do-batch some idea");
+    expect(RC.batchHandoffPending(dir, { sessionId: "s" })).toBeNull();
+  });
+
+  test("an unrelated typed command leaves the marker alone", () => {
+    RC.markBatchHandoff(dir, { sessionId: "s" });
+    run("/auto-harden");
+    expect(RC.batchHandoffPending(dir, { sessionId: "s" })).toBeTruthy();
+  });
+});

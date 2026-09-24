@@ -1,13 +1,14 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
  *   call the same way. Pure parsing plus two small fs reads (card payload,
  *   transcript tail); no git, no contract state.
  *
+ *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS   constants
  *   commandFacts(cmd)          → {commit, branch, branchName, renderCard, worktree, detach, release}
  *   toolFilePath(tool, input)  → string | null
  *   isGatedPath(root, cwd, p)  → boolean (inside the work tree, not exempt)
@@ -15,9 +16,10 @@
  *   cardFacts(input)           → {variant, final}
  *   readCardPayload(file, cwd) → object | null
  *   releaseResult(response)    → {ok, merged} | null
- *   routerFromTranscript(transcriptPath, sinceIso) → {questions, answers, followUps[]} | null
+ *   routerFromTranscript(transcriptPath, sinceIso, RC) → {questions, answers, followUps[]} | null
  *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
  *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
+ *   stripQuotes(cmd) / gitOut(root, args) / readTail(file)   helpers (AUD-015c: kept in sync with module.exports)
  */
 
 const fs = require('fs');
@@ -52,18 +54,32 @@ const PUSH_MAIN_RE = /(^|\s)(?:[^\s:]*:)?(?:refs\/heads\/)?(main|master)(\s|$)/;
 /**
  * Facts of a Bash / PowerShell command line.
  * @param {string} cmd
- * @returns {{commit:boolean, branch:boolean, branchName:string|null, renderCard:string|null}}
+ * @returns {{commit:boolean, branch:boolean, branchName:string|null, renderCard:string|null, worktree:boolean, detach:boolean, release:boolean}}
  */
+const RENDER_CARD_FLAG_RE = /(^|\s)--render-card\b/;
+const RENDER_CARD_RE = /index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
+
 function commandFacts(cmd) {
   const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false };
   if (typeof cmd !== 'string' || !cmd.trim()) return out;
-  const rc = cmd.match(/index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
-  if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
   const segs = stripQuotes(cmd).split(/&&|\|\||[;|\n]/);
   const rawSegs = cmd.split(/&&|\|\||[;|\n]/);
   segs.forEach((seg, i) => {
     const bare = bareSegment(seg);
     if (GH_MERGE_RE.test(bare)) out.release = true;
+    // AUD-008: the --render-card FLAG must be a real, unquoted token on the
+    // quote-stripped segment (so `grep "index.js --render-card x" file` —
+    // both inside one quoted string — never matches). The renderer's own
+    // path may legitimately be quoted (Windows paths with spaces), so
+    // `index.js` is looked up on the RAW segment instead, and the payload
+    // path is also read from the RAW segment (as :76 does for branch names).
+    if (!out.renderCard && RENDER_CARD_FLAG_RE.test(bare)) {
+      const rawSeg = rawSegs.length === segs.length ? rawSegs[i] : seg;
+      if (/index\.js/i.test(rawSeg)) {
+        const rc = rawSeg.match(RENDER_CARD_RE);
+        if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
+      }
+    }
     const m = bare.match(GIT_RE);
     if (!m) return;
     const sub = m[1];

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.run.contract
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Arm, refresh or pre-arm the do-run RUN CONTRACT from the prompt
@@ -37,16 +37,60 @@ function doRunSlashArgs(text) {
   return m ? m[1].trim() : null;
 }
 
+// AUD-002: devops skills a user TYPES as a slash command, other than do-run /
+// auto-concept (armed separately above / cleared below). A typed invocation
+// never reaches the Skill tool, so without this the obligation it satisfies
+// never records and stays open even though the pass ran.
+const RECORDED_COMMANDS = new Set(['auto-harden', 'auto-polish', 'do-ship', 'auto-agents', 'auto-issue']);
+const TYPED_CMD_RE = /^\s*\/(?:devops:)?([\w-]+)\b([\s\S]*)$/;
+
+/** Every devops slash-command name + args in the prompt text (typed `/x args`
+ *  form, and the harness `<command-name>…<command-args>` form). Not filtered
+ *  to RECORDED_COMMANDS — callers decide what a name means. */
+function commandsIn(text) {
+  if (typeof text !== 'string' || !text) return [];
+  const out = [];
+  const typed = text.match(TYPED_CMD_RE);
+  if (typed) {
+    out.push({ name: typed[1].toLowerCase(), args: typed[2].trim() });
+    return out; // a typed prompt is exactly one slash command
+  }
+  if (!text.includes('<command-name>')) return out;
+  const { COMMAND_NAME_RE, COMMAND_ARGS_AFTER_RE } = require('../lib/skill-invocations');
+  for (const m of text.matchAll(COMMAND_NAME_RE)) {
+    const raw = m[1].replace(/^\//, '').toLowerCase();
+    const name = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 2000);
+    const a = COMMAND_ARGS_AFTER_RE.exec(after);
+    out.push({ name, args: a ? a[1].trim() : '' });
+  }
+  return out;
+}
+
 function main(hook) {
   const text = hook.prompt || hook.user_message || hook.message || '';
   if (typeof text !== 'string') return;
   const slashArgs = doRunSlashArgs(text);
-  if (slashArgs === null && !MACHINE_RE.test(text)) return;
+  const cmds = commandsIn(text);
+  const hasAutoConcept = cmds.some(c => c.name === 'auto-concept');
+  const recorded = cmds.filter(c => RECORDED_COMMANDS.has(c.name));
+  if (slashArgs === null && !hasAutoConcept && !recorded.length && !MACHINE_RE.test(text)) return;
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return;
   const { projectRoot } = require('../lib/project-root');
   const root = projectRoot(hook.cwd || process.cwd());
   const sessionId = hook.session_id || null;
+  const s = { sessionId };
+
+  // AUD-003: a typed do-run / auto-concept takes over a pending do-batch plan
+  // just like the Skill-tool path does — clear the hand-off marker.
+  if ((slashArgs !== null || hasAutoConcept) && RC.batchHandoffPending(root, s)) RC.clearBatchHandoff(root);
+
+  // AUD-002: record each typed devops command as a `skill` event on the
+  // active contract of THIS session, same as a Skill-tool call would.
+  for (const c of recorded) {
+    if (RC.readContract(root, s)) RC.record(root, { k: 'skill', name: c.name, args: c.args }, s);
+  }
 
   if (slashArgs !== null) {
     RC.markPendingArm(root, { sessionId, args: slashArgs });
@@ -54,9 +98,9 @@ function main(hook) {
   }
   const fields = RC.parseMachinePrompt(text);
   if (!fields) return;
-  const active = RC.readContract(root, { sessionId });
+  const active = RC.readContract(root, s);
   if (active) {
-    RC.update(root, RC.machinePatch(active, text), { sessionId });
+    RC.update(root, RC.machinePatch(active, text), s);
   } else {
     RC.arm(root, { ...fields, modeFrom: 'machine', sessionId });
   }
@@ -76,4 +120,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { doRunSlashArgs };
+module.exports = { doRunSlashArgs, commandsIn };

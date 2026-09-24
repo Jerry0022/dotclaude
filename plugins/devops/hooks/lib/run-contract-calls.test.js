@@ -40,6 +40,15 @@ describe("commandFacts", () => {
     expect(C.commandFacts("node index.js --render-card /tmp/c.json").renderCard).toBe("/tmp/c.json");
     expect(C.commandFacts("node other.js --render-card x").renderCard).toBeNull();
   });
+
+  test("AUD-008: --render-card inside a quoted string (unrelated command) is never mistaken for the renderer", () => {
+    expect(C.commandFacts('grep "index.js --render-card x" file.txt').renderCard).toBeNull();
+    expect(C.commandFacts('echo "run node index.js --render-card /tmp/c.json manually"').renderCard).toBeNull();
+  });
+
+  test("AUD-008: a quoted renderer path (Windows path with spaces) is still found", () => {
+    expect(C.commandFacts('node "C:/p/mcp server/index.js" --render-card "C:/t/card one.json"').renderCard).toBe("C:/t/card one.json");
+  });
 });
 
 describe("isGatedPath", () => {
