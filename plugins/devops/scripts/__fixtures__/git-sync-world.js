@@ -64,6 +64,11 @@ const GIT_ENV = {
   GIT_CONFIG_COUNT: "1",
   GIT_CONFIG_KEY_0: "commit.gpgsign",
   GIT_CONFIG_VALUE_0: "false",
+  // Load tolerance (#475): the sync's own 15 s per-git-call budget is sized
+  // for an idle machine. Under parallel test load a real merge outran it and
+  // the sync reported ✗ for a merge that was fine. The test's own 60 s
+  // timeout stays the outer bound.
+  DEVOPS_GIT_SYNC_TIMEOUT_MS: "55000",
 };
 
 export async function git(cwd, args) {
