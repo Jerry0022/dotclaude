@@ -651,3 +651,113 @@ describe("help — the long form, free of charge while collecting", () => {
     expect(r.stderr).toContain("auch nach dem Auto-Ende");
   });
 });
+
+// ---------------------------------------------------------------------------
+// #490 — Desktop-app images: no marker in the prompt, saved by the harness to
+// <tmp>/claude/<slug>/<session_id>/images/ when the prompt is submitted.
+// ---------------------------------------------------------------------------
+
+describe("mode on — a pasted Desktop image is kept with its note (#490)", () => {
+  const SID = "0f1e2d3c-aaaa-bbbb-cccc-490490490490";
+  let tmpRoot;
+  let imagesDir;
+
+  /** The spawned hook's os.tmpdir() → the fake harness temp root. */
+  const tmpEnv = () => ({ TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot });
+
+  beforeEach(() => {
+    activate(cwd, { marker: ">>" });
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-img-tmp-"));
+    imagesDir = path.join(tmpRoot, "claude", "C--some-project", SID, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
+
+  test("the image saved at submit time is copied and named in the note", () => {
+    fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
+    const r = runHook({ prompt: "siehe Bild in rot eingezeichnet", session_id: SID }, tmpEnv());
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("Das Bild ist mit der Notiz gespeichert");
+    const [note] = readNotes(cwd);
+    expect(note.text).toContain("siehe Bild in rot eingezeichnet");
+    const line = note.text.split("\n").find(l => l.startsWith("[Anhang-Datei] "));
+    expect(line).toBeTruthy();
+    const copy = line.slice("[Anhang-Datei] ".length);
+    expect(copy).toContain(path.join(".claude", "batch-assets"));
+    expect(fs.readFileSync(copy, "utf8")).toBe("png-bytes");
+  });
+
+  test("an image already taken by an earlier note is not attached twice", () => {
+    fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
+    runHook({ prompt: "erste Notiz mit Bild", session_id: SID }, tmpEnv());
+    runHook({ prompt: "zweite Notiz ohne Bild", session_id: SID }, tmpEnv());
+    const notes = readNotes(cwd);
+    expect(notes).toHaveLength(2);
+    expect(notes[1].text).toBe("zweite Notiz ohne Bild");
+  });
+
+  test("an old image of the session is not attached to a new note", () => {
+    const old = path.join(imagesDir, "1.png");
+    fs.writeFileSync(old, "png-bytes");
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(old, past, past);
+    runHook({ prompt: "nur Text", session_id: SID }, tmpEnv());
+    expect(readNotes(cwd)[0].text).toBe("nur Text");
+  });
+
+  test("the merge matches a note stored without its image by timestamp", () => {
+    const at = Date.now() - 30_000;
+    appendNote(cwd, "siehe Screenshot", at);
+    const img = path.join(imagesDir, "2.webp");
+    fs.writeFileSync(img, "webp-bytes");
+    fs.utimesSync(img, new Date(at), new Date(at));
+    const r = runHook({ prompt: ">> leg los", session_id: SID }, { ...tmpEnv(), DEVOPS_BATCH_NO_SYNC: "1" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("siehe Screenshot");
+    expect(r.stdout).toContain("[Anhang-Datei] ");
+    expect(r.stdout).toContain(".webp");
+    // The notes file itself is left as the user wrote it.
+    expect(fs.readFileSync(path.join(cwd, ".claude", "batch.md"), "utf8")).not.toContain("[Anhang-Datei]");
+  });
+
+  test("without a session images folder the note is stored as before", () => {
+    const r = runHook({ prompt: "kein Bild", session_id: "no-such-session" }, tmpEnv());
+    expect(r.code).toBe(2);
+    expect(r.stderr).not.toContain("Bild ist mit der Notiz");
+    expect(readNotes(cwd)[0].text).toBe("kein Bild");
+  });
+});
+
+describe("merge fallback marks an uncertain image match (#490)", () => {
+  const SID = "0f1e2d3c-aaaa-bbbb-cccc-490490490491";
+  let tmpRoot;
+
+  beforeEach(() => {
+    activate(cwd, { marker: ">>" });
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-img-tmp-"));
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
+
+  test("an image 10 s from its nearest note is attached with a check-this hint", () => {
+    const imagesDir = path.join(tmpRoot, "claude", "C--some-project", SID, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+    const at = Date.now() - 120_000;
+    appendNote(cwd, "siehe Bild", at);
+    const img = path.join(imagesDir, "1.png");
+    fs.writeFileSync(img, "png-bytes");
+    fs.utimesSync(img, new Date(at - 10_000), new Date(at - 10_000));
+    const r = runHook(
+      { prompt: ">> leg los", session_id: SID },
+      { TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot, DEVOPS_BATCH_NO_SYNC: "1" },
+    );
+    expect(r.stdout).toContain("[Anhang-Datei] ");
+    expect(r.stdout).toContain("10 s Abstand");
+    expect(r.stdout).toContain("prüfen");
+  });
+});

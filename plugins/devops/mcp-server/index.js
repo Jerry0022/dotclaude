@@ -331,12 +331,44 @@ function hasBody(variant) { return variant !== 'test-minimal'; }
  * Resolve the GitHub HTTPS base URL from the git remote origin.
  * Returns e.g. "https://github.com/owner/repo" or '' on failure.
  */
+const GIT_PROBE_OPTS = { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] };
+
+/**
+ * The repo's remote names, or null when the probe failed (not a repo, git
+ * missing, timeout) — a failed probe is never read as "no remote".
+ */
+function remoteNames(cwd) {
+  try {
+    return execSync('git remote', { ...GIT_PROBE_OPTS, cwd: cwd || undefined })
+      .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Card callers outside /do-ship never ran ship_preflight, so they rarely pass
+ * `state.mode`. Without it a local-only repo still got the Ship button and the
+ * push → PR → merge track (#500). Fill it in the way repo-mode.js decides it:
+ * a work tree whose `origin` is missing is `git-no-remote`. An explicit mode
+ * always wins; a failed probe changes nothing.
+ */
+function withDetectedRepoMode(params) {
+  const state = params.state || {};
+  if (state.mode) return;
+  const names = remoteNames(params.cwd);
+  if (state.delivered === 'local-commit-only' || (names && !names.includes('origin'))) {
+    params.state = { ...state, mode: 'git-no-remote' };
+  }
+}
+
 function getRepoUrl(cwd) {
   try {
-    const raw = execSync('git remote get-url origin', {
-      encoding: 'utf8', timeout: 5000,
-      cwd: cwd || undefined,
-    }).trim();
+    // A repo without an origin has no URL to link to — asking for it anyway
+    // printed "error: No such remote 'origin'" to stderr (#500).
+    const names = remoteNames(cwd);
+    if (!names || !names.includes('origin')) return '';
+    const raw = execSync('git remote get-url origin', { ...GIT_PROBE_OPTS, cwd: cwd || undefined }).trim();
     // SSH: git@github.com:owner/repo.git
     const sshMatch = raw.match(/git@github\.com:(.+?)(?:\.git)?$/);
     if (sshMatch) return 'https://github.com/' + sshMatch[1];
@@ -737,6 +769,16 @@ function renderPipelineLine(input, lang, buildId) {
   }
 
   const commitDone = !!(state.commit || state.pushed || state.merged);
+  // No remote: the track ends at the local commit — push, PR and merge have
+  // nowhere to go, so they are not drawn as pending steps (#500).
+  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
+  if (state.mode === 'git-no-remote') {
+    let local = (commitDone ? '✓' : '○') + ' commit · ' + (lang === 'en' ? 'local only, no remote' : 'nur lokal, kein Remote');
+    if (state.branch) local += ' · ' + state.branch;
+    // A local ship still bumps and commits the version.
+    if (version) local += ' · v' + String(version).replace(/^v/, '');
+    return local + ' · Build ' + buildId;
+  }
   const pushDone = !!(state.pushed || state.merged);
   const prDone = !!state.pr;
   const mergeDone = !!state.merged;
@@ -753,7 +795,6 @@ function renderPipelineLine(input, lang, buildId) {
 
   // A ring project shows its versions on the channel ladder line below; the
   // pipeline line then names no version of its own.
-  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
   if (version && !delivery.promote) line += ' · v' + String(version).replace(/^v/, '');
   line += ' · Build ' + buildId;
   return line;
@@ -865,6 +906,9 @@ function renderChannelLadderMd(ladder, lang) {
 const HEADINGS = {
   de: {
     ready: (c) => c.reservation ? `📦 Shippen trotz ${c.reservation}?` : '📦 Shippen?',
+    // No remote (#500): nothing to ship to — the work ends at the local commit.
+    'ready-local': (c) => c.reservation ? `📦 Lokal fertig trotz ${c.reservation} — noch etwas?` : '📦 Lokal fertig — noch etwas?',
+    'test-local': () => '🧪 Erst testen?',
     // Names what is actually red: failing tests, else unmet requirements,
     // else partially met ones — an unmet requirement is not a "red test".
     'ready-red': (c) => `⚠ Trotzdem shippen mit ${c.redTests
@@ -894,6 +938,8 @@ const HEADINGS = {
   },
   en: {
     ready: (c) => c.reservation ? `📦 Ship anyway despite ${c.reservation}?` : '📦 Ship?',
+    'ready-local': (c) => c.reservation ? `📦 Done locally despite ${c.reservation} — anything else?` : '📦 Done locally — anything else?',
+    'test-local': () => '🧪 Test first?',
     'ready-red': (c) => `⚠ Ship anyway with ${c.redTests
       ? c.redTests + ' red tests'
       : c.unmet
@@ -1234,7 +1280,12 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);
-  const fn = T[key] || T.fallback;
+  // Without a remote there is nothing to push, PR or merge, so the ready and
+  // test cards stop asking "ship?" and the widget drops their Ship button
+  // (#500). The keys that follow a ship attempt (ready-red, ship-blocked,
+  // vv-unverified, ship-compact) keep theirs: a local ship still commits.
+  const noShip = state.mode === 'git-no-remote' && (key === 'ready' || key === 'test');
+  const fn = T[noShip ? key + '-local' : key] || T.fallback;
   let heading = fn(ctx);
 
   const points = pointsForKey(input, key, lang);
@@ -1261,7 +1312,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
-  return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies };
+  return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip };
 }
 
 function readToolCallCount(sessionId) {
@@ -1363,6 +1414,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     buttonsKey: decision.buttonsKey,
     promoteVersion: decision.version || null,
     replies: decision.replies || [],
+    noShip: !!decision.noShip,
   };
 }
 
@@ -1647,6 +1699,9 @@ function normalizeCardParams(raw, { strictVariant = false } = {}) {
  * @returns {string} the card markdown
  */
 function buildCompletionCard(params) {
+  // 0a. Repo mode — before the variant guard, which routes git-no-remote.
+  withDetectedRepoMode(params);
+
   // 0. Variant guard — "ship-successful" is ONLY valid after ship_release ran
   //    (pushed + merged). A commit, push, or PR alone is NEVER ship-successful.
   //    Logic lives in lib/variant-guard.js so it is unit-testable without
