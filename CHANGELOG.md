@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.194.2] — 2026-09-24
+
+### Fixed
+- **No more false "heartbeat dead" with several sessions open.** Every session runs its own copy of each MCP server, but they all shared one PID file per server and deleted it on exit. When the first server exited, the hooks reported the others dead and told Claude to render the completion card offline first. Each server process now writes its own `dotclaude-mcp-<name>-<pid>.pid`, and one reader (`hooks/lib/mcp-heartbeat.js`) counts any live PID as alive. `mcp-status` and `pre.mcp.health` use that reader. The old single file is still written for one release and is removed only by the server that owns it.
+
 ## [0.194.1] — 2026-09-24
 
 ### Fixed
