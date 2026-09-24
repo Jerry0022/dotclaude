@@ -156,15 +156,25 @@ function renderSyncLines(sync) {
   const script = sync?.script || GIT_SYNC_SCRIPT;
   if (!sync) {
     lines.push(
-      `Kein Sync gelaufen. Führe ZUERST aus: node "${script}" — und behandle das`,
+      `Kein Sync gelaufen. Führe ZUERST aus: node "${script}" --explain — und behandle das`,
       'Ergebnis wie unten beschrieben, bevor du eine Notiz bewertest.',
     );
   } else if (!sync.ran) {
     lines.push(
       `Der Sync konnte im Hook nicht laufen (${sync.reason || 'unbekannt'}).`,
-      `Führe ZUERST aus: node "${script}" — erst danach die Notizen prüfen.`,
+      `Führe ZUERST aus: node "${script}" --explain — erst danach die Notizen prüfen.`,
     );
-  } else if (sync.output) {
+  } else if (/skipped:/.test(sync.output || '')) {
+    // --explain: the sync stepped aside (dirty overlap, detached HEAD, a merge
+    // or ship in progress). The branch may be behind main — never report that
+    // as "already contained".
+    lines.push(
+      `main (bzw. ein Eltern-Branch) wurde NICHT vollständig gemerged: ${sync.output}`,
+      'Behebe den genannten Grund ZUERST (z. B. WIP committen, Branch auschecken,',
+      `laufende Operation abschließen) und führe dann node "${script}" --explain aus —`,
+      'erst wenn main drin ist, die Notizen prüfen.',
+    );
+  } else if (sync.output && /[✓⚠✗]/.test(sync.output)) {
     lines.push(`Der Hook hat main gerade gemerged: ${sync.output}`);
     if (/[⚠✗]/.test(sync.output)) {
       lines.push(
@@ -175,7 +185,9 @@ function renderSyncLines(sync) {
     }
   } else {
     lines.push(
-      'main ist bereits enthalten — nichts zu mergen (oder Branch = main, kein Remote).',
+      sync.output
+        ? `main ist bereits enthalten — nichts zu mergen: ${sync.output}`
+        : 'main ist bereits enthalten — nichts zu mergen (oder Branch = main, kein Remote).',
     );
   }
   lines.push(
@@ -453,7 +465,8 @@ function syncMain(cwd) {
   // the result.
   delete env.DEVOPS_GIT_SYNC_RESULT_FILE;
   try {
-    const out = execFileSync(process.execPath, [script], {
+    // --explain: a skipped sync must say so, or it reads as "up to date".
+    const out = execFileSync(process.execPath, [script, '--explain'], {
       cwd,
       env,
       encoding: 'utf8',
