@@ -168,6 +168,15 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
   triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
   Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
+- **Prepared answer (`ready`)**: when the card has open points, the second
+  button is `Offenes abarbeiten` instead of `Ändern`. It puts the answer to
+  EVERY open point (also those folded into `+N weitere`) into the input box,
+  assuming the user wants them all tackled: each point's `reply`
+  (`open: [{ text, reply }]`, written as the user — "Ja, die Änderung bitte
+  auch in X machen."), else a plain "… Ja, bitte." / "… — bitte angehen."
+  One point → its answer alone; two or more → an intro line, a blank line
+  and one `- ` bullet per answer in card order. Final tests stay out — they
+  are the user's own steps. Without open points the button stays `Ändern`.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
 
@@ -175,7 +184,7 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
-| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern | |
+| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Offenes abarbeiten) | |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
 | `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | final tests | Promote / none | context line = distance to beta |

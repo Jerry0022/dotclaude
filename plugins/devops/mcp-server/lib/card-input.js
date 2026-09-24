@@ -186,7 +186,12 @@ export function validateCardInput(params) {
     : null);
 
   eachEntry(issues, "userTest", params.userTest, (u) => (isStr(u) ? null : "must be a string"));
-  eachEntry(issues, "open", params.open, (o) => (isStr(o) ? null : "must be a string"));
+  eachEntry(issues, "open", params.open, (o) =>
+    isStr(o) ? null
+    : !isObj(o) ? "must be a string or { text, reply? }"
+    : !isStr(o.text) ? "text must be a string"
+    : o.reply !== undefined && !isStr(o.reply) ? "reply must be a string"
+    : null);
 
   eachEntry(issues, "userFinalTest", params.userFinalTest, (u) =>
     isStr(u) ? null
@@ -247,7 +252,7 @@ export function formatIssues(issues) {
 export const CARD_FIELD_REFERENCE =
   'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
   'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
-  'userFinalTest: [string | { action, afterDeployment }] · open: [string] · ' +
+  'userFinalTest: [string | { action, afterDeployment }] · open: [string | { text, reply }] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 
 /**

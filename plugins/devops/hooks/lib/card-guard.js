@@ -589,7 +589,7 @@ function offlineRendererPath(pluginRoot) {
 const CARD_FIELD_REFERENCE =
   'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
   'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
-  'userFinalTest: [string | { action, afterDeployment }] · open: [string] · ' +
+  'userFinalTest: [string | { action, afterDeployment }] · open: [string | { text, reply }] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 
 /**

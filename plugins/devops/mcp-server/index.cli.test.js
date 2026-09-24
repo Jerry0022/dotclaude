@@ -190,6 +190,46 @@ describe("--render-card CLI fallback", () => {
     expect(released.stderr).toContain('data-prompt="promote stable 0.193.0"');
   });
 
+  // The ready card's second button answers the open points instead of asking
+  // "what do you want to change?" — every point, in card order, also those
+  // past the 3-point cap; the user's own final tests stay out.
+  test("ready with open points: the conclude button carries the prepared answers (Desktop)", async () => {
+    const payload = {
+      variant: "ready", summary: "Vorbehalte", lang: "de", session_id: "cli-test-conclude",
+      open: [
+        { text: "Soll die Änderung auch im Terminal-Renderer rein?", reply: "Ja, die Änderung bitte auch im Terminal-Renderer machen." },
+        "Doku zur Card nachziehen?",
+        "Alten Branch feat/x aufräumen",
+        { text: "Vierter Punkt", reply: "Vierten Punkt bitte auch erledigen." },
+      ],
+      userFinalTest: ["Im Desktop klicken"],
+    };
+    const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(stderr).toContain("Offenes abarbeiten ↗");
+    expect(stderr).not.toContain("Ändern ↗");
+    expect(stderr).toContain(
+      'data-prompt="Bitte vor dem Ship noch alle offenen Punkte angehen:&#10;&#10;' +
+      "- Ja, die Änderung bitte auch im Terminal-Renderer machen.&#10;" +
+      "- Doku zur Card nachziehen? Ja, bitte.&#10;" +
+      "- Alten Branch feat/x aufräumen — bitte angehen.&#10;" +
+      '- Vierten Punkt bitte auch erledigen."',
+    );
+    expect(stderr).not.toMatch(/data-prompt="[^"]*Im Desktop klicken/);
+    // The terminal shows the object entries as plain points.
+    const term = await renderCard(payload);
+    expect(term).toMatch(/^1\. Soll die Änderung auch im Terminal-Renderer rein\?$/m);
+    expect(term).toMatch(/^## 📦 Shippen trotz 4 Vorbehalten \+2 weitere\?$/m);
+  });
+
+  test("ready without open points keeps the plain Ändern button", async () => {
+    const { stderr } = await renderCardFull(
+      { variant: "ready", summary: "Ohne", lang: "de", session_id: "cli-test-conclude-none", userFinalTest: ["Im Desktop klicken"] },
+      { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
+    );
+    expect(stderr).toContain("Ändern ↗");
+    expect(stderr).not.toContain("Offenes abarbeiten");
+  });
+
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {
     const desktop = await renderCardFull(
       { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-md", cta: { description: "läuft auf Port 3000" } },
