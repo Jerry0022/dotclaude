@@ -49,6 +49,21 @@ function gitNames(root, args) {
   return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
+/**
+ * The qa diff base (R9): an explicit base, else origin/HEAD's branch, else
+ * `main`, then `master` when that exists locally or on origin.
+ */
+function resolveBase(root, explicit, C) {
+  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  const sym = C.gitOut(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+  if (sym) return sym.replace(/^origin\//, '');
+  for (const b of ['main', 'master']) {
+    if (C.gitOut(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`])
+      || C.gitOut(root, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${b}`])) return b;
+  }
+  return 'main';
+}
+
 /** Changed code files for the qa rule, or null (unknown). */
 function codeFilesChanged(root, gate, base) {
   try {
@@ -122,10 +137,14 @@ function armFromPending(hook, root, RC, C, sessionId) {
 function main(hook) {
   const cwd = hook.cwd || process.cwd();
   const root = projectRoot(cwd);
-  const dir = path.join(root, '.claude');
-  if (!fs.existsSync(path.join(dir, 'run-contract.json'))
-    && !fs.existsSync(path.join(dir, 'run-contract.pending'))
-    && !fs.existsSync(path.join(dir, 'batch-handoff.json'))) return 0;
+  // ship_release / the card act on tool_input.cwd — its root is tried second.
+  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const inputRoot = typeof input.cwd === 'string' && input.cwd.trim() && String(hook.tool_name || '').startsWith('mcp__')
+    ? projectRoot(input.cwd) : null;
+  const roots = inputRoot && inputRoot !== root ? [root, inputRoot] : [root];
+  const hasState = (r) => ['run-contract.json', 'run-contract.pending', 'batch-handoff.json']
+    .some(n => fs.existsSync(path.join(r, '.claude', n)));
+  if (!roots.some(hasState)) return 0;
 
   const C = require('../lib/run-contract-calls');
   const call = classify(hook, root, cwd, C);
@@ -141,16 +160,25 @@ function main(hook) {
   }
 
   const armed = armFromPending(hook, root, RC, C, sessionId);
-  RC.claim(root, sessionId);
-  const contract = RC.readContract(root, { sessionId });
+  let croot = null;
+  let contract = null;
+  for (const r of roots) {
+    RC.claim(r, sessionId);
+    contract = RC.readContract(r, { sessionId });
+    if (contract) { croot = r; break; }
+  }
   if (!contract) return 0;
-  const evs = RC.events(root);
+  const evs = RC.events(croot);
   const seg = RC.currentSegment(contract, evs);
+  const gitRoot = inputRoot || root;
 
   for (const gate of call.gates) {
     const ctx = { closes: call.closes || [] };
     if ((gate === 'release' || gate === 'card' || gate === 'branch') && RC.segmentHasWork(seg)) {
-      ctx.codeFilesChanged = codeFilesChanged(root, gate, typeof call.base === 'string' && call.base.trim() ? call.base.trim() : 'main');
+      const n = codeFilesChanged(gitRoot, gate, resolveBase(gitRoot, call.base, C));
+      ctx.codeFilesChanged = n;
+      // Recorded before deciding, so the card knows qa's input (`QA ?` when unknown).
+      if (RC.record(croot, { k: 'measure', codeFiles: n }, { sessionId })) evs.push({ k: 'measure', codeFiles: n });
     }
     const open = RC.openObligations(contract, evs, gate, ctx);
     if (!open.length) continue;

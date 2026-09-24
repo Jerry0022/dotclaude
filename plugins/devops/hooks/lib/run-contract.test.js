@@ -451,7 +451,9 @@ describe("formatBlock", () => {
     expect(msg).toContain('Skill("devops:auto-harden", "--invoked-by=autonomous")');
     expect(msg).toContain('Skill("devops:do-ship", "--queued=1/6")   ← never the ship_* MCP tools directly');
     expect(msg).toContain('node "/p/run-contract.js" skip <ob> --reason "<why>"');
-    expect(msg).toContain('Run finished or this is not part of it: node "/p/run-contract.js" done');
+    expect(msg).toContain('Only when every chosen step ran: node "/p/run-contract.js" done');
+    expect(msg).toContain('Run over with open steps (card shows ✗): node "/p/run-contract.js" abort --reason');
+    expect(msg).toContain('park <item> --reason');
   });
 
   test("interactive strict hints and refine skip line", () => {
@@ -488,7 +490,7 @@ describe("summaryForCard", () => {
   test("aborted contracts say so", () => {
     const c = { ...C(), closedAt: "x", aborted: true, closeReason: "blocked: tests red on CI after three tries" };
     const line = R.summaryForCard(c, [sk("auto-agents"), edit], "de");
-    expect(line.startsWith("🧾 Run · Prompt · Interaktiv · Ship manuell · abgebrochen (blocked: tests red on CI after three tr…)")).toBe(true);
+    expect(line.startsWith("🧾 Run · Prompt · Interaktiv · Ship manuell · ✗ abgebrochen (blocked: tests red on CI after three tr…)")).toBe(true);
     expect(line).toContain("Harden ✗");
     expect(R.summaryForCard(c, [], "en")).toContain("aborted");
     expect(R.summaryForCard(null, [])).toBeNull();

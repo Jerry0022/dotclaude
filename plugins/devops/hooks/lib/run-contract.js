@@ -277,6 +277,7 @@ function sanitize(h) {
   out.burn = !!out.burn;
   out.presence = out.presence !== false;
   out.alsoAudit = !!out.alsoAudit;
+  if (out.unresolved) out.unresolved = true; else delete out.unresolved;
   if (!['prompt', 'backlog', 'audit'].includes(out.mode)) out.mode = 'prompt';
   if (!['interactive', 'autonomous'].includes(out.flow)) out.flow = 'interactive';
   if (!['auto', 'manual'].includes(out.ship)) out.ship = 'manual';
@@ -354,9 +355,10 @@ function record(cwd, event, opts = {}) {
     ev.name = skillName(ev.name);
     if (typeof ev.args === 'string' && ev.args.length > ARGS_MAX) ev.args = ev.args.slice(0, ARGS_MAX);
   }
-  if (ev.k === 'edit') {
+  if (ev.k === 'edit' || ev.k === 'measure') {
     const evs = eventsOf(cwd, h);
-    if (evs.length && evs[evs.length - 1].k === 'edit') return null;
+    const last = evs[evs.length - 1];
+    if (last && last.k === ev.k && (ev.k === 'edit' || last.codeFiles === ev.codeFiles)) return null;
   }
   ev.t = new Date(now).toISOString();
   ev.c = h.id;
@@ -615,11 +617,12 @@ function parseRouterAnswers(questions, answers, opts = {}) {
     passes: ['harden', 'polish'], rethink: args.rethink, burn: args.burn,
   };
 
+  const answered = [];
   const q1 = findQuestion(questions, 'Was?');
   const q1r = q1 ? parseQ1(answerTokens(answerFor(a, q1), q1), q1) : null;
   const hint = followUpModeHint(questions);
   out.modeFrom = 'default';
-  if (q1r) { out.mode = q1r.mode; out.alsoAudit = q1r.alsoAudit; out.modeFrom = 'q1'; }
+  if (q1r) { out.mode = q1r.mode; out.alsoAudit = q1r.alsoAudit; out.modeFrom = 'q1'; answered.push('mode', 'alsoAudit', 'modeFrom'); }
   else if (args.mode) { out.mode = args.mode; out.modeFrom = 'args'; }
   else if (hint) { out.mode = hint; out.modeFrom = 'follow-up'; }
 
@@ -627,35 +630,106 @@ function parseRouterAnswers(questions, answers, opts = {}) {
   const q2t = q2 ? answerTokens(answerFor(a, q2), q2).join(' ') : '';
   if (q2t) {
     const s = q2t.toLowerCase();
-    if (/^\s*(autonom|weg)/.test(s)) out.flow = 'autonomous';
-    else if (/^\s*(interaktiv|dabei)/.test(s)) out.flow = 'interactive';
-    else if (/autonom|\bweg\b/.test(s)) out.flow = 'autonomous';
-    if (/ship automatisch|ship auto\b/.test(s)) out.ship = 'auto';
+    if (/^\s*(autonom|weg|away)/.test(s)) out.flow = 'autonomous';
+    else if (/^\s*(interaktiv|dabei|interactive|present|with you|here)/.test(s)) out.flow = 'interactive';
+    else if (/autonom|\bweg\b|\baway\b/.test(s)) out.flow = 'autonomous';
+    if (/ship automatisch|ship automatic|ship auto\b/.test(s)) out.ship = 'auto';
     else if (/ship manuell|ship manual/.test(s)) out.ship = 'manual';
+    answered.push('flow', 'ship');
   } else if (args.flow) out.flow = args.flow;
 
   const q3 = findQuestion(questions, 'Umfang?');
   const q3t = q3 ? answerTokens(answerFor(a, q3), q3).join(' ').toLowerCase() : '';
-  if (/strikt|strict|nur das/.test(q3t)) out.strict = true;
+  if (/strikt|strict|nur das|only this|just this/.test(q3t)) out.strict = true;
+  if (q3t) answered.push('strict');
 
   const q4 = findQuestion(questions, 'Durchgänge?');
   if (q4) {
     const tokens = answerTokens(answerFor(a, q4), q4);
-    const flags = { passes: new Set(), rethink: false, burn: false };
-    if (!tokens.length) {
-      const rec = optionLabels(q4).filter(hasRecommended);
-      if (rec.length) passFlagsOf(rec, flags);
-      else { flags.passes.add('harden'); flags.passes.add('polish'); }
-    } else if (tokens.some(t => /^(keine|none|nichts|no passes)\b/i.test(t))) {
-      // explicit "no passes"
-    } else {
-      passFlagsOf(tokens, flags);
-    }
-    out.passes = ['harden', 'polish'].filter(p => flags.passes.has(p));
-    out.rethink = out.rethink || flags.rethink;
-    out.burn = out.burn || flags.burn;
+    const r = parseQ4(tokens, q4);
+    out.passes = r.passes;
+    out.rethink = out.rethink || r.rethink;
+    out.burn = out.burn || r.burn;
+    out.unresolved = r.unresolved;
+    if (tokens.length) answered.push('passes', 'rethink', 'burn', 'unresolved');
   }
+  Object.defineProperty(out, 'answered', { value: answered, enumerable: false });
   return out;
+}
+
+const PLACEHOLDER_RE = /^(something else|other|etwas anderes|sonstiges|andere)$/i;
+const NONE_RE = /^(keine?|none|nichts|no|no passes)(\s+(durchgänge|passes))?$/i;
+const NEG_RE = /^(?:ohne|kein(?:e|en)?|without|no)\s+(.+)$/i;
+
+/**
+ * Q4 tokens → {passes, rethink, burn, unresolved} (R7). Empty → the
+ * recommended set. `ohne X` / `kein X` / `without X` / `no X` excludes X.
+ * An unrecognised or Other-placeholder token → the recommended set (minus
+ * exclusions) when no pass was named, and `unresolved: true` either way.
+ */
+function parseQ4(tokens, q4) {
+  const rec = { passes: new Set(), rethink: false, burn: false };
+  const recLabels = optionLabels(q4).filter(hasRecommended);
+  if (recLabels.length) passFlagsOf(recLabels, rec);
+  else { rec.passes.add('harden'); rec.passes.add('polish'); }
+  const recommended = ['harden', 'polish'].filter(p => rec.passes.has(p));
+  if (!tokens.length) return { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false };
+  if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: [], rethink: false, burn: false, unresolved: false };
+  const flags = { passes: new Set(), rethink: false, burn: false };
+  const neg = new Set();
+  let unresolved = false;
+  let named = false;
+  for (const tok of tokens) {
+    const t = tok.trim();
+    if (PLACEHOLDER_RE.test(t)) { unresolved = true; continue; }
+    const nm = t.match(NEG_RE);
+    if (nm) {
+      const f = { passes: new Set(), rethink: false, burn: false };
+      passFlagsOf([nm[1]], f);
+      if (!f.passes.size) unresolved = true;
+      f.passes.forEach(p => neg.add(p));
+      continue;
+    }
+    const before = flags.passes.size + Number(flags.rethink) + Number(flags.burn);
+    passFlagsOf([t], flags);
+    const after = flags.passes.size + Number(flags.rethink) + Number(flags.burn);
+    if (after === before) unresolved = true;
+    else named = true;
+  }
+  let passes;
+  if (flags.passes.size) passes = ['harden', 'polish'].filter(p => flags.passes.has(p) && !neg.has(p));
+  else if (neg.size || unresolved || !named) passes = recommended.filter(p => !neg.has(p));
+  else passes = [];
+  return { passes, rethink: flags.rethink, burn: flags.burn, unresolved };
+}
+
+/**
+ * Only the fields a router-shaped call actually answered (R7 merge): a
+ * later call carrying some of the router headers updates just those.
+ */
+function answeredFields(fields) {
+  const out = {};
+  for (const k of (fields && fields.answered) || []) if (fields[k] !== undefined) out[k] = fields[k];
+  return out;
+}
+
+/** A router call that lacks one of Ablauf / Umfang / Durchgänge. */
+function isPartialRouterCall(questions) {
+  return isRouterCall(questions) && !['Ablauf?', 'Umfang?', 'Durchgänge?'].every(h => findQuestion(questions, h));
+}
+
+/**
+ * A partial router call of this session within 30 min of arming MERGES into
+ * the active contract (R7). Returns the updated header, or null (→ arm).
+ */
+function mergeRouterAnswers(cwd, questions, fields, opts = {}) {
+  if (!fields || !isPartialRouterCall(questions)) return null;
+  const now = nowOf(opts);
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
+  if (!h) return null;
+  const armed = Date.parse(h.armedAt);
+  if (!Number.isFinite(armed) || now - armed > MERGE_WINDOW_MS) return null;
+  return update(cwd, answeredFields(fields), { now, sessionId: opts.sessionId });
 }
 
 /** Mode a follow-up header implies (Q1 was preset away): backlog | audit | null. */
@@ -835,7 +909,7 @@ function segments(contract, evs) {
       continue;
     }
     cur.push(ev);
-    if (ev.k === 'release' && ev.ok === true) out.push([]);
+    if ((ev.k === 'release' && ev.ok === true) || ev.k === 'park') out.push([]);
   }
   return out;
 }
@@ -855,15 +929,31 @@ function isQaAgent(ev) {
   return t === 'devops:qa' || t === 'qa' || t.endsWith(':qa');
 }
 function skipOf(list, ob, item) {
-  return list.find(ev => ev.k === 'skip' && ev.ob === ob && (item === undefined || String(ev.item) === String(item))) || null;
+  const itemOk = (ev) => item === undefined || String(ev.item) === String(item);
+  return list.find(ev => ev.k === 'skip' && ev.ob === ob && itemOk(ev))
+    || list.find(ev => ev.k === 'park' && ob !== 'triage' && itemOk(ev))
+    || null;
+}
+
+/** Latest `measure` event of a segment: {codeFiles:n|null} or undefined. */
+function measureOf(seg) {
+  for (let i = seg.length - 1; i >= 0; i--) if (seg[i].k === 'measure') return seg[i];
+  return undefined;
+}
+
+/** ctx.codeFilesChanged, else the segment's latest measure (R9). */
+function codeFilesOf(seg, ctx) {
+  if (ctx && typeof ctx.codeFilesChanged === 'number') return ctx.codeFilesChanged;
+  const m = measureOf(seg || []);
+  return m && typeof m.codeFiles === 'number' ? m.codeFiles : null;
 }
 function issueNamed(args, n) {
   const re = new RegExp(`#${n}(?!\\d)|\\bissues?\\b[^\\n]*?(?<!\\d)${n}(?!\\d)`, 'i');
   return re.test(args);
 }
 
-function qaApplies(contract, ctx) {
-  const n = ctx && typeof ctx.codeFilesChanged === 'number' ? ctx.codeFilesChanged : null;
+function qaApplies(contract, ctx, seg) {
+  const n = codeFilesOf(seg, ctx);
   if (n === null || contract.mode === 'audit') return false;
   return contract.mode === 'backlog' ? n >= 1 : n > 5;
 }
@@ -884,7 +974,7 @@ function obState(contract, seg, allEvs, ob, gate, ctx) {
       if (!contract.passes.includes(ob) || !work) return null;
       return res(passDone(seg, `auto-${ob}`));
     case 'qa':
-      if (!work || !qaApplies(contract, ctx)) return null;
+      if (!work || !qaApplies(contract, ctx, seg)) return null;
       return res(seg.some(isQaAgent));
     case 'do-ship': {
       if (contract.ship !== 'auto' || !work) return null;
@@ -909,7 +999,7 @@ const GATE_OBS = {
   branch: ['harden', 'polish', 'qa', 'do-ship'],
   'auto-agents': ['triage'],
   release: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
-  card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship'],
+  card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
 };
 const AUDIT_OBS = new Set(['harden', 'polish', 'do-ship']);
 
@@ -970,7 +1060,9 @@ function openObligations(contract, evs, gate, ctx = {}) {
   for (const ob of obs) {
     if (ob === 'refine') {
       if (contract.mode !== 'backlog' || contract.presence === false) continue;
-      const closes = strList(ctx && ctx.closes).map(s => s.replace(/^#/, ''));
+      // Ship manuell never reaches ship_release: the final card checks every item.
+      const list = gate === 'card' ? (contract.ship === 'manual' ? contract.items : []) : (ctx && ctx.closes);
+      const closes = strList(list).map(s => s.replace(/^#/, ''));
       for (const n of closes) {
         const done = all.some(ev => isSkill(ev, 'auto-issue') && issueNamed(argsOf(ev), n));
         if (!done && !skipOf(all, 'refine', n)) {
@@ -1018,7 +1110,11 @@ function formatBlock(contract, open, gate, opts = {}) {
   const itemSkip = list.find(o => o.item);
   const skipArgs = itemSkip && list.every(o => o.item) ? `${itemSkip.ob} --item ${itemSkip.item}` : '<ob>';
   lines.push(`Conscious skip (shown on the card as ⚠): node "${lib}" skip ${skipArgs} --reason "<why>"`);
-  lines.push(`Run finished or this is not part of it: node "${lib}" done`);
+  if (contract && contract.mode === 'backlog') {
+    lines.push(`Item parked (blocked ship / ⏸ Rückfrage): node "${lib}" park <item> --reason "<why>"`);
+  }
+  lines.push(`Run over with open steps (card shows ✗): node "${lib}" abort --reason "<why>"`);
+  lines.push(`Only when every chosen step ran: node "${lib}" done`);
   return lines.join('\n');
 }
 
@@ -1028,8 +1124,8 @@ function short(s, max = 40) {
 }
 
 const CARD_LABELS = {
-  de: { interactive: 'Interaktiv', autonomous: 'Autonom', auto: 'Ship auto', manual: 'Ship manuell', strict: 'Strikt', aborted: 'abgebrochen', none: 'keine Pflichten offen' },
-  en: { interactive: 'Interactive', autonomous: 'Autonomous', auto: 'Ship auto', manual: 'Ship manual', strict: 'Strict', aborted: 'aborted', none: 'no obligations' },
+  de: { interactive: 'Interaktiv', autonomous: 'Autonom', auto: 'Ship auto', manual: 'Ship manuell', strict: 'Strikt', unresolved: 'Durchgänge ?', aborted: 'abgebrochen', none: 'keine Pflichten offen' },
+  en: { interactive: 'Interactive', autonomous: 'Autonomous', auto: 'Ship auto', manual: 'Ship manual', strict: 'Strict', unresolved: 'Passes ?', aborted: 'aborted', none: 'no obligations' },
 };
 const OB_LABEL = { triage: 'Triage', refine: 'Refine', 'auto-agents': 'auto-agents', harden: 'Harden', polish: 'Polish', qa: 'QA', 'do-ship': 'do-ship' };
 
@@ -1037,7 +1133,9 @@ function renderStates(label, states, skipReason, aggregate) {
   const n = states.length;
   const done = states.filter(s => s === 'done').length;
   const skipped = states.filter(s => s === 'skipped').length;
-  const open = n - done - skipped;
+  const unknown = states.filter(s => s === 'unknown').length;
+  const open = n - done - skipped - unknown;
+  if (!open && unknown) return `${label} ?`;
   const why = skipped && skipReason ? ` (${short(skipReason)})` : '';
   if (aggregate && n > 1) {
     if (open) return `${label} ${done}/${n} ✗`;
@@ -1065,8 +1163,9 @@ function summaryForCard(contract, evs, lang = 'de', ctx = {}) {
   const mode = contract.mode === 'backlog' ? 'Backlog' : contract.mode === 'audit' ? 'Audit' : (contract.alsoAudit ? 'Prompt + Audit' : 'Prompt');
   const head = ['🧾 Run', mode, L[contract.flow] || L.interactive, L[contract.ship] || L.manual];
   if (contract.strict) head.push(L.strict);
+  if (contract.unresolved) head.push(L.unresolved);
   let line = head.join(' · ');
-  if (contract.aborted) line += ` · ${L.aborted}${contract.closeReason && contract.closeReason !== 'aborted' ? ` (${short(contract.closeReason)})` : ''}`;
+  if (contract.aborted) line += ` · ✗ ${L.aborted}${contract.closeReason && contract.closeReason !== 'aborted' ? ` (${short(contract.closeReason)})` : ''}`;
 
   const segs = segments(contract, all);
   const workSegs = segs.filter(segmentHasWork);
@@ -1094,7 +1193,9 @@ function summaryForCard(contract, evs, lang = 'de', ctx = {}) {
       if (ob === 'qa') {
         if (seg.some(isQaAgent)) st = 'done';
         else if (skipOf(seg, 'qa')) st = 'skipped';
-        else st = seg === last && qaApplies(contract, ctx) ? 'open' : null;
+        else if (seg !== last) st = null;
+        else if (qaApplies(contract, ctx, seg)) st = 'open';
+        else st = measureOf(seg) && codeFilesOf(seg, ctx) === null ? 'unknown' : null;
       } else {
         st = obState(contract, seg, all, ob, 'summary', ctx);
       }
@@ -1159,8 +1260,28 @@ function cli(argv, opts = {}) {
       return 0;
     }
     case 'done': {
+      const c = readContract(cwd, { now });
+      const open = c ? openObligations(c, eventsOf(cwd, c), 'card', {}) : [];
+      if (open.length) {
+        const names = open.map(o => (o.item ? `${o.ob} #${o.item}` : o.ob)).join(', ');
+        if (!reason) {
+          return fail(`open obligations: ${names} — run them, skip <ob> --reason "<why>", or done --reason "<why>" (closes as aborted, card shows ✗)`);
+        }
+        const h = close(cwd, reason, { aborted: true, now });
+        write({ ok: true, closed: !!h, aborted: true, open: names, id: h ? h.id : null });
+        return 0;
+      }
       const h = close(cwd, reason || 'done', { now });
       write({ ok: true, closed: !!h, id: h ? h.id : null });
+      return 0;
+    }
+    case 'park': {
+      const item = pos[1] ? String(pos[1]).replace(/^#/, '') : '';
+      if (!item) return fail('usage: park <item> --reason "<why>"');
+      if (!reason) return fail('park needs --reason "<why>"');
+      const ev = record(cwd, { k: 'park', item, reason: short(reason, 200) }, { now });
+      if (!ev) return fail('no active run contract');
+      write({ ok: true, parked: item, reason: ev.reason });
       return 0;
     }
     case 'abort': {
@@ -1198,7 +1319,7 @@ function cli(argv, opts = {}) {
       return 0;
     }
     default:
-      return fail('usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]');
+      return fail('usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]');
   }
 }
 
@@ -1211,7 +1332,7 @@ module.exports = {
   EXPIRY_INTERACTIVE_H, EXPIRY_AUTONOMOUS_H, CARD_GRACE_MS, PENDING_MAX_MS, BATCH_MAX_MS,
   disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath,
   FOREIGN_GRACE_MS, MERGE_WINDOW_MS,
-  ownedBy, claim, applyFollowUp, hasHeader, canonHeader, followUpModeHint, machinePatch,
+  ownedBy, claim, applyFollowUp, parseQ4, answeredFields, isPartialRouterCall, mergeRouterAnswers, measureOf, hasHeader, canonHeader, followUpModeHint, machinePatch,
   readContract, readContractForCard, readRawContract, arm, update, record, close, events,
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   extractAnswers, isRouterCall, parseRouterAnswers, parseFollowUp, parseMachinePrompt,

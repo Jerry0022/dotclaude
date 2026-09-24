@@ -257,3 +257,153 @@ describe("R6 — only real item branches are item boundaries", () => {
     expect(C.isItemBranch(C.commandFacts("git worktree add ../a -b y"), {}, "main")).toBe(false);
   });
 });
+
+// ── Group B ────────────────────────────────────────────────────────────────
+
+const Q4 = ROUTER_Q[2];
+const q4Only = (answer) => RC.parseRouterAnswers([Q4], { [Q4.question]: answer });
+
+describe("R7 — Q4 free text, negation, partial merge", () => {
+  test("R7: placeholder / unmatched Q4 text → recommended passes + unresolved; the card says so", () => {
+    expect(q4Only("Something else")).toMatchObject({ passes: ["harden", "polish"], unresolved: true });
+    expect(q4Only("irgendwas mit Tests")).toMatchObject({ passes: ["harden", "polish"], unresolved: true });
+    expect(q4Only(["Harden danach (Recommended)"]).unresolved).toBe(false);
+    const c = RC.arm(dir, { ...q4Only("Something else"), sessionId: "s1" });
+    expect(c.unresolved).toBe(true);
+    expect(RC.summaryForCard(c, [], "de")).toContain("Durchgänge ?");
+    expect(RC.summaryForCard(c, [], "en")).toContain("Passes ?");
+  });
+
+  test("R7: negation excludes the named pass", () => {
+    expect(q4Only("ohne Polish").passes).toEqual(["harden"]);
+    expect(q4Only("kein Harden").passes).toEqual(["polish"]);
+    expect(q4Only("without polish").passes).toEqual(["harden"]);
+    expect(q4Only(["Harden danach (Recommended)", "no polish"]).passes).toEqual(["harden"]);
+    expect(q4Only("keine").passes).toEqual([]);
+  });
+
+  test("R7: a later partial router call merges only its answered fields", () => {
+    post("AskUserQuestion", { questions: ROUTER_Q }, { questions: ROUTER_Q, answers: ROUTER_A });
+    const first = RC.readContract(dir);
+    expect(first).toMatchObject({ flow: "autonomous", ship: "auto", passes: ["harden", "polish"] });
+    post("AskUserQuestion", { questions: [Q4] }, { questions: [Q4], answers: { [Q4.question]: ["Polish danach (Recommended)"] } });
+    expect(RC.readContract(dir)).toMatchObject({ id: first.id, flow: "autonomous", ship: "auto", passes: ["polish"] });
+  });
+});
+
+describe("R8 — done with open obligations", () => {
+  test("R8: done refuses without --reason and closes as aborted with one; the card shows ✗", () => {
+    armS1({ ship: "auto" });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    const bare = cli("done");
+    expect(bare.code).toBe(1);
+    expect(bare.out.error).toContain("harden");
+    const r = cli("done", "--reason", "user stopped the run");
+    expect(r.out).toMatchObject({ ok: true, closed: true, aborted: true });
+    const h = RC.readContractForCard(dir);
+    expect(h.aborted).toBe(true);
+    expect(RC.summaryForCard(h, RC.events(dir), "de")).toContain("✗ abgebrochen (user stopped the run)");
+  });
+
+  test("R8: done on a clean run closes normally; the block text names skip / abort / done", () => {
+    armS1({ passes: [] });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    expect(cli("done").out).toMatchObject({ ok: true, closed: true });
+    expect(RC.readContractForCard(dir).aborted).toBe(false);
+    const msg = RC.formatBlock({ mode: "prompt", passes: [] }, [{ ob: "harden", fix: "x" }], "card", { libPath: "L" });
+    expect(msg).toContain('Conscious skip (shown on the card as ⚠): node "L" skip <ob> --reason');
+    expect(msg).toContain('Run over with open steps (card shows ✗): node "L" abort --reason');
+    expect(msg).toContain('Only when every chosen step ran: node "L" done');
+  });
+});
+
+describe("R9 — qa base and measure", () => {
+  test("R9: a master-default repo still counts changed code files (qa applies)", () => {
+    git("branch", "-m", "main", "master");
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "auto", passes: [], sessionId: "s1", presence: false });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "skill", name: "do-ship" });
+    git("checkout", "-q", "-b", "fix/1");
+    fs.writeFileSync(f("a.js"), "1\n");
+    git("add", "-A"); git("commit", "-q", "-m", "x");
+    ev({ k: "commit" });
+    const r = pre(SHIP, { body: "" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("qa");
+    expect(RC.events(dir).filter(e => e.k === "measure").pop()).toMatchObject({ codeFiles: 1 });
+  });
+
+  test("R9: an unknown count is recorded and shown as QA ?", () => {
+    const c = armS1({ passes: [] });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    ev({ k: "measure", codeFiles: null });
+    expect(RC.summaryForCard(c, RC.events(dir), "de")).toContain("QA ?");
+    ev({ k: "measure", codeFiles: 9 });
+    expect(RC.summaryForCard(c, RC.events(dir), "de")).toContain("QA ✗");
+  });
+});
+
+describe("release / card gates use tool_input.cwd", () => {
+  test("release gate: the contract of tool_input.cwd's repo gates ship_release", () => {
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "rc-redteam-other-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: other });
+      RC.arm(other, { mode: "prompt", ship: "auto", passes: [], sessionId: "s1" });
+      RC.record(other, { k: "skill", name: "auto-agents" });
+      RC.record(other, { k: "edit" });
+      const r = pre(SHIP, { body: "", cwd: other });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("do-ship");
+    } finally { fs.rmSync(other, { recursive: true, force: true }); }
+  });
+});
+
+describe("park", () => {
+  test("park: one event satisfies the item's obligations and ends the segment", () => {
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "auto", sessionId: "s1", items: ["1", "2"] });
+    ev({ k: "agent", type: "Explore" });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    expect(pre("Bash", { command: "git checkout -b fix/2" }).code).toBe(2);
+    expect(cli("park", "1").code).toBe(1);
+    expect(cli("park", "#1", "--reason", "tests red on CI").out).toMatchObject({ ok: true, parked: "1" });
+    expect(pre("Bash", { command: "git checkout -b fix/2" }).code).toBe(0);
+    const line = RC.summaryForCard(RC.readContract(dir), RC.events(dir), "de");
+    expect(line).toContain("Harden ⚠ (tests red on CI)");
+    expect(line).toContain("Refine 0/2 ✗");
+  });
+});
+
+describe("Ship manuell backlog: refine at the final card", () => {
+  test("refine: the final card needs a refine (or skip / park) for every queued item", () => {
+    RC.arm(dir, { mode: "backlog", flow: "interactive", ship: "manual", passes: [], sessionId: "s1", items: ["1", "2"] });
+    ev({ k: "agent", type: "Explore" });
+    ev({ k: "skill", name: "auto-issue", args: "refine #1" });
+    const r = pre(CARD, { variant: "ready" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("refine #2");
+    expect(r.stderr).not.toContain("refine #1");
+    ev({ k: "skip", ob: "refine", item: "2", reason: "duplicate" });
+    expect(pre(CARD, { variant: "ready" }).code).toBe(0);
+  });
+});
+
+describe("headers: normalised and English", () => {
+  test("headers: English / ?-less router headers and answers are recognised", () => {
+    const qs = [
+      { header: "What", question: "What should this run do?", options: [{ label: "Prompt" }, { label: "Audit" }, { label: "Backlog" }] },
+      { header: "Flow", question: "Are you around?", options: [] },
+      { header: " scope ", question: "How far?", options: [] },
+      { header: "Passes?", question: "Which passes?", options: [] },
+    ];
+    expect(RC.isRouterCall(qs)).toBe(true);
+    const a = { "What should this run do?": "Backlog", "Are you around?": "Away · Ship automatically", "How far?": "Strict", "Which passes?": "Harden" };
+    expect(RC.parseRouterAnswers(qs, a)).toMatchObject({ mode: "backlog", flow: "autonomous", ship: "auto", strict: true, passes: ["harden"] });
+    expect(RC.isRouterCall([{ header: "Ablauf" }, { header: "Umfang" }])).toBe(true);
+    const fu = RC.parseFollowUp([{ header: "Result", question: "r" }, { header: "PC after", question: "p" }], { r: "Audit as concept", p: "PC off" });
+    expect(fu).toMatchObject({ auditResult: "concept", pcAfter: "PC off", modeHint: "audit" });
+  });
+});

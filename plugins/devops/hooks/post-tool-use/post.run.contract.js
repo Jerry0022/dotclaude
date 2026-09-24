@@ -47,7 +47,7 @@ function backlogFinished(h, evs) {
   const closed = new Set();
   for (const ev of evs) {
     if (ev.k === 'release' && ev.ok === true && Array.isArray(ev.closes)) ev.closes.forEach(n => closed.add(String(n)));
-    if (ev.k === 'skip' && ev.item) closed.add(String(ev.item));
+    if ((ev.k === 'skip' || ev.k === 'park') && ev.item) closed.add(String(ev.item));
   }
   return h.items.every(n => closed.has(String(n)));
 }
@@ -76,8 +76,10 @@ function main(hook) {
   const tool = hook.tool_name || '';
   // Fast path: only AskUserQuestion (arming) and Skill (arm / batch markers)
   // can matter without a contract on disk.
+  const inCwd = hook.tool_input && typeof hook.tool_input.cwd === 'string' ? hook.tool_input.cwd : '';
   if (tool !== 'AskUserQuestion' && tool !== 'Skill'
-    && !fs.existsSync(path.join(root, '.claude', 'run-contract.json'))) return null;
+    && !fs.existsSync(path.join(root, '.claude', 'run-contract.json'))
+    && !(inCwd && fs.existsSync(path.join(projectRoot(inCwd), '.claude', 'run-contract.json')))) return null;
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return null;
   const C = require('../lib/run-contract-calls');
@@ -91,7 +93,9 @@ function main(hook) {
     if (RC.isRouterCall(questions)) {
       const marker = RC.pendingArm(root, s);
       const fields = RC.parseRouterAnswers(questions, answers, { doRunArgs: marker && marker.args });
-      if (fields) {
+      // A partial router call (only some headers) merges into this session's
+      // fresh contract instead of re-arming with defaults (R7).
+      if (fields && !RC.mergeRouterAnswers(root, questions, fields, s)) {
         RC.arm(root, { ...fields, source: 'router', sessionId });
         RC.clearPendingArm(root);
       }
@@ -124,10 +128,13 @@ function main(hook) {
       if (payload) { const cf = C.cardFacts(payload); recordCard(root, cf.variant, cf.final, RC, s); }
     }
   } else if (tool === C.SHIP_RELEASE) {
+    // ship_release acts on tool_input.cwd: the session root first, then that one.
+    let r = root;
+    if (!RC.readContract(r, s) && typeof input.cwd === 'string' && input.cwd.trim()) r = projectRoot(input.cwd);
     const res = C.releaseResult(hook.tool_response) || { ok: false, merged: false };
-    RC.record(root, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) }, s);
-    const h = RC.readContract(root, s);
-    if (h && backlogFinished(h, RC.events(root))) RC.close(root, 'done: every queued item shipped', s);
+    RC.record(r, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) }, s);
+    const h = RC.readContract(r, s);
+    if (h && backlogFinished(h, RC.events(r))) RC.close(r, 'done: every queued item shipped', s);
   } else if (tool === C.RENDER_CARD) {
     const cf = C.cardFacts(input);
     recordCard(root, cf.variant, cf.final, RC, s);

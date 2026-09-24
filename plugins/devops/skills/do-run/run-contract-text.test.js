@@ -46,6 +46,17 @@ describe("do-run backlog mode — ships only via devops:do-ship", () => {
     expect(backlog).toMatch(/NEVER the ship_\* MCP tools directly/);
   });
 
+  it("R10: no guardrail says to ship via the MCP ship tools themselves", () => {
+    expect(backlog).not.toMatch(/ship \*\*only\*\* via the MCP ship tools/);
+    expect(backlog).not.toMatch(/Ship only via MCP ship tools/);
+    expect(backlog).not.toMatch(/only MCP ship tools/);
+    expect(backlog).toMatch(/ship \*\*only\*\* via `Skill\("devops:do-ship"\)` \(it drives the MCP ship tools\)/);
+  });
+
+  it("names park for a blocked item", () => {
+    expect(backlog).toMatch(/run-contract\.js" park <N> --reason/);
+  });
+
   it("Step 5 closes the run contract", () => {
     const step5 = backlog.slice(backlog.indexOf("## Step 5 — Completion"), backlog.indexOf("## Artifacts"));
     expect(step5).toMatch(/run-contract\.js" done/);
