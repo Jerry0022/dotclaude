@@ -163,6 +163,24 @@ function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+/**
+ * Escape a text line and turn every http(s) URL in it into a link. The
+ * visualize host opens any `<a href>` with an http(s) URL itself (its
+ * open-link script posts `ui/open-link`), so a plain anchor is all a widget
+ * needs. Trailing sentence punctuation stays outside the link.
+ */
+function linkifyHtml(s) {
+  return String(s == null ? "" : s)
+    .split(/(https?:\/\/[^\s<>"'`]+)/)
+    .map((part, i) => {
+      if (i % 2 === 0) return escapeHtml(part);
+      const url = part.replace(/[.,;:!?)\]]+$/, "");
+      const tail = part.slice(url.length);
+      return `<a href="${escapeHtml(url)}" class="card-link" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${escapeHtml(url)}</a>${escapeHtml(tail)}`;
+    })
+    .join("");
+}
+
 const COLOR = {
   green: "#8fae8f",
   red: "#e0a0a0",
@@ -249,7 +267,7 @@ export function cardWidgetHtml(model, repoUrl) {
   const glyphLine = (cls, inner, extra = "") =>
     `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
   const resultLinesHtml = (model.resultLines || [])
-    .map((l) => glyphLine("card-result", escapeHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
+    .map((l) => glyphLine("card-result", linkifyHtml(l).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
     .join("\n  ");
 
   const evidenceHtml = (model.evidence || []).length
@@ -264,9 +282,9 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
-  // The title lives in the widget: on Desktop the markdown under it is the ✨
-  // marker only, as a markdown comment (§ 4), so the whole card is drawn
-  // once and nothing visible follows the widget. h3 = the contract's
+  // The title lives in the widget: on Desktop there is no card markdown
+  // (§ 4), so the whole card is drawn once and nothing follows the widget.
+  // card-guard reads this h3 as the card title. h3 = the contract's
   // 16px/500 — one step below h2, which read too large in the chat column.
   const titleHtml = model.title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.title)}</h3>` : "";
 
@@ -290,10 +308,10 @@ export function cardWidgetHtml(model, repoUrl) {
   // numbers in the widget — the terminal markdown keeps "1." for the same
   // points), so both blocks speak the same language.
   const contextHtml = model.context
-    ? glyphLine("card-context", escapeHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
+    ? glyphLine("card-context", linkifyHtml(model.context.replace(/^›\s*/, "")), ";font-size:13px;margin:0 0 4px")
     : "";
   const pointsHtml = (model.points || []).length
-    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", escapeHtml(p))).join("")}</div>`
+    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p))).join("")}</div>`
     : "";
 
   const buttons = buttonsFor(model.buttonsKey, lang);

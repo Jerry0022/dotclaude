@@ -136,6 +136,21 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
 });
 
 describe("cardWidgetHtml", () => {
+  // The visualize host opens any http(s) <a href> itself (ui/open-link), so a
+  // generated URL must be an anchor — the concept page URL was plain text.
+  test("URLs in the context line, points and result lines are clickable links", () => {
+    const html = cardWidgetHtml(baseModel({
+      context: "› http://localhost:8721/docs/concepts/plan.html",
+      points: ["Siehe https://github.com/o/r/pull/7."],
+      resultLines: ["Seite <b> auf https://example.com/a?x=1&y=2"],
+    }), "");
+    expect(html).toContain('<a href="http://localhost:8721/docs/concepts/plan.html" class="card-link"');
+    expect(html).toContain('<a href="https://github.com/o/r/pull/7" class="card-link"');
+    expect(html).toMatch(/pull\/7<\/a>\./);
+    expect(html).toContain('href="https://example.com/a?x=1&amp;y=2"');
+    expect(html).toContain("Seite &lt;b&gt; auf");
+  });
+
   test("draws both blocks: result lines + evidence + pipeline, heading + points + buttons", () => {
     const html = cardWidgetHtml(baseModel(), "");
     expect(html).toContain("Card zeigt jetzt drei Zeilen");
