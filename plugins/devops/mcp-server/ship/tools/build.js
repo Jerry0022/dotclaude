@@ -55,9 +55,9 @@ function scriptPath(name) { return join(pluginRoot(), "scripts", name); }
 
 // Lazy accessors — resolved at call time, not import time
 const BUILD_ID_SCRIPT = () => scriptPath("build-id.js");
-const DK_INDEX_SCRIPT = () => scriptPath("gen-dk-index.js");
-const PROJECT_MAP_SCRIPT = () => scriptPath("gen-project-map.js");
-const README_SECTIONS_SCRIPT = () => scriptPath("gen-readme-sections.js");
+const DK_INDEX_SCRIPT = () => scriptPath("gen-dk-index.mjs");
+const PROJECT_MAP_SCRIPT = () => scriptPath("gen-project-map.mjs");
+const README_SECTIONS_SCRIPT = () => scriptPath("gen-readme-sections.mjs");
 
 export const schema = z.object({
   buildCmd: z.string().nullable().default(null).describe("Build command (null = auto-detect from package.json)"),

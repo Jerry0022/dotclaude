@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 vi.setConfig({ testTimeout: 30_000 });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPT = join(__dirname, "gen-project-map.js");
+const SCRIPT = join(__dirname, "gen-project-map.mjs");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();

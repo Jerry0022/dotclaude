@@ -56,7 +56,7 @@ For a rule (no code at fault), in order of preference:
 2. **Reference content / mental model / convention** → `{PLUGIN_ROOT}/deep-knowledge/<topic>.md`.
    Grep `{PLUGIN_ROOT}/deep-knowledge/INDEX.md` first for an existing file to
    append to. After creating a new one, regenerate the index:
-   `node plugins/devops/scripts/gen-dk-index.js plugins/devops/deep-knowledge`.
+   `node plugins/devops/scripts/gen-dk-index.mjs plugins/devops/deep-knowledge`.
 3. **Agent behavior** → `plugins/devops/agents/<name>.md`.
 4. **Hook behavior** → `plugins/devops/hooks/<phase>/<hook>.js`.
 

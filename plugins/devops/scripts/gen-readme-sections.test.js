@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 vi.setConfig({ testTimeout: 30_000 });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPT = join(__dirname, "gen-readme-sections.js");
+const SCRIPT = join(__dirname, "gen-readme-sections.mjs");
 const REPO_ROOT = resolve(__dirname, "..", "..", "..");
 
 describe("gen-readme-sections", () => {
@@ -22,9 +22,8 @@ describe("gen-readme-sections", () => {
     expect(() =>
       execFileSync(process.execPath, [SCRIPT, "--check", REPO_ROOT], { stdio: "pipe" }),
     ).not.toThrow();
-    // 30s timeout, not the default 5s: this spawns a cold `node` subprocess that
-    // reparses the ESM generator (the CommonJS-typeless package.json forces a
-    // reparse), which on Windows runs right at the 5s edge and flakes. The work
-    // is a fixed marker diff, not load-dependent — generous headroom, no flake.
+    // 30s timeout, not the default 5s: this spawns a cold `node` subprocess,
+    // which on a loaded Windows machine can run close to the 5s edge. The
+    // generator is .mjs (#476), so node no longer parses it twice.
   }, 30000);
 });

@@ -425,7 +425,7 @@ canonical source — **never hand-edit the text between markers:**
 <!--devops:block:hook-lifecycle--> … <!--/devops:block:hook-lifecycle-->   ← block
 ```
 
-- **Generator:** `scripts/gen-readme-sections.js` reads `hooks/hooks.json`,
+- **Generator:** `scripts/gen-readme-sections.mjs` reads `hooks/hooks.json`,
   `skills/*/SKILL.md`, `agents/*.md`, `deep-knowledge/*.md` and rewrites every
   marker. Counts and the lifecycle roster can therefore never go stale.
   No-ops outside the plugin source repo. Run standalone, or with `--check`
