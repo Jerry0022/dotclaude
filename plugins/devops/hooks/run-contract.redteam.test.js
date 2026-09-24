@@ -407,3 +407,109 @@ describe("headers: normalised and English", () => {
     expect(fu).toMatchObject({ auditResult: "concept", pcAfter: "PC off", modeHint: "audit" });
   });
 });
+
+// ── Group C ────────────────────────────────────────────────────────────────
+
+describe("C — card payload, command detection, direct ships", () => {
+  const withWork = (over = {}) => { armS1(over); ev({ k: "skill", name: "auto-agents" }); ev({ k: "edit" }); };
+
+  test("C-card-stdin: an unreadable --render-card payload (stdin, $var) is gated as a final card", () => {
+    withWork();
+    expect(pre("Bash", { command: "node x/mcp-server/index.js --render-card -" }).code).toBe(2);
+    expect(pre("Bash", { command: "node x/mcp-server/index.js --render-card $payload" }).code).toBe(2);
+    const p = f(".claude/pending.json");
+    fs.writeFileSync(p, JSON.stringify({ variant: "ready", pending: ["verify on device"] }));
+    expect(pre("Bash", { command: `node x/mcp-server/index.js --render-card ${p}` }).code).toBe(0);
+  });
+
+  test.each([
+    ["& git commit -m x"], ["git.exe commit -m x"], ["git --no-pager commit -m x"],
+    ["git -C ../x commit -m y"], ["git -c user.name=x commit -m y"], ["/usr/bin/git commit -m z"],
+  ])("C-commit-normalise: %s is a commit", (command) => {
+    expect(C.commandFacts(command).commit).toBe(true);
+  });
+
+  test("C-commit-normalise: the PowerShell call operator form hits the commit gate", () => {
+    armS1();
+    expect(pre("PowerShell", { command: "& git commit -m x" }).code).toBe(2);
+  });
+
+  test.each([
+    ["gh pr merge 12 --squash", true], ["git push origin HEAD:main", true], ["git push origin :master", true],
+    ["git push origin main", true], ["git push -u origin feat/x", false], ["git push origin main-core", false],
+    ["git push --dry-run origin HEAD:main", false],
+  ])("C-direct-ship: %s → release %s", (command, release) => {
+    expect(C.commandFacts(command).release).toBe(release);
+  });
+
+  test("C-direct-ship: gh pr merge / push to main is refused while ship: auto and do-ship never ran", () => {
+    withWork({ ship: "auto", passes: [] });
+    const r = pre("Bash", { command: "gh pr merge 12 --squash --delete-branch" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("BLOCKED at release");
+    expect(r.stderr).toContain('Skill("devops:do-ship")');
+    expect(pre("Bash", { command: "git push origin HEAD:main" }).code).toBe(2);
+    ev({ k: "skill", name: "do-ship" });
+    expect(pre("Bash", { command: "gh pr merge 12 --squash" }).code).toBe(0);
+  });
+
+  test("C-direct-ship: with ship: manual a push to main is not release-gated", () => {
+    withWork({ ship: "manual", passes: ["harden"] });
+    expect(pre("Bash", { command: "git push origin HEAD:main" }).code).toBe(0);
+  });
+});
+
+describe("C — atomic arm and update", () => {
+  const nodeFs = require("fs");
+
+  test("C-arm-order: a failed rename keeps the old contract (new header written first)", () => {
+    const old = armS1({ mode: "audit" });
+    const real = nodeFs.renameSync;
+    nodeFs.renameSync = () => { const e = new Error("EPERM"); e.code = "EPERM"; throw e; };
+    try {
+      expect(RC.arm(dir, { mode: "backlog", sessionId: "s1" })).toBeNull();
+    } finally { nodeFs.renameSync = real; }
+    expect(RC.readRawContract(dir)).toMatchObject({ id: old.id, mode: "audit" });
+    expect(fs.existsSync(RC.prevPath(dir))).toBe(false);
+  });
+
+  test("C-arm-order: one failed rename is retried after 50 ms", () => {
+    const old = armS1({ mode: "audit" });
+    ev({ k: "edit" });
+    const real = nodeFs.renameSync;
+    let fails = 1;
+    nodeFs.renameSync = (...a) => {
+      if (fails-- > 0) { const e = new Error("EPERM"); e.code = "EPERM"; throw e; }
+      return real(...a);
+    };
+    let h;
+    try { h = RC.arm(dir, { mode: "backlog", sessionId: "s1" }); } finally { nodeFs.renameSync = real; }
+    expect(h).toMatchObject({ mode: "backlog" });
+    expect(RC.readRawContract(dir).id).toBe(h.id);
+    const prev = JSON.parse(fs.readFileSync(RC.prevPath(dir), "utf8"));
+    expect(prev).toMatchObject({ id: old.id, mode: "audit" });
+    expect(prev.events).toHaveLength(1);
+    expect(RC.events(dir)).toEqual([]);
+  });
+
+  test("C-update-race: update re-reads before writing and never clears a concurrent close", () => {
+    const c = armS1({ source: "fallback" });
+    const openText = fs.readFileSync(RC.contractPath(dir), "utf8");
+    RC.close(dir, "done: final card");
+    const real = nodeFs.readFileSync;
+    let stale = 2; // archiveIfExpired + readContract see the pre-close header
+    let served = false;
+    nodeFs.readFileSync = (file, ...rest) => {
+      if (stale > 0 && String(file) === RC.contractPath(dir)) { stale--; served = true; return openText; }
+      return real(file, ...rest);
+    };
+    let out;
+    try { out = RC.update(dir, { announced: true, closedAt: null }); } finally { nodeFs.readFileSync = real; }
+    expect(served).toBe(true);
+    const raw = RC.readRawContract(dir);
+    expect(raw.id).toBe(c.id);
+    expect(raw.closedAt).not.toBeNull();
+    expect(raw.closeReason).toBe("done: final card");
+    expect(out.closedAt).not.toBeNull();
+  });
+});

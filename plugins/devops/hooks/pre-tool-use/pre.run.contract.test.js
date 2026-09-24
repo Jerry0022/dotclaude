@@ -258,7 +258,8 @@ describe("card gate", () => {
     expect(run("Bash", { command: cmd }).code).toBe(2);
     fs.writeFileSync(payload, JSON.stringify({ variant: "ship-successful", pending: ["verify"] }));
     expect(run("Bash", { command: cmd }).code).toBe(0);
-    expect(run("Bash", { command: `node index.js --render-card missing.json` }).code).toBe(0);
+    // unreadable payload → gated as a final card (red-team C-card-stdin)
+    expect(run("Bash", { command: `node index.js --render-card missing.json` }).code).toBe(2);
   });
 });
 

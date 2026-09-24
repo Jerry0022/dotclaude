@@ -158,6 +158,17 @@ function writeJsonAtomic(file, obj) {
   } catch { return false; }
 }
 
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* no wait */ }
+}
+
+/** writeJsonAtomic with one retry after 50 ms (Windows EPERM from AV / indexer). */
+function writeJsonRetry(file, obj) {
+  if (writeJsonAtomic(file, obj)) return true;
+  sleepSync(50);
+  return writeJsonAtomic(file, obj);
+}
+
 function unlinkQuiet(file) { try { fs.unlinkSync(file); } catch { /* already gone */ } }
 
 function readRawContract(cwd) {
@@ -295,8 +306,7 @@ function arm(cwd, header = {}, opts = {}) {
   if (disabled()) return null;
   const now = nowOf(opts);
   const existing = readRawContract(cwd);
-  if (existing) archive(cwd, existing, now);
-  else unlinkQuiet(eventsPath(cwd));
+  const oldEvents = existing ? eventsOf(cwd, existing).slice(-ARCHIVE_EVENTS) : [];
   const h = sanitize({
     ...DEFAULT_HEADER,
     ...(header || {}),
@@ -307,7 +317,14 @@ function arm(cwd, header = {}, opts = {}) {
     closeReason: null,
     aborted: false,
   });
-  return writeJsonAtomic(contractPath(cwd), h) ? h : null;
+  // The new header is written FIRST (temp + rename, one retry): a failed
+  // rename leaves the old contract in place instead of no contract at all.
+  if (!writeJsonRetry(contractPath(cwd), h)) return null;
+  if (existing) {
+    writeJsonAtomic(prevPath(cwd), { ...existing, archivedAt: new Date(now).toISOString(), events: oldEvents });
+  }
+  unlinkQuiet(eventsPath(cwd));
+  return h;
 }
 
 /** Merge `patch` into the active contract. Returns the new header or null. */
@@ -323,7 +340,7 @@ function update(cwd, patch = {}, opts = {}) {
   const fresh = readRawContract(cwd);
   if (!fresh || fresh.id !== h.id) return null;
   const next = sanitize({ ...fresh, ...rest });
-  return writeJsonAtomic(contractPath(cwd), next) ? next : null;
+  return writeJsonRetry(contractPath(cwd), next) ? next : null;
 }
 
 /**

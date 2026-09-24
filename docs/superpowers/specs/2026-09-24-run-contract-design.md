@@ -179,9 +179,11 @@ one per item). `audit` contracts carry only `harden`, `polish`, `do-ship`
 
 ### D. Gates — `hooks/pre-tool-use/pre.run.contract.js`
 
-Early exit when neither `.claude/run-contract.json` nor
-`.claude/batch-handoff.json` exists (one `existsSync` each) — this hook sits on
-every Edit and Bash call and must stay under ~30 ms on the no-contract path.
+Early exit when none of `.claude/run-contract.json`,
+`.claude/run-contract.pending` and `.claude/batch-handoff.json` exists (one
+`existsSync` each, before the lib is loaded). The real cost on the
+no-contract path is the one `node` spawn per matched call that every command
+hook pays — the early exit only keeps the hook from adding work on top.
 
 | Tool call | Checks |
 |---|---|

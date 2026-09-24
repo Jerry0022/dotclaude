@@ -92,10 +92,13 @@ function classify(hook, root, cwd, C) {
       gates.push('branch');
     }
     if (f.renderCard) {
+      // Unreadable payload (`-` = stdin, `$var`, missing file) → gated as a final card.
       const payload = C.readCardPayload(f.renderCard, cwd);
-      if (payload && C.cardFacts(payload).final) gates.push('card');
+      if (!payload || C.cardFacts(payload).final) gates.push('card');
     }
-    return gates.length ? { gates, batch } : null;
+    // gh pr merge / git push onto main|master → release gate (ship: auto only).
+    if (f.release) gates.push('release');
+    return gates.length ? { gates, batch, shellRelease: f.release } : null;
   }
   if (tool === 'Skill') {
     const RC = require('../lib/run-contract');
@@ -173,6 +176,7 @@ function main(hook) {
   const gitRoot = inputRoot || root;
 
   for (const gate of call.gates) {
+    if (gate === 'release' && call.shellRelease && contract.ship !== 'auto') continue;
     const ctx = { closes: call.closes || [] };
     if ((gate === 'release' || gate === 'card' || gate === 'branch') && RC.segmentHasWork(seg)) {
       const n = codeFilesChanged(gitRoot, gate, resolveBase(gitRoot, call.base, C));

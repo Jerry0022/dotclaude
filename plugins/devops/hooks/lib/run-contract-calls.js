@@ -8,7 +8,7 @@
  *   call the same way. Pure parsing plus two small fs reads (card payload,
  *   transcript tail); no git, no contract state.
  *
- *   commandFacts(cmd)          → {commit, branch, branchName, renderCard}
+ *   commandFacts(cmd)          → {commit, branch, branchName, renderCard, worktree, detach, release}
  *   toolFilePath(tool, input)  → string | null
  *   isGatedPath(root, cwd, p)  → boolean (inside the work tree, not exempt)
  *   closesOf(body)             → ["473", …] from "Closes #473" / "Fixes #…"
@@ -34,9 +34,9 @@ function stripQuotes(cmd) {
   return String(cmd || '').replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'[^']*'/g, "''");
 }
 
-/** Leading `(`, `{`, `VAR=value ` and `sudo ` removed from one segment. */
+/** Leading `(`, `{`, `&` (PowerShell call operator), `VAR=value ` and `sudo ` removed from one segment. */
 function bareSegment(seg) {
-  let s = seg.trim().replace(/^[({\s]+/, '');
+  let s = seg.trim().replace(/^[({&\s]+/, '');
   for (;;) {
     const next = s.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S*\s+/, '').replace(/^sudo\s+/, '');
     if (next === s) return s;
@@ -44,7 +44,10 @@ function bareSegment(seg) {
   }
 }
 
-const GIT_RE = /^git(?:\s+-[cC]\s+\S+)*\s+(\S+)(.*)$/s;
+// `git`, `git.exe`, `/usr/bin/git`, then git's global flags before the subcommand.
+const GIT_RE = /^(?:\S*[\\/])?git(?:\.exe)?(?:\s+(?:-[cC]\s+\S+|--no-pager|--paginate|-p|-P|--bare|--no-replace-objects|--literal-pathspecs|--(?:git-dir|work-tree|namespace|exec-path|config-env)(?:=\S+|\s+\S+)))*\s+(\S+)(.*)$/s;
+const GH_MERGE_RE = /^(?:\S*[\\/])?gh(?:\.exe)?\s+pr\s+merge\b/;
+const PUSH_MAIN_RE = /(^|\s)(?:[^\s:]*:)?(?:refs\/heads\/)?(main|master)(\s|$)/;
 
 /**
  * Facts of a Bash / PowerShell command line.
@@ -52,18 +55,22 @@ const GIT_RE = /^git(?:\s+-[cC]\s+\S+)*\s+(\S+)(.*)$/s;
  * @returns {{commit:boolean, branch:boolean, branchName:string|null, renderCard:string|null}}
  */
 function commandFacts(cmd) {
-  const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false };
+  const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false };
   if (typeof cmd !== 'string' || !cmd.trim()) return out;
   const rc = cmd.match(/index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
   if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
   const segs = stripQuotes(cmd).split(/&&|\|\||[;|\n]/);
   const rawSegs = cmd.split(/&&|\|\||[;|\n]/);
   segs.forEach((seg, i) => {
-    const m = bareSegment(seg).match(GIT_RE);
+    const bare = bareSegment(seg);
+    if (GH_MERGE_RE.test(bare)) out.release = true;
+    const m = bare.match(GIT_RE);
     if (!m) return;
     const sub = m[1];
     const rest = m[2] || '';
     if (sub === 'commit' && !/(^|\s)--dry-run\b/.test(rest)) out.commit = true;
+    // A push straight onto main / master (`HEAD:main`, `:main`, `origin main`) is a ship.
+    if (sub === 'push' && PUSH_MAIN_RE.test(rest) && !/(^|\s)--dry-run\b/.test(rest)) out.release = true;
     let name = null;
     let hit = false;
     const raw = rawSegs.length === segs.length ? bareSegment(rawSegs[i]) : bareSegment(seg);
