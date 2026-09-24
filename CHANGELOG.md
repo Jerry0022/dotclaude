@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.194.7] — 2026-09-24
+
+### Fixed
+- **The git-sync tests no longer fail when the machine is busy.** `git-sync.js` gives each git call 15 s. Under parallel agent load a real merge took longer, so the sync reported `✗` for a merge that worked, and the guards and conflicts suites failed one assertion each. `DEVOPS_GIT_SYNC_TIMEOUT_MS` (1 s to 5 min) raises that limit. The integration fixture sets it to 55 s, below the 60 s test timeout. Production keeps 15 s (#475).
+
 ## [0.194.6] — 2026-09-24
 
 ### Changed
