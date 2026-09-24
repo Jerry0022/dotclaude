@@ -28,6 +28,9 @@ export default defineConfig({
     // 100-650 s). Full runs queue behind a machine-wide lock; filtered runs
     // (`vitest run some.test.js`) and watch mode pass straight through.
     globalSetup: ["./vitest.suite-lock.mjs"],
+    // One event-loop turn after every test, so RPC replies to a worker whose
+    // tests block synchronously are drained before their 60 s timer fires.
+    setupFiles: ["./vitest.yield.mjs"],
     minWorkers: 1,
     // Hook tests spawn real node processes (that IS the contract under test —
     // the harness invokes hooks as child processes). On Windows a single spawn
