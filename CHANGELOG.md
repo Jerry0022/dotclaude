@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.201.4] — 2026-09-25
+
+### Fixed
+- **do-batch keeps images you paste in the Desktop app (#490).** The Desktop app sends a pasted image as its own block, so the collect hook used to store the note as text only, and at merge time nobody could see what "siehe Bild in rot eingezeichnet" referred to. The note is now collected with its image: the hook finds the image the harness saved for this session, copies it to `.claude/batch-assets/` and adds an `[Anhang-Datei]` line to the note. The collect panel says "📎 Das Bild ist mit der Notiz gespeichert". An image the hook missed at collect time is matched at merge time to the note nearest to it; a match more than 3 s off is labelled "prüfen" so the merge checks it instead of trusting it. In the CLI, `[Image #N]` and `@file` still pass through as before.
+
 ## [0.201.3] — 2026-09-25
 
 ### Fixed
