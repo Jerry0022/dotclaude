@@ -48,9 +48,9 @@ Otherwise branch on `phase`:
 - **`phase=presence`** — the user left **before** finishing the gate. Timeout
   defaults apply and are not renegotiable:
   - **`shutdown` = what the cron carries — never forced.** The cron encodes
-    the do-run router's Q2 answer (Step 1a): **Dabei → `shutdown=no`**, always
+    the do-run router's Q2 answer (Step 1a): **Interaktiv → `shutdown=no`**, always
     — the user said they stay at the PC, and a timeout must never power it
-    down under them. **Weg** → the F6 "PC danach" answer once given, else
+    down under them. **Autonom** → the F6 "PC danach" answer once given, else
     `shutdown=yes` (a walked-away user's report-only run would otherwise idle
     the PC all night). No router answer (legacy direct entry) → `yes`.
   - **`burnMode=no` always.** The presence default is the normal sequential run;
@@ -124,9 +124,9 @@ CronCreate({ recurring: false, cron: "<now+3min>",
 
 **`shutdown` in this cron follows the do-run router's Q2 answer** (already
 given when this cron is armed — the router asks Q1/Q2 before F3/F4):
-- **Dabei** → `shutdown=no`, in every arm and re-arm. The user said they stay;
+- **Interaktiv** → `shutdown=no`, in every arm and re-arm. The user said they stay;
   a presence timeout never powers the PC down under them.
-- **Weg** → `shutdown=yes` until F6 "PC danach" is answered, then F6's value
+- **Autonom** → `shutdown=yes` until F6 "PC danach" is answered, then F6's value
   (`PC aus` → `yes`, `PC an · …` → `no`).
 - No router answer (legacy direct entry) → `shutdown=yes`.
 
@@ -238,11 +238,11 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    repo, no force-push. `$SHIP=manual` means no ship in this run: Step 4
    leaves each issue committed on its own branch (not pushed, issue and
    milestone stay open, item reported as `ready`). Not asked again.
-3. **Shutdown / resume — answered by the router.** Weg → its follow-up F6
+3. **Shutdown / resume — answered by the router.** Autonom → its follow-up F6
    ("PC danach": `PC an · mit Resume` / `PC an · ohne Resume` /
    `PC aus · ohne Resume`), which folds autonomous mode Step 2 **Q3** and
    **Q4** and keeps their HARD GATE by construction (shutdown=yes ⇒
-   `$AUTO_RESUME=no`). Dabei → `shutdown=no`, `autoResume=no`.
+   `$AUTO_RESUME=no`). Interaktiv → `shutdown=no`, `autoResume=no`.
 
    **Budget-Modus (`$BURN_MODE`)** — answered by the router's Q4: "Budget
    verbrennen" ticked → `yes` (work the backlog like `/do-run burn`:
@@ -420,7 +420,7 @@ git-exclude entries (Step 3). Semantics mirror the `AUTONOMOUS-*` family.
 - **Presence phase is timeout-safe** — the autostart is armed from the FIRST
   question (Step 1a), not just the gate, so a user who walks away early still
   starts with safe defaults (all open milestones; `shutdown` per the router's
-  Q2 — Dabei never shuts down, Weg defaults to `yes` until F6 answers); undecided
+  Q2 — Interaktiv never shuts down, Autonom defaults to `yes` until F6 answers); undecided
   `needs-decision`/`oversized` items are parked, never guessed.
 - **Composed ships never prompt** — Step 4 arms the autonomous lockout, so
   `/do-ship` parks/blocks at every gate that would otherwise raise a modal.

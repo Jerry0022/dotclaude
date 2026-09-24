@@ -87,7 +87,7 @@ describe("base call: the four spec questions in one AskUserQuestion", () => {
 describe("base call: fixed option order", () => {
   const EXPECTED = {
     Q1: ["Prompt umsetzen", "Audit", "Backlog"],
-    Q2: ["Dabei · Ship manuell", "Dabei · Ship automatisch", "Weg · Ship automatisch", "Weg · Ship manuell"],
+    Q2: ["Interaktiv · Ship manuell", "Interaktiv · Ship automatisch", "Autonom · Ship manuell", "Autonom · Ship automatisch"],
     Q3: ["Mit Umfeld", "Nur das"],
     Q4: ["Harden danach", "Polish danach", "Rethink vorher", "Budget verbrennen"],
   };
@@ -122,7 +122,7 @@ describe("base call: recommendation", () => {
   });
 
   test("Q2's recommended option keeps ship manual (the user's 'ship nein default')", () => {
-    expect(byId(base, "Q2").options[0].label).toBe("Dabei · Ship manuell");
+    expect(byId(base, "Q2").options[0].label).toBe("Interaktiv · Ship manuell");
   });
 });
 
@@ -174,6 +174,11 @@ describe("base call: empty multi-select answer", () => {
     expect(reading).toMatch(/Nothing ticked\*\* → the recommended set/);
     expect(reading).toMatch(/"keine" \/ "none"/);
   });
+
+  test("Q4's question names the set an empty answer runs (no pre-tick exists)", () => {
+    expect(skill).toMatch(/Leer lassen = Harden \+ Polish\)/);
+    expect(skill).toMatch(/no pre-selection: an option can be\s+marked, never pre-ticked/);
+  });
 });
 
 describe("label rules (base call and follow-up)", () => {
@@ -188,10 +193,12 @@ describe("label rules (base call and follow-up)", () => {
     expect(label).not.toMatch(/^(ja|nein|yes|no)\b/i);
   });
 
-  test.each(all)("%s %j is short (≤ 4 words, ≤ 26 chars)", (_id, label) => {
+  test.each(all)("%s %j is short (≤ 4 words, ≤ 30 chars)", (_id, label) => {
     const words = label.split(/\s+/).filter((w) => w !== "·");
     expect(words.length).toBeLessThanOrEqual(4);
-    expect(label.length).toBeLessThanOrEqual(26);
+    // 30, not shorter: "Interaktiv · Ship automatisch" — the user chose
+    // words that explain themselves over a terser label.
+    expect(label.length).toBeLessThanOrEqual(30);
   });
 
   test("headers fit the tool's 12-character chip", () => {
@@ -200,7 +207,7 @@ describe("label rules (base call and follow-up)", () => {
 
   test("Q2 labels share one shape: <presence> · Ship <how>", () => {
     for (const o of byId(base, "Q2").options) {
-      expect(o.label).toMatch(/^(Dabei|Weg) · Ship (manuell|automatisch)$/);
+      expect(o.label).toMatch(/^(Interaktiv|Autonom) · Ship (manuell|automatisch)$/);
     }
   });
 

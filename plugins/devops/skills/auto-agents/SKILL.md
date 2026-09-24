@@ -54,7 +54,7 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 | Argument | Set by | Meaning |
 |---|---|---|
 | `--from=<caller>` | every calling skill: `do-run`, `auto-concept`, `auto-fix`, `auto-harden`, `auto-polish` | Who gets the result (Step 7). **Absent** = the model invoked this skill directly — the user said yes to the full-ceremony offer or typed a trigger phrase; the main conversation is then the caller. |
-| `--mode=interactive\|background` | the caller | The execution mode — the former Step 4 question. `do-run` answers it with its question 2 ("Ablauf?"): **Dabei · …** → `interactive`, **Weg · …** → `background`. `auto-concept` passes `background` (its main session keeps the heartbeat and `/status` posts). `auto-fix`, `auto-harden`, `auto-polish` pass `background` under `--autonomous`, else `interactive`. |
+| `--mode=interactive\|background` | the caller | The execution mode — the former Step 4 question. `do-run` answers it with its question 2 ("Ablauf?"): **Interaktiv · …** → `interactive`, **Autonom · …** → `background`. `auto-concept` passes `background` (its main session keeps the heartbeat and `/status` posts). `auto-fix`, `auto-harden`, `auto-polish` pass `background` under `--autonomous`, else `interactive`. |
 | `--ship=auto\|manual` | `do-run` (question 2) | Echoed in the result, never acted on. Missing = `manual`. |
 | rest | the caller | The task or the approved plan, verbatim — decisions, file paths, the concept file, the root cause. Never a paraphrase. |
 
@@ -162,7 +162,7 @@ Parse the JSON `suggestions` array:
   suggestions and rejects anything not in the list (defense in depth).
 
 Under `--mode=background` with a `--from`, do not ask: the user may be away
-(`do-run` "Weg"), and a pending prompt would stall the run. List the
+(`do-run` "Autonom"), and a pending prompt would stall the run. List the
 suggestions in the result's `open` field (Step 7) instead. The audit is read-only on no findings — never blocks the flow when
 there's nothing to fix.
 
@@ -227,7 +227,7 @@ prompts will carry, so it is visible before anything is spawned.
 **Confirmation — only where the user has not already said go.** Ask for it
 on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`.
 Every other caller's own gate was the confirmation — do-run's questions
-answered with "Weg", the concept's implement click, an `--autonomous` pass —
+answered with "Autonom", the concept's implement click, an `--autonomous` pass —
 and the user may be away, so show the plan and continue. Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
 - de: "ja" / "go" / "mach" → proceed as planned
