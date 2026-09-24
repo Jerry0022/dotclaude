@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.198.1] — 2026-09-24
+
+### Fixed
+- **A resume is never answered with silence.** When a tool call was cut off mid-pipeline — here the completion card right after a merge — Claude answered the app's "Continue from where you left off." with "No response requested." The session stayed on "🚀 Shipping –" with no card and no plugin sync, and looked broken. The Quiet output style now says that a resume follows an interrupted or rejected tool call and picks the work up at that step. The empty reply stays reserved for the card nudge and for background events that changed nothing.
+
 ## [0.198.0] — 2026-09-24
 
 ### Added

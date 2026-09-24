@@ -41,3 +41,9 @@ evidence — nothing to report), answer with nothing — no "Stand bleibt", no
 card repeat, no line at all. Only a real change since the last card (a test
 went red, a new error, work finished) gets one line and, if it ends the
 turn, a new card.
+
+"Continue from where you left off." is never such a turn. It follows a tool
+call that was interrupted or rejected, so the step that call belonged to is
+still open — a card that never reached the screen, a finalizer that never
+ran, a title still on "🚀 Shipping –". Pick the work up at that step and end
+the turn the way it would have ended; never answer it with nothing.

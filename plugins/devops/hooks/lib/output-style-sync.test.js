@@ -107,6 +107,27 @@ describe("shipped manifest", () => {
   });
 });
 
+// A ship whose card call was cut off after the merge got "Continue from where
+// you left off." and answered "No response requested." — the quiet-tick rule
+// read as licence to stay silent, and the session sat on "🚀 Shipping –" with
+// no card and the plugin sync never run. The style scopes silence to the
+// card nudge and to unchanged background events; a resume is neither.
+describe("Quiet style — a resume is never a quiet tick", () => {
+  const template = fs.readFileSync(path.join(REPO_PLUGIN, TEMPLATE_REL), "utf8");
+
+  test("names the resume prompt and forbids answering it with nothing", () => {
+    expect(template).toContain('"Continue from where you left off." is never such a turn.');
+    expect(template).toMatch(/never answer it with nothing\./);
+  });
+
+  test("the resume rule follows the background-turn rule it carves out of", () => {
+    const quiet = template.indexOf("A turn triggered by a background-task notification");
+    const resume = template.indexOf('"Continue from where you left off."');
+    expect(quiet).toBeGreaterThan(-1);
+    expect(resume).toBeGreaterThan(quiet);
+  });
+});
+
 describe("ss.plugin.update → Quiet style sync (end to end)", () => {
   test("the real hook refreshes an outdated shipped copy and reports it", () => {
     // Marketplace clone: a git repo with plugins/devops carrying the template.
