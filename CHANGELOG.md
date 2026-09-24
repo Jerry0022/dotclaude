@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.195.1] — 2026-09-24
+
+### Fixed
+- **One completion card per turn, and nothing under it.** On the Desktop app the same card showed up twice, with a stray line under each copy. Three things caused it. The Stop gate read any text after the card widget as "card never shown" and asked for the card again. `post.flow.completion` told Claude, right after the widget, to render a card and output its markdown. And the card told Claude to answer the app's one "no visible output" nudge with a short line. Now a card shown after the turn's last render counts, whatever follows it. The hook answers the widget call with "end of turn". The nudge gets an empty reply, which ends the turn with the card last. The Quiet output style says the same.
+- **`/do-run`'s questions explain themselves.** The Ablauf options are now "Interaktiv" and "Autonom" (were "Dabei" and "Weg"). Their descriptions say what each choice means. Their order is fixed: manual ship before automatic ship, in both halves. The Durchgänge question names what an empty answer runs ("Leer lassen = Harden + Polish"), because the question tool cannot pre-tick options.
+
 ## [0.195.0] — 2026-09-24
 
 ### Added
