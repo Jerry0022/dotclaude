@@ -337,6 +337,9 @@ describe("final-report close-out sheet", () => {
       skill.indexOf("### C · Ship")
     );
     expect(b).toMatch(/devops role agents/i);
+    // auto-agents is the single execution path of every implementing skill.
+    expect(b).toContain("`auto-agents` skill");
+    expect(b).toContain("--from=auto-concept");
     expect(b).toContain("never inline");
     // The item shape is the same one part A files as issues, so the brief an
     // agent gets is the body Claude wrote for the issue.

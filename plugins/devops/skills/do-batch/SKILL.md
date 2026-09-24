@@ -1,24 +1,23 @@
 ---
 name: do-batch
-version: 0.5.0
+version: 0.6.0
 description: >-
   Collect mode — a UserPromptSubmit hook parks each prompt in
   `.claude/batch.md` instead of executing it (no model turn), until an
-  execute marker merges the whole set into ONE feasibility-checked plan.
-  Triggers on "/do-batch", "sammelmodus", "collect mode", "batch mode",
-  "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work,
+  execute marker merges the whole set into ONE feasibility-checked plan and
+  hands it on — to auto-concept when it still needs decisions, to do-run
+  (--from=do-batch) when it is ready to implement. Triggers on "/do-batch",
+  "sammelmodus", "collect mode", "batch mode", "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work,
   for backlog execution (/do-run backlog), or for issue creation (/auto-issue).
 layer: 0
 invokes: [do-run, auto-concept]
 triggers:
   en: ["/do-batch", "collect mode", "batch mode"]
   de: ["sammelmodus", "erstmal sammeln", "nicht sofort umsetzen"]
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Skill, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # do-batch — Collect Prompts, Merge Once
-
-<!-- PR2-phaseB: route the merged plan to do-run (question 1 skipped when started from do-batch) or auto-concept, per spec call graph `do-batch → do-run, auto-concept`. Today the plan is still executed inline. -->
 
 Spec: `docs/superpowers/specs/2026-08-16-claude-batch-design.md`
 
@@ -351,17 +350,36 @@ coherent piece of work. Where notes describe the same surface, they merge.
 Silent "later wins" resolution is the failure mode this step exists to prevent.
 An impossible item is **named**, never quietly routed around.
 
-**4.6 Present the plan and get approval.** After the OK:
-- conflicts substantial enough to deserve clickable decisions → invoke `/auto-concept`
-- otherwise → straight into implementation
+**4.6 Present the plan and pick the hand-off.** do-batch plans; it never
+implements. Show the coverage list, the merged plan and every named conflict
+or infeasible item in this turn, then hand the whole thing to exactly ONE
+skill (4.9). There is no separate "passt der Plan?" question: the first
+interaction of the receiving skill — do-run's questions, the concept page —
+is the approval point, and a second gate in front of it would ask the same
+thing twice.
 
-"Implementation" is deliberately broad: code, concepting, UI concepting, or only
-a first step of what the notes ask for.
+**Decision rule — does the plan still need a decision, or is it ready?**
 
-**4.7 Archive, do not delete.** After the plan is approved, call
-`archiveNotes(cwd)` — it renames `batch.md` to `batch-<timestamp>.md`. The
-originals stay recoverable; a merge must never be the only record of what the
-user actually wrote.
+| The merged plan … | Hand to |
+|---|---|
+| has **no open decision**: every coverage line is übernommen, zusammengeführt, nicht machbar (named, and nothing that depends on it needs a new direction) or a Frage already answered; at most **one** conflict, and that one resolved in the plan with a named default the user can veto ("#2 rot, #6 blau — ich nehme blau") | **do-run** with `--from=do-batch` |
+| has **at least one open decision**: two or more conflicts, or one without a defensible default · a note that asks for analysis, a comparison or a concept rather than a change · a visual/design choice the notes leave open · an infeasible note whose dependents need a new direction · two or more approach forks in the plan itself | **auto-concept** with `--from=do-batch` |
+
+When unsure, route to auto-concept: an unneeded decision page costs one
+click-through, a silently decided conflict costs the user's requirement. A
+plan that is mostly ready with one open fork still goes to auto-concept — the
+concept's implement click runs the whole plan through `auto-agents`, so the
+ready parts are not delayed by a second hand-off, and do-run is never
+started afterwards for the same plan.
+
+"Implementation" stays deliberately broad: code, concepting, UI concepting,
+or only a first step of what the notes ask for — the receiving skill decides
+the scope with the user.
+
+**4.7 Archive, do not delete.** Before the hand-off, call `archiveNotes(cwd)`
+— it renames `batch.md` to `batch-<timestamp>.md`. The originals stay
+recoverable; a merge must never be the only record of what the user actually
+wrote. The archived path travels with the hand-off (4.9).
 
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/do-batch go` path
@@ -382,6 +400,28 @@ context repeats this instruction because the hook path never loads this skill.
 Say in one clause that follow-up prompts run normally again and `/do-batch on`
 re-arms collection. A question here would be asking whether to keep blocking the
 answers to your own questions.
+
+**4.9 Hand off — the last action of the turn.** Invoke the Skill chosen in
+4.6 with `--from=do-batch` followed by the hand-off body:
+
+```
+--from=do-batch
+Notizen: <archived path from 4.7>
+Abdeckung: #1 … #N, one line each, dispositions as in 4.2
+Plan: <the merged plan>
+Konflikte / nicht machbar: <each one named, with the default taken or "offen">
+Offene Entscheidungen: <auto-concept only — the forks that made 4.6 route here>
+```
+
+- **do-run** skips its question 1 ("Was?") on `--from=do-batch` — the answer
+  is "Prompt umsetzen", with this plan as the prompt — and asks its remaining
+  questions (Ablauf, Umfang, Durchgänge) as usual. It then executes through
+  `auto-agents`.
+- **auto-concept** opens with this plan as iteration 1 and every open
+  decision as a decision item (its Step 0.5 § Started from do-batch).
+
+Never both, and never implement anything here before the hand-off: the
+receiving skill owns the run from this point.
 
 ## Step 5 — Deactivate
 
@@ -452,6 +492,9 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
   route word becomes note #1 (Step 2.4). Acting on it defeats the mode in the
   very turn that starts it, and it is how the marker dialog gets skipped.
 - **Never resolve a contradiction silently.** Name it, then decide.
+- **do-batch never implements.** The merged plan goes to exactly one skill —
+  do-run (`--from=do-batch`, ready plan) or auto-concept (`--from=do-batch`,
+  open decisions) — per the Step 4.6 decision rule.
 - **Never delete notes.** Archive them.
 - **Activation ends with the mode ON.** The invocation is the request; never
   ask the user to send `/do-batch on` afterwards. A re-activation while

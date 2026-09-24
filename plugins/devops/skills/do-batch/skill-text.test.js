@@ -155,3 +155,49 @@ describe("do-batch SKILL.md — help route and re-arming", () => {
     expect(step2).toMatch(/after an auto-end/);
   });
 });
+
+// PR 2 of the skill restructure: do-batch plans, it never implements. The
+// merged plan goes to exactly one skill — auto-concept while a decision is
+// open, do-run (`--from=do-batch`, question 1 skipped) when it is ready.
+describe("do-batch SKILL.md — hand-off to do-run / auto-concept", () => {
+  const fm = skill.slice(0, skill.indexOf("\n---", 4));
+  const step4 = section("## Step 4 — Fire the merge", "## Step 5 — Deactivate");
+
+  it("declares both callees and may use the Skill tool", () => {
+    expect(fm).toMatch(/^invokes: \[do-run, auto-concept\]$/m);
+    expect(fm.match(/^allowed-tools:(.*)$/m)[1].split(",").map((t) => t.trim())).toContain("Skill");
+  });
+
+  it("has a decision rule table routing to do-run and auto-concept, both with --from=do-batch", () => {
+    const rule = step4.slice(step4.indexOf("**Decision rule"), step4.indexOf("**4.7"));
+    const rows = rule.split("\n").filter((l) => l.startsWith("| has "));
+    expect(rows).toHaveLength(2);
+    const [ready, open] = rows;
+    expect(ready).toMatch(/\*\*no open decision\*\*/);
+    expect(ready).toMatch(/\*\*do-run\*\* with `--from=do-batch`/);
+    expect(open).toMatch(/\*\*at least one open decision\*\*/);
+    expect(open).toMatch(/\*\*auto-concept\*\* with `--from=do-batch`/);
+    expect(rule).toMatch(/When unsure, route to auto-concept/);
+  });
+
+  it("do-run skips its question 1 when started from do-batch", () => {
+    const handoff = step4.slice(step4.indexOf("**4.9 Hand off"));
+    expect(handoff).toMatch(/\*\*do-run\*\* skips its question 1 \("Was\?"\) on `--from=do-batch`/);
+    expect(handoff).toMatch(/^--from=do-batch$/m);
+    expect(handoff).toMatch(/Never both, and never implement anything here/);
+  });
+
+  it("archives and retires before the hand-off, which is the last action", () => {
+    const at = (s) => step4.indexOf(s);
+    expect(at("**4.6")).toBeLessThan(at("**4.7 Archive"));
+    expect(at("**4.7 Archive")).toBeLessThan(at("**4.8 Retire"));
+    expect(at("**4.8 Retire")).toBeLessThan(at("**4.9 Hand off"));
+    expect(step4).toMatch(/\*\*4\.9 Hand off — the last action of the turn\.\*\*/);
+  });
+
+  it("no longer runs the plan inline or asks a separate approval question", () => {
+    expect(step4).not.toMatch(/straight into implementation/);
+    expect(step4).not.toMatch(/get approval/);
+    expect(section("## Rules")).toMatch(/\*\*do-batch never implements\.\*\*/);
+  });
+});

@@ -44,7 +44,7 @@ export function isDesktopSession(env = process.env) {
  * No prompt may start with "/": the host refuses a prefill whose text starts
  * with a slash — a leading space does not help (live 2026-09-23) — while plain
  * text lands. Skills are reached by their trigger words instead: "ship" hits
- * prompt.ship.detect, "promote" do-ship's promote mode, "Debug …" auto-fix.
+ * prompt.ship.detect, "promote" / "promote stable" do-ship's promotion (prompt.ship.detect parses the channel), "Debug …" auto-fix.
  *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a

@@ -1,6 +1,6 @@
 ---
 name: auto-polish
-version: 0.3.0
+version: 0.4.0
 description: >-
   UI refinement pass: visual consistency (spacing, tokens, typography, icons,
   colors), state-visuals, UI-side functionality checks, the standing UI
@@ -19,7 +19,7 @@ user-invocable: false
 triggers:
   en: ["polish", "ui polish", "design pass"]
   de: ["ui angleichen", "design konsistenz", "feinschliff", "visuell aufräumen"]
-argument-hint: "[--autonomous] [--invoked-by=agents|autonomous|ship] [optional scope: file/dir path]"
+argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -30,27 +30,40 @@ functionality — with user approval for structural changes. Scope: `$ARGUMENTS`
 
 ## Invocation Context
 
-Same three invocation paths as `/auto-harden`:
+Same callers as `/auto-harden` — the user, `/do-run` and `/do-ship`, all
+above this skill in the call graph. `/auto-agents` (layer 5) never calls it;
+it is the layer this skill *executes through*.
 
 1. **Direct** — user asks for it (trigger phrase; the skill is hidden from the slash menu).
-2. **From `/auto-agents`** — pass `--invoked-by=agents` plus
-   <!-- PR2-phaseB: auto-agents (layer 5) may not invoke auto-polish (layer 4); the caller is now do-run ("Polish danach"). Rewrite this path. -->
-   `--parent-mode=background|interactive`. Skip self-spawned qa/redteam if
-   parent owns those waves. Structural changes (Step 10) STILL require
-   approval — when `--parent-mode=background`, structural items are
-   skipped + flagged for parent's report.
-3. **From `/do-run autonomous`** — pass `--invoked-by=autonomous` (implies
-   `--autonomous`). No permission priming, no user prompts. Structural
-   changes always flagged for the autonomous report (never auto-applied).
-4. **From `/do-ship`** — pass `--invoked-by=ship` plus the diff's UI files as
+2. **From `/do-run`** ("Polish danach") — `--invoked-by=do-run`, a full pass
+   scoped to the run's changes, executed through auto-agents (§ Execution).
+   Under "Weg" do-run adds `--autonomous` (no prompts; structural changes
+   always flagged, never auto-applied); under "Nur das" it adds `--strict`.
+   Skip self-spawned qa/redteam when the parent owns those waves. The
+   pre-PR-2 values `--invoked-by=agents` and `--invoked-by=autonomous` (the
+   latter implies `--autonomous`) are read as `do-run`.
+3. **From `/do-ship`** — pass `--invoked-by=ship` plus the diff's UI files as
    scope. This is the **rules-only path**: it runs nothing but the static
    halves of the UI rules (Step 4 #8) over the given files and returns a
    findings list to the caller. No test plan, no qa/redteam agents, no
    browser, no fixes, no completion card. See § Rules-only path (ship).
+   /do-ship calls `/auto-harden --invoked-by=ship` at the same step.
+4. **Under strict** — `--strict` (do-run "Nur das", /do-ship under strict
+   mode, or the `[claude-strict contract]` in context): only the named scope
+   changes; wider findings are reported, never fixed. The ship path is
+   report-only anyway — /do-ship then applies none of its mechanical fixes.
 
-The Single-Agent Shortcut from `deep-knowledge/agent-orchestration.md`
-applies: orchestrators delegate directly to this skill instead of building
-a wave for polish-tasks (avoids double qa/redteam spawning).
+## Execution — through auto-agents
+
+The changes of a full pass (Steps 5–10) run through `/auto-agents`, the
+single execution path: `Skill("auto-agents", "--from=auto-polish --mode=<m> <change list>")`
+with `--mode=background` under `--autonomous`, else `--mode=interactive`.
+Read its result block (`tier`, `done`, `open`, `needs-decision`, `ship`) and
+**ignore `ship`** — this skill never ships. **Inline shortcut:** when your own
+tier check lands on Inline (one domain, ≤ ~5 files), apply the changes
+yourself without loading auto-agents. Read-only helpers (Explore scans, qa,
+redteam, designer consults) stay direct `Agent` spawns. The rules-only path
+never loads auto-agents.
 
 ## Step 0 — Load Extensions
 
@@ -83,12 +96,15 @@ Scan `$ARGUMENTS` for:
 - `--autonomous` flag → set `$AUTONOMOUS=1`. Skips ALL `AskUserQuestion`
   calls. Structural changes are STILL not auto-applied — they get flagged
   in the final report. Autonomous is mute mode, not yolo mode.
-- `--invoked-by=agents|autonomous|ship` → set `$PARENT_SKILL`. See "Invocation
-  Context". `--invoked-by=autonomous` implicitly sets `$AUTONOMOUS=1`.
-  `--invoked-by=ship` sets `$RULES_ONLY=1` and jumps to § Rules-only path
-  (ship) right after Step 2 — Steps 3 and 5–12 do not run.
-- `--parent-mode=background|interactive` → only with
-  `--invoked-by=agents`. Background acts like `--autonomous`.
+- `--invoked-by=do-run|ship` → set `$PARENT_SKILL`. See "Invocation
+  Context". Legacy values: `agents` → `do-run`; `autonomous` → `do-run` +
+  `$AUTONOMOUS=1`. `--invoked-by=ship` sets `$RULES_ONLY=1` and jumps to
+  § Rules-only path (ship) right after Step 2 — Steps 3 and 5–12 do not run.
+- `--strict` → set `$STRICT=1`: nothing outside the named scope changes;
+  wider findings go to the report. Also set when the `[claude-strict
+  contract]` block is in this turn's context.
+- `--parent-mode=background|interactive` → pre-PR-2 flag, still read:
+  background acts like `--autonomous`.
 - Any remaining tokens → treat as scope path(s).
 
 ## Step 2 — Scope Selection
@@ -122,7 +138,7 @@ In parallel — do NOT block:
 1. **Determine UI test tools per `deep-knowledge/test-plan.md`** (browser
    preview, Playwright, snapshot tests, multi-viewport setup). Store as
    `$TEST_PLAN`.
-2. **Spawn `qa` agent** in background — SKIP when `$PARENT_SKILL=agents`
+2. **Spawn `qa` agent** in background — SKIP when `$PARENT_SKILL=do-run`
    AND a qa wave is already planned (parent owns qa). Otherwise:
    ```
    Agent(subagent_type="devops:qa", run_in_background=true,
@@ -404,7 +420,7 @@ as skipped in Step 12.
    ```
 5. Apply Step 7 to redteam findings.
 
-**Skip self-spawned redteam** when `$PARENT_SKILL=agents` and parent owns
+**Skip self-spawned redteam** when `$PARENT_SKILL=do-run` and parent owns
 a redteam wave — flag findings for parent's wave instead.
 
 ## Step 12 — Output
@@ -453,6 +469,8 @@ applies the chosen items.
   only when UI demonstrably suffers.
 - **Structural changes ALWAYS need approval.** `--autonomous` flags
   them, never applies.
+- **`--strict` narrows, never widens.** Only the named scope changes; a
+  finding outside it is reported, not fixed.
 - **Token-first** — when a design token catalog exists, prefer tokens
   over dominant-value-snap. Tokens are intent; dominance is accident.
 - **Multi-viewport verify** — for web apps, never declare done without

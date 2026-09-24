@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.4.0
+ * @version 0.5.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
  *   prompt (exit 2 — the harness erases it, so it never reaches the model) and
  *   appends it to `.claude/batch.md`. A prompt starting with the configured
  *   execute marker instead fires the merge: the whole note list is injected as
- *   context and Claude works the collected intent as ONE plan.
+ *   context and Claude merges the collected intent into ONE plan, which it
+ *   hands to auto-concept (open decisions) or do-run (--from=do-batch, ready).
  *
  *   Why: eight observations sent one by one are eight turns, each paying the
  *   full accumulated context. Worse, observation five routinely supersedes
@@ -235,8 +236,15 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     '3. Liste Widersprüche EINZELN auf ("#2 wollte rot, #6 blau") statt sie still',
     '   nach "später gewinnt" aufzulösen. Unmögliche Punkte werden benannt,',
     '   nicht umgangen.',
-    '4. Lege den Plan zur Freigabe vor. Danach: /auto-concept wenn die Konflikte eine',
-    '   Entscheidungsseite rechtfertigen, sonst direkt in die Umsetzung.',
+    '4. Lege Abdeckungsliste und Plan vor und übergib ihn OHNE eigene Freigabefrage an',
+    '   GENAU EINEN Skill (do-batch Step 4.6) — du setzt selbst nichts um:',
+    '   - Skill auto-concept mit --from=do-batch, wenn noch eine Entscheidung offen ist:',
+    '     2+ Konflikte oder einer ohne vertretbaren Default, eine Notiz will Analyse/',
+    '     Vergleich/Concept statt Änderung, eine offene Design-Wahl, ein unmachbarer',
+    '     Punkt mit abhängigen Punkten, 2+ Ansatz-Gabelungen. Im Zweifel auto-concept.',
+    '   - sonst Skill do-run mit --from=do-batch (do-run überspringt dann "Was?").',
+    '   Vorher: archiveNotes(cwd) aus hooks/lib/batch-state.js (archivieren, nie',
+    '   löschen) und den archivierten Pfad in die Übergabe schreiben.',
     '',
     'Umsetzung ist breit gemeint — Code, Concepting, UI-Concepting, oder auch nur',
     'ein erster Schritt.',

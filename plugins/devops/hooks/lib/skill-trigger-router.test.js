@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   ALIAS_MAP,
+  HOOK_OWNED_MODES,
   SINGLE_WORD_ALLOWLIST,
   PHRASE_DENYLIST,
   detectAliasMentions,
@@ -82,8 +83,12 @@ describe("detectAliasMentions / detectAliasHits", () => {
     expect(detectAliasMentions("/claude-batch an")).toEqual([]);
   });
 
-  test("/promote is a folded mode, not ship intent — it routes to do-ship mode promote", () => {
-    expect(detectAliasHits("jetzt /promote stable")).toEqual([{ skill: "do-ship", mode: "promote", alias: "promote" }]);
+  // Skill restructure PR 2: promote is do-ship's target channel now, parsed
+  // by prompt.ship.detect (lib/ship-intent.js) — the router must not add a
+  // second, conflicting mandate (args "promote" next to the hook's "stable").
+  test("/promote belongs to prompt.ship.detect — the router emits nothing for it", () => {
+    expect(detectAliasHits("jetzt /promote stable")).toEqual([]);
+    expect(HOOK_OWNED_MODES.has("do-ship")).toBe(true);
   });
 
   test("dedupes by skill and keeps order of first appearance", () => {
@@ -164,7 +169,6 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
 
   test("multi-word phrases are routed; denylisted ones are not", () => {
     expect(phrases("auto-fix")).toContain("this is broken");
-    expect(phrases("do-ship")).toContain("promote to beta");
     expect(phrases("do-ship")).not.toContain("release");
     expect(phrases("auto-graph")).not.toContain("graphify");
   });
@@ -175,13 +179,10 @@ describe("buildWordTriggerCorpus — what the router acts on", () => {
     expect(phrases("do-run")).toContain("/run-burn");
   });
 
-  test("dedicated-hook skills never enter the corpus — except a folded mode's phrases", () => {
-    for (const s of ["do-batch", "claude-strict"]) {
+  test("dedicated-hook skills never enter the corpus — do-ship not even with its promote mode", () => {
+    for (const s of ["do-batch", "claude-strict", "do-ship"]) {
       expect(corpus.some((e) => e.skill === s)).toBe(false);
     }
-    const ship = corpus.filter((e) => e.skill === "do-ship");
-    expect(ship.map((e) => e.phrase)).toEqual(["promote to beta"]);
-    expect(ship[0].mode).toBe("promote");
   });
 
   test("a folded mode's phrase carries the mode", () => {
@@ -364,9 +365,8 @@ describe("routeMessage — combined router", () => {
     expect(routeMessage("ich bin festgefahren", skillSet())).toEqual([
       { skill: "do-run", reason: 'trigger phrase "festgefahren" (mode rethink)', phrase: true, mode: "rethink" },
     ]);
-    expect(routeMessage("jetzt promote to beta bitte", skillSet())).toEqual([
-      { skill: "do-ship", reason: 'trigger phrase "promote to beta" (mode promote)', phrase: true, mode: "promote" },
-    ]);
+    // promote phrases are prompt.ship.detect's (HOOK_OWNED_MODES)
+    expect(routeMessage("jetzt promote to beta bitte", skillSet())).toEqual([]);
   });
 
   test("error pattern only fires when 'auto-fix' exists in the skill set", () => {
@@ -388,6 +388,10 @@ describe("routeMessage — combined router", () => {
 // mandatory skill load through the router.
 const NEGATIVE_PROMPTS = [
   "ship",
+  // promote is do-ship's target channel — prompt.ship.detect owns these
+  "promote to stable bitte",
+  "jetzt /promote",
+  "auf stable heben",
   "weiter",
   "fix auch X und dann ship",
   "merge main hierrein",
@@ -447,7 +451,6 @@ const POSITIVE_PROMPTS = [
   ["Zeit für Feinschliff", "auto-polish"],
   ["bitte einmal auditieren", "do-run"],
   ["arbeite den backlog ab", "do-run"],
-  ["promote to stable bitte", "do-ship"],
   ["der button funktioniert nicht", "auto-fix"],
   ["TypeError: Cannot read properties of undefined (reading 'map')\n    at Foo (bar.js:12:5)\ngeht nicht", "auto-fix"],
   ["Traceback (most recent call last):\n  File \"app.py\", line 3, in <module>\ncrash beim Start", "auto-fix"],
@@ -455,7 +458,6 @@ const POSITIVE_PROMPTS = [
   ["/devops-learn remember the port", "do-learn"],
   ["bitte /fix", "auto-fix"],
   ["und dann /run-backlog", "do-run"],
-  ["jetzt /promote", "do-ship"],
   ["führe mich durch das Supabase Setup", "auto-guide"],
   ["show me this as a page", "auto-concept"],
   ["kannst du das als concept aufbereiten", "auto-concept"],

@@ -15,7 +15,7 @@ PATCH  → Bug fixes, doc updates, internal improvements
 Current version is tracked in `.claude-plugin/plugin.json` → `"version"`.
 
 **Release channels (ring model):** every ship to main creates the annotated
-tag `alpha/vX.Y.Z` automatically. Promotion (`/do-ship promote`) re-tags the
+tag `alpha/vX.Y.Z` automatically. Promotion (`ship beta` / `ship stable`, or `/do-ship promote`) re-tags the
 SAME commit as `beta/vX.Y.Z`, then `stable/vX.Y.Z` + bare `vX.Y.Z` (stable
 alias, triggers the Release workflow). Version files never carry a channel;
 published tags are never moved or deleted. Consumers pin a channel per

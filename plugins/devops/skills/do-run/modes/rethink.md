@@ -156,16 +156,18 @@ Only after an explicit **Implement** decision. Assemble the task briefing:
   recommendation,
 - pointer to the `.claude/rethink/<date>-<slug>/` artifacts.
 
-Then switch to autonomous mode (`modes/autonomous.md`, same skill) with this briefing as the task. Autonomous
-owns permission priming, confirmation, worktree, implementation, testing,
-and the report — do not re-implement any of that here.
+Then hand this briefing back to the do-run router (`../SKILL.md` Step 6) as
+the task: Ablauf "Dabei" → `auto-agents`; "Weg" → autonomous mode
+(`modes/autonomous.md`, same skill), which owns permission priming,
+confirmation, worktree, implementation, testing and the report — do not
+re-implement any of that here.
 
 If the user chose an `over-corridor` approach: ask ONE explicit
 corridor-widening question before the handoff.
 
 ## Completion
 
-- Handoff happened (Step 7) → autonomous mode owns the completion card.
+- Handoff happened (Step 7) → the router's execution path owns the completion card.
 - Run ends earlier (no decision yet, or user stops at the concept page) →
   render a completion card yourself (`analysis` if nothing was written,
   `ready` if brief/approaches were persisted). Artifacts remain on disk for

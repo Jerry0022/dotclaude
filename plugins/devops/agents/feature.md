@@ -4,7 +4,7 @@ description: >-
   Feature worker agent — implements features in an isolated worktree.
   Can delegate to other role agents (frontend, core, ai, etc.) when
   the feature spans multiple domains.
-  Never spawn proactively — the full-ceremony path is /auto-agents or /do-run autonomous, offered to the user first.
+  Never spawn proactively — the full-ceremony path is /do-run (which executes through auto-agents), offered to the user first.
   <example>Implement the video filter feature end-to-end</example>
   <example>Add multi-tenant support: migration, auth, and UI</example>
 model: inherit

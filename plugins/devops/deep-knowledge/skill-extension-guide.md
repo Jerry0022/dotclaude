@@ -112,7 +112,7 @@ Every plugin skill starts with Step 0:
 - All list rows use `--space-3` vertical rhythm.
 ```
 The same section is read by the `post.design.remind` hook (prevention while
-writing), by `/do-ship` Step 1d through `/auto-polish --invoked-by=ship`
+writing), by `/do-ship` Step 1e through `/auto-polish --invoked-by=ship`
 (static check on the diff) and by a full `/auto-polish` pass (static +
 runtime). Rule ids and the default allowlists: `deep-knowledge/ui-defaults.md`.
 

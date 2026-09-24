@@ -612,8 +612,9 @@ function renderHelp(p = {}) {
     '                             sie nur als Notiz ablegt — nicht bearbeitet.',
     `${`3. "${marker} <text>"`.padEnd(29)}Umsetzung starten (oder /do-batch go). Text hinter`,
     '                             dem Marker ist Anweisung für diese Phase.',
-    '4. Plan freigeben            Claude legt EINEN Plan vor. Ab hier läuft die',
-    '                             Unterhaltung wieder normal, der Modus ist aus.',
+    '4. Plan übernehmen           Claude legt EINEN Plan vor und übergibt ihn: offene',
+    '                             Entscheidungen → Concept-Seite, sonst → do-run',
+    '                             (dessen Fragen sind die Freigabe). Der Modus ist aus.',
     '',
     'Weitere Befehle: /do-batch off (nur stoppen, Notizen bleiben) · on (weiter',
     'sammeln, auch nach dem Auto-Ende) · status · marker (Ausführungs-Marker ändern)',
@@ -628,9 +629,11 @@ function renderHelp(p = {}) {
     '3. Auslösen        main in den Branch mergen (Konflikte zuerst lösen), alle',
     '                   Notizen lesen, Abdeckungsliste #1…#N mit Disposition, Machbarkeit',
     '                   gegen den echten Code prüfen, Widersprüche einzeln nennen, EINEN',
-    '                   Plan vorlegen — bei großen Konflikten als /concept-Seite.',
-    '4. Danach          Notizen archivieren (nie löschen), Modus aus, Watchdog stoppen.',
-    '                   Folgeprompts sind die Unterhaltung über die Umsetzung.',
+    '                   Plan vorlegen.',
+    '4. Übergeben       Notizen archivieren (nie löschen), Modus aus, Watchdog stoppen,',
+    '                   dann den Plan weiterreichen: offene Entscheidungen → Concept-',
+    '                   Seite, sonst → do-run ohne dessen Frage "Was?". do-batch setzt',
+    '                   selbst nichts um.',
   ].join('\n');
 }
 

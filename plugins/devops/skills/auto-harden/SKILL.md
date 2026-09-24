@@ -1,13 +1,15 @@
 ---
 name: auto-harden
-version: 0.2.0
+version: 0.3.0
 description: >-
   Stabilization pass: run the full test suite, fix bugs autonomously, identify
   architecture smells, write regression + missing-coverage tests, apply
   consistency fixes (spacing, tokens, typography, icons, colors, state-visuals)
   across the codebase. Does NOT introduce new UI elements, new buttons,
   re-arrangements, or substantial position changes — those belong to
-  /auto-polish. Triggers on: "harden", "stabilize", "härten",
+  /auto-polish. `--invoked-by=ship` is the narrow diff-scoped path /do-ship
+  calls: static checks on the added lines, no agents, no browser, mechanical
+  fixes only, never blocks. Triggers on: "harden", "stabilize", "härten",
   "stabilisieren", "bug pass", "consistency pass", "lint und fix".
   Skips all confirmations when invoked with --autonomous.
   Do NOT trigger for: feature work, new UI structure, theme changes.
@@ -17,7 +19,7 @@ user-invocable: false
 triggers:
   en: ["harden", "stabilize", "bug pass", "consistency pass"]
   de: ["härten", "stabilisieren", "lint und fix"]
-argument-hint: "[--autonomous] [--invoked-by=agents|autonomous] [optional scope: file/dir path]"
+argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [--base=<branch>] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -28,31 +30,48 @@ restructuring the UI. Scope: `$ARGUMENTS`.
 
 ## Invocation Context
 
-This skill can be invoked in three ways:
+Callers sit ABOVE this skill in the call graph (layer 4 — spec
+`docs/superpowers/specs/2026-09-24-skill-restructure-design.md` § Call graph):
+the user, `/do-run` and `/do-ship`. `/auto-agents` (layer 5) never calls it —
+it is the layer this skill *executes through*. Four ways in:
 
 1. **Direct** — user asks for it (trigger phrase; the skill is hidden from the slash menu). Full skill
    runs as documented below. Asks questions when `$AUTONOMOUS=0`.
-2. **From `/auto-agents`** — orchestrator detected a harden-style request.
-   <!-- PR2-phaseB: auto-agents (layer 5) may not invoke auto-harden (layer 4). The harden pass is now started by do-run ("Harden danach") and by do-ship (harden at ship, diff-scoped, --invoked-by=ship); rewrite this path and add the ship path. -->
-   Per `deep-knowledge/agent-orchestration.md` § Single-Agent Shortcut,
-   the orchestrator delegates directly to this skill (no wave model, no
-   sub-branching). Pass `--invoked-by=agents`.
-3. **From `/do-run autonomous`** — autonomous skill primed permissions,
-   confirmed the user, and now delegates a harden task. Pass
-   `--invoked-by=autonomous` (which implies `--autonomous`).
+2. **From `/do-run`** ("Harden danach") — `--invoked-by=do-run`, a full pass
+   scoped to the run's changes, executed through auto-agents (§ Execution).
+   Under "Weg" do-run adds `--autonomous`; under "Nur das" it adds
+   `--strict`. The pre-PR-2 values `--invoked-by=agents` and
+   `--invoked-by=autonomous` (the latter implies `--autonomous`) are read as
+   `do-run`.
+3. **From `/do-ship`** — `--invoked-by=ship --base=<base> <files of the diff>`.
+   The **ship path**: static checks on the diff's added lines, mechanical
+   fixes only, no agents, no browser, no card. See § Ship path.
+4. **Under strict** — `--strict` (from do-run "Nur das", from /do-ship when
+   strict mode is active, or when the `[claude-strict contract]` is in
+   context): stay inside the named scope; everything wider is reported as a
+   finding instead of fixed. On the ship path it means *report-only*.
 
-When `--invoked-by` is set, the skill adjusts:
+When `--invoked-by=do-run` is set, the skill adjusts:
 - **No qa-agent re-spawn** if the parent already runs a qa wave/agent.
   Rely on the parent's qa result, request a focused re-test only after fixes.
 - **No redteam re-spawn** if the parent has a redteam wave planned.
   Skip Step 9 redteam, flag for parent's wave instead.
 - **No permission priming** assumed — parent handled it.
-- **AskUserQuestion suppressed** (autonomous implied) when parent is
-  `autonomous`; when parent is `agents`, respect the parent's
-  interactive/background mode.
+- **AskUserQuestion suppressed** under `--autonomous`; otherwise the user is
+  present ("Dabei") and plan + confirm stays as documented.
 
-The parent passes its mode via an additional flag when needed:
-`--parent-mode=background` or `--parent-mode=interactive`.
+## Execution — through auto-agents
+
+The fixes of a full pass (Steps 5–8) run through `/auto-agents`, the single
+execution path: `Skill("auto-agents", "--from=auto-harden --mode=<m> <fix list>")`
+with `--mode=background` under `--autonomous`, else `--mode=interactive`.
+Read its result block (`tier`, `done`, `open`, `needs-decision`, `ship`) and
+**ignore `ship`** — this skill never ships; its caller does. `open` and
+`needs-decision` items feed Step 10. **Inline shortcut:** when your own tier
+check lands on Inline (one domain, ≤ ~5 files), apply the fixes yourself
+without loading auto-agents. The read-only helpers (Explore scans, the qa and
+redteam reviewers, code-simplifier) stay direct `Agent` spawns — they
+implement nothing. The ship path never loads auto-agents.
 
 ## Step 0 — Load Extensions
 
@@ -73,14 +92,63 @@ Scan `$ARGUMENTS` for:
 
 - `--autonomous` flag → set `$AUTONOMOUS=1`. Skips ALL `AskUserQuestion` calls
   for the rest of the run.
-- `--invoked-by=agents|autonomous` → set `$PARENT_SKILL`. Adjusts behavior
-  per "Invocation Context" above (skip parent-owned phases, no permission
-  priming assumed). `--invoked-by=autonomous` implicitly sets `$AUTONOMOUS=1`.
-- `--parent-mode=background|interactive` → only relevant with
-  `--invoked-by=agents`. Background acts like `--autonomous`; interactive
-  keeps prompts (parent expects user engagement).
+- `--invoked-by=do-run|ship` → set `$PARENT_SKILL`. Adjusts behavior per
+  "Invocation Context" above. Legacy values: `agents` → `do-run`;
+  `autonomous` → `do-run` + `$AUTONOMOUS=1`. `--invoked-by=ship` sets
+  `$SHIP_PATH=1` and jumps to § Ship path right after this step — Steps 2–10
+  do not run.
+- `--strict` → set `$STRICT=1`: nothing outside the named scope changes;
+  wider findings are reported, not fixed. Also set when the
+  `[claude-strict contract]` block is in this turn's context.
+- `--base=<branch>` → the diff base (ship path; default: the repo's default
+  branch).
+- `--parent-mode=background|interactive` → pre-PR-2 flag, still read:
+  background acts like `--autonomous`.
 - Any remaining tokens → treat as scope path(s). If present, restrict the
   entire run to those paths.
+
+## Ship path — `$SHIP_PATH=1`
+
+Runs instead of Steps 2–10 when `/do-ship` calls with `--invoked-by=ship`
+(approved concept item "Harden beim Ship, diff-eng wie Polish"). Every ship
+gets the cheap, mechanical half of a harden pass on exactly what it lands,
+without the full pass's cost (Explore/qa/redteam agents, test plan, coverage
+writing). Mirrors `/auto-polish` § Rules-only path.
+
+1. **Scope** = the files /do-ship passed, and inside them only the added or
+   changed lines: `git diff -U0 origin/<base>...HEAD -- <files>` plus the
+   uncommitted diff of the same files. Deleted files and generated/vendor
+   paths drop out. Empty → return `{ applicable: false, reason: "empty diff" }`.
+2. **Static, inline, bounded.** Read the hunks, grep the added lines — no
+   agents, no browser, no network, no test run (the ship's `ship_build`
+   runs the suite on the result in its Step 2). Budget ~60 s and ≤ 40 files;
+   beyond that check the 40 largest hunks and list the rest once as
+   `skipped: <n> files (budget)`.
+3. **Checks** (added lines only — pre-existing code is not a finding here):
+
+   | id | Finding | Mechanical fix |
+   |---|---|---|
+   | H1 | focused test left in: `.only(`, `fit(`, `fdescribe(` in a test file — it silently disables the rest of the suite | drop `.only` / the `f` |
+   | H2 | `debugger;` statement in source | delete the line |
+   | H3 | secret-shaped literal (`(api[_-]?key\|secret\|token\|password)\s*[:=]\s*['"][^'"\s]{16,}`, a PEM header) | none — report FIRST |
+   | H4 | empty catch without a comment (`catch {}`, `catch (e) {}`, `except: pass`) | none — the intent is unknown |
+   | H5 | new skipped test (`.skip(`, `xit(`, `xdescribe(`, `@pytest.mark.skip`) | none |
+   | H6 | timer or listener without cleanup in the same file (`setInterval` w/o `clearInterval`, `addEventListener` w/o `removeEventListener` in a long-lived module/component) | none |
+   | H7 | new `TODO`/`FIXME`/`XXX`/`HACK` | none |
+
+   A `mechanical` fix invents nothing: it only deletes what the finding names.
+4. **Apply** the mechanical fixes — unless `$STRICT=1`, then apply none and
+   report every finding (the ship's scope is what the user asked for; a
+   drive-by line change is not).
+5. **Return** to the caller and stop:
+   `{ applicable, fixed: [{ id, file, line, change }], findings: [{ id, file, line, detail }], skipped: [...] }`.
+   No completion card, no AskUserQuestion, no session-title change, no
+   commit — /do-ship owns the turn and lands the fixes with the ship.
+6. **Never blocks.** A finding is never a gate. The only red that stops a
+   ship is a failing build/test in `ship_build` — and if one of THIS path's
+   fixes caused it, /do-ship reverts that fix, re-runs the gate and reports
+   the finding instead. A failing test the fixes did not cause is the
+   ship's normal `ship-blocked`, not this path's verdict.
 
 ## Step 2 — Scope Selection
 
@@ -113,7 +181,7 @@ Two things happen in parallel — do NOT block on either:
 
 1. **Determine the test tool-chain per `deep-knowledge/test-plan.md`** (detect +
    pin the profile) for this project. Store result as `$TEST_PLAN`.
-2. **Spawn `qa` agent** in background — SKIP this when `$PARENT_SKILL=agents`
+2. **Spawn `qa` agent** in background — SKIP this when `$PARENT_SKILL=do-run`
    AND a qa wave is already planned/running (the orchestrator owns qa).
    When skipped, defer to parent's qa output and request a focused re-test
    after fixes (Step 9 step 2).
@@ -284,7 +352,7 @@ in the final report. Do not act.
    tier first, e.g. unit before E2E). If anything regressed: open the
    regression as a high-priority finding, attempt fix (back to Step 5
    for that one file). Cap at 2 retry loops per file.
-3. **Red-team pass** — SKIP when `$PARENT_SKILL=agents` AND a redteam wave
+3. **Red-team pass** — SKIP when `$PARENT_SKILL=do-run` AND a redteam wave
    is planned (parent owns it; flag findings for parent's wave instead).
    Otherwise spawn `redteam` agent on the cumulative diff:
    ```
@@ -356,6 +424,9 @@ or dismisses it.
 - **Pre-mortem inline** for every non-trivial fix (see `deep-knowledge/pre-mortem.md`).
 - **`--autonomous` is mute mode**, not yolo mode. High-risk items are still
   skipped + flagged — autonomous never escalates risk tolerance.
+- **`--strict` narrows, never widens.** Only files and symbols inside the
+  named scope change; a bug, smell or drift outside it is a finding under
+  "Manual review", not a fix. The ship path under strict applies nothing.
 - **Surface polish-candidates explicitly** so the user can ask for a polish pass (`auto-polish`)
   as a natural follow-up.
 - **Never commit automatically** — this skill modifies files; the user

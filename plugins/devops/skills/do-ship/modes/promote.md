@@ -1,10 +1,13 @@
-<!-- do-ship mode `promote` — the body of the former `promote` skill (v0.1.0), moved verbatim in PR 2 of the skill restructure (docs/superpowers/specs/2026-09-24-skill-restructure-design.md). Its triggers, allowed tools and argument hint now live in ../SKILL.md. -->
+<!-- do-ship promotion steps — the body of the former `promote` skill (v0.1.0), moved in PR 2 of the skill restructure (docs/superpowers/specs/2026-09-24-skill-restructure-design.md). Its triggers, allowed tools and argument hint live in ../SKILL.md, which decides WHEN these steps run (§ Target channel: promotion-only, or Step 5d after a ship). -->
 
 # Release — Channel Promotion
 
 Promote a shipped version to a higher channel. Ship publishes every version
-to **alpha** autonomously; this skill is the deliberate half of the ring
+to **alpha** autonomously; the promotion is the deliberate half of the ring
 model (spec: `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`).
+do-ship runs these steps in two situations (`../SKILL.md` § Target channel):
+**promotion-only** (a channel is named and nothing is unshipped) and **Step
+5d** (a channel is named and the ship just landed `vNew` on alpha).
 
 > **CRITICAL — `cwd` is required on every MCP tool call.**
 > The ship MCP server runs in the plugin directory, NOT the target repo.
@@ -42,10 +45,18 @@ Channels: alpha v0.117.0 · beta v0.114.0 · stable v0.112.0
 If alpha has never shipped a channel tag → report "no channel tags yet —
 ship something first" and stop.
 
-## Step 2 — Ask which promotion
+## Step 2 — Which promotion
 
-Precompute only the **meaningful** promotions (source strictly ahead of
-target). Present via AskUserQuestion, recommended option first:
+**A channel named by the user answers this step** — "ship stable", "promote
+to beta", "auf stable heben", `/do-ship stable`: the target is that channel,
+the version is the one named, else `vNew` of the ship that just ran (Step
+5d), else the latest alpha. Target stable with the version not yet on beta →
+fast-track (Step 3). Only when that promotion is not meaningful (the version
+already sits on the target or higher) say so and stop — no question.
+
+**A bare "promote"** (no channel) asks. Precompute only the **meaningful**
+promotions (source strictly ahead of target). Present via AskUserQuestion,
+recommended option first:
 
 - `alpha vX → beta` (Recommended when alpha > beta)
 - `beta vY → stable`
@@ -54,7 +65,8 @@ target). Present via AskUserQuestion, recommended option first:
 
 If NO promotion is meaningful (all channels equal) → report "all channels
 are at vX — nothing to promote" and stop. Never promote autonomously, even
-with `--autonomous` in the trigger.
+with `--autonomous` in the trigger: a channel counts only when the USER
+named it (never an orchestrator's arguments, never under `$SHIP_LOCKOUT`).
 
 ## Step 3 — Execute
 
@@ -104,7 +116,11 @@ error names it and the remedy (`git tag -d <tag>`) — delete it, then re-run.
 ## Step 4 — Report
 
 Render the completion card (`render_completion_card`, variant **`released`**,
-summary e.g. "vX.Y.Z auf <channel> promotet"). Populate:
+summary e.g. "vX.Y.Z auf <channel> promotet"). After a ship in the same run
+(Step 5d) this is the run's ONE card: keep every ship field from
+`../SKILL.md` Step 6 (`changes`, `tests`, `validation`, `userFinalTest`,
+`state`, `cta`, `delivery.pr`, `delivery.ship`) and add the fields below;
+the summary then names what changed for the user, like a ship card. Populate:
 - `delivery` — the pipeline track. Fill `pr`/`ship` when known, and
   `promote: { channels: { alpha, beta, stable }, current: "<target>", fastTrack }`
   using the per-channel versions from the re-run Step 1 (null for a channel not

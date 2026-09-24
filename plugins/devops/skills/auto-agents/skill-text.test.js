@@ -125,3 +125,114 @@ describe("agent-orchestration.md § Model & Effort Defaults stays the source of 
     }
   });
 });
+
+// PR 2 of the skill restructure (docs/superpowers/specs/2026-09-24-skill-restructure-design.md
+// § auto-agents): this skill is the single execution path of every
+// implementing skill and sits at the bottom of the call graph because it
+// invokes NO skill. Shipping, concept pages and issues are returned to the
+// caller instead.
+const frontmatter = skill.slice(0, skill.indexOf("\n---", 4));
+const body = skill.slice(skill.indexOf("\n---", 4) + 4);
+
+describe("auto-agents invokes no skill", () => {
+  it("declares an empty invokes list at the bottom layer", () => {
+    expect(frontmatter).toMatch(/^invokes: \[\]$/m);
+    expect(frontmatter).toMatch(/^layer: 5$/m);
+  });
+
+  it("does not pre-approve the Skill tool", () => {
+    const tools = frontmatter.match(/^allowed-tools:(.*)$/m)[1];
+    expect(tools.split(",").map((t) => t.trim())).not.toContain("Skill");
+  });
+
+  it("never tells the model or the user to start another devops skill", () => {
+    // Slash forms of any devops skill, and a "run/invoke <skill>" instruction.
+    expect(body).not.toMatch(/`\/(do-ship|do-run|auto-concept|auto-issue|auto-fix|auto-harden|auto-polish|ship|concept)\b/);
+    expect(body).not.toMatch(/\b(invoke|run|call)\s+(the\s+)?(Skill\s+)?`?(do-ship|auto-concept|auto-issue)`?(?!\s+next)/i);
+    expect(body).toMatch(/\*\*This skill invokes no skill\.\*\*/);
+  });
+
+  it("returns shipping to the caller as a result field", () => {
+    const step7 = section(skill, "## Step 7 — Return to the caller", "## Rules");
+    expect(step7).toMatch(/^ship: <auto \| manual>$/m);
+    expect(step7).toMatch(/^needs-decision: /m);
+    expect(step7).toMatch(/never ships/);
+    expect(step7).toMatch(/`ship: auto` means the\s+caller runs `do-ship` next/);
+  });
+});
+
+describe("auto-agents arguments — the mode comes from the caller", () => {
+  const step1 = section(skill, "## Step 1 — Inputs", "## Step 2 — Tier and agents");
+
+  it("documents --from, --mode and --ship", () => {
+    for (const arg of ["`--from=<caller>`", "`--mode=interactive\\|background`", "`--ship=auto\\|manual`"]) {
+      expect(step1, arg).toContain(arg);
+    }
+  });
+
+  it("maps do-run's question 2 onto the execution mode", () => {
+    expect(step1).toMatch(/\*\*Dabei · …\*\* → `interactive`, \*\*Weg · …\*\* → `background`/);
+  });
+
+  it("asks the mode question only on a direct full-ceremony invocation", () => {
+    const step4 = section(skill, "## Step 4 — Execution Mode", "## Step 5 — Start Table");
+    expect(step4).toMatch(/Ask only when this skill was\s+invoked directly — no `--from`, no `--mode` — and the tier is full ceremony/);
+  });
+
+  it("reads plan and usage through get_usage", () => {
+    expect(step1).toContain("mcp__plugin_devops_dotclaude-completion__get_usage");
+    expect(step1).toMatch(/budget\.cls/);
+  });
+});
+
+describe("auto-agents start table", () => {
+  const step5 = section(skill, "## Step 5 — Start Table", "## Step 6 — Execution");
+  const block = (() => {
+    const m = step5.match(/```\n([\s\S]*?)```/);
+    expect(m, "Step 5 has no fenced table shape").toBeTruthy();
+    return m[1];
+  })();
+
+  it("has exactly the columns wave · task · model · effort, in that order", () => {
+    const header = block.split("\n").find((l) => l.startsWith("| {start."));
+    expect(cells(header)).toEqual(["{start.wave}", "{start.task}", "{start.model}", "{start.effort}"]);
+    const rows = block.split("\n").filter((l) => /^\| \d+ \|/.test(l));
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of rows) expect(cells(row)).toHaveLength(4);
+  });
+
+  it("labels the columns in both locales", () => {
+    const label = (key) => cells(step5.split("\n").find((l) => l.startsWith(`| \`${key}\``)));
+    expect(label("start.wave")).toEqual(["`start.wave`", "Wave", "Wave"]);
+    expect(label("start.task")).toEqual(["`start.task`", "Task", "Aufgabe"]);
+    expect(label("start.model")).toEqual(["`start.model`", "Model", "Modell"]);
+    expect(label("start.effort")).toEqual(["`start.effort`", "Effort", "Effort"]);
+  });
+
+  it("is card-style but carries no CTA and no completion-card marker", () => {
+    expect(block.startsWith("---\n")).toBe(true);
+    expect(block.trimEnd().endsWith("---")).toBe(true);
+    expect(block).not.toContain("✨");
+    expect(block).not.toMatch(/^## /m); // no decision heading
+    expect(step5).toMatch(/\*\*has no CTA\*\*/);
+  });
+
+  it("is not shown for the inline tier", () => {
+    expect(step5).toMatch(/\*\*Not for Inline\*\*/);
+  });
+
+  it("resolves the model at runtime — never a hard-coded id or version", () => {
+    expect(step5).toMatch(/Agent tool's `model`\s+parameter enum/);
+    expect(step5).toMatch(/`inherit` → the session's own model/);
+    expect(step5).toMatch(/newest release/);
+    // No model id or "family + version" anywhere in the skill.
+    expect(skill).not.toMatch(/claude-(opus|sonnet|haiku|fable)-\d/);
+    expect(skill).not.toMatch(/\b(opus|sonnet|haiku|fable) \d+(\.\d+)?\b/i);
+  });
+
+  it("gives effort per task, never with an arrow", () => {
+    expect(step5).toMatch(/\*\*Effort — per task\.\*\*/);
+    const rows = block.split("\n").filter((l) => /^\| \d+ \|/.test(l));
+    for (const row of rows) expect(cells(row)[3]).not.toContain("→");
+  });
+});

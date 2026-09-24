@@ -49,6 +49,11 @@ describe("ship-compact", () => {
     expect(shipCompactAdvice({ tokens: 434_000, prompt: "/do-ship", advisedBefore: false, env })).not.toBeNull();
   });
 
+  test("a promotion-only run (nothing unshipped) is never stopped — it is ~4 calls, not ~16", () => {
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "promote stable", promotionOnly: true, env })).toBeNull();
+    expect(shipCompactAdvice({ tokens: 700_000, prompt: "promote stable", promotionOnly: false, env })).not.toBeNull();
+  });
+
   test("the default is high enough that compacting pays: ≥ 4 M saved", () => {
     expect(DEFAULT_THRESHOLD).toBe(350_000);
     expect(POST_COMPACT_FLOOR).toBe(100_000);

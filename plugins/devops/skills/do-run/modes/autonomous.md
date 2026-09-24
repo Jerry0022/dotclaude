@@ -23,7 +23,8 @@ If the incoming user message starts with `AUTONOMOUS_AUTOSTART:`, this is the
    `AUTONOMOUS_AUTOSTART:` prompt and context, log "Autostart verschoben —
    offene Frage aktiv", continue waiting.
 2. If no question is pending: parse `task`, `mode`, `desktop`, `shutdown`,
-   `autoResume`, `branch` from the prompt.
+   `autoResume`, `branch` — and the do-run router answers `ship`, `passes`,
+   `strict` — from the prompt.
 3. Output once: **"3-Minuten-Timeout — starte jetzt autonom."**
 4. Skip Steps 1-4 entirely. Permissions were already primed in the parent session.
 5. If `autoResume=yes`, arm the resume cron now (Step 4e) — Step 4c never ran on
@@ -59,14 +60,9 @@ If not found → proceed to Step 1.
 
 If found:
 1. Read the resume file (contains: task, mode, progress, missing permission, shutdown pref, branch)
-2. Show: **"Unterbrochene Session gefunden: {task}. Fehlende Berechtigung: {missingPermission}."**
-3. Ask via `AskUserQuestion`:
-   > header: "Fortsetzen"
-   > question: "Unterbrochene autonome Session gefunden — fortsetzen oder neu starten?"
-   > multiSelect: false
-   > Options (fixed order):
-   > 1. label: "Ja, fortsetzen (empfohlen)" — description: "Fehlende Berechtigungen jetzt erteilen, dann weiter wo es aufgehört hat."
-   > 2. label: "Nein, neu starten" — description: "Alte Session verwerfen, neuen Task starten."
+2. The do-run router already asked "Run fortsetzen" / "Run neu starten" before
+   its base call (`../SKILL.md` Step 2, naming the task and the missing
+   permission). Take that answer — never ask again.
 
 **If resuming:**
 - Re-prime ALL permissions including the previously missing one (run Step 3 again)
@@ -84,7 +80,7 @@ If found:
 - Skip Steps 1-4, jump directly to Step 5 with the resumed context
 - On completion, proceed normally through Steps 7-8
 
-**If starting fresh:** delete the resume file and proceed to Step 1.
+**If starting fresh:** delete the resume file; the router continues with its base call.
 
 ## Step 0.7 — Permission Audit
 
@@ -126,28 +122,32 @@ These cannot be allow-listed by design; the user must be aware before AFK.
 
 ## Step 1 — Task Intake
 
-Use `$ARGUMENTS` if provided, otherwise ask: **"Was soll ich autonom erledigen?"**
+The do-run router passes the task (the prompt, a rethink briefing, an audit
+work unit or burn's composite prompt) as `$ARGUMENTS`. Only when it is
+empty, ask: **"Was soll ich autonom erledigen?"**
 
 Parse into: **Goal** (one sentence), **Scope** (files/systems), **Success criteria**.
 If ambiguous, ask ONE clarifying question — time is limited.
 
 ## Step 2 — Mode & Preference Questions
 
-Ask via `AskUserQuestion` — three sequential questions (a fourth, Q4 Auto-Resume,
+**Answered by the do-run router — do not ask.** `$EXEC_MODE` comes from the
+router's mapping (`implement` for Prompt umsetzen and Audit umsetzen,
+`analyze` for Audit als Concept) — the former Q1 below is gone. Q2 is the
+router's follow-up F5 (Desktop); Q3 and Q4 are folded into its F6
+("PC danach"), whose options never pair shutdown with resume, so the HARD
+GATE below holds by construction. Also take `$SHIP` (`auto` / `manual`),
+`$PASSES` and `$STRICT` from the router. The question texts below stay as
+the definition of what each variable means.
+
+Former flow: three sequential questions (a fourth, Q4 Auto-Resume,
 follows **only when shutdown is declined in Q3** — never after a shutdown choice; see
 the HARD GATE after Q3). **Option order is fixed** as listed
 below (option 1 first, option 2 second). Never shuffle. Mark the recommended option
 with "(empfohlen)" in its label.
 
-**Question 1 — Execution Mode:**
-> header: "Modus"
-> question: "Nur analysieren oder auch implementieren & testen?"
-> multiSelect: false
-> Options (fixed order):
-> 1. label: "Analysieren & implementieren (empfohlen)" — description: "Erst analysieren, dann implementieren, testen, builden, live verifizieren. Kein Ship — alles bleibt lokal."
-> 2. label: "Nur analysieren" — description: "Read-only: Code lesen, recherchieren, Architektur-Analyse, Report mit Findings & Empfehlungen. Keine Datei-Änderungen."
-
-Save the choice as `$EXEC_MODE` (`implement` if option 1, `analyze` if option 2). This controls Step 5.
+**Question 1 — Execution Mode:** removed — the router sets `$EXEC_MODE`
+(`implement` / `analyze`, see above). It controls Step 5.
 
 **Question 2 — Desktop:**
 > header: "Desktop"
@@ -193,12 +193,12 @@ Ask it only when the PC stays on:
 > 2. label: "Nein" — description: "Kein automatischer Resume. Hängengebliebene Worktrees setzt du später selbst fort."
 
 Save the choice as `$AUTO_RESUME` (`yes` if option 1, `no` if option 2). It is armed
-at "Ja, los!" (Step 4c) — or on auto-start (Step 0.1) — via Step 4e.
+at "Jetzt starten" (Step 4c) — or on auto-start (Step 0.1) — via Step 4e.
 
 ## Step 3 — Permission Priming (ALL permissions BEFORE confirmation)
 
 **This step MUST complete fully before Step 4.** The user must not be interrupted
-by any permission prompt after confirming "Ja, los!".
+by any permission prompt after confirming "Jetzt starten".
 
 Determine which tool categories the task requires based on `$EXEC_MODE` and
 desktop choice, then prime ALL of them now:
@@ -294,7 +294,7 @@ execution context (the user will not be there to re-enter it):
 CronCreate({
   cron: "<M> <H> <D> <Mo> *",
   recurring: false,
-  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, branch=<current-branch>."
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=<harden,polish|none>, strict=<on|off>, branch=<current-branch>."
 })
 ```
 
@@ -306,18 +306,18 @@ Ask via `AskUserQuestion`:
 > header: "Start"
 > question: "Alle Berechtigungen erteilt. Soll ich jetzt autonom starten? (Ohne Antwort starte ich nach 3 Minuten automatisch.)"
 > Options (fixed order):
-> 1. label: "Ja, los!" — description: "Sofort starten, PC kann verlassen werden."
-> 2. label: "Noch nicht" — description: "Timer um 3 Minuten zurücksetzen — ich kann noch Rückfragen stellen."
+> 1. label: "Jetzt starten" — description: "Sofort starten, PC kann verlassen werden."
+> 2. label: "Später starten" — description: "Timer um 3 Minuten zurücksetzen — ich kann noch Rückfragen stellen."
 
 ### 4c — Resolve
 
-- **"Ja, los!"** → `CronDelete($TIMEOUT_JOB_ID)`. If `$AUTO_RESUME=yes`, arm the
+- **"Jetzt starten"** → `CronDelete($TIMEOUT_JOB_ID)`. If `$AUTO_RESUME=yes`, arm the
   resume cron now (Step 4e). Then proceed to Step 5.
-- **"Noch nicht"** → `CronDelete($TIMEOUT_JOB_ID)`, then re-arm fresh: `CronCreate`
+- **"Später starten"** → `CronDelete($TIMEOUT_JOB_ID)`, then re-arm fresh: `CronCreate`
   one-shot at `now + 3min` with the same `AUTONOMOUS_AUTOSTART:` prompt, save
   new `$TIMEOUT_JOB_ID`. The user may now ask clarifying questions or reconsider.
-  Every additional "Noch nicht" resets the timer again. The only way out is
-  "Ja, los!" (start) or full session close (user abandoned).
+  Every additional "Später starten" resets the timer again. The only way out is
+  "Jetzt starten" (start) or full session close (user abandoned).
 - **No answer / timeout fires** → see Step 0.1 for the auto-start handler.
 
 **Re-arm guard (cron fires while another question is pending):** If the
@@ -353,7 +353,7 @@ warning and continue.
 
 ### 4e — Auto-Resume Scheduling (only if `$AUTO_RESUME=yes`)
 
-Armed at "Ja, los!" (Step 4c) or on auto-start (Step 0.1) — the instant execution
+Armed at "Jetzt starten" (Step 4c) or on auto-start (Step 0.1) — the instant execution
 begins. A one-shot session cron that, 5h from now (after the rolling token window
 has reset), nudges every still-stalled Claude worktree to continue with `weiter`.
 
@@ -487,14 +487,18 @@ it to `AUTONOMOUS-RESUME.json` as a BLOCKER rather than proceeding.
 Quick summary:
 - `analyze` → read-only (Read, Glob, Grep, WebFetch, git log/blame/diff, screenshots). No Write/Edit/commit.
 - `implement` → Phase 1 analyse, Phase 2 implement+test+build+verify. No push/ship/PR.
-- **Forbidden in both modes:** push to `main`/`master` or any shared branch, force-push, /do-ship, create PRs, external comms, purchases, destructive git ops, system config changes.
+- **Forbidden in both modes:** push to `main`/`master` or any shared branch, force-push, /do-ship, create PRs, external comms, purchases, destructive git ops, system config changes. The one ship is not this engine's: Step 6.5 hands `$SHIP=auto` back to the do-run router.
 - **Allowed (durability exception):** non-force push of the run's **own**
   integration/sub-branch to origin, so a reset or a token-limit kill cannot erase
   the run's output. See `autonomous-execution.md` § Safety Guardrails.
 
 ### Strategy
 
-Select agents and execute waves per `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md`:
+Run the work through `auto-agents`, the single execution path —
+`Skill("devops:auto-agents")` with `--from=do-run --mode=background
+--ship=<$SHIP> <task>` (an audit work unit runs `modes/audit.md` with
+`--autonomous` instead; its implement step goes through auto-agents too). It
+selects agents and executes waves per `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md`:
 - § Agent Selection for roster, criteria, and complexity tiers + per-agent effort budget
 - § Wave Execution for spawning mechanics, prompt template (budget, stopping criteria, distinct scope), and branch strategy
 - § Inter-Wave Verification Gate — verify each wave's handoff before the next consumes it (cascading-error guard)
@@ -543,6 +547,16 @@ Use `$BROWSER_TOOL` (from Step 3b) for all browser-based visual verification.
 INTERRUPTED means useful work was done but couldn't finish due to missing permission
 or an upstream rate-limit. The resume file enables continuation. Shutdown is safe
 because progress is saved.
+
+## Step 6.5 — Passes and ship (do-run router)
+
+Only for status COMPLETED in `implement` mode, and only when the router set
+`$PASSES` or `$SHIP=auto`: run the router's Step 7 (`../SKILL.md`) now —
+auto-harden / auto-polish with `--invoked-by=autonomous`, then, for
+`$SHIP=auto`, do-ship under the `do-run` lockout. Still no questions (the
+Lockout holds). A blocked pass or ship is logged and reported, the run
+continues to Step 7. INTERRUPTED / BLOCKED runs and `analyze` mode skip this
+step.
 
 ## Step 7 — Report & Completion
 

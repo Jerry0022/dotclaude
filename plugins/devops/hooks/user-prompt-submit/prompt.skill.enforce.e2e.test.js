@@ -102,11 +102,16 @@ describe("prompt.skill.enforce — e2e process (mentions + router)", () => {
 
   test("a folded alias carries its mode as the skill args", () => {
     expect(runHook({ prompt: "und dann /run-backlog" }).stdout).toContain('Skill("do-run") with args "backlog"');
-    expect(runHook({ prompt: "jetzt /promote bitte" }).stdout).toContain('Skill("do-ship") with args "promote"');
   });
 
   test("the old /ship alias emits nothing (prompt.ship.detect owns ship)", () => {
     expect(runHook({ prompt: "/ship bitte" }).stdout).toBe("");
+  });
+
+  // promote is do-ship's target channel since the skill restructure PR 2 —
+  // prompt.ship.detect parses it and passes the channel as the skill args.
+  test("the old /promote alias emits nothing either (prompt.ship.detect owns it)", () => {
+    expect(runHook({ prompt: "jetzt /promote bitte" }).stdout).not.toContain('Skill("do-ship")');
   });
 
   test("a mention inside backticks or quotes is not an invocation", () => {

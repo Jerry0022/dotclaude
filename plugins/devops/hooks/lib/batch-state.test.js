@@ -766,6 +766,10 @@ describe("help route and the long-form summary", () => {
     expect(h).toContain("8 Stunden oder 100 Notizen");
     expect(h).toContain("main in den Branch mergen");
     expect(h).toContain("Abdeckungsliste");
+    // The merge ends in a hand-off, not in Claude implementing the plan itself.
+    expect(h).toContain("do-run");
+    expect(h).toContain("Concept-");
+    expect(h).toContain("do-batch setzt");
   });
 
   test("the short summary points at status, marker and help in one line", () => {

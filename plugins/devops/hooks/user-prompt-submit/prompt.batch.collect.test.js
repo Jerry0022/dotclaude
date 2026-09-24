@@ -362,6 +362,21 @@ describe("message builders", () => {
     expect(ctx).toMatch(/still überspringen/);
   });
 
+  test("the merge context hands the plan to auto-concept or do-run, never implements", () => {
+    // The marker path never loads the skill, so the Step 4.6 hand-off rule has
+    // to ride along: do-batch plans, the receiving skill runs.
+    const ctx = buildMergeContext([{ at: "2026-08-16T10:00:00.000Z", text: "x" }], "", "/tmp/p/.claude/batch.md");
+    expect(ctx).toContain("Skill auto-concept mit --from=do-batch");
+    expect(ctx).toContain("Skill do-run mit --from=do-batch");
+    expect(ctx).toContain("GENAU EINEN Skill");
+    expect(ctx).toContain("OHNE eigene Freigabefrage");
+    expect(ctx).toContain("du setzt selbst nichts um");
+    expect(ctx).toContain("Im Zweifel auto-concept");
+    expect(ctx).toContain("archiveNotes(cwd)");
+    // The old inline path ("direkt in die Umsetzung") is gone.
+    expect(ctx).not.toMatch(/direkt in die Umsetzung/);
+  });
+
   test("a truncated index says so instead of looking complete", () => {
     const notes = Array.from({ length: 400 }, (_, i) => ({
       at: "2026-08-16T10:00:00.000Z",

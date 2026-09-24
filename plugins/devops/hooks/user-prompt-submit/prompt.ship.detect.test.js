@@ -118,3 +118,88 @@ describe("prompt.ship.detect — careful compact", () => {
     expect(r.stdout).toBe("");
   });
 });
+
+// Skill restructure PR 2: promote folded into do-ship. The hook parses the
+// target channel (lib/ship-intent.js) and passes it as the skill argument;
+// do-ship ships anything unshipped to alpha, then promotes.
+describe("prompt.ship.detect — target channel", () => {
+  test("a plain ship carries no argument (alpha is the default)", () => {
+    const r = runHook({ prompt: "ship it" });
+    expect(r.stdout).toContain('MANDATORY: Use Skill("do-ship") to execute the full shipping pipeline.');
+    expect(r.stdout).not.toContain("with args");
+  });
+
+  test.each([
+    ["promote stable", "stable"],
+    ["release beta", "beta"],
+    ["auf stable heben", "stable"],
+    ["ship it to stable", "stable"],
+    ["/do-ship beta", "beta"],
+    ["/promote stable", "stable"],
+    ["Promote v0.171.0 to stable", "stable 0.171.0"],
+  ])("%s → do-ship with args %s", (prompt, args) => {
+    const r = runHook({ prompt });
+    expect(r.stdout).toContain(`Skill("do-ship") with args "${args}"`);
+    expect(r.stdout).toContain("ships any unshipped work of this branch to alpha first");
+  });
+
+  test("a bare promote passes 'promote' — do-ship asks which promotion", () => {
+    const r = runHook({ prompt: "promote" });
+    expect(r.stdout).toContain('Skill("do-ship") with args "promote"');
+  });
+
+  test("'promote the idea to the team' is no ship at all", () => {
+    expect(runHook({ prompt: "promote the idea to the team" }).stdout).toBe("");
+  });
+
+  describe("careful compact vs. a promotion", () => {
+    /** Turn the test cwd into a clone whose main is in sync with its origin. */
+    function syncedWithOrigin() {
+      const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ship-detect-origin-"));
+      execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+      execFileSync("git", ["checkout", "-q", "-b", "main"], { cwd });
+      fs.writeFileSync(path.join(cwd, "a.txt"), "one\n");
+      execFileSync("git", ["add", "a.txt"], { cwd });
+      execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], { cwd });
+      execFileSync("git", ["remote", "add", "origin", origin], { cwd });
+      execFileSync("git", ["push", "-q", "-u", "origin", "main"], { cwd });
+      execFileSync("git", ["remote", "set-head", "origin", "main"], { cwd });
+      return origin;
+    }
+
+    afterEach(() => {
+      try { fs.unlinkSync(sessionFile("dotclaude-devops-ship-compact-advised", "ship-detect-test")); } catch {}
+    });
+
+    test("promotion-only (nothing unshipped): no compact stop on a large context", () => {
+      const origin = syncedWithOrigin();
+      try {
+        const r = runHook({ prompt: "promote stable", transcript_path: transcript(600_000) });
+        expect(r.stdout).toContain('Skill("do-ship") with args "stable"');
+        expect(r.stdout).not.toContain("[ship-compact]");
+      } finally {
+        fs.rmSync(origin, { recursive: true, force: true });
+      }
+    });
+
+    test("a promotion that has to ship first is a ship — the stop applies", () => {
+      const origin = syncedWithOrigin();
+      try {
+        fs.writeFileSync(path.join(cwd, "a.txt"), "two\n");
+        const r = runHook({ prompt: "promote stable", transcript_path: transcript(600_000) });
+        expect(r.stdout).toContain("[ship-compact]");
+      } finally {
+        fs.rmSync(origin, { recursive: true, force: true });
+      }
+    });
+
+    test("a plain ship on a synced branch still gets the stop (only promotions are spared)", () => {
+      const origin = syncedWithOrigin();
+      try {
+        expect(runHook({ prompt: "ship", transcript_path: transcript(600_000) }).stdout).toContain("[ship-compact]");
+      } finally {
+        fs.rmSync(origin, { recursive: true, force: true });
+      }
+    });
+  });
+});

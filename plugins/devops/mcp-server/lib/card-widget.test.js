@@ -105,13 +105,19 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     }
   });
 
-  test("plain-text prompts still route: ship buttons are ship intents, the others are not", () => {
-    const { isShipIntent } = createRequire(import.meta.url)("../../hooks/lib/ship-intent.js");
+  // Since the skill restructure PR 2 a promotion is a do-ship run too:
+  // prompt.ship.detect routes "promote" / "promote stable" to do-ship with the
+  // promotion argument — so the promote buttons are promotion requests, not
+  // plain ships, and the blocker's Debug button is neither.
+  test("plain-text prompts still route: ship buttons ship, promote buttons promote, the others neither", () => {
+    const { isShipIntent, parseShipRequest } = createRequire(import.meta.url)("../../hooks/lib/ship-intent.js");
     for (const lang of ["de", "en"]) {
-      for (const key of ["ready", "test"]) expect(isShipIntent(buttonsFor(key, lang)[0].prompt)).toBe(true);
-      for (const key of ["ship-successful", "released-beta", "ship-blocked"]) {
-        expect(isShipIntent(buttonsFor(key, lang)[0].prompt), `${lang}/${key}`).toBe(false);
+      for (const key of ["ready", "test"]) {
+        expect(parseShipRequest(buttonsFor(key, lang)[0].prompt)).toMatchObject({ ship: true, promote: false });
       }
+      expect(parseShipRequest(buttonsFor("ship-successful", lang)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: null });
+      expect(parseShipRequest(buttonsFor("released-beta", lang)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable" });
+      expect(isShipIntent(buttonsFor("ship-blocked", lang)[0].prompt), `${lang}/ship-blocked`).toBe(false);
       expect(buttonsFor("ship-successful", lang)[0].prompt).toMatch(/^promote\b/);
       expect(buttonsFor("released-beta", lang)[0].prompt).toMatch(/^promote\b.*stable/);
       expect(buttonsFor("ship-blocked", lang)[0].prompt).toMatch(/^Debug\b/);

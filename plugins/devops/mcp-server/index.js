@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.9.0
+ * @version 0.10.0
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -588,7 +588,10 @@ function buildEvidencePosts(input, lang, key) {
 
   let main;
   if (key === 'released-beta' || key === 'released-stable') {
-    main = promotionPosts(input, lang);
+    // A ship + promote run (do-ship "ship stable") ends with ONE released
+    // card: the ship's requirements and tests lead, the promotion facts follow.
+    // A promotion-only run passes neither, so only the promotion posts show.
+    main = [requirementsPost(validation, lang), testsPost(tests, lang), ...promotionPosts(input, lang)].filter(Boolean);
   } else if (key === 'analysis') {
     main = analysisPosts(input);
   } else {
@@ -911,10 +914,18 @@ function pointsForKey(input, key, lang) {
       return open.length ? open : redFindings(input);
     case 'ship-blocked':
       return [topGateFinding(input, lang)].filter(Boolean);
+    // `open` after a merge: a promotion do-ship had to skip (Step 5d), a
+    // remote branch it could not delete (Step 5c) — decisions, listed first.
     case 'ship-successful':
-      return finalTest;
+      return [...open, ...finalTest.map(testTag)];
     case 'ship-successful-deploy':
       return deploy;
+    // The released card carries the lagging-consumer note (promote mode) and,
+    // after a ship in the same run, the ship's own manual checks and the
+    // harden/polish findings — none of them may be dropped.
+    case 'released-beta':
+    case 'released-stable':
+      return [...open, ...finalTest.map(testTag)];
     case 'test':
       return userTest;
     case 'vv-unverified':
@@ -1799,7 +1810,7 @@ server.registerTool(
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (promote alpha→beta→stable) rendered by do-ship's promote mode. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),

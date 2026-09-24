@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { isShipIntent, SHIP_KEYWORDS, SHIP_SLASH, KEYWORD_MAX_CHARS } from "./ship-intent.js";
+import { isShipIntent, parseShipRequest, SHIP_KEYWORDS, SHIP_SLASH, KEYWORD_MAX_CHARS } from "./ship-intent.js";
 
 // One classifier for both hooks: prompt.ship.detect turns the intent into a
 // Skill('do-ship') instruction, prompt.flow.title-work marks the sidebar with
@@ -59,5 +59,95 @@ describe("ship-intent", () => {
   test("the keyword list is frozen — one source for both hooks", () => {
     expect(Object.isFrozen(SHIP_KEYWORDS)).toBe(true);
     expect(SHIP_KEYWORDS.length).toBeGreaterThan(5);
+  });
+});
+
+// Skill restructure PR 2 — promote folded into do-ship: "ship" goes to alpha;
+// naming beta or stable means "ship if anything is unshipped, then promote".
+// The channel must be the OBJECT of a ship/promote/release/heben verb, never a
+// noun in passing.
+describe("parseShipRequest — target channel", () => {
+  const cases = [
+    // en
+    ["promote stable", true, "stable"],
+    ["promote to stable bitte", true, "stable"],
+    ["Promote to beta", true, "beta"],
+    ["release beta", true, "beta"],
+    ["release stable", true, "stable"],
+    ["ship stable", true, "stable"],
+    ["ship it to stable", true, "stable"],
+    ["Promote v0.171.0 to stable", true, "stable"],
+    // de
+    ["auf stable heben", true, "stable"],
+    ["jetzt auf beta heben!", true, "beta"],
+    ["stable promoten", true, "stable"],
+    ["ship, dann direkt nach stable", true, "stable"],
+    ["ship und dann auf stable", true, "stable"],
+    ["ship alles nach stable", true, "stable"],
+    ["erst beta, dann auf stable heben", true, "stable"],
+    // slash forms
+    ["/do-ship stable", true, "stable"],
+    ["/do-ship promote beta", true, "beta"],
+    ["/ship beta --keep", true, "beta"],
+    ["/promote stable", true, "stable"],
+    ["jetzt /promote stable", true, "stable"],
+  ];
+  test.each(cases)("%s → promote=%s channel=%s", (prompt, promote, channel) => {
+    const r = parseShipRequest(prompt);
+    expect(r.ship).toBe(true);
+    expect(r.promote).toBe(promote);
+    expect(r.channel).toBe(channel);
+  });
+
+  test("a bare promotion names no channel — do-ship asks which one", () => {
+    for (const p of ["promote", "promote it", "jetzt promoten", "/promote", "/do-ship promote", "Promote!"]) {
+      expect(parseShipRequest(p), p).toMatchObject({ ship: true, promote: true, channel: null });
+    }
+  });
+
+  test("a plain ship is alpha — no promotion", () => {
+    for (const p of ["ship", "ship it", "release", "/do-ship", "/do-ship --keep", "ab damit"]) {
+      expect(parseShipRequest(p), p).toMatchObject({ ship: true, promote: false, channel: null });
+    }
+    expect(parseShipRequest("ship to alpha")).toMatchObject({ ship: true, promote: false, channel: "alpha" });
+  });
+
+  test("a named version travels with the promotion", () => {
+    expect(parseShipRequest("Promote v0.171.0 to stable").version).toBe("0.171.0");
+    expect(parseShipRequest("/do-ship stable 0.170.2").version).toBe("0.170.2");
+    expect(parseShipRequest("promote stable").version).toBe(null);
+    expect(parseShipRequest("ship it").version).toBe(null);
+  });
+
+  test("negatives — a channel word or 'promote' in passing is no order", () => {
+    for (const p of [
+      "promote the idea to the team",
+      "promote this function to a class",
+      "the stable API is broken",
+      "fix the promote to stable flow",
+      "bring the stable version back",
+      "the `/promote` skill is gone",
+      "promote to stable?",
+      "sollen wir auf stable heben?",
+      "der beta tester meldet einen crash",
+    ]) {
+      expect(parseShipRequest(p), p).toMatchObject({ ship: false, promote: false });
+    }
+    // a ship order that merely mentions a channel noun stays a plain ship
+    expect(parseShipRequest("stable release notes need fixing, ship it")).toMatchObject({ ship: true, promote: false, channel: null });
+    expect(parseShipRequest("release to beta testers")).toMatchObject({ promote: false, channel: null });
+  });
+
+  test("a mid-prompt /promote in long prose is a mention, not an order", () => {
+    const prose = "Der /promote Button in der Card hat früher direkt promotet, das soll jetzt anders laufen — " +
+      "bitte die Card-Texte prüfen und die Tooltips anpassen, damit klar ist, dass do-ship das übernimmt und erst shippt.";
+    expect(prose.length).toBeGreaterThan(KEYWORD_MAX_CHARS);
+    expect(parseShipRequest(prose).ship).toBe(false);
+  });
+
+  test("isShipIntent counts a promotion — the title hook marks it like a ship", () => {
+    expect(isShipIntent("promote stable")).toBe(true);
+    expect(isShipIntent("auf beta heben")).toBe(true);
+    expect(isShipIntent("promote the idea to the team")).toBe(false);
   });
 });

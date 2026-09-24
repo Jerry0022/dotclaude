@@ -12,7 +12,7 @@ Three readers, one source:
 | Reader | When | What it does with the rules |
 |---|---|---|
 | `post.design.remind` hook + `agents/frontend.md` / `agents/designer.md` | The moment a UI file is written | Prevention — the rules are in context before the element exists |
-| `/auto-polish --invoked-by=ship` (called from `/do-ship` Step 1d) | Every ship whose diff touches UI files | Measurement — **static** halves only, diff files only, report-only |
+| `/auto-polish --invoked-by=ship` (called from `/do-ship` Step 1e) | Every ship whose diff touches UI files | Measurement — **static** halves only, diff files only, report-only |
 | `/auto-polish` (direct, `/auto-agents`, `/do-run autonomous`) | A polish pass with a browser | Full check — static **and** runtime halves, whole scope |
 
 ## The rules
@@ -92,7 +92,7 @@ static half; the runtime half belongs to a full `/auto-polish` pass.
   merged PRs (the `/do-ship` Step 1d purpose-alignment sources) beats a generic
   rule from this file. "Tooltips removed from the toolbar because they got in
   the way" is a decision, not a defect.
-- **Never blocks a ship.** Findings feed `/do-ship` Step 1d's semantics:
+- **Never blocks a ship.** Findings feed `/do-ship` Step 1e's semantics:
   mechanically fixable → fixed, listed under `changes`; everything else →
   `userFinalTest`. Under `$SHIP_LOCKOUT` findings are recorded and the ship
   continues.

@@ -1,6 +1,6 @@
 /**
  * @module ship-compact
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description The "careful compact before /do-ship" advice, shared by
  *   `prompt.ship.detect` (which emits it instead of the Skill('do-ship')
@@ -29,6 +29,11 @@
  *     made the user compact twice and then type `--no-compact` anyway.
  *   - Never for a ship an orchestrator invokes through the Skill tool
  *     (those are not user prompts), `--no-compact` skips it for one ship.
+ *   - Never for a promotion-only run (`promotionOnly`): "promote stable" on
+ *     a branch with nothing unshipped runs ~4 calls (ls-remote, ship_promote,
+ *     the card), not ~16 — the saving is smaller than the prompt the stop
+ *     costs. The caller decides "nothing unshipped" (lib/ship-unshipped.js);
+ *     a promotion that has to ship first is a ship and gets the stop.
  *
  *   The advice ends in a completion card (`compact` field, 2026-09-23) that
  *   spells out the `/compact` command. On Desktop its one button "Ohne
@@ -89,15 +94,18 @@ function shipSavingEstimate(tokens) {
 
 /**
  * The advice block, or null when the ship should just run.
- * @param {{ tokens: number|null, prompt: string, advisedBefore?: boolean, env?: NodeJS.ProcessEnv }} o
+ * @param {{ tokens: number|null, prompt: string, advisedBefore?: boolean, promotionOnly?: boolean, env?: NodeJS.ProcessEnv }} o
  *   advisedBefore — the previous ship prompt of this session already got the
  *   advice; this one is the user's answer and runs.
+ *   promotionOnly — the prompt asks for a promotion and nothing is unshipped:
+ *   the run is cheap, no advice.
  * @returns {string|null}
  */
-function shipCompactAdvice({ tokens, prompt, advisedBefore = false, env = process.env }) {
+function shipCompactAdvice({ tokens, prompt, advisedBefore = false, promotionOnly = false, env = process.env }) {
   const limit = threshold(env);
   if (!limit || tokens == null || tokens < limit) return null;
   if (advisedBefore) return null;
+  if (promotionOnly) return null;
   if (NO_COMPACT.test(prompt || '')) return null;
   const size = formatTokens(tokens);
   return [

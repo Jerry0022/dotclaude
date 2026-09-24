@@ -32,7 +32,8 @@ If the incoming message starts with `RUN_BACKLOG_AUTOSTART:`, a presence-phase
 timeout fired and the user is AFK. Step 1a arms this cron **before the first
 question**, and every presence question re-arms it, so the timeout covers the
 whole Präsenz phase — not just the final confirmation. Do NOT re-ask anything.
-Parse `phase`, `queue`, `milestones`, `shutdown`, `autoResume`, `burnMode`, `branch`.
+Parse `phase`, `queue`, `milestones`, `shutdown`, `autoResume`, `burnMode`,
+`ship`, `passes`, `strict`, `branch`.
 
 **Pending-question guard:** if an `AskUserQuestion` is still active when the
 prompt arrives (the user is mid-answer), do NOT auto-start — re-arm a fresh
@@ -111,7 +112,8 @@ CronCreate({ recurring: false, cron: "<now+3min>",
   prompt: "RUN_BACKLOG_AUTOSTART: presence timeout. phase=presence,
   queue=<all trusted open milestone issue numbers; or all trusted open loose
   issue numbers when there are no milestones>, milestones=<all open titles>,
-  shutdown=yes, autoResume=no, burnMode=no, branch=<current-branch>." })
+  shutdown=yes, autoResume=no, burnMode=no, ship=<router $SHIP>,
+  passes=<router $PASSES>, strict=<on|off>, branch=<current-branch>." })
 ```
 
 **Re-arm** it (delete + recreate at a fresh `now + 3min`) after **every** answered
@@ -126,6 +128,10 @@ is still on screen, apply the Step 0.1 pending-question guard (re-arm + wait).
    gh api "repos/{owner}/{repo}/milestones?state=open" \
      --jq '.[] | {title, number, open_issues, description}'
    ```
+   **do-run router:** steps 1–2 run as part of the router's follow-up
+   (`../SKILL.md` Step 4, F3/F4): fetch + trust gate + presence cron first,
+   then the selection questions below are rendered inside that one follow-up
+   call. Continue here at step 3 with its answers.
 2. **Selection logic (follow exactly):** the counts from step 1 include issues
    from untrusted authors, so **apply the trust gate before presenting anything**
    — a milestone whose open issues are all untrusted has an effective count of 0
@@ -213,33 +219,24 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
      grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
    fi
    ```
-2. **Ship-mandate confirmation (explicit gate point)** — ask via
-   `AskUserQuestion`:
-   > header: "Ship-Mandat"
-   > question: "Pro fertigem Issue: Branch → PR → ship → merge `main` → Issue
-   > geschlossen. Nur MCP-Ship-Tools, eigenes Repo, kein Force-Push. Starten?"
-   > Options (fixed order): 1. "Ja, mit Ship-Mandat" · 2. "Nein, abbrechen"
+2. **Ship mandate — answered by the do-run router (Q2 "Ablauf?").**
+   `$SHIP=auto` ("… · Ship automatisch") is the mandate: per finished issue
+   Branch → PR → ship → merge `main` → issue closed, only MCP ship tools, own
+   repo, no force-push. `$SHIP=manual` means no ship in this run: Step 4
+   leaves each issue committed on its own branch (not pushed, issue and
+   milestone stay open, item reported as `ready`). Not asked again.
+3. **Shutdown / resume — answered by the router.** Weg → its follow-up F6
+   ("PC danach": `PC an · mit Resume` / `PC an · ohne Resume` /
+   `PC aus · ohne Resume`), which folds autonomous mode Step 2 **Q3** and
+   **Q4** and keeps their HARD GATE by construction (shutdown=yes ⇒
+   `$AUTO_RESUME=no`). Dabei → `shutdown=no`, `autoResume=no`.
 
-   "Nein" → stop, output "Backlog-Runner abgebrochen.", render a `ready` card if
-   Step 2 wrote refinements, else `analysis`.
-3. **Shutdown / resume** — ask autonomous mode Step 2 **Q3** (shutdown yes/no)
-   and, only when shutdown=no, **Q4** (auto-resume) — same fixed option order and
-   same HARD GATE (shutdown=yes ⇒ `$AUTO_RESUME=no`, skip Q4).
-
-   **Budget-Modus (`$BURN_MODE`, default Nein)** — one more `AskUserQuestion`:
-   whether to work the backlog like `/do-run burn` (budget-driven, aggressively
-   parallelized) instead of the default sequential one-issue-at-a-time.
-   > header: "Modus"
-   > question: "Backlog im Budget-Modus abarbeiten? Burn-Modus-Stil: vorab
-   > Budget-Assessment + aggressive Agenten-Parallelisierung pro Issue, plus
-   > zusätzliche Tasks aus TODOs/Lint/Coverage zusätzlich zu den Milestones —
-   > sonst normal der Reihe nach."
-   > Options (fixed order): 1. "Nein, normal sequentiell (empfohlen)" ·
-   > 2. "Ja, Budget-Modus (Burn-Modus)"
-
-   Save as `$BURN_MODE` (`no` if option 1, `yes` if option 2). The default — and
-   the presence-timeout value — is always `no`. It is threaded into the autostart
-   marker below and consumed in Step 4.
+   **Budget-Modus (`$BURN_MODE`)** — answered by the router's Q4: "Budget
+   verbrennen" ticked → `yes` (work the backlog like `/do-run burn`:
+   budget assessment + aggressive agent parallelization per issue, plus extra
+   tasks from TODOs/Lint/Coverage), otherwise `no` (sequential, one issue at
+   a time). The presence-timeout value is always `no`. It is threaded into
+   the autostart marker below and consumed in Step 4.
 4. **Confirmation + timers** — arm the external watchdog (`register`) and the
    auto-resume cron (if shutdown=no + resume=yes) per autonomous mode Step 4
    and `skills/do-run/modes/autonomous/deep-knowledge/shutdown-watchdog.md`. **Watchdog
@@ -261,6 +258,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
      prompt: "RUN_BACKLOG_AUTOSTART: confirmation timeout. phase=gate, resume
      /do-run backlog Step 4 loop with: queue=<issue numbers>,
      milestones=<titles>, shutdown=<y/n>, autoResume=<y/n>, burnMode=<y/n>,
+     ship=<auto|manual>, passes=<harden,polish|none>, strict=<on|off>,
      branch=<branch>." })
    ```
    On re-entry the Step 0.1 `phase=gate` branch resumes the Step 4 loop (skips
@@ -306,13 +304,18 @@ Loop the queue, **one issue at a time**:
 ```
 for each issue in queue:
   1. WORKTREE  → branch for the issue
-  2. IMPLEMENT → the same role-agent orchestration /auto-agents runs
+  2. IMPLEMENT → /auto-agents --from=do-run --mode=background --ship=<$SHIP>
                  (agent-orchestration.md — Single-Agent Shortcut / waves;
                  Autonomous directive, no AskUserQuestion). May delegate one heavy
                  item to a /do-run autonomous implement sub-run (never ships).
   3. TEST/QA   → pin the profile per deep-knowledge/test-plan.md; devops:qa agent; verify
                  per test-strategy.md (browser verification MANDATORY for web tech)
-  4. SHIP      → /do-ship (MCP ship tools) — this skill's own authority
+  3b. PASSES   → the router's Q4 passes over this issue's diff: /auto-harden,
+                 then /auto-polish, each --invoked-by=autonomous (+ --strict
+                 under "Nur das"); skipped when none were chosen
+  4. SHIP      → $SHIP=auto: /do-ship (MCP ship tools) — this skill's own
+                 authority. $SHIP=manual: commit on the issue branch, no
+                 push/PR, item → ready; skip 5
   5. CLOSE     → close the issue; when ALL issues of a milestone are done,
                  close the milestone
   ── special cases ──
@@ -389,8 +392,9 @@ git-exclude entries (Step 3). Semantics mirror the `AUTONOMOUS-*` family.
   third party's issue is never implemented, shipped, commented on, or closed by
   this runner; it is reported as `🚫 fremd` and left untouched. Unresolvable
   trusted set ⇒ run nothing.
-- **Never modify autonomous mode** — ship authority lives ONLY in this skill;
-  the autonomous no-ship guarantee stays intact.
+- **Never route a ship through autonomous mode** — ship authority lives in
+  this skill's loop and in the do-run router (Q2); the autonomous engine's
+  no-ship guarantee stays intact.
 - **Ship only via MCP ship tools, own repo, no force-push.**
 - **GitHub writes (refine, sub-issues) happen only in Präsenz** (Step 2), never
   after the Lockout.

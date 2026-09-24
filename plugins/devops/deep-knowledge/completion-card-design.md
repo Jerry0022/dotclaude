@@ -276,7 +276,7 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
      red, `ship --no-compact` and plain sentences green). A button can
      therefore never carry a slash command. Button prompts are plain text
      that reaches the skill by its trigger words: `ship` (prompt.ship.detect),
-     `promote` / `promote stable` (do-ship promote mode), `Debug …` (auto-fix).
+     `promote` / `ship stable` (prompt.ship.detect → do-ship with the channel), `Debug …` (auto-fix).
      Built-in commands like `/compact` have no such route — the card shows
      them as text. `card-widget.test.js` rejects any slash prompt.
 

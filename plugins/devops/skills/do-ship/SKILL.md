@@ -1,16 +1,18 @@
 ---
 name: do-ship
-version: 0.11.0
+version: 0.12.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, render_completion_card,
   then silent memory consolidation.
   Supports hierarchical merges (sub-branch → feature → main).
-  Use when work is ready to land. Promote mode (formerly the promote skill):
-  deliberate channel promotion of an already-shipped version alpha→beta→stable
-  by re-tagging the SAME commit via ship_promote — never rebuilds, never bumps,
-  never autonomous. Do NOT trigger during coding/debugging, for commits
-  without shipping, or for plugin updates (/auto-update).
+  Use when work is ready to land. Ships to alpha; naming beta or stable
+  ("ship stable", "promote to beta", "auf stable heben") ships anything
+  unshipped first, then promotes by re-tagging the SAME commit via
+  ship_promote (formerly the promote skill) — never rebuilds, never bumps,
+  never autonomous. Runs auto-harden and auto-polish diff-scoped at ship.
+  Do NOT trigger during coding/debugging, for commits without shipping, or
+  for plugin updates (/auto-update).
   Triggers on: "ship it", "push and merge", "release", "promote", "promotion",
   "channel release", "auf stable heben", "promote to beta", "promote to stable".
 layer: 3
@@ -18,7 +20,7 @@ invokes: [auto-harden, auto-polish]
 triggers:
   en: ["ship it", "push and merge", "release", "promote", "promotion", "channel release", "promote to beta", "promote to stable"]
   de: ["auf stable heben"]
-argument-hint: "[--cwd <path>] [--keep] [--queued] | promote [beta|stable]"
+argument-hint: "[beta|stable|promote] [<version>] [--cwd <path>] [--keep] [--queued] [--no-compact]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
@@ -32,17 +34,40 @@ Supports two modes: **direct** (branch → main) and **intermediate** (sub-branc
 > Every `ship_*` tool call MUST include `cwd` set to the current working directory of this Claude session.
 > Omitting `cwd` will cause the tool to operate on the wrong repository.
 
-## Promote mode — beta / stable requests
+## Target channel — alpha by default, beta / stable on request
 
-A request to move an already-shipped version to a higher channel ("promote",
-"promote to stable", "auf stable heben", "release", `/do-ship promote`, the
-card's Promote button, the pre-PR-2 `/promote`) is NOT a ship: skip every
-step below and follow `modes/promote.md` (same directory as this file)
-instead. It re-tags the same commit via `ship_promote`, never rebuilds and
-never runs autonomously. A plain "ship" / "ship it" is always the pipeline
-below, never promote mode.
+A ship always lands on **alpha**. Naming a higher channel means "ship if
+anything is unshipped, then promote" — promote is no longer a separate skill
+(spec `docs/superpowers/specs/2026-09-24-skill-restructure-design.md`).
 
-<!-- PR2-phaseB: fold promote into the ship flow proper (spec "Delivery" PR 2 — "promote into do-ship"): mode detection, the question design and the card hand-off. This section is only the temporary router. -->
+**Read the target** from the skill arguments first — `prompt.ship.detect`
+passes it (`beta`, `stable`, `promote`, optionally a version: `stable 0.171.0`)
+— else from the user's own prompt: "ship stable", "promote to beta",
+"release beta", "auf stable heben", "stable promoten", `/do-ship stable`,
+`/do-ship promote`, the pre-PR-2 `/promote`, the card's Promote button. A
+channel counts only as the object of ship/promote/release/heben ("the stable
+API" is no request). Several named → the highest.
+
+| Unshipped work on this branch? | Channel | Run |
+|---|---|---|
+| yes | none / alpha | the pipeline below, unchanged |
+| yes | beta / stable | the pipeline below to alpha, then **Step 5d** promotes the version just shipped; ONE `released` card (Step 6) |
+| no | beta / stable / bare `promote` | **promotion only**: Pre-Step A, then `modes/promote.md` Steps 0–4 — no preflight, no build, no passes |
+| no | none / alpha | the pipeline below (preflight reports "nothing to ship", as before) |
+
+"Unshipped" = tracked changes, or commits whose files still differ from the
+default branch (`git diff --name-only origin/<base>...HEAD` non-empty AND
+`git diff --quiet origin/<base> HEAD -- <those files>` fails) — a content
+check, so a squash-merged keep-mode branch counts as shipped
+(`hooks/lib/ship-unshipped.js` is the same test).
+
+**Promotion stays a user decision.** The channel word the user typed IS that
+decision — no extra confirmation. Never promote on a channel that did not
+come from the user: arguments an orchestrator passes (`--queued`, `--cwd`,
+`/do-run backlog`, `/setup-cleanup`) and any `$SHIP_LOCKOUT` run skip the
+promotion and name it as an `open` item. A bare "promote" (no channel) asks
+which promotion (`modes/promote.md` Step 2). All `ship_promote` guards stay
+final (monotonicity, ancestry, immutability — `modes/promote.md` Step 3).
 
 ## Composed ships — `--cwd`, `--keep`, `--queued`, the queue marker
 
@@ -82,6 +107,10 @@ and types `/do-ship` again (the hook sees the compaction and lets it through), o
 ships without compacting (the button, or simply `/do-ship` again).
 Ships reached through the Skill tool by an orchestrator (`/do-run backlog`,
 `/setup-cleanup`) never see the block — the hook only reads user prompts.
+A **promotion-only** prompt ("promote stable" with nothing unshipped) never
+gets it either: that run is ~4 calls (ls-remote, `ship_promote`, the card),
+not ~16, so the stop would cost the user more than it saves. A promotion that
+has to ship first is a ship and gets the stop like any other.
 
 ## Pre-Step A — Autonomous Lockout Detection
 
@@ -123,7 +152,8 @@ two shapes are:
 | Pre-Step B — session activity still in progress | ask Warten/Trotzdem/Abbrechen | in-scope activity pending → **BLOCK** ("session activity active"); otherwise proceed |
 | Step 1b(e) — truly ambiguous rebase conflict | abort + ask which side wins | `git rebase --abort` → **BLOCK** ("unresolvable merge conflict — needs human decision") |
 | Step 1d — high-impact purpose-alignment conflict | ask (batched) | apply mechanical fixes as usual; high-impact items → **RECORD & CONTINUE** |
-| Step 1d — standing UI-rule finding (`/auto-polish --invoked-by=ship`) | mechanical → fix; else `userFinalTest` (never asks) | same: mechanical → fix; else **RECORD & CONTINUE** — never BLOCK |
+| Step 1e — ship-pass finding (`/auto-harden` + `/auto-polish --invoked-by=ship`) | mechanical → fix; else `userFinalTest` (never asks) | same: mechanical → fix; else **RECORD & CONTINUE** — never BLOCK |
+| Step 5d — promotion (beta/stable named) | promote on the user's channel word | never promote — `open` item "Promotion auf <channel> ausgesetzt — unbeaufsichtigter Lauf" |
 | Step 2 — Codex judgment-required finding | ask Fixen/Ignorieren/Abbrechen | auto-fixable → fix inline; design/logic/security → **BLOCK** (finding named) |
 | Step 3 — major version bump | always ask | **BLOCK** ("needs major-version decision — not shipped unattended") |
 
@@ -206,7 +236,7 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 1. Global: `~/.claude/skills/do-ship/SKILL.md` + `reference.md`
 2. Project: `{project}/.claude/skills/do-ship/SKILL.md` + `reference.md`
    Fallback (pre-PR-2 name): where `do-ship/` does not exist, read `~/.claude/skills/ship/` / `{project}/.claude/skills/ship/` instead — an extension written before the rename keeps working.
-   Promote mode additionally reads the pre-PR-2 `~/.claude/skills/promote/` / `{project}/.claude/skills/promote/` when present.
+   A promotion (Step 5d / promotion-only) additionally reads the pre-PR-2 `~/.claude/skills/promote/` / `{project}/.claude/skills/promote/` when present.
 3. Merge: project > global > plugin defaults
 
 Project extensions define: quality gate commands, deploy targets, version files, CI specifics.
@@ -401,36 +431,55 @@ the convention (it ships with this PR). Ask via AskUserQuestion ONLY for
 high-impact conflicts (contradicting purposes, design decisions, substantial
 rework) — all batched into ONE question.
 
-**Standing UI rules (part of the Light check).** Besides the conventions
-mined from recent PRs, every project has the standing UI conventions in
-`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` (tooltips, dropdowns, spacing,
-hotkeys — plus the project's `## UI rules` override in
-`.claude/skills/auto-polish/reference.md`, pre-PR-2 fallback `tune-polish/`). When the diff contains UI files
-(`ui-defaults.md` § UI file detection), invoke the **rules-only path** of
-auto-polish — `/auto-polish --invoked-by=ship <ui files of the diff>` (the
-Skill tool, same as every other skill composition here) — and treat what it returns exactly like the other 1d findings:
-- `applicable: false` (no UI files, no UI profile) → nothing; no card entry.
-- `mechanical: true` findings → apply the one-line fix, list under `changes`.
-- every other finding → a `userFinalTest` item naming rule, file:line and
-  what to check.
-- `disabled` / `notApplicable` ids → one `tests` line for the card
-  ("UI-Regeln: 2 Findings · R2b deaktiviert (Projekt-Override) · R4 n/a").
-The rules-only path is static, diff-only, runs no agents and no browser, and
-returns no card of its own; the runtime halves of the rules are a full
-`/auto-polish` matter and are never attempted here. **Priority:** a more
-recent project convention from the mined PRs beats a standing rule — the
-convention is a decision, the rule a default. This check never blocks a ship.
-
 **If `$SHIP_LOCKOUT` (Pre-Step A):** still apply the mechanical fixes; for the
 high-impact conflicts do not ask — **RECORD & CONTINUE** (fold each into a
 `userFinalTest` item for Step 6). This gate never blocks the ship on its own.
 
 Skip silently when: `mode: "file-only"`, no purpose sources found, or the diff
-is clearly out of scope for every gathered purpose. The standing-UI-rules part
-additionally skips when the diff touches no UI file.
+is clearly out of scope for every gathered purpose.
 
 Feed results into Step 6: fixed violations → `changes`; open/unverifiable
 items → `userFinalTest`. Silent when clean.
+
+### 1e. Ship passes — harden + polish, diff-scoped
+
+Every ship runs the two cheap passes on exactly what it lands (spec call
+graph: `do-ship → auto-harden, auto-polish`, both `--invoked-by=ship`). Both
+are static, diff-only, run no agents and no browser, return a findings
+structure and no card — the Skill tool, one call each, then continue:
+
+1. `/auto-harden --invoked-by=ship --base=<base> <files of the diff>` — every
+   changed file; checks H1–H7 on the added lines (`auto-harden` § Ship path).
+2. `/auto-polish --invoked-by=ship <ui files of the diff>` — only when the
+   diff has UI files (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § UI file
+   detection, plus the project's `## UI rules` override in
+   `.claude/skills/auto-polish/reference.md`, pre-PR-2 fallback `tune-polish/`);
+   the static halves of the standing UI rules (`auto-polish` § Rules-only path).
+
+Treat what they return like the other 1d findings:
+- `applicable: false` → nothing; no card entry.
+- harden `fixed` items (it applied them) and polish findings with
+  `mechanical: true` (apply the one-line `fix` yourself) → commit with this
+  ship, list under `changes`.
+- every other finding → a `userFinalTest` item naming id/rule, file:line and
+  what to check; a harden H3 (secret-shaped literal) goes first.
+- one `tests` line per pass that ran: `{ method: "Harden (Ship)", result: "1 Fix · 2 Hinweise" }`,
+  `{ method: "UI-Regeln", result: "2 Findings · R2b deaktiviert (Projekt-Override) · R4 n/a" }`.
+
+**Never blocks.** If Step 2's `ship_build` goes red on a line a pass fixed,
+revert that fix, re-run the gate, and report the finding instead; a red
+build the passes did not cause is the normal `ship-blocked`. **Priority:** a
+more recent project convention from the mined PRs (1d) beats a standing rule.
+
+**Strict mode** (`node "$CLAUDE_PLUGIN_ROOT/hooks/lib/strict-state.js" status`
+→ `active: true`, or the `[claude-strict contract]` in context): the passes
+still run — reporting costs nothing and the diff is the user's own scope —
+but with `--strict` added, and nothing is applied: every finding, mechanical
+or not, becomes a `userFinalTest` item. A drive-by line change is exactly
+what strict forbids.
+
+**Skip** both when `mode: "file-only"` (no diff) or the run is
+promotion-only. `$SHIP_LOCKOUT` changes nothing here — the passes never ask.
 
 ### Merge strategy decision
 
@@ -585,12 +634,12 @@ as file-only (that was the 2026-09-18 failure: a real repo got a skipped
 
 **Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
 the EARLIEST channel autonomously. beta/stable tags and GitHub Releases are
-created later by `/do-ship promote` (deliberate promotion, same SHA, no rebuild).
+created later by a promotion (`ship beta|stable`, Step 5d — same SHA, no rebuild).
 Pass the bare `tag: "vX.Y.Z"` (the tool prefixes the channel) — or **omit
 `tag`** and the tool derives `v<version>` from the version file `ship_version_bump`
 just wrote (result carries `tagDefaulted: true`). Only an explicit `tag: null`
 skips the ring tag, and even then the result says so: `tagSkipped: true` +
-`tagWarning` (main is ahead of every ring, `/do-ship promote` has nothing to promote) —
+`tagWarning` (main is ahead of every ring, a promotion has nothing to promote) —
 surface that warning as a `userFinalTest` item, never render an all-green card
 over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
 
@@ -1000,9 +1049,55 @@ In Step 6:
   reserved for expected follow-up work; a worktree kept because nobody else may remove it
   must not read as "keep coding here".
 
+## Step 5d — Promote (beta / stable requested)
+
+**Runs only when** the target channel (§ Target channel) is beta or stable,
+it came from the user, this was a final ship to main that merged, and
+`ship_release` tagged `alpha/v<vNew>`. Otherwise skip — and when a channel
+WAS requested, say why on the card as an `open` item (Step 6):
+
+| Reason to skip | `open` item |
+|---|---|
+| `$SHIP_LOCKOUT` / orchestrator arguments | "Promotion auf <channel> ausgesetzt — unbeaufsichtigter Lauf, bitte selbst anstoßen" |
+| Step 4d raised the deploy gate | "Promotion auf <channel> ausgesetzt — erst deployen, dann `promote <channel>`" |
+| intermediate ship (feature branch) | "Promotion erst nach dem Ship auf main" |
+| `tagSkipped` / `tagError` (no alpha tag) | "Promotion ausgesetzt — alpha-Tag fehlt (siehe Test-Punkt)" |
+| no channel tags in the repo (no ring model) | "Kein Ring-Modell (keine Channel-Tags) — nichts zu promoten" |
+
+Otherwise follow `modes/promote.md` with these fixed inputs — its Step 2
+question is already answered by the channel the user named:
+- **Version** = `vNew` of this ship (or the version the user named).
+- **cwd** = this session's cwd; after Step 5b removed the worktree, the
+  captured `$MAIN_REPO_ROOT`.
+- **beta** → `ship_promote({ version, from: "alpha", to: "beta", cwd })`.
+- **stable** → fast-track, two sequential calls (alpha→beta, then
+  beta→stable with `releaseNotes` = this version's CHANGELOG entry), unless
+  the version is already on beta — then only beta→stable.
+- Guard errors are final (`modes/promote.md` Step 3): no retry around
+  monotonicity/ancestry/immutability. A failed promotion never undoes the
+  ship — the card stays `ship-successful` with the guard error as an `open`
+  item.
+
+Carry the result into Step 6: `promotion: { from, to, sha, tags: <pushed>, release }`
+and the re-read channel ladder (`git ls-remote --tags origin`).
+
+**Promotion-only runs** (§ Target channel, nothing unshipped) do exactly
+this and nothing else — `modes/promote.md` Steps 0–4, the version = latest
+alpha unless one was named; a bare "promote" asks its Step 2 question.
+
 ## Step 6 — Completion Card
 
 Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
+
+**One card per run.** When Step 5d promoted, the run ends with ONE
+`released` card — never a `ship-successful` card first. It carries the
+ship's fields exactly as below (`changes`, `tests`, `validation`,
+`userFinalTest`, `state`, `cta`, `delivery.pr` + `delivery.ship`) plus
+`delivery.promote: { channels, current: "<channel>", fastTrack }` and
+`promotion` (see `modes/promote.md` Step 4); skip the promotion-gap nudge —
+the ladder already shows the new state. Its `[SESSION TITLE]` block sets
+`🎊 Released <Channel> – `. Without a promotion the variants below apply
+unchanged.
 
 **CRITICAL — `cwd` is required for clickable links.** Without `cwd`, `getRepoUrl` falls back to the MCP server's own working directory (plugin dir, not your target repo) and the card renders PR/commit/branch as plain text. Always pass the same `cwd` you used for the ship tools.
 
@@ -1018,13 +1113,14 @@ the card (the card stays the last output of the turn). What it resolves to:
 |---------|-------|
 | `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🚀 Shipped – {title}` — the finished form of `🚀 Shipping – `; the next card that ends a turn replaces the marker |
 | `ship-blocked` (any gate, build, checks, PR not merged) | `⛔ Blocked – {title}` — same emoji as the card headline |
+| `released` (Step 5d promoted, with or without a ship before it) | `🎊 Released <Beta\|Stable> – {title}` |
 
 The block also strips a stale `🚀 Shipping – ` when the title carries one. A
 title with none of the devops prefixes is left untouched — the user renamed it
 meanwhile, and that name wins. Desktop app only; skip silently elsewhere or on
 any failure.
 
-### Promotion-gap nudge (final ship to main only — MANDATORY)
+### Promotion-gap nudge (final ship to main without a promotion — MANDATORY)
 
 Deliberate promotion has no heartbeat without a forcing function — invisible
 channel lag is how stable rots. Before rendering the card, compute the drift:
@@ -1056,7 +1152,7 @@ render_completion_card({
   cwd: "<current working directory — same as ship_release>",
   buildId: <from ship_build.buildId>,
   changes: [<top 3 FUNCTIONAL changes — user-perceived effect, phrased as behavior; area ≤ 24, description ≤ 90 chars (one line each). Derive from ship_build/version_bump results but do NOT list files/modules. See completion-card template § Changes.>],
-  tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit") and, when Step 1d ran the UI rules, one line { method: "UI-Regeln", result: "2 Findings · R2b deaktiviert" } — omitted entirely when the diff had no UI files. Rendered on the header line(s) under **Geprüft**.>],
+  tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit") and the Step 1e lines: { method: "Harden (Ship)", result: "1 Fix · 2 Hinweise" } whenever the harden pass ran, { method: "UI-Regeln", result: "2 Findings · R2b deaktiviert" } only when the diff had UI files. Rendered on the header line(s) under **Geprüft**.>],
   validation: [<requirement ≤ 70 → evidence ≤ 100 chars; partial/unmet items first. Long-form evidence belongs in the PR body.>],
   userFinalTest: [<ONLY real manual tests the user must run>],
   open: [<decisions, cleanups, open questions — NOT tests: "feat/x liegt 70 PRs hinter main — committen oder verwerfen?">],
@@ -1092,7 +1188,7 @@ post-merge. Add `promote: { channels: { alpha: <vNew> }, current: "alpha" }`
 **only for ring-model projects** (plain ship publishes to alpha) — that also
 makes the CTA read "SHIPPED → alpha" and shows the channel ladder with beta/
 stable still pending. Projects without channels omit `promote`; the track then
-just shows PR → Ship, and a later `/do-ship promote` renders the `released` card that
+just shows PR → Ship, and a later promotion (Step 5d) renders the `released` card that
 advances the ladder to beta/stable.
 
 **Variant reflects what the pipeline DID, not what's verified downstream.**

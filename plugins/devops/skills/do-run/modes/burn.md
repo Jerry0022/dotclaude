@@ -15,7 +15,8 @@ the uplift floor that makes a burn worth running, the reserve, and the durabilit
 protocol all live in `{PLUGIN_ROOT}/skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` — **read that file at the
 start of Step 2.**
 
-**This skill MUST only run when explicitly invoked via `/do-run burn` (or the pre-PR-2 `/run-burn`).**
+**This skill MUST only run when explicitly invoked via `/do-run burn` (or the pre-PR-2 `/run-burn`),
+or when the user ticked "Budget verbrennen" in the do-run router's Q4.**
 Never trigger from hooks, prompt phrasing, or heuristic matching.
 
 ## Step 0 — Load Extensions
@@ -34,42 +35,31 @@ Extension-overridable knobs: `RESERVE`, `LANE_CAP`, `BASE_PCT_PER_LANE_HOUR`
 Before the confirmation gate, check for `BURN-STATE.json` in the project root.
 
 If it exists with a non-empty `queue` or `inFlight`, a previous burn was cut off
-— by the weekly limit, a crash, or a session end. Ask via `AskUserQuestion`:
+— by the weekly limit, a crash, or a session end. The do-run router already
+asked "Run fortsetzen" / "Run neu starten" before its base call
+(`../SKILL.md` Step 2, naming {done} landed · {queue} open · {inFlight}
+unclear) — take that answer, never ask again:
 
-> Ein abgebrochener Burn liegt vor: {done} Tasks gelandet, {queue} offen,
-> {inFlight} unklar. Fortsetzen oder neu starten?
-
-Options: `["Fortsetzen", "Neu starten"]`
-
-- **Fortsetzen** → adopt `integrationBranch`, skip everything in `done`, verify
+- **Fortsetzen** ("Run fortsetzen") → adopt `integrationBranch`, skip everything in `done`, verify
   each `inFlight` branch for commits and either merge it or requeue the task.
   Then run **Step 2** (the stored plan is from the previous window and is stale —
   `profile` and `lanes` must be re-derived from current usage), skip Steps 3–5
   (the queue already exists), and continue at Step 6.
-- **Neu starten** → archive to `BURN-STATE.prev.json` (never delete — it is the
+- **Neu starten** ("Run neu starten") → archive to `BURN-STATE.prev.json` (never delete — it is the
   only record of the previous run's branches) and continue to Step 1.
 
 Full protocol: `{PLUGIN_ROOT}/skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` § Resume.
 
 ## Step 1 — Burn Confirmation Gate
 
-**MANDATORY — never skip this step.**
-
-Before doing ANYTHING else, ask via `AskUserQuestion`:
-
-> **BURN MODE**
->
-> Dieser Modus verbraucht dein verbleibendes Weekly-Budget gezielt vor dem
-> Reset — primär über mehr Tiefe pro Task (stärkere Modelle, höherer Effort,
-> zusätzliche Review-Durchläufe), sekundär über parallele Lanes. Bei
-> aktivierter Zusatznutzung kann das über dein Standardlimit hinausgehen.
->
-> Bist du sicher, dass du den Burn-Modus starten willst?
-
-Options: `["Ja, burn starten", "Nein, abbrechen"]`
-
-- **"Ja, burn starten"** → proceed to Step 2
-- **"Nein, abbrechen"** → stop immediately, output: "Burn abgebrochen." — do nothing else
+**Answered by the do-run router — do not ask.** The confirmation is the
+user's own "Budget verbrennen" tick in the router's Q4 (never recommended,
+never pre-selected, only visible above 80 % weekly usage) or the literal
+`/do-run burn` / `/run-burn`. Its option description carries what this gate
+used to say: the remaining weekly budget is spent before the reset —
+depth per task first (stronger models, higher effort, extra review passes),
+parallel lanes second; with extra usage enabled it can go past the standard
+limit. Proceed to Step 2.
 
 ## Step 2 — Budget Assessment & Plan Derivation
 
@@ -113,7 +103,7 @@ plainly — do not invent extra lanes to close a gap fan-out cannot close:
 
 ## Step 3 — Primary Task Intake
 
-Use `$ARGUMENTS` if provided. If empty, ask:
+The do-run router passes the prompt as `$ARGUMENTS`. Only if empty, ask:
 > **Was ist der Hauptauftrag für den Burn?**
 
 Parse into: **Goal** (one sentence), **Scope** (files/systems), **Priority** (high).
@@ -286,12 +276,13 @@ re-derive it, only recalibrate it per
 
 **Important:** Pass the filled-in prompt as `$ARGUMENTS` to the autonomous
 skill. The autonomous skill then handles Steps 2–8 of its own flow
-(desktop questions, permission priming, execution, reporting, optional
-shutdown).
+(permission priming, execution, reporting, optional shutdown); its desktop
+and shutdown/resume answers come from the router's follow-up (F5 / F6), and
+its Step 6.5 hands `$PASSES` / `$SHIP` back to the router.
 
 ## Rules
 
-- **NEVER auto-trigger** — this skill runs ONLY on explicit `/do-run burn` (or legacy `/run-burn`) invocation
+- **NEVER auto-trigger** — this skill runs ONLY on explicit `/do-run burn` (or legacy `/run-burn`) invocation or the router's "Budget verbrennen" tick
 - **NEVER skip the plan step** — always present the consolidated plan and wait for confirmation
 - **NEVER skip budget assessment** — the plan is derived from it, not guessed
 - **Depth before breadth** — raise the profile first, add lanes only to close a
@@ -304,7 +295,9 @@ shutdown).
   task. Never batch landing to the end of the run.
 - **Push the integration branch, never main** — non-force, no PR, no ship. This
   is the one push exception in `autonomous-execution.md` § Safety Guardrails;
-  every other outbound action stays forbidden.
+  every other outbound action stays forbidden. The router's single ship after
+  the run (Q2 "Ship automatisch", via autonomous Step 6.5) is not part of the
+  conveyor.
 - **Respect autonomous guardrails** — burn mode amplifies throughput and depth,
   not permissions. All other safety rules from autonomous mode still apply.
 - **Reserve is not optional** — stop spawning at `RESERVE`, drain, report.
@@ -314,6 +307,6 @@ shutdown).
   `git merge-base --is-ancestor` before any cleanup.
 - **Deduplication is mandatory** — never let two agents modify the same file simultaneously
 - **Primary task always wins** — if budget is tight, drop P3+ tasks, never the user's prompt
-- **NEVER skip the confirmation gate** — Step 1 is mandatory, even if the user says "just do it"
+- **NEVER run without the confirmation** — the "Budget verbrennen" tick or the literal command IS Step 1; wording alone never is
 - **Task discovery is optional** — if the user says "nur mein Prompt", skip Steps 4–5 entirely
   and jump straight to Step 7 with only the primary task

@@ -1,29 +1,41 @@
 ---
 name: auto-agents
-version: 0.9.0
+version: 0.10.0
 description: >-
-  Full-ceremony multi-agent orchestration: plan → user confirm → execution
-  mode → waves → inter-wave gates → synthesis. The EXPLICIT path for the
-  Full-ceremony tier of the always-on delegation policy (3+ domains, a feature
-  end-to-end, high-risk change); the lower tiers never go through this skill.
-  Triggers on: "run agents", "use agents", "orchestrate", "parallel agents",
-  "multi-agent", "delegate to agents", "agent workflow", or the user saying
-  yes to Claude's offer. Do NOT trigger for: simple edits, quick fixes,
-  explanations, or single-agent research.
+  The single execution path for everything that implements — do-run,
+  auto-concept (implement), auto-fix, auto-harden, auto-polish — and for a
+  yes to Claude's full-ceremony offer. Applies the always-on delegation
+  policy tiers (inline · 1 agent · parallel · full ceremony), reads plan and
+  usage via get_usage, shows a start table (wave · task · model · effort) and
+  runs the waves; full ceremony keeps plan → confirm → waves → gates →
+  synthesis. Invokes no skill: shipping or a concept page is handed back to
+  the caller. Triggers on: "run agents", "use agents", "orchestrate",
+  "parallel agents", "multi-agent", "delegate to agents", "agent workflow",
+  or the user saying yes to Claude's offer. Do NOT trigger for: simple edits,
+  quick fixes, explanations, or single-agent research.
 layer: 5
 invokes: []
 user-invocable: false
 triggers:
   en: ["run agents", "use agents", "orchestrate", "parallel agents", "multi-agent", "delegate to agents", "agent workflow"]
-argument-hint: "[task description or goal]"
+argument-hint: "[--from=<caller>] [--mode=interactive|background] [--ship=auto|manual] <task or plan>"
 allowed-tools: Agent, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
 
-# Run Agents
+# auto-agents — the execution path
 
-<!-- PR2-phaseB: make auto-agents the single execution path (spec § auto-agents): callers do-run, auto-concept (implement), auto-fix, auto-harden, auto-polish; add the start mini table (wave · task · model · effort, no CTA). Layer 5 — this skill may invoke NO skill: the interactive-mode `/auto-concept` hand-offs below (Step 4 option text, Step 5 orchestrator rule) and the Step 6 `/do-ship` reminder must become returns to the caller (do-run / auto-concept own those decisions). -->
+Every skill that implements executes through this one: `do-run`,
+`auto-concept` (implement click and close-out follow-ups), `auto-fix`,
+`auto-harden`, `auto-polish`. It decides *how* the work runs — inline, one
+agent, parallel agents or the full wave ceremony — by the always-on
+delegation policy (`deep-knowledge/agent-proactivity.md`), shows what it is
+about to run, runs it, and returns the result to its caller.
 
-Evaluate which agents add value for `$ARGUMENTS`, then orchestrate their execution.
+**This skill invokes no skill.** It sits at the bottom of the call graph
+(layer 5, `invokes: []`) because it only spawns role agents. Everything that
+would need another skill — shipping, a concept page, an issue — is returned
+to the caller as a field of the result (Step 7), and the caller decides.
+Spawned agents follow the same rule: they report, they do not start skills.
 
 ## Step 0 — Load Extensions
 
@@ -35,26 +47,84 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
    Fallback (pre-PR-2 name): where `auto-agents/` does not exist, read `~/.claude/skills/run-agents/` / `{project}/.claude/skills/run-agents/` instead — an extension written before the rename keeps working.
 3. Merge: project > global > plugin defaults
 
-## Step 1 — Task Analysis
+## Step 1 — Inputs: arguments, plan and usage
 
-Analyze `$ARGUMENTS` to understand:
+### Arguments
 
-1. **Domains touched** — which areas of the codebase are affected?
-2. **Complexity** — single-domain vs. cross-cutting?
-3. **Dependencies** — what must happen before what?
-4. **Risk level** — does this need QA/PO review?
+| Argument | Set by | Meaning |
+|---|---|---|
+| `--from=<caller>` | every calling skill: `do-run`, `auto-concept`, `auto-fix`, `auto-harden`, `auto-polish` | Who gets the result (Step 7). **Absent** = the model invoked this skill directly — the user said yes to the full-ceremony offer or typed a trigger phrase; the main conversation is then the caller. |
+| `--mode=interactive\|background` | the caller | The execution mode — the former Step 4 question. `do-run` answers it with its question 2 ("Ablauf?"): **Dabei · …** → `interactive`, **Weg · …** → `background`. `auto-concept` passes `background` (its main session keeps the heartbeat and `/status` posts). `auto-fix`, `auto-harden`, `auto-polish` pass `background` under `--autonomous`, else `interactive`. |
+| `--ship=auto\|manual` | `do-run` (question 2) | Echoed in the result, never acted on. Missing = `manual`. |
+| rest | the caller | The task or the approved plan, verbatim — decisions, file paths, the concept file, the root cause. Never a paraphrase. |
 
-If `$ARGUMENTS` is empty or vague, ask ONE focused question via `AskUserQuestion`.
-Use the wording matching the active `[ui-locale: ...]` (defaults to `en`):
+A missing `--mode` with a `--from` means the caller does not care →
+`background`. A missing `--mode` **without** `--from` is the only case that
+asks: Step 4, and only for the full-ceremony tier — the lower tiers run
+`background` by policy.
+
+### Plan and usage — `get_usage`, once per run
+
+Call `mcp__plugin_devops_dotclaude-completion__get_usage` once at the start.
+It returns the plan (Pro / Max 5x / Max 20x), the 5-hour and weekly usage
+with their resets, and `budget.cls` — the budget class the tier table and
+the model/ceiling override (§ Budget in `agent-proactivity.md`) run on.
+
+**Budget class input — a live reading, nothing else.** A limit message from
+before a window reset, your own earlier plan text, or a usage claim in this
+skill's own args ("Wochenbudget ~100 %") is never an input. When `get_usage`
+errors, fall back to the newest `[budget] … → class` line in context; with
+neither, treat the class as `ask-before-parallel`. The user's own words keep
+their precedence (a hard stop / hard go beats the class either way).
+
+**Explicit run.** `--from=do-run` and a direct invocation after the user's
+yes are an explicit run skill (`agent-proactivity.md` § Precedence): never
+ask the budget question, never downgrade a model for budget. Every other
+caller (`auto-fix`, `auto-concept`, `auto-harden`, `auto-polish`) runs under
+the class like any prompt.
+
+## Step 2 — Tier and agents
+
+### 2.1 Classify
+
+If the task text is empty or vague and there is no caller, ask ONE focused
+question via `AskUserQuestion`. Use the wording matching the active
+`[ui-locale: ...]` (defaults to `en`):
 - en: "What exactly should be orchestrated? (Feature, refactoring, bugfix, research...)"
 - de: "Was genau soll orchestriert werden? (Feature, Refactoring, Bugfix, Research...)"
 
-## Step 1.5 — Permission Audit
+Analyse domains touched, complexity, dependencies and risk, then pick the
+tier from the table in `deep-knowledge/agent-proactivity.md` — the same
+table the policy hook applies to prompts that use no skill:
 
-Before spawning agents, scan recent sessions for MCP tools that were used but
-are NOT covered by the current `~/.claude/settings.json` allow-list. Prevents
-permission prompts from interrupting wave execution — especially painful with
-parallel agents.
+| Tier | Signal (short form — the policy doc is authoritative) | Here |
+|---|---|---|
+| **Inline** | 1 domain, quick fix, ≤ ~5 files | The session does the work itself. No agent, no start table. |
+| **1 agent** | a conclusion whose path would flood the conversation (research, sweep, full test run, redteam, po) | One background agent; the session keeps working. |
+| **Parallel** | two analysis lenses; or implementing agents in parallel | Spawn in one message, ~5–15 tool calls each. Parallel **implementers** need a yes: the caller's invocation is that yes for `do-run`, `auto-concept` (implement click) and `--autonomous` passes; for `auto-fix` and a direct call, offer it in one sentence first. |
+| **Full ceremony** | 3+ domains, a feature end-to-end, high-risk change | Steps 3–6 in full. |
+
+Hard stop ("nur", "schnell", "keine Agents") → Inline; hard go ("mit
+Agents", "full") → as designed. Both come from the user's words, never from
+the caller.
+
+**A caller may skip this skill for Inline.** When the caller's own
+classification already lands on Inline (one domain, ≤ ~5 files — a typo, a
+one-file fix, a copy change), it applies the change itself: the Inline tier
+has no table, no agent and no result contract, so loading this skill would
+only add a round of reading. Everything above Inline goes through here.
+
+### 2.2 Agent selection
+
+Select agents using the roster, criteria, and complexity tiers from
+`deep-knowledge/agent-orchestration.md` § Agent Selection.
+
+### 2.3 Permission audit (parallel and full ceremony)
+
+Before spawning more than one agent, scan recent sessions for MCP tools that
+were used but are NOT covered by the current `~/.claude/settings.json`
+allow-list. Prevents permission prompts from interrupting wave execution —
+especially painful with parallel agents.
 
 ```bash
 node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
@@ -62,39 +132,36 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
 
 Parse the JSON `suggestions` array:
 
-- **Empty** → skip silently, continue to Step 2.
+- **Empty** → skip silently.
 - **Non-empty** → present ALL suggestions in **one** `AskUserQuestion`
   multi-select. Never auto-apply — every rule needs user confirmation,
   to prevent log-forgery from seeding the allow-list. Each option =
   one suggested rule, labeled with its risk marker:
   - 🟢 low: user-installed plugin/runtime MCPs (`mcp__plugin_*`, `mcp__ccd_*`)
   - 🟡 medium: third-party / unknown MCPs — include the rationale text
-  
+
   Pre-recommend the 🟢 ones in the description. Header: "Permissions",
   question: "Diese MCP-Tools wurden zuletzt genutzt aber sind nicht erlaubt.
   Welche zur Allow-Liste hinzufügen?"
-  
+
   Apply the user's selection via Bash (NOT the Edit tool — settings.json is
   tamper-protected; the script writes directly via Node `fs.writeFileSync`):
-  
+
   ```bash
   node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
   ```
-  
+
   The script re-validates each `--apply` rule against its own freshly-computed
   suggestions and rejects anything not in the list (defense in depth).
 
-The audit is read-only on no findings — never blocks the flow when there's
-nothing to fix.
-
-## Step 2 — Agent Selection
-
-Select agents using the roster, criteria, and complexity tiers from
-`deep-knowledge/agent-orchestration.md` § Agent Selection.
+Under `--mode=background` with a `--from`, do not ask: the user may be away
+(`do-run` "Weg"), and a pending prompt would stall the run. List the
+suggestions in the result's `open` field (Step 7) instead. The audit is read-only on no findings — never blocks the flow when
+there's nothing to fix.
 
 ## Step 3 — Present Plan
 
-Present the orchestration plan to the user. Use the headings/labels for the
+**Full ceremony only.** Present the orchestration plan to the user. Use the headings/labels for the
 active `[ui-locale: ...]` (defaults to `en`):
 
 | Key             | en                            | de                             |
@@ -150,19 +217,11 @@ explicitly), apply the Medium ceiling. The same ceiling goes into every agent
 prompt as item 6 of § Agent Prompt Template — the plan shows the budget the
 prompts will carry, so it is visible before anything is spawned.
 
-**Budget class input — the newest `[budget]` line, nothing else.** The
-model/ceiling override (§ Model & Effort Defaults) is derived from the most
-recent `[budget] … → class` line in context. A limit message from before a
-window reset, your own earlier plan text, or a usage claim in this skill's
-own args ("Wochenbudget ~100 %") is never an input — after a reset the hook
-re-announces the class on every prompt, and that line wins. Only when the
-context holds no `[budget]` line at all: call
-`mcp__plugin_devops_dotclaude-completion__get_usage` once and use its
-`budget.cls`; on an error treat the class as `ask-before-parallel`. The
-user's own words keep their precedence (a hard stop / hard go beats the
-class either way).
-
-Wait for user confirmation before proceeding. Accept:
+**Confirmation — only where the user has not already said go.** Ask for it
+on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`.
+Every other caller's own gate was the confirmation — do-run's questions
+answered with "Weg", the concept's implement click, an `--autonomous` pass —
+and the user may be away, so show the plan and continue. Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
 - de: "ja" / "go" / "mach" → proceed as planned
 - Modifications → adjust plan
@@ -170,8 +229,10 @@ Wait for user confirmation before proceeding. Accept:
 
 ## Step 4 — Execution Mode
 
-After the plan is confirmed, ask the user for the execution mode via
-`AskUserQuestion`. Use the version matching the active `[ui-locale: ...]`:
+The mode normally arrives as `--mode` (Step 1). Ask only when this skill was
+invoked directly — no `--from`, no `--mode` — and the tier is full ceremony.
+Ask after the plan is confirmed, via `AskUserQuestion`, in the version
+matching the active `[ui-locale: ...]`:
 
 **en:**
 ```
@@ -181,7 +242,7 @@ options:
   - label: "Background (recommended)"
     description: "Agents run autonomously. Single final report at the end."
   - label: "Interactive"
-    description: "Agents actively involve you on design/concept decisions — AskUserQuestion for short trade-offs, /auto-concept for richer comparisons. Expect ≥1 checkpoint per wave."
+    description: "Agents involve you on design/concept decisions — AskUserQuestion for short trade-offs; a richer comparison ends the wave and comes back to you as an open decision. Expect ≥1 checkpoint per wave."
 ```
 
 **de:**
@@ -192,12 +253,80 @@ options:
   - label: "Hintergrund (Recommended)"
     description: "Agents arbeiten autonom. Am Ende ein Gesamtbericht."
   - label: "Interaktiv"
-    description: "Agents binden dich aktiv bei Design-/Konzeptentscheidungen ein — AskUserQuestion für kurze Trade-offs, /auto-concept für komplexere Vergleiche. Rechne mit ≥1 Checkpoint pro Wave."
+    description: "Agents binden dich bei Design-/Konzeptentscheidungen ein — AskUserQuestion für kurze Trade-offs; ein größerer Vergleich beendet die Wave und kommt als offene Entscheidung zu dir zurück. Rechne mit ≥1 Checkpoint pro Wave."
 ```
 
 Store the result as `$EXEC_MODE` (`background` or `interactive`).
 
-## Step 5 — Execution
+## Step 5 — Start Table
+
+Shown **once, when execution starts** — after the confirmation where Step 3
+asks for one, otherwise right after Step 2 — for the **1 agent**,
+**parallel** and **full ceremony** tiers. **Not for Inline**: nothing is
+spawned, the model is the session's own, and a one-row table would only
+repeat what the user already sees; the tier is named in the result instead.
+Shown again only when the run changes shape (a wave added or dropped, a
+scope-cut, a sub-split) — the full table, not a diff.
+
+It is card-style but **has no CTA**: no decision heading, no question, no
+buttons, no "say go". Nothing waits on it — execution continues in the same
+turn. It never carries the `✨✨✨` completion-card marker (that marker is
+reserved for the completion card and the stop guard counts it).
+
+Exact shape (labels per `[ui-locale]`, defaults to `en`):
+
+```
+---
+### **▶ {start.heading}** · {tier label}
+| {start.wave} | {start.task} | {start.model} | {start.effort} |
+|---|---|---|---|
+| 1 | devops:core — <what it builds> | sonnet (newest) | medium |
+| 1 | devops:frontend — <what it builds> | sonnet (newest) | medium |
+| 2 | devops:qa — <what it verifies> | sonnet (newest) | medium |
+| 2 | devops:feature — <what it builds> | <session model> | <session effort> |
+---
+```
+
+| Key | en | de |
+|---|---|---|
+| `start.heading` | Execution start | Ausführung startet |
+| `start.wave` | Wave | Wave |
+| `start.task` | Task | Aufgabe |
+| `start.model` | Model | Modell |
+| `start.effort` | Effort | Effort |
+| tier label | `1 agent · background` / `parallel · N agents` / `full ceremony · N waves` | `1 Agent · Hintergrund` / `parallel · N Agents` / `volle Zeremonie · N Waves` |
+
+One row per task, not per wave; waves repeat. The task cell starts with the
+agent type. Four columns, exactly these, in this order.
+
+**Model — resolved at runtime, never hard-coded.** A model id or version
+number never appears in this skill, a frontmatter, an override or a prompt;
+it is resolved when the table is drawn:
+
+1. **The chosen family.** The agent's frontmatter `model`, or the override
+   you pass at spawn. It must be a value of the Agent tool's `model`
+   parameter enum as the tool schema lists it in this session — read the
+   enum, do not assume it (today: `sonnet`, `opus`, `haiku`, `fable`). The
+   harness resolves each alias to the **newest release** of that family at
+   spawn.
+2. **The cell.** `inherit` → the session's own model, name and version as
+   the system prompt states it (`<family> <version>`, lower case, the way
+   `pre.agent.announce` prints an inherited model) — that is what the agent
+   runs on. A family alias → `<family> (newest)`: the release is picked by
+   the harness at spawn, and writing a version here would be a guess that
+   ages. An override → `<default> → <override> (newest)`, e.g.
+   `sonnet → opus (newest)`.
+
+**Effort — per task.** The agent's frontmatter `effort` (the Agent tool has
+no effort parameter, so that value is the effective one); `inherit` → the
+session's effort. Never an arrow: a budget override lowers the tool-call
+ceiling, not the effort.
+
+After the table, relay the `→ Agent … · model · effort` line
+`pre.agent.announce` hands you for each launch, verbatim — the table says
+what will run, the announce line says what just started.
+
+## Step 6 — Execution
 
 Follow `deep-knowledge/agent-orchestration.md` § Wave Execution for spawning mechanics,
 agent prompt template (now incl. per-agent effort budget, stopping criteria, and
@@ -205,7 +334,15 @@ distinct scope boundary), branch strategy, and single-agent shortcut. Between wa
 apply § Inter-Wave Verification Gate — verify each wave's handoff before the next
 wave builds on it (the cascading-error guard).
 
-Collaboration protocol (handoffs, merge order, shipping): `deep-knowledge/agent-collaboration.md`.
+Collaboration protocol (handoffs, merge order): `deep-knowledge/agent-collaboration.md`.
+
+Per tier:
+
+- **Inline** — do the work in this session; no agent.
+- **1 agent / parallel** — § Single-Agent Shortcut, or one message with all
+  independent agents; no waves, no inter-wave gate. `devops:qa` verifies
+  implementing work when the change is more than one file.
+- **Full ceremony** — waves as planned in Step 3, inter-wave gates, QA wave.
 
 ### Mode-Specific Behavior
 
@@ -217,33 +354,64 @@ Collaboration protocol (handoffs, merge order, shipping): `deep-knowledge/agent-
   with inline analysis text.
   The **orchestrator itself** also follows the Engagement Rules — for
   cross-wave conceptual decisions (overall approach, contract shape between
-  waves, evaluation criteria, scope cuts) use `AskUserQuestion` or
-  `/auto-concept` *before* spawning the relevant wave, not only inside it.
+  waves, evaluation criteria, scope cuts) use `AskUserQuestion` *before*
+  spawning the relevant wave, not only inside it. A decision too rich for
+  `AskUserQuestion` (the Engagement Rules' concept-page cases) is **not**
+  opened here: stop before that wave and return it as `needs-decision`
+  (Step 7). The caller opens the concept page and re-enters this skill with
+  the answer.
   Treat the user as a collaborator on the plan, not just a recipient of results.
 
 QA Wave testing protocol and single-agent shortcut: see `deep-knowledge/agent-orchestration.md`
 § QA Wave — Testing Protocol and § Single-Agent Shortcut.
 
-## Step 6 — Synthesis
+## Step 7 — Return to the caller
 
-After all waves complete:
+After the last wave (or when a `needs-decision` stops the run):
 
 1. Summarize what each agent accomplished
 2. List any unresolved findings or open questions
 3. Show final branch/PR state
-4. Remind the user to run `/do-ship` manually when ready to merge
-5. Trigger completion flow
+4. Hand the result back in this shape — the caller reads it, the user sees it:
+
+```
+auto-agents result
+tier: <inline | 1 agent | parallel | full ceremony>
+done: <what landed — commits, files, per agent>
+open: <unresolved findings, shortfalls with their reason — or "none">
+needs-decision: <the fork, its options, the wave it blocks — or "none">
+ship: <auto | manual>
+```
+
+`ship` echoes `--ship` (missing = `manual`). **This skill never ships and
+never tells the user to type a ship command.** `ship: auto` means the
+caller runs `do-ship` next; `ship: manual` means the caller's completion
+card offers shipping as its decision. A `needs-decision` means the caller
+decides how to put it in front of the user (a concept page, a question) and
+calls this skill again with the answer.
+
+5. **Completion card.** With a caller (`--from`), the caller renders it —
+   one card per turn, and the caller knows the whole run. On a direct
+   invocation, render it here via `render_completion_card` (variant per
+   outcome, see the card design doc); shipping is then its decision point,
+   not a skill call.
 
 ## Rules
 
-- **Never skip the plan step** — always present and confirm before executing
+- **Invokes no skill** — not `do-ship`, not `auto-concept`, not
+  `auto-issue`, not a nested `auto-agents`. Shipping, concept pages and
+  issues are returned to the caller (Step 7).
+- **Never skip the plan step in full ceremony** — the plan is always shown;
+  confirmation is asked where Step 3 says so.
+- **Start table for every tier except Inline**, exactly the four columns of
+  Step 5, no CTA, no hard-coded model version.
 - **Never run agents silently** — relay the `→ Agent … · model · effort` line
   `pre.agent.announce` hands you for each launch, verbatim
 - **Respect wave dependencies** — Core before Frontend, QA after all code changes
-- **Never ship automatically** — agents commit and push only. The user decides when to run `/do-ship`
+- **Never ship automatically** — agents commit and push only; `ship: auto`
+  is an instruction to the caller, not an action here.
 - **Follow handoff protocol** — every agent-to-agent transition uses structured handoffs
 - If the user says "just do it" without agents → respect that, don't orchestrate
-- If only 1 domain is affected → consider if a single inline execution is simpler
-- The user called this skill explicitly (or said yes to the offer) — they WANT
-  the ceremony, so deliver it. The tier decision that led here lives in
-  `deep-knowledge/agent-proactivity.md`; this skill never re-litigates it
+- The tier decision follows `deep-knowledge/agent-proactivity.md`; a caller
+  that invoked this skill never re-litigates it, and neither does this skill
+  once the user said yes to a ceremony.

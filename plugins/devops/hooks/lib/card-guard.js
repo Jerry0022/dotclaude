@@ -623,6 +623,7 @@ function buildBlockReason(pluginRoot, opts = {}) {
     '',
     'Variant decision (pick exactly one):',
     '  ship pipeline ran + merged → ship-successful  (ONLY after /do-ship + merge)',
+    '  a channel promotion ran (also right after a ship — ONE card) → released',
     '  ship pipeline ran + NOT merged → ship-blocked',
     '  task aborted / infeasible → aborted',
     '  code edits + app/service startable → test',

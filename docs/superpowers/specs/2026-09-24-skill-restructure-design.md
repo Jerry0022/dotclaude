@@ -100,6 +100,17 @@ milestone selection (Backlog), audit scope + output (Audit), desktop /
 shutdown / auto-resume (Weg). Resume of an interrupted autonomous or burn run
 is asked before the base call, only when a resume state exists.
 
+Decided while implementing (phase B1): the `(Recommended)` marker of a
+single-select question always sits on the first, agnostic option — it marks
+what click-through picks. The user's last Q3 answer in this chat shows as the
+description suffix "zuletzt gewählt" on that option; it moves neither marker
+nor order. An empty Q4 submit means the recommended set (Harden + Polish,
+plus Rethink when marked); "keine" in the free-text field means no passes.
+Shutdown and auto-resume fold into one follow-up question ("PC an · mit
+Resume" · "PC an · ohne Resume" · "PC aus · ohne Resume"), so the
+autonomous HARD GATE holds without a second call. The contract is pinned by
+`plugins/devops/skills/do-run/do-run-questions.test.js`.
+
 ### auto-agents
 
 The single execution path for everything that implements (do-run,

@@ -1,6 +1,6 @@
 ---
 name: auto-fix
-version: 0.2.0
+version: 0.3.0
 description: >-
   Read session logs, runtime errors, and crash output to diagnose and fix the
   current issue — root-cause analysis first. Use when something is broken or
@@ -95,7 +95,24 @@ the reported symptom while regressing a sibling path is a net loss. Cover:
 - Does this fix paper over a deeper invariant violation?
 - Could the root cause reappear in a different branch of the same code path?
 
-Apply the fix. Then verify:
+**The fix executes through the `auto-agents` skill** — the single execution
+path of every implementing skill. Diagnosis (Steps 1–6) and the pre-mortem
+stay here; `auto-agents` only decides how the change is carried out and runs
+it:
+
+- **Inline** — a trivial fix or a clear single-file, low-risk one (the first
+  two rows of Step 6) is the Inline tier by definition: apply it yourself,
+  without loading `auto-agents` (its Inline tier has no table, no agent and
+  no result contract — `auto-agents` § 2.1 lets a caller skip it there).
+- **Anything larger** — a multi-file fix the user approved in Step 6, or one
+  that needs a parallel test run: invoke the Skill `auto-agents` with
+  `--from=auto-fix --mode=interactive` (`--mode=background` when this skill
+  runs unattended) and the fix brief: root cause with file:line, the change
+  to make, the pre-mortem findings, and how to verify. Take its result back
+  here — `open` items and a `needs-decision` go into the Step 8 report; this
+  skill never ships, so its `ship` field is ignored.
+
+Then verify:
 1. The specific error no longer occurs
 2. Related functionality still works
 3. Run tests if available
@@ -132,3 +149,5 @@ nothing after the closing `---`.
 - No fallbacks by default — propose as alternatives if relevant.
 - Report the exact file:line where the failure originates.
 - If `git bisect` would help, offer it as an option.
+- Implementation above the Inline tier runs through `auto-agents` (Step 7),
+  never through a second, private agent fan-out.

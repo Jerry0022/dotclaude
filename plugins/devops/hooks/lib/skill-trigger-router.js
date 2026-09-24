@@ -1,6 +1,6 @@
 /**
  * @module skill-trigger-router
- * @version 0.5.0
+ * @version 0.6.0
  * @description Pure trigger-matching core for `prompt.skill.enforce`'s router
  *   half (PR 1 + PR 2 of the skill restructure —
  *   docs/superpowers/specs/2026-09-24-skill-restructure-design.md "Triggers —
@@ -15,11 +15,13 @@
  *      `/claude-learn`, `/run-backlog`, `/promote`, …) mapped to the skill
  *      that now owns them via `ALIAS_MAP` (built from `skill-names.js`);
  *      a folded name also carries its mode (`/run-backlog` → do-run mode
- *      `backlog`, `/promote` → do-ship mode `promote`). A 1:1 alias of a
- *      skill owned by a dedicated hook (`SKIP_SKILLS`: do-ship, do-batch,
- *      claude-strict) emits nothing — `prompt.ship.detect` and
- *      `prompt.batch.collect` recognise `/ship` and `/claude-batch`
- *      themselves. The NEW names are real skills and go through the inline
+ *      `backlog`). A 1:1 alias of a skill owned by a dedicated hook
+ *      (`SKIP_SKILLS`: do-ship, do-batch, claude-strict) emits nothing —
+ *      `prompt.ship.detect` and `prompt.batch.collect` recognise `/ship`
+ *      and `/claude-batch` themselves. do-ship is owned WHOLE by its hook
+ *      (`HOOK_OWNED_MODES`): its folded `promote` mode (`/promote`,
+ *      "promote to stable") is a target channel of the ship now, parsed by
+ *      `lib/ship-intent.js`, so the router emits nothing for it either. The NEW names are real skills and go through the inline
  *      mention path in `prompt.skill.enforce`.
  *      Reach: only a prompt that reaches UserPromptSubmit is seen here. A
  *      typed `/old-name` at the very start of a prompt is a slash command to
@@ -93,15 +95,22 @@ const { RENAMED, FOLDED, modeForPhrase } = require('./skill-names');
  *  (prompt.ship.detect), `do-batch` (prompt.batch.collect),
  *  `claude-strict` (prompt.strict.enforce). The router never emits them —
  *  not from phrases and not from 1:1 aliases — so two hooks never issue
- *  conflicting mandates for one prompt. Exception: a phrase or alias of a
- *  FOLDED mode (do-ship's `promote` mode: "promote to stable", `/promote`)
- *  is no ship intent, so it still routes, tagged with its mode. */
+ *  conflicting mandates for one prompt. A phrase or alias of a FOLDED mode
+ *  of such a skill still routes, tagged with its mode — unless the skill is
+ *  in HOOK_OWNED_MODES. */
 const SKIP_SKILLS = new Set(['do-ship', 'do-batch', 'claude-strict']);
+
+/** Dedicated-hook skills whose folded modes the hook owns too. do-ship: the
+ *  promote mode became the ship's target channel ("promote stable" = ship if
+ *  needed, then promote), and prompt.ship.detect parses it
+ *  (lib/ship-intent.js) — a router mandate with args "promote" next to the
+ *  hook's args "stable" would be two conflicting orders. */
+const HOOK_OWNED_MODES = new Set(['do-ship']);
 
 /** Multi-word (and a few single-word) frontmatter phrases the router ignores
  *  because they are ambiguous in ordinary prose, or owned elsewhere:
- *  - do-ship (promote mode) "release" — also a ship-intent keyword
- *    (prompt.ship.detect);
+ *  - do-ship "release" — a ship-intent keyword (prompt.ship.detect; the
+ *    whole of do-ship is hook-owned anyway, HOOK_OWNED_MODES);
  *  - do-run (audit mode) "prüf alles" — "prüf alles nochmal" is a review
  *    request;
  *  - auto-update "neue version" — "neue Version der Datei"; "update plugin",
@@ -174,7 +183,8 @@ const TOKEN_SPLIT_RE = /[\s!-/:-@[-`{-~]+/;
  * Built from `skill-names.js` so the renames live in exactly one table.
  * A 1:1 alias whose target is in SKIP_SKILLS (`/ship`, `/claude-batch`) is
  * filtered out by `detectAliasHits` — the dedicated hook owns it. A folded
- * alias always passes: `/promote` is no ship-intent prompt.
+ * alias passes unless its skill is in HOOK_OWNED_MODES (`/promote` →
+ * prompt.ship.detect).
  * @type {Readonly<Record<string, {skill:string, mode:string|null}>>}
  */
 const ALIAS_MAP = Object.freeze(Object.fromEntries([
@@ -244,7 +254,7 @@ function detectAliasHits(message) {
     const alias = m[2].toLowerCase().replace(/-+$/, '');
     if (!Object.prototype.hasOwnProperty.call(ALIAS_MAP, alias)) continue;
     const target = ALIAS_MAP[alias];
-    if (!target.mode && SKIP_SKILLS.has(target.skill)) continue;
+    if (SKIP_SKILLS.has(target.skill) && (!target.mode || HOOK_OWNED_MODES.has(target.skill))) continue;
     if (found.some(h => h.skill === target.skill)) continue;
     found.push({ skill: target.skill, mode: target.mode, alias });
   }
@@ -350,8 +360,8 @@ function isRoutablePhrase(skill, phrase, skillNames) {
 
 /**
  * Flatten every skill's `triggers:` frontmatter plus `ROUTER_PHRASES` into
- * the router corpus (SKIP_SKILLS dropped except their folded-mode phrases,
- * only routable phrases kept). A phrase of a folded mode carries `mode`.
+ * the router corpus (SKIP_SKILLS dropped except the folded-mode phrases of
+ * a skill outside HOOK_OWNED_MODES, only routable phrases kept). A phrase of a folded mode carries `mode`.
  * @param {Record<string, object>} skills — from `skill-meta.loadAllSkills`
  * @returns {{skill:string, phrase:string, matcher:object, mode?:string}[]} longest first
  */
@@ -360,13 +370,14 @@ function buildWordTriggerCorpus(skills) {
   const names = new Set(Object.keys(skills || {}).map(n => n.toLowerCase()));
   for (const [name, meta] of Object.entries(skills || {})) {
     const skipped = SKIP_SKILLS.has(name);
+    const skippedWhole = skipped && HOOK_OWNED_MODES.has(name);
     const byLang = meta && meta.triggers && typeof meta.triggers === 'object' ? meta.triggers : {};
     for (const list of Object.values(byLang)) {
       if (!Array.isArray(list)) continue;
       for (const phrase of list) {
         if (typeof phrase !== 'string' || !phrase.trim()) continue;
         const mode = modeForPhrase(name, phrase);
-        if (skipped && !mode) continue;
+        if (skipped && (!mode || skippedWhole)) continue;
         if (!isRoutablePhrase(name, phrase, names)) continue;
         const entry = { skill: name, phrase, matcher: buildPhraseMatcher(phrase) };
         if (mode) entry.mode = mode;
@@ -520,6 +531,7 @@ function routeMessage(message, skills, opts = {}) {
 module.exports = {
   ALIAS_MAP,
   SKIP_SKILLS,
+  HOOK_OWNED_MODES,
   PHRASE_DENYLIST,
   SINGLE_WORD_ALLOWLIST,
   ROUTER_PHRASES,

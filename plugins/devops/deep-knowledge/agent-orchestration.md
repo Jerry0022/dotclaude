@@ -4,7 +4,9 @@
 > This file retains Agent wave model + QA testing protocol.
 
 Shared orchestration logic for agent selection, prompting, and wave execution.
-Referenced by `/auto-agents` and `/do-run autonomous`. *Whether* to spawn at all —
+Referenced by the auto-agents skill — the single execution path of every
+implementing skill (do-run, auto-concept implement, auto-fix, auto-harden,
+auto-polish) — and by the do-run modes. *Whether* to spawn at all —
 and how many — is decided upstream by the always-on delegation policy in
 [agent-proactivity.md](agent-proactivity.md); this file covers the *how* once
 that decision is made.
@@ -39,8 +41,10 @@ The orchestrator can override `model` at invocation time but **not** `effort` �
 the Agent tool has no effort parameter, so the frontmatter value is always the
 effective one.
 This table is the **source of truth for the `Model · Effort` column** the plan
-tables show — `/auto-agents` Step 3 renders each agent as `model · effort` (e.g.
-`opus · high`); the `/do-run burn` plan lists `default → override` per role — keep
+tables show — the auto-agents Step 3 plan renders each agent as `model · effort` (e.g.
+`opus · high`), and its Step 5 start table splits the same values into a Model
+column (the family resolved per run to its newest release, never a pinned id)
+and an Effort column; the `/do-run burn` plan lists `default → override` per role — keep
 it in sync with the agent frontmatter. When you override a model at invocation,
 show it as `default → override` with the effort repeated on both sides
 (`sonnet · medium → opus · medium`); the effort never carries an arrow.
@@ -89,8 +93,8 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
 | **Complex** | 3+ domains, cross-cutting, or high risk | Full agent roster with wave model |
 
 These tiers map 1:1 onto the delegation policy: Simple → Inline, Medium → the
-automatic 1-agent / 2–3-agent tiers, Complex → `/auto-agents` offered, never
-auto-started.
+automatic 1-agent / 2–3-agent tiers, Complex → the auto-agents full ceremony,
+offered, never auto-started.
 
 **Effort budget per agent** (Step 4 of the prompt template — embed it, scaled to
 tier). Anthropic's multi-agent work found over-investment on simple queries to be
@@ -195,7 +199,11 @@ agent.
   work
 - Scope cuts (do X now, defer Y? include Z or skip?)
 
-**Use `/auto-concept` instead when:**
+**Hand the decision back as a concept-page case instead when** (neither an
+agent nor auto-agents opens a concept page itself — auto-agents invokes no
+skill: the agent stops at the fork and returns it as an open decision, the
+orchestrator ends the wave with `needs-decision`, and the calling skill opens
+the page via auto-concept and re-enters auto-agents with the answer):
 - 3+ design alternatives need side-by-side comparison with pros/cons
 - A UI/UX layout decision benefits from a visual mockup (prototype template)
 - An architecture or strategy choice has multi-dimensional trade-offs

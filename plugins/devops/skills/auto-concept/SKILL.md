@@ -1,6 +1,6 @@
 ---
 name: auto-concept
-version: 0.1.2
+version: 0.2.0
 description: >-
   Generate an interactive HTML page for analysis, plans, concepts, prototypes,
   comparisons, or creative work — open it in the browser and monitor user
@@ -59,6 +59,18 @@ a decision-only page hides the visual consequences, a design-only page
 hides the trade-offs behind the visuals. Do NOT prefix this question with
 "Erstmal in Ruhe durchlesen" — no inline result precedes it. A typed
 "Other" answer is a real answer (`{PLUGIN_ROOT}/deep-knowledge/decision-format.md`).
+
+**Started from do-batch (`--from=do-batch`).** The args carry the merged,
+feasibility-checked plan of a collect run: the coverage list (`#1 … #N`
+with dispositions), the plan, and the open decisions that made do-batch
+route here instead of to do-run (do-batch Step 4.6). Iteration 1 is that
+plan with every open decision as a decision item — conflicts ("#2 rot, #6
+blau"), infeasible notes whose dependents need a new direction, analysis
+requests; settled parts are shown as context, not re-asked. The mode
+follows from the open decisions (all visual → design, none visual →
+decision, both → mixed) — skip the question. Never drop a coverage line:
+the list travels into the page unchanged. Implementation then runs through
+the implement click (`auto-agents`), not through a second do-run.
 
 The mode is decided **once per concept**, not once per iteration. Later
 iterations (Step 5c) still pick their own template through the 1a check —
@@ -1337,18 +1349,24 @@ never re-run a completed step. The checkpoint records what the previous run
    the mapping and round). A `violation` (an empty required slot, an
    over-full one) that keeps a target from being built is a **shortfall**
    reported with its reason, never re-labelled as a follow-up.
-2. **Execute** the decisions as real changes — **through the devops role
-   agents, not inline.** An implement order is the one place in a concept
-   session where code gets written, it is usually multi-domain, and the main
-   session has a second job while it runs (heartbeat, `/status` POSTs,
-   checkpoints). So dispatch it the way `auto-agents` does: split the approved
-   work by domain, hand each part to the agent that owns it — `devops:core`
-   (services, data models, APIs), `devops:frontend` (UI, templates, styling),
-   `devops:designer`, `devops:ai`, `devops:windows` — send independent parts
-   in ONE message so they run in parallel, and let `devops:qa` verify while
-   the rest finishes. `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md` is
-   the authority on who owns what and how wide to fan out. Give every agent
-   the concept file path and the decisions it must honour, not a paraphrase.
+2. **Execute** the decisions as real changes — **through the `auto-agents`
+   skill, the single execution path of every implementing skill.** An
+   implement order is the one place in a concept session where code gets
+   written, it is usually multi-domain, and the main session has a second job
+   while it runs (heartbeat, `/status` POSTs, checkpoints). So invoke the
+   Skill `auto-agents` with `--from=auto-concept --mode=background` and the
+   brief: the concept file path, the submitted round, and the decisions the
+   work must honour — not a paraphrase. `auto-agents` applies the delegation
+   tiers, shows its start table, splits the approved work by domain
+   (`devops:core`, `devops:frontend`, `devops:designer`, `devops:ai`,
+   `devops:windows`), runs independent parts in parallel and lets
+   `devops:qa` verify; `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md`
+   stays the authority on who owns what. The implement click is the yes its
+   parallel tier needs — it does not ask again. Its result comes back here:
+   `done` feeds the final report, `open` shortfalls go into the
+   *Zusammenfassung* per the rule below, and a `needs-decision` becomes the
+   next round (Step 5c) instead of the final report. Its `ship` field is
+   ignored — shipping from a concept is the close-out sheet's part C.
 
    **The approved scope is built in full.** Everything the submitted round
    carried as accepted — every Miteinbeziehen finding, every approved plan
@@ -1360,8 +1378,9 @@ never re-run a completed step. The checkpoint records what the previous run
    user to sign off.
 
    Doing it inline is the exception and needs a reason: a change small enough
-   that one dispatch costs more than it saves (a one-line fix, a copy change).
-   Take that exception when it applies, and name it in the final report.
+   that one dispatch costs more than it saves (a one-line fix, a copy change)
+   — `auto-agents`' Inline tier, which a caller may apply without loading the
+   skill. Take that exception when it applies, and name it in the final report.
 
    What the decisions mean per template — this is the brief you hand the
    agents, not a second implementation path:
@@ -1509,14 +1528,16 @@ re-shipping.
 
 The points the user routed to "Jetzt umsetzen" are ordinary implementation
 work that happens to arrive at close-out time. Build them exactly the way the
-`implement` branch does — **through the devops role agents** (§ `action:
-"implement"` step 2), never inline because the session feels like it is
-ending.
+`implement` branch does — **through the `auto-agents` skill, which runs the
+devops role agents** (§ `action: "implement"` step 2,
+`--from=auto-concept --mode=background`), never inline
+because the session feels like it is ending.
 
 1. Read `implement.items[]`. Each entry carries the part-A item shape
    (`title`, `type`, `description`, optional `role` / `module`); `role` and
    `module` are the strongest signal for which agent owns the work.
-2. Dispatch by domain, independent items in parallel, `devops:qa` verifying.
+2. Hand all items to `auto-agents` in ONE call — it dispatches by domain,
+   independent items in parallel, `devops:qa` verifying.
    The user-value gate from part A does NOT apply here — it exists to keep the
    issue tracker free of fragments, and these items are being built, not
    filed.

@@ -41,6 +41,11 @@ Scan `$ARGUMENTS` for:
 
 ## Step 2 — Intake (one AskUserQuestion call, two questions)
 
+**Answered by the do-run router** — its follow-up asks both (F1 "Ergebnis",
+F2 "Audit-Umfang", same meaning, fixed order) and passes `--scope=` and
+`--mode=`, so Step 1 presets them and this step asks nothing. It runs only
+when a preset is missing.
+
 First detect whether **this conversation already developed something**:
 files written/edited by this session, or commits made in it. Hold as
 `$CHAT_HAS_WORK` (true/false). Then ask both questions in ONE
