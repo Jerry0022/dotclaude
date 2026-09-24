@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.201.0**
+**Version: 0.201.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -199,8 +199,10 @@ The style relays only what the plugin marks for you. Every user-facing hook
 and tool block opens with `Show the user this … verbatim` — the completion
 card, the workspace check, the update notice, the team changelog — and the
 rest of the tool output (instructions addressed to Claude) stays silent.
-Explicit questions still get a full answer; the style targets narration, not
-explanations.
+Those blocks reach you in the language you write in, every line kept, and so
+does every answer: English hook text, skill files and the app's own resume
+and nudge messages never switch it. Explicit questions still get a full
+answer; the style targets narration, not explanations.
 
 If the desktop app's "New output style" dialog asks you to sign in again, the
 headless CLI token behind it has expired — the file route above needs no
