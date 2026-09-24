@@ -396,7 +396,11 @@ function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** Ready-made card lines: a `tests` entry for a cleanup that ran, an `open` item for the nudge. */
+/**
+ * Ready-made card lines: a `tests` entry for a cleanup that ran, an `open`
+ * item for the nudge — `{ text, reply }`, so the card's "Offenes abarbeiten"
+ * button pre-fills the answer that opens the cleanup page (#495).
+ */
 export function cardLines(result, lang = "de") {
   const de = lang !== "en";
   const out = {};
@@ -415,8 +419,14 @@ export function cardLines(result, lang = "de") {
   }
   if (result.nudge) {
     out.open = de
-      ? `${result.leftover} Branches/Worktrees liegen herum (Schwelle ${result.threshold}) — »branches aufräumen« öffnet die Aufräum-Seite`
-      : `${result.leftover} branches/worktrees lying around (threshold ${result.threshold}) — say "branch cleanup" to open the cleanup page`;
+      ? {
+        text: `${result.leftover} Branches/Worktrees liegen herum (Schwelle ${result.threshold}) — »branches aufräumen« öffnet die Aufräum-Seite`,
+        reply: "Ja, branches aufräumen.",
+      }
+      : {
+        text: `${result.leftover} branches/worktrees lying around (threshold ${result.threshold}) — say "branch cleanup" to open the cleanup page`,
+        reply: "Yes, branch cleanup.",
+      };
   }
   return out;
 }

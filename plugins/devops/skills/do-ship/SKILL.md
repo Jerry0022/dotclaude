@@ -1186,8 +1186,8 @@ provably landed — only after a ship, only once one of them is older than the
 age gate (default 30 days), and then every removable one older than 7 days;
 younger leftovers stay for the page. It also decides whether the cleanup page
 is worth suggesting (more than 50 leftovers, at most once a week). Pass its
-card lines through unchanged: `card.tests` → append to `tests`, `card.open` →
-append to `open`. Both are absent when nothing happened — add nothing then, and
+card lines through unchanged: `card.tests` → append to `tests`, `card.open` (a
+`{ text, reply }` item) → append to `open`. Both are absent when nothing happened — add nothing then, and
 never restate the result in prose.
 
 Skip it for `--queued` ships (the auto-cleanup queue already decided on its

@@ -256,7 +256,10 @@ describe("runHygiene — trigger, switches and the nudge", () => {
     const settings = { ...SETTINGS, nudgeThreshold: 2 };
     const first = runHygiene({ cwd: dir, trigger: "promote", settings, statePath, now: NOW, stateKey: dir });
     expect(first.nudge).toBe(true);
-    expect(first.card.open).toBe("3 Branches/Worktrees liegen herum (Schwelle 2) — »branches aufräumen« öffnet die Aufräum-Seite");
+    expect(first.card.open).toEqual({
+      text: "3 Branches/Worktrees liegen herum (Schwelle 2) — »branches aufräumen« öffnet die Aufräum-Seite",
+      reply: "Ja, branches aufräumen.",
+    });
     const soon = runHygiene({ cwd: dir, trigger: "promote", settings, statePath, now: NOW + DAY, stateKey: dir });
     expect(soon.nudge).toBe(false);
     expect(soon.nudgeSuppressed).toMatch(/cooldown/);
@@ -283,9 +286,13 @@ describe("cardLines", () => {
     };
     expect(cardLines(r, "de")).toEqual({
       tests: { method: "Aufräumen (auto)", result: "2 Branches · 1 Worktree entfernt · 1 übersprungen" },
-      open: "61 Branches/Worktrees liegen herum (Schwelle 50) — »branches aufräumen« öffnet die Aufräum-Seite",
+      open: {
+        text: "61 Branches/Worktrees liegen herum (Schwelle 50) — »branches aufräumen« öffnet die Aufräum-Seite",
+        reply: "Ja, branches aufräumen.",
+      },
     });
     expect(cardLines(r, "en").tests.result).toBe("2 branches · 1 worktree removed · 1 skipped");
-    expect(cardLines(r, "en").open).toMatch(/say "branch cleanup"/);
+    expect(cardLines(r, "en").open.text).toMatch(/say "branch cleanup"/);
+    expect(cardLines(r, "en").open.reply).toBe("Yes, branch cleanup.");
   });
 });

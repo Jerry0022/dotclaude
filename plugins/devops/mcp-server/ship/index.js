@@ -143,7 +143,7 @@ registerTool(
   "removes old leftover branches/worktrees whose content provably landed — only after a ship, only once one is older " +
   "than the age gate (default 30 days), then everything removable older than 7 days — and decides whether the card " +
   "suggests the cleanup page (more than 50 leftovers, at most weekly). Thresholds are user settings (devops-config). " +
-  "Returns ready-made card lines: card.tests → the card's tests array, card.open → its open array. " +
+  "Returns ready-made card lines: card.tests → the card's tests array, card.open ({ text, reply }) → its open array. " +
   "Never call it for a blocked ship or a queued ship (--queued).",
   hygieneSchema,
   hygieneHandler,
