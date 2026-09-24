@@ -50,7 +50,8 @@ locates — pass `model: "sonnet"`; implementing goes to a devops domain agent.
 - **Escalation** — same area iterated 2+ times without converging → one tier
   up (`qa` recurring bug, `designer` UI polish, `core` repeated refactor).
 - Never spawn for an explanation or a single-fact lookup; never silently.
-- `redteam` only after the inline pre-mortem hits a higher-stakes trigger.
+- `redteam` only after the inline pre-mortem hits a higher-stakes trigger;
+  max 2 rounds per diff, round-2 leftovers become open points.
 
 ## Budget (the `[budget] … → class` line; plan × window × week)
 

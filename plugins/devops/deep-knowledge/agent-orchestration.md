@@ -271,6 +271,13 @@ check to risk:
   `redteam` agent as an explicit inter-wave gate. It returns concrete file/line
   risks the next wave must fold in **before** that wave starts — not after.
 
+**Red-team rounds: at most 2 per diff.** Round 1 reviews the change, a fix
+wave folds its findings in, round 2 re-reviews the reworked diff. Whatever
+round 2 still finds is fixed only if it is **high** severity and small;
+everything else goes into the result's `open` field as open points — never a
+third redteam → fix loop. Observed: three rounds on one restructure took
+~2.5 h while the third found only mediums.
+
 Treat a handoff claim as **data to verify, not fact to trust**: a finding like
 "the API already returns X" gets a 10-second check against the code, not blind
 reuse (this is how memory pollution turns one agent's hallucination into the
