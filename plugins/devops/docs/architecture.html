@@ -168,7 +168,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->50<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->24<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->52<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->24<!--/devops:count:skills--> skills, <!--devops:count:agents-->12<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -179,13 +179,13 @@
 
 <div class="card-grid">
   <div class="card">
-    <h4><!--devops:count:hooks-->50<!--/devops:count:hooks--> Hooks</h4>
+    <h4><!--devops:count:hooks-->52<!--/devops:count:hooks--> Hooks</h4>
     <p style="color:var(--text2);font-size:.85rem">Lifecycle guards across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop</p>
     <span class="badge b-hook">SessionStart &times;<!--devops:count:hooks:ss-->16<!--/devops:count:hooks:ss--></span>
     <span class="badge b-hook">Prompt &times;<!--devops:count:hooks:prompt-->12<!--/devops:count:hooks:prompt--></span>
-    <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->9<!--/devops:count:hooks:pre--></span>
+    <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->10<!--/devops:count:hooks:pre--></span>
     <span class="badge b-hook">Post &times;<!--devops:count:hooks:post-->7<!--/devops:count:hooks:post--></span>
-    <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->6<!--/devops:count:hooks:stop--></span>
+    <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
     <h4><!--devops:count:skills-->24<!--/devops:count:skills--> Skills</h4>
@@ -218,9 +218,9 @@
 │   ├── lib/                   <span style="color:var(--text2)"># plugin-guard, run-once, session-id</span>
 │   ├── session-start/         <span style="color:var(--purple)"># <!--devops:count:hooks:ss-->16<!--/devops:count:hooks:ss--> hooks (ss.*)</span>
 │   ├── user-prompt-submit/    <span style="color:var(--purple)"># <!--devops:count:hooks:prompt-->12<!--/devops:count:hooks:prompt--> hooks (prompt.*)</span>
-│   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->9<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
+│   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->10<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
 │   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->7<!--/devops:count:hooks:post--> hooks (post.*)</span>
-│   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->6<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
+│   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
 ├── mcp-server/
 │   ├── index.js               <span style="color:var(--orange)"># dotclaude-completion MCP</span>
 │   └── ship/
@@ -376,12 +376,12 @@
 <details>
   <summary><span class="badge b-hook">POST</span> post.flow.debug.js &mdash; Failure Detector</summary>
   <div class="detail-body">
-    <p>Detects repeated Bash failures (error patterns). After 2+ consecutive failures, recommends the <code>/fix</code> skill for root-cause analysis.</p>
+    <p>Counts consecutive shell failures per session and agent. A failed call arrives as <code>PostToolUseFailure</code> (exit 1 of grep/rg/test/diff probes excused); a success on <code>PostToolUse</code> resets the streak. After 2+ consecutive failures it mandates the <code>/fix</code> skill for root-cause analysis, unless fix already ran this turn.</p>
     <table>
-      <tr><th>Trigger</th><td>After Bash tool use</td></tr>
-      <tr><th>Matcher</th><td><code>Bash</code></td></tr>
+      <tr><th>Trigger</th><td>PostToolUse (reset) + PostToolUseFailure (count)</td></tr>
+      <tr><th>Matcher</th><td><code>Bash|PowerShell</code></td></tr>
       <tr><th>Threshold</th><td>2+ consecutive failures</td></tr>
-      <tr><th>Output</th><td>Skill('flow') recommendation</td></tr>
+      <tr><th>Output</th><td><code>additionalContext</code>: mandatory Skill('fix'); subagents hand the diagnosis back</td></tr>
     </table>
   </div>
 </details>
@@ -460,7 +460,7 @@
   │  ── tool executes ──
   │
   ├─ <span class="ok">POST</span> post.flow.completion.js  Track code edits
-  └─ <span class="ok">POST</span> post.flow.debug.js ───── Detect Bash failures → /fix
+  └─ <span class="ok">POST</span> post.flow.debug.js ───── Shell failures → /fix
          (only Bash)
   │
   ▼
@@ -968,7 +968,7 @@
    ├─ Every prompt: <span class="wr">prompt.git.sync</span> (rebase), <span class="wr">prompt.issue.detect</span> (#NNN)
    ├─ Every tool:   <span class="wr">pre.tokens.guard</span> (budget check)
    ├─ After tools:  <span class="ok">post.flow.completion</span> (track edits)
-   ├─ Bash fails:   <span class="er">post.flow.debug</span> → suggests /fix after 2+ failures
+   ├─ Bash fails:   <span class="er">post.flow.debug</span> → mandates /fix after 2+ failures
    │
    ├─ User says "debug this" → <span class="hl">/fix</span> skill (root-cause analysis)
    ├─ User says "explain X"  → <span class="hl">/devops-explain</span> skill
@@ -1006,7 +1006,7 @@
 <h3>Hook &rarr; Skill Routing</h3>
 <div class="interaction-matrix">
   <span class="from">prompt.ship.detect</span> <span class="to">&rarr; Skill('ship') &mdash; on "ship", "fertig", "ab damit", or affirmation after card</span>
-  <span class="from">post.flow.debug</span> <span class="to">&rarr; recommends /fix &mdash; after 2+ consecutive Bash failures</span>
+  <span class="from">post.flow.debug</span> <span class="to">&rarr; mandates /fix &mdash; after 2+ consecutive shell failures (PostToolUseFailure)</span>
   <span class="from">prompt.flow.appstart</span> <span class="to">&rarr; enforces completion card &mdash; before allowing app start</span>
   <span class="from">stop.flow.guard</span> <span class="to">&rarr; carry-over instruction &mdash; render card as first output next turn</span>
 </div>

@@ -12,6 +12,11 @@ description: >-
   trigger for: ordinary requests without a literal-scope signal, /tune-harden
   or /tune-polish scope fences (they stay as they are), or TypeScript
   `strict` compiler options.
+layer: 0
+invokes: []
+triggers:
+  en: ["/claude-strict", "strict"]
+  de: ["strikt", "genau so und nicht mehr", "nur das ändern", "nichts anderes anfassen"]
 argument-hint: "<task> | on | off | status"
 allowed-tools: Bash(node *), Bash(git *), Read, Write, Edit, Glob, Grep, Skill, Agent, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

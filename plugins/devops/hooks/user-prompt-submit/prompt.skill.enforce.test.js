@@ -39,7 +39,13 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
   test("adjacent punctuation does not break detection", () => {
     expect(detectInlineSkillMentions("(siehe /fix)", KNOWN)).toEqual(["fix"]);
     expect(detectInlineSkillMentions("nutze /promote.", KNOWN)).toEqual(["promote"]);
-    expect(detectInlineSkillMentions('"/ship" wäre gut', KNOWN)).toEqual(["ship"]);
+  });
+
+  test("a mention inside quotes or code is discussion, not an invocation", () => {
+    expect(detectInlineSkillMentions('"/ship" wäre gut', KNOWN)).toEqual([]);
+    expect(detectInlineSkillMentions("der Hook sagt `/concept` zuerst", KNOWN)).toEqual([]);
+    expect(detectInlineSkillMentions("„/fix“ steht in der Doku", KNOWN)).toEqual([]);
+    expect(detectInlineSkillMentions("```\n/tune-harden\n```", KNOWN)).toEqual([]);
   });
 
   test("unknown skill names are dropped", () => {
@@ -75,5 +81,17 @@ describe("detectInlineSkillMentions — inline /devops-* references (#235)", () 
     expect(detectInlineSkillMentions(null, KNOWN)).toEqual([]);
     expect(detectInlineSkillMentions(undefined, KNOWN)).toEqual([]);
     expect(detectInlineSkillMentions(42, KNOWN)).toEqual([]);
+  });
+});
+
+describe("detectInlineSkillMentions — machine prompts (R1)", () => {
+  test.each([
+    "<<autonomous-loop>> /concept",
+    "AUTONOMOUS_RESUME: /tune-harden",
+    "RUN_BACKLOG_AUTOSTART: /fix",
+    "Silently run /ship checks",
+    '<scheduled-task name="x">/concept</scheduled-task>',
+  ])("%s → no mentions", (msg) => {
+    expect(detectInlineSkillMentions(msg, KNOWN)).toEqual([]);
   });
 });

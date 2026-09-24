@@ -5,6 +5,10 @@ description: >-
   Interactively scaffold or adapt a project-level extension for any plugin skill.
   Lists available skills, checks for existing extensions, and creates or opens
   the correct files. Triggers on: "extend skill", "customize skill", "skill extension".
+layer: 0
+invokes: []
+triggers:
+  en: ["extend skill", "customize skill", "skill extension"]
 argument-hint: "[skill-name]"
 allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion, Write, Edit
 ---

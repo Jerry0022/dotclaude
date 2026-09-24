@@ -10,6 +10,11 @@ description: >-
   "auf stable heben", "promote to beta", "promote to stable". Do NOT trigger
   for shipping new work (use /ship) or plugin updates
   (/auto-update).
+layer: 0
+invokes: []
+triggers:
+  en: ["release", "promote", "promotion", "channel release", "promote to beta", "promote to stable"]
+  de: ["auf stable heben"]
 allowed-tools: Bash(git *), AskUserQuestion, Read, mcp__plugin_devops_dotclaude-ship__ship_promote, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 

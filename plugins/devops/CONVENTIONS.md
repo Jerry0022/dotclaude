@@ -32,7 +32,7 @@ Spec: `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
 Prefixes:
   ss.      = SessionStart
   pre.     = PreToolUse
-  post.    = PostToolUse
+  post.    = PostToolUse (a post. hook may also register for PostToolUseFailure)
   prompt.  = UserPromptSubmit
   stop.    = Stop
 
@@ -54,7 +54,7 @@ Every hook file starts with a JSDoc header:
 /**
  * @hook {prefix}.{domain}.{action}
  * @version X.Y.Z
- * @event {SessionStart|PreToolUse|PostToolUse|Stop}
+ * @event {SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PostToolUseFailure|Stop}
  * @plugin devops
  * @description One-line description of what this hook does.
  */
@@ -83,7 +83,25 @@ The authoritative list of registered hooks and their matchers is
 
 - `process.stderr.write()` — Messages shown in hook output (collapsed by default)
 - `process.stdout.write()` — Injected into Claude's context as instructions
+  (SessionStart, UserPromptSubmit, Stop `decision` JSON). **Not** for
+  PostToolUse / PostToolUseFailure: their plain stdout only shows in
+  transcript mode. Reach the model there with
+  `{"hookSpecificOutput":{"hookEventName":"<event>","additionalContext":"…"}}`
+  (or exit 2 + stderr to block).
 - `console.error()` — Same as stderr, shown in hook output
+
+### Stdin Tolerance
+
+Every hook exits 0 silently when its stdin is unusable — empty, `null`, a
+non-object, invalid JSON — and tolerates a UTF-8 BOM and CRLF. Parse with
+`parseHookInput()` from `hooks/lib/hook-input.js` and wrap the hook body in a
+try/catch that never lets an internal error surface as a hook failure.
+
+A failed Bash/PowerShell call does not reach PostToolUse: the harness fires
+**PostToolUseFailure** with `error` (starts with `Exit code N`) and
+`is_interrupt`; PostToolUse only sees successes (`tool_response` without an exit code).
+Normalize any `tool_response` with `normalizeToolResponse()` from
+`hooks/lib/browsertest-guard.js`.
 
 ### Project-Rooted State
 
@@ -198,6 +216,56 @@ content indented on the next line) or be quoted. A plain scalar with an inner
 doc with **empty metadata and no error** — the skill never triggers / the agent
 never appears. Applies equally to `agents/*.md`. Guarded by
 `scripts/frontmatter-yaml.test.js`.
+
+### Frontmatter — `layer` / `invokes` / `triggers`
+
+Every `SKILL.md` also carries three fields that describe the devops→devops
+skill-call graph:
+
+```yaml
+layer: 3                     # integer, 0 = top; assigned by the call graph rule below
+invokes: [tune-polish]       # devops skills this skill actually calls; [] when none
+triggers:                    # every trigger phrase from the description, verbatim, per language
+  de: ["ship", "und dann ship"]
+  en: ["ship it", "push and merge"]
+```
+
+- **`layer`** — an integer. The rule: every real skill→skill call goes
+  **strictly to a higher layer number** than the caller (a cycle is therefore
+  impossible by construction). Assign the smallest layer consistent with
+  every edge; a skill with no incoming or outgoing edges is layer `0`.
+- **`invokes`** — the list of devops skills this skill actually calls via the
+  `Skill` tool or an equivalent hand-off. A mention ("use `/other-skill`
+  instead", "do NOT trigger for `/x`") is NOT an edge — only a real
+  invocation counts. Empty list `[]` when the skill calls no other skill.
+- **`triggers`** — every phrase from the description's `Triggers on:` /
+  `Triggers:` list, copied verbatim, grouped by language (`de` / `en`; a
+  slash command or proper noun goes under `en`). `triggers: {}` when the
+  description has no phrase list (e.g. explicit-invocation-only skills keep
+  only their literal slash form).
+
+**Scope:** these fields govern devops→devops calls only. They do not
+restrict consumer skills or extensions, and the harness ignores them at
+runtime — `scripts/skill-graph.test.js` (via `hooks/lib/skill-meta.js`) is
+the enforcement: every skill declares all three fields, every `invokes`
+entry names a real skill, every edge respects the layer rule (with an
+explicit cycle check), and every quoted description-trigger phrase survives
+in `triggers:` so a later description edit can't silently drop it.
+
+**Router scope:** `triggers:` stays the complete phrase list, but the
+deterministic router in `prompt.skill.enforce` (`hooks/lib/skill-trigger-router.js`)
+only turns **multi-word phrases**, **slash forms** and the curated
+**single-word allowlist** (`SINGLE_WORD_ALLOWLIST`) into a mandatory load.
+A new single-word trigger reaches the model through the description only,
+until it is added to that allowlist — add a word there only when it names the
+skill's job and hardly occurs in ordinary prose. An everyday multi-word phrase
+— or one too generic in a consumer project ("update plugin", "guide me
+through") — goes on `PHRASE_DENYLIST` instead; the frontmatter keeps it. A word too ambiguous alone but clear as a
+request (bare "concept") gets router-only verb-object phrases in
+`ROUTER_PHRASES` ("ein concept", "als concept", …) — never the bare word.
+A phrase match is only a non-mandatory hint when the session runs in the
+plugin source repo or a meta word (skill, hook, runner, guard, hint, …)
+stands next to it.
 
 ### Extension Mechanism (applies to ALL skills)
 

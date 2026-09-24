@@ -6,6 +6,11 @@ description: >-
   statusLine-written usage file first (no scrape), falls back to the Edge CDP
   scraper or cached data. Run silently pre-card, or manually:
   "refresh usage", "wie viel hab ich verbraucht", "token budget".
+layer: 0
+invokes: []
+triggers:
+  en: ["refresh usage", "token budget"]
+  de: ["wie viel hab ich verbraucht"]
 allowed-tools: Bash(node *), Read
 ---
 

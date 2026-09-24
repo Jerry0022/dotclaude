@@ -14,6 +14,11 @@ description: >-
   "milestone planen", "plan a milestone".
   Do NOT trigger for: PR creation (use /ship), plain commits,
   or code implementation.
+layer: 2
+invokes: []
+triggers:
+  en: ["create issue", "new issue", "refine issue", "update issue", "plan a milestone"]
+  de: ["neues Issue", "Issue erstellen", "mach ein Issue", "Issue refinen", "Issue ergänzen", "Issue anpassen", "milestone planen"]
 allowed-tools: Bash(gh *), AskUserQuestion, Read, Grep, mcp__plugin_devops_dotclaude-issues__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
@@ -124,15 +129,38 @@ gate, not silently refined.
 ## Step 2 — Create the issue
 
 ```bash
-gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"
+gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"  # via setup-issue
 ```
 
 **With a `{target_repo}` from Step 1, `--repo` is mandatory** — without it `gh`
 creates the issue in whatever repo the CWD happens to be:
 
 ```bash
-gh issue create --repo "{target_repo}" --title "[TYPE] Title" --body "Description" --label "type:X"
+gh issue create --repo "{target_repo}" --title "[TYPE] Title" --body "Description" --label "type:X"  # via setup-issue
 ```
+
+Every `gh issue create` / `gh issue edit` this skill runs carries the trailing
+`# via setup-issue` marker comment shown above — `pre.issue.guard` lets a
+marked write through only while this skill runs in the current turn
+(everyone else's raw `gh issue` call is blocked). Never drop the marker when
+composing the command (a multi-line `\` / PowerShell-backtick continuation is
+fine), and never add it to a command this skill itself did not construct.
+
+**Never pass the body on stdin via a heredoc** (`--body-file - <<'EOF'`): the
+body lines follow the opener on new lines, so the marker no longer sits on the
+`gh` command's own segment and the guard blocks the write. For a multi-line
+body use a command substitution or a temp file instead:
+
+```bash
+gh issue create --title "[TYPE] Title" --body "$(cat <<'EOF'
+Description
+
+**User value:** <direct or indirect effect>
+EOF
+)" --label "type:X"  # via setup-issue
+```
+
+or write the body to a temp file and pass `--body-file "{tmp}/body.md"`.
 
 The body MUST include the user-value line (see deep-knowledge/issue-rules.md):
 `**User value:** <direct or indirect effect>`
@@ -237,7 +265,7 @@ markers, else append the section after the original body (one blank line in
 between):
 
 ```bash
-gh issue edit {issue} --body-file "{tmp}/body.md"          # add --repo "{target_repo}" when set
+gh issue edit {issue} --body-file "{tmp}/body.md"  # via setup-issue — add --repo "{target_repo}" when set
 ```
 
 Build `body.md` from the fetched body — never from memory of what the issue
@@ -246,11 +274,16 @@ Build `body.md` from the fetched body — never from memory of what the issue
 ### R3 — Metadata corrections
 
 Apply only what R1 flagged:
-- Title not in `[TYPE] …` form, or `[FIX]` → `gh issue edit {issue} --title "[TYPE] …"`
+- Title not in `[TYPE] …` form, or `[FIX]` → `gh issue edit {issue} --title "[TYPE] …"  # via setup-issue`
 - No `type:*` label → `--add-label "type:<type>"` (verify the label exists in
-  `{target_repo}` first, as in Step 1)
-- Hand-over names a milestone that is not set → `--milestone "<name>"`
+  `{target_repo}` first, as in Step 1) — same `gh issue edit … # via setup-issue` form
+- Hand-over names a milestone that is not set → `--milestone "<name>"` — same
+  `gh issue edit … # via setup-issue` form
 - Extension labels (`role:*`, `module:*`) resolved the same way as in Step 2
+
+Every metadata correction is its own `gh issue edit {issue} <flags>  # via
+setup-issue` call (or flags combined into one call) — never omit the marker,
+R3's edits are exactly the raw commands `pre.issue.guard` would otherwise block.
 
 Then verify like Step 4: re-run `gh issue view`, check exactly one
 `<!-- refinement:start -->` … `<!-- refinement:end -->` pair, exactly one

@@ -10,6 +10,10 @@ description: >-
   Do NOT trigger on any phrasing, keyword, or intent — not on "burn",
   "budget", "limit", "aufbrauchen", "maximize", "alles verbrauchen",
   "token", or ANY other wording. Only the literal /run-burn command.
+layer: 0
+invokes: [run-autonomous]
+triggers:
+  en: ["/run-burn"]
 argument-hint: "[task description or goal — additional tasks are discovered automatically]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,

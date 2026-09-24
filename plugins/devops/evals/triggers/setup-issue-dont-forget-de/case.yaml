@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: setup-issue-dont-forget-de
+context:
+  scaffold_script: scaffold.sh

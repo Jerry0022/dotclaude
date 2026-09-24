@@ -7,6 +7,10 @@ description: >-
   browser/app tests) and can OPTIONALLY SHUT DOWN THE PC after completion.
   Triggers: "autonomous", "run autonomous", "run this while I'm away", "afk mode", "autopilot".
   Do NOT trigger when the user stays present — use /run-agents instead.
+layer: 1
+invokes: [tune-polish, tune-harden]
+triggers:
+  en: ["autonomous", "run autonomous", "run this while I'm away", "afk mode", "autopilot"]
 argument-hint: "[task, e.g. 'refactor auth module and run tests']"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,

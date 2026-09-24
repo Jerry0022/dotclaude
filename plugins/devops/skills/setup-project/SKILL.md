@@ -8,6 +8,10 @@ description: >-
   "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene".
   Do NOT trigger for README generation (/setup-readme), CLAUDE.md edits,
   or source code changes.
+layer: 0
+invokes: []
+triggers:
+  en: ["set up this project", "init repo", "audit gitignore", "add license", "fix gitignore", "repo hygiene"]
 argument-hint: "[--audit | --init] [--fix]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write, Edit, WebFetch, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

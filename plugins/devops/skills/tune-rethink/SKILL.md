@@ -12,6 +12,11 @@ description: >-
   approach", "komplett neu denken", "das führt zu nichts". Do NOT trigger
   for: debugging/errors (use /fix), incremental consistency or UI passes
   (/tune-harden, /tune-polish), or normal feature work.
+layer: 0
+invokes: [run-autonomous, concept]
+triggers:
+  en: ["stuck", "unstuck", "rethink", "fresh approach"]
+  de: ["festgefahren", "wir drehen uns im Kreis", "neu denken", "frischer Ansatz", "komplett neu denken", "das führt zu nichts"]
 argument-hint: "[app or section that is stuck, e.g. 'the onboarding flow']"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*
 ---

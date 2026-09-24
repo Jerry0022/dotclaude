@@ -9,6 +9,10 @@ description: >-
   hard-gates broad raw-file searches toward the graph. Triggers: "knowledge
   graph", "graphify", "code graph", "/auto-graph". Do NOT trigger for simple
   single-file lookups.
+layer: 0
+invokes: []
+triggers:
+  en: ["knowledge graph", "graphify", "code graph", "/auto-graph"]
 allowed-tools: Bash(node *), Bash(graphify *), Bash(uv *), Bash(pipx *), Read, Glob, Write
 ---
 

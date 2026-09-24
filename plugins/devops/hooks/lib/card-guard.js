@@ -108,16 +108,9 @@ function lastAssistantContainsCard(transcriptContent) {
   return lastAssistantText(transcriptContent).includes(CARD_MARKER);
 }
 
-/** A user-role entry the user (or a hook on their behalf) wrote — as opposed
- *  to one that only carries tool results, or an `isMeta` entry the harness
- *  inserts mid-turn (a loaded skill's body). Marks where the current turn began. */
-function isPromptEntry(entry) {
-  if (entry.isMeta === true) return false;
-  const content = entry.message && entry.message.content;
-  if (typeof content === 'string') return true;
-  if (!Array.isArray(content)) return false;
-  return content.some(b => b && b.type !== 'tool_result');
-}
+/** A user-role entry that opens a new turn — shared with the other transcript
+ *  walkers in lib/skill-invocations.js. */
+const { isPromptEntry } = require('./skill-invocations');
 
 /** The Desktop widget tool — loaded as `mcp__visualize__show_widget`, or under
  *  a connector-id namespace when it arrives deferred. */

@@ -8,6 +8,11 @@ description: >-
   Triggers on "/claude-batch", "sammelmodus", "collect mode", "batch mode",
   "erstmal sammeln", "nicht sofort umsetzen". Do NOT trigger for normal work,
   for backlog execution (/run-backlog), or for issue creation (/setup-issue).
+layer: 0
+invokes: [concept]
+triggers:
+  en: ["/claude-batch", "collect mode", "batch mode"]
+  de: ["sammelmodus", "erstmal sammeln", "nicht sofort umsetzen"]
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 

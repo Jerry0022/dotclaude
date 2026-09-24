@@ -13,6 +13,11 @@ description: >-
   angleichen", "design konsistenz", "feinschliff", "visuell aufräumen",
   "design pass". Do NOT trigger for: backend-only work, feature
   implementation, theme/style overhaul.
+layer: 3
+invokes: []
+triggers:
+  en: ["polish", "ui polish", "design pass"]
+  de: ["ui angleichen", "design konsistenz", "feinschliff", "visuell aufräumen"]
 argument-hint: "[--autonomous] [--invoked-by=agents|autonomous|ship] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

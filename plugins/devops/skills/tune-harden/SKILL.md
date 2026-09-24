@@ -11,6 +11,11 @@ description: >-
   "stabilisieren", "bug pass", "consistency pass", "lint und fix".
   Skips all confirmations when invoked with --autonomous.
   Do NOT trigger for: feature work, new UI structure, theme changes.
+layer: 2
+invokes: []
+triggers:
+  en: ["harden", "stabilize", "bug pass", "consistency pass"]
+  de: ["härten", "stabilisieren", "lint und fix"]
 argument-hint: "[--autonomous] [--invoked-by=agents|autonomous] [optional scope: file/dir path]"
 allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---

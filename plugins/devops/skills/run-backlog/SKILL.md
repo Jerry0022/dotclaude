@@ -12,6 +12,11 @@ description: >-
   "arbeite den milestone ab". Do NOT trigger for maximizing token budget
   (that is /run-burn, explicit-only), nor for a generic single ad-hoc AFK
   task (that is /run-autonomous).
+layer: 0
+invokes: [setup-issue, ship, concept]
+triggers:
+  en: ["backlog runner", "run the backlog"]
+  de: ["backlog abarbeiten", "arbeite den backlog ab", "milestones abarbeiten", "arbeite die milestones ab", "arbeite den milestone ab"]
 argument-hint: "[optional filter, e.g. 'only bugs' or a milestone name]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent,

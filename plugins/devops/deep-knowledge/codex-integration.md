@@ -118,7 +118,8 @@ systematically. Tests verify behavior; Codex reviews design and logic.
 **When:** 2+ consecutive Bash failures detected.
 **Skill:** `/codex:rescue` (mentioned as alternative)
 **Behavior:**
-- Existing behavior: recommend `/fix`
+- Existing behavior: mandate `/fix` (as `additionalContext` on
+  PostToolUseFailure — plain stdout of a PostToolUse* hook never reaches the model)
 - Added: mention `/codex:rescue` as alternative for delegation
 - No automatic invocation — hook outputs text only (cannot invoke skills)
 
@@ -155,7 +156,7 @@ runs and reaches Step 6 with an unclear root cause (see Integration Point 2).
 |---|---|---|
 | /ship review | ~20-40K tokens | Per ship (~2-5/week) |
 | /fix rescue | ~30-50K tokens | When stuck (~1-3/week) |
-| post.flow.debug | 0 (suggestion only) | N/A |
+| post.flow.debug | 0 (hook text only) | N/A |
 | QA review | ~20-40K tokens | Per QA run |
 | Research delegation | ~20-40K tokens | Per research task |
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.193.0] — 2026-09-24
+
+### Added
+- **Hidden skills now start without being asked.** This is PR 1 of the skill restructure (`docs/superpowers/specs/2026-09-24-skill-restructure-design.md`); no skill is renamed yet.
+  - `prompt.skill.enforce` is now a trigger router. It reads the new `triggers:` frontmatter of every skill and forces the matching skill on multi-word phrases, slash forms and a small allowlist of unambiguous single words. Stack frames, `Traceback` and error classes route a bug report to `fix` in any language.
+  - The router stays silent on machine prompts, in batch or strict mode, while the matching skill already runs, and while a concept page is live. Inside the plugin source repo, and when a skill is only talked about, it gives a hint instead of a mandate.
+- **`web-guide` is offered when Claude hands you web steps.** The new Stop hook `stop.guide.handoff` catches click steps for an external service in Claude's answer. It never blocks after the completion card; it leaves a one-time hint for the next prompt instead.
+- **Every issue write goes through `setup-issue`.** The new `pre.issue.guard` routes `gh issue create/edit`, writing `gh api …/issues` calls and GitHub MCP issue writes through `setup-issue`, subagents included.
+- **Skill layers.** Every SKILL.md carries `layer` / `invokes` / `triggers`. `skill-graph.test.js` enforces downward-only calls (no skill loops) and checks that no trigger phrase is lost.
+- **Trigger evals in 11 languages** (`evals/triggers/`, generated from one data file) and a dotclaude-only usage scan in `.claude/skill-usage/`.
+
+### Fixed
+- **`post.flow.debug` fires.** It read a top-level exit code that does not exist, on the wrong event, so it never fired. It now listens on `PostToolUseFailure`, counts only real non-zero exit codes per agent, and mandates `fix` after two failures.
+
 ## [0.192.7] — 2026-09-24
 
 ### Fixed

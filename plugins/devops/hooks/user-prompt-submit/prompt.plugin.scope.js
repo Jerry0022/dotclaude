@@ -61,45 +61,49 @@ function hasPluginSignal(message) {
   return PLUGIN_SIGNALS.some(re => re.test(message));
 }
 
-let inputData = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
-process.stdin.on('end', () => {
-  let hook;
-  try { hook = JSON.parse(inputData); } catch { process.exit(0); }
+// Guarded so prompt.skill.enforce can require hasPluginSignal without a
+// second stdin consumer.
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', d => { inputData += d; });
+  process.stdin.on('end', () => {
+    let hook;
+    try { hook = JSON.parse(inputData); } catch { process.exit(0); }
 
-  // `prompt` is what the runtime actually sends; the others are defensive.
-  const message = hook.prompt || hook.user_message || hook.message || '';
-  if (!hasPluginSignal(message)) process.exit(0);
+    // `prompt` is what the runtime actually sends; the others are defensive.
+    const message = hook.prompt || hook.user_message || hook.message || '';
+    if (!hasPluginSignal(message)) process.exit(0);
 
-  const cwd = hook.cwd || process.cwd();
-  const repoRoot = gitTopLevel(cwd);
+    const cwd = hook.cwd || process.cwd();
+    const repoRoot = gitTopLevel(cwd);
 
-  // Plugin source repo → direct implementation is the correct route, no nudge.
-  if (isPluginSourceRepo(repoRoot)) process.exit(0);
+    // Plugin source repo → direct implementation is the correct route, no nudge.
+    if (isPluginSourceRepo(repoRoot)) process.exit(0);
 
-  const marker = sessionFile('dotclaude-devops-scope-routed', hook.session_id);
-  try { if (fs.existsSync(marker)) process.exit(0); } catch {}
-  try { writeSessionFile(marker, '1'); } catch {}
+    const marker = sessionFile('dotclaude-devops-scope-routed', hook.session_id);
+    try { if (fs.existsSync(marker)) process.exit(0); } catch {}
+    try { writeSessionFile(marker, '1'); } catch {}
 
-  const slug = upstreamSlug();
-  const project = repoRoot || cwd;
+    const slug = upstreamSlug();
+    const project = repoRoot || cwd;
 
-  process.stdout.write(
-    `This session is a CONSUMER of the devops plugin (${project}), not its source repo. ` +
-    `Scope routing is therefore mandatory before any fix:\n` +
-    `1. Defect/gap in the devops plugin itself (skill, hook, agent, MCP server, ` +
-    `convention, installed copy under ~/.claude/plugins/**) → do NOT fix it here and ` +
-    `do NOT hand-edit the installed copy. Invoke the /setup-issue skill and file it ` +
-    `against ${slug}: [BUG] for a defect, [FEATURE] for a gap, body = symptom + affected ` +
-    `plugin part + "Captured from a session in ${project}." + a mandatory ` +
-    `"**User value:**" line (setup-issue rejects issues without one).\n` +
-    `2. Anything about THIS project (its build, architecture, conventions, or a ` +
-    `deliberate deviation from a plugin default) → persist it in this project's own ` +
-    `.claude/ instructions (deep-knowledge > skill extension > CLAUDE.md).\n` +
-    `Read deep-knowledge/plugin-scope-routing.md before deciding if the split is unclear. ` +
-    `Do not surface this note as its own message — apply it when routing the work.\n`
-  );
-});
+    process.stdout.write(
+      `This session is a CONSUMER of the devops plugin (${project}), not its source repo. ` +
+      `Scope routing is therefore mandatory before any fix:\n` +
+      `1. Defect/gap in the devops plugin itself (skill, hook, agent, MCP server, ` +
+      `convention, installed copy under ~/.claude/plugins/**) → do NOT fix it here and ` +
+      `do NOT hand-edit the installed copy. Invoke the /setup-issue skill and file it ` +
+      `against ${slug}: [BUG] for a defect, [FEATURE] for a gap, body = symptom + affected ` +
+      `plugin part + "Captured from a session in ${project}." + a mandatory ` +
+      `"**User value:**" line (setup-issue rejects issues without one).\n` +
+      `2. Anything about THIS project (its build, architecture, conventions, or a ` +
+      `deliberate deviation from a plugin default) → persist it in this project's own ` +
+      `.claude/ instructions (deep-knowledge > skill extension > CLAUDE.md).\n` +
+      `Read deep-knowledge/plugin-scope-routing.md before deciding if the split is unclear. ` +
+      `Do not surface this note as its own message — apply it when routing the work.\n`
+    );
+  });
+}
 
 module.exports = { hasPluginSignal, PLUGIN_SIGNALS };
