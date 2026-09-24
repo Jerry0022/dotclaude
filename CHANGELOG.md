@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.194.3] — 2026-09-24
+
+### Fixed
+- **Firing a batch no longer plans against a stale branch without saying so.** Firing the merge (marker, `/do-batch go` / `los`) merges main into the branch first, as before. But `git-sync.js` exits silently when it steps aside: uncommitted changes that overlap the incoming merge, a detached HEAD, an unfinished merge or rebase, or a running `/do-ship`. The merge context then said "main ist bereits enthalten" and the plan was built on the old base. `git-sync.js --explain` now names every no-merge exit (`=` nothing to merge, `– skipped: <reason>`). The merge hook and the `go` route use it, and a skip means fix the cause, re-run the sync, then read the notes. The background sync stays silent as before.
+
 ## [0.194.2] — 2026-09-24
 
 ### Fixed
