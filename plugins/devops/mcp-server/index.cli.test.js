@@ -210,6 +210,79 @@ describe("--render-card CLI fallback", () => {
     expect(onStable.stderr).not.toContain('data-prompt="promote');
   });
 
+  // The ready card's second button answers the open points instead of asking
+  // "what do you want to change?" — every point, in card order, also those
+  // past the 3-point cap; the user's own final tests stay out.
+  test("ready with open points: the conclude button carries the prepared answers (Desktop)", async () => {
+    const payload = {
+      variant: "ready", summary: "Vorbehalte", lang: "de", session_id: "cli-test-conclude",
+      open: [
+        { text: "Soll die Änderung auch im Terminal-Renderer rein?", reply: "Ja, die Änderung bitte auch im Terminal-Renderer machen." },
+        "Doku zur Card nachziehen?",
+        "Alten Branch feat/x aufräumen",
+        { text: "Vierter Punkt", reply: "Vierten Punkt bitte auch erledigen." },
+      ],
+      userFinalTest: ["Im Desktop klicken"],
+    };
+    const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(stderr).toContain("Nachbessern ↗");
+    expect(stderr).not.toContain("Ändern ↗");
+    expect(stderr).toContain(
+      'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;' +
+      "- Ja, die Änderung bitte auch im Terminal-Renderer machen.&#10;" +
+      "- Doku zur Card nachziehen? Ja, bitte.&#10;" +
+      "- Alten Branch feat/x aufräumen — bitte angehen.&#10;" +
+      '- Vierten Punkt bitte auch erledigen."',
+    );
+    expect(stderr).not.toMatch(/data-prompt="[^"]*Im Desktop klicken/);
+    // The terminal shows the object entries as plain points.
+    const term = await renderCard(payload);
+    expect(term).toMatch(/^1\. Soll die Änderung auch im Terminal-Renderer rein\?$/m);
+    expect(term).toMatch(/^## 📦 Shippen trotz 4 Vorbehalten \+2 weitere\?$/m);
+  });
+
+  test("test and ship-successful cards answer their open points too (Desktop)", async () => {
+    const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
+    const open = [{ text: "Auch im Terminal?", reply: "Ja, bitte auch im Terminal." }, "Doku nachziehen?"];
+    const answer = 'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;- Ja, bitte auch im Terminal.&#10;- Doku nachziehen? Ja, bitte."';
+
+    const test = { variant: "test", summary: "Testen", lang: "de", session_id: "cli-test-conclude-test", open, userTest: ["Seite öffnen"] };
+    const testWidget = (await renderCardFull(test, desktop)).stderr;
+    // the test card's own Nachbessern carries the answer — no second button
+    expect(testWidget.match(/Nachbessern ↗/g)).toHaveLength(1);
+    expect(testWidget).toContain(answer);
+    expect(testWidget).not.toContain("frag mich, was");
+    // the open points show on the test card, the steps tagged 🧪
+    const testTerm = await renderCard(test);
+    expect(testTerm).toMatch(/^1\. Auch im Terminal\?$/m);
+    expect(testTerm).toMatch(/^3\. 🧪 Seite öffnen$/m);
+
+    const ring = (await renderCardFull({
+      variant: "ship-successful", summary: "Ship", lang: "de", session_id: "cli-test-conclude-ring", open,
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
+    }, desktop)).stderr;
+    expect(ring).toContain('data-prompt="promote beta 0.193.0"');
+    expect(ring).toContain("Nachbessern ↗");
+    expect(ring).toContain(answer);
+
+    const plain = { variant: "ship-successful", summary: "Merge", lang: "de", session_id: "cli-test-conclude-plain", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.193.0" } } };
+    const plainOpen = (await renderCardFull({ ...plain, open }, desktop)).stderr;
+    expect(plainOpen).toContain("Nachbessern ↗");
+    expect(plainOpen).not.toContain("Promote");
+    const plainNone = (await renderCardFull({ ...plain, session_id: "cli-test-conclude-plain-none" }, desktop)).stderr;
+    expect(plainNone).not.toContain('<span role="button"');
+  });
+
+  test("ready without open points keeps the plain Ändern button", async () => {
+    const { stderr } = await renderCardFull(
+      { variant: "ready", summary: "Ohne", lang: "de", session_id: "cli-test-conclude-none", userFinalTest: ["Im Desktop klicken"] },
+      { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
+    );
+    expect(stderr).toContain("Ändern ↗");
+    expect(stderr).not.toContain("Nachbessern");
+  });
+
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {
     const desktop = await renderCardFull(
       { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-md", cta: { description: "läuft auf Port 3000" } },

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.198.0] — 2026-09-24
+
+### Added
+- **Nachbessern answers the card's open points for you.** When a ready, test or ship card lists open points, its „Nachbessern" button puts the prepared answer to every one of them into the input box, so Enter is all that is left. It assumes you want all of them tackled. One point gives its answer alone; several give an intro line and one bullet per answer, in the order the card lists them, also the ones folded into „+N weitere". On the ready card „Nachbessern" replaces „Ändern", on the test card the existing „Nachbessern" carries the answer instead of asking „what?", and a ship card adds it next to its promote buttons (after a plain merge it is the only button). Without open points everything stays as it was. Manual test steps stay out of the answer — they are yours to run.
+- **Open points can carry their answer.** `open` entries accept `{ text, reply }`: `reply` is the answer written as you would type it ("Ja, die Änderung bitte auch dort machen."). A plain string still works and gets a generic „… Ja, bitte." / „… — bitte angehen.".
+
+### Changed
+- **The test card lists open points too.** They come before the test steps, which are then marked 🧪.
+
 ## [0.197.1] — 2026-09-24
 
 ### Fixed

@@ -174,6 +174,18 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
   Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
+- **Prepared answer (`ready`, `test`, `ship-successful`)**: when the card has
+  open points, a `Nachbessern` button carries the prepared answer:
+  `ready`'s `Ändern` becomes it, `test`'s own `Nachbessern` swaps its "frag
+  mich, was" prompt for it, and `ship-successful` (ring or plain merge) gets
+  it after its promote verbs. It puts the answer to
+  EVERY open point (also those folded into `+N weitere`) into the input box,
+  assuming the user wants them all tackled: each point's `reply`
+  (`open: [{ text, reply }]`, written as the user — "Ja, die Änderung bitte
+  auch in X machen."), else a plain "… Ja, bitte." / "… — bitte angehen."
+  One point → its answer alone; two or more → an intro line, a blank line
+  and one `- ` bullet per answer in card order. Final tests stay out — they
+  are the user's own steps. Without open points `ready` keeps `Ändern` and `test` its plain `Nachbessern`.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
 
@@ -181,16 +193,16 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
-| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern | |
+| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Nachbessern) | |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
-| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none | context line = distance to beta |
+| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points | context line = distance to beta |
 | `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter | |
 | `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy | replaces the 🚨 DEPLOY block |
 | `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Promote stable | evidence = promotion facts |
 | `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
 | `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
-| `test` | `🧪 Erst testen, dann shippen?` | userTest steps | Ship · Nachbessern | unverified part = `◐` post |
+| `test` | `🧪 Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (open points → prepared answer) | unverified part = `◐` post |
 | `test-minimal` | `▶️ Läuft — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget |
 | `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage | pipeline = `➖ keine Änderungen` |
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |

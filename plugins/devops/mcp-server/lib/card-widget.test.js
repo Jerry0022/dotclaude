@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import {
   isDesktopSession,
   buttonsFor,
+  conclusionPrompt,
   cardWidgetHtml,
   cardWidgetInstruction,
   writeCardWidgetFile,
@@ -54,6 +55,51 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(de[0]).toMatchObject({ prompt: "ship", primary: true });
     const en = buttonsFor("ready", "en");
     expect(en.map((a) => a.label)).toEqual(["Ship", "Change"]);
+  });
+
+  test("ready with open points: Ändern becomes Nachbessern and carries the prepared answer", () => {
+    const one = buttonsFor("ready", "de", { replies: ["Ja, die Änderung bitte auch dort machen."] });
+    expect(one.map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
+    expect(one[1]).toMatchObject({ icon: "bug", prompt: "Ja, die Änderung bitte auch dort machen." });
+    expect(one[1]).not.toHaveProperty("conclude");
+    expect(one[0].prompt).toBe("ship");
+    const en = buttonsFor("ready", "en", { replies: ["A.", "B."] });
+    expect(en[1].label).toBe("Rework");
+    expect(en[1].prompt).toBe("Please tackle all open points:\n\n- A.\n- B.");
+    // no replies → the generic button, unchanged
+    expect(buttonsFor("ready", "de", { replies: [] })[1].label).toBe("Ändern");
+    expect(buttonsFor("ready", "de", { replies: ["  "] })[1].label).toBe("Ändern");
+  });
+
+  test("test's Nachbessern carries the answer; ship-successful appends Nachbessern after its promote verbs", () => {
+    const replies = ["Ja, bitte."];
+    const test = buttonsFor("test", "de", { replies });
+    expect(test.map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
+    expect(test[1].prompt).toBe("Ja, bitte.");
+    const ring = buttonsFor("ship-successful", "de", { replies, version: "0.193.0" });
+    expect(ring.map((a) => a.label)).toEqual(["Promote beta", "Promote stable", "Nachbessern"]);
+    expect(ring[0].prompt).toBe("promote beta 0.193.0");
+    expect(ring[2]).toMatchObject({ prompt: "Ja, bitte.", icon: "bug" });
+    expect(ring[2].primary).toBeUndefined();
+    // plain merge: nothing to promote, Nachbessern alone
+    expect(buttonsFor("ship-successful-plain", "en", { replies }).map((a) => a.label)).toEqual(["Rework"]);
+    expect(buttonsFor("ship-successful-plain", "de")).toEqual([]);
+    // without replies: nothing appended, test keeps its "frag mich" prompt
+    expect(buttonsFor("test", "de").map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
+    expect(buttonsFor("test", "de")[1].prompt).toMatch(/frag mich, was/);
+  });
+
+  test("conclusionPrompt: one answer alone, several as an ordered bullet list, never a leading slash", () => {
+    expect(conclusionPrompt([], "de")).toBe("");
+    expect(conclusionPrompt(["Nur das."], "de")).toBe("Nur das.");
+    expect(conclusionPrompt(["Erstens.", "Zweitens.", "Drittens."], "de"))
+      .toBe("Bitte noch alle offenen Punkte angehen:\n\n- Erstens.\n- Zweitens.\n- Drittens.");
+    expect(conclusionPrompt(["/compact jetzt"], "de")).toMatch(/^Bitte noch alle offenen Punkte/);
+  });
+
+  test("the widget keeps a multi-line conclusion's line breaks as &#10;", () => {
+    const html = cardWidgetHtml(baseModel({ replies: ["A.", "B."] }), "");
+    expect(html).toContain('data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;- A.&#10;- B."');
   });
 
   test("ready-red offers Fix and Trotzdem shippen — worded for red findings, not only red tests", () => {

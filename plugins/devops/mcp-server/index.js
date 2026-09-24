@@ -969,8 +969,42 @@ function redFindings(input) {
   return tests.filter(t => glyphForResult(t.result) !== '✓').map(t => (t.method ? t.method + ': ' : '') + t.result);
 }
 
+/**
+ * `open` entries as `{ text, reply }`. A string is a point without a prepared
+ * answer; `{ text, reply }` carries the answer the user gives when they want
+ * the point tackled ("Ja, die Änderung bitte auch dort machen.").
+ */
+function normalizeOpenItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map(it => {
+    if (typeof it === 'string') return { text: it.trim(), reply: '' };
+    if (it && typeof it === 'object') return { text: String(it.text || '').trim(), reply: String(it.reply || '').trim() };
+    return { text: '', reply: '' };
+  }).filter(it => it.text);
+}
+
+const OPEN_REPLY_FALLBACK = {
+  de: { question: (t) => t + ' Ja, bitte.', point: (t) => t + ' — bitte angehen.' },
+  en: { question: (t) => t + ' Yes, please.', point: (t) => t + ' — please tackle it.' },
+};
+
+/**
+ * The prepared answer per open point, in card order — what the widget's
+ * conclude button puts into the composer (card-widget.js#conclusionPrompt).
+ * A point without its own `reply` gets a plain "yes" to its text: the card
+ * assumes the user wants every point tackled.
+ */
+function openReplies(input, lang) {
+  const F = OPEN_REPLY_FALLBACK[lang] || OPEN_REPLY_FALLBACK.de;
+  return normalizeOpenItems(input.open).map(it => {
+    if (it.reply) return it.reply;
+    const text = it.text.replace(/\s+$/, '');
+    return /\?$/.test(text) ? F.question(text) : F.point(text.replace(/[.!]$/, ''));
+  });
+}
+
 function pointsForKey(input, key, lang) {
-  const open = (Array.isArray(input.open) ? input.open : []).map(String).filter(Boolean);
+  const open = normalizeOpenItems(input.open).map(it => it.text);
   const userTest = (Array.isArray(input.userTest) ? input.userTest : []).map(String).filter(Boolean);
   const finalTest = normalizeFinalTestItems(input.userFinalTest, lang);
   const deploy = normalizeDeployGateItems(input.deployGate);
@@ -997,8 +1031,9 @@ function pointsForKey(input, key, lang) {
     case 'released-beta':
     case 'released-stable':
       return [...open, ...finalTest.map(testTag)];
+    // Open points ride on the test card too — its conclude button answers them.
     case 'test':
-      return userTest;
+      return [...open, ...userTest.map(testTag)];
     case 'vv-unverified':
       return [lang === 'en'
         ? 'npm test did not run — run it first, or ship anyway.'
@@ -1059,7 +1094,7 @@ const RESERVATION_MAX = 48;
  * that quotes a 120-character sentence is no question any more.
  */
 function headingReservation(open, lang) {
-  const items = (Array.isArray(open) ? open : []).map(String).filter(Boolean);
+  const items = normalizeOpenItems(open).map(it => it.text);
   if (!items.length) return '';
   const first = items[0].replace(/[.!?]\s*$/, '');
   if (items.length === 1 && first.length <= RESERVATION_MAX) return first;
@@ -1139,6 +1174,9 @@ function shipCompactInfo(compact, lang) {
 /** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
 const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback']);
 
+/** Decision keys whose widget offers "Nachbessern" with the prepared answer to the card's open points. */
+const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
+
 /**
  * The whole decision block: heading (already carrying any "+N weitere" tail),
  * optional context line, ≤3 points, and the button-table key for the widget.
@@ -1194,18 +1232,25 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
 
   const context = buildContextLine(input, key, delivery, lang);
 
+  // The replies ride on the conclude button of the ready, test and
+  // ship-successful cards — all open points, also those folded into
+  // "+N weitere"; the (final) tests are the user's own to run.
+  const replies = CONCLUDE_KEYS.has(key) ? openReplies(input, lang) : [];
+
   let buttonsKey = key;
   if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
   // The ladder already sits above alpha: beta offers only stable, stable nothing.
   const landed = delivery.promote && delivery.promote.current;
   if (key === 'ship-successful' && landed === 'beta') buttonsKey = 'released-beta';
   if (key === 'ship-successful' && landed === 'stable') buttonsKey = null;
+  // Nothing to promote, but open points: Nachbessern alone.
+  if (key === 'ship-successful' && !buttonsKey && replies.length) buttonsKey = 'ship-successful-plain';
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
-  return { heading, context, points: shown, buttonsKey, version: ctx.version || null };
+  return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies };
 }
 
 function readToolCallCount(sessionId) {
@@ -1305,6 +1350,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     points: decision.widgetPoints || decision.points,
     buttonsKey: decision.buttonsKey,
     promoteVersion: decision.version || null,
+    replies: decision.replies || [],
   };
 }
 
@@ -1954,8 +2000,14 @@ server.registerTool(
       ).describe("User-final-test items — for changes where automation cannot cover the last step (packaged Electron/Tauri without desktop takeover, 3rd-party integrations). Pass strings for local final tests; pass { action, afterDeployment: true } for 3rd-party items that require deployment first. Available in all variants except test-minimal and test — in the test variant all manual steps go into userTest (single test section, no duplicate)."),
       open: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
-        z.array(z.string()).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
+        z.array(z.union([
+          z.string(),
+          z.object({
+            text: z.string().describe("The open point as the card shows it."),
+            reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'feat/x bitte committen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
+          }),
+        ])).optional(),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

@@ -1179,7 +1179,7 @@ render_completion_card({
   tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit") and the Step 1e lines: { method: "Harden (Ship)", result: "1 Fix · 2 Hinweise" } whenever the harden pass ran, { method: "UI-Regeln", result: "2 Findings · R2b deaktiviert" } only when the diff had UI files. Rendered on the header line(s) under **Geprüft**.>],
   validation: [<requirement ≤ 70 → evidence ≤ 100 chars; partial/unmet items first. Long-form evidence belongs in the PR body.>],
   userFinalTest: [<ONLY real manual tests the user must run>],
-  open: [<decisions, cleanups, open questions — NOT tests: "feat/x liegt 70 PRs hinter main — committen oder verwerfen?">],
+  open: [<decisions, cleanups, open questions — NOT tests: "feat/x liegt 70 PRs hinter main — committen oder verwerfen?"; as { text, reply } when the user's answer is clear — reply: "feat/x bitte committen.">],
   state: {
     branch: "main",
     commit: <from ship_release.commit>,

@@ -49,12 +49,14 @@ export function isDesktopSession(env = process.env) {
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
  * `tooltip` — shown on hover, explaining what the click triggers (§ 2.6).
+ * `conclude` marks the button that turns into the prepared answer to the
+ * card's open points when it has any (see `CONCLUDE` / `conclusionPrompt`).
  */
 export const BUTTONS = {
   de: {
     ready: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Startet die Ship-Pipeline mit dem aktuellen Stand." },
-      { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll." },
+      { label: "Ändern", icon: "edit", prompt: "Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was.", tooltip: "Hält den Ship an und fragt zuerst, was noch anders sein soll.", conclude: true },
     ],
     "ready-red": [
       { label: "Fix", icon: "tool", prompt: "Behebe zuerst die roten Befunde der letzten Card (rote Tests bzw. unerfüllte Anforderungen), dann kommt die Card neu.", primary: true, tooltip: "Ich behebe die roten Befunde zuerst, dann kommt die Card neu." },
@@ -68,6 +70,9 @@ export const BUTTONS = {
       { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotet den aktuellen Build von alpha nach beta." },
       { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotet den aktuellen Build direkt nach stable — beta zieht auf dieselbe Version mit." },
     ],
+    // A plain merge has nothing to promote; it only carries the conclude
+    // button when the card has open points (see buttonsFor).
+    "ship-successful-plain": [],
     "ship-successful-kept": [
       { label: "Weiter", icon: "arrow-right", prompt: "Ich mache auf diesem Branch weiter — was ist der nächste Schritt?", primary: true, tooltip: "Setzt die Arbeit auf dem offen gehaltenen Branch fort." },
     ],
@@ -79,7 +84,7 @@ export const BUTTONS = {
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
-      { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel." },
+      { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel.", conclude: true },
     ],
     analysis: [
       { label: "Umsetzen", icon: "player-play", prompt: "Setz die Analyse jetzt um.", primary: true, tooltip: "Beginnt die Umsetzung der Analyse." },
@@ -102,7 +107,7 @@ export const BUTTONS = {
   en: {
     ready: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Starts the ship pipeline with the current state." },
-      { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first." },
+      { label: "Change", icon: "edit", prompt: "I want to change something before we ship — ask me what.", tooltip: "Pauses the ship and asks what should change first.", conclude: true },
     ],
     "ready-red": [
       { label: "Fix", icon: "tool", prompt: "Fix the red findings of the last card first (red tests or unmet requirements), then render the card again.", primary: true, tooltip: "I fix the red findings first, then the card comes back." },
@@ -116,6 +121,7 @@ export const BUTTONS = {
       { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotes the current build from alpha to beta." },
       { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotes the current build straight to stable — beta follows to the same version." },
     ],
+    "ship-successful-plain": [],
     "ship-successful-kept": [
       { label: "Continue", icon: "arrow-right", prompt: "I'll continue on this branch — what's the next step?", primary: true, tooltip: "Continues the work on the branch kept open." },
     ],
@@ -127,7 +133,7 @@ export const BUTTONS = {
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test was fine — ship now." },
-      { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing." },
+      { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing.", conclude: true },
     ],
     analysis: [
       { label: "Implement", icon: "player-play", prompt: "Implement the analysis now.", primary: true, tooltip: "Starts implementing the analysis." },
@@ -147,6 +153,36 @@ export const BUTTONS = {
 };
 
 /**
+ * The `conclude` button once the card has open points: instead of "ask me
+ * what", it puts the prepared answer to those points into the composer —
+ * assuming the user wants every one of them tackled — so Enter is all that is
+ * left. `intro` heads a list of two or more answers. Worded for both sides of
+ * a ship: the ready and test cards ask before it, ship-successful after it.
+ */
+export const CONCLUDE = {
+  de: { label: "Nachbessern", icon: "bug", tooltip: "Legt die vorbereitete Antwort auf die offenen Punkte ins Eingabefeld — alle angehen, Enter sendet.", intro: "Bitte noch alle offenen Punkte angehen:" },
+  en: { label: "Rework", icon: "bug", tooltip: "Puts the prepared answer to the open points into the input box — tackle all of them, Enter sends.", intro: "Please tackle all open points:" },
+};
+
+/**
+ * The prepared answer to a card's open points, in their order. One answer is
+ * the prompt itself; two or more become a bulleted list under the intro line.
+ * A prompt the host would refuse (leading "/") gets the intro line in front.
+ * '' when there is nothing to answer.
+ *
+ * @param {string[]} replies one prepared answer per open point
+ * @param {'de'|'en'} lang
+ * @returns {string}
+ */
+export function conclusionPrompt(replies, lang = "de") {
+  const list = (Array.isArray(replies) ? replies : []).map((r) => String(r || "").trim()).filter(Boolean);
+  if (!list.length) return "";
+  if (list.length === 1 && !/^\//.test(list[0])) return list[0];
+  const intro = (CONCLUDE[lang] || CONCLUDE.de).intro;
+  return `${intro}\n\n${list.map((r) => `- ${r}`).join("\n")}`;
+}
+
+/**
  * The buttons a card offers, or [] when nothing is clickable (pending /
  * concept / batch overrides, test-minimal, states with nothing to decide).
  *
@@ -156,9 +192,14 @@ export const BUTTONS = {
  * build and never ships edits made after it. Without a known version the
  * promote button is dropped — a bare "promote" could ship later work.
  *
+ * With `replies` (one prepared answer per open point) the `conclude` button
+ * becomes `CONCLUDE` and carries `conclusionPrompt(replies)`; a key without
+ * one (ship-successful) gets `CONCLUDE` appended after its own verbs.
+ * index.js#buildDecisionBlock decides which cards pass replies at all.
+ *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
- * @param {{ version?: string|null }} [opts] the version the card is about
+ * @param {{ version?: string|null, replies?: string[] }} [opts] the version the card is about, the prepared answers to its open points
  * @returns {Array<{ label: string, icon: string, prompt: string, primary?: boolean, tooltip: string }>}
  */
 export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
@@ -168,9 +209,18 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
   if (!Array.isArray(list)) return [];
   const version = String((opts && opts.version) || "").trim().replace(/^v/, "");
   const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version) ? version : "";
-  return list
+  const conclusion = conclusionPrompt(opts && opts.replies, lang);
+  const conclude = CONCLUDE[lang] || CONCLUDE.de;
+  const concludeButton = { label: conclude.label, icon: conclude.icon, prompt: conclusion, tooltip: conclude.tooltip };
+  const buttons = list
     .filter((a) => !isPromotePrompt(a.prompt) || semver)
-    .map((a) => (isPromotePrompt(a.prompt) ? { ...a, prompt: `${a.prompt} ${semver}` } : { ...a }));
+    .map(({ conclude: isConclude, ...a }) => {
+      if (isPromotePrompt(a.prompt)) return { ...a, prompt: `${a.prompt} ${semver}` };
+      if (isConclude && conclusion) return { ...a, ...concludeButton };
+      return a;
+    });
+  if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
+  return buttons;
 }
 
 /** A promote button's prompt ("promote beta", "promote stable"). */
@@ -364,13 +414,16 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p))).join("")}</div>`
     : "";
 
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion });
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies });
   const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
   const buttonsHtml = buttons.length
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
       buttons.map((a, i) => {
         const accent = a.primary ? ";border-color:var(--border-accent);color:var(--text-accent)" : "";
-        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt)}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
+        // A multi-line prompt (the conclusion list) keeps its line breaks as
+        // &#10;: getAttribute hands them back as "\n", and a relayed widget
+        // cannot lose them to whitespace tidying.
+        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
           `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
           `${escapeHtml(a.label)} ↗</span>`;
       }).join("\n  ") +
