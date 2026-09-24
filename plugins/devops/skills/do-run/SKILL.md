@@ -92,7 +92,7 @@ It never reorders the options that remain.
 | `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Autonom · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
-| strict already armed for this branch (`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Nur das (`strict off` lifts it, not this question). |
+| strict already armed for this branch (`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
 
 The remaining tokens of `$ARGUMENTS` (or the prompt itself) are the task,
 the backlog filter or the audit target.
@@ -129,7 +129,7 @@ Rules for every question this router asks (spec § "do-run questions"):
   shows as a description suffix instead (Q3), or as a preset (Step 1).
 - **Click-through is a valid run.** Accepting the first option of every
   single-select question and submitting Q4 empty runs: Prompt umsetzen ·
-  Interaktiv · Ship manuell · Mit Umfeld · Harden danach + Polish danach.
+  Interaktiv · Ship manuell · Flexibel · Harden danach + Polish danach.
 - **Parallel labels.** Short, same shape, the verb in the same place — never
   "Ja" / "Nein".
 
@@ -149,8 +149,8 @@ Q2  header: "Ablauf?"       multiSelect: false
 
 Q3  header: "Umfang?"       multiSelect: false
     question: "Wie weit darf die Änderung greifen?"
-    1. "Mit Umfeld (Recommended)"       — Sinnvolles Umfeld mit anpassen (Aufrufer, Tests, Doku).
-    2. "Nur das"                        — Strikt: nur was der Prompt nennt, jede offene Wahl wird berichtet.
+    1. "Flexibel (Recommended)"         — Zieht Nötiges mit: Aufrufer, Tests, Doku.
+    2. "Strikt"                         — Nur was der Prompt nennt; jede offene Wahl wird berichtet.
 
 Q4  header: "Durchgänge?"   multiSelect: true
     question: "Welche Durchgänge kommen dazu? (Leer lassen = Harden + Polish)"   [name every option marked (Recommended) in this call, e.g. "Harden + Polish + Rethink"]
@@ -238,8 +238,8 @@ four-question cap is the only reason for a second follow-up.
 
 ## Step 5 — Umfang
 
-- **Mit Umfeld** → nothing to arm.
-- **Nur das** → strict for this run, through the existing strict machinery
+- **Flexibel** → nothing to arm.
+- **Strikt** → strict for this run, through the existing strict machinery
   (`deep-knowledge/strict.md`, `hooks/lib/strict-state.js`). Arm an inline
   mode exactly as `prompt.strict.enforce` does for `strict: <task>` — never
   over a branch mode or a mode bound to a running concept / autonomous
@@ -308,7 +308,7 @@ step for item 3.
 
 1. **Harden danach** → `Skill("devops:auto-harden")`, args
    `--invoked-by=do-run` (Interaktiv) or `--invoked-by=autonomous` (Autonom), plus
-   `--strict` under Nur das.
+   `--strict` under Strikt.
 2. **Polish danach** → `Skill("devops:auto-polish")`, same args.
 3. **Ship.**
    - `$SHIP=auto`, Interaktiv → `Skill("devops:do-ship")`; it renders the card.

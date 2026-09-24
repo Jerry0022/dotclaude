@@ -88,7 +88,7 @@ describe("base call: fixed option order", () => {
   const EXPECTED = {
     Q1: ["Prompt umsetzen", "Audit", "Backlog"],
     Q2: ["Interaktiv · Ship manuell", "Interaktiv · Ship automatisch", "Autonom · Ship manuell", "Autonom · Ship automatisch"],
-    Q3: ["Mit Umfeld", "Nur das"],
+    Q3: ["Flexibel", "Strikt"],
     Q4: ["Harden danach", "Polish danach", "Rethink vorher", "Budget verbrennen"],
   };
 
@@ -155,7 +155,7 @@ describe("base call: Q3 default = last choice, without reordering", () => {
     expect(skill).toMatch(/Label, marker and order stay unchanged/);
   });
 
-  test("Nur das arms the existing strict machinery, not a reimplementation", () => {
+  test("Strikt arms the existing strict machinery, not a reimplementation", () => {
     const umfang = section(skill, "## Step 5 — Umfang", "## Step 6");
     expect(umfang).toMatch(/hooks\/lib\/strict-state\.js/);
     // One CLI call that arms AND prints the contract only on success — no

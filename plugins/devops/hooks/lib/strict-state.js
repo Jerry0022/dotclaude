@@ -22,7 +22,7 @@
  *   on          `strict on` / `strikt an` / `/claude-strict on` — lives until
  *               `off` or a branch switch.
  *   inline      `strict: <task>` / `/claude-strict <task>` / a literal-scope
- *               phrase / do-run "Nur das" (CLI `inline`) — this turn; the
+ *               phrase / do-run "Strikt" (CLI `inline`) — this turn; the
  *               Stop hook either binds it to a workflow that the turn started
  *               or releases it.
  *   concept /   bound to a workflow state file (`boundTo`); released the moment
@@ -386,7 +386,7 @@ function cli(argv) {
       return 0;
     }
     case 'inline': {
-      // do-run "Nur das" (and a model-decided arm): arm for this turn/run,
+      // do-run "Strikt" (and a model-decided arm): arm for this turn/run,
       // never over a stronger mode. The contract is printed ONLY when the mode
       // is verifiably active afterwards — a printed block the model reads as
       // "strict is armed" while no mode file exists would make the Agent gate
