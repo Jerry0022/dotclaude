@@ -230,6 +230,20 @@ describe("auto-agents start table", () => {
     expect(skill).not.toMatch(/\b(opus|sonnet|haiku|fable) \d+(\.\d+)?\b/i);
   });
 
+  it("says 'newest release' once under the heading, never per row", () => {
+    const lines = block.split("\n");
+    expect(lines[2]).toBe("{start.models}");
+    const rows = lines.filter((l) => /^\| \d+ \|/.test(l));
+    for (const row of rows) expect(cells(row)[2]).not.toMatch(/newest/i);
+    const label = cells(step5.split("\n").find((l) => l.startsWith("| `start.models`")));
+    expect(label[1]).toMatch(/newest release/);
+    expect(label[2]).toMatch(/neueste Version/);
+  });
+
+  it("relays one announce line per parallel launch, never a prose summary", () => {
+    expect(step5).toMatch(/Parallel launches\s+→ every line, one per agent/);
+  });
+
   it("gives effort per task, never with an arrow", () => {
     expect(step5).toMatch(/\*\*Effort — per task\.\*\*/);
     const rows = block.split("\n").filter((l) => /^\| \d+ \|/.test(l));

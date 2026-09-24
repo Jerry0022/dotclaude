@@ -228,7 +228,10 @@ prompts will carry, so it is visible before anything is spawned.
 on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`.
 Every other caller's own gate was the confirmation — do-run's questions
 answered with "Autonom", the concept's implement click, an `--autonomous` pass —
-and the user may be away, so show the plan and continue. Accept:
+and the user may be away, so show the plan and continue — **without its
+Agents table**: the Step 5 start table follows in the same message and is
+the one agent list the user reads (two tables of the same agents in two
+shapes, back to back, is noise). Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
 - de: "ja" / "go" / "mach" → proceed as planned
 - Modifications → adjust plan
@@ -285,11 +288,12 @@ Exact shape (labels per `[ui-locale]`, defaults to `en`):
 ```
 ---
 ### **▶ {start.heading}** · {tier label}
+{start.models}
 | {start.wave} | {start.task} | {start.model} | {start.effort} |
 |---|---|---|---|
-| 1 | devops:core — <what it builds> | sonnet (newest) | medium |
-| 1 | devops:frontend — <what it builds> | sonnet (newest) | medium |
-| 2 | devops:qa — <what it verifies> | sonnet (newest) | medium |
+| 1 | devops:core — <what it builds> | sonnet | medium |
+| 1 | devops:frontend — <what it builds> | sonnet → opus | medium |
+| 2 | devops:qa — <what it verifies> | sonnet | medium |
 | 2 | devops:feature — <what it builds> | <session model> | <session effort> |
 ---
 ```
@@ -297,6 +301,7 @@ Exact shape (labels per `[ui-locale]`, defaults to `en`):
 | Key | en | de |
 |---|---|---|
 | `start.heading` | Execution start | Ausführung startet |
+| `start.models` | `*Models: newest release of each family*` | `*Modelle: jeweils neueste Version der Familie*` |
 | `start.wave` | Wave | Wave |
 | `start.task` | Task | Aufgabe |
 | `start.model` | Model | Modell |
@@ -319,10 +324,12 @@ it is resolved when the table is drawn:
 2. **The cell.** `inherit` → the session's own model, name and version as
    the system prompt states it (`<family> <version>`, lower case, the way
    `pre.agent.announce` prints an inherited model) — that is what the agent
-   runs on. A family alias → `<family> (newest)`: the release is picked by
+   runs on. A family alias → the bare `<family>`: the release is picked by
    the harness at spawn, and writing a version here would be a guess that
-   ages. An override → `<default> → <override> (newest)`, e.g.
-   `sonnet → opus (newest)`.
+   ages. An override → `<default> → <override>`, e.g. `sonnet → opus`.
+   That every alias means the newest release is said **once**, in the
+   `{start.models}` line under the heading — never repeated per row. Drop
+   the line when no row uses an alias (every agent inherits).
 
 **Effort — per task.** The agent's frontmatter `effort` (the Agent tool has
 no effort parameter, so that value is the effective one); `inherit` → the
@@ -331,7 +338,9 @@ ceiling, not the effort.
 
 After the table, relay the `→ Agent … · model · effort` line
 `pre.agent.announce` hands you for each launch, verbatim — the table says
-what will run, the announce line says what just started.
+what will run, the announce line says what just started. Parallel launches
+→ every line, one per agent; a prose summary ("vier Agenten setzen … um")
+never replaces them.
 
 ## Step 6 — Execution
 

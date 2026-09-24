@@ -24,9 +24,12 @@ Every spawn is announced to the user — also under the Quiet output style.
 the line to show verbatim:
 `→ Agent devops:research · opus · high · background — <what>` /
 `→ Agent devops:research · opus → sonnet · high · background — <what>` (spare).
+Parallel spawns → one line each, never a prose summary.
 Models are family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`) —
 the harness resolves each to the newest model of that family, so never pin a
 version (`claude-opus-5-5`) in frontmatter, an override or a prompt.
+`Explore` and `general-purpose` inherit the session model: `Explore` only
+locates — pass `model: "sonnet"`; implementing goes to a devops domain agent.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 

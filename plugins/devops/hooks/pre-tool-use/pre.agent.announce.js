@@ -156,7 +156,9 @@ function main() {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           additionalContext:
-            'Agent spawn — show the user this line verbatim in your next message, also under the Quiet output style:\n' +
+            'Agent spawn — show the user this line verbatim in the next text you write (before your next ' +
+            'tool call if you would otherwise stay silent), also under the Quiet output style. Several ' +
+            'agents started together → every line, one per agent; a prose summary never replaces them:\n' +
             line,
         },
       }));
