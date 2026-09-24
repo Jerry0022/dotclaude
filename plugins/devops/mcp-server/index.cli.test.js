@@ -31,6 +31,12 @@ vi.setConfig({ testTimeout: 30_000 });
 // Desktop cases override it explicitly.
 const CHILD_ENV = { ...process.env, DEVOPS_COMPLETION_NO_USAGE: "1", CLAUDE_CODE_ENTRYPOINT: "cli" };
 
+// Session ids carry a per-run tag: every dotclaude worktree runs this suite
+// against the same OS tmpdir, and a concurrent run (another session) would
+// otherwise overwrite or sweep this run's card-widget / flag files mid-test.
+const RUN = `${process.pid}-${Date.now().toString(36)}`;
+const S = (name) => `cli-test-${RUN}-${name}`;
+
 let workDir;
 
 async function renderCardFull(payload, envOverride = {}) {
@@ -63,7 +69,7 @@ afterAll(() => {
   // Every Desktop render saves its widget HTML to the real tmpdir (#451).
   try {
     for (const f of readdirSync(tmpdir())) {
-      if (f.startsWith("dotclaude-devops-card-widget-cli-test-")) rmSync(join(tmpdir(), f), { force: true });
+      if (f.startsWith(`dotclaude-devops-card-widget-cli-test-${RUN}-`)) rmSync(join(tmpdir(), f), { force: true });
     }
   } catch { /* best effort */ }
 });
@@ -74,7 +80,7 @@ describe("--render-card CLI fallback", () => {
       variant: "analysis",
       summary: "Karte ohne MCP-Server",
       lang: "de",
-      session_id: "cli-test-basic",
+      session_id: S("basic"),
       changes: [{ area: "Completion card", description: "Rendert auch ohne MCP" }],
     });
 
@@ -84,7 +90,7 @@ describe("--render-card CLI fallback", () => {
   });
 
   test("compact: the ship-compact stop as a card — size, saving, command text, one ship button (Desktop)", async () => {
-    const payload = { variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: "cli-test-compact", compact: { tokens: 435000 } };
+    const payload = { variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: S("compact"), compact: { tokens: 435000 } };
     const term = await renderCard(payload);
     expect(term).toMatch(/^## 🗜 Kontext 435 k Tokens — vor dem Ship kompaktieren\?/m);
     expect(term).toContain("Kompaktieren spart beim Ship ≈ 5.4 M Tokens");
@@ -100,7 +106,7 @@ describe("--render-card CLI fallback", () => {
 
   test("compact outranks an open concept page — the ship stop stays the decision", async () => {
     const payload = {
-      variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: "cli-test-compact-concept",
+      variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: S("compact-concept"),
       compact: { tokens: 435000 }, concept: "waiting", pending: [{ name: "devops:qa", doing: "Suite" }],
     };
     const term = await renderCard(payload);
@@ -111,19 +117,19 @@ describe("--render-card CLI fallback", () => {
   });
 
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
-    const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: "cli-test-clean" });
+    const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: S("clean") });
     expect(out).not.toContain("DO NOT OUTPUT THIS BLOCK");
   });
 
   test("the session-title instruction rides on stderr, never in the card", async () => {
-    const { stdout, stderr } = await renderCardFull({ variant: "ready", summary: "Titel-Test", session_id: "cli-test-title", changes: [{ area: "x", description: "y" }] });
+    const { stdout, stderr } = await renderCardFull({ variant: "ready", summary: "Titel-Test", session_id: S("title"), changes: [{ area: "x", description: "y" }] });
     expect(stdout).not.toContain("SESSION TITLE");
     expect(stderr).toContain("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]");
     expect(stderr).toContain('"📦 Ready – " + <stripped title>');
   });
 
   test("the card-widget instruction rides on stderr on the Desktop app only (§ 4)", async () => {
-    const payload = { variant: "ready", summary: "CTA-Test", session_id: "cli-test-cta", changes: [{ area: "x", description: "y" }] };
+    const payload = { variant: "ready", summary: "CTA-Test", session_id: S("cta"), changes: [{ area: "x", description: "y" }] };
     const desktop = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
     expect(desktop.stdout).not.toContain("CARD WIDGET");
     expect(desktop.stderr).toContain("[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]");
@@ -153,7 +159,7 @@ describe("--render-card CLI fallback", () => {
   });
 
   test("a Desktop render saves the widget HTML for the Stop gate and names the file (#451)", async () => {
-    const session = "cli-test-widget-file";
+    const session = S("widget-file");
     const file = join(tmpdir(), `dotclaude-devops-card-widget-${session}`);
     try { unlinkSync(file); } catch { /* best effort */ }
     const payload = { variant: "ready", summary: "Widget-Datei", session_id: session, changes: [{ area: "x", description: "y" }] };
@@ -178,14 +184,14 @@ describe("--render-card CLI fallback", () => {
   // click on an old card is promotion-only and never ships later edits.
   test("the Desktop promote button carries the shipped / promoted version", async () => {
     const shipped = await renderCardFull({
-      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-version",
+      variant: "ship-successful", summary: "Ship", session_id: S("promote-version"),
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
     expect(shipped.stderr).toContain('data-prompt="promote beta 0.193.0"');
     expect(shipped.stderr).toContain('data-prompt="promote stable 0.193.0"');
     const released = await renderCardFull({
-      variant: "released", summary: "Beta", session_id: "cli-test-promote-version-beta",
+      variant: "released", summary: "Beta", session_id: S("promote-version-beta"),
       delivery: { promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
     expect(released.stderr).toContain('data-prompt="promote stable 0.193.0"');
@@ -196,14 +202,14 @@ describe("--render-card CLI fallback", () => {
   // offer a beta promotion any more — only the stable step is left.
   test("a ship-successful card already on beta offers only Promote stable", async () => {
     const onBeta = await renderCardFull({
-      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-on-beta",
+      variant: "ship-successful", summary: "Ship", session_id: S("promote-on-beta"),
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
     expect(onBeta.stderr).toContain('data-prompt="promote stable 0.193.0"');
     expect(onBeta.stderr).not.toContain('data-prompt="promote beta');
     const onStable = await renderCardFull({
-      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-on-stable",
+      variant: "ship-successful", summary: "Ship", session_id: S("promote-on-stable"),
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0", stable: "0.193.0" }, current: "stable" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
@@ -215,7 +221,7 @@ describe("--render-card CLI fallback", () => {
   // past the 3-point cap; the user's own final tests stay out.
   test("ready with open points: the conclude button carries the prepared answers (Desktop)", async () => {
     const payload = {
-      variant: "ready", summary: "Vorbehalte", lang: "de", session_id: "cli-test-conclude",
+      variant: "ready", summary: "Vorbehalte", lang: "de", session_id: S("conclude"),
       open: [
         { text: "Soll die Änderung auch im Terminal-Renderer rein?", reply: "Ja, die Änderung bitte auch im Terminal-Renderer machen." },
         "Doku zur Card nachziehen?",
@@ -246,7 +252,7 @@ describe("--render-card CLI fallback", () => {
     const open = [{ text: "Auch im Terminal?", reply: "Ja, bitte auch im Terminal." }, "Doku nachziehen?"];
     const answer = 'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;- Ja, bitte auch im Terminal.&#10;- Doku nachziehen? Ja, bitte."';
 
-    const test = { variant: "test", summary: "Testen", lang: "de", session_id: "cli-test-conclude-test", open, userTest: ["Seite öffnen"] };
+    const test = { variant: "test", summary: "Testen", lang: "de", session_id: S("conclude-test"), open, userTest: ["Seite öffnen"] };
     const testWidget = (await renderCardFull(test, desktop)).stderr;
     // the test card's own Nachbessern carries the answer — no second button
     expect(testWidget.match(/Nachbessern ↗/g)).toHaveLength(1);
@@ -258,7 +264,7 @@ describe("--render-card CLI fallback", () => {
     expect(testTerm).toMatch(/^3\. 🧪 Seite öffnen$/m);
 
     const ring = (await renderCardFull({
-      variant: "ship-successful", summary: "Ship", lang: "de", session_id: "cli-test-conclude-ring", open,
+      variant: "ship-successful", summary: "Ship", lang: "de", session_id: S("conclude-ring"), open,
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
     }, desktop)).stderr;
@@ -266,17 +272,17 @@ describe("--render-card CLI fallback", () => {
     expect(ring).toContain("Nachbessern ↗");
     expect(ring).toContain(answer);
 
-    const plain = { variant: "ship-successful", summary: "Merge", lang: "de", session_id: "cli-test-conclude-plain", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.193.0" } } };
+    const plain = { variant: "ship-successful", summary: "Merge", lang: "de", session_id: S("conclude-plain"), state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.193.0" } } };
     const plainOpen = (await renderCardFull({ ...plain, open }, desktop)).stderr;
     expect(plainOpen).toContain("Nachbessern ↗");
     expect(plainOpen).not.toContain("Promote");
-    const plainNone = (await renderCardFull({ ...plain, session_id: "cli-test-conclude-plain-none" }, desktop)).stderr;
+    const plainNone = (await renderCardFull({ ...plain, session_id: S("conclude-plain-none") }, desktop)).stderr;
     expect(plainNone).not.toContain('<span role="button"');
   });
 
   test("ready without open points keeps the plain Ändern button", async () => {
     const { stderr } = await renderCardFull(
-      { variant: "ready", summary: "Ohne", lang: "de", session_id: "cli-test-conclude-none", userFinalTest: ["Im Desktop klicken"] },
+      { variant: "ready", summary: "Ohne", lang: "de", session_id: S("conclude-none"), userFinalTest: ["Im Desktop klicken"] },
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
     expect(stderr).toContain("Ändern ↗");
@@ -285,7 +291,7 @@ describe("--render-card CLI fallback", () => {
 
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {
     const desktop = await renderCardFull(
-      { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-md", cta: { description: "läuft auf Port 3000" } },
+      { variant: "test-minimal", summary: "Dev-Server", session_id: S("minimal-md"), cta: { description: "läuft auf Port 3000" } },
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
     expect(desktop.stdout).toMatch(/^› läuft auf Port 3000$/m);
@@ -294,14 +300,14 @@ describe("--render-card CLI fallback", () => {
 
   test("test-minimal never rides the card-widget instruction, even on Desktop", async () => {
     const desktop = await renderCardFull(
-      { variant: "test-minimal", summary: "Dev-Server", session_id: "cli-test-minimal-widget" },
+      { variant: "test-minimal", summary: "Dev-Server", session_id: S("minimal-widget") },
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
     expect(desktop.stderr).not.toContain("CARD WIDGET");
   });
 
   test("satisfies the Stop gate by writing the card-rendered flag", async () => {
-    const sessionId = "cli-test-flag";
+    const sessionId = S("flag");
     try { unlinkSync(flagFile(sessionId)); } catch { /* not there yet */ }
 
     await renderCard({ variant: "analysis", summary: "Flag-Test", session_id: sessionId });
@@ -311,8 +317,8 @@ describe("--render-card CLI fallback", () => {
   });
 
   test("attests validation only when the field is populated", async () => {
-    const withItems = "cli-test-attested";
-    const without = "cli-test-unattested";
+    const withItems = S("attested");
+    const without = S("unattested");
     for (const s of [withItems, without]) {
       try { unlinkSync(attestedFile(s)); } catch { /* not there yet */ }
     }
@@ -337,7 +343,7 @@ describe("--render-card CLI fallback", () => {
     const out = await renderCard({
       variant: "ready",
       summary: "x".repeat(120),
-      session_id: "cli-test-coercions",
+      session_id: S("coercions"),
       // The MCP schema accepts these as JSON strings; the CLI must too.
       changes: JSON.stringify([
         { area: "A", description: "first" },
@@ -358,7 +364,7 @@ describe("--render-card CLI fallback", () => {
       variant: "ready",
       summary: "Agent läuft noch",
       lang: "de",
-      session_id: "cli-test-pending",
+      session_id: S("pending"),
       pending: JSON.stringify([{ name: "devops:frontend", doing: "Farbstil" }]),
     });
     expect(out).toMatch(/^## ⏳ Noch nicht fertig/m);
@@ -367,7 +373,7 @@ describe("--render-card CLI fallback", () => {
   });
 
   test("writes the pending-attested flag so the Stop gate is satisfied", async () => {
-    const session = "cli-test-pending-flag";
+    const session = S("pending-flag");
     const attested = join(tmpdir(), `dotclaude-devops-pending-attested-${session}`);
     try { unlinkSync(attested); } catch { /* best effort */ }
 
@@ -389,30 +395,30 @@ describe("--render-card CLI fallback", () => {
   // ask where the ship card was. An unknown variant is now a hard error that
   // names the valid ones — the MCP path already rejects it via the zod enum.
   test("REGRESSION (#406): an unknown variant exits 2 with the valid variants on stderr and writes no flag", async () => {
-    const err = await renderCardFull({ variant: "ship", summary: "Falsche Variante", session_id: "cli-test-406-variant" })
+    const err = await renderCardFull({ variant: "ship", summary: "Falsche Variante", session_id: S("406-variant") })
       .then(() => null, (e) => e);
     expect(err).not.toBeNull();
     expect(err.code).toBe(2);
     expect(err.stderr).toMatch(/variant: "ship" is not a card variant/);
     expect(err.stderr).toMatch(/ship-successful\|ready\|released\|ship-blocked\|test\|test-minimal\|analysis\|aborted\|fallback\|ready-files/);
     expect(err.stdout).toBe("");
-    expect(existsSync(flagFile("cli-test-406-variant"))).toBe(false);
+    expect(existsSync(flagFile(S("406-variant")))).toBe(false);
   });
 
   test("#406: ship-successful without the merge proof exits 2 naming state.pushed + state.merged", async () => {
     const err = await renderCardFull({
-      variant: "ship-successful", summary: "Ohne Beweis", session_id: "cli-test-406-proof",
+      variant: "ship-successful", summary: "Ohne Beweis", session_id: S("406-proof"),
       state: { branch: "main", commit: "abc1234" },
     }).then(() => null, (e) => e);
     expect(err).not.toBeNull();
     expect(err.code).toBe(2);
     expect(err.stderr).toMatch(/state: ship-successful requires the merge proof state\.pushed: true and state\.merged/);
-    expect(existsSync(flagFile("cli-test-406-proof"))).toBe(false);
+    expect(existsSync(flagFile(S("406-proof")))).toBe(false);
   });
 
   test("#406: a real ship-successful payload still renders the SHIPPED card", async () => {
     const out = await renderCard({
-      variant: "ship-successful", summary: "Echter Ship", session_id: "cli-test-406-real", lang: "de",
+      variant: "ship-successful", summary: "Echter Ship", session_id: S("406-real"), lang: "de",
       state: { branch: "main", commit: "abc1234", pushed: true, merged: "main", pr: { number: 7, title: "fix: x" } },
       cta: { vOld: "1.0.0", vNew: "1.0.1", bump: "patch" },
       delivery: { pr: { number: 7, title: "fix: x" }, ship: { version: "1.0.1", base: "main" } },
@@ -423,7 +429,7 @@ describe("--render-card CLI fallback", () => {
 
   test("#406: unknown top-level keys are reported on stderr (parity with the zod strip) but never reject", async () => {
     const res = await renderCardFull({
-      variant: "ready", summary: "Fremde Keys", session_id: "cli-test-406-keys",
+      variant: "ready", summary: "Fremde Keys", session_id: S("406-keys"),
       links: "https://example.invalid/pr/1", validationNotes: "plain string",
     });
     expect(res.stderr).toMatch(/ignored unknown top-level key\(s\): links, validationNotes/);
@@ -448,7 +454,7 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
     const out = await renderCard({
       variant: "ready",
       summary: "Card aus dem Offline-Pfad",
-      session_id: "cli-test-396-strings",
+      session_id: S("396-strings"),
       changes: [
         "Completion card → Changes-Bullets werden gelesen",
         "Ship: merged ohne Tag",
@@ -470,7 +476,7 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
     const err = await renderCardFull({
       variant: "ready",
       summary: "Kaputt",
-      session_id: "cli-test-396-invalid",
+      session_id: S("396-invalid"),
       changes: [{ area: "A" }, 42],
       pending: [{ kind: "agent" }],
     }).then(() => null, (e) => e);
@@ -482,14 +488,14 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
     expect(err.stderr).toMatch(/changes\[1\]: must be \{ area, description \}/);
     expect(err.stderr).toMatch(/pending\[0\]: name must be a string/);
     expect(err.stdout).toBe("");                       // nothing half-rendered on stdout
-    expect(existsSync(flagFile("cli-test-396-invalid"))).toBe(false); // the Stop gate is NOT satisfied
+    expect(existsSync(flagFile(S("396-invalid")))).toBe(false); // the Stop gate is NOT satisfied
   });
 
   test("string entries in `tests` and `validation` are coerced and folded into the evidence row", async () => {
     const out = await renderCard({
       variant: "ready",
       summary: "Coercion",
-      session_id: "cli-test-396-tests",
+      session_id: S("396-tests"),
       tests: ["npm test → 12 grün", "eslint"],
       validation: ["Anforderung erfüllt — Test grün"],
       state: { branch: "feat/x", pushed: true },
