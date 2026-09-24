@@ -33,7 +33,7 @@
  *   record(cwd, event, {now})                     → event | null (adds t, c; dedupes edit runs)
  *   close(cwd, reason, {aborted, now})            → header | null
  *   events(cwd)                                   → event[] of the current contract
- *   markPendingArm(cwd, {sessionId, now}) / pendingArm(cwd, {now}) / clearPendingArm(cwd)
+ *   markPendingArm(cwd, {sessionId, args, now}) / pendingArm(cwd, {now}) / clearPendingArm(cwd)
  *   markBatchHandoff(cwd, {sessionId, now}) / batchHandoffPending(cwd, {now}) / clearBatchHandoff(cwd)
  *   extractAnswers(toolResponse, toolInput)       → {questions, answers}
  *   isRouterCall(questions)                       → boolean
@@ -46,6 +46,7 @@
  *   segmentHasWork(seg)                           → boolean
  *   openObligations(contract, events, gate, ctx)  → [{ob, why, fix, item?}]
  *   formatBlock(contract, open, gate, {libPath})  → string (stderr block, spec D)
+ *   chosenLine(contract)                          → string ("Backlog · Autonom · Ship automatisch · Harden + Polish")
  *   summaryForCard(contract, events, lang, ctx)   → string | null (card line, spec J)
  *   cli(argv, {cwd, now})                         → exit code (prints one JSON line)
  *
@@ -356,6 +357,7 @@ function close(cwd, reason, opts = {}) {
 function markPendingArm(cwd, opts = {}) {
   if (disabled()) return null;
   const m = { at: new Date(nowOf(opts)).toISOString(), sessionId: opts.sessionId || null };
+  if (typeof opts.args === 'string' && opts.args.trim()) m.args = opts.args.slice(0, ARGS_MAX);
   return writeJsonAtomic(pendingPath(cwd), m) ? m : null;
 }
 
@@ -1087,5 +1089,5 @@ module.exports = {
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   extractAnswers, isRouterCall, parseRouterAnswers, parseFollowUp, parseMachinePrompt,
   skillName, segments, currentSegment, segmentHasWork, openObligations,
-  formatBlock, summaryForCard, cli,
+  formatBlock, chosenLine, summaryForCard, cli,
 };
