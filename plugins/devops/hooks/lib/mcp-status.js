@@ -1,6 +1,6 @@
 /**
  * @module mcp-status
- * @version 0.1.0
+ * @version 0.2.0
  * @description Shared helpers for inspecting devops MCP server health, used by
  *   ss.mcp.verify (cache-file presence at session start) and pre.ship.guard
  *   (heartbeat liveness when deciding between "deferred" vs "genuinely absent").
@@ -17,39 +17,19 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
-const PID_PREFIX = 'dotclaude-mcp-';
-
-function pidFileFor(serverName) {
-  return path.join(os.tmpdir(), `${PID_PREFIX}${serverName}.pid`);
-}
-
-function isProcessAlive(pid) {
-  try {
-    process.kill(pid, 0); // signal 0 = existence check, no kill
-    return true;
-  } catch (err) {
-    // EPERM = process exists but we lack permission → alive
-    return err.code === 'EPERM';
-  }
-}
+// Liveness is read by ONE module (per-process heartbeat files + the legacy
+// single file) — see mcp-heartbeat.js.
+const { pidFileFor, isProcessAlive, isMcpServerAlive } = require('./mcp-heartbeat');
 
 /**
- * Is the named MCP server reporting alive via its heartbeat PID file?
- * Returns false when the PID file is absent, unreadable, or the PID is dead.
+ * Is the named MCP server reporting alive via a heartbeat PID file?
+ * False when no heartbeat file names a live process.
  * @param {string} serverName  e.g. "dotclaude-ship"
  * @returns {boolean}
  */
 function isServerAlive(serverName) {
-  let pid;
-  try {
-    pid = parseInt(fs.readFileSync(pidFileFor(serverName), 'utf8').trim(), 10);
-  } catch {
-    return false;
-  }
-  if (!pid || Number.isNaN(pid)) return false;
-  return isProcessAlive(pid);
+  return isMcpServerAlive(serverName);
 }
 
 /**
