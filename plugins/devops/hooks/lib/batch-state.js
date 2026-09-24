@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.5.0
+ * @version 0.6.0
  * @description State and classification for the `/do-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -346,6 +346,104 @@ function archiveNotes(cwd, stampSource) {
   const dest = path.join(claudeDir(cwd), `batch-${stamp}.md`);
   fs.renameSync(file, dest);
   return dest;
+}
+
+// ── pasted images (Desktop app) ───────────────────────────────────────────
+
+/**
+ * The Desktop app sends a pasted image as its own content block: the
+ * UserPromptSubmit payload carries neither an `[Image #N]` placeholder nor an
+ * attachment key, so `hasAttachment()` cannot see it and the prompt is
+ * collected as text only (#490). The image is not lost, though — the harness
+ * saves every image pasted into a session to
+ * `<tmp>/claude/<project-slug>/<session_id>/images/<n>.<ext>` when the prompt
+ * is submitted. Its mtime matches the note's timestamp to the millisecond, so
+ * a note finds its image by time, and a copy next to the notes survives a temp
+ * cleanup.
+ */
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+
+/** How far an image's mtime may sit from its note's timestamp. */
+const IMAGE_MATCH_WINDOW_MS = 3000;
+
+/** Copies live here, covered by the same `/.claude/batch*` exclude as the notes.
+ *  They are never moved — archived notes keep pointing at valid files. */
+function assetsDir(cwd) { return path.join(claudeDir(cwd), 'batch-assets'); }
+
+/** Source image → copy, so no image is ever assigned to two notes. */
+function capturedPath(cwd) { return path.join(assetsDir(cwd), 'captured.json'); }
+
+/**
+ * Every `images` directory the harness keeps for this session. The project
+ * slug is the harness's own encoding of the cwd, so it is globbed, not derived.
+ * @returns {string[]}
+ */
+function sessionImageDirs(sessionId, tmpRoot = os.tmpdir()) {
+  if (typeof sessionId !== 'string' || !/^[\w-]+$/.test(sessionId)) return [];
+  const base = path.join(tmpRoot, 'claude');
+  let slugs;
+  try { slugs = fs.readdirSync(base); } catch { return []; }
+  const dirs = [];
+  for (const slug of slugs) {
+    const dir = path.join(base, slug, sessionId, 'images');
+    try { if (fs.statSync(dir).isDirectory()) dirs.push(dir); } catch { /* not this slug */ }
+  }
+  return dirs;
+}
+
+/** @returns {{file:string, mtimeMs:number}[]} */
+function listSessionImages(sessionId, tmpRoot) {
+  const out = [];
+  for (const dir of sessionImageDirs(sessionId, tmpRoot)) {
+    let names;
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!IMAGE_EXT.test(name)) continue;
+      const file = path.join(dir, name);
+      try { out.push({ file, mtimeMs: fs.statSync(file).mtimeMs }); } catch { /* vanished */ }
+    }
+  }
+  return out;
+}
+
+function readCaptured(cwd) {
+  try { return JSON.parse(fs.readFileSync(capturedPath(cwd), 'utf8')) || {}; } catch { return {}; }
+}
+
+/**
+ * Copy this session's images whose mtime lies within the window of `at` and
+ * that no earlier note already took, into `.claude/batch-assets/`.
+ *
+ * @param {string} cwd
+ * @param {string} sessionId hook input `session_id`
+ * @param {number} at epoch ms of the note
+ * @param {{tmpRoot?:string, windowMs?:number}} [opts]
+ * @returns {string[]} absolute paths of the copies, oldest image first
+ */
+function captureSessionImages(cwd, sessionId, at, opts = {}) {
+  const windowMs = opts.windowMs ?? IMAGE_MATCH_WINDOW_MS;
+  const captured = readCaptured(cwd);
+  const hits = listSessionImages(sessionId, opts.tmpRoot)
+    .filter(img => Math.abs(img.mtimeMs - at) <= windowMs)
+    .filter(img => !captured[`${img.file}|${Math.round(img.mtimeMs)}`])
+    .sort((a, b) => a.mtimeMs - b.mtimeMs);
+  if (!hits.length) return [];
+  fs.mkdirSync(assetsDir(cwd), { recursive: true });
+  const stamp = new Date(at).toISOString().replace(/[:.]/g, '-');
+  const copies = [];
+  hits.forEach((img, i) => {
+    const dest = path.join(assetsDir(cwd), `${stamp}-${i + 1}${path.extname(img.file).toLowerCase()}`);
+    fs.copyFileSync(img.file, dest);
+    captured[`${img.file}|${Math.round(img.mtimeMs)}`] = dest;
+    copies.push(dest);
+  });
+  fs.writeFileSync(capturedPath(cwd), JSON.stringify(captured, null, 2), 'utf8');
+  return copies;
+}
+
+/** The note lines that tie copies to their note — the merge opens each one. */
+function attachmentFileLines(copies) {
+  return copies.map(p => `[Anhang-Datei] ${p}`).join('\n');
 }
 
 // ── activity clock ─────────────────────────────────────────────────────────
@@ -820,6 +918,7 @@ module.exports = {
   loadConfig, saveConfig,
   readMode, isModeActive, expiryReason, activate, deactivate,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
+  IMAGE_MATCH_WINDOW_MS, assetsDir, sessionImageDirs, listSessionImages, captureSessionImages, attachmentFileLines,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode, renderHelp,

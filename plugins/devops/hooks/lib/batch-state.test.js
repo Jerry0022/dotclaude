@@ -804,3 +804,20 @@ describe("help route and the long-form summary", () => {
     expect(readNotes(cwd).map(n => n.text)).toEqual(["eins"]);
   });
 });
+
+describe("sessionImageDirs — the harness images folder of one session (#490)", () => {
+  test("finds the folder under any project slug, and nothing for a foreign or unsafe id", async () => {
+    const { sessionImageDirs } = await import("./batch-state.js");
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-img-dirs-"));
+    try {
+      const dir = path.join(tmpRoot, "claude", "C--proj", "abc-123", "images");
+      fs.mkdirSync(dir, { recursive: true });
+      expect(sessionImageDirs("abc-123", tmpRoot)).toEqual([dir]);
+      expect(sessionImageDirs("other", tmpRoot)).toEqual([]);
+      expect(sessionImageDirs("../abc-123", tmpRoot)).toEqual([]);
+      expect(sessionImageDirs(undefined, tmpRoot)).toEqual([]);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});

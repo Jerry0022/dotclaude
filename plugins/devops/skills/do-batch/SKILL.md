@@ -246,6 +246,17 @@ a guard telling you to file it. Do that, and nothing else:
 Without this, the note reaches the merge as "mach das so wie hier" with no
 "hier" — the linkage the user actually cared about is the first thing lost.
 
+**Desktop-app images are the exception — the hook files them itself (#490).**
+The Desktop app sends a pasted image as its own content block: the prompt
+carries no `[Image #N]` and no attachment key, so it IS collected (the user
+sees the red collect panel, as for any note). The harness has already saved
+the image to `<tmp>/claude/<project-slug>/<session_id>/images/`; the hook
+copies every image whose mtime matches the prompt (±3 s) to
+`.claude/batch-assets/<note-timestamp>-<n>.<ext>` and appends
+`[Anhang-Datei] <copy>` to the note. The panel says "📎 Das Bild ist mit der
+Notiz gespeichert". Nothing for you to do; the copies are never moved, so
+archived notes keep valid paths.
+
 ## Step 3 — Status
 
 Read the mode and notes via `batch-state.js`, plus
@@ -317,7 +328,11 @@ index it carries is a checksum, not a substitute.
 
 **A note's `[Anhang]` / `[Anhang-Datei]` lines belong to that note and to no
 other.** Where an `[Anhang-Datei]` path still exists, open it before judging the
-note. Where only the `[Anhang]` description survives, that description IS the
+note. The injected merge context already carries `[Anhang-Datei]` lines the
+hook matched late: a note without one whose timestamp matches an image of this
+session (±3 s) gets it at merge time — `batch.md` itself is not rewritten.
+Where a note refers to an image ("siehe Bild", "Screenshot") and neither
+path nor description exists, say so in its coverage line instead of guessing. Where only the `[Anhang]` description survives, that description IS the
 evidence — do not silently drop the note for lacking the image.
 
 **4.2 Write the coverage list before planning.** Exactly one line per note,
@@ -409,7 +424,9 @@ the scope with the user.
 **4.7 Archive, do not delete.** Before the hand-off, call `archiveNotes(cwd)`
 — it renames `batch.md` to `batch-<timestamp>.md`. The originals stay
 recoverable; a merge must never be the only record of what the user actually
-wrote. The archived path travels with the hand-off (4.9).
+wrote. The archived path travels with the hand-off (4.9). Image copies in
+`.claude/batch-assets/` stay where they are — their names carry the note's
+timestamp, so the archived notes still point at them.
 
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/do-batch go` path
