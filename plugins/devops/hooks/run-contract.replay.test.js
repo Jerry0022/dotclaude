@@ -140,6 +140,32 @@ describe("replay A — backlog session", () => {
   });
 });
 
+describe("replay A' — the same backlog session started by a typed /do-run (R2)", () => {
+  test("R2: typed /do-run backlog arms backlog mode, gates stay on", () => {
+    const PROMPT = path.join(__dirname, "user-prompt-submit", "prompt.run.contract.js");
+    run(PROMPT, { hook_event_name: "UserPromptSubmit", prompt: "/do-run backlog" });
+    expect(RC.pendingArm(dir)).toMatchObject({ args: "backlog" });
+    post("AskUserQuestion", { questions: ROUTER_Q }, { questions: ROUTER_Q, answers: ROUTER_A });
+    post("AskUserQuestion", { questions: FOLLOW_Q }, { questions: FOLLOW_Q, answers: FOLLOW_A });
+    const c = RC.readContract(dir);
+    expect(c).toMatchObject({ mode: "backlog", flow: "autonomous", ship: "auto", passes: ["harden", "polish"] });
+    expect(c.items).toHaveLength(6);
+
+    const w = pre("Write", { file_path: path.join(dir, "plugins/devops/hooks/lib/non-user-prompt.js"), content: "x" });
+    expect(w.code).toBe(2);
+    expect(w.stderr).toContain("auto-agents");
+    const tri = pre("Skill", { skill: "devops:auto-agents", args: "--from=do-run #473" });
+    expect(tri.code).toBe(2);
+    expect(tri.stderr).toContain("triage");
+  });
+
+  test("R2: without the marker, the Issues follow-up upgrades the defaulted prompt contract", () => {
+    post("AskUserQuestion", { questions: ROUTER_Q }, { questions: ROUTER_Q, answers: ROUTER_A });
+    post("AskUserQuestion", { questions: FOLLOW_Q }, { questions: FOLLOW_Q, answers: FOLLOW_A });
+    expect(RC.readContract(dir)).toMatchObject({ mode: "backlog" });
+  });
+});
+
 describe("replay B — batch session", () => {
   test("refused at the first Edit after the fire until do-run is invoked", () => {
     B.activate(dir, { marker: ">>" });

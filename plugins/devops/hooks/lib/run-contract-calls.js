@@ -8,7 +8,7 @@
  *   call the same way. Pure parsing plus two small fs reads (card payload,
  *   transcript tail); no git, no contract state.
  *
- *   commandFacts(cmd)          → {commit, branch, branchName, renderCard}
+ *   commandFacts(cmd)          → {commit, branch, branchName, renderCard, worktree, detach, release}
  *   toolFilePath(tool, input)  → string | null
  *   isGatedPath(root, cwd, p)  → boolean (inside the work tree, not exempt)
  *   closesOf(body)             → ["473", …] from "Closes #473" / "Fixes #…"
@@ -16,6 +16,8 @@
  *   readCardPayload(file, cwd) → object | null
  *   releaseResult(response)    → {ok, merged} | null
  *   routerFromTranscript(transcriptPath, sinceIso) → {questions, answers, followUps[]} | null
+ *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
+ *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
  */
 
 const fs = require('fs');
@@ -32,9 +34,9 @@ function stripQuotes(cmd) {
   return String(cmd || '').replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'[^']*'/g, "''");
 }
 
-/** Leading `(`, `{`, `VAR=value ` and `sudo ` removed from one segment. */
+/** Leading `(`, `{`, `&` (PowerShell call operator), `VAR=value ` and `sudo ` removed from one segment. */
 function bareSegment(seg) {
-  let s = seg.trim().replace(/^[({\s]+/, '');
+  let s = seg.trim().replace(/^[({&\s]+/, '');
   for (;;) {
     const next = s.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S*\s+/, '').replace(/^sudo\s+/, '');
     if (next === s) return s;
@@ -42,7 +44,10 @@ function bareSegment(seg) {
   }
 }
 
-const GIT_RE = /^git(?:\s+-[cC]\s+\S+)*\s+(\S+)(.*)$/s;
+// `git`, `git.exe`, `/usr/bin/git`, then git's global flags before the subcommand.
+const GIT_RE = /^(?:\S*[\\/])?git(?:\.exe)?(?:\s+(?:-[cC]\s+\S+|--no-pager|--paginate|-p|-P|--bare|--no-replace-objects|--literal-pathspecs|--(?:git-dir|work-tree|namespace|exec-path|config-env)(?:=\S+|\s+\S+)))*\s+(\S+)(.*)$/s;
+const GH_MERGE_RE = /^(?:\S*[\\/])?gh(?:\.exe)?\s+pr\s+merge\b/;
+const PUSH_MAIN_RE = /(^|\s)(?:[^\s:]*:)?(?:refs\/heads\/)?(main|master)(\s|$)/;
 
 /**
  * Facts of a Bash / PowerShell command line.
@@ -50,18 +55,22 @@ const GIT_RE = /^git(?:\s+-[cC]\s+\S+)*\s+(\S+)(.*)$/s;
  * @returns {{commit:boolean, branch:boolean, branchName:string|null, renderCard:string|null}}
  */
 function commandFacts(cmd) {
-  const out = { commit: false, branch: false, branchName: null, renderCard: null };
+  const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false };
   if (typeof cmd !== 'string' || !cmd.trim()) return out;
   const rc = cmd.match(/index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
   if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
   const segs = stripQuotes(cmd).split(/&&|\|\||[;|\n]/);
   const rawSegs = cmd.split(/&&|\|\||[;|\n]/);
   segs.forEach((seg, i) => {
-    const m = bareSegment(seg).match(GIT_RE);
+    const bare = bareSegment(seg);
+    if (GH_MERGE_RE.test(bare)) out.release = true;
+    const m = bare.match(GIT_RE);
     if (!m) return;
     const sub = m[1];
     const rest = m[2] || '';
     if (sub === 'commit' && !/(^|\s)--dry-run\b/.test(rest)) out.commit = true;
+    // A push straight onto main / master (`HEAD:main`, `:main`, `origin main`) is a ship.
+    if (sub === 'push' && PUSH_MAIN_RE.test(rest) && !/(^|\s)--dry-run\b/.test(rest)) out.release = true;
     let name = null;
     let hit = false;
     const raw = rawSegs.length === segs.length ? bareSegment(rawSegs[i]) : bareSegment(seg);
@@ -75,6 +84,7 @@ function commandFacts(cmd) {
       name = n ? n[1] : null;
     } else if (sub === 'worktree' && /^\s+add\b/.test(rest)) {
       hit = true;
+      out.worktree = true;
       const b = raw.match(/\s-[bB]\s+(\S+)/);
       if (b) name = b[1];
       else {
@@ -84,10 +94,44 @@ function commandFacts(cmd) {
     }
     if (hit) {
       out.branch = true;
+      if (/(^|\s)--detach\b/.test(rest)) out.detach = true;
       if (name && !out.branchName) out.branchName = name.replace(/^["']|["']$/g, '');
     }
   });
   return out;
+}
+
+function gitOut(root, args) {
+  try {
+    const { execFileSync } = require('child_process');
+    return execFileSync('git', args, {
+      cwd: root, timeout: 3000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+    }).trim() || null;
+  } catch { return null; }
+}
+
+/**
+ * The branch a new branch is created FROM. PreToolUse: HEAD. PostToolUse
+ * (`after`): HEAD already is the new branch → the previous one (`@{-1}`).
+ */
+function baseBranch(root, newName, after) {
+  const head = gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (after && head && newName && head === newName) return gitOut(root, ['rev-parse', '--abbrev-ref', '@{-1}']);
+  return head;
+}
+
+/**
+ * Is a branch creation an ITEM boundary (backlog event + branch gate, R6)?
+ * Not from a subagent (`agent_id`), not `git worktree add`, not `--detach`,
+ * and not a sub-branch `<current>-…` / `<current>/…` (agents' own branches).
+ */
+function isItemBranch(facts, hook, current) {
+  if (!facts || !facts.branch) return false;
+  if (hook && hook.agent_id) return false;
+  if (facts.worktree || facts.detach) return false;
+  const name = facts.branchName;
+  if (name && current && current !== 'HEAD' && (name.startsWith(`${current}-`) || name.startsWith(`${current}/`))) return false;
+  return true;
 }
 
 function toolFilePath(toolName, input) {
@@ -219,5 +263,5 @@ function routerFromTranscript(transcriptPath, sinceIso, RC) {
 module.exports = {
   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS,
   commandFacts, toolFilePath, isGatedPath, closesOf, cardFacts, readCardPayload,
-  releaseResult, routerFromTranscript, stripQuotes,
+  releaseResult, routerFromTranscript, stripQuotes, gitOut, baseBranch, isItemBranch, readTail,
 };

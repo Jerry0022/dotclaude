@@ -287,17 +287,25 @@ A conscious deviation is one CLI call, never a silent skip — the completion
 card shows it as ⚠:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" skip <ob> --reason "<why>"
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" done
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" status
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" skip <ob> [--item <N>] --reason "<why>"
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" done
+node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
 ```
 
-`done` closes the contract when the run is genuinely over (`prompt` / `audit`:
-after the final card; `backlog`: on `done` or when every queued item shipped
-or was skipped). `abort` closes an interrupted or blocked run before its
-card — the card still shows it, with the open obligations. `status` prints
-the header and what is still open for the current segment.
+`status` prints the header and what is still open for the current segment.
+`skip` is one conscious skip (card: ⚠). `park` (backlog) records a blocked /
+`⏸ Rückfrage` item once — it satisfies every open obligation of that item and
+ends its segment. `abort` closes a run that is over with open steps (card:
+✗ + reason) — before its card. `done` only when every chosen step ran
+(`prompt` / `audit`: the final card closes it anyway; `backlog`: once every
+queued item shipped, was skipped or parked); with open obligations it
+refuses unless `--reason` is given, and then closes as aborted. `batch-clear`
+drops a stale do-batch hand-off marker. The contract, its markers and the
+card line belong to the session that armed them — a `.claude/` copied into a
+new worktree never gates another session.
 
 ## Step 6 — Run the mode
 

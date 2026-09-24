@@ -37,6 +37,8 @@ const BATCH_BLOCK = [
   'A ready plan goes to Skill("devops:do-run", "--from=do-batch …"), a plan with',
   'open decisions to Skill("devops:auto-concept", "--from=do-batch …") — never',
   'implemented directly. Reading, exploring and planning stay allowed.',
+  `Stale marker / not a do-batch hand-off: node "${LIB}" batch-clear --reason "<why>"`,
+  'Kill switch (every run-contract gate): DOTCLAUDE_RUN_CONTRACT=off',
 ].join('\n');
 
 function gitNames(root, args) {
@@ -45,6 +47,21 @@ function gitNames(root, args) {
     cwd: root, timeout: 5000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
   });
   return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * The qa diff base (R9): an explicit base, else origin/HEAD's branch, else
+ * `main`, then `master` when that exists locally or on origin.
+ */
+function resolveBase(root, explicit, C) {
+  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  const sym = C.gitOut(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+  if (sym) return sym.replace(/^origin\//, '');
+  for (const b of ['main', 'master']) {
+    if (C.gitOut(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`])
+      || C.gitOut(root, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${b}`])) return b;
+  }
+  return 'main';
 }
 
 /** Changed code files for the qa rule, or null (unknown). */
@@ -71,12 +88,17 @@ function classify(hook, root, cwd, C) {
     const gates = [];
     let batch = false;
     if (f.commit) { gates.push('commit'); batch = true; }
-    if (f.branch) gates.push('branch');
-    if (f.renderCard) {
-      const payload = C.readCardPayload(f.renderCard, cwd);
-      if (payload && C.cardFacts(payload).final) gates.push('card');
+    if (f.branch && C.isItemBranch(f, hook, hook.agent_id || f.worktree || f.detach ? null : C.baseBranch(root, f.branchName, false))) {
+      gates.push('branch');
     }
-    return gates.length ? { gates, batch } : null;
+    if (f.renderCard) {
+      // Unreadable payload (`-` = stdin, `$var`, missing file) → gated as a final card.
+      const payload = C.readCardPayload(f.renderCard, cwd);
+      if (!payload || C.cardFacts(payload).final) gates.push('card');
+    }
+    // gh pr merge / git push onto main|master → release gate (ship: auto only).
+    if (f.release) gates.push('release');
+    return gates.length ? { gates, batch, shellRelease: f.release } : null;
   }
   if (tool === 'Skill') {
     const RC = require('../lib/run-contract');
@@ -92,9 +114,12 @@ function classify(hook, root, cwd, C) {
 }
 
 /** Spec B: a do-run started but its answers were never recorded — arm now. */
-function armFromPending(hook, root, RC, C) {
-  const marker = RC.pendingArm(root);
+function armFromPending(hook, root, RC, C, sessionId) {
+  const marker = RC.pendingArm(root, { sessionId });
   if (!marker) return null;
+  // R1: a do-run that skipped the router (resume, machine prompt, backlog's
+  // own sub-run) never replaces the contract the user already chose.
+  if (RC.readContract(root, { sessionId })) { RC.clearPendingArm(root); return null; }
   const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC);
   let fields = null;
   let source = 'router';
@@ -106,19 +131,23 @@ function armFromPending(hook, root, RC, C) {
     const q4 = { header: 'Durchgänge?', question: 'Durchgänge?', options: [{ label: 'Harden danach (Recommended)' }, { label: 'Polish danach (Recommended)' }] };
     fields = RC.parseRouterAnswers([q4], {}, { doRunArgs: marker.args });
   }
-  const h = RC.arm(root, { ...fields, source, sessionId: hook.session_id || marker.sessionId || null });
+  const h = RC.arm(root, { ...fields, source, sessionId: sessionId || marker.sessionId || null });
   RC.clearPendingArm(root);
-  if (h && found) for (const patch of found.followUps) RC.update(root, patch);
+  if (h && found) for (const patch of found.followUps) RC.applyFollowUp(root, patch, { sessionId });
   return h ? { source } : null;
 }
 
 function main(hook) {
   const cwd = hook.cwd || process.cwd();
   const root = projectRoot(cwd);
-  const dir = path.join(root, '.claude');
-  if (!fs.existsSync(path.join(dir, 'run-contract.json'))
-    && !fs.existsSync(path.join(dir, 'run-contract.pending'))
-    && !fs.existsSync(path.join(dir, 'batch-handoff.json'))) return 0;
+  // ship_release / the card act on tool_input.cwd — its root is tried second.
+  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const inputRoot = typeof input.cwd === 'string' && input.cwd.trim() && String(hook.tool_name || '').startsWith('mcp__')
+    ? projectRoot(input.cwd) : null;
+  const roots = inputRoot && inputRoot !== root ? [root, inputRoot] : [root];
+  const hasState = (r) => ['run-contract.json', 'run-contract.pending', 'batch-handoff.json']
+    .some(n => fs.existsSync(path.join(r, '.claude', n)));
+  if (!roots.some(hasState)) return 0;
 
   const C = require('../lib/run-contract-calls');
   const call = classify(hook, root, cwd, C);
@@ -127,21 +156,33 @@ function main(hook) {
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return 0;
 
-  if (call.batch && RC.batchHandoffPending(root)) {
+  const sessionId = hook.session_id || null;
+  if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
     process.stderr.write(`${BATCH_BLOCK}\n`);
     return 2;
   }
 
-  const armed = armFromPending(hook, root, RC, C);
-  const contract = RC.readContract(root);
+  const armed = armFromPending(hook, root, RC, C, sessionId);
+  let croot = null;
+  let contract = null;
+  for (const r of roots) {
+    RC.claim(r, sessionId);
+    contract = RC.readContract(r, { sessionId });
+    if (contract) { croot = r; break; }
+  }
   if (!contract) return 0;
-  const evs = RC.events(root);
+  const evs = RC.events(croot);
   const seg = RC.currentSegment(contract, evs);
+  const gitRoot = inputRoot || root;
 
   for (const gate of call.gates) {
+    if (gate === 'release' && call.shellRelease && contract.ship !== 'auto') continue;
     const ctx = { closes: call.closes || [] };
     if ((gate === 'release' || gate === 'card' || gate === 'branch') && RC.segmentHasWork(seg)) {
-      ctx.codeFilesChanged = codeFilesChanged(root, gate, typeof call.base === 'string' && call.base.trim() ? call.base.trim() : 'main');
+      const n = codeFilesChanged(gitRoot, gate, resolveBase(gitRoot, call.base, C));
+      ctx.codeFilesChanged = n;
+      // Recorded before deciding, so the card knows qa's input (`QA ?` when unknown).
+      if (RC.record(croot, { k: 'measure', codeFiles: n }, { sessionId })) evs.push({ k: 'measure', codeFiles: n });
     }
     const open = RC.openObligations(contract, evs, gate, ctx);
     if (!open.length) continue;

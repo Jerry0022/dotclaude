@@ -767,7 +767,7 @@ function renderPipelineLine(input, lang, buildId) {
  * contract — the line is then simply absent, byte-identical to before.
  */
 function renderRunContractLine(input, lang) {
-  return readRunContractLine(input.cwd, lang);
+  return readRunContractLine(input.cwd, lang, input.session_id);
 }
 
 // ---------------------------------------------------------------------------

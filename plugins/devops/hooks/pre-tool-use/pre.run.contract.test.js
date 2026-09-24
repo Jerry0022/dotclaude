@@ -139,9 +139,9 @@ describe("branch gate (backlog)", () => {
     ev({ k: "skill", name: "auto-harden", args: "--invoked-by=autonomous" });
     ev({ k: "skill", name: "auto-polish", args: "--invoked-by=autonomous" });
     ev({ k: "release", ok: false });
-    expect(run("Bash", { command: "git worktree add ../wt -b fix/3" }).stderr).toContain("do-ship");
+    expect(run("Bash", { command: "git checkout -b fix/3" }).stderr).toContain("do-ship");
     ev({ k: "card", variant: "ship-blocked" });
-    expect(run("Bash", { command: "git worktree add ../wt -b fix/3" }).code).toBe(0);
+    expect(run("Bash", { command: "git checkout -b fix/3" }).code).toBe(0);
   });
 
   test("harden run by do-ship (--invoked-by=ship) does not count", () => {
@@ -258,7 +258,8 @@ describe("card gate", () => {
     expect(run("Bash", { command: cmd }).code).toBe(2);
     fs.writeFileSync(payload, JSON.stringify({ variant: "ship-successful", pending: ["verify"] }));
     expect(run("Bash", { command: cmd }).code).toBe(0);
-    expect(run("Bash", { command: `node index.js --render-card missing.json` }).code).toBe(0);
+    // unreadable payload → gated as a final card (red-team C-card-stdin)
+    expect(run("Bash", { command: `node index.js --render-card missing.json` }).code).toBe(2);
   });
 });
 

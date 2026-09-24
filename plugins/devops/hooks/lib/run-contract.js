@@ -85,6 +85,8 @@ const PENDING_MAX_MS = 2 * HOUR;
 const BATCH_MAX_MS = 6 * HOUR;
 const ARCHIVE_EVENTS = 200;
 const ARGS_MAX = 400;
+const FOREIGN_GRACE_MS = 10 * 60_000;
+const MERGE_WINDOW_MS = 30 * 60_000;
 
 const DEFAULT_HEADER = Object.freeze({
   v: 1,
@@ -122,6 +124,20 @@ function batchHandoffPath(cwd) { return fileIn(cwd, FILES.batch); }
 
 function nowOf(opts) { return opts && typeof opts.now === 'number' ? opts.now : Date.now(); }
 
+/**
+ * Does a stored object (header or marker) belong to the session asking?
+ * Unknown asking session → yes (CLI, tests). Stored id → must match. No
+ * stored id → only while `at` is < 10 min old (Desktop copies the main
+ * checkout's untracked `.claude/` into every new worktree — R3).
+ */
+function ownedBy(obj, sessionId, at, now) {
+  if (!obj) return false;
+  if (!sessionId) return true;
+  if (obj.sessionId) return obj.sessionId === sessionId;
+  const t = Date.parse(at);
+  return Number.isFinite(t) && now - t < FOREIGN_GRACE_MS;
+}
+
 function readJson(file) {
   try {
     const v = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -140,6 +156,17 @@ function writeJsonAtomic(file, obj) {
     }
     return true;
   } catch { return false; }
+}
+
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* no wait */ }
+}
+
+/** writeJsonAtomic with one retry after 50 ms (Windows EPERM from AV / indexer). */
+function writeJsonRetry(file, obj) {
+  if (writeJsonAtomic(file, obj)) return true;
+  sleepSync(50);
+  return writeJsonAtomic(file, obj);
 }
 
 function unlinkQuiet(file) { try { fs.unlinkSync(file); } catch { /* already gone */ } }
@@ -202,7 +229,9 @@ function readContract(cwd, opts = {}) {
   if (disabled()) return null;
   const h = readRawContract(cwd);
   if (!h || h.closedAt) return null;
-  if (isExpired(h, eventsOf(cwd, h), nowOf(opts))) return null;
+  const now = nowOf(opts);
+  if (!ownedBy(h, opts.sessionId, h.armedAt, now)) return null;
+  if (isExpired(h, eventsOf(cwd, h), now)) return null;
   return h;
 }
 
@@ -212,6 +241,7 @@ function readContractForCard(cwd, opts = {}) {
   const h = readRawContract(cwd);
   if (!h) return null;
   const now = nowOf(opts);
+  if (!ownedBy(h, opts.sessionId, h.armedAt, now)) return null;
   if (h.closedAt) {
     const t = Date.parse(h.closedAt);
     return Number.isFinite(t) && now - t <= CARD_GRACE_MS ? h : null;
@@ -258,6 +288,7 @@ function sanitize(h) {
   out.burn = !!out.burn;
   out.presence = out.presence !== false;
   out.alsoAudit = !!out.alsoAudit;
+  if (out.unresolved) out.unresolved = true; else delete out.unresolved;
   if (!['prompt', 'backlog', 'audit'].includes(out.mode)) out.mode = 'prompt';
   if (!['interactive', 'autonomous'].includes(out.flow)) out.flow = 'interactive';
   if (!['auto', 'manual'].includes(out.ship)) out.ship = 'manual';
@@ -275,8 +306,7 @@ function arm(cwd, header = {}, opts = {}) {
   if (disabled()) return null;
   const now = nowOf(opts);
   const existing = readRawContract(cwd);
-  if (existing) archive(cwd, existing, now);
-  else unlinkQuiet(eventsPath(cwd));
+  const oldEvents = existing ? eventsOf(cwd, existing).slice(-ARCHIVE_EVENTS) : [];
   const h = sanitize({
     ...DEFAULT_HEADER,
     ...(header || {}),
@@ -287,19 +317,42 @@ function arm(cwd, header = {}, opts = {}) {
     closeReason: null,
     aborted: false,
   });
-  return writeJsonAtomic(contractPath(cwd), h) ? h : null;
+  // The new header is written FIRST (temp + rename, one retry): a failed
+  // rename leaves the old contract in place instead of no contract at all.
+  if (!writeJsonRetry(contractPath(cwd), h)) return null;
+  if (existing) {
+    writeJsonAtomic(prevPath(cwd), { ...existing, archivedAt: new Date(now).toISOString(), events: oldEvents });
+  }
+  unlinkQuiet(eventsPath(cwd));
+  return h;
 }
 
 /** Merge `patch` into the active contract. Returns the new header or null. */
 function update(cwd, patch = {}, opts = {}) {
   const now = nowOf(opts);
   archiveIfExpired(cwd, now);
-  const h = readContract(cwd, { now });
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
   const rest = { ...(patch || {}) };
   delete rest.id; delete rest.armedAt; delete rest.v;
-  const next = sanitize({ ...h, ...rest });
-  return writeJsonAtomic(contractPath(cwd), next) ? next : null;
+  delete rest.closedAt; delete rest.closeReason; delete rest.aborted;
+  // Re-read right before the write: a parallel post hook may have closed it.
+  const fresh = readRawContract(cwd);
+  if (!fresh || fresh.id !== h.id) return null;
+  const next = sanitize({ ...fresh, ...rest });
+  return writeJsonRetry(contractPath(cwd), next) ? next : null;
+}
+
+/**
+ * Adopt a fresh contract armed without a session id (CLI `arm`) for the
+ * session asking, so it keeps gating that session after the 10-min grace.
+ */
+function claim(cwd, sessionId, opts = {}) {
+  if (!sessionId || disabled()) return null;
+  const h = readRawContract(cwd);
+  if (!h || h.sessionId || h.closedAt) return null;
+  if (!ownedBy(h, sessionId, h.armedAt, nowOf(opts))) return null;
+  return update(cwd, { sessionId }, opts);
 }
 
 /**
@@ -312,16 +365,17 @@ function record(cwd, event, opts = {}) {
   if (!event || typeof event.k !== 'string') return null;
   const now = nowOf(opts);
   archiveIfExpired(cwd, now);
-  const h = readContract(cwd, { now });
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
   const ev = { ...event };
   if (ev.k === 'skill') {
     ev.name = skillName(ev.name);
     if (typeof ev.args === 'string' && ev.args.length > ARGS_MAX) ev.args = ev.args.slice(0, ARGS_MAX);
   }
-  if (ev.k === 'edit') {
+  if (ev.k === 'edit' || ev.k === 'measure') {
     const evs = eventsOf(cwd, h);
-    if (evs.length && evs[evs.length - 1].k === 'edit') return null;
+    const last = evs[evs.length - 1];
+    if (last && last.k === ev.k && (ev.k === 'edit' || last.codeFiles === ev.codeFiles)) return null;
   }
   ev.t = new Date(now).toISOString();
   ev.c = h.id;
@@ -341,7 +395,7 @@ function record(cwd, event, opts = {}) {
  */
 function close(cwd, reason, opts = {}) {
   const now = nowOf(opts);
-  const h = readContract(cwd, { now });
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
   const next = {
     ...h,
@@ -361,16 +415,18 @@ function markPendingArm(cwd, opts = {}) {
   return writeJsonAtomic(pendingPath(cwd), m) ? m : null;
 }
 
-function freshMarker(file, field, maxMs, opts) {
+function freshMarker(file, field, maxMs, opts = {}) {
   if (disabled()) return null;
   const m = readJson(file);
   if (!m) return null;
   const t = Date.parse(m[field]);
-  if (!Number.isFinite(t) || nowOf(opts) - t > maxMs) {
+  const now = nowOf(opts);
+  if (!Number.isFinite(t) || now - t > maxMs) {
     unlinkQuiet(file);
     return null;
   }
-  return m;
+  // A foreign session's marker is left alone (it expires on its own).
+  return ownedBy(m, opts.sessionId, m[field], now) ? m : null;
 }
 
 /** The arm marker, or null (none, or older than 2 h → removed). */
@@ -456,9 +512,22 @@ function hasRecommended(s) { return /\((?:recommended|empfohlen)\)/i.test(String
 
 function headerOf(q) { return q && typeof q.header === 'string' ? q.header.trim() : (q && q.question ? guessHeader(q.question) : null); }
 
+/** English / alternative router headers → the canonical German key. */
+const HEADER_ALIASES = {
+  what: 'was', flow: 'ablauf', scope: 'umfang', passes: 'durchgänge',
+  result: 'ergebnis', 'audit scope': 'audit-umfang', 'audit-scope': 'audit-umfang', 'pc after': 'pc danach',
+};
+
+/** Header normalised: NFC, trimmed, trailing `?` stripped, case-folded, aliases mapped. */
+function canonHeader(h) {
+  if (typeof h !== 'string') return '';
+  const s = h.normalize('NFC').trim().replace(/\s*\?+$/, '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return HEADER_ALIASES[s] || s;
+}
+
 function findQuestion(questions, header) {
-  const want = header.toLowerCase();
-  return (questions || []).find(q => (headerOf(q) || '').toLowerCase() === want) || null;
+  const want = canonHeader(header);
+  return (questions || []).find(q => canonHeader(headerOf(q)) === want) || null;
 }
 
 function optionLabels(q) {
@@ -565,49 +634,162 @@ function parseRouterAnswers(questions, answers, opts = {}) {
     passes: ['harden', 'polish'], rethink: args.rethink, burn: args.burn,
   };
 
+  const answered = [];
   const q1 = findQuestion(questions, 'Was?');
   const q1r = q1 ? parseQ1(answerTokens(answerFor(a, q1), q1), q1) : null;
-  if (q1r) { out.mode = q1r.mode; out.alsoAudit = q1r.alsoAudit; }
-  else if (args.mode) out.mode = args.mode;
+  const hint = followUpModeHint(questions);
+  out.modeFrom = 'default';
+  if (q1r) { out.mode = q1r.mode; out.alsoAudit = q1r.alsoAudit; out.modeFrom = 'q1'; answered.push('mode', 'alsoAudit', 'modeFrom'); }
+  else if (args.mode) { out.mode = args.mode; out.modeFrom = 'args'; }
+  else if (hint) { out.mode = hint; out.modeFrom = 'follow-up'; }
 
   const q2 = findQuestion(questions, 'Ablauf?');
   const q2t = q2 ? answerTokens(answerFor(a, q2), q2).join(' ') : '';
   if (q2t) {
     const s = q2t.toLowerCase();
-    if (/^\s*(autonom|weg)/.test(s)) out.flow = 'autonomous';
-    else if (/^\s*(interaktiv|dabei)/.test(s)) out.flow = 'interactive';
-    else if (/autonom|\bweg\b/.test(s)) out.flow = 'autonomous';
-    if (/ship automatisch|ship auto\b/.test(s)) out.ship = 'auto';
+    if (/^\s*(autonom|weg|away)/.test(s)) out.flow = 'autonomous';
+    else if (/^\s*(interaktiv|dabei|interactive|present|with you|here)/.test(s)) out.flow = 'interactive';
+    else if (/autonom|\bweg\b|\baway\b/.test(s)) out.flow = 'autonomous';
+    if (/ship automatisch|ship automatic|ship auto\b/.test(s)) out.ship = 'auto';
     else if (/ship manuell|ship manual/.test(s)) out.ship = 'manual';
+    answered.push('flow', 'ship');
   } else if (args.flow) out.flow = args.flow;
 
   const q3 = findQuestion(questions, 'Umfang?');
   const q3t = q3 ? answerTokens(answerFor(a, q3), q3).join(' ').toLowerCase() : '';
-  if (/strikt|strict|nur das/.test(q3t)) out.strict = true;
+  if (/strikt|strict|nur das|only this|just this/.test(q3t)) out.strict = true;
+  if (q3t) answered.push('strict');
 
   const q4 = findQuestion(questions, 'Durchgänge?');
   if (q4) {
     const tokens = answerTokens(answerFor(a, q4), q4);
-    const flags = { passes: new Set(), rethink: false, burn: false };
-    if (!tokens.length) {
-      const rec = optionLabels(q4).filter(hasRecommended);
-      if (rec.length) passFlagsOf(rec, flags);
-      else { flags.passes.add('harden'); flags.passes.add('polish'); }
-    } else if (tokens.some(t => /^(keine|none|nichts|no passes)\b/i.test(t))) {
-      // explicit "no passes"
-    } else {
-      passFlagsOf(tokens, flags);
-    }
-    out.passes = ['harden', 'polish'].filter(p => flags.passes.has(p));
-    out.rethink = out.rethink || flags.rethink;
-    out.burn = out.burn || flags.burn;
+    const r = parseQ4(tokens, q4);
+    out.passes = r.passes;
+    out.rethink = out.rethink || r.rethink;
+    out.burn = out.burn || r.burn;
+    out.unresolved = r.unresolved;
+    if (tokens.length) answered.push('passes', 'rethink', 'burn', 'unresolved');
   }
+  Object.defineProperty(out, 'answered', { value: answered, enumerable: false });
   return out;
+}
+
+const PLACEHOLDER_RE = /^(something else|other|etwas anderes|sonstiges|andere)$/i;
+const NONE_RE = /^(keine?|none|nichts|no|no passes)(\s+(durchgänge|passes))?$/i;
+const NEG_RE = /^(?:ohne|kein(?:e|en)?|without|no)\s+(.+)$/i;
+
+/**
+ * Q4 tokens → {passes, rethink, burn, unresolved} (R7). Empty → the
+ * recommended set. `ohne X` / `kein X` / `without X` / `no X` excludes X.
+ * An unrecognised or Other-placeholder token → the recommended set (minus
+ * exclusions) when no pass was named, and `unresolved: true` either way.
+ */
+function parseQ4(tokens, q4) {
+  const rec = { passes: new Set(), rethink: false, burn: false };
+  const recLabels = optionLabels(q4).filter(hasRecommended);
+  if (recLabels.length) passFlagsOf(recLabels, rec);
+  else { rec.passes.add('harden'); rec.passes.add('polish'); }
+  const recommended = ['harden', 'polish'].filter(p => rec.passes.has(p));
+  if (!tokens.length) return { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false };
+  if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: [], rethink: false, burn: false, unresolved: false };
+  const flags = { passes: new Set(), rethink: false, burn: false };
+  const neg = new Set();
+  let unresolved = false;
+  let named = false;
+  for (const tok of tokens) {
+    const t = tok.trim();
+    if (PLACEHOLDER_RE.test(t)) { unresolved = true; continue; }
+    const nm = t.match(NEG_RE);
+    if (nm) {
+      const f = { passes: new Set(), rethink: false, burn: false };
+      passFlagsOf([nm[1]], f);
+      if (!f.passes.size) unresolved = true;
+      f.passes.forEach(p => neg.add(p));
+      continue;
+    }
+    const before = flags.passes.size + Number(flags.rethink) + Number(flags.burn);
+    passFlagsOf([t], flags);
+    const after = flags.passes.size + Number(flags.rethink) + Number(flags.burn);
+    if (after === before) unresolved = true;
+    else named = true;
+  }
+  let passes;
+  if (flags.passes.size) passes = ['harden', 'polish'].filter(p => flags.passes.has(p) && !neg.has(p));
+  else if (neg.size || unresolved || !named) passes = recommended.filter(p => !neg.has(p));
+  else passes = [];
+  return { passes, rethink: flags.rethink, burn: flags.burn, unresolved };
+}
+
+/**
+ * Only the fields a router-shaped call actually answered (R7 merge): a
+ * later call carrying some of the router headers updates just those.
+ */
+function answeredFields(fields) {
+  const out = {};
+  for (const k of (fields && fields.answered) || []) if (fields[k] !== undefined) out[k] = fields[k];
+  return out;
+}
+
+/** A router call that lacks one of Ablauf / Umfang / Durchgänge. */
+function isPartialRouterCall(questions) {
+  return isRouterCall(questions) && !['Ablauf?', 'Umfang?', 'Durchgänge?'].every(h => findQuestion(questions, h));
+}
+
+/**
+ * A partial router call of this session within 30 min of arming MERGES into
+ * the active contract (R7). Returns the updated header, or null (→ arm).
+ */
+function mergeRouterAnswers(cwd, questions, fields, opts = {}) {
+  if (!fields || !isPartialRouterCall(questions)) return null;
+  const now = nowOf(opts);
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
+  if (!h) return null;
+  const armed = Date.parse(h.armedAt);
+  if (!Number.isFinite(armed) || now - armed > MERGE_WINDOW_MS) return null;
+  return update(cwd, answeredFields(fields), { now, sessionId: opts.sessionId });
+}
+
+/** Mode a follow-up header implies (Q1 was preset away): backlog | audit | null. */
+function followUpModeHint(questions) {
+  let hint = null;
+  for (const q of Array.isArray(questions) ? questions : []) {
+    const h = canonHeader(headerOf(q));
+    if (h === 'milestones' || /^issues/.test(h)) return 'backlog';
+    if (h === 'ergebnis' || h === 'audit-umfang') hint = hint || 'audit';
+  }
+  return hint;
+}
+
+/** Does the call carry a question with this (canonical) header? */
+function hasHeader(questions, key) {
+  return (Array.isArray(questions) ? questions : []).some(q => canonHeader(headerOf(q)) === canonHeader(key));
+}
+
+/**
+ * Apply a follow-up patch to the active contract. Its `modeHint` upgrades a
+ * prompt-mode contract whose mode was only defaulted (no Q1 answer, no do-run
+ * args) and that was armed ≤ 30 min ago in this session (R2).
+ */
+function applyFollowUp(cwd, patch, opts = {}) {
+  if (!patch) return null;
+  const now = nowOf(opts);
+  const h = readContract(cwd, { now, sessionId: opts.sessionId });
+  if (!h) return null;
+  const p = { ...patch };
+  const hint = p.modeHint;
+  delete p.modeHint;
+  const armed = Date.parse(h.armedAt);
+  if (hint && h.mode === 'prompt' && h.modeFrom === 'default' && Number.isFinite(armed) && now - armed <= MERGE_WINDOW_MS) {
+    p.mode = hint;
+    p.alsoAudit = false;
+    p.modeFrom = 'follow-up';
+  }
+  return update(cwd, p, { now, sessionId: opts.sessionId });
 }
 
 /**
  * Patch from the router's follow-up call (spec B), or null when the call
- * carries none of its headers.
+ * carries none of its headers. `modeHint` names the mode its headers imply.
  */
 function parseFollowUp(questions, answers) {
   if (!Array.isArray(questions)) return null;
@@ -615,7 +797,7 @@ function parseFollowUp(questions, answers) {
   const patch = {};
   let hit = false;
   for (const q of questions) {
-    const h = (headerOf(q) || '').trim();
+    const h = canonHeader(headerOf(q));
     const tokens = answerTokens(answerFor(a, q), q);
     if (/^ergebnis$/i.test(h)) {
       hit = true;
@@ -633,9 +815,14 @@ function parseFollowUp(questions, answers) {
     } else if (/^pc danach$/i.test(h)) {
       hit = true;
       patch.pcAfter = tokens.join(', ') || null;
+    } else if (/^audit-umfang$/i.test(h)) {
+      hit = true;
     }
   }
-  return hit ? patch : null;
+  if (!hit) return null;
+  const hint = followUpModeHint(questions);
+  if (hint) patch.modeHint = hint;
+  return patch;
 }
 
 // ── machine prompts ────────────────────────────────────────────────────────
@@ -683,6 +870,27 @@ function parseMachinePrompt(text) {
   return out;
 }
 
+/**
+ * Patch for an ACTIVE same-session contract from a machine prompt (R5): only
+ * ship / passes / strict / items / presence are refreshed, the mode never
+ * changes — except `RUN_BACKLOG_AUTOSTART` (forces backlog) and
+ * `mode=analyze` over an audit contract (audit as concept: passes cleared).
+ */
+function machinePatch(active, text) {
+  const fields = parseMachinePrompt(text);
+  if (!fields) return null;
+  const patch = {};
+  for (const k of ['ship', 'passes', 'strict', 'items', 'presence']) {
+    if (fields[k] !== undefined) patch[k] = fields[k];
+  }
+  if (/^\s*RUN_BACKLOG_AUTOSTART\s*:/i.test(text)) patch.mode = 'backlog';
+  else if (active && active.mode === 'audit' && /^analy/i.test(kvPairs(text).mode || '')) {
+    patch.passes = [];
+    patch.auditResult = 'concept';
+  }
+  return patch;
+}
+
 // ── segments / obligations ─────────────────────────────────────────────────
 
 /** Current skill name of a raw invocation name (`devops:tune-harden` → `auto-harden`). */
@@ -718,7 +926,7 @@ function segments(contract, evs) {
       continue;
     }
     cur.push(ev);
-    if (ev.k === 'release' && ev.ok === true) out.push([]);
+    if ((ev.k === 'release' && ev.ok === true) || ev.k === 'park') out.push([]);
   }
   return out;
 }
@@ -738,15 +946,31 @@ function isQaAgent(ev) {
   return t === 'devops:qa' || t === 'qa' || t.endsWith(':qa');
 }
 function skipOf(list, ob, item) {
-  return list.find(ev => ev.k === 'skip' && ev.ob === ob && (item === undefined || String(ev.item) === String(item))) || null;
+  const itemOk = (ev) => item === undefined || String(ev.item) === String(item);
+  return list.find(ev => ev.k === 'skip' && ev.ob === ob && itemOk(ev))
+    || list.find(ev => ev.k === 'park' && ob !== 'triage' && itemOk(ev))
+    || null;
+}
+
+/** Latest `measure` event of a segment: {codeFiles:n|null} or undefined. */
+function measureOf(seg) {
+  for (let i = seg.length - 1; i >= 0; i--) if (seg[i].k === 'measure') return seg[i];
+  return undefined;
+}
+
+/** ctx.codeFilesChanged, else the segment's latest measure (R9). */
+function codeFilesOf(seg, ctx) {
+  if (ctx && typeof ctx.codeFilesChanged === 'number') return ctx.codeFilesChanged;
+  const m = measureOf(seg || []);
+  return m && typeof m.codeFiles === 'number' ? m.codeFiles : null;
 }
 function issueNamed(args, n) {
   const re = new RegExp(`#${n}(?!\\d)|\\bissues?\\b[^\\n]*?(?<!\\d)${n}(?!\\d)`, 'i');
   return re.test(args);
 }
 
-function qaApplies(contract, ctx) {
-  const n = ctx && typeof ctx.codeFilesChanged === 'number' ? ctx.codeFilesChanged : null;
+function qaApplies(contract, ctx, seg) {
+  const n = codeFilesOf(seg, ctx);
   if (n === null || contract.mode === 'audit') return false;
   return contract.mode === 'backlog' ? n >= 1 : n > 5;
 }
@@ -767,7 +991,7 @@ function obState(contract, seg, allEvs, ob, gate, ctx) {
       if (!contract.passes.includes(ob) || !work) return null;
       return res(passDone(seg, `auto-${ob}`));
     case 'qa':
-      if (!work || !qaApplies(contract, ctx)) return null;
+      if (!work || !qaApplies(contract, ctx, seg)) return null;
       return res(seg.some(isQaAgent));
     case 'do-ship': {
       if (contract.ship !== 'auto' || !work) return null;
@@ -792,7 +1016,7 @@ const GATE_OBS = {
   branch: ['harden', 'polish', 'qa', 'do-ship'],
   'auto-agents': ['triage'],
   release: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
-  card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship'],
+  card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
 };
 const AUDIT_OBS = new Set(['harden', 'polish', 'do-ship']);
 
@@ -853,7 +1077,9 @@ function openObligations(contract, evs, gate, ctx = {}) {
   for (const ob of obs) {
     if (ob === 'refine') {
       if (contract.mode !== 'backlog' || contract.presence === false) continue;
-      const closes = strList(ctx && ctx.closes).map(s => s.replace(/^#/, ''));
+      // Ship manuell never reaches ship_release: the final card checks every item.
+      const list = gate === 'card' ? (contract.ship === 'manual' ? contract.items : []) : (ctx && ctx.closes);
+      const closes = strList(list).map(s => s.replace(/^#/, ''));
       for (const n of closes) {
         const done = all.some(ev => isSkill(ev, 'auto-issue') && issueNamed(argsOf(ev), n));
         if (!done && !skipOf(all, 'refine', n)) {
@@ -901,7 +1127,11 @@ function formatBlock(contract, open, gate, opts = {}) {
   const itemSkip = list.find(o => o.item);
   const skipArgs = itemSkip && list.every(o => o.item) ? `${itemSkip.ob} --item ${itemSkip.item}` : '<ob>';
   lines.push(`Conscious skip (shown on the card as ⚠): node "${lib}" skip ${skipArgs} --reason "<why>"`);
-  lines.push(`Run finished or this is not part of it: node "${lib}" done`);
+  if (contract && contract.mode === 'backlog') {
+    lines.push(`Item parked (blocked ship / ⏸ Rückfrage): node "${lib}" park <item> --reason "<why>"`);
+  }
+  lines.push(`Run over with open steps (card shows ✗): node "${lib}" abort --reason "<why>"`);
+  lines.push(`Only when every chosen step ran: node "${lib}" done`);
   return lines.join('\n');
 }
 
@@ -911,8 +1141,8 @@ function short(s, max = 40) {
 }
 
 const CARD_LABELS = {
-  de: { interactive: 'Interaktiv', autonomous: 'Autonom', auto: 'Ship auto', manual: 'Ship manuell', strict: 'Strikt', aborted: 'abgebrochen', none: 'keine Pflichten offen' },
-  en: { interactive: 'Interactive', autonomous: 'Autonomous', auto: 'Ship auto', manual: 'Ship manual', strict: 'Strict', aborted: 'aborted', none: 'no obligations' },
+  de: { interactive: 'Interaktiv', autonomous: 'Autonom', auto: 'Ship auto', manual: 'Ship manuell', strict: 'Strikt', unresolved: 'Durchgänge ?', aborted: 'abgebrochen', none: 'keine Pflichten offen' },
+  en: { interactive: 'Interactive', autonomous: 'Autonomous', auto: 'Ship auto', manual: 'Ship manual', strict: 'Strict', unresolved: 'Passes ?', aborted: 'aborted', none: 'no obligations' },
 };
 const OB_LABEL = { triage: 'Triage', refine: 'Refine', 'auto-agents': 'auto-agents', harden: 'Harden', polish: 'Polish', qa: 'QA', 'do-ship': 'do-ship' };
 
@@ -920,7 +1150,9 @@ function renderStates(label, states, skipReason, aggregate) {
   const n = states.length;
   const done = states.filter(s => s === 'done').length;
   const skipped = states.filter(s => s === 'skipped').length;
-  const open = n - done - skipped;
+  const unknown = states.filter(s => s === 'unknown').length;
+  const open = n - done - skipped - unknown;
+  if (!open && unknown) return `${label} ?`;
   const why = skipped && skipReason ? ` (${short(skipReason)})` : '';
   if (aggregate && n > 1) {
     if (open) return `${label} ${done}/${n} ✗`;
@@ -948,8 +1180,9 @@ function summaryForCard(contract, evs, lang = 'de', ctx = {}) {
   const mode = contract.mode === 'backlog' ? 'Backlog' : contract.mode === 'audit' ? 'Audit' : (contract.alsoAudit ? 'Prompt + Audit' : 'Prompt');
   const head = ['🧾 Run', mode, L[contract.flow] || L.interactive, L[contract.ship] || L.manual];
   if (contract.strict) head.push(L.strict);
+  if (contract.unresolved) head.push(L.unresolved);
   let line = head.join(' · ');
-  if (contract.aborted) line += ` · ${L.aborted}${contract.closeReason && contract.closeReason !== 'aborted' ? ` (${short(contract.closeReason)})` : ''}`;
+  if (contract.aborted) line += ` · ✗ ${L.aborted}${contract.closeReason && contract.closeReason !== 'aborted' ? ` (${short(contract.closeReason)})` : ''}`;
 
   const segs = segments(contract, all);
   const workSegs = segs.filter(segmentHasWork);
@@ -977,7 +1210,9 @@ function summaryForCard(contract, evs, lang = 'de', ctx = {}) {
       if (ob === 'qa') {
         if (seg.some(isQaAgent)) st = 'done';
         else if (skipOf(seg, 'qa')) st = 'skipped';
-        else st = seg === last && qaApplies(contract, ctx) ? 'open' : null;
+        else if (seg !== last) st = null;
+        else if (qaApplies(contract, ctx, seg)) st = 'open';
+        else st = measureOf(seg) && codeFilesOf(seg, ctx) === null ? 'unknown' : null;
       } else {
         st = obState(contract, seg, all, ob, 'summary', ctx);
       }
@@ -1042,8 +1277,28 @@ function cli(argv, opts = {}) {
       return 0;
     }
     case 'done': {
+      const c = readContract(cwd, { now });
+      const open = c ? openObligations(c, eventsOf(cwd, c), 'card', {}) : [];
+      if (open.length) {
+        const names = open.map(o => (o.item ? `${o.ob} #${o.item}` : o.ob)).join(', ');
+        if (!reason) {
+          return fail(`open obligations: ${names} — run them, skip <ob> --reason "<why>", or done --reason "<why>" (closes as aborted, card shows ✗)`);
+        }
+        const h = close(cwd, reason, { aborted: true, now });
+        write({ ok: true, closed: !!h, aborted: true, open: names, id: h ? h.id : null });
+        return 0;
+      }
       const h = close(cwd, reason || 'done', { now });
       write({ ok: true, closed: !!h, id: h ? h.id : null });
+      return 0;
+    }
+    case 'park': {
+      const item = pos[1] ? String(pos[1]).replace(/^#/, '') : '';
+      if (!item) return fail('usage: park <item> --reason "<why>"');
+      if (!reason) return fail('park needs --reason "<why>"');
+      const ev = record(cwd, { k: 'park', item, reason: short(reason, 200) }, { now });
+      if (!ev) return fail('no active run contract');
+      write({ ok: true, parked: item, reason: ev.reason });
       return 0;
     }
     case 'abort': {
@@ -1051,6 +1306,13 @@ function cli(argv, opts = {}) {
       const h = close(cwd, reason, { aborted: true, now });
       if (!h) return fail('no active run contract');
       write({ ok: true, aborted: true, id: h.id, reason });
+      return 0;
+    }
+    case 'batch-clear': {
+      if (!reason) return fail('batch-clear needs --reason "<why>"');
+      const had = !!readJson(batchHandoffPath(cwd));
+      clearBatchHandoff(cwd);
+      write({ ok: true, cleared: had, reason: short(reason, 200) });
       return 0;
     }
     case 'arm': {
@@ -1067,13 +1329,14 @@ function cli(argv, opts = {}) {
         if (passes.some(p => p !== 'harden' && p !== 'polish')) return fail('--passes harden,polish|none');
       }
       const items = typeof flags.items === 'string' ? flags.items.split(',') : [];
-      const h = arm(cwd, { source: 'cli', mode, flow, ship, passes, strict: flags.strict === true || flags.strict === 'on', items }, { now });
+      const sessionId = typeof flags.session === 'string' ? flags.session : null;
+      const h = arm(cwd, { source: 'cli', mode, modeFrom: 'cli', flow, ship, passes, strict: flags.strict === true || flags.strict === 'on', items, sessionId }, { now });
       if (!h) return fail(disabled() ? 'run contract disabled (DOTCLAUDE_RUN_CONTRACT=off)' : 'could not write the contract');
       write({ ok: true, armed: true, contract: h });
       return 0;
     }
     default:
-      return fail('usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--cwd <path>]');
+      return fail('usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]');
   }
 }
 
@@ -1085,6 +1348,8 @@ module.exports = {
   FILES, OBLIGATIONS, GATES, DEFAULT_HEADER,
   EXPIRY_INTERACTIVE_H, EXPIRY_AUTONOMOUS_H, CARD_GRACE_MS, PENDING_MAX_MS, BATCH_MAX_MS,
   disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath,
+  FOREIGN_GRACE_MS, MERGE_WINDOW_MS,
+  ownedBy, claim, applyFollowUp, parseQ4, answeredFields, isPartialRouterCall, mergeRouterAnswers, measureOf, hasHeader, canonHeader, followUpModeHint, machinePatch,
   readContract, readContractForCard, readRawContract, arm, update, record, close, events,
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   extractAnswers, isRouterCall, parseRouterAnswers, parseFollowUp, parseMachinePrompt,
