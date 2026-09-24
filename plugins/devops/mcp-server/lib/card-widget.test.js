@@ -13,6 +13,8 @@ import {
   WIDGET_FILE_PREFIX,
   BUTTONS,
   NO_OUTPUT_NUDGE_REPLY,
+  OPEN_URL_PREFIX,
+  isLoopbackHttpUrl,
 } from "./card-widget.js";
 
 const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
@@ -240,19 +242,71 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
 });
 
 describe("cardWidgetHtml", () => {
-  // The visualize host opens any http(s) <a href> itself (ui/open-link), so a
-  // generated URL must be an anchor — the concept page URL was plain text.
-  test("URLs in the context line, points and result lines are clickable links", () => {
+  // Code tab (Claude 2.7032, 2026-09-24): a widget link opens only when it is
+  // https (confirmation, then the default browser); an http link — localhost
+  // included — is dropped, and the frame may not open popups. So https stays
+  // an anchor and a loopback page becomes an open button.
+  test("URLs in the context line, points and result lines are clickable", () => {
     const html = cardWidgetHtml(baseModel({
       context: "› http://localhost:8721/docs/concepts/plan.html",
       points: ["Siehe https://github.com/o/r/pull/7."],
       resultLines: ["Seite <b> auf https://example.com/a?x=1&y=2"],
     }), "");
-    expect(html).toContain('<a href="http://localhost:8721/docs/concepts/plan.html" class="card-link"');
+    expect(html).toContain('data-prompt="Im Standardbrowser öffnen: http://localhost:8721/docs/concepts/plan.html"');
+    expect(html).not.toContain('<a href="http://localhost');
     expect(html).toContain('<a href="https://github.com/o/r/pull/7" class="card-link"');
     expect(html).toMatch(/pull\/7<\/a>\./);
     expect(html).toContain('href="https://example.com/a?x=1&amp;y=2"');
     expect(html).toContain("Seite &lt;b&gt; auf");
+  });
+
+  test("a loopback page is an open button: URL visible, own status line, punctuation outside", () => {
+    const html = cardWidgetHtml(baseModel({ context: "› Läuft auf http://127.0.0.1:5173/app." }), "");
+    const open = html.match(/<span class="card-open">([\s\S]*?)<\/span><\/span><span class="card-act-state"[^>]*><\/span><\/span>(.)/);
+    expect(open, html).not.toBeNull();
+    expect(open[1]).toContain('role="button" tabindex="0" class="card-link"');
+    expect(open[1]).toContain('data-prompt="Im Standardbrowser öffnen: http://127.0.0.1:5173/app"');
+    expect(open[1]).toContain('data-sent="Im Eingabefeld, Enter öffnet die Seite"');
+    expect(open[1]).toMatch(/data-tip="Öffnet die Seite im Standardbrowser/);
+    expect(html, "app-styled tip, never the native title").not.toMatch(/\stitle="/);
+    expect(open[1]).toContain('>http://127.0.0.1:5173/app<span aria-hidden="true"');
+    expect(open[2]).toBe(".");
+    // The click script shows the button's own status text.
+    expect(html).toContain("b.getAttribute('data-sent') || T.sent");
+  });
+
+  test("an English card prefills the English open prompt", () => {
+    const html = cardWidgetHtml(baseModel({ lang: "en", context: "› http://localhost:3000/" }), "");
+    expect(html).toContain('data-prompt="Open in default browser: http://localhost:3000/"');
+    expect(html).toContain('data-sent="In the input box, Enter opens the page"');
+  });
+
+  test("an http URL that is not on this machine stays an anchor", () => {
+    const html = cardWidgetHtml(baseModel({ points: ["LAN: http://192.168.1.5:3000/"] }), "");
+    expect(html).toContain('<a href="http://192.168.1.5:3000/" class="card-link"');
+    expect(html).not.toContain("card-open");
+  });
+
+  // The hook is CJS and keeps its own copy of the prefix and of the loopback
+  // rule; these bind the widget to it so a click always reaches the hook.
+  test("the open prompt is exactly what prompt.flow.open-url acts on", () => {
+    const lib = createRequire(import.meta.url)("../../hooks/lib/open-url.js");
+    expect(lib.OPEN_URL_PREFIX).toEqual(OPEN_URL_PREFIX);
+    const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    for (const lang of ["de", "en"]) {
+      const url = "http://localhost:8721/docs/concepts/plan.html?x=1&y=2";
+      const html = cardWidgetHtml(baseModel({ lang, buttonsKey: null, context: `› ${url}` }), "");
+      const prompts = [...html.matchAll(/data-prompt="([^"]*)"/g)].map((m) => decode(m[1]));
+      expect(prompts).toHaveLength(1);
+      expect(lib.parseOpenUrlPrompt(prompts[0])).toEqual({ url, lang });
+    }
+    for (const u of [
+      "http://localhost:1/", "https://app.localhost/x", "http://127.0.0.1:8080", "http://[::1]:3000/",
+      "http://127.1/", "https://example.com", "http://192.168.1.5:3000", "http://user:pw@localhost/",
+      "http://localhost.evil.com/", "ftp://localhost/", "not a url",
+    ]) {
+      expect(isLoopbackHttpUrl(u), u).toBe(lib.isLoopbackHttpUrl(u));
+    }
   });
 
   test("draws both blocks: result lines + evidence + pipeline, heading + points + buttons", () => {

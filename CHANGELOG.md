@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.199.0] — 2026-09-24
+
+### Added
+- **Local links in the card open in your default browser.** The Desktop Code tab opens only https links from a widget. An http link, localhost included, was dropped without a trace, so a concept page or dev-server link in the card did nothing. A link to this machine (`localhost`, `*.localhost`, `127.x`, `[::1]`) is now a button: a click puts „Im Standardbrowser öffnen: <url>" into the input box, and Enter opens the page in the browser the system has set as default. The new hook `prompt.flow.open-url` opens it and catches the prompt, so it costs no turn. It acts only on the prefix plus one local URL, starts the browser without a shell, and passes the prompt on to Claude when the browser cannot start. An armed `/do-batch` never collects the open command. https links stay normal links. `completion-card-design.md` § 4 records the host's link rules.
+
 ## [0.198.1] — 2026-09-24
 
 ### Fixed

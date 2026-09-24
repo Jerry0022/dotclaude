@@ -93,7 +93,8 @@ between posts, no `·` separators:
 - Released cards: slot 1–3 become the promotion facts (`✓ Tags beta/v0.179.0
   · v0.179.0`, `✓ bit-identisch mit alpha`, `✓ GitHub-Release` on stable).
 - Analysis cards: `✓ 12 Dateien gelesen`, `✓ 3 Befunde belegt`.
-- Widget: each post has a tooltip (after ~600 ms hover) with the details
+- Widget: each post has an app-styled tooltip (Info tier, 1500 ms;
+  `ui-defaults.md` R1) with the details
   (`144 Dateien · 3 übersprungen · 0 rot · 41 s`; the four live checks by name).
 
 ### 2.4 Budget line
@@ -251,8 +252,8 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   it in the `[CARD WIDGET]` block, and `stop.flow.guard` blocks a card turn
   on which `show_widget` was never called, pointing at that file. The widget draws the
   title (h3) and both blocks, colours (green `#8fae8f` posts, red
-  `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
-  delay), the budget bars, the quiet PR link and the buttons. Nothing is
+  `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), app-styled
+  tooltips (Info 1500 ms, Label 500 ms for the budget bars), the budget bars, the quiet PR link and the buttons. Nothing is
   drawn twice (observed 2026-09-21: widget + full markdown showed the whole
   card twice). The widget wraps result lines instead of cutting them — the
   120-char ellipsis of § 2.2 is a terminal budget, and a line cut mid-sentence
@@ -321,6 +322,25 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   `Nicht übernommen, Eingabefeld leeren und erneut klicken`. There is no
   clipboard fallback. `card-widget.send.test.js` pins this behavior against
   a host simulator that applies these three rules.
+- **Links (Code-tab host rules, read from its bundle 2026-09-24, Claude
+  2.7032):** the widget script sends an `<a href>` as `ui/open-link`, and the
+  host opens **only https**: a confirmation dialog, then the default browser
+  (or the built-in one when "Open links in built-in browser" is on). An
+  **http link is dropped without a trace**, localhost included, and the
+  widget frame's sandbox has no `allow-popups`, so `window.open` and
+  `target=_blank` get nowhere either. The app setting does not change that.
+  So an https URL stays an anchor, and a loopback page (concept page, dev
+  server: `localhost`, `*.localhost`, `127.x`, `[::1]`) becomes an **open
+  button**. The URL stays visible and copyable. The click prefills
+  `Im Standardbrowser öffnen: <url>` (en: `Open in default browser: <url>`)
+  with the button rules above, and `prompt.flow.open-url` opens the page on
+  Enter. It opens in the OS default browser (`rundll32
+  url.dll,FileProtocolHandler` / `open` / `xdg-open`, never a shell) and
+  blocks the prompt, so reopening costs no turn. Only a prompt that is
+  exactly the prefix plus one loopback URL is handled. If the browser cannot
+  start, the prompt passes through and Claude opens the page itself. Any
+  other http URL stays an anchor: dead on the Desktop app, but still a
+  visible address.
 
 ## 5. Guards (stop.flow.guard / card-guard)
 
