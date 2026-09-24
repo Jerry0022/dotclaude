@@ -263,6 +263,8 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     '   Vorher: archiveNotes(cwd) aus hooks/lib/batch-state.js (archivieren, nie',
     '   löschen) und den archivierten Pfad in die Übergabe schreiben. Die Übergabe',
     '   trägt den Abschnitt "Bündel:" (do-batch 4.9).',
+    '   Die Übergabe an do-run (--from=do-batch) bzw. auto-concept (--from=do-batch) wird',
+    '   per Hook erzwungen: Edits und Commits werden abgelehnt, bis einer der beiden aufgerufen ist.',
     '',
     'Umsetzung ist breit gemeint — Code, Concepting, UI-Concepting, oder auch nur',
     'ein erster Schritt.',
@@ -493,7 +495,7 @@ function syncMain(cwd) {
  * Fire the merge: sync main, inject every note, then end collection.
  * @param {{cwd:string,text:string,marker:string,modeActive:boolean}} ctx
  */
-function fireMerge({ cwd, text, marker, modeActive }) {
+function fireMerge({ cwd, text, marker, modeActive, sessionId }) {
   const notes = B.readNotes(cwd);
   if (notes.length === 0) {
     // Nothing parsed. Never a silent exit — see buildEmptyQueueNotice.
@@ -509,6 +511,9 @@ function fireMerge({ cwd, text, marker, modeActive }) {
   // Before the notes are even shown: bring main in. The plan is checked against
   // the code as it is now, not as it was when the first note was written.
   const sync = syncMain(cwd);
+  // The hand-off is enforced, not hoped for: pre.run.contract refuses edits and
+  // commits until do-run / auto-concept is invoked (run-contract spec E).
+  try { require('../lib/run-contract').markBatchHandoff(cwd, { sessionId }); } catch { /* advisory */ }
   process.stdout.write(
     `${buildMergeContext(notes, rest, B.notesPath(cwd), { stale: !modeActive, sync })}\n`,
   );
@@ -549,7 +554,7 @@ process.stdin.on('end', () => {
   if (verdict === 'execute') {
     // Reached with the mode off as well: an expired or note-capped mode must not
     // strand the notes it collected.
-    try { fireMerge({ cwd, text, marker, modeActive }); } catch { /* non-fatal — the turn still runs */ }
+    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id || null }); } catch { /* non-fatal — the turn still runs */ }
     process.exit(0);
   }
 

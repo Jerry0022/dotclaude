@@ -147,6 +147,23 @@ describe("mode on — firing the merge", () => {
     expect(r.stdout).toContain("Widersprüche");
   });
 
+  test("a fire writes the enforced hand-off marker and says so in the context", () => {
+    // run-contract spec E: pre.run.contract refuses edits and commits until
+    // do-run / auto-concept is invoked.
+    appendNote(cwd, "Button verrutscht");
+    const r = runHook({ prompt: ">> leg los", session_id: "sess-1" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("per Hook erzwungen: Edits und Commits werden abgelehnt");
+    const marker = JSON.parse(fs.readFileSync(path.join(cwd, ".claude", "batch-handoff.json"), "utf8"));
+    expect(marker.sessionId).toBe("sess-1");
+    expect(Number.isFinite(Date.parse(marker.firedAt))).toBe(true);
+  });
+
+  test("an early marker on an empty queue writes no hand-off marker", () => {
+    runHook({ prompt: ">> leg los" });
+    expect(fs.existsSync(path.join(cwd, ".claude", "batch-handoff.json"))).toBe(false);
+  });
+
   test("the marked prompt itself is not stored as a note", () => {
     appendNote(cwd, "eine notiz");
     runHook({ prompt: ">> jetzt umsetzen" });

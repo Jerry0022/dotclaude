@@ -24,7 +24,11 @@ the hook reads the tool result directly. `RUN_BACKLOG_AUTOSTART:` /
 `key=value` pairs. Arming never fails silently: a `.claude/run-contract.pending`
 marker (written the instant `do-run` starts) is scanned from the transcript
 if the `AskUserQuestion` arm is somehow missed, or falls back to the
-click-through defaults with `source: fallback`.
+click-through defaults with `source: fallback`. A contract armed from the
+fallback or a machine prompt is announced once (PostToolUse
+`additionalContext`) with the `arm` / `done` call that corrects it. A
+repeated machine prompt of the same mode refreshes the active contract in
+place — its events and segments survive every wake of a loop.
 
 A contract expires — reads as absent, archived to `run-contract.prev.json` —
 after 12 h idle (interactive) or 30 h (autonomous / backlog), so a leftover
