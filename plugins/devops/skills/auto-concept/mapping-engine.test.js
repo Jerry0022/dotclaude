@@ -157,7 +157,7 @@ describe("mapping engine — model + state", () => {
     p.window.setCell("veh", "plate", "card.header", "phone", false);                         // written into the phone matrix …
     expect(sum("card@phone").classList.contains("is-under")).toBe(true);
     expect(sum("card@desktop").classList.contains("is-under")).toBe(true);                   // … the desktop Σ follows at once
-    expect(sum("card@desktop").title).toBe("map.item_required");
+    expect(sum("card@desktop").dataset.tip).toBe("map.item_required");
     p.window.setCell("veh", "plate", "card.footer", "desktop", true);
     expect(sum("card@phone").classList.contains("is-under")).toBe(false);
   });

@@ -204,21 +204,23 @@ describe("design mode hides the document chrome it would paint over", () => {
   });
 });
 
-describe("scroll boxes are skinned, not raw", () => {
+describe("every scroll container is skinned, not raw (ui-defaults.md R5)", () => {
   // The panel aside itself no longer scrolls (flex split, § Panel anatomy);
   // its tree box .panel-nav-scroll is the scroll container now.
   const BOXES = [".feedback-dock", ".panel-nav-scroll", "section[data-screen]"];
+  const universal = (suffix = "") =>
+    RULES.find((r) => r.selectors.some((s) => norm(s) === "*" + suffix));
 
-  test.each(BOXES)("%s declares the thin scrollbar", (box) => {
-    const hit = RULES.find((r) => r.selectors.some((s) => norm(s) === box)
-      && /scrollbar-width\s*:\s*thin/.test(r.body));
-    expect(hit, box + " { scrollbar-width: thin }").toBeTruthy();
-    expect(hit.body, box + " thumb colour on a transparent track")
+  test("one universal rule declares the thin scrollbar", () => {
+    const hit = universal();
+    expect(hit, "* { scrollbar-width: thin }").toBeTruthy();
+    expect(hit.body).toMatch(/scrollbar-width\s*:\s*thin/);
+    expect(hit.body, "thumb colour on a transparent track")
       .toMatch(/scrollbar-color\s*:\s*var\(--border-color[^)]*\)\s+transparent/);
   });
 
-  test.each(BOXES)("%s ships the ::-webkit fallback too", (box) => {
-    // scrollbar-* is Firefox + modern Chromium only; older WebKit ignores it
+  test("the ::-webkit fallback is universal too", () => {
+    // scrollbar-* is Firefox + modern Chromium only; WebKit ignores it
     // entirely and keeps the 16px slab. Both syntaxes or neither.
     const want = {
       "::-webkit-scrollbar": /width\s*:\s*8px/,
@@ -226,31 +228,29 @@ describe("scroll boxes are skinned, not raw", () => {
       "::-webkit-scrollbar-track": /background\s*:\s*transparent/,
     };
     for (const [pseudo, body] of Object.entries(want)) {
-      const hit = RULES.find((r) => r.selectors.some((s) => norm(s) === box + pseudo)
-        && body.test(r.body));
-      expect(hit, box + pseudo).toBeTruthy();
+      const hit = universal(pseudo);
+      expect(hit, "*" + pseudo).toBeTruthy();
+      expect(hit.body, "*" + pseudo).toMatch(body);
     }
-    const thumb = RULES.find((r) => r.selectors.some((s) => norm(s) === box + "::-webkit-scrollbar-thumb"));
-    expect(thumb.body, "thumb is rounded").toMatch(/border-radius\s*:\s*4px/);
+    expect(universal("::-webkit-scrollbar-thumb").body, "thumb is rounded")
+      .toMatch(/border-radius\s*:\s*4px/);
+    expect(universal("::-webkit-scrollbar").body, "horizontal bars too").toMatch(/height\s*:\s*8px/);
   });
 
-  test("the skin stays unscoped — every template has these boxes", () => {
-    // Scoping it to html[data-template="design"] would leave the decision and
-    // free iterations of the SAME page with the raw bar.
-    for (const box of BOXES) {
-      const hit = RULES.find((r) => r.selectors.some((s) => norm(s) === box)
-        && /scrollbar-width/.test(r.body));
-      for (const sel of hit.selectors) {
-        expect(norm(sel), "scrollbar skin must not be template-scoped")
-          .not.toMatch(/data-template/);
+  test("the skin stays unscoped — no box list, no template scope", () => {
+    // A box list goes stale the moment page content adds a scroll container,
+    // and scoping to html[data-template="design"] would leave the decision
+    // and free iterations of the SAME page with the raw bar.
+    for (const r of RULES) {
+      if (!/scrollbar-(width|color)/.test(r.body)) continue;
+      for (const sel of r.selectors) {
+        expect(norm(sel), "scrollbar skin must not be template-scoped").not.toMatch(/data-template/);
+        expect(norm(sel), "only the universal rule sets the skin").toBe("*");
       }
     }
   });
 
-  test("the boxes it skins are the ones that actually scroll", () => {
-    // Derived, not copied: a box that stops scrolling should drop out of the
-    // list rather than keep a dead rule, and one that STARTS scrolling should
-    // fail here until it is added.
+  test("the known scroll boxes still scroll — the universal rule reaches them", () => {
     const scrolling = new Set();
     for (const r of RULES) {
       if (!/overflow(-y)?\s*:\s*(auto|scroll)/.test(r.body)) continue;
@@ -258,8 +258,16 @@ describe("scroll boxes are skinned, not raw", () => {
         for (const box of BOXES) if (norm(s).includes(box)) scrolling.add(box);
       }
     }
-    expect([...scrolling].sort(), "skinned boxes must all be scroll containers")
-      .toEqual([...BOXES].sort());
+    expect([...scrolling].sort()).toEqual([...BOXES].sort());
+  });
+
+  test("color-scheme follows the theme", () => {
+    const dark = RULES.find((r) => r.selectors.some((s) => norm(s) === 'html[data-theme="dark"]')
+      && /color-scheme\s*:\s*dark/.test(r.body));
+    const light = RULES.find((r) => r.selectors.some((s) => norm(s) === 'html:not([data-theme="dark"])')
+      && /color-scheme\s*:\s*light/.test(r.body));
+    expect(dark, "dark theme → color-scheme: dark").toBeTruthy();
+    expect(light, "light theme → color-scheme: light").toBeTruthy();
   });
 });
 

@@ -54,12 +54,16 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
 
 - Read `{PLUGIN_ROOT}/deep-knowledge/pre-mortem.md` before non-trivial implementation.
 - Read `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` before writing any UI —
-  the standing UI rules (tooltips on icon-only controls, dropdowns styled with
-  the app's tokens and uniform per menu, same component → same spacing tokens,
-  a hotkey on every interaction shown in the control or its tooltip) plus the
+  the standing UI rules (R0: everything in the app's own style, never the
+  browser/OS default look — part of every rule; tooltips through the app's
+  styled tooltip component with the Info/Label delay tiers, never `title`;
+  dropdowns styled with the app's tokens and uniform per menu; same component
+  → same spacing tokens; a hotkey on every interaction shown in the control or
+  its tooltip; scrollbars styled once, globally, from tokens) plus the
   project's `## UI rules` override in `.claude/skills/auto-polish/reference.md` (pre-PR-2: `tune-polish/`).
-  `/do-ship` measures the static halves on every UI diff; writing to the rules
-  is cheaper than fixing the findings.
+  No app-styled tooltip component or scrollbar style yet → build it first,
+  then the element that needs it. `/do-ship` measures the static halves on
+  every UI diff; writing to the rules is cheaper than fixing the findings.
 - Keep **project docs** current: when your change adds a feature, alters a flow, or changes architecture, update the affected `docs/`, README prose, or architecture docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
 - For mechanical UI boilerplate (prop-typed components, form scaffolds, barrel exports, repeated variants, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always verify visual output in a real browser (follow

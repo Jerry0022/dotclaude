@@ -637,7 +637,7 @@ clickable while the dock is open (clicking it toggles closed again). The
 close button is a **minimise** (`−`), not a destroy: text content stays
 intact in `localStorage` when the dock is closed.
 
-Both FABs are labelled by **tooltip only** (`title` + `aria-label` from the
+Both FABs are labelled by **tooltip only** (`data-tip` + `aria-label` from the
 locale table, swapped between the open and close wording as the control
 toggles) — no visible text, because a label inside the button would break the
 shared circle. The 💬 FAB additionally carries `data-untouched="true"` for a
