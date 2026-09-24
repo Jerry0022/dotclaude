@@ -152,26 +152,26 @@ describe("the theme toggle lives in the ☰ panel head", () => {
 
     const btn = document.getElementById("theme-toggle");
     expect(btn, "#theme-toggle").toBeTruthy();
-    expect(btn.getAttribute("title"), "dark → names the switch to light").toBe("theme.to_light");
+    expect(btn.getAttribute("data-tip"), "dark → names the switch to light").toBe("theme.to_light");
     expect(btn.getAttribute("aria-label")).toBe("theme.to_light");
     expect(saves, "boot must not write state").toBe(0);
 
     btn.click();
     expect(html.getAttribute("data-theme")).toBe("light");
-    expect(btn.getAttribute("title")).toBe("theme.to_dark");
+    expect(btn.getAttribute("data-tip")).toBe("theme.to_dark");
     expect(btn.getAttribute("aria-label")).toBe("theme.to_dark");
     expect(saves, "the click persists the choice").toBe(1);
 
     btn.click();
     expect(html.getAttribute("data-theme")).toBe("dark");
-    expect(btn.getAttribute("title")).toBe("theme.to_light");
+    expect(btn.getAttribute("data-tip")).toBe("theme.to_light");
 
     // restoreState() sets data-theme directly (§ State Persistence). The
     // label must follow that write too, not only the click.
     return new Promise((resolve) => {
       html.setAttribute("data-theme", "light");
       window.setTimeout(() => {
-        expect(btn.getAttribute("title"), "label follows an external data-theme write").toBe("theme.to_dark");
+        expect(btn.getAttribute("data-tip"), "label follows an external data-theme write").toBe("theme.to_dark");
         resolve();
       }, 0);
     });

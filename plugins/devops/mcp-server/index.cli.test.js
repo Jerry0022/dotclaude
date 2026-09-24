@@ -182,12 +182,32 @@ describe("--render-card CLI fallback", () => {
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(shipped.stderr).toContain('data-prompt="promote 0.193.0"');
+    expect(shipped.stderr).toContain('data-prompt="promote beta 0.193.0"');
+    expect(shipped.stderr).toContain('data-prompt="promote stable 0.193.0"');
     const released = await renderCardFull({
       variant: "released", summary: "Beta", session_id: "cli-test-promote-version-beta",
       delivery: { promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
     }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
     expect(released.stderr).toContain('data-prompt="promote stable 0.193.0"');
+    expect(released.stderr).not.toContain('data-prompt="promote beta');
+  });
+
+  // A ship card whose ladder already sits on beta (e.g. "ship beta") must not
+  // offer a beta promotion any more — only the stable step is left.
+  test("a ship-successful card already on beta offers only Promote stable", async () => {
+    const onBeta = await renderCardFull({
+      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-on-beta",
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0", beta: "0.193.0" }, current: "beta" } },
+    }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(onBeta.stderr).toContain('data-prompt="promote stable 0.193.0"');
+    expect(onBeta.stderr).not.toContain('data-prompt="promote beta');
+    const onStable = await renderCardFull({
+      variant: "ship-successful", summary: "Ship", session_id: "cli-test-promote-on-stable",
+      state: { pushed: true, merged: "main" },
+      delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0", stable: "0.193.0" }, current: "stable" } },
+    }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
+    expect(onStable.stderr).not.toContain('data-prompt="promote');
   });
 
   // The ready card's second button answers the open points instead of asking
@@ -205,7 +225,7 @@ describe("--render-card CLI fallback", () => {
       userFinalTest: ["Im Desktop klicken"],
     };
     const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(stderr).toContain("Offenes abarbeiten ↗");
+    expect(stderr).toContain("Nachbessern ↗");
     expect(stderr).not.toContain("Ändern ↗");
     expect(stderr).toContain(
       'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;' +
@@ -228,9 +248,10 @@ describe("--render-card CLI fallback", () => {
 
     const test = { variant: "test", summary: "Testen", lang: "de", session_id: "cli-test-conclude-test", open, userTest: ["Seite öffnen"] };
     const testWidget = (await renderCardFull(test, desktop)).stderr;
-    expect(testWidget).toContain("Nachbessern ↗");
-    expect(testWidget).toContain("Offenes abarbeiten ↗");
+    // the test card's own Nachbessern carries the answer — no second button
+    expect(testWidget.match(/Nachbessern ↗/g)).toHaveLength(1);
     expect(testWidget).toContain(answer);
+    expect(testWidget).not.toContain("frag mich, was");
     // the open points show on the test card, the steps tagged 🧪
     const testTerm = await renderCard(test);
     expect(testTerm).toMatch(/^1\. Auch im Terminal\?$/m);
@@ -241,13 +262,14 @@ describe("--render-card CLI fallback", () => {
       state: { pushed: true, merged: "main" },
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
     }, desktop)).stderr;
-    expect(ring).toContain('data-prompt="promote 0.193.0"');
+    expect(ring).toContain('data-prompt="promote beta 0.193.0"');
+    expect(ring).toContain("Nachbessern ↗");
     expect(ring).toContain(answer);
 
     const plain = { variant: "ship-successful", summary: "Merge", lang: "de", session_id: "cli-test-conclude-plain", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.193.0" } } };
     const plainOpen = (await renderCardFull({ ...plain, open }, desktop)).stderr;
-    expect(plainOpen).toContain("Offenes abarbeiten ↗");
-    expect(plainOpen).not.toContain("Promote ↗");
+    expect(plainOpen).toContain("Nachbessern ↗");
+    expect(plainOpen).not.toContain("Promote");
     const plainNone = (await renderCardFull({ ...plain, session_id: "cli-test-conclude-plain-none" }, desktop)).stderr;
     expect(plainNone).not.toContain('<span role="button"');
   });
@@ -258,7 +280,7 @@ describe("--render-card CLI fallback", () => {
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
     expect(stderr).toContain("Ändern ↗");
-    expect(stderr).not.toContain("Offenes abarbeiten");
+    expect(stderr).not.toContain("Nachbessern");
   });
 
   test("test-minimal keeps its whole markdown on Desktop — no widget draws it", async () => {

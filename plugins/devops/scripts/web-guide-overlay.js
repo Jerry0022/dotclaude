@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.1.0
+ * @version 1.2.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.1.1";
+  var VERSION = "1.2.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -118,7 +118,7 @@
 
   var styleEl = document.createElement("style");
   styleEl.textContent = [
-    ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none}",
+    ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;color-scheme:light dark}",
     "*{box-sizing:border-box}",
     ".fab,.panel{pointer-events:auto;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#111}",
     ".fab{position:fixed;width:56px;height:56px;border-radius:50%;background:#6d28d9;color:#fff;",
@@ -142,9 +142,18 @@
     ".status{font-size:12px;color:#777;display:flex;align-items:center;gap:6px;padding:0 12px 10px}",
     ".spin{width:12px;height:12px;border-radius:50%;border:2px solid #ccc;border-top-color:#6d28d9;animation:wgs .8s linear infinite}",
     "@keyframes wgs{to{transform:rotate(360deg)}}",
+    ".tip{position:fixed;max-width:260px;padding:6px 10px;border-radius:8px;background:#fff;color:#111;border:1px solid #ddd;",
+    "  box-shadow:0 6px 20px rgba(0,0,0,.25);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1.45;pointer-events:auto}",
+    ".tip[hidden]{display:none}",
+    ".panel{scrollbar-width:thin;scrollbar-color:#ccc transparent}",
+    ".panel::-webkit-scrollbar{width:8px}",
+    ".panel::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}",
+    ".panel::-webkit-scrollbar-track{background:transparent}",
     "@media(prefers-color-scheme:dark){",
     "  .fab,.panel{color:#eee}",
-    "  .panel{background:#1e1e24}",
+    "  .panel{background:#1e1e24;scrollbar-color:#444 transparent}",
+    "  .panel::-webkit-scrollbar-thumb{background:#444}",
+    "  .tip{background:#1e1e24;color:#eee;border-color:#333}",
     "  .foot{border-top-color:#333}",
     "  .secondary{background:#333;color:#eee}",
     "  input.f,textarea.f{background:#2a2a31;color:#eee;border-color:#444}",
@@ -155,11 +164,58 @@
   var fabButton = mk("button", "fab");
   fabButton.type = "button";
   fabButton.setAttribute("aria-label", "Claude Guide");
-  fabButton.title = "Claude Guide – Schritt anzeigen";
   fabButton.setAttribute("aria-expanded", "false");
   var badge = mk("span", "badge");
   fabButton.appendChild(badge);
   shadow.appendChild(fabButton);
+
+  // App-styled tooltip for the FAB (ui-defaults.md R0/R1) — never the native
+  // title, which ignores the overlay's look, the delay and keyboard focus.
+  // Label tier (500 ms): the tip is the FAB's only visible name.
+  var fabTip = mk("div", "tip", "Claude Guide – Schritt anzeigen");
+  fabTip.id = "wg-tip";
+  fabTip.setAttribute("role", "tooltip");
+  fabTip.hidden = true;
+  shadow.appendChild(fabTip);
+  var fabTipOpen = 0;
+  var fabTipClose = 0;
+  function showFabTip() {
+    var r = fabButton.getBoundingClientRect();
+    fabTip.hidden = false;
+    var top = r.top - fabTip.offsetHeight - 8;
+    if (top < 4) top = r.bottom + 8;
+    var left = Math.max(4, Math.min(r.left + r.width / 2 - fabTip.offsetWidth / 2, window.innerWidth - fabTip.offsetWidth - 4));
+    fabTip.style.top = Math.round(top) + "px";
+    fabTip.style.left = Math.round(left) + "px";
+    fabButton.setAttribute("aria-describedby", "wg-tip");
+  }
+  function hideFabTip() {
+    clearTimeout(fabTipOpen);
+    clearTimeout(fabTipClose);
+    if (fabTip.hidden) return;
+    fabTip.hidden = true;
+    fabButton.removeAttribute("aria-describedby");
+  }
+  fabButton.addEventListener("pointerenter", function (e) {
+    if (e.pointerType === "touch") return;
+    clearTimeout(fabTipClose);
+    fabTipOpen = setTimeout(showFabTip, 500);
+  });
+  fabButton.addEventListener("pointerleave", function (e) {
+    clearTimeout(fabTipOpen);
+    if (e.relatedTarget === fabTip) return;
+    fabTipClose = setTimeout(hideFabTip, 120);
+  });
+  fabTip.addEventListener("pointerenter", function () { clearTimeout(fabTipClose); });
+  fabTip.addEventListener("pointerleave", function () { fabTipClose = setTimeout(hideFabTip, 120); });
+  fabButton.addEventListener("focus", function () {
+    var keyboard = true;
+    try { keyboard = fabButton.matches(":focus-visible"); } catch { /* engine without :focus-visible */ }
+    if (keyboard) showFabTip();
+  });
+  fabButton.addEventListener("blur", hideFabTip);
+  fabButton.addEventListener("pointerdown", hideFabTip);
+  fabButton.addEventListener("keydown", function (e) { if (e.key === "Escape") hideFabTip(); });
 
   var panel = mk("div", "panel");
   panel.setAttribute("role", "dialog");

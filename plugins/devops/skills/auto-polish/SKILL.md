@@ -1,11 +1,11 @@
 ---
 name: auto-polish
-version: 0.4.0
+version: 0.5.0
 description: >-
   UI refinement pass: visual consistency (spacing, tokens, typography, icons,
   colors), state-visuals, UI-side functionality checks, the standing UI
-  rules from deep-knowledge/ui-defaults.md (tooltips, dropdowns, spacing,
-  hotkeys), and small demonstrably UI-related backend fixes. Structural UI
+  rules from deep-knowledge/ui-defaults.md (app style, tooltips, dropdowns,
+  spacing, hotkeys, scrollbars), and small demonstrably UI-related backend fixes. Structural UI
   changes only with user approval; `--autonomous` skips prompts but keeps
   the "structural changes flagged not applied" rule. `--invoked-by=ship` is
   the narrow rules-only path /do-ship calls: static checks on the diff, no
@@ -205,33 +205,24 @@ Spawn parallel Explore agents (single message, multiple Agent calls):
    no internal seams, hook-reuse opportunities (same effect logic in
    3+ components).
 
-8. **Standing UI rules (`$UI_RULES`)** — the four rules from
-   `deep-knowledge/ui-defaults.md`, each with a static and a runtime half:
-   - **R1 tooltips** — static: new/changed icon-only interactive element
-     without one of the project's tooltip mechanisms; runtime: tooltip shows
-     after 300–700 ms, hides on mouse-out/Escape.
-   - **R2a dropdowns styled** — static: bare native `<select>`/OS menu where
-     the project has a menu component, or a menu themed by one colour while
-     trigger/items ignore the app's tokens. **R2b uniform item structure** —
-     static: items of one menu differ in slot structure (icon/description on
-     some, not all); runtime: open menu matches the app's elevated surfaces.
-   - **R3 spacing** — static: same component type, different spacing than
-     its siblings in scope, no justification comment (math from
-     `harden-polish-shared.md` § 3, scope files only); runtime: 44 px touch
-     targets, no touching actions, across the viewport matrix.
-   - **R4 hotkeys** — static: new/changed interaction without a key binding
-     through a project hotkey mechanism, or with a binding that is shown
-     neither in the control nor in its tooltip, or two bindings to one key
-     in a view; runtime: tab-walk + snapshot — every flow completable by
-     keyboard, visible focus ring, Escape/Enter/arrows behave.
+8. **Standing UI rules (`$UI_RULES`)** — R0–R5, each with a static and a
+   runtime half. `deep-knowledge/ui-defaults.md` (loaded in Step 0) is the
+   single source for what each half checks — work from it, not from memory:
+   R0 app style · R1 tooltips (app-styled, Info/Label delay tiers) · R2a
+   dropdowns styled · R2b uniform menu items · R3 spacing · R4 hotkeys ·
+   R5 scrollbars. **R0 is part of every rule**, project rules included.
    Detection uses the allowlist from `ui-defaults.md` merged with the
    override. A rule whose mechanism class has zero matches in the whole
-   project (e.g. no tooltip mechanism anywhere) is reported once as *not
-   applicable*, never as a batch of failures. Only **new or changed**
+   project (e.g. no hotkey mechanism anywhere) is reported once as *not
+   applicable*, never as a batch of failures — except where R0 turns the
+   absence itself into the one project-level finding (no app-styled tooltip
+   component, no scrollbar style). Only **new or changed**
    elements in scope are findings on the ship path; the full pass may also
-   list pre-existing violations, marked as such. R1 and R4 are
-   **report-only** (R1: a fix may only reuse an existing label's text; R4:
-   the key choice is design). A more recent project convention from merged
+   list pre-existing violations, marked as such. R0, R1, R4 and R5 are
+   **report-only** (R0: only a literal → token swap is mechanical; R1: a fix
+   may only reuse an existing label's text, through the app's tooltip
+   component; R4: the key choice is design; R5: thumb/track colours are
+   design). A more recent project convention from merged
    PRs beats a generic rule — say so in the finding instead of reporting it.
 
 ## Rules-only path (ship) — `$RULES_ONLY=1`
@@ -245,16 +236,20 @@ polish pass (agents, browser, viewports).
    resolved against `--cwd` when given (else the session's cwd). Empty
    scope → return `{ applicable: false, reason: "no UI files in diff" }` and
    stop. No UI profile (`test-autonomy.md` profiles `cli-node`, `lib`,
-   `generic`) → same, reason `"no UI profile"`.
-2. **Check** only the **static** halves of Step 4 #8 (R1, R2a, R2b, R3, R4),
+   `generic`) → same, reason `"no UI profile"` — unless a `files:` glob of
+   the override names a scope file: that explicit opt-in counts as a UI
+   profile for the files it names (how a CLI or plugin repo checks its own UI
+   sources).
+2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4, R5),
    inline — no Explore agents, no browser, no screenshots. Runtime halves
    are never attempted here; they are listed once as
    `skipped: runtime rules (full /auto-polish)`.
 3. **Never fix.** Return a findings list, one entry per finding:
    `{ rule, file, line, element, detail, mechanical: true|false,
    fix?: "<one-line change when mechanical>" }`. `mechanical: true` only when
-   the fix needs no invented content (a spacing token swap, an existing
-   label reused as tooltip text). The caller decides what to apply.
+   the fix needs no invented content (a spacing or colour token swap, an
+   existing label reused as tooltip text through the app's tooltip
+   component). The caller decides what to apply.
 4. **Name the overrides**: `disabled: [ids]` from the project override,
    `notApplicable: [ids]` for mechanism classes absent from the project.
 5. **No completion card, no AskUserQuestion, no session-title change** — the
@@ -394,13 +389,15 @@ When `$AUTONOMOUS=1`:
 ## Step 11 — Re-test + Pre-Mortem
 
 Before the re-test, when a browser tool is available, run the **runtime
-halves** of the standing UI rules (Step 4 #8) over the scope: hover an
-icon-only control and time the tooltip, open each changed menu and compare
-its surface to a card/dialog of the app, measure touch targets on the phone
-viewport, and tab-walk every changed view (focus order, Escape/Enter/arrows,
-focus ring). Findings follow the same score/approval rules as every other
-polish item; R1/R4 stay report-only. Without a browser tool: list them once
-as skipped in Step 12.
+halves** of the standing UI rules (Step 4 #8) over the scope: time an Info
+and a Label tooltip against their tiers (plus the 300 ms skip delay and
+focus-open), open each changed tooltip, menu and scroll container and
+compare it to a card/dialog of the app in every theme (R0/R5), measure touch
+targets on the phone viewport, and tab-walk every changed view (focus order,
+Escape/Enter/arrows, focus ring). Findings follow the same score/approval
+rules as every other polish item; R0/R1/R4/R5 stay report-only (R0 token
+swaps excepted). Without a browser tool: list them once as skipped in
+Step 12.
 
 1. **Wait** for the background qa agent. Capture screenshots/snapshot
    diffs.

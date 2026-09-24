@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.4.0
+ * @version 0.5.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -44,7 +44,7 @@ export function isDesktopSession(env = process.env) {
  * No prompt may start with "/": the host refuses a prefill whose text starts
  * with a slash — a leading space does not help (live 2026-09-23) — while plain
  * text lands. Skills are reached by their trigger words instead: "ship" hits
- * prompt.ship.detect, "promote <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
+ * prompt.ship.detect, "promote beta <version>" / "promote stable <version>" do-ship's promotion-only run (prompt.ship.detect parses channel + version), "Debug …" auto-fix.
  *
  * `icon` is a Tabler outline icon name (the widget font); `primary` marks the
  * one accent button per row (the card's main verb). Each also carries a
@@ -67,7 +67,8 @@ export const BUTTONS = {
       { label: "Skip", icon: "player-skip-forward", prompt: "Blocker bewusst überspringen: Ship erneut mit skipChecks (Hot-fix-Bypass) durchführen.", tooltip: "Überspringt den Blocker bewusst (Hot-fix-Bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotet den aktuellen Build in den nächsten Channel." },
+      { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotet den aktuellen Build von alpha nach beta." },
+      { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotet den aktuellen Build direkt nach stable — beta zieht auf dieselbe Version mit." },
     ],
     // A plain merge has nothing to promote; it only carries the conclude
     // button when the card has open points (see buttonsFor).
@@ -79,11 +80,11 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploye jetzt die ausstehenden Out-of-band-Artefakte aus dem Deploy-Gate der letzten Card.", primary: true, tooltip: "Deployt die ausstehenden Migrationen/Functions." },
     ],
     "released-beta": [
-      { label: "Nach stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
+      { label: "Promote stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotet von beta nach stable." },
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test war ok — jetzt shippen." },
-      { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel." },
+      { label: "Nachbessern", icon: "bug", prompt: "Beim Testen ist mir etwas aufgefallen, das noch nicht passt — frag mich, was.", tooltip: "Hält den Ship an und fragt, was beim Testen auffiel.", conclude: true },
     ],
     analysis: [
       { label: "Umsetzen", icon: "player-play", prompt: "Setz die Analyse jetzt um.", primary: true, tooltip: "Beginnt die Umsetzung der Analyse." },
@@ -117,7 +118,8 @@ export const BUTTONS = {
       { label: "Skip", icon: "player-skip-forward", prompt: "Deliberately skip the blocker: run the ship again with skipChecks (hot-fix bypass).", tooltip: "Deliberately skips the blocker (hot-fix bypass)." },
     ],
     "ship-successful": [
-      { label: "Promote", icon: "arrow-up", prompt: "promote", primary: true, tooltip: "Promotes the current build to the next channel." },
+      { label: "Promote beta", icon: "arrow-up", prompt: "promote beta", primary: true, tooltip: "Promotes the current build from alpha to beta." },
+      { label: "Promote stable", icon: "arrow-bar-to-up", prompt: "promote stable", tooltip: "Promotes the current build straight to stable — beta follows to the same version." },
     ],
     "ship-successful-plain": [],
     "ship-successful-kept": [
@@ -127,11 +129,11 @@ export const BUTTONS = {
       { label: "Deploy", icon: "cloud-upload", prompt: "Deploy the pending out-of-band artifacts from the last card's deploy gate now.", primary: true, tooltip: "Deploys the pending migrations/functions." },
     ],
     "released-beta": [
-      { label: "To stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
+      { label: "Promote stable", icon: "arrow-up", prompt: "promote stable", primary: true, tooltip: "Promotes from beta to stable." },
     ],
     test: [
       { label: "Ship", icon: "rocket", prompt: "ship", primary: true, tooltip: "Test was fine — ship now." },
-      { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing." },
+      { label: "Rework", icon: "bug", prompt: "While testing I noticed something that is not right yet — ask me what.", tooltip: "Pauses the ship and asks what was found while testing.", conclude: true },
     ],
     analysis: [
       { label: "Implement", icon: "player-play", prompt: "Implement the analysis now.", primary: true, tooltip: "Starts implementing the analysis." },
@@ -158,8 +160,8 @@ export const BUTTONS = {
  * a ship: the ready and test cards ask before it, ship-successful after it.
  */
 export const CONCLUDE = {
-  de: { label: "Offenes abarbeiten", icon: "list-check", tooltip: "Legt die vorbereitete Antwort auf die offenen Punkte ins Eingabefeld — alle angehen, Enter sendet.", intro: "Bitte noch alle offenen Punkte angehen:" },
-  en: { label: "Work through open points", icon: "list-check", tooltip: "Puts the prepared answer to the open points into the input box — tackle all of them, Enter sends.", intro: "Please tackle all open points:" },
+  de: { label: "Nachbessern", icon: "bug", tooltip: "Legt die vorbereitete Antwort auf die offenen Punkte ins Eingabefeld — alle angehen, Enter sendet.", intro: "Bitte noch alle offenen Punkte angehen:" },
+  en: { label: "Rework", icon: "bug", tooltip: "Puts the prepared answer to the open points into the input box — tackle all of them, Enter sends.", intro: "Please tackle all open points:" },
 };
 
 /**
@@ -184,15 +186,15 @@ export function conclusionPrompt(replies, lang = "de") {
  * The buttons a card offers, or [] when nothing is clickable (pending /
  * concept / batch overrides, test-minimal, states with nothing to decide).
  *
- * A promote button carries the card's version ("promote 0.193.0", "promote
- * stable 0.193.0"): prompt.ship.detect treats a named version as
+ * A promote button carries the card's version ("promote beta 0.193.0",
+ * "promote stable 0.193.0"): prompt.ship.detect treats a named version as
  * promotion-only, so a stale click on an old card promotes exactly that
  * build and never ships edits made after it. Without a known version the
  * promote button is dropped — a bare "promote" could ship later work.
  *
  * With `replies` (one prepared answer per open point) the `conclude` button
  * becomes `CONCLUDE` and carries `conclusionPrompt(replies)`; a key without
- * one (test, ship-successful) gets `CONCLUDE` appended after its own verbs.
+ * one (ship-successful) gets `CONCLUDE` appended after its own verbs.
  * index.js#buildDecisionBlock decides which cards pass replies at all.
  *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
@@ -221,7 +223,7 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
   return buttons;
 }
 
-/** A promote button's prompt ("promote", "promote stable"). */
+/** A promote button's prompt ("promote beta", "promote stable"). */
 function isPromotePrompt(prompt) {
   return /^promote\b/i.test(String(prompt || ""));
 }
@@ -267,11 +269,11 @@ function glyphColor(glyph) {
   return COLOR.green;
 }
 
-/** One evidence post as a `<span>` with a ~600 ms hover tooltip. */
+/** One evidence post as a `<span>` with an app-styled Info tooltip (`data-tip`). */
 function evidencePostHtml(post) {
   const color = glyphColor(post.glyph);
-  const title = post.tooltip ? ` title="${escapeHtml(post.tooltip)}"` : "";
-  return `<span class="card-post" data-delay="600" style="color:${color}"${title}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
+  const tip = post.tooltip ? ` data-tip="${escapeHtml(post.tooltip)}"` : "";
+  return `<span class="card-post" style="color:${color}"${tip}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
 }
 
 /** One budget bar (time fill + usage marker + watermark + sheen). */
@@ -280,7 +282,9 @@ function budgetBarHtml(bar) {
   const elapsed = Math.max(0, Math.min(100, Number(bar.elapsedPct) || 0));
   const markerColor = bar.level === "red" ? COLOR.markerRed : bar.level === "yellow" ? COLOR.markerYellow : COLOR.markerWhite;
   return [
-    `<span class="card-budget" data-delay="600" title="${escapeHtml(bar.tooltip || "")}" style="display:inline-flex;align-items:center;gap:8px">`,
+    // Label tier: the bar is a graphic, its tooltip is the only place that
+    // names the value the user is inspecting (ui-defaults.md R1).
+    `<span class="card-budget" data-tip="${escapeHtml(bar.tooltip || "")}" data-tip-tier="label" style="display:inline-flex;align-items:center;gap:8px">`,
     `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
     // Track: time fill with the sweep clipped INSIDE it (the glint runs over
     // elapsed time only — never over time that has not passed), watermark in
@@ -304,6 +308,32 @@ function pipelinePrHtml(pipelinePr, repoUrl) {
   return href
     ? `<a href="${escapeHtml(href)}" class="card-pr-link" style="color:inherit;text-decoration:none">${escapeHtml(label)}</a>`
     : escapeHtml(label);
+}
+
+/**
+ * The ring model's channel ladder as plain text — no frame, no fill, nothing
+ * that reads like a button next to the promote buttons. The highest version
+ * leads in lilac (green once every channel serves it), the lagging channels
+ * follow quieter with their distance in yellow ("−3 · 7 d").
+ */
+function channelLadderHtml(ladder, lang) {
+  if (!ladder || !Array.isArray(ladder.groups) || !ladder.groups.length) return "";
+  const skipped = lang === "en" ? "skipped" : "übersprungen";
+  const lead = ladder.allEqual ? COLOR.green : COLOR.lilac;
+  const sep = `<span aria-hidden="true" style="color:${COLOR.watermark}">›</span>`;
+  const parts = ladder.groups.map((g) => {
+    const name = `<span style="color:${COLOR.watermark}">${escapeHtml(g.channels.join(" · "))}</span>`;
+    if (g.skipped) return `<span>${name} <span style="color:${COLOR.watermark}">${skipped}</span></span>`;
+    if (!g.version) return `<span>${name} <span style="color:${COLOR.watermark}">—</span></span>`;
+    const ver = g.top
+      ? `<span style="color:${lead};font-weight:500">v${escapeHtml(g.version)}${ladder.allEqual ? " ✓" : ""}</span>`
+      : `<span style="color:var(--text-secondary)">v${escapeHtml(g.version)}</span>`;
+    const lag = g.lag
+      ? ` <span style="font-size:11px;color:${COLOR.yellow}">−${g.lag.versions}${g.lag.days ? ` · ${g.lag.days} d` : ""}</span>`
+      : "";
+    return `<span>${name} ${ver}${lag}</span>`;
+  });
+  return `<div class="card-ladder" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:13px;padding:0 0 4px">${parts.join(sep)}</div>`;
 }
 
 /**
@@ -349,6 +379,8 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
+  const ladderHtml = channelLadderHtml(model.ladder, lang);
+
   // The title lives in the widget: on Desktop there is no card markdown
   // (§ 4), so the whole card is drawn once and nothing follows the widget.
   // card-guard reads this h3 as the card title. h3 = the contract's
@@ -364,6 +396,7 @@ export function cardWidgetHtml(model, repoUrl) {
     resultLinesHtml,
     evidenceHtml,
     pipelineHtml,
+    ladderHtml,
     budgetHtml,
     `</div>`,
   ].filter(Boolean).join("\n  ");
@@ -390,7 +423,7 @@ export function cardWidgetHtml(model, repoUrl) {
         // A multi-line prompt (the conclusion list) keeps its line breaks as
         // &#10;: getAttribute hands them back as "\n", and a relayed widget
         // cannot lose them to whitespace tidying.
-        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" title="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
+        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
           `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
           `${escapeHtml(a.label)} ↗</span>`;
       }).join("\n  ") +
@@ -414,13 +447,13 @@ export function cardWidgetHtml(model, repoUrl) {
 
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}</style>`,
+    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}</style>`,
     // ONE surface around everything: a faint blue wash (6 % of the accent
     // blue), the same hue as the decision box one step lighter, so the card is
     // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface
     // token: `--surface-1`/`-2` read as grey-on-grey ("too colourless") on the
     // dark page. No border — the tint alone says "one card".
-    `<div class="card-surface" style="background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
+    `<div class="card-surface" style="position:relative;background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
     blockA,
     blockB,
     `</div>`,
@@ -445,6 +478,10 @@ export const SEND_RETRY_WINDOW_MS = 5000;
 export const SEND_RETRY_INTERVAL_MS = 300;
 export const SEND_REPLY_TIMEOUT_MS = 1000;
 
+/** The two tooltip delay tiers and the skip window (ui-defaults.md R1). */
+export const TOOLTIP_DELAY_MS = { info: 1500, label: 500 };
+export const TOOLTIP_SKIP_MS = 300;
+
 /**
  * The button script. How the Desktop Code-tab host handles `ui/message`
  * (read from its bundle, 2026-09-22):
@@ -468,6 +505,14 @@ export const SEND_REPLY_TIMEOUT_MS = 1000;
  * that is already filled refuses. If every attempt fails, the likely cause
  * is a non-empty composer, and the button says so. One click at a time per
  * button (`data-busy`).
+ *
+ * It also draws every `data-tip` as an app-styled tooltip in the host's
+ * tokens (ui-defaults.md R0/R1) — never the native `title`, which ignores the
+ * theme, the delay and keyboard focus. Info 1500 ms by default, Label 500 ms
+ * where `data-tip-tier="label"` (the budget bar); the next tip opens
+ * instantly within 300 ms and on keyboard focus; the pointer can move onto
+ * it; Escape closes it. Positioned absolutely inside `.card-surface`, never
+ * fixed (a fixed element collapses the widget iframe).
  *
  * @param {'de'|'en'} lang
  * @returns {string} plain ES5, no comments (widget streaming rules)
@@ -506,6 +551,50 @@ export function cardWidgetScript(lang = "de") {
     `    b.addEventListener('click', function () { go(b); });`,
     `    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });`,
     `  });`,
+    `  var TIP = { info: ${TOOLTIP_DELAY_MS.info}, label: ${TOOLTIP_DELAY_MS.label} }, SKIP = ${TOOLTIP_SKIP_MS};`,
+    `  var surface = document.querySelector('.card-surface'), tip = document.createElement('div');`,
+    `  var owner = null, openT = 0, closeT = 0, lastClose = 0, viaKey = false;`,
+    `  tip.className = 'card-tip'; tip.id = 'card-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;`,
+    `  if (surface) surface.appendChild(tip);`,
+    `  function place(el) {`,
+    `    var s = surface.getBoundingClientRect(), r = el.getBoundingClientRect();`,
+    `    var top = r.top - s.top - tip.offsetHeight - 6;`,
+    `    if (top < 0) top = r.bottom - s.top + 6;`,
+    `    var left = Math.max(0, Math.min(r.left - s.left + r.width / 2 - tip.offsetWidth / 2, s.width - tip.offsetWidth));`,
+    `    tip.style.top = Math.round(top) + 'px'; tip.style.left = Math.round(left) + 'px';`,
+    `  }`,
+    `  function show(el) {`,
+    `    if (!surface || !el.getAttribute('data-tip')) return;`,
+    `    owner = el; tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(el);`,
+    `    el.setAttribute('aria-describedby', 'card-tip');`,
+    `  }`,
+    `  function hide() {`,
+    `    clearTimeout(openT); clearTimeout(closeT);`,
+    `    if (!owner) return;`,
+    `    owner.removeAttribute('aria-describedby'); owner = null; tip.hidden = true; lastClose = Date.now();`,
+    `  }`,
+    `  function schedule(el, now) {`,
+    `    clearTimeout(openT); clearTimeout(closeT);`,
+    `    if (owner === el) return;`,
+    `    if (owner) hide();`,
+    `    var wait = now || Date.now() - lastClose < SKIP ? 0 : TIP[el.getAttribute('data-tip-tier') === 'label' ? 'label' : 'info'];`,
+    `    openT = setTimeout(function () { show(el); }, wait);`,
+    `  }`,
+    `  function trig(n) { return n && n.closest ? n.closest('[data-tip]') : null; }`,
+    `  document.addEventListener('pointerover', function (e) {`,
+    `    if (tip.contains(e.target)) { clearTimeout(closeT); return; }`,
+    `    var el = trig(e.target); if (el) schedule(el, false);`,
+    `  });`,
+    `  document.addEventListener('pointerout', function (e) {`,
+    `    var to = e.relatedTarget;`,
+    `    if (to && (tip.contains(to) || (owner && owner.contains(to)))) return;`,
+    `    if (!trig(e.target) && !tip.contains(e.target)) return;`,
+    `    clearTimeout(openT); if (owner) closeT = setTimeout(hide, 120);`,
+    `  });`,
+    `  document.addEventListener('focusin', function (e) { var el = trig(e.target); if (el && viaKey) schedule(el, true); });`,
+    `  document.addEventListener('focusout', function () { hide(); });`,
+    `  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); else viaKey = true; }, true);`,
+    `  document.addEventListener('pointerdown', function (e) { viaKey = false; if (!tip.contains(e.target)) hide(); }, true);`,
     `})();`,
   ].join("\n");
 }

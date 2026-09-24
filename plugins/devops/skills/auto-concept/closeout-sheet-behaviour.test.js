@@ -350,12 +350,12 @@ describe("close-out sheet — what the user is promised", () => {
     expect(p.sheet().querySelector('.hint[data-finalize-state="done"]')).toBeNull();
   });
 
-  test("the consequence warning is the execute button's title, only once the click can fire", () => {
+  test("the consequence warning is the execute button's tooltip, only once the click can fire", () => {
     const p = page({ items: ITEMS });
-    expect(p.button().hasAttribute("title"), "unanswered ship — nothing to warn about yet").toBe(false);
+    expect(p.button().hasAttribute("data-tip"), "unanswered ship — nothing to warn about yet").toBe(false);
     p.ship("no");
     p.advanceAll();
-    expect(p.button().title, "every row answered — the click is live").toBe("final.closeout_plan_warn");
+    expect(p.button().dataset.tip, "every row answered — the click is live").toBe("final.closeout_plan_warn");
   });
 
   test("a disconnected bridge shows on the button, not on a status line", () => {

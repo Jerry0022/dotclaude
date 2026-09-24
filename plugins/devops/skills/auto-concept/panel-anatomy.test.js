@@ -157,8 +157,8 @@ describe("panel anatomy — markup (both skeletons)", () => {
       expect(ready, where).not.toMatch(/<p class="hint">\{\{panel\.submit_iterate_hint\}\}/);
       expect(ready, where).not.toMatch(/<p class="hint hint-warn">\{\{panel\.submit_implement_hint\}\}/);
       // …the hints are tooltips now.
-      expect(ready, where).toMatch(/id="submit-iterate-btn"[^>]*title="\{\{panel\.submit_iterate_hint\}\}"/);
-      expect(ready, where).toMatch(/id="submit-implement-btn"[^>]*title="\{\{panel\.submit_implement_hint\}\}"/);
+      expect(ready, where).toMatch(/id="submit-iterate-btn"[^>]*data-tip="\{\{panel\.submit_iterate_hint\}\}"/);
+      expect(ready, where).toMatch(/id="submit-implement-btn"[^>]*data-tip="\{\{panel\.submit_implement_hint\}\}"/);
       // The cache hint stays, twice: badge on the primary, line in the menu.
       expect((ready.match(/data-cache-hint="/g) || []).length, where).toBe(2);
     }
@@ -317,7 +317,7 @@ describe("panel anatomy — markup (both skeletons)", () => {
     // The execute title is the consequence warning, set only once the click
     // can fire; the disconnected case is the button's own label.
     const btnFn = fnSource("updateCloseoutButton");
-    expect(btnFn).toContain("if (ready) btn.title = btn.dataset.titleExecute || '';");
+    expect(btnFn).toContain("if (ready) btn.dataset.tip = btn.dataset.titleExecute || '';");
     expect(btnFn).toContain("conn.dataset.state === 'disconnected'");
     expect(btnFn).toContain("btn.dataset.labelExecuteOffline");
     // … and never repaints a button that already shows a finalize state.
@@ -411,7 +411,8 @@ describe("panel anatomy — markup (both skeletons)", () => {
   test("locale table carries the status-line and menu strings in en and de", () => {
     for (const key of [
       "panel.status_saved", "panel.status_saving", "panel.status_connecting",
-      "panel.status_local_only", "panel.status_working", "panel.status_frozen",
+      "panel.status_local_only", "panel.status_local_only_connected",
+      "panel.status_working", "panel.status_frozen",
       "panel.status_detail", "panel.submit_menu", "panel.submit_menu_hint", "panel.here_back",
     ]) {
       const row = md.split("\n").find((l) => l.startsWith("| `" + key + "`"));
@@ -746,6 +747,16 @@ describe("panel anatomy — status line behaviour (reference JS on jsdom)", () =
     p.document.getElementById("connection-status").dataset.state = "connected";
     p.window._setDraftPhase("local");
     expect(p.status()).toBe("local-only");
+    // Same state, but no "· getrennt": the heartbeat vouches for the bridge,
+    // so a failing draft mirror is not a disconnect (gate 65).
+    expect(p.label()).toBe("panel.status_local_only_connected");
+    p.document.getElementById("connection-status").dataset.state = "connecting";
+    p.window.renderPanelStatus();
+    expect(p.label()).toBe("panel.status_local_only_connected");
+    // A real disconnect still says so, whatever the draft mirror reports.
+    p.document.getElementById("connection-status").dataset.state = "disconnected";
+    p.window.renderPanelStatus();
+    expect(p.label()).toBe("panel.status_local_only");
   });
 
   test("after submit: working + one dot per VISIBLE step, list expandable under the line", () => {
@@ -798,7 +809,7 @@ describe("panel anatomy — status line behaviour (reference JS on jsdom)", () =
     p.window.checkClaudeConnection();
     p.window.checkClaudeConnection();
     expect(p.document.getElementById("connection-status").dataset.state).toBe("disconnected");
-    expect(p.document.getElementById("connection-status").title).toBe("panel.disconnected_title");
+    expect(p.document.getElementById("connection-status").dataset.tip).toBe("panel.disconnected_title");
   });
 
   test("ready panel: disconnected shows the cache badge and keeps the buttons enabled", () => {

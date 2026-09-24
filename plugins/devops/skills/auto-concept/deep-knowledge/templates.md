@@ -62,7 +62,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.submit_implement_hint`  | Claude applies the selection as real changes now. | Claude setzt die Auswahl jetzt in echte Änderungen um. |
 | `panel.submit_implement_confirm` | Implement with feedback now? Claude will write code changes. | Mit Feedback jetzt implementieren? Claude schreibt jetzt Code-Änderungen. |
 | `panel.submitted`              | Decisions submitted            | Entscheidungen übermittelt |
-| `panel.submitted_hint`         | Claude is processing your selection. Switch to the **Claude chat** to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum **Claude Chat** um den Fortschritt zu sehen. |
+| `panel.submitted_hint`         | Claude is processing your selection. Switch to the Claude chat to follow progress. | Claude verarbeitet deine Auswahl. Wechsle zum Claude-Chat, um den Fortschritt zu sehen. |
 | `panel.step_submitted`         | Submitted                      | Übermittelt |
 | `panel.step_received`          | Claude is processing           | Claude verarbeitet |
 | `panel.step_implemented`       | Implementation complete        | Implementierung abgeschlossen |
@@ -93,6 +93,7 @@ must see their own language. The locale hint is authoritative.
 | `panel.status_saving`          | Saving…                        | Speichert… |
 | `panel.status_connecting`      | Saved · connecting…            | Gespeichert · verbinde… |
 | `panel.status_local_only`      | Saved locally only · disconnected | Nur lokal gespeichert · getrennt |
+| `panel.status_local_only_connected` | Saved locally only       | Nur lokal gespeichert |
 | `panel.status_working`         | Submitted · Claude is working  | Übermittelt · Claude arbeitet |
 | `panel.status_frozen`          | read-only                      | nur lesen |
 | `panel.status_detail`          | Progress                       | Fortschritt |
@@ -211,6 +212,7 @@ must see their own language. The locale hint is authoritative.
 | `state.recovered_found`        | Notes from an earlier version of this page were restored. | Notizen aus einer früheren Fassung dieser Seite wurden wiederhergestellt. |
 | `state.recovered_dismiss`      | Dismiss                          | Ausblenden |
 | `state.draft_local_only`       | Notes are saved in this browser only — the bridge is unreachable. | Notizen liegen nur in diesem Browser — die Bridge ist nicht erreichbar. |
+| `state.draft_save_failed`      | Notes are saved in this browser only — the bridge did not store them. | Notizen liegen nur in diesem Browser — die Bridge hat sie nicht gespeichert. |
 | `state.dock_submitted`         | Sent to Claude — read-only until the next round. | An Claude gesendet — schreibgeschützt bis zur nächsten Runde. |
 | `design.viewport_switch`       | View                           | Ansicht |
 | `design.viewport_desktop`      | Desktop                        | Desktop |
@@ -365,14 +367,14 @@ the `[ui-locale: ...]` hint produced.
                showIteration() path as an iteration tab. -->
           <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
                   aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
-                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+                  data-tip="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
             <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
           </button>
         </span>
         <button type="button" id="theme-toggle" class="theme-toggle-btn"
                 data-label-light="{{theme.to_light}}"
                 data-label-dark="{{theme.to_dark}}"
-                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+                data-tip="{{theme.to_light}}" aria-label="{{theme.to_light}}">
           <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
           <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
         </button>
@@ -506,7 +508,7 @@ the `[ui-locale: ...]` hint produced.
            the implement action one level deeper. The misclick barrier is
            colour + border + the extra click, not distance — there is no
            .submit-gap in here any more. The two hint lines moved into
-           `title` tooltips; the cache hint stays an inline badge on the
+           `data-tip` tooltips; the cache hint stays an inline badge on the
            primary button and a line inside the menu (both toggled by
            _setCacheHints while disconnected). -->
       <div id="panel-ready">
@@ -515,7 +517,7 @@ the `[ui-locale: ...]` hint produced.
         </div>
 
         <div class="submit-split">
-          <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+          <button id="submit-iterate-btn" class="primary submit-btn" data-tip="{{panel.submit_iterate_hint}}">
             <span class="submit-label">{{panel.submit_iterate}}</span>
             <span class="hint-cache" data-cache-hint="iterate" hidden>
               <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
@@ -523,12 +525,12 @@ the `[ui-locale: ...]` hint produced.
           </button>
           <button type="button" id="submit-menu-btn" class="submit-menu-btn"
                   aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
-                  aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+                  aria-label="{{panel.submit_menu}}" data-tip="{{panel.submit_menu}}">
             <span aria-hidden="true">▾</span>
           </button>
         </div>
         <div id="submit-menu" class="submit-menu" role="menu" hidden>
-          <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+          <button id="submit-implement-btn" class="implement-btn" role="menuitem" data-tip="{{panel.submit_implement_hint}}">
             <span class="warn-icon" aria-hidden="true">⚠</span>
             {{panel.submit_implement}}
           </button>
@@ -586,7 +588,7 @@ the `[ui-locale: ...]` hint produced.
              height it needs, and the plan line only repeated what the rows'
              own inline summaries already said.
              Each row collapses to ONE line — ○/●/✓ marker, icon (native
-             title + aria-label), short label, current-answer summary — and
+             data-tip + aria-label), short label, current-answer summary — and
              exactly one is open at a time (openCloseoutRow()). The order is
              enforced: the first unanswered row opens by itself, every LATER
              unanswered row is locked (data-locked, head `disabled`, no
@@ -598,7 +600,7 @@ the `[ui-locale: ...]` hint produced.
              default may stand as-is, confirming just means the user looked.
              The button reads "Weiter ›" until every visible row is answered,
              then transforms into the warning-coloured "⚠ Ausführen" (the
-             consequence warning is its native title) that submits
+             consequence warning is its data-tip tooltip) that submits
              `finalize`, and after that click it IS the status: "⏳ Claude
              arbeitet es ab …", then "✓ Concept abgeschlossen." — never two
              buttons, never a status paragraph beneath it
@@ -646,7 +648,7 @@ the `[ui-locale: ...]` hint produced.
           <section class="closeout-block" data-closeout-block="followups" hidden>
             <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
               <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" title="{{final.followups_q}}" aria-label="{{final.followups_q}}">📌</span>
+              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.followups_q}}" aria-label="{{final.followups_q}}">📌</span>
               <span class="closeout-row-label">{{final.followups_q}}</span>
               <span class="closeout-count" id="closeout-followup-count" aria-live="polite"></span>
               <span class="closeout-row-summary" data-closeout-summary></span>
@@ -672,7 +674,7 @@ the `[ui-locale: ...]` hint produced.
           <section class="closeout-block" data-closeout-block="ship">
             <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
               <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" title="{{final.closeout_ship_q}}" aria-label="{{final.closeout_ship_q}}">🚀</span>
+              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.closeout_ship_q}}" aria-label="{{final.closeout_ship_q}}">🚀</span>
               <span class="closeout-row-label">{{final.closeout_ship_q}}</span>
               <span class="closeout-row-summary" data-closeout-summary></span>
             </button>
@@ -707,7 +709,7 @@ the `[ui-locale: ...]` hint produced.
           <section class="closeout-block" data-closeout-block="files">
             <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
               <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" title="{{final.closeout_label_files}}" aria-label="{{final.closeout_label_files}}">🗂</span>
+              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.closeout_label_files}}" aria-label="{{final.closeout_label_files}}">🗂</span>
               <span class="closeout-row-label">{{final.closeout_label_files}}</span>
               <span class="closeout-row-summary" data-closeout-summary></span>
             </button>
@@ -764,7 +766,7 @@ the `[ui-locale: ...]` hint produced.
           <section class="closeout-block closeout-handoffs" data-closeout-block="handoffs" hidden>
             <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
               <span class="closeout-mark" data-closeout-mark aria-hidden="true">○</span>
-              <span class="closeout-row-icon" aria-hidden="true" title="{{final.handoffs}}" aria-label="{{final.handoffs}}">⚠</span>
+              <span class="closeout-row-icon" aria-hidden="true" data-tip="{{final.handoffs}}" aria-label="{{final.handoffs}}">⚠</span>
               <span class="closeout-row-label">{{final.handoffs}}</span>
               <span class="closeout-count" id="closeout-handoffs-count"></span>
               <span class="closeout-row-summary" data-closeout-summary></span>
@@ -822,7 +824,7 @@ the `[ui-locale: ...]` hint produced.
     <!-- ☰ FAB + backdrop — page chrome, same markup in every template. -->
     <button id="panel-toggle" class="panel-fab"
             aria-label="{{panel.toggle_open}}"
-            title="{{panel.toggle_open}}"
+            data-tip="{{panel.toggle_open}}"
             aria-expanded="false"
             data-label-open="{{panel.toggle_open}}"
             data-label-close="{{panel.toggle_close}}">☰</button>
@@ -844,7 +846,7 @@ the `[ui-locale: ...]` hint produced.
          locale table; never bake English (or "Feedback") in here. -->
     <button id="feedback-toggle" class="feedback-fab"
             aria-label="{{proto.feedback_toggle}}"
-            title="{{proto.feedback_toggle}}"
+            data-tip="{{proto.feedback_toggle}}"
             aria-expanded="false"
             data-untouched="true"
             data-label-open="{{proto.feedback_toggle}}"
@@ -856,8 +858,8 @@ the `[ui-locale: ...]` hint produced.
              the dock (data-open toggle), maximise RESIZES it (data-size
              override) without touching data-open at all. Never merge them. -->
         <button id="feedback-maximize" class="feedback-maximize-btn" aria-pressed="false"
-                aria-label="{{panel.maximize}}" title="{{panel.maximize}}">⤢</button>
-        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
+                aria-label="{{panel.maximize}}" data-tip="{{panel.maximize}}">⤢</button>
+        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" data-tip="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
         <label>{{proto.feedback_general}}</label>
@@ -881,7 +883,7 @@ the `[ui-locale: ...]` hint produced.
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
-       title="{{panel.dim_dismiss}}" hidden></div>
+       data-tip="{{panel.dim_dismiss}}" hidden></div>
 
   <!-- Frozen-iteration floating bar (all templates). Page-level chrome, so it
        lives OUTSIDE section[data-iteration], next to the dimmer. showIteration()
@@ -944,7 +946,7 @@ the ☰ panel or the 💬 dock. The payload is one shape everywhere
 <!-- inside .concept-layout, after the </aside> -->
 <button id="panel-toggle" class="panel-fab"
         aria-label="{{panel.toggle_open}}"
-        title="{{panel.toggle_open}}"
+        data-tip="{{panel.toggle_open}}"
         aria-expanded="false"
         data-label-open="{{panel.toggle_open}}"
         data-label-close="{{panel.toggle_close}}">☰</button>
@@ -1420,7 +1422,7 @@ html:not([data-template="design"]) .feedback-dock .feedback-divider { display: n
     if (panelToggle) {
       panelToggle.setAttribute('aria-expanded', 'true');
       const lbl = panelToggle.dataset.labelClose;
-      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.dataset.tip = lbl; }
     }
     document.body.classList.add('panel-open');
     // Only re-home focus that the dock just lost — never steal it from a
@@ -1434,7 +1436,7 @@ html:not([data-template="design"]) .feedback-dock .feedback-divider { display: n
     if (panelToggle) {
       panelToggle.setAttribute('aria-expanded', 'false');
       const lbl = panelToggle.dataset.labelOpen;
-      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.title = lbl; }
+      if (lbl) { panelToggle.setAttribute('aria-label', lbl); panelToggle.dataset.tip = lbl; }
     }
     document.body.classList.remove('panel-open');
   };
@@ -1518,7 +1520,7 @@ html:not([data-template="design"]) .feedback-dock .feedback-divider { display: n
     dock.dataset.open = 'true';
     dockToggle.setAttribute('aria-expanded', 'true');
     dockToggle.setAttribute('aria-label', LABEL_CLOSE);
-    dockToggle.title = LABEL_CLOSE;
+    dockToggle.dataset.tip = LABEL_CLOSE;
   }
   // `handOff` = the dock is closing because the panel is taking over. Then
   // the FAB must NOT be focused: it sits at z-index 220, above the panel
@@ -1534,7 +1536,7 @@ html:not([data-template="design"]) .feedback-dock .feedback-divider { display: n
     dock.dataset.open = 'false';
     dockToggle.setAttribute('aria-expanded', 'false');
     dockToggle.setAttribute('aria-label', LABEL_OPEN);
-    dockToggle.title = LABEL_OPEN;
+    dockToggle.dataset.tip = LABEL_OPEN;
     if (focusWasInside) dockToggle.focus();
   }
   window.openDock = openDock;
@@ -1572,7 +1574,7 @@ html:not([data-template="design"]) .feedback-dock .feedback-divider { display: n
     dockMaximize.setAttribute('aria-pressed', String(on));
     const label = on ? '{{panel.restore_size}}' : '{{panel.maximize}}';
     dockMaximize.setAttribute('aria-label', label);
-    dockMaximize.title = label;
+    dockMaximize.dataset.tip = label;
   }
   dockMaximize?.addEventListener('click', () => {
     if (!dock) return;
@@ -3055,7 +3057,7 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
     </nav>
 
     <!-- Two FABs — the only floating UI besides the screen itself.
-         BOTH carry two labels: the toggle swaps `title` AND `aria-label`
+         BOTH carry two labels: the toggle swaps `data-tip` AND `aria-label`
          together with `aria-expanded`, so pointer users get a hover tooltip
          and screen-reader users hear the correct NEXT action ("Open" vs
          "Minimize"). The labels are tooltip-only on purpose — an unlabelled
@@ -3069,13 +3071,13 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
          twice. -->
     <button id="panel-toggle" class="panel-fab"
             aria-label="{{panel.toggle_open}}"
-            title="{{panel.toggle_open}}"
+            data-tip="{{panel.toggle_open}}"
             aria-expanded="false"
             data-label-open="{{panel.toggle_open}}"
             data-label-close="{{panel.toggle_close}}">☰</button>
     <button id="feedback-toggle" class="feedback-fab"
             aria-label="{{proto.feedback_toggle}}"
-            title="{{proto.feedback_toggle}}"
+            data-tip="{{proto.feedback_toggle}}"
             aria-expanded="false"
             data-untouched="true"
             data-label-open="{{proto.feedback_toggle}}"
@@ -3143,14 +3145,14 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
           <button type="button" id="panel-here-back" class="link-btn panel-here-back" hidden></button>
           <button type="button" id="panel-here-rounds" class="panel-here-rounds-btn" hidden
                   aria-haspopup="true" aria-expanded="false" aria-controls="panel-here-rounds-list"
-                  title="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
+                  data-tip="{{nav.rounds_chip}}" aria-label="{{nav.rounds_chip}}">
             <span aria-hidden="true">🕘</span> <span data-here-rounds-count></span>
           </button>
         </span>
         <button type="button" id="theme-toggle" class="theme-toggle-btn"
                 data-label-light="{{theme.to_light}}"
                 data-label-dark="{{theme.to_dark}}"
-                title="{{theme.to_light}}" aria-label="{{theme.to_light}}">
+                data-tip="{{theme.to_light}}" aria-label="{{theme.to_light}}">
           <span class="theme-glyph" data-glyph="sun" aria-hidden="true">☀️</span>
           <span class="theme-glyph" data-glyph="moon" aria-hidden="true">🌙</span>
         </button>
@@ -3236,7 +3238,7 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
       <div class="panel-cta">
       <div id="panel-ready">
         <div class="submit-split">
-          <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+          <button id="submit-iterate-btn" class="primary submit-btn" data-tip="{{panel.submit_iterate_hint}}">
             <span class="submit-label">{{panel.submit_iterate}}</span>
             <span class="hint-cache" data-cache-hint="iterate" hidden>
               <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
@@ -3244,12 +3246,12 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
           </button>
           <button type="button" id="submit-menu-btn" class="submit-menu-btn"
                   aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
-                  aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+                  aria-label="{{panel.submit_menu}}" data-tip="{{panel.submit_menu}}">
             <span aria-hidden="true">▾</span>
           </button>
         </div>
         <div id="submit-menu" class="submit-menu" role="menu" hidden>
-          <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+          <button id="submit-implement-btn" class="implement-btn" role="menuitem" data-tip="{{panel.submit_implement_hint}}">
             <span class="warn-icon" aria-hidden="true">⚠</span>
             {{panel.submit_implement}}
           </button>
@@ -3310,8 +3312,8 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
              (data-size override) without touching data-open at all. The two
              must never be merged into one button. -->
         <button id="feedback-maximize" class="feedback-maximize-btn" aria-pressed="false"
-                aria-label="{{panel.maximize}}" title="{{panel.maximize}}">⤢</button>
-        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" title="{{panel.minimize}}">−</button>
+                aria-label="{{panel.maximize}}" data-tip="{{panel.maximize}}">⤢</button>
+        <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" data-tip="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
         <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong></label>
@@ -3361,7 +3363,7 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
-       title="{{panel.dim_dismiss}}" hidden></div>
+       data-tip="{{panel.dim_dismiss}}" hidden></div>
   <div class="frozen-bar" id="frozen-bar" role="status" hidden>
     <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
     <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
@@ -3373,41 +3375,34 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
 ## Layout CSS
 
 ```css
-/* ── Scroll boxes ───────────────────────────────────────────────────────
-   Deliberately UNSCOPED (the only rules in this section that are): these
-   three are the page's scrolling surfaces in EVERY template, and a
-   scrollbar skin changes no geometry, so scoping it to design mode would
-   only mean the decision/free iterations of the same page keep the raw
-   platform bar. The boxes need `overflow-y: auto` for legitimate reasons
-   (a dock taller than its max-height, a long panel TOC, a screen taller
-   than the safe area), but the default Windows/Chromium bar is an opaque
-   16px slab against a dark panel — measured on a real page as the single
-   loudest piece of chrome in a 430px dock. Thin + border-coloured thumb on
-   a transparent track reads as part of the panel instead. Both syntaxes:
-   `scrollbar-*` covers Firefox and modern Chromium, the `::-webkit-*`
-   pseudo-elements cover the older Chromium/WebKit that ignore it. */
-.feedback-dock,
-.panel-nav-scroll,
-.panel-cta,
-section[data-screen] {
+/* ── Scrollbars (ui-defaults.md R5) ─────────────────────────────────────
+   Deliberately UNSCOPED and UNIVERSAL (the only rules in this section that
+   are): every scroll container of the page wears the same skin in every
+   template and both themes — the dock, the panel TOC, the CTA foot, a
+   design screen taller than the safe area, and every box the page content
+   adds (code blocks, mapping tables, textareas). Scoping it to design mode
+   or to a list of boxes would leave the rest on the raw platform bar, an
+   opaque 16px slab against a dark panel — measured on a real page as the
+   single loudest piece of chrome in a 430px dock. Thin + border-coloured
+   thumb on a transparent track reads as part of the page instead. Both
+   syntaxes: `scrollbar-*` covers Firefox and modern Chromium (which then
+   ignores the `::-webkit-*` rules), the pseudo-elements cover WebKit and
+   older Chromium. `color-scheme` follows the theme so whatever the platform
+   still draws (form controls, the canvas) matches light/dark. */
+* {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color, #30363d) transparent;
 }
-.feedback-dock::-webkit-scrollbar,
-.panel-nav-scroll::-webkit-scrollbar,
-.panel-cta::-webkit-scrollbar,
-section[data-screen]::-webkit-scrollbar { width: 8px; }
-.feedback-dock::-webkit-scrollbar-thumb,
-.panel-nav-scroll::-webkit-scrollbar-thumb,
-.panel-cta::-webkit-scrollbar-thumb,
-section[data-screen]::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb {
   background: var(--border-color, #30363d);
   border-radius: 4px;
 }
-.feedback-dock::-webkit-scrollbar-track,
-.panel-nav-scroll::-webkit-scrollbar-track,
-.panel-cta::-webkit-scrollbar-track,
-section[data-screen]::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb:hover { background: var(--text-secondary, #8b949e); }
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner { background: transparent; }
+html[data-theme="dark"] { color-scheme: dark; }
+html:not([data-theme="dark"]) { color-scheme: light; }
 
 /* EVERY rule below is scoped to html[data-template="design"]. That attribute
    is a projection of the ACTIVE iteration (see § Per-Iteration Templates), so
@@ -4969,7 +4964,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     const label = (btn.dataset.labelPrefix ? btn.dataset.labelPrefix + ': ' : '')
       + current + ' → ' + (VIEWPORT_LABELS[upcoming] || upcoming);
     btn.setAttribute('aria-label', label);
-    btn.title = label;
+    btn.dataset.tip = label;
     const text = btn.querySelector('.viewport-toggle-label');
     if (text) text.textContent = current;
   }
@@ -6324,7 +6319,7 @@ content.
     <!-- Page chrome, not design-only — see § Panel Chrome (all templates). -->
     <button id="panel-toggle" class="panel-fab"
             aria-label="{{panel.toggle_open}}"
-            title="{{panel.toggle_open}}"
+            data-tip="{{panel.toggle_open}}"
             aria-expanded="false"
             data-label-open="{{panel.toggle_open}}"
             data-label-close="{{panel.toggle_close}}">☰</button>
@@ -6337,7 +6332,7 @@ content.
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
-       title="{{panel.dim_dismiss}}" hidden></div>
+       data-tip="{{panel.dim_dismiss}}" hidden></div>
   <div class="frozen-bar" id="frozen-bar" role="status" hidden>
     <span class="frozen-bar-text">🕘 <strong data-frozen-bar-title>Iteration 1</strong> {{frozen.bar_hint}}</span>
     <button type="button" id="frozen-bar-back">{{frozen.bar_back}}</button>
@@ -8655,18 +8650,36 @@ function _draftPayload(cleared) {
 function _takeCleared() { return _draftCleared.splice(0); }
 function _returnCleared(keys) { if (keys.length) _draftCleared.unshift(...keys); }
 
+// The strip names the failure truthfully. Only a transport error while the
+// heartbeat does not vouch for the bridge is "unreachable"; an HTTP refusal
+// (507 disk, 413, 400) means the bridge WAS reached, and a transport error
+// under a connected heartbeat is the browser refusing the request, not the
+// bridge being gone. Both used to read "die Bridge ist nicht erreichbar" —
+// over a bridge answering 200 to everything else, which sent the user after
+// a server that was running fine.
+function _draftStripText(why) {
+  let conn = '';
+  try {
+    const line = document.getElementById('connection-status');
+    conn = (line && line.dataset.state) || '';
+  } catch (e) { /* no status line — fall back to the transport verdict */ }
+  return (why === 'unreachable' && conn !== 'connected')
+    ? '{{state.draft_local_only}}'
+    : '{{state.draft_save_failed}}';
+}
+
 // Only after three consecutive failures, so a single blip does not flash a
 // warning at the user; cleared again on the next success.
-function _setDraftHealth(ok) {
+function _setDraftHealth(ok, why) {
   _draftFailures = ok ? 0 : _draftFailures + 1;
   const show = _draftFailures >= 3;
   if (show && !_draftStripEl) {
     _draftStripEl = document.createElement('div');
     _draftStripEl.className = 'draft-offline-strip';
     _draftStripEl.setAttribute('role', 'status');
-    _draftStripEl.textContent = '{{state.draft_local_only}}';
     document.body.appendChild(_draftStripEl);
   }
+  if (show) _draftStripEl.textContent = _draftStripText(why);
   if (_draftStripEl) _draftStripEl.hidden = !show;
   // The status line follows the same three-strike rule: a single blip stays
   // "Gespeichert" (the local copy IS saved), three in a row read "Nur lokal".
@@ -8679,26 +8692,44 @@ function _setDraftHealth(ok) {
   }
 }
 
+// Every /draft response is read to the end, and the live autosave carries no
+// `keepalive`. Chromium books each keepalive request body against a 64 KiB
+// per-page quota and gives it back only once the response has COMPLETED — and
+// under the bridge's `Cache-Control: no-store` a body nobody reads never
+// completes. The old fire-and-forget flush pinned ~2.4 KB per autosave: after
+// ~27 of them every further keepalive fetch failed inside the browser
+// ("TypeError: Failed to fetch", nothing on the wire), the strip announced an
+// unreachable bridge over a bridge answering 200 to everything else, and
+// nothing typed from then on reached disk until a reload reset the quota.
+// A live page does not need its request to outlive it; keepalive belongs to
+// the teardown path (flushDraftBeacon), which drains its response as well.
+function _drainDraftResponse(res) {
+  try { return res.text().catch(() => ''); }
+  catch (e) { return Promise.resolve(''); }
+}
+
 async function flushDraft() {
   if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
   if (!DRAFT_ENABLED) return;
   const cleared = _takeCleared();
+  let res;
   try {
-    const res = await fetch('/draft', {
+    res = await fetch('/draft', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: _draftPayload(cleared),
-      keepalive: true,
     });
-    // A 507 means the bridge could not reach disk. Same rule as POST
-    // /decisions: that is NOT a success, and the local copy stays the only
-    // one — so the user is told rather than left believing it is safe.
-    if (!res.ok) _returnCleared(cleared);
-    _setDraftHealth(res.ok);
   } catch (e) {
     _returnCleared(cleared);
-    _setDraftHealth(false);
+    _setDraftHealth(false, 'unreachable');
+    return;
   }
+  await _drainDraftResponse(res);
+  // A 507 means the bridge could not reach disk. Same rule as POST
+  // /decisions: that is NOT a success, and the local copy stays the only
+  // one — so the user is told rather than left believing it is safe.
+  if (!res.ok) _returnCleared(cleared);
+  _setDraftHealth(res.ok, res.ok ? '' : 'refused');
 }
 
 function queueDraftSync() {
@@ -8711,7 +8742,9 @@ function queueDraftSync() {
 // Teardown path. sendBeacon is queued by the browser itself and survives the
 // document being discarded, which `fetch` — even with keepalive — does not
 // reliably do on every engine; the fetch below is the fallback for browsers
-// that refuse the beacon (payload too large).
+// that refuse the beacon (payload too large). It still drains its response:
+// `visibilitychange` → hidden runs this on a page that lives on, and an
+// undrained keepalive response keeps its body booked against the quota.
 function flushDraftBeacon() {
   if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
   if (!DRAFT_ENABLED) return;
@@ -8728,7 +8761,7 @@ function flushDraftBeacon() {
       headers: { 'Content-Type': 'application/json' },
       body: body,
       keepalive: true,
-    });
+    }).then(_drainDraftResponse, () => { /* the localStorage copy stands */ });
   } catch (e) { /* the localStorage copy stands — nothing else left to try */ }
 }
 window.addEventListener('pagehide', flushDraftBeacon);
@@ -9158,6 +9191,14 @@ document.addEventListener('input', saveState);
   cache; the bridge's append-only draft log is the record that survives a
   wiped profile, a private window, a quota error, a power cut, and a Claude
   that has stopped answering.
+- **The live autosave never uses `keepalive`, and every draft response is
+  read to the end** (`_drainDraftResponse()`). Chromium books a keepalive
+  request's body against a 64 KiB per-page quota until its response
+  completes, and a `no-store` response nobody reads never completes: a
+  fire-and-forget `fetch('/draft', { keepalive: true })` silently stopped
+  mirroring after ~27 autosaves — every later request failed inside the
+  browser while the bridge kept answering 200 — and stayed dead until a
+  reload. `keepalive` is for the teardown fallback only, and that drains too.
 - `restoreState()` never overwrites a field carrying `data-touched` — it is
   re-entrant (the design layout re-runs it; so does the bridge hydrate), and a
   late re-run must not stamp a stored value over newer keystrokes.
@@ -9416,7 +9457,7 @@ The bar is injected per field by `ensureCommentSlots()` and
 ```html
 <div class="attach-bar" data-attach-for="variant-a-note">
   <button type="button" class="attach-btn"
-          title="{{attach.button_title}}" aria-label="{{attach.button_title}}">📎</button>
+          data-tip="{{attach.button_title}}" aria-label="{{attach.button_title}}">📎</button>
   <input type="file" multiple hidden>
   <div class="attach-thumbs"></div>
 </div>
@@ -9429,7 +9470,7 @@ ziehen)". Resolve it at generation time per § UI Locale.
 carries a bar, so a spelled-out "Ctrl+V or drop any file" line repeated under
 each one is pure noise: it out-weighs the field it decorates and reads as
 clutter down a dock of them. The paste/drop shortcuts live in the button's
-`title`/`aria-label`, which is where a discoverable-but-quiet affordance
+`data-tip`/`aria-label`, which is where a discoverable-but-quiet affordance
 belongs, and the drop target itself stays advertised by the dashed
 `.attach-dragover` outline the moment a file is dragged over the textarea.
 
@@ -9559,7 +9600,7 @@ function buildAttachmentBar(slotKey) {
   bar.className = 'attach-bar';
   bar.dataset.attachFor = slotKey;
   bar.innerHTML =
-    '<button type="button" class="attach-btn" title="{{attach.button_title}}"' +
+    '<button type="button" class="attach-btn" data-tip="{{attach.button_title}}"' +
     ' aria-label="{{attach.button_title}}">📎</button>' +
     '<input type="file" multiple hidden>' +
     '<div class="attach-thumbs"></div>';
@@ -9813,7 +9854,7 @@ function renderAttachments(slotKey) {
     wrap.className = raster ? 'attach-thumb' : 'attach-chip';
     wrap.dataset.synced = String(!!rec.synced);
     wrap.dataset.error = String(!!rec.error);
-    wrap.title = rec.name + attachStatusText(rec);
+    wrap.dataset.tip = rec.name + attachStatusText(rec);
 
     if (raster) {
       const img = document.createElement('img');
@@ -9856,7 +9897,7 @@ function renderAttachments(slotKey) {
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'attach-retry';
-      retry.title = '{{attach.retry}}';
+      retry.dataset.tip = '{{attach.retry}}';
       retry.textContent = '⟳';
       retry.addEventListener('click', () => { uploadAttachment(rec).then(() => renderAttachments(slotKey)); });
       wrap.appendChild(retry);
@@ -9865,7 +9906,7 @@ function renderAttachments(slotKey) {
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'attach-remove';
-    rm.title = '{{attach.remove}}';
+    rm.dataset.tip = '{{attach.remove}}';
     rm.textContent = '×';
     rm.addEventListener('click', () => removeAttachment(slotKey, rec.key));
     wrap.appendChild(rm);
@@ -10435,7 +10476,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
   function slotNoteButton() {
     const note = el('button', 'map-slot-note-btn', '✎');
     note.type = 'button';
-    note.title = MAP_LOCALE.slot_note;
+    note.dataset.tip = MAP_LOCALE.slot_note;
     note.setAttribute('aria-label', MAP_LOCALE.slot_note);
     return note;
   }
@@ -10511,7 +10552,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const th = el('th', 'map-item-label');
     th.setAttribute('scope', 'row');
     th.appendChild(el('span', null, item.label));
-    if (item.hint) th.title = item.hint;
+    if (item.hint) th.dataset.tip = item.hint;
     tr.appendChild(th);
     targets.forEach(t => {
       const td = el('td', 'map-cell-td');
@@ -10555,7 +10596,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       count.textContent = t.accepts === 'one' ? n + '/1' : String(n);
       th.classList.toggle('is-under', !!t.min && n < t.min);
       th.classList.toggle('is-over', (!!t.max && n > t.max) || (t.accepts === 'one' && n > 1));
-      th.title = th.classList.contains('is-under') ? fmt(MAP_LOCALE.slot_empty_min, { n: t.min })
+      th.dataset.tip = th.classList.contains('is-under') ? fmt(MAP_LOCALE.slot_empty_min, { n: t.min })
                : th.classList.contains('is-over') ? fmt(MAP_LOCALE.slot_over_max, { n: t.max || 1 }) : '';
       markNoteButton(section, model, th);
     });
@@ -10567,7 +10608,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       sum.textContent = String(n);
       const flagged = (item.required && !anywhere.has(item.id)) || (min1 && n === 0);
       sum.classList.toggle('is-under', flagged);
-      sum.title = flagged ? MAP_LOCALE.item_required : '';
+      sum.dataset.tip = flagged ? MAP_LOCALE.item_required : '';
     });
   }
   function updateSummary(section, model) {
@@ -10911,7 +10952,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       if (!isFrozen(section)) {
         const x = el('span', 'map-chip-remove', '×');
         x.setAttribute('aria-label', MAP_LOCALE.remove);
-        x.title = MAP_LOCALE.remove;
+        x.dataset.tip = MAP_LOCALE.remove;
         chip.appendChild(x);
       }
       chips.appendChild(chip);
@@ -10930,7 +10971,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
     const over = (!!target.max && n > target.max) || (target.accepts === 'one' && n > 1);
     slot.classList.toggle('is-under', under);
     slot.classList.toggle('is-over', over);
-    count.title = under ? fmt(MAP_LOCALE.slot_empty_min, { n: target.min }) : over ? fmt(MAP_LOCALE.slot_over_max, { n: target.max || 1 }) : '';
+    count.dataset.tip = under ? fmt(MAP_LOCALE.slot_empty_min, { n: target.min }) : over ? fmt(MAP_LOCALE.slot_over_max, { n: target.max || 1 }) : '';
     markNoteButton(section, model, slot);
   }
   // Per item across ALL matrices: where it sits and whether any cell differs
@@ -10976,7 +11017,7 @@ html:not([data-template="design"]) .map-scroll { max-height: 80vh; }
       const s = stats.get(item.id);
       const n = s.places.length;
       chip.querySelector('.map-item-count').textContent = n ? n + '×' : '○';
-      chip.title = s.places.join(', ');
+      chip.dataset.tip = s.places.join(', ');
       chip.classList.toggle('is-changed', s.changed);
       chip.classList.toggle('is-unassigned', n === 0);
       const hit = !q || (item.label + ' ' + groupLabel(item.group)).toLowerCase().includes(q);
@@ -11711,7 +11752,7 @@ changes. The misclick barrier is the extra click plus colour + border
 (warning outline, ⚠ icon), not distance: there is no `.submit-gap` anywhere
 any more — the final-report close-out sheet dropped its own copy too, in
 favour of the accordion rows in front of its single button (§ The close-out
-sheet). The hint lines moved into `title` tooltips; the one line that stays
+sheet). The hint lines moved into `data-tip` tooltips; the one line that stays
 visible is inside the menu ("Kein Code beim Primär-Button").
 
 ### HTML
@@ -11723,7 +11764,7 @@ visible is inside the menu ("Kein Code beim Primär-Button").
   <div class="submit-split">
     <!-- Primary: safe, never implements. The hint is its tooltip; the cache
          badge inside it shows only while disconnected (_setCacheHints). -->
-    <button id="submit-iterate-btn" class="primary submit-btn" title="{{panel.submit_iterate_hint}}">
+    <button id="submit-iterate-btn" class="primary submit-btn" data-tip="{{panel.submit_iterate_hint}}">
       <span class="submit-label">{{panel.submit_iterate}}</span>
       <span class="hint-cache" data-cache-hint="iterate" hidden>
         <span aria-hidden="true">⚠</span> {{panel.btn_cache_hint}}
@@ -11732,7 +11773,7 @@ visible is inside the menu ("Kein Code beim Primär-Button").
     <!-- Caret: opens the menu. aria-expanded mirrors the menu's [hidden]. -->
     <button type="button" id="submit-menu-btn" class="submit-menu-btn"
             aria-haspopup="menu" aria-expanded="false" aria-controls="submit-menu"
-            aria-label="{{panel.submit_menu}}" title="{{panel.submit_menu}}">
+            aria-label="{{panel.submit_menu}}" data-tip="{{panel.submit_menu}}">
       <span aria-hidden="true">▾</span>
     </button>
   </div>
@@ -11740,7 +11781,7 @@ visible is inside the menu ("Kein Code beim Primär-Button").
   <!-- One level deeper: the explicit implementation commit. Opens UPWARD
        over the status line; Escape / outside click closes it. -->
   <div id="submit-menu" class="submit-menu" role="menu" hidden>
-    <button id="submit-implement-btn" class="implement-btn" role="menuitem" title="{{panel.submit_implement_hint}}">
+    <button id="submit-implement-btn" class="implement-btn" role="menuitem" data-tip="{{panel.submit_implement_hint}}">
       <span class="warn-icon" aria-hidden="true">⚠</span>
       {{panel.submit_implement}}
     </button>
@@ -12413,7 +12454,7 @@ function updateCloseoutProgress() {
 }
 // The one button's pre-submit states — never two buttons. Ready = every
 // visible row answered; only then does it read as the warning-coloured
-// execute action, with the consequence warning as its native title. While
+// execute action, with the consequence warning as its data-tip tooltip. While
 // the bridge is disconnected the ready label says so ("· wird
 // zwischengespeichert"): the final report has no status line of its own
 // (§ CSS body.viewing-final .panel-status), so the button is the one place
@@ -12446,8 +12487,8 @@ function updateCloseoutButton() {
   }
   // "Ein Klick, alles davon" only makes sense once the click it describes
   // can actually fire.
-  if (ready) btn.title = btn.dataset.titleExecute || '';
-  else btn.removeAttribute('title');
+  if (ready) btn.dataset.tip = btn.dataset.titleExecute || '';
+  else btn.removeAttribute('data-tip');
 }
 // After the click the button IS the status: running → done, or stalled.
 // Sets [data-finalize-state] (the CSS colour), swaps the label/icon from the
@@ -12471,7 +12512,7 @@ function setCloseoutButtonState(state) {
     return;
   }
   btn.dataset.finalizeState = state;
-  btn.removeAttribute('title');
+  btn.removeAttribute('data-tip');
   const glyph = state === 'running' ? '⏳' : state === 'done' ? '✓' : '⚠';
   const key = 'label' + state.charAt(0).toUpperCase() + state.slice(1);
   const label = btn.querySelector('[data-closeout-btn-label]');
@@ -13284,6 +13325,199 @@ function updateStatusSteps(data) {
 }
 ```
 
+## App Tooltips
+
+Page chrome on every template, like the theme toggle below: no element of a
+concept page uses the native `title` attribute — it renders in the OS look,
+its delay cannot be set and it never opens on keyboard focus
+(`ui-defaults.md` R0/R1, gate 48b). Every hover hint is `data-tip="…"`, and
+this engine renders it in the page's own tokens with the two delay tiers:
+**Info** (1500 ms) is the default; **Label** (500 ms) applies only when the
+tip is the element's only name (an icon-only control), shows cut-off text, or
+explains a disabled control. The engine detects those three cases itself;
+`data-tip-tier="label"` / `"info"` overrides the detection (e.g. `info` on a
+universal ✕). Once a tip has closed, the next one opens instantly within
+300 ms; keyboard focus opens it instantly; the pointer can move onto it;
+Escape, a click or a scroll closes it; touch opens it on long-press. A stray
+`title` — page content Claude writes, an older script — is moved to
+`data-tip` on sight, so the OS tooltip can never appear.
+
+```css
+.app-tip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel-bg, #161b22);
+  color: var(--text-color, #e6edf3);
+  border: 1px solid var(--border-color, #30363d);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.app-tip[data-open] { opacity: 1; }
+.app-tip[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .app-tip { transition: none; } }
+```
+
+```javascript
+(function wireAppTooltips() {
+  if (window.__appTooltips) return;
+  window.__appTooltips = true;
+  const DELAY = { info: 1500, label: 500 };  // R1 tiers — Info is the default
+  const SKIP_MS = 300;                        // the next tip opens instantly
+  const NO_ADOPT = /^(IFRAME|FRAME|LINK|STYLE|META)$/;
+  const SYMBOLIC = /^[\s\p{Extended_Pictographic}\p{S}\p{P}‍️]*$/u;
+  const tip = document.createElement('div');
+  tip.className = 'app-tip';
+  tip.id = 'app-tip';
+  tip.setAttribute('role', 'tooltip');
+  tip.hidden = true;
+  let owner = null, openTimer = 0, closeTimer = 0, pressTimer = 0, lastClose = 0;
+
+  // A native title would put the OS tooltip on top of ours: move it to
+  // data-tip and keep an accessible name on an otherwise empty control.
+  function adopt(el) {
+    if (!el || el.nodeType !== 1 || NO_ADOPT.test(el.tagName) || !el.hasAttribute('title')) return;
+    const text = el.getAttribute('title');
+    el.removeAttribute('title');
+    if (!text) return;
+    if (!el.dataset.tip) el.dataset.tip = text;
+    if (!el.hasAttribute('aria-label') && !el.textContent.trim()) el.setAttribute('aria-label', text);
+  }
+
+  function tierOf(el) {
+    const forced = el.getAttribute('data-tip-tier');
+    if (forced === 'label' || forced === 'info') return forced;
+    if (el.disabled || el.getAttribute('aria-disabled') === 'true') return 'label';
+    if (el.matches('button, a[href], input, select, textarea, [role="button"], [role="tab"], [role="menuitem"], [tabindex]')
+      && SYMBOLIC.test(el.textContent || '')) return 'label';
+    if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow === 'ellipsis') return 'label';
+    return 'info';
+  }
+
+  function describe(el, on) {
+    const ids = (el.getAttribute('aria-describedby') || '').split(/\s+/)
+      .filter((id) => id && id !== tip.id);
+    if (on) ids.push(tip.id);
+    if (ids.length) el.setAttribute('aria-describedby', ids.join(' '));
+    else el.removeAttribute('aria-describedby');
+  }
+
+  function place(el) {
+    const r = el.getBoundingClientRect();
+    const w = tip.offsetWidth, h = tip.offsetHeight, gap = 8;
+    let top = r.top - h - gap;
+    if (top < 4) top = r.bottom + gap;
+    const left = Math.max(4, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 4));
+    tip.style.left = Math.round(left) + 'px';
+    tip.style.top = Math.round(top) + 'px';
+  }
+
+  function show(el) {
+    const text = el.dataset.tip;
+    if (!text || !el.isConnected) return;
+    if (!tip.isConnected) document.body.appendChild(tip);
+    if (owner && owner !== el) describe(owner, false);
+    owner = el;
+    tip.textContent = text;
+    tip.hidden = false;
+    place(el);
+    tip.setAttribute('data-open', '');
+    describe(el, true);
+  }
+
+  function hide() {
+    clearTimeout(openTimer);
+    clearTimeout(closeTimer);
+    if (!owner) return;
+    describe(owner, false);
+    owner = null;
+    tip.removeAttribute('data-open');
+    tip.hidden = true;
+    lastClose = Date.now();
+  }
+
+  function schedule(el, instant) {
+    clearTimeout(openTimer);
+    clearTimeout(closeTimer);
+    if (owner === el) return;
+    if (owner) hide();
+    const wait = instant || Date.now() - lastClose < SKIP_MS ? 0 : DELAY[tierOf(el)];
+    openTimer = setTimeout(() => show(el), wait);
+  }
+
+  const triggerOf = (node) => (node instanceof Element ? node.closest('[data-tip]') : null);
+
+  function boot() {
+    document.querySelectorAll('[title]').forEach(adopt);
+    new MutationObserver((records) => {
+      for (const rec of records) {
+        if (rec.type === 'attributes') {
+          if (rec.attributeName === 'title') adopt(rec.target);
+          else if (rec.target === owner) {
+            if (owner.dataset.tip) { tip.textContent = owner.dataset.tip; place(owner); } else hide();
+          }
+          continue;
+        }
+        rec.addedNodes.forEach((n) => {
+          if (n.nodeType !== 1) return;
+          adopt(n);
+          n.querySelectorAll('[title]').forEach(adopt);
+        });
+      }
+    }).observe(document.documentElement,
+      { subtree: true, childList: true, attributes: true, attributeFilter: ['title', 'data-tip'] });
+  }
+
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType === 'touch') return;
+    if (tip.contains(e.target)) { clearTimeout(closeTimer); return; }
+    const el = triggerOf(e.target);
+    if (el) schedule(el, false);
+  });
+  document.addEventListener('pointerout', (e) => {
+    if (e.pointerType === 'touch') return;
+    const to = e.relatedTarget;
+    if (to instanceof Node && (tip.contains(to) || (owner && owner.contains(to)))) return;
+    if (!triggerOf(e.target) && !tip.contains(e.target)) return;
+    clearTimeout(openTimer);
+    if (owner) closeTimer = setTimeout(hide, 120);
+  });
+  // Keyboard focus opens instantly; focus from a click does not (the pointer
+  // runs its own delay), so the last input modality decides.
+  let viaKeyboard = false;
+  document.addEventListener('focusin', (e) => {
+    const el = triggerOf(e.target);
+    if (el && viaKeyboard) schedule(el, true);
+  });
+  document.addEventListener('focusout', (e) => { if (owner && owner.contains(e.target)) hide(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide();
+    else viaKeyboard = true;
+  }, true);
+  document.addEventListener('pointerdown', (e) => {
+    viaKeyboard = false;
+    if (!tip.contains(e.target)) hide();
+    if (e.pointerType !== 'touch') return;
+    const el = triggerOf(e.target);
+    if (el) pressTimer = setTimeout(() => show(el), DELAY.label);
+  }, true);
+  ['pointerup', 'pointercancel'].forEach((type) =>
+    document.addEventListener(type, () => clearTimeout(pressTimer), true));
+  window.addEventListener('scroll', hide, true);
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+```
+
 ## Theme Toggle
 
 The page defaults to **dark** (`<html data-theme="dark">`, see § Common
@@ -13312,7 +13546,7 @@ the ☀️ glyph shows (CSS, § Panel Chrome) and the tooltip reads
     const sync = () => {
       const next = html.getAttribute('data-theme') === 'dark' ? btn.dataset.labelLight : btn.dataset.labelDark;
       if (!next) return;
-      btn.setAttribute('title', next);
+      btn.setAttribute('data-tip', next);
       btn.setAttribute('aria-label', next);
     };
     btn.addEventListener('click', () => {
@@ -13518,7 +13752,13 @@ function sendTabBye(ev) {
     const body = new Blob([JSON.stringify({ tab: _tabId })], { type: 'application/json' });
     if (navigator.sendBeacon && navigator.sendBeacon('/bye', body)) return;
   } catch (e) { /* fall through */ }
-  try { fetch('/bye', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: _tabId }), keepalive: true }); }
+  // Drained like every keepalive response (§ State Persistence,
+  // _drainDraftResponse): a bfcache-restored page lives on, and an unread
+  // keepalive response keeps its body booked against the 64 KiB quota.
+  try {
+    fetch('/bye', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: _tabId }), keepalive: true })
+      .then(r => r.text(), () => '').catch(() => '');
+  }
   catch (e) { /* the server's TAB_STALE_MS prune is the backstop */ }
 }
 window.addEventListener('pagehide', sendTabBye);
@@ -13587,7 +13827,8 @@ function _setCacheHints(visible) {
 // The one renderer for the pinned .panel-status line. Inputs, in priority:
 //   frozen tab (body.viewing-frozen)        → 🕘 {tab label} · nur lesen
 //   submission in flight (_submittedAt)     → ⏳ Übermittelt · Claude arbeitet  + dots
-//   disconnected OR draft mirror failing    → ⚠ Nur lokal gespeichert · getrennt
+//   disconnected                            → ⚠ Nur lokal gespeichert · getrennt
+//   draft mirror failing, not disconnected  → ⚠ Nur lokal gespeichert
 //   draft flush pending                     → … Speichert
 //   heartbeat still connecting              → ◐ Gespeichert · verbinde…
 //   otherwise                               → ✓ Gespeichert · verbunden
@@ -13612,8 +13853,14 @@ function renderPanelStatus() {
     status = 'frozen'; glyph = '🕘'; text = label + ' · {{panel.status_frozen}}';
   } else if (submitted) {
     status = 'submitted'; glyph = '⏳'; text = '{{panel.status_working}}';
-  } else if (conn === 'disconnected' || draft === 'local') {
+  } else if (conn === 'disconnected') {
     status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only}}';
+  } else if (draft === 'local') {
+    // Same state, no "· getrennt": the heartbeat reports no disconnect, so
+    // the draft mirror failed for another reason (§ State Persistence,
+    // _draftStripText). Claiming a disconnect here is what made a running
+    // bridge look dead.
+    status = 'local-only'; glyph = '⚠'; text = '{{panel.status_local_only_connected}}';
   } else if (draft === 'saving') {
     status = 'saving'; glyph = '…'; text = '{{panel.status_saving}}';
   } else if (conn === 'connecting') {
@@ -13629,7 +13876,7 @@ function renderPanelStatus() {
   // The heartbeat wording lives in the tooltip — the line itself says what
   // the user wants to know (is my work safe / delivered), not what the
   // bridge is doing.
-  line.title = conn === 'connected'    ? '{{panel.connected_title}}'
+  line.dataset.tip = conn === 'connected'    ? '{{panel.connected_title}}'
              : conn === 'disconnected' ? '{{panel.disconnected_title}}'
              :                           '{{panel.connecting_title}}';
   const detail = document.getElementById('status-detail');
@@ -14254,7 +14501,7 @@ pre-selected default may stand as given, confirming just means the user
 looked. There is no separate plan line: each collapsed row's inline summary
 ("shippen", "Seite löschen", "2 · Issue, Issue", "2 Schritte") IS the
 readout of what will happen, and the consequence warning ("Ein Klick, alles
-davon …") is the execute button's native title. Progress ("n von N
+davon …") is the execute button's data-tip tooltip. Progress ("n von N
 beantwortet", `#closeout-progress`) and each row's answered flag are mirrored
 into `sessionStorage` (`closeoutStorageKey()`, keyed by `STORAGE_KEY` +
 iteration) so a reload within the same session does not re-ask what was

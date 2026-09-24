@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.8.0
+ * @version 0.9.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -60,7 +60,7 @@ const TOPIC_MAP = [
   {
     file: 'ui-defaults.md',
     specificity: 2,
-    patterns: [/\bui.*(?:default|rule|convention|regel)/i, /\btooltip/i, /\bdropdown/i, /\bhotkey/i, /\bshortcut/i, /\btastenk/i, /\bkeyboard.*(?:nav|access|shortcut)/i, /\bdesign.*(?:rule|regel|check)/i],
+    patterns: [/\bui.*(?:default|rule|convention|regel)/i, /\btooltip/i, /\bdropdown/i, /\bhotkey/i, /\bshortcut/i, /\btastenk/i, /\bkeyboard.*(?:nav|access|shortcut)/i, /\bdesign.*(?:rule|regel|check)/i, /\bscroll.?bar/i],
   },
   {
     file: 'codex-integration.md',

@@ -128,14 +128,20 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 
 ```
 ○ commit → ○ push → ○ PR → ○ merge · claude/devops-agent-usage-refresh-263640 · Build 176c57d
-✓ commit → ✓ push → ✓ PR #416 → ✓ merge   main → ✓ alpha → ○ beta → ○ stable · v0.179.0 · Build a91c3e2
+✓ commit → ✓ push → ✓ PR #416 → ✓ merge   main · Build a91c3e2
+alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 ```
 
 - `○` open, `✓` done, both grey. After `merge` an em-gap, then the base branch.
-- Ring projects continue the line with the channels (`→ ✓ alpha → ○ beta →
-  ○ stable`). **This replaces the Delivery block / ladder.** The distance to
-  the next channel ("alpha liegt 3 Versionen / 5 Tage vor beta") is the
-  context line under the decision heading.
+- Ring projects add the **channel ladder** under the pipeline line: each
+  channel with the version it serves. The highest version leads (lilac,
+  weight 500); lagging channels follow quieter with their distance in yellow
+  (`−3`, `−9 · 12 d`, from `betaLag` / `stableLag`). Channels on the same
+  version merge (`alpha · beta v0.179.0`); all three equal turn green with a
+  `✓`. Plain text — no frame, no fill: it must never read like a button next
+  to the promote buttons. The ladder is the only place the version appears on
+  the lines (the pipeline line drops its `· v…`), and it replaces the old
+  lag context line under the heading.
 - `#416` is a quiet link on the widget: no colour, underline on hover only.
 - `ready-files`: `📂 9 Dateien geändert · kein Repo · H:\notes\budget`.
 - `analysis` / no changes: `➖ keine Änderungen im Repo · branch`.
@@ -169,16 +175,17 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
   Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
 - **Prepared answer (`ready`, `test`, `ship-successful`)**: when the card has
-  open points, `ready`'s second button is `Offenes abarbeiten` instead of
-  `Ändern`; `test` and `ship-successful` (ring or plain merge) get it as an
-  extra button after their own verbs. It puts the answer to
+  open points, a `Nachbessern` button carries the prepared answer:
+  `ready`'s `Ändern` becomes it, `test`'s own `Nachbessern` swaps its "frag
+  mich, was" prompt for it, and `ship-successful` (ring or plain merge) gets
+  it after its promote verbs. It puts the answer to
   EVERY open point (also those folded into `+N weitere`) into the input box,
   assuming the user wants them all tackled: each point's `reply`
   (`open: [{ text, reply }]`, written as the user — "Ja, die Änderung bitte
   auch in X machen."), else a plain "… Ja, bitte." / "… — bitte angehen."
   One point → its answer alone; two or more → an intro line, a blank line
   and one `- ` bullet per answer in card order. Final tests stay out — they
-  are the user's own steps. Without open points the button stays `Ändern`.
+  are the user's own steps. Without open points `ready` keeps `Ändern` and `test` its plain `Nachbessern`.
 - No `SHIP oder ÄNDERN` line anymore — the buttons say it. The terminal
   shows the question heading alone.
 
@@ -186,16 +193,16 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
-| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Offenes abarbeiten) | |
+| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Nachbessern) | |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
-| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote / none (+ Offenes abarbeiten with open points) | context line = distance to beta |
+| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points | context line = distance to beta |
 | `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter | |
 | `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy | replaces the 🚨 DEPLOY block |
-| `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Nach stable | evidence = promotion facts |
+| `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Promote stable | evidence = promotion facts |
 | `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
 | `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
-| `test` | `🧪 Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (+ Offenes abarbeiten with open points) | unverified part = `◐` post |
+| `test` | `🧪 Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (open points → prepared answer) | unverified part = `◐` post |
 | `test-minimal` | `▶️ Läuft — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget |
 | `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage | pipeline = `➖ keine Änderungen` |
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |

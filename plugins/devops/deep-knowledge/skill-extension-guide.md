@@ -105,6 +105,7 @@ Every plugin skill starts with Step 0:
 ## UI rules
 - disable: R2b, R4                 # standing rules to switch off (named on the ship card)
 - tooltip.mechanisms: appTooltip, <HelpHint>
+- tooltip.delay: info 1200, label 400   # ms, the two R1 tier values (default 1500 / 500)
 - hotkey.mechanisms: useShortcut(, data-hotkey
 - menu.components: <AppMenu>, <ContextMenu>
 - files: src/renderer/**/*.ts      # extra UI file globs for detection + the reminder hook

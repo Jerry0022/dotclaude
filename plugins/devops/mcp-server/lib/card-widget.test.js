@@ -57,33 +57,36 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(en.map((a) => a.label)).toEqual(["Ship", "Change"]);
   });
 
-  test("ready with open points: Ändern becomes Offenes abarbeiten and carries the prepared answer", () => {
+  test("ready with open points: Ändern becomes Nachbessern and carries the prepared answer", () => {
     const one = buttonsFor("ready", "de", { replies: ["Ja, die Änderung bitte auch dort machen."] });
-    expect(one.map((a) => a.label)).toEqual(["Ship", "Offenes abarbeiten"]);
-    expect(one[1]).toMatchObject({ icon: "list-check", prompt: "Ja, die Änderung bitte auch dort machen." });
+    expect(one.map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
+    expect(one[1]).toMatchObject({ icon: "bug", prompt: "Ja, die Änderung bitte auch dort machen." });
     expect(one[1]).not.toHaveProperty("conclude");
     expect(one[0].prompt).toBe("ship");
     const en = buttonsFor("ready", "en", { replies: ["A.", "B."] });
-    expect(en[1].label).toBe("Work through open points");
+    expect(en[1].label).toBe("Rework");
     expect(en[1].prompt).toBe("Please tackle all open points:\n\n- A.\n- B.");
     // no replies → the generic button, unchanged
     expect(buttonsFor("ready", "de", { replies: [] })[1].label).toBe("Ändern");
     expect(buttonsFor("ready", "de", { replies: ["  "] })[1].label).toBe("Ändern");
   });
 
-  test("test and ship-successful keep their verbs and append Offenes abarbeiten after them", () => {
+  test("test's Nachbessern carries the answer; ship-successful appends Nachbessern after its promote verbs", () => {
     const replies = ["Ja, bitte."];
-    expect(buttonsFor("test", "de", { replies }).map((a) => a.label)).toEqual(["Ship", "Nachbessern", "Offenes abarbeiten"]);
+    const test = buttonsFor("test", "de", { replies });
+    expect(test.map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
+    expect(test[1].prompt).toBe("Ja, bitte.");
     const ring = buttonsFor("ship-successful", "de", { replies, version: "0.193.0" });
-    expect(ring.map((a) => a.label)).toEqual(["Promote", "Offenes abarbeiten"]);
-    expect(ring[0].prompt).toBe("promote 0.193.0");
-    expect(ring[1]).toMatchObject({ prompt: "Ja, bitte.", icon: "list-check" });
-    expect(ring[1].primary).toBeUndefined();
-    // plain merge: nothing to promote, the conclude button alone
-    expect(buttonsFor("ship-successful-plain", "en", { replies }).map((a) => a.label)).toEqual(["Work through open points"]);
+    expect(ring.map((a) => a.label)).toEqual(["Promote beta", "Promote stable", "Nachbessern"]);
+    expect(ring[0].prompt).toBe("promote beta 0.193.0");
+    expect(ring[2]).toMatchObject({ prompt: "Ja, bitte.", icon: "bug" });
+    expect(ring[2].primary).toBeUndefined();
+    // plain merge: nothing to promote, Nachbessern alone
+    expect(buttonsFor("ship-successful-plain", "en", { replies }).map((a) => a.label)).toEqual(["Rework"]);
     expect(buttonsFor("ship-successful-plain", "de")).toEqual([]);
-    // without replies nothing is appended
+    // without replies: nothing appended, test keeps its "frag mich" prompt
     expect(buttonsFor("test", "de").map((a) => a.label)).toEqual(["Ship", "Nachbessern"]);
+    expect(buttonsFor("test", "de")[1].prompt).toMatch(/frag mich, was/);
   });
 
   test("conclusionPrompt: one answer alone, several as an ordered bullet list, never a leading slash", () => {
@@ -160,10 +163,11 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
         expect(parseShipRequest(buttonsFor(key, lang)[0].prompt)).toMatchObject({ ship: true, promote: false });
       }
       const v = { version: "0.193.0" };
-      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: null, version: "0.193.0" });
+      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "beta", version: "0.193.0" });
+      expect(parseShipRequest(buttonsFor("ship-successful", lang, v)[1].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
       expect(parseShipRequest(buttonsFor("released-beta", lang, v)[0].prompt)).toMatchObject({ ship: true, promote: true, channel: "stable", version: "0.193.0" });
       expect(isShipIntent(buttonsFor("ship-blocked", lang)[0].prompt), `${lang}/ship-blocked`).toBe(false);
-      expect(buttonsFor("ship-successful", lang, v)[0].prompt).toBe("promote 0.193.0");
+      expect(buttonsFor("ship-successful", lang, v).map((b) => b.prompt)).toEqual(["promote beta 0.193.0", "promote stable 0.193.0"]);
       expect(buttonsFor("released-beta", lang, v)[0].prompt).toBe("promote stable 0.193.0");
       expect(buttonsFor("ship-blocked", lang)[0].prompt).toMatch(/^Debug\b/);
     }
@@ -174,12 +178,43 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
   // prompt.ship.detect), and without a known version there is no button.
   test("promote buttons carry the card's version; without one they are dropped", () => {
     for (const lang of ["de", "en"]) {
-      expect(buttonsFor("ship-successful", lang, { version: "v0.193.0" })[0].prompt).toBe("promote 0.193.0");
+      expect(buttonsFor("ship-successful", lang, { version: "v0.193.0" })[0].prompt).toBe("promote beta 0.193.0");
       expect(buttonsFor("ship-successful", lang)).toEqual([]);
       expect(buttonsFor("released-beta", lang, { version: "not-a-version" })).toEqual([]);
       // non-promote buttons are untouched by the version
       expect(buttonsFor("ready", lang, { version: "0.193.0" })[0].prompt).toBe("ship");
     }
+  });
+
+  // After an alpha ship both promotions are offered — beta as the main verb,
+  // stable as the fast track. On beta only the stable step is left.
+  test("ship-successful offers Promote beta (primary) and Promote stable; released-beta only Promote stable", () => {
+    for (const lang of ["de", "en"]) {
+      const shipped = buttonsFor("ship-successful", lang, { version: "0.193.0" });
+      expect(shipped.map((b) => b.label)).toEqual(["Promote beta", "Promote stable"]);
+      expect(shipped.map((b) => !!b.primary)).toEqual([true, false]);
+      const onBeta = buttonsFor("released-beta", lang, { version: "0.193.0" });
+      expect(onBeta.map((b) => b.label)).toEqual(["Promote stable"]);
+      expect(onBeta[0].primary).toBe(true);
+    }
+  });
+
+  // The ladder is plain text: no border, no fill — it must never read like
+  // a button next to the promote buttons.
+  test("the channel ladder renders frameless, highest version accented, lag hinted", () => {
+    const ladder = { allEqual: false, groups: [
+      { channels: ["alpha"], version: "0.193.0", top: true },
+      { channels: ["beta"], version: "0.190.2", top: false, lag: { versions: 3 } },
+      { channels: ["stable"], version: "0.188.0", top: false, lag: { versions: 5, days: 7 } },
+    ] };
+    const html = cardWidgetHtml(baseModel({ ladder }), "");
+    const block = html.match(/<div class="card-ladder"[\s\S]*?<\/div>/)[0];
+    expect(block).not.toMatch(/border|background|role="button"/);
+    expect(block).toMatch(/font-weight:500">v0\.193\.0</);
+    expect(block).toContain("−3");
+    expect(block).toContain("−5 · 7 d");
+    expect(html.indexOf("card-pipeline")).toBeLessThan(html.indexOf("card-ladder"));
+    expect(cardWidgetHtml(baseModel({ ladder: null }), "")).not.toContain("card-ladder");
   });
 
   test("the widget HTML puts the versioned prompt on the promote button", () => {
@@ -248,6 +283,23 @@ describe("cardWidgetHtml", () => {
     expect(html).toContain("card-budget");
     expect(html).toContain("3 h 39 m");
     expect(html).toContain("62% verbraucht");
+  });
+
+  test("tooltips are app-styled data-tip, never the native title (ui-defaults.md R0/R1)", () => {
+    const html = cardWidgetHtml(baseModel({
+      evidence: [{ glyph: "✓", text: "ok", dim: false, tooltip: "npm test · 41s" }],
+      budget: { omitted: false, warn: false, contextHealth: "", bars: [
+        { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "40% verbraucht" },
+      ] },
+    }), "");
+    expect(html).not.toMatch(/\stitle="/);
+    expect(html).toContain('data-tip="npm test · 41s"');
+    expect(html, "the bar names its value only in the tip → Label tier")
+      .toContain('class="card-budget" data-tip="40% verbraucht" data-tip-tier="label"');
+    expect(html).toContain("var TIP = { info: 1500, label: 500 }, SKIP = 300;");
+    expect(html, "drawn from the host tokens").toMatch(/\.card-tip\{[^}]*var\(--surface-popover/);
+    expect(html, "absolute inside the card, never fixed").not.toMatch(/\.card-tip\{[^}]*position:fixed/);
+    expect(html).toMatch(/class="card-surface" style="position:relative;/);
   });
 
   test("evidence posts carry a tooltip and colour by glyph", () => {

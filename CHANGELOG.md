@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.197.1] — 2026-09-24
+
+### Fixed
+- **Concept pages keep mirroring your notes to the bridge.** After about 27 autosaves a concept page stopped saving its notes to the bridge and showed "die Bridge ist nicht erreichbar" and "Nur lokal gespeichert · getrennt", while the bridge was running and answering. The autosave sent each draft with `keepalive` and never read the answer. Chromium keeps a keepalive request's body on a 64 KiB per-page budget until its answer completes, and an unread `no-store` answer never completes. Once the budget was full, the browser refused every further autosave before sending it, until the tab was reloaded. Now the autosave is a plain request and every answer is read; only the teardown fallbacks keep `keepalive`, and they read their answers too. The bridge answers POSTs with `no-cache` instead of `no-store`, so a page built from an older template recovers once its bridge restarts. Gate 65 marks such a page as a stale engine, so its next round re-syncs the fix.
+- **A failed save is named truthfully.** "Bridge nicht erreichbar" and "getrennt" now appear only when the heartbeat does not vouch for the bridge. A save the bridge refused (disk full, bad payload) reads "die Bridge hat sie nicht gespeichert", and the status line reads "Nur lokal gespeichert".
+- **No literal asterisks in the submitted panel.** "Wechsle zum Claude-Chat, um den Fortschritt zu sehen" showed the Markdown `**` around "Claude Chat". Locale values are plain text, and a test keeps them that way.
+
+## [0.197.0] — 2026-09-24
+
+### Added
+- **App style is part of every UI rule.** The new rule R0 in `ui-defaults.md` says everything the app shows uses the app's own tokens (surface, border, radius, type, shadow, motion) in every theme. It applies to every rule, project rules included, unless a rule says otherwise. Native tooltips, bare selects, default scrollbars and `alert()` dialogs are findings.
+- **Scrollbars in the app's style (R5).** Scroll containers get one global skin from the tokens: `scrollbar-color` and `scrollbar-width`, a `::-webkit-scrollbar` fallback and `color-scheme` per theme.
+- **Concept pages have an app tooltip engine.** Every hover hint is `data-tip`, drawn in the page tokens with the two delay tiers. A stray native `title` is converted when it appears. Gate 48b checks that the engine is there. Every scroll container on the page wears the same skin.
+
+### Changed
+- **Tooltips wait by kind (R1).** Info tooltips are the default and open after 1.5 s. Label tooltips open after 0.5 s, and only when the tooltip is the element's only name, shows cut-off text or explains a disabled control. The next tooltip opens instantly within 300 ms, keyboard focus opens it instantly, and Escape closes it. A native `title` no longer counts as a tooltip. A project can change the two values with `tooltip.delay`.
+- **The completion card and the `/auto-guide` overlay use app-styled tooltips.** Neither uses native `title` tooltips any more. The card draws its tooltips from the host tokens, the overlay from its own palette, and the overlay's panel scrollbar matches.
+- **The UI reminder also covers concept pages and opted-in plugin sources.** `post.design.remind` lists R0–R5 and no longer skips `docs/concepts/`. A `files:` glob in the override opts plugin sources in and counts as a UI profile at ship time. This repo opts in its own UI sources.
+
+## [0.196.0] — 2026-09-24
+
+### Added
+- **The ship card offers Promote beta and Promote stable.** After an alpha ship the card has two buttons: Promote beta as the main one and Promote stable as the fast track. A card that already sits on beta offers only Promote stable. A card on stable offers no promotion. Each button still carries the card's version, so a click on an old card promotes exactly that build.
+- **A channel ladder shows the version of every channel.** Under the pipeline line the card reads `alpha v0.193.0 › beta v0.190.2 −3 › stable v0.188.0 −5 · 7 d`. The highest version is lilac, the lagging channels are quieter and show their distance. Channels on the same version merge into one entry, and all three equal turn green with a tick. It is plain text with no frame, so it never looks like a button. It replaces the channel ticks and the version on the pipeline line, and the lag line under the heading. `do-ship` passes the latest beta version and a new `betaLag` for it.
+
+### Changed
+- **Promoting alpha straight to stable moves beta too.** `ship_promote` from alpha to stable now tags `beta/vN` first, unless beta already serves this version or a newer one. Beta can no longer sit behind stable, and the fast track is one call instead of two.
+
 ## [0.195.1] — 2026-09-24
 
 ### Fixed
