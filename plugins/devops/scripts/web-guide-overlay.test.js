@@ -540,4 +540,11 @@ describe("web-guide-overlay — app-styled FAB tooltip (ui-defaults.md R0/R1)", 
     expect(SRC, "Label tier: the tip is the FAB's only visible name").toMatch(/setTimeout\(showFabTip, 500\)/);
     expect(SRC, "styled in both colour schemes").toMatch(/\.tip\{background:#1e1e24/);
   });
+
+  test("the scrolling panel wears the overlay's scrollbar skin (ui-defaults.md R5)", () => {
+    expect(SRC).toMatch(/\.panel\{scrollbar-width:thin;scrollbar-color:#ccc transparent\}/);
+    expect(SRC, "WebKit fallback").toMatch(/\.panel::-webkit-scrollbar-thumb\{background:#ccc/);
+    expect(SRC, "dark scheme").toMatch(/\.panel\{background:#1e1e24;scrollbar-color:#444 transparent\}/);
+    expect(SRC, "native parts follow the scheme").toMatch(/:host\{[^}]*color-scheme:light dark/);
+  });
 });

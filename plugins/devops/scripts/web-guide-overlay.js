@@ -118,7 +118,7 @@
 
   var styleEl = document.createElement("style");
   styleEl.textContent = [
-    ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none}",
+    ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;color-scheme:light dark}",
     "*{box-sizing:border-box}",
     ".fab,.panel{pointer-events:auto;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#111}",
     ".fab{position:fixed;width:56px;height:56px;border-radius:50%;background:#6d28d9;color:#fff;",
@@ -145,9 +145,14 @@
     ".tip{position:fixed;max-width:260px;padding:6px 10px;border-radius:8px;background:#fff;color:#111;border:1px solid #ddd;",
     "  box-shadow:0 6px 20px rgba(0,0,0,.25);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1.45;pointer-events:auto}",
     ".tip[hidden]{display:none}",
+    ".panel{scrollbar-width:thin;scrollbar-color:#ccc transparent}",
+    ".panel::-webkit-scrollbar{width:8px}",
+    ".panel::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}",
+    ".panel::-webkit-scrollbar-track{background:transparent}",
     "@media(prefers-color-scheme:dark){",
     "  .fab,.panel{color:#eee}",
-    "  .panel{background:#1e1e24}",
+    "  .panel{background:#1e1e24;scrollbar-color:#444 transparent}",
+    "  .panel::-webkit-scrollbar-thumb{background:#444}",
     "  .tip{background:#1e1e24;color:#eee;border-color:#333}",
     "  .foot{border-top-color:#333}",
     "  .secondary{background:#333;color:#eee}",
