@@ -5,10 +5,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-// Spawns the real hook; see post.flow.completion.test.js for why the timeout
-// is generous under a full parallel run.
-vi.setConfig({ testTimeout: 30_000 });
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.agent.announce.js");
 

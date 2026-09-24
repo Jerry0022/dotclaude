@@ -9,8 +9,6 @@ const require = createRequire(import.meta.url);
 const { setupProject } = require("./ss.project.setup.js");
 const { BLOCK_START } = require("../lib/runtime-ignores.js");
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const tmp = [];
 function mkTmp(prefix) {
   const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));

@@ -28,6 +28,11 @@ export default defineConfig({
     // 100-650 s). Full runs queue behind a machine-wide lock; filtered runs
     // (`vitest run some.test.js`) and watch mode pass straight through.
     globalSetup: ["./vitest.suite-lock.mjs"],
+    // The "Timeout calling onTaskUpdate" above had a second, load-independent
+    // half: vitest's runner never yields to the event loop between tests, so a
+    // file of synchronously spawning tests starved its own RPC reply for 60 s.
+    // One loop turn after every test fixes that (the file says how).
+    setupFiles: ["./vitest.yield-setup.mjs"],
     minWorkers: 1,
     // Hook tests spawn real node processes (that IS the contract under test —
     // the harness invokes hooks as child processes). On Windows a single spawn
@@ -35,7 +40,10 @@ export default defineConfig({
     // default fails on machine load rather than on behaviour: whole suites of
     // passing tests go red with "Test timed out", and the ship's test gate
     // blocks on noise. Individual files had started pinning 30_000 by hand;
-    // this makes the real budget the default for all of them.
+    // this makes the real budget the default for all of them. Do not pin a
+    // file-wide `vi.setConfig({ testTimeout })` again: 28 such pins outlived
+    // the 5 s default they were written against and cut this budget in half
+    // (index.cli.test.js timed out at 30 s under load, 2026-09-24).
     testTimeout: 60_000,
     hookTimeout: 60_000,
     // Hook tests spawn the real SessionStart / UserPromptSubmit hooks, and the
