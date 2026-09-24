@@ -164,6 +164,46 @@ function shipReleaseMerged(toolResponse) {
   return !!(r && typeof r === 'object' && r.merged);
 }
 
+/** Per-turn flags the completion MCP writes under the `session_id` the MODEL passed. */
+const CARD_FLAG_PREFIXES = [
+  'dotclaude-devops-card-rendered',
+  'dotclaude-devops-validation-attested',
+  'dotclaude-devops-pending-attested',
+  'dotclaude-devops-card-widget',
+];
+
+/**
+ * Move the card flags the MCP just wrote under the model-supplied key onto
+ * this session's real id. The MCP only knows what the model passes — and the
+ * model passes `"self"` (the ccd_session convention), the Desktop
+ * `local_…` id, or nothing — while stop.flow.guard reads the harness id,
+ * exact match only (#290). Unmoved, every such card counted as "never
+ * rendered" and the guard demanded a second one.
+ *
+ * @param {object} hook — PostToolUse payload of a render_completion_card call
+ * @returns {number} how many flags were moved
+ */
+function adoptCardFlags(hook) {
+  const realId = hook.session_id;
+  if (!realId) return 0;
+  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const given = typeof input.session_id === 'string' && input.session_id ? input.session_id : 'unknown';
+  if (given === realId || /[\\/]|\.\./.test(given)) return 0;
+  let moved = 0;
+  for (const prefix of CARD_FLAG_PREFIXES) {
+    const from = sessionFile(prefix, given);
+    const to = sessionFile(prefix, realId);
+    try {
+      // The widget HTML is copied, not moved: the tool result names its path
+      // as the fallback source for a cut-off widget block.
+      if (prefix === 'dotclaude-devops-card-widget') fs.copyFileSync(from, to);
+      else fs.renameSync(from, to);
+      moved++;
+    } catch { /* not written for this card */ }
+  }
+  return moved;
+}
+
 function detectBackgroundLaunch(hook) {
   const r = hook && hook.tool_response;
   const text = typeof r === 'string' ? r : (r ? JSON.stringify(r) : '');
@@ -208,6 +248,7 @@ process.stdin.on('end', () => {
   if (toolName === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
     try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch {}
   }
+  if (toolName.endsWith('__render_completion_card')) adoptCardFlags(hook);
   const scheduledTask =
     readSessionFile('dotclaude-devops-scheduled-task', hook.session_id, { exact: true }) !== null;
 

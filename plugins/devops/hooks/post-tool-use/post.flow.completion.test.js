@@ -308,3 +308,56 @@ describe("post.flow.completion — a chained command that died before the runner
     cleanup(dir);
   });
 });
+
+// The completion MCP keys its per-turn flags by the `session_id` the MODEL
+// passes — observed "self" (the ccd_session convention) and the Desktop
+// `local_…` id — while stop.flow.guard reads the harness id, exact match only.
+// Unmoved, the card counted as never rendered and the guard demanded a second
+// one (do-batch activation, 2026-09-24: two identical cards in one turn).
+describe("post.flow.completion — card flags follow the real session id", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+  const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+
+  test('a card rendered with session_id "self" lands on the real id', () => {
+    const dir = project();
+    const sid = "real-uuid-1";
+    fs.writeFileSync(flag(dir, "card-rendered", "self"), "t");
+    fs.writeFileSync(flag(dir, "validation-attested", "self"), "t");
+    fs.writeFileSync(flag(dir, "card-widget", "self"), "<h3>x</h3>");
+    runHook(dir, sid, RENDER, { tool_input: { variant: "analysis", session_id: "self" } });
+    expect(fs.existsSync(flag(dir, "card-rendered", sid))).toBe(true);
+    expect(fs.existsSync(flag(dir, "validation-attested", sid))).toBe(true);
+    expect(fs.readFileSync(flag(dir, "card-widget", sid), "utf8")).toBe("<h3>x</h3>");
+    expect(fs.existsSync(flag(dir, "card-rendered", "self"))).toBe(false);
+    // The widget path in the tool result stays readable.
+    expect(fs.existsSync(flag(dir, "card-widget", "self"))).toBe(true);
+    cleanup(dir);
+  });
+
+  test("a card rendered without session_id is picked up from the 'unknown' key", () => {
+    const dir = project();
+    const sid = "real-uuid-2";
+    fs.writeFileSync(flag(dir, "card-rendered", "unknown"), "t");
+    runHook(dir, sid, RENDER, { tool_input: { variant: "ready" } });
+    expect(fs.existsSync(flag(dir, "card-rendered", sid))).toBe(true);
+    cleanup(dir);
+  });
+
+  test("the right id leaves the flag where it is", () => {
+    const dir = project();
+    const sid = "real-uuid-3";
+    fs.writeFileSync(flag(dir, "card-rendered", sid), "t");
+    runHook(dir, sid, RENDER, { tool_input: { variant: "ready", session_id: sid } });
+    expect(fs.existsSync(flag(dir, "card-rendered", sid))).toBe(true);
+    cleanup(dir);
+  });
+
+  test("other tools never touch foreign card flags", () => {
+    const dir = project();
+    fs.writeFileSync(flag(dir, "card-rendered", "self"), "t");
+    runHook(dir, "real-uuid-4", "Read", { tool_input: { file_path: "x", session_id: "self" } });
+    expect(fs.existsSync(flag(dir, "card-rendered", "self"))).toBe(true);
+    expect(fs.existsSync(flag(dir, "card-rendered", "real-uuid-4"))).toBe(false);
+    cleanup(dir);
+  });
+});

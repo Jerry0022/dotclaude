@@ -49,7 +49,7 @@ import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js"
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
+import { batchGuide, conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, writeCardWidgetFile } from "./lib/card-widget.js";
 import {
   assessFreshness,
@@ -806,7 +806,7 @@ const HEADINGS = {
     fallback: () => '🔧 Erledigt — noch etwas?',
     pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
     concept: (c) => `🧭 Concept ${c.what}`,
-    batch: (c) => `📥 Batch sammelt — ${c.n} Einträge`,
+    batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
     'vv-unverified': () => '⚠ Ungeprüft shippen?',
     'ship-compact': (c) => `🗜 Kontext ${c.size} Tokens — vor dem Ship kompaktieren?`,
   },
@@ -833,7 +833,7 @@ const HEADINGS = {
     fallback: () => '🔧 Done — anything else?',
     pending: (c) => `⏳ Not done yet — ${c.what}`,
     concept: (c) => `🧭 Concept ${c.what}`,
-    batch: (c) => `📥 Batch collecting — ${c.n} entries`,
+    batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
     'vv-unverified': () => '⚠ Ship unverified?',
     'ship-compact': (c) => `🗜 Context ${c.size} tokens — compact before the ship?`,
   },
@@ -1116,7 +1116,8 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null };
   }
   if (batch) {
-    return { heading: T.batch({ n: (batch && batch.notes) || 0 }), context: '', points: [], buttonsKey: null };
+    const guide = batchGuide(batch, lang);
+    return { heading: T.batch({ n: batch.notes || 0 }), context: guide.context, points: guide.points, buttonsKey: null };
   }
   if (hasPending(input.pending)) {
     const what = pendingWhat(input.pending, lang);
@@ -1454,6 +1455,8 @@ const WIDGET_RELAY_INSTRUCTION =
   "[INSTRUCTION — DO NOT OUTPUT THIS BLOCK]\n" +
   "Desktop app: this card has no markdown to relay. The show_widget call in the CARD WIDGET " +
   "block below IS the card — make it the LAST action of the turn and output no text after it. " +
+  "If the app then asks for a user-visible response anyway, the card already counts: answer " +
+  "with ONE short line and never render or show the card a second time. " +
   "Do NOT output this instruction block.";
 
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */

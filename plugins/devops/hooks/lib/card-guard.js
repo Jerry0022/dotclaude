@@ -107,6 +107,27 @@ function isShowWidgetTool(name) {
   return typeof name === 'string' && (name === 'show_widget' || name.endsWith('__show_widget'));
 }
 
+/**
+ * The Desktop app's own nudge when a turn ends without text — which a
+ * widget-only card turn does by design. It arrives as a meta user entry, and
+ * whatever the model answers to it lands AFTER the card widget. That reply is
+ * forced by the app, not a card that was never relayed: treating it as one
+ * made the guard demand a second card (observed 2026-09-24, do-batch
+ * activation — two identical cards in one turn).
+ */
+const NO_OUTPUT_NUDGE = '[Your previous response had no visible output';
+
+function isNoOutputNudge(entry) {
+  if (!entry || entry.isMeta !== true) return false;
+  const content = entry.message && entry.message.content;
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('')
+      : '';
+  return text.trimStart().startsWith(NO_OUTPUT_NUDGE);
+}
+
 /** The title the card body widget is called with (card-widget.js). */
 const CARD_WIDGET_TITLE = 'completion_card_body';
 
@@ -130,27 +151,34 @@ function widgetCardTitle(widgetCode) {
  * A card-body show_widget call that ends the turn (only its tool result and
  * blank text after it) stands in as `✨✨✨ {title} ✨✨✨`, so every check below
  * reads both forms the same way. Text after the widget means the card was not
- * last — '' then, like a card that was never relayed.
+ * last — '' then, like a card that was never relayed. Exception: text that
+ * answers the app's own no-output nudge (isNoOutputNudge) is not held against
+ * the card.
  */
 function lastAssistantCardText(transcriptContent) {
   const text = lastAssistantText(transcriptContent);
   if (text.includes(CARD_MARKER)) return text;
   if (!transcriptContent) return '';
   const lines = transcriptContent.split('\n');
+  // Text-only replies seen so far (scanning backwards). They disqualify the
+  // widget as "last" — unless the app itself forced them (see NO_OUTPUT_NUDGE).
+  let textAfter = false;
   for (let i = lines.length - 1; i >= 0; i--) {
     const raw = lines[i].trim();
     if (!raw) continue;
     let entry;
     try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isNoOutputNudge(entry)) { textAfter = false; continue; }
     if (entry.type === 'user' && isPromptEntry(entry)) return '';
     if (entry.type !== 'assistant') continue;
     const content = entry.message && entry.message.content;
     if (!Array.isArray(content)) continue;
     const tool = content.find(b => b && b.type === 'tool_use');
     if (!tool) {
-      if (content.some(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())) return '';
+      if (content.some(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())) textAfter = true;
       continue;
     }
+    if (textAfter) return '';
     if (!isShowWidgetTool(tool.name) || !tool.input || tool.input.title !== CARD_WIDGET_TITLE) return '';
     const title = widgetCardTitle(tool.input.widget_code);
     return title ? `${CARD_MARKER} ${title} ${CARD_MARKER}` : '';

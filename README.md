@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.194.0**
+**Version: 0.194.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -546,7 +546,7 @@ terminal shows the question heading alone.
 | `fallback` | `🔧 Erledigt — noch etwas?` | miscellaneous / default |
 | pending override | `⏳ Noch nicht fertig — {what}` | replaces the CTA of whichever variant the card carries, so it never asks you to act on a result that has not arrived |
 | concept override | `🧭 Concept wartet auf deine Entscheidungen` | context line = the page link |
-| batch override | `📥 Batch sammelt — {n} Einträge` | — |
+| batch override | `📥 Batch sammelt — {n} Einträge` | points = how to collect, fire and stop; context line = what happens to the next prompt |
 | V&V unverified | `⚠ Ungeprüft shippen?` | `⚠ ungeprüft` leads the evidence row |
 
 English strings mirror these one to one (`Ship anyway despite 2 red tests?`,

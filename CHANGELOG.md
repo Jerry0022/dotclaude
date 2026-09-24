@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.194.1] — 2026-09-24
+
+### Fixed
+- **One completion card per turn again.** A card rendered with a `session_id` other than the harness id (`"self"`, the Desktop `local_…` id, or none) wrote its flags under that key, so `stop.flow.guard` saw no card and demanded a second one. `post.flow.completion` now moves those flags onto the real session id right after the render.
+- **The Desktop "no visible output" nudge no longer costs a second card.** A widget-only card ends the turn without text, and the app sometimes asks for a visible reply. That forced reply no longer counts as text after the card, and the card result tells Claude to answer it with one line instead of rendering the card again.
+
+### Changed
+- **The `/do-batch` card carries the how-to.** While collecting, the card shows what happens to the next prompt plus three points: how collecting works, how to fire (`<marker> <text>` or `/do-batch go`), how to stop (`/do-batch off`, auto-end bounds). Activation confirms with this card alone, with no mode summary printed before it.
+
 ## [0.194.0] — 2026-09-24
 
 ### Changed — BREAKING (skill names)

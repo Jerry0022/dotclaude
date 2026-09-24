@@ -1119,6 +1119,30 @@ describe("lastAssistantContainsCard", () => {
       assistantMsg({ type: "text", text: "Nachsatz" })))).toBe(false);
   });
 
+  // A widget-only turn ends without text, so the Desktop app sometimes nudges
+  // for a visible reply. That forced reply is not a card left unrelayed — it
+  // made the guard demand a second, identical card (2026-09-24).
+  const nudge = { type: "user", isMeta: true, message: { role: "user", content: "[Your previous response had no visible output. Please continue and produce a user-visible response.]" } };
+
+  test("Desktop: the reply to the app's no-output nudge does not unseat the card", () => {
+    const tx = jsonl(userMsg("go"), cardWidget("T"), widgetResult, nudge,
+      assistantMsg({ type: "text", text: "Sammelmodus an." }));
+    expect(lastAssistantContainsCard(tx)).toBe(true);
+    expect(extractCardTitle(lastAssistantCardText(tx))).toBe("T");
+  });
+
+  test("Desktop: text before the nudge, or a tool call after it, still unseats the card", () => {
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult,
+      assistantMsg({ type: "text", text: "Nachsatz" }), nudge,
+      assistantMsg({ type: "text", text: "noch einer" })))).toBe(false);
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult, nudge,
+      toolUse("Bash"), toolResult()))).toBe(false);
+    // A non-meta user message with the same words is a real prompt.
+    const typed = { type: "user", message: { role: "user", content: nudge.message.content } };
+    expect(lastAssistantContainsCard(jsonl(userMsg("go"), cardWidget("T"), widgetResult, typed,
+      assistantMsg({ type: "text", text: "ok" })))).toBe(false);
+  });
+
   test("Desktop: another widget, another tool after the card, or a widget of an earlier turn → no card", () => {
     const other = assistantMsg({ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: { title: "chart", widget_code: '<h3 class="card-title">T</h3>' } });
     expect(lastAssistantContainsCard(jsonl(userMsg("go"), other, widgetResult))).toBe(false);

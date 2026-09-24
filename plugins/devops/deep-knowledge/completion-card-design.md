@@ -191,7 +191,7 @@ code spans (they would be red on Desktop). Names in the accent lilac on the widg
 | `fallback` | `🔧 Erledigt — noch etwas?` | — | — | |
 | pending override | `⏳ Noch nicht fertig — {what}` | what is running | — | evidence gets `◐ Belege vorläufig` |
 | concept override | by phase: `🧭 Concept wartet auf deine Entscheidungen` · `🧭 Concept in Iteration — ich melde mich` · `🧭 Concept in Implementierung — ich melde mich`; running work as its own sentence (`… in Implementierung. 2 Agenten arbeiten — …`) | the running items | — | context line = the page URL (quiet link); "wartet" during an implementation run is a regression |
-| batch override | `📥 Batch sammelt — {n} Einträge` | — | — | context line = what happens to the next prompt |
+| batch override | `📥 Batch sammelt — {n} Einträge` | how to collect · fire (`<marker> <text>` / `/do-batch go`) · stop (`/do-batch off`, auto-end bounds) | — | context line = what happens to the next prompt; the card is the whole activation confirmation, no text block beside it |
 | V&V unverified | `⚠ Ungeprüft shippen?` | "npm test lief nicht — …" | Tests laufen lassen · Trotzdem shippen | `⚠ ungeprüft` first evidence post |
 
 English strings mirror these one to one (`Ship anyway despite 2 red tests?`,

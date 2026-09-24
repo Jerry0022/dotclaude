@@ -282,7 +282,7 @@ export function readConceptState(cwd) {
  * can never disagree on "active" (expiry and note cap included).
  *
  * @param {string|undefined} cwd
- * @returns {{ notes: number, marker: string }|null}
+ * @returns {{ notes: number, marker: string, expiryHours: number|null, maxNotes: number|null }|null}
  */
 export function readBatch(cwd) {
   if (!cwd) return null;
@@ -290,7 +290,18 @@ export function readBatch(cwd) {
     const require = createRequire(import.meta.url);
     const B = require(join(here, "..", "..", "hooks", "lib", "batch-state.js"));
     if (!B.isModeActive(cwd)) return null;
-    return { notes: B.countNotes(cwd), marker: B.effectiveMarker(cwd) };
+    // Same bounds describeMode() prints: the armed window's own length, else config.
+    const mode = B.readMode(cwd) || {};
+    const cfg = B.loadConfig();
+    let expiryHours = cfg.expiryHours ?? null;
+    const h = (Date.parse(mode.expiresAt) - Date.parse(mode.startedAt)) / 3600_000;
+    if (Number.isFinite(h) && h > 0) expiryHours = Math.round(h * 10) / 10;
+    return {
+      notes: B.countNotes(cwd),
+      marker: B.effectiveMarker(cwd),
+      expiryHours,
+      maxNotes: mode.maxNotes ?? cfg.maxNotes ?? null,
+    };
   } catch {
     return null;
   }
@@ -328,4 +339,44 @@ export function batchWhat(batch, lang) {
   const parts = [count, L.next.replace("{n}", String(n + 1))];
   if (batch && batch.marker) parts.push(L.fire.replace("{marker}", batch.marker));
   return parts.join(" · ");
+}
+
+const BATCH_GUIDE = {
+  de: {
+    collect: 'Sammeln: jeder Prompt ohne Marker wird Notiz — das rote „Eingabe blockiert"-Panel ist normal',
+    fire: 'Umsetzen: „{marker} <text>" oder /do-batch go — main mergen, alle Notizen, EIN Plan',
+    stop: "Stoppen: /do-batch off (Notizen bleiben){bounds}",
+    bounds: " · Auto-Ende nach {h} h oder {max} Notizen",
+  },
+  en: {
+    collect: 'Collect: every prompt without the marker becomes a note — the red "input blocked" panel is expected',
+    fire: 'Execute: "{marker} <text>" or /do-batch go — merge main, read all notes, ONE plan',
+    stop: "Stop: /do-batch off (notes stay){bounds}",
+    bounds: " · auto-ends after {h} h or {max} notes",
+  },
+};
+
+/**
+ * The how-to of an armed collection, carried by the card itself (context
+ * line + three points) so the activating turn needs no separate text block:
+ * the card is the whole confirmation, on Desktop and in the terminal alike.
+ *
+ * @param {{ notes: number, marker: string, expiryHours?: number|null, maxNotes?: number|null }} batch
+ * @param {'de'|'en'} lang
+ * @returns {{ context: string, points: string[] }}
+ */
+export function batchGuide(batch, lang) {
+  const G = BATCH_GUIDE[lang] || BATCH_GUIDE.de;
+  const marker = (batch && batch.marker) || ">>";
+  const h = batch && batch.expiryHours;
+  const max = batch && batch.maxNotes;
+  const bounds = h && max ? G.bounds.replace("{h}", String(h)).replace("{max}", String(max)) : "";
+  return {
+    context: "› " + batchWhat(batch, lang),
+    points: [
+      G.collect,
+      G.fire.replace("{marker}", marker),
+      G.stop.replace("{bounds}", bounds),
+    ],
+  };
 }
