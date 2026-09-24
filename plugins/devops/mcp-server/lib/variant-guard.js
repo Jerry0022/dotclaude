@@ -27,6 +27,11 @@ export const FILE_ONLY_NOTE = {
   en: 'ℹ️ **Variant corrected to `ready-files`** — this project is not a git repo (`state.mode: "file-only"`), so there is no push, no PR and no merge. The work is on disk; the card deliberately claims nothing about a remote.',
 };
 
+export const NO_REMOTE_NOTE = {
+  de: 'ℹ️ **Variante auf `ready` korrigiert** — dieses Repo hat kein Remote (`state.mode: "git-no-remote"`), der Ship endet beim lokalen Commit. Push, PR und Merge gibt es hier nicht.',
+  en: 'ℹ️ **Variant corrected to `ready`** — this repo has no remote (`state.mode: "git-no-remote"`), so the ship ends at the local commit. There is no push, PR or merge here.',
+};
+
 /**
  * Decide the effective completion-card variant. Only `ship-successful` is policed.
  * @param {string} variant - the requested variant
@@ -48,6 +53,15 @@ export function correctShipVariant(variant, state) {
         reason: 'file-only: no remote to push to, no PR to merge',
       };
     }
+    // Same for a git repo without a remote: the ship ends at the local commit,
+    // so "pass pushed + merged" is advice nobody can follow (#500).
+    if (s.mode === 'git-no-remote') {
+      return {
+        variant: 'ready',
+        downgraded: true,
+        reason: 'git-no-remote: the ship ends at the local commit',
+      };
+    }
     if (!s.pushed || !s.merged) {
       return {
         variant: 'ready',
@@ -65,6 +79,8 @@ export function correctShipVariant(variant, state) {
  * cannot be carried out in a project without a remote.
  */
 export function renderDowngradeNote(lang, reason) {
-  const table = (reason && reason.startsWith('file-only')) ? FILE_ONLY_NOTE : DOWNGRADE_NOTE;
+  const table = (reason && reason.startsWith('file-only')) ? FILE_ONLY_NOTE
+    : (reason && reason.startsWith('git-no-remote')) ? NO_REMOTE_NOTE
+      : DOWNGRADE_NOTE;
   return table[lang] || table.de;
 }
