@@ -239,7 +239,7 @@ describe("pre.agent.announce (hook)", () => {
       "frontend · sonnet · medium · background — Hold",
     ]);
     expect(card(second)).toMatch(/\*\*2 agents started\*\* · background · Wave 1/);
-    expect(card(second)).toContain("**Σ Mix:** **2×** sonnet ●●○ medium");
+    expect(card(second)).toContain("**Σ Mix:** **2×** sonnet ●● medium");
 
     // Without a tool_use_id the spawn is found by its prompt; the first of the batch is alone.
     const first = runHook(dir, { input: a, extra: { transcript_path: file } });

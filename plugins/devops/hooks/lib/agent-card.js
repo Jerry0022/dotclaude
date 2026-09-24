@@ -53,7 +53,8 @@ const ICON = {
   explore: '🔭', plan: '📐', 'general-purpose': '🤖',
 };
 
-const DOTS = { low: '●○○', medium: '●●○', high: '●●●', xhigh: '●●●+', max: '●●●+' };
+// Filled dots only — one per level, so a higher level just adds a dot.
+const DOTS = { low: '●', medium: '●●', high: '●●●', xhigh: '●●●●', max: '●●●●●' };
 const ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable']);
 
 /** `[W1] Build contracts` → { wave: '1', task: 'Build contracts' }. */
@@ -108,7 +109,7 @@ function table(agents, t) {
   return [`| ${t.cols.join(' | ')} |`, '|---|---|---|---|---|', ...rows].join('\n');
 }
 
-/** `**3×** sonnet ●●○ medium  ·  **1×** opus ●●● high`, or null when nothing repeats. */
+/** `**3×** sonnet ●● medium  ·  **1×** opus ●●● high`, or null when nothing repeats. */
 function tally(agents, t) {
   const counts = new Map();
   for (const a of agents) {

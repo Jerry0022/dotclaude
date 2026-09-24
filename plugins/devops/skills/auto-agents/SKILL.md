@@ -277,9 +277,9 @@ What the template does (so you know what you relay):
   card spans more than one wave; a spawn batch within one wave names it in
   the header. Spawn descriptions therefore start with `[W<n>]`
   (`[W1] API contracts`) — the card strips the prefix from the task cell.
-- **Rows** — role icon · agent · task · model · effort (`●●○ medium`).
+- **Rows** — role icon · agent · task · model · effort (`●● medium`).
 - **Σ tally** — the last line groups agents by model · effort
-  (`**3×** sonnet ●●○ medium  ·  **1×** opus ●●● high`), only when at
+  (`**3×** sonnet ●● medium  ·  **1×** opus ●●● high`), only when at
   least one combination occurs twice.
 
 Cards have **no CTA**: no decision heading, no question, no buttons, no "say

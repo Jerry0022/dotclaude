@@ -226,8 +226,8 @@ describe("the plan card script renders through the same template", () => {
     });
     expect(card).toContain("### 🗺️ **Agent-Plan** · 4 Agents · 2 Waves · volle Zeremonie");
     expect(card.indexOf("#### Wave 1")).toBeLessThan(card.indexOf("#### Wave 2"));
-    expect(card).toContain("| 🔧 | **core** | API | sonnet → opus | ●●○ medium |");
+    expect(card).toContain("| 🔧 | **core** | API | sonnet → opus | ●● medium |");
     expect(card).toContain("| 🧩 | **feature** | Glue | fable (Session) | ●●● high |");
-    expect(card).toContain("**Σ Verteilung:** **2×** sonnet ●●○ medium");
+    expect(card).toContain("**Σ Verteilung:** **2×** sonnet ●● medium");
   });
 });

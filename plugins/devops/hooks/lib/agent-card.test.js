@@ -23,8 +23,16 @@ describe("agent card — one template for one agent or many", () => {
     const card = renderAgentCard({ lang: "en", agents: [core, { ...core, type: "devops:frontend" }, redteam] });
     expect(card).toContain("### 🤖 **3 agents started** · background");
     expect(rows(card)).toHaveLength(3);
-    expect(card).toContain("**Σ Mix:** **2×** sonnet ●●○ medium  ·  **1×** opus ●●● high");
+    expect(card).toContain("**Σ Mix:** **2×** sonnet ●● medium  ·  **1×** opus ●●● high");
     for (const row of rows(card)) expect(row).not.toMatch(/newest/);
+  });
+
+  test("effort is one filled dot per level, never a hollow one — higher levels just add dots", () => {
+    const levels = ["low", "medium", "high", "xhigh", "max"];
+    const card = renderAgentCard({ agents: levels.map((effort) => ({ ...core, effort })) });
+    const efforts = rows(card).map((r) => r.split("|").slice(1, -1).map((c) => c.trim())[4]);
+    expect(efforts).toEqual(["● low", "●● medium", "●●● high", "●●●● xhigh", "●●●●● max"]);
+    expect(card).not.toMatch(/[○◯+]/);
   });
 
   test("no tally when every model · effort combination is unique", () => {
