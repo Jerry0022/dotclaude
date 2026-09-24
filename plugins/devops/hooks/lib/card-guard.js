@@ -1,14 +1,15 @@
 /**
  * @module card-guard
- * @version 0.7.0
+ * @version 0.8.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
  *
  *   Stacked gates, all one-block (stop_hook_active yields):
  *     1. Completion card — block when work happened but no card was rendered.
- *        1b. (#449) block when the card was rendered but its markdown never
- *        reached the turn's last assistant text (the ✨ marker is missing).
+ *        1b. (#449) block when the card was rendered but never shown after
+ *        its last render (no ✨ marker text, no card widget). Output AFTER a
+ *        shown card never re-demands it — that only stacked a duplicate.
  *        1c. (#451) block when a Desktop render owed the widget call and the
  *        turn never called show_widget.
  *     2. Notification-turn duplicate (design § 5.5) — once a card exists on a
@@ -58,8 +59,8 @@ const SUBSTANTIAL_CHARS = 400;
 
 /** Distinctive marker the completion-card template prints around the title
  *  (`### **✨✨✨ title ✨✨✨**`) in the terminal. On Desktop the card is the
- *  body widget alone, and lastAssistantCardText stands in the same marker
- *  for it, so every check reads both forms. */
+ *  body widget alone, and deliveredCardText stands in the same marker for
+ *  it, so every check reads both forms. */
 const CARD_MARKER = '\u2728\u2728\u2728';
 
 /**
@@ -107,29 +108,33 @@ function isShowWidgetTool(name) {
   return typeof name === 'string' && (name === 'show_widget' || name.endsWith('__show_widget'));
 }
 
-/**
- * The Desktop app's own nudge when a turn ends without text — which a
- * widget-only card turn does by design. It arrives as a meta user entry, and
- * whatever the model answers to it lands AFTER the card widget. That reply is
- * forced by the app, not a card that was never relayed: treating it as one
- * made the guard demand a second card (observed 2026-09-24, do-batch
- * activation — two identical cards in one turn).
- */
-const NO_OUTPUT_NUDGE = '[Your previous response had no visible output';
-
-function isNoOutputNudge(entry) {
-  if (!entry || entry.isMeta !== true) return false;
-  const content = entry.message && entry.message.content;
-  const text = typeof content === 'string'
-    ? content
-    : Array.isArray(content)
-      ? content.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('')
-      : '';
-  return text.trimStart().startsWith(NO_OUTPUT_NUDGE);
-}
-
 /** The title the card body widget is called with (card-widget.js). */
 const CARD_WIDGET_TITLE = 'completion_card_body';
+
+/**
+ * What to do with the app's no-output nudge. Claude Code sends ONE meta
+ * message — "[Your previous response had no visible output…]" — when the model
+ * call after a tool result ends without text, which a widget-only card turn
+ * always does. It fires once per turn (its `thinkingOnlyNudged` state); an
+ * empty reply then ends the turn normally, with the card last. Every line
+ * written in answer to it lands under the card. Mirrored in
+ * mcp-server/lib/card-widget.js; card-widget.test.js pins the two equal.
+ */
+const NO_OUTPUT_NUDGE_REPLY =
+  'The app then sends one "[Your previous response had no visible output…]" nudge: ' +
+  'reply to it with nothing — no text, no tool call. It comes once per turn, and the ' +
+  'empty reply ends the turn with the card last.';
+
+/** The offline renderer's command line (`node ".../mcp-server/index.js" --render-card …`). */
+const OFFLINE_RENDER_RE = /mcp-server[\\/]index\.js["']?\s+--render-card\b/;
+
+/** A completion-card render: the MCP tool under any namespace, or the offline CLI via Bash. */
+function isCardRenderCall(block) {
+  if (!block || block.type !== 'tool_use') return false;
+  if (typeof block.name === 'string' && block.name.endsWith('render_completion_card')) return true;
+  const command = block.input && typeof block.input.command === 'string' ? block.input.command : '';
+  return OFFLINE_RENDER_RE.test(command);
+}
 
 /** The card title the widget HTML draws (`<h3 class="card-title" …>`). */
 function widgetCardTitle(widgetCode) {
@@ -143,58 +148,55 @@ function widgetCardTitle(widgetCode) {
 }
 
 /**
- * The card as the turn delivered it, '' when there is none. Terminal (and the
- * Desktop fallback): the last assistant text when it carries the ✨ marker.
- * Desktop: the card body widget IS the card and nothing follows it — no
- * markdown at all, since every hidden-markdown marker (an HTML comment, #443;
- * a `[//]: #` definition, #470) showed as literal text in the Desktop chat.
- * A card-body show_widget call that ends the turn (only its tool result and
- * blank text after it) stands in as `✨✨✨ {title} ✨✨✨`, so every check below
- * reads both forms the same way. Text after the widget means the card was not
- * last — '' then, like a card that was never relayed. Exception: text that
- * answers the app's own no-output nudge (isNoOutputNudge) is not held against
- * the card.
+ * The card this turn put on screen after its LAST render, '' when there is
+ * none. Terminal (and the Desktop fallback title line): an assistant text
+ * carrying the ✨ marker. Desktop: the card-body show_widget call — the widget
+ * IS the card, there is no markdown (every hidden-markdown marker, an HTML
+ * comment #443 or a `[//]: #` definition #470, showed as literal text), so it
+ * stands in as `✨✨✨ {title} ✨✨✨` and every check reads both forms alike.
+ *
+ * Scans back to the turn's opening prompt: the first card met is the one on
+ * screen, unless a render call comes later than it — then the newest card was
+ * never shown. What follows the shown card (a stray line, the reply to the
+ * app's one-time no-output nudge, a tool call) does not unsee it: demanding
+ * the card again for that stacks a second, identical card on top of the
+ * first (observed 2026-09-24, twice in one day — a line after the widget, then
+ * the re-shown widget, then another line for the nudge).
  */
-function lastAssistantCardText(transcriptContent) {
-  const text = lastAssistantText(transcriptContent);
-  if (text.includes(CARD_MARKER)) return text;
+function deliveredCardText(transcriptContent) {
   if (!transcriptContent) return '';
   const lines = transcriptContent.split('\n');
-  // Text-only replies seen so far (scanning backwards). They disqualify the
-  // widget as "last" — unless the app itself forced them (see NO_OUTPUT_NUDGE).
-  let textAfter = false;
   for (let i = lines.length - 1; i >= 0; i--) {
     const raw = lines[i].trim();
     if (!raw) continue;
     let entry;
     try { entry = JSON.parse(raw); } catch { continue; }
-    if (entry.type === 'user' && isNoOutputNudge(entry)) { textAfter = false; continue; }
     if (entry.type === 'user' && isPromptEntry(entry)) return '';
     if (entry.type !== 'assistant') continue;
     const content = entry.message && entry.message.content;
     if (!Array.isArray(content)) continue;
-    const tool = content.find(b => b && b.type === 'tool_use');
-    if (!tool) {
-      if (content.some(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())) textAfter = true;
-      continue;
+    for (let b = content.length - 1; b >= 0; b--) {
+      const block = content[b];
+      if (!block) continue;
+      if (block.type === 'text' && typeof block.text === 'string' && block.text.includes(CARD_MARKER)) return block.text;
+      if (block.type !== 'tool_use') continue;
+      if (isCardRenderCall(block)) return '';
+      if (isShowWidgetTool(block.name) && block.input && block.input.title === CARD_WIDGET_TITLE) {
+        const title = widgetCardTitle(block.input.widget_code);
+        return title ? `${CARD_MARKER} ${title} ${CARD_MARKER}` : '';
+      }
     }
-    if (textAfter) return '';
-    if (!isShowWidgetTool(tool.name) || !tool.input || tool.input.title !== CARD_WIDGET_TITLE) return '';
-    const title = widgetCardTitle(tool.input.widget_code);
-    return title ? `${CARD_MARKER} ${title} ${CARD_MARKER}` : '';
   }
   return '';
 }
 
 /**
- * Did the turn end on a completion card? Proves the card was relayed, not
- * just rendered (#449, Gate 1b), and backs up a failed card-rendered flag
- * write (e.g. tmp-file I/O error). Terminal: the distinctive ✨✨✨ title
- * marker in the last text. Desktop: the card body widget as the turn's last
- * action (see lastAssistantCardText).
+ * Did the user see this turn's card? Proves the card was relayed, not just
+ * rendered (#449, Gate 1b), and backs up a failed card-rendered flag write
+ * (e.g. tmp-file I/O error). See deliveredCardText.
  */
-function lastAssistantContainsCard(transcriptContent) {
-  return lastAssistantCardText(transcriptContent).includes(CARD_MARKER);
+function cardDelivered(transcriptContent) {
+  return deliveredCardText(transcriptContent).includes(CARD_MARKER);
 }
 
 /**
@@ -457,11 +459,11 @@ function decideAction({
   }
 
   // Gate 1b — rendered but never relayed (#449). The render flag only proves
-  // the tool ran; the user sees the card only when its markdown is in the
-  // turn's last assistant text. `cardRelayed` is undefined when the caller
-  // could not read the transcript — then the flag alone must suffice, a
-  // blind block would bounce every turn. A second render mid-turn stays
-  // legal: only the marker of the last relayed card is checked.
+  // the tool ran; the user sees the card only when it was shown after the
+  // last render (deliveredCardText). `cardRelayed` is undefined when the
+  // caller could not read the transcript — then the flag alone must suffice,
+  // a blind block would bounce every turn. A second render mid-turn stays
+  // legal: only the card shown after the newest render is checked.
   if (cardRendered && cardRelayed === false) {
     return {
       action: 'block',
@@ -681,6 +683,7 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'On the Desktop app the result carries a [CARD WIDGET] block instead of',
     'markdown: the mcp__visualize__show_widget call IS the card — make it the',
     'LAST action of the turn, with no text after it.',
+    NO_OUTPUT_NUDGE_REPLY,
   ].join('\n');
 }
 
@@ -688,16 +691,17 @@ function buildNotRelayedReason() {
   return [
     '[stop.flow.guard] Card rendered but never relayed — the user sees no card this turn.',
     '',
-    'render_completion_card ran, but the turn did not end on the card. The tool',
+    'render_completion_card ran, but no card was shown after that render. The tool',
     'result sits in a collapsed block the user does not read; only what you output',
     'yourself is visible.',
     '',
     'Terminal: output the markdown of the LAST card you rendered VERBATIM now,',
     'character-for-character, as the LAST thing in the response. Desktop app: call',
-    'mcp__visualize__show_widget with that card\'s widget HTML again as the LAST',
-    'action — no text after it. If circumstances changed since that render (a',
+    'mcp__visualize__show_widget with that card\'s widget HTML as the LAST action —',
+    'no text before or after it. If circumstances changed since that render (a',
     'blocker cleared, a gate got fixed), re-render first and deliver the new card',
     'instead. Nothing after the card.',
+    NO_OUTPUT_NUDGE_REPLY,
   ].join('\n');
 }
 
@@ -716,6 +720,7 @@ function buildWidgetSkippedReason(widgetFile) {
     'loading_messages ["Card wird geladen"] and widget_code = that file\'s content,',
     'verbatim, as the LAST action — no text after it. If the tool does not exist',
     'in this session, output the visible title line instead and end the turn.',
+    NO_OUTPUT_NUDGE_REPLY,
   ].join('\n');
 }
 
@@ -872,8 +877,10 @@ module.exports = {
   lastAssistantText,
   lastAssistantTextLength,
   isSubstantialAnswer,
-  lastAssistantContainsCard,
-  lastAssistantCardText,
+  cardDelivered,
+  deliveredCardText,
+  isCardRenderCall,
+  NO_OUTPUT_NUDGE_REPLY,
   widgetCardTitle,
   decideAction,
   buildBlockReason,

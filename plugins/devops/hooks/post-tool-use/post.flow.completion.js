@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.23.0
+ * @version 0.24.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -25,6 +25,11 @@
  *       the completion card; a new edit clears a prior validation-attested flag.
  *   Subagent delegation does not satisfy any of these gates.
  *
+ *   Except after the card itself: the render's result carries its own relay
+ *   contract, and the card widget ends the turn — there the generic reminder
+ *   ("render … output the markdown VERBATIM") read as "a card still follows"
+ *   and produced a line under the widget plus a second, identical card.
+ *
  *   Also detects background work started by the current call (a run_in_background
  *   Agent, a backgrounded Bash task) and injects the `pending` instruction right
  *   away, so a card rendered before those results arrive declares them instead of
@@ -38,6 +43,7 @@ const os = require('os');
 const path = require('path');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
+const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
 const {
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, labelFor, isConceptInfra,
@@ -144,6 +150,12 @@ const LAUNCH_NOUN = {
 };
 
 const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
+
+/** The Desktop card itself: show_widget (any namespace) with the card-body title. */
+function isCardWidgetCall(toolName, toolInput) {
+  const widgetTool = toolName === 'show_widget' || toolName.endsWith('__show_widget');
+  return widgetTool && !!toolInput && toolInput.title === 'completion_card_body';
+}
 
 /**
  * Did a ship_release response report a merge? MCP results arrive as
@@ -382,12 +394,40 @@ process.stdin.on('end', () => {
 
   // --- 2. Emit completion-card instruction (MCP tool call) ---
 
+  // After the card itself the generic reminder is wrong: it asks for a card
+  // that is already there. Observed 2026-09-24 — injected right after the
+  // card widget, it read as "the markdown card still follows" and produced a
+  // line under the widget, the Stop gate's re-demand, and an identical second
+  // card.
+  if (isCardWidgetCall(toolName, hook.tool_input)) {
+    process.stdout.write([
+      '[completion-flow] Card shown — this is the end of the turn.',
+      'Write nothing after it: no summary, no "the card is above", no second card.',
+      NO_OUTPUT_NUDGE_REPLY,
+    ].join('\n') + '\n');
+    return;
+  }
+  if (toolName.endsWith('__render_completion_card')) {
+    process.stdout.write(
+      '[completion-flow] Card rendered — deliver it exactly as its result says (Desktop app: the ' +
+      'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
+      'Render no second card for the same outcome.\n',
+    );
+    return;
+  }
+
   const lines = [];
 
   if (isCodeEdit) {
     lines.push(`[completion-flow] Code edit #${editCount} recorded (${toolName}).`);
   } else {
     lines.push(`[completion-flow] Tool call recorded (${toolName}).`);
+  }
+  if (readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true }) !== null) {
+    lines.push(
+      'A completion card was already rendered this turn. Render a new one only when the',
+      'outcome changed since — then show THAT one; never show the same card twice.',
+    );
   }
 
   // Offline-first when the completion MCP's heartbeat is dead (#371): each
@@ -428,7 +468,7 @@ process.stdin.on('end', () => {
     '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
     '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
     'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
-    'tool call in the Desktop App UI. You MUST copy the returned markdown and output',
+    'tool call. When it returns card markdown (terminal), you MUST copy it and output',
     'it VERBATIM as your own text response — do NOT rely on the tool result being',
     'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
     'symbol, and formatting character exactly. The card is pre-rendered content —',
@@ -437,9 +477,11 @@ process.stdin.on('end', () => {
     'field — map each requirement / acceptance criterion to HOW this change meets it',
     'and how you confirmed it. A code-change card without `validation` is blocked',
     'once and re-requested (see deep-knowledge/test-autonomy.md).',
-    'Card LAST, nothing after the closing ---. The show_widget call a [CARD WIDGET] block',
-    'beside the card asks for (Desktop app) goes BEFORE the card, never after — and it is',
-    'mandatory: the one-line ✨ title is only for a failed call, never a shortcut.',
+    'Card LAST, nothing after it. Terminal: the markdown, nothing after the closing ---.',
+    'Desktop app: the result carries a [CARD WIDGET] block instead of markdown — that',
+    'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
+    '✨ title is only for a failed call, never a shortcut).',
+    NO_OUTPUT_NUDGE_REPLY,
     'NO RECAP before the card either: the card IS the summary — never restate in prose what',
     'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
     'the card only for what it cannot carry: answers to side questions or other topics of',

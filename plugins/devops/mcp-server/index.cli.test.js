@@ -141,6 +141,10 @@ describe("--render-card CLI fallback", () => {
     expect(terminal.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
     expect(desktop.stdout.trim()).toBe("");
     expect(desktop.stderr).toContain("this card has no markdown to relay");
+    // 2026-09-24: "answer with ONE short line" put a stray line under the card
+    // on every widget turn — the app's nudge now gets an empty reply.
+    expect(desktop.stderr).toMatch(/reply to it with nothing — no text, no tool call/);
+    expect(desktop.stderr).not.toMatch(/ONE short line/);
     // The failed-call fallback line names the title.
     expect(desktop.stderr).toContain("`### **✨✨✨ CTA-Test ✨✨✨**`");
     // The widget carries the title and the body instead.

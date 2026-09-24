@@ -29,7 +29,7 @@
  *
  *   The completion card is out of scope: only the text BEFORE the first
  *   ✨✨✨ marker of each entry (card-guard.CARD_MARKER — the terminal title, or
- *   the stand-in card-guard.lastAssistantCardText builds for a Desktop card
+ *   the stand-in card-guard.deliveredCardText builds for a Desktop card
  *   widget) is scanned.
  *
  *   Pending hint: when the hand-off sits in a turn that already ends with
