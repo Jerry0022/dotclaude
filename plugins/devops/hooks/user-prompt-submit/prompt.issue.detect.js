@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.3.0
+ * @version 0.4.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect issue references in user messages. If explicit (#N or
@@ -33,6 +33,10 @@ process.stdin.on('end', () => {
 
   const message = hook.prompt || hook.user_message || hook.message || '';
   if (!message) process.exit(0);
+  // Background agent reports quote issue and PR numbers; the user referenced
+  // none of them (#473). Machine turns also must not consume the first-prompt
+  // heuristic.
+  if (require('../lib/non-user-prompt').isNonUserPrompt(message)) process.exit(0);
 
   // Pattern 1: Explicit issue reference — #42, Issue #42, Issue 42, "mach Issue #42"
   const explicitMatch = message.match(/#(\d+)/g) || message.match(/\bIssue\s+(\d+)/gi);

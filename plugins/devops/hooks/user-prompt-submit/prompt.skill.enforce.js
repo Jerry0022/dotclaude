@@ -75,8 +75,8 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { isMachineTurn, isSilent, isScheduledTask } = require('./prompt.flow.silent-turn');
-const { isMachinePrompt, isModeActive, detectActivation, willBeCollected } = require('../lib/batch-state');
+const { isModeActive, detectActivation, willBeCollected } = require('../lib/batch-state');
+const { isNonUserPrompt } = require('../lib/non-user-prompt');
 const { parseHookInput } = require('../lib/hook-input');
 const { loadAllSkills } = require('../lib/skill-meta');
 const { routeMessage, stripCodeAndQuotes, SKIP_SKILLS, HOOK_OWNED_MODES, ALIAS_MAP } = require('../lib/skill-trigger-router');
@@ -99,16 +99,6 @@ const MODE_KEYED = new Set(['do-run', 'do-ship']);
 
 /** Every mandate names the devops plugin's skill, never a bare name. */
 const NAMESPACE = 'devops';
-
-/**
- * Not typed by the user: cron/loop ticks, AFK resumes, scheduled tasks,
- * task notifications, channel messages.
- * @param {string} message
- */
-function isNonUserPrompt(message) {
-  if (typeof message !== 'string') return true;
-  return isMachinePrompt(message) || isMachineTurn(message) || isSilent(message) || isScheduledTask(message);
-}
 
 /**
  * Extract inline skill mentions from a user prompt (outside code/quotes).
