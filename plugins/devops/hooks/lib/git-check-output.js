@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module git-check-output
- * @version 0.1.1
+ * @version 0.2.0
  * @description Pure output composition for the ss.git.check SessionStart hook.
  *   Takes the already-collected findings and renders the hook's stdout lines.
  *   No git, no fs — so the decision logic is unit-testable.
@@ -29,6 +29,10 @@ function issueLine(issue) {
   if (!issue || typeof issue !== 'object') return null;
   switch (issue.type) {
     case 'uncommitted':
+      // A repo without a remote cannot ship (ship_preflight needs one), so the
+      // CTA must not point at /do-ship there (#500).
+      if (issue.noRemote) return `- ${issue.label} → commit them locally (no remote configured)`;
+      return `- ${issue.label} → run \`/do-ship\` to commit, push & create PR`;
     case 'unpushed':
       return `- ${issue.label} → run \`/do-ship\` to commit, push & create PR`;
     case 'stash':
@@ -83,12 +87,14 @@ function workspaceLines(workspace) {
  * "FIRST action of this turn" mandate is intentionally kept verbatim so
  * interactive sessions behave exactly as they did.
  */
-function askLines(workspace, hasChanges) {
+function askLines(workspace, hasChanges, noRemote = false) {
   const out = [];
   out.push('Call AskUserQuestion as the FIRST action of this turn. Ask the user (in their language). Suggested options:');
   if (hasChanges) {
     out.push('  - Worktree + Feature-Branch anlegen');
-    out.push('  - Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen (recommended)');
+    out.push(noRemote
+      ? '  - Erst aktuelle Changes lokal committen, dann Worktree anlegen (recommended)'
+      : '  - Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen (recommended)');
     out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
   } else {
     out.push('  - Worktree + Feature-Branch anlegen (recommended)');
@@ -102,7 +108,9 @@ function askLines(workspace, hasChanges) {
   out.push('Resolution per option:');
   out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
   if (hasChanges) {
-    out.push('  - Ship-first: invoke /do-ship, then create worktree');
+    out.push(noRemote
+      ? '  - Commit-first: `git commit` locally (no remote, /do-ship cannot run here), then create worktree'
+      : '  - Ship-first: invoke /do-ship, then create worktree');
     out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
   }
   if (workspace.type === 'on-main-no-worktree') {
@@ -160,7 +168,10 @@ function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
     const hasChanges = currentDirty
       ? issuesOf(currentDirty).some(i => i && stagedTypes.has(i.type))
       : false;
-    out.push(...askLines(workspace, hasChanges));
+    const noRemote = currentDirty
+      ? issuesOf(currentDirty).some(i => i && i.type === 'uncommitted' && i.noRemote)
+      : false;
+    out.push(...askLines(workspace, hasChanges, noRemote));
   }
 
   if (staleNote) {

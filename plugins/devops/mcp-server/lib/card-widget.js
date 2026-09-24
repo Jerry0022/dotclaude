@@ -199,7 +199,7 @@ export function conclusionPrompt(replies, lang = "de") {
  *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
- * @param {{ version?: string|null, replies?: string[] }} [opts] the version the card is about, the prepared answers to its open points
+ * @param {{ version?: string|null, replies?: string[], noShip?: boolean }} [opts] the version the card is about, the prepared answers to its open points, and whether the repo has no remote (every ship button is dropped, #500)
  * @returns {Array<{ label: string, icon: string, prompt: string, primary?: boolean, tooltip: string }>}
  */
 export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
@@ -214,6 +214,7 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
   const concludeButton = { label: conclude.label, icon: conclude.icon, prompt: conclusion, tooltip: conclude.tooltip };
   const buttons = list
     .filter((a) => !isPromotePrompt(a.prompt) || semver)
+    .filter((a) => !(opts && opts.noShip && isShipPrompt(a.prompt)))
     .map(({ conclude: isConclude, ...a }) => {
       if (isPromotePrompt(a.prompt)) return { ...a, prompt: `${a.prompt} ${semver}` };
       if (isConclude && conclusion) return { ...a, ...concludeButton };
@@ -221,6 +222,11 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
     });
   if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
   return buttons;
+}
+
+/** A ship button's prompt ("ship", "Ship trotzdem …", "ship --no-compact"). */
+function isShipPrompt(prompt) {
+  return /^ship\b/i.test(String(prompt || ""));
 }
 
 /** A promote button's prompt ("promote beta", "promote stable"). */
@@ -477,7 +483,7 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p, lang))).join("")}</div>`
     : "";
 
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies });
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip });
   const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
   const buttonsHtml = buttons.length
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +

@@ -156,6 +156,25 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(text).toContain("kein Repo");
   });
 
+  test("no remote: the track ends at the local commit and nothing asks to ship (#500)", async () => {
+    const ready = await cardText({
+      variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8b",
+      state: { mode: "git-no-remote", commit: "abc1234", branch: "main", pushed: false, delivered: "local-commit-only" },
+      open: ["Doku fehlt", "Test fehlt"],
+    });
+    expect(ready).toContain("✓ commit · nur lokal, kein Remote · main");
+    expect(ready).not.toMatch(/push|PR|merge/);
+    expect(ready).toMatch(/^## 📦 Lokal fertig trotz 2 Vorbehalten — noch etwas\?$/m);
+    expect(ready).not.toMatch(/^## .*[Ss]hippen\?/m);
+
+    const test = await cardText({
+      variant: "test", summary: "Lokal", lang: "en", session_id: "test-anatomy-8c",
+      state: { mode: "git-no-remote", branch: "main" },
+    });
+    expect(test).toContain("○ commit · local only, no remote · main");
+    expect(test).toMatch(/^## 🧪 Test first\?$/m);
+  });
+
   test("analysis pipeline says no changes to the repo", async () => {
     const text = await cardText({ variant: "analysis", summary: "Nur gelesen", lang: "de", session_id: "test-anatomy-9" });
     expect(text).toContain("➖ keine Änderungen im Repo");

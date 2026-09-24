@@ -333,10 +333,11 @@ function hasBody(variant) { return variant !== 'test-minimal'; }
  */
 function getRepoUrl(cwd) {
   try {
-    const raw = execSync('git remote get-url origin', {
-      encoding: 'utf8', timeout: 5000,
-      cwd: cwd || undefined,
-    }).trim();
+    // A repo without a remote has no URL to link to — asking for `origin`
+    // anyway printed "error: No such remote 'origin'" to stderr (#500).
+    const opts = { encoding: 'utf8', timeout: 5000, cwd: cwd || undefined, stdio: ['ignore', 'pipe', 'ignore'] };
+    if (!execSync('git remote', opts).split(/\r?\n/).includes('origin')) return '';
+    const raw = execSync('git remote get-url origin', opts).trim();
     // SSH: git@github.com:owner/repo.git
     const sshMatch = raw.match(/git@github\.com:(.+?)(?:\.git)?$/);
     if (sshMatch) return 'https://github.com/' + sshMatch[1];
@@ -737,6 +738,13 @@ function renderPipelineLine(input, lang, buildId) {
   }
 
   const commitDone = !!(state.commit || state.pushed || state.merged);
+  // No remote: the track ends at the local commit — push, PR and merge have
+  // nowhere to go, so they are not drawn as pending steps (#500).
+  if (state.mode === 'git-no-remote') {
+    let local = (commitDone ? '✓' : '○') + ' commit · ' + (lang === 'en' ? 'local only, no remote' : 'nur lokal, kein Remote');
+    if (state.branch) local += ' · ' + state.branch;
+    return local + ' · Build ' + buildId;
+  }
   const pushDone = !!(state.pushed || state.merged);
   const prDone = !!state.pr;
   const mergeDone = !!state.merged;
@@ -854,6 +862,9 @@ function renderChannelLadderMd(ladder, lang) {
 const HEADINGS = {
   de: {
     ready: (c) => c.reservation ? `📦 Shippen trotz ${c.reservation}?` : '📦 Shippen?',
+    // No remote (#500): nothing to ship to — the work ends at the local commit.
+    'ready-local': (c) => c.reservation ? `📦 Lokal fertig trotz ${c.reservation} — noch etwas?` : '📦 Lokal fertig — noch etwas?',
+    'test-local': () => '🧪 Erst testen?',
     // Names what is actually red: failing tests, else unmet requirements,
     // else partially met ones — an unmet requirement is not a "red test".
     'ready-red': (c) => `⚠ Trotzdem shippen mit ${c.redTests
@@ -883,6 +894,8 @@ const HEADINGS = {
   },
   en: {
     ready: (c) => c.reservation ? `📦 Ship anyway despite ${c.reservation}?` : '📦 Ship?',
+    'ready-local': (c) => c.reservation ? `📦 Done locally despite ${c.reservation} — anything else?` : '📦 Done locally — anything else?',
+    'test-local': () => '🧪 Test first?',
     'ready-red': (c) => `⚠ Ship anyway with ${c.redTests
       ? c.redTests + ' red tests'
       : c.unmet
@@ -1223,7 +1236,11 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);
-  const fn = T[key] || T.fallback;
+  // Without a remote /do-ship cannot run (ship_preflight needs one): the
+  // heading asks no ship question and the widget drops every ship button.
+  const noShip = state.mode === 'git-no-remote';
+  const localKey = noShip && (key === 'ready' || key === 'test') ? key + '-local' : key;
+  const fn = T[localKey] || T.fallback;
   let heading = fn(ctx);
 
   const points = pointsForKey(input, key, lang);
@@ -1250,7 +1267,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
-  return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies };
+  return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip };
 }
 
 function readToolCallCount(sessionId) {
@@ -1351,6 +1368,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     buttonsKey: decision.buttonsKey,
     promoteVersion: decision.version || null,
     replies: decision.replies || [],
+    noShip: !!decision.noShip,
   };
 }
 

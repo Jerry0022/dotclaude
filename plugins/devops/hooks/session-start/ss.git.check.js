@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.6.0
+ * @version 0.7.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
@@ -142,6 +142,8 @@ function checkRepo(dir) {
       type: 'uncommitted',
       count: lines.length,
       label: `${lines.length} uncommitted file(s)`,
+      // No remote → /do-ship cannot run here; the CTA says "commit locally" (#500).
+      noRemote: !remote,
     });
   }
 
