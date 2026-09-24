@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.201.3] — 2026-09-25
+
+### Fixed
+- **A repo without a remote no longer gets a Ship button (#500).** In a repo with no `origin`, the `ready` and `test` cards stop asking "Shippen?": the heading becomes „📦 Lokal fertig — noch etwas?" or „🧪 Erst testen?", and the widget drops the Ship button. The pipeline line ends at the local commit (`✓ commit · nur lokal, kein Remote · main · v1.2.3`) with no pending push → PR → merge steps. The card finds this on its own from `cwd` when the caller passes no `state.mode`, so it also works for cards rendered outside `/do-ship`. A `ship-successful` card in such a repo drops to `ready` with a note that does not ask for a push or merge that cannot happen. Cards that follow a ship attempt keep their buttons, since a local ship still commits.
+- **The card renderer no longer prints `error: No such remote 'origin'`.** It checks which remotes exist before asking for `origin`'s URL.
+- **SessionStart stops recommending `/do-ship` where there is nothing to push.** In a repo without an origin, uncommitted files get „commit them locally on a feature branch". On main, the workspace question now recommends taking the changes along into a new worktree, because pre.main.guard blocks a commit on main. If the remote check itself fails, the hook keeps the usual advice and does not claim the repo is local-only.
+
 ## [0.201.2] — 2026-09-24
 
 ### Fixed
