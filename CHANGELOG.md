@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.194.4] — 2026-09-24
+
+### Fixed
+- **Background reports no longer act as user prompts.** Task notifications and cron ticks arrive through the same hook as typed prompts. `prompt.issue.detect` read "PR #471" in a red-team report as an issue reference and asked to move it to In Progress (#473). `prompt.flow.appstart` read "start" in a subagent notification and demanded an app-start card (#474). Both hooks now skip non-user prompts via the shared `hooks/lib/non-user-prompt.js`, which `prompt.skill.enforce` uses as well.
+
 ## [0.194.3] — 2026-09-24
 
 ### Fixed

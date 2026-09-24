@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.appstart
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect app start intent in user prompts. When the user wants to
@@ -29,7 +29,11 @@ process.stdin.on('end', () => {
   try { if (require('../lib/batch-state').willBeCollected(hook)) process.exit(0); }
   catch { /* fail open */ }
 
-  const userMessage = (hook.prompt || hook.user_message || hook.message || '').toLowerCase().trim();
+  const raw = hook.prompt || hook.user_message || hook.message || '';
+  // A task notification or cron tick is no start request: its text can say
+  // "start" or "preview" and still come from nobody (#474).
+  if (require('../lib/non-user-prompt').isNonUserPrompt(raw)) process.exit(0);
+  const userMessage = raw.toLowerCase().trim();
   if (!userMessage) process.exit(0);
 
   const startKeywords = [
