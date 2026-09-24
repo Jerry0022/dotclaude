@@ -98,14 +98,16 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
     } finally { cleanup(dir); }
   });
 
-  test("Desktop: text after the card widget → the card was not last, block once", async () => {
+  // Regression 2026-09-24: blocking here made the model show the same widget
+  // again — two identical cards, plus one more stray line for the app's nudge.
+  test("Desktop: text after the card widget → the card is on screen, pass — never a second card", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       setFlag(dir, "card-rendered");
+      setFlag(dir, "card-widget");
       const out = await stop(dir, widgetTranscript(dir, "Noch ein Nachsatz."));
-      expect(out).toContain('"decision":"block"');
-      expect(out).toContain("never relayed");
+      expect(out.trim()).toBe("");
     } finally { cleanup(dir); }
   });
 

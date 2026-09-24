@@ -37,7 +37,7 @@ require('../lib/plugin-guard');
 
 const { readSessionFile, sessionFile, writeSessionFile } = require('../lib/session-id');
 const { parseHookInput } = require('../lib/hook-input');
-const { safeReadTranscript, lastAssistantCardText, TRANSCRIPT_TAIL_BYTES } = require('../lib/card-guard');
+const { safeReadTranscript, deliveredCardText, TRANSCRIPT_TAIL_BYTES } = require('../lib/card-guard');
 const {
   detectWebHandoff, webGuideInvokedThisTurn, containsCompletionCard, writePendingHandoff, stripCompletionCard,
 } = require('../lib/guide-handoff');
@@ -105,7 +105,7 @@ function main(inputData) {
 
   const detection = detectWebHandoff(turnText);
   if (!detection) return;
-  const lastText = lastAssistantCardText(transcript);
+  const lastText = deliveredCardText(transcript);
 
   if (webGuideInvokedThisTurn(transcript)) return;
 

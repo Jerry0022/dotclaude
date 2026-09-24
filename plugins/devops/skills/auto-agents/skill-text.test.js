@@ -171,7 +171,7 @@ describe("auto-agents arguments — the mode comes from the caller", () => {
   });
 
   it("maps do-run's question 2 onto the execution mode", () => {
-    expect(step1).toMatch(/\*\*Dabei · …\*\* → `interactive`, \*\*Weg · …\*\* → `background`/);
+    expect(step1).toMatch(/\*\*Interaktiv · …\*\* → `interactive`, \*\*Autonom · …\*\* → `background`/);
   });
 
   it("asks the mode question only on a direct full-ceremony invocation", () => {

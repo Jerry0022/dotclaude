@@ -30,6 +30,11 @@ block introduced by "show the user … verbatim" — exactly as returned, never
 shortened or paraphrased. Everything else in the same output (instructions,
 reminders, status lines, "do not output" notes) stays silent.
 
+The completion card ends the turn — nothing after it: no summary, no "the
+card is above". On the Desktop app the card is a widget call, and the app
+answers it with one "[Your previous response had no visible output…]" nudge:
+reply to that with nothing at all.
+
 A turn triggered by a background-task notification, a wake-up or a cron tick,
 with no user prompt: if nothing changed (same variant, same build-id, same
 evidence — nothing to report), answer with nothing — no "Stand bleibt", no

@@ -3,7 +3,7 @@
  *
  * Red-team R4 (skill restructure PR 2): the presence-timeout cron always
  * carried `shutdown=yes`, even when the do-run router's Q2 was answered
- * "Dabei" (the user stays at the PC). A timeout fired while the user was
+ * "Interaktiv" (the user stays at the PC). A timeout fired while the user was
  * still there would then arm the shutdown watchdog and power the PC down
  * under them. The cron's `shutdown` now follows the router answer.
  */
@@ -33,21 +33,21 @@ describe("backlog presence-timeout cron — shutdown follows the router's Q2", (
     expect(cron).toMatch(/shutdown=<presence default below>/);
   });
 
-  it("Dabei → shutdown=no in every arm and re-arm; Weg → yes until F6 answers", () => {
-    expect(step1).toMatch(/\*\*Dabei\*\* → `shutdown=no`, in every arm and re-arm/);
-    expect(step1).toMatch(/\*\*Weg\*\* → `shutdown=yes` until F6 "PC danach" is answered/);
+  it("Interaktiv → shutdown=no in every arm and re-arm; Autonom → yes until F6 answers", () => {
+    expect(step1).toMatch(/\*\*Interaktiv\*\* → `shutdown=no`, in every arm and re-arm/);
+    expect(step1).toMatch(/\*\*Autonom\*\* → `shutdown=yes` until F6 "PC danach" is answered/);
     expect(step1).toMatch(/updating `queue`\/`milestones`\/`shutdown`/);
     expect(step1).not.toMatch(/Keep `shutdown=yes` as the\s+timeout default throughout/);
   });
 
   it("the re-entry uses the cron's value — no forced shutdown on a presence timeout", () => {
     expect(reentry).not.toMatch(/`shutdown=yes` always/);
-    expect(reentry).toMatch(/\*\*Dabei → `shutdown=no`\*\*, always/);
+    expect(reentry).toMatch(/\*\*Interaktiv → `shutdown=no`\*\*, always/);
     expect(reentry).toMatch(/watchdog with the cron's `shutdown` value/);
   });
 
   it("the summary rule names the router-driven default", () => {
     const rules = runner.slice(runner.indexOf("**Presence phase is timeout-safe**"));
-    expect(rules).toMatch(/Dabei never shuts down/);
+    expect(rules).toMatch(/Interaktiv never shuts down/);
   });
 });

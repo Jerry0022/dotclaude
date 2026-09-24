@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.7.0
+ * @version 0.8.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -11,8 +11,9 @@
  *   Block (JSON `{decision:"block"}` on stdout) when, and this is not already a
  *   blocked stop cycle (stop_hook_active=false):
  *     1. no card rendered AND (tool calls happened OR substantial prose), OR
- *        a card was rendered but never relayed — the ✨ marker is missing from
- *        the last assistant text (#449), OR
+ *        a card was rendered but never shown after its last render — no ✨
+ *        marker text, no card widget (#449). Output after a shown card never
+ *        re-demands it: that only stacked a second, identical card. OR
  *        a Desktop card owed its widget call and show_widget never ran (#451), OR
  *     2. a notification turn (see below) re-rendered a card identical to the
  *        previous one (design § 5.5), OR
@@ -55,8 +56,8 @@ const { readSessionFile, sessionFile, writeSessionFile } = require('../lib/sessi
 const {
   decideAction,
   isSubstantialAnswer,
-  lastAssistantContainsCard,
-  lastAssistantCardText,
+  cardDelivered,
+  deliveredCardText,
   lastUserEntryIsNotification,
   safeReadTranscript,
   showWidgetCalledThisTurn,
@@ -141,13 +142,13 @@ process.stdin.on('end', () => {
   const substantial = isSubstantialAnswer(transcript);
   const openTasks = silent ? [] : openTaskNames(scanOpenTasks(transcript));
   const notificationTurn = !silent && lastUserEntryIsNotification(transcript);
-  // The marker in the last assistant text proves the card was RELAYED, not
-  // just rendered (#449). It also backs up a failed flag write: marker alone
+  // A card shown after the last render proves it was RELAYED, not just
+  // rendered (#449). It also backs up a failed flag write: a shown card alone
   // still counts as rendered. An unreadable transcript leaves it undefined so
   // the relay gate stays out of the way instead of blocking blind.
-  const cardRelayed = (silent || !transcript) ? undefined : lastAssistantContainsCard(transcript);
+  const cardRelayed = (silent || !transcript) ? undefined : cardDelivered(transcript);
   const cardRendered = flagCardRendered || cardRelayed === true;
-  const cardText = (!silent && cardRendered) ? lastAssistantCardText(transcript) : '';
+  const cardText = (!silent && cardRendered) ? deliveredCardText(transcript) : '';
   const widgetFile = widgetResult ? String(widgetResult.filePath).replace(/\\/g, '/') : '';
   const widgetCalled = (widgetFile && transcript) ? showWidgetCalledThisTurn(transcript) : undefined;
   // Both probes are only needed on the paths that read them: the tree check

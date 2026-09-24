@@ -204,8 +204,21 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   "card body widget"), made as the **last action of the turn, with no card
   markdown at all** — the tool result carries no markdown block, and no text
   may follow the widget. card-guard reads the card from that call instead
-  (`lastAssistantCardText`: a card-body `show_widget` that ends the turn
-  stands in as `✨✨✨ {title} ✨✨✨`, the title taken from the widget's h3).
+  (`deliveredCardText`: a card-body `show_widget` after the turn's last
+  render stands in as `✨✨✨ {title} ✨✨✨`, the title taken from the
+  widget's h3).
+- **Ending on the widget (Desktop).** A turn whose last model call follows
+  a tool result without text gets ONE meta nudge from Claude Code —
+  `[Your previous response had no visible output…]` — and a widget-only
+  card turn always ends that way. The nudge fires once per turn; an empty
+  reply (no text, no tool call) ends the turn with the card last. Every
+  line written for it ("Die Card steht oben …") lands under the card, so
+  the card contract says to reply with nothing (`NO_OUTPUT_NUDGE_REPLY`,
+  shared by card-guard and card-widget). Once the card was shown after the
+  last render, nothing that follows re-demands it: the Stop gate passes,
+  and `post.flow.completion` answers the widget call with "end of turn"
+  instead of its generic render reminder. Both used to ask for the card
+  again, which drew the same card twice (observed 2026-09-24).
   Every hidden-markdown marker tried before showed as a stray literal line
   under the widget in the Desktop chat: an HTML comment (#443) and a
   `[//]: # (…)` link reference definition (#470). (Until 0.184.0 the

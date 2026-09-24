@@ -361,3 +361,63 @@ describe("post.flow.completion — card flags follow the real session id", () =>
     cleanup(dir);
   });
 });
+
+// Regression 2026-09-24: the generic reminder ("COMPLETION CARD — when ALL work
+// is done … output the markdown VERBATIM") was injected right after the card
+// widget. It read as "a card still follows": a line landed under the widget,
+// the Stop gate re-demanded the card, and the same card was drawn twice.
+describe("post.flow.completion — quiet after the card itself", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+  const WIDGET = "mcp__visualize__show_widget";
+  const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+
+  test("after the card widget: end of turn, empty reply to the nudge, no card reminder", () => {
+    const dir = project();
+    const out = runHook(dir, "s-widget", WIDGET, { tool_input: { title: "completion_card_body", widget_code: "<h3>x</h3>" } });
+    expect(out).toContain("Card shown");
+    expect(out).toMatch(/reply to it with nothing/);
+    expect(out).not.toContain("COMPLETION CARD");
+    expect(out).not.toMatch(/VERBATIM/);
+    cleanup(dir);
+  });
+
+  test("a deferred-namespace widget tool is the card too", () => {
+    const dir = project();
+    const out = runHook(dir, "s-widget-ns", "mcp__6f616b42__show_widget", { tool_input: { title: "completion_card_body" } });
+    expect(out).toContain("Card shown");
+    cleanup(dir);
+  });
+
+  test("after the render: deliver it as its result says, no second render", () => {
+    const dir = project();
+    const out = runHook(dir, "s-render", RENDER, { tool_input: { variant: "ready", session_id: "s-render" } });
+    expect(out).toContain("Card rendered");
+    expect(out).not.toContain("COMPLETION CARD");
+    cleanup(dir);
+  });
+
+  test("any other widget keeps the ordinary reminder", () => {
+    const dir = project();
+    const out = runHook(dir, "s-chart", WIDGET, { tool_input: { title: "q4_revenue_chart" } });
+    expect(out).toContain("COMPLETION CARD");
+    cleanup(dir);
+  });
+
+  test("a tool call after this turn's render warns against showing the same card twice", () => {
+    const dir = project();
+    fs.writeFileSync(flag(dir, "card-rendered", "s-after"), "t");
+    const out = runHook(dir, "s-after", "mcp__ccd_session_mgmt__set_session_title");
+    expect(out).toContain("already rendered this turn");
+    expect(out).toMatch(/never show the same card twice/);
+    cleanup(dir);
+  });
+
+  test("the reminder states the widget-only contract, not the old widget-before-markdown order", () => {
+    const dir = project();
+    const out = runHook(dir, "s-contract");
+    expect(out).not.toMatch(/goes BEFORE the card/);
+    expect(out).toMatch(/show_widget call IS the card/);
+    expect(out).toMatch(/reply to it with nothing/);
+    cleanup(dir);
+  });
+});

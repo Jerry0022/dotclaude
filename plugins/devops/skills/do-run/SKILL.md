@@ -89,7 +89,7 @@ It never reorders the options that remain.
 | `--from=do-batch` | Q1 dropped — the merged batch plan is the prompt (Prompt umsetzen). |
 | `backlog`, or a backlog trigger phrase | Q1 dropped → Backlog. |
 | `audit`, or an audit trigger phrase | Q1 dropped → Audit. |
-| `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Weg · …` options, in table order. |
+| `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Autonom · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
 | strict already armed for this branch (`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Nur das (`strict off` lifts it, not this question). |
@@ -129,7 +129,7 @@ Rules for every question this router asks (spec § "do-run questions"):
   shows as a description suffix instead (Q3), or as a preset (Step 1).
 - **Click-through is a valid run.** Accepting the first option of every
   single-select question and submitting Q4 empty runs: Prompt umsetzen ·
-  Dabei · Ship manuell · Mit Umfeld · Harden danach + Polish danach.
+  Interaktiv · Ship manuell · Mit Umfeld · Harden danach + Polish danach.
 - **Parallel labels.** Short, same shape, the verb in the same place — never
   "Ja" / "Nein".
 
@@ -141,11 +141,11 @@ Q1  header: "Was?"          multiSelect: false
     3. "Backlog"                        — Offene Milestones / Issues abarbeiten.   [only when open issues exist]
 
 Q2  header: "Ablauf?"       multiSelect: false
-    question: "Bist du dabei, und wer shippt am Ende?"
-    1. "Dabei · Ship manuell (Recommended)" — Du bist da; am Ende steht die ready-Card, du shippst selbst.
-    2. "Dabei · Ship automatisch"           — Du bist da; am Ende läuft do-ship.
-    3. "Weg · Ship automatisch"             — Du gehst weg; autonomer Rahmen, am Ende läuft do-ship.
-    4. "Weg · Ship manuell"                 — Du gehst weg; autonomer Rahmen, Ergebnis bleibt lokal.
+    question: "Bleibst du erreichbar, und wer shippt am Ende?"
+    1. "Interaktiv · Ship manuell (Recommended)" — Du bleibst erreichbar und beantwortest Rückfragen. Am Ende zeigt die ready-Card das Ergebnis; PR, Merge und Release machst du selbst.
+    2. "Interaktiv · Ship automatisch"           — Du bleibst erreichbar und beantwortest Rückfragen. Ist alles grün, läuft am Ende do-ship (PR, Merge, Alpha-Release) ohne weitere Frage.
+    3. "Autonom · Ship manuell"                  — Du gehst weg: Claude fragt nichts mehr, entscheidet selbst und sammelt offene Punkte. Das Ergebnis bleibt auf dem Branch, du shippst danach selbst.
+    4. "Autonom · Ship automatisch"              — Du gehst weg: Claude fragt nichts mehr, entscheidet selbst und sammelt offene Punkte. Ist alles grün, läuft am Ende do-ship.
 
 Q3  header: "Umfang?"       multiSelect: false
     question: "Wie weit darf die Änderung greifen?"
@@ -153,7 +153,7 @@ Q3  header: "Umfang?"       multiSelect: false
     2. "Nur das"                        — Strikt: nur was der Prompt nennt, jede offene Wahl wird berichtet.
 
 Q4  header: "Durchgänge?"   multiSelect: true
-    question: "Welche Durchgänge kommen dazu? (Leer lassen = empfohlene)"
+    question: "Welche Durchgänge kommen dazu? (Leer lassen = Harden + Polish)"   [name every option marked (Recommended) in this call, e.g. "Harden + Polish + Rethink"]
     1. "Harden danach (Recommended)"    — Tests, Bugs, Konsistenz über die Änderung.
     2. "Polish danach (Recommended)"    — UI-Feinschliff über die Änderung.
     3. "Rethink vorher"                 — Erst frisch neu denken (Concept-Seite), dann umsetzen.   [+ " (Recommended)" when the prompt reads stuck]
@@ -178,7 +178,10 @@ Q4  header: "Durchgänge?"   multiSelect: true
   **description** of that option. Label, marker and order stay unchanged;
   the user's last choice is one keypress away and visibly flagged.
 
-**Reading Q4 (multi-select has no pre-selection):**
+**Reading Q4.** `AskUserQuestion` has no pre-selection: an option can be
+marked, never pre-ticked, so opt-out checkboxes are impossible. The
+question text therefore names the set an empty answer runs — the user sees
+what "leer lassen" means instead of having to untick anything.
 
 - **Nothing ticked** → the recommended set: every option whose label carries
   `(Recommended)` in this call (Harden danach + Polish danach, plus Rethink
@@ -196,8 +199,8 @@ four questions). No follow-up when nothing is open.
 |---|---|
 | Q1 Audit | F1 Ergebnis + F2 Audit-Umfang |
 | Q1 Backlog | F3 Milestones (and F4 Issues when loose issues exist) — run `modes/backlog.md` Step 1 fetch, trust gate and presence-cron arm first; they feed the options |
-| Q2 Weg (not Backlog), or Budget verbrennen | F5 Desktop + F6 PC danach |
-| Q2 Weg with Backlog | F6 PC danach (backlog never asks Desktop) |
+| Q2 Autonom (not Backlog), or Budget verbrennen | F5 Desktop + F6 PC danach |
+| Q2 Autonom with Backlog | F6 PC danach (backlog never asks Desktop) |
 
 ```
 F1  header: "Ergebnis"      multiSelect: false
@@ -276,7 +279,7 @@ same run — never a new Skill call to `do-run`.
 Q4, `$STRICT` from Q3. Implementation always goes through `auto-agents`,
 the single execution path: `Skill("devops:auto-agents")` with args
 `--from=do-run --mode=<interactive|background> --ship=<auto|manual> <task>`
-(Dabei → `interactive`, Weg → `background`). It shows its own start table,
+(Interaktiv → `interactive`, Autonom → `background`). It shows its own start table,
 returns a result block (`tier`, `done`, `open`, `needs-decision`, `ship`)
 and never ships or renders a card — this router acts on the block and
 renders the card. **Inline shortcut:** when the router's own check already
@@ -285,12 +288,12 @@ without loading auto-agents.
 
 | Q1 | Ablauf | Runs | Mode questions answered here (the mode skips them) |
 |---|---|---|---|
-| Prompt umsetzen | Dabei | [Rethink vorher → `modes/rethink.md`] → `auto-agents` → Step 7 | — |
-| Prompt umsetzen | Weg | [Rethink vorher → `modes/rethink.md`, while the user is still here] → `modes/autonomous.md` from Step 0.7 with the prompt as task, `$EXEC_MODE=implement`; its Step 6.5 hands back to Step 7 | autonomous Step 1 intake, Step 2 Q1–Q4 (Q1 → implement, Q2 ← F5, Q3+Q4 ← F6) |
+| Prompt umsetzen | Interaktiv | [Rethink vorher → `modes/rethink.md`] → `auto-agents` → Step 7 | — |
+| Prompt umsetzen | Autonom | [Rethink vorher → `modes/rethink.md`, while the user is still here] → `modes/autonomous.md` from Step 0.7 with the prompt as task, `$EXEC_MODE=implement`; its Step 6.5 hands back to Step 7 | autonomous Step 1 intake, Step 2 Q1–Q4 (Q1 → implement, Q2 ← F5, Q3+Q4 ← F6) |
 | Prompt umsetzen + Budget verbrennen | either | `modes/burn.md` from Step 2 with the prompt as primary task → its Step 7 autonomous frame (F5/F6 answers) → Step 7 | burn Step 1 confirmation (the tick is the confirmation), Step 3 intake; autonomous Step 2 |
-| Audit | Dabei | `modes/audit.md` with `--scope=<F2> --mode=<F1>` → Step 7 when `implement` | audit Step 2 intake |
-| Audit | Weg | `modes/autonomous.md` frame; its Step 5 work unit is `modes/audit.md` with `--autonomous --scope=<F2> --mode=<F1>`; `$EXEC_MODE` = `implement` (umsetzen) or `analyze` (Concept — the page waits for the user's return) | autonomous Steps 1–2, audit Step 2 |
-| Backlog | Dabei / Weg | `modes/backlog.md` from Step 1.3 with F3/F4 as the selection; shutdown/resume ← F6 (Weg) or `no`/`no` (Dabei); `$BURN_MODE` ← Budget verbrennen; ship mandate ← `$SHIP`; passes run per issue | backlog Step 1.2 selection, Step 3.2 ship mandate, Step 3.3 shutdown/resume + budget mode |
+| Audit | Interaktiv | `modes/audit.md` with `--scope=<F2> --mode=<F1>` → Step 7 when `implement` | audit Step 2 intake |
+| Audit | Autonom | `modes/autonomous.md` frame; its Step 5 work unit is `modes/audit.md` with `--autonomous --scope=<F2> --mode=<F1>`; `$EXEC_MODE` = `implement` (umsetzen) or `analyze` (Concept — the page waits for the user's return) | autonomous Steps 1–2, audit Step 2 |
+| Backlog | Interaktiv / Autonom | `modes/backlog.md` from Step 1.3 with F3/F4 as the selection; shutdown/resume ← F6 (Autonom) or `no`/`no` (Interaktiv); `$BURN_MODE` ← Budget verbrennen; ship mandate ← `$SHIP`; passes run per issue | backlog Step 1.2 selection, Step 3.2 ship mandate, Step 3.3 shutdown/resume + budget mode |
 
 Combinations without a meaning are dropped with one line, never asked:
 Rethink vorher with Audit or Backlog; Budget verbrennen with Audit; Harden /
@@ -298,18 +301,18 @@ Polish with "Audit als Concept" (the concept page owns what gets built).
 
 ## Step 7 — Passes and ship
 
-Runs after implementation, in this order. Weg runs reach it from
+Runs after implementation, in this order. Autonom runs reach it from
 `modes/autonomous.md` Step 6.5 (before that mode's report and Step 8);
 backlog runs apply items 1–2 per issue inside its loop and its own ship
 step for item 3.
 
 1. **Harden danach** → `Skill("devops:auto-harden")`, args
-   `--invoked-by=do-run` (Dabei) or `--invoked-by=autonomous` (Weg), plus
+   `--invoked-by=do-run` (Interaktiv) or `--invoked-by=autonomous` (Autonom), plus
    `--strict` under Nur das.
 2. **Polish danach** → `Skill("devops:auto-polish")`, same args.
 3. **Ship.**
-   - `$SHIP=auto`, Dabei → `Skill("devops:do-ship")`; it renders the card.
-   - `$SHIP=auto`, Weg → arm the lockout first so no ship gate can wedge the
+   - `$SHIP=auto`, Interaktiv → `Skill("devops:do-ship")`; it renders the card.
+   - `$SHIP=auto`, Autonom → arm the lockout first so no ship gate can wedge the
      run on a modal, ship, clear it:
      `node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm do-run` →
      `Skill("devops:do-ship")` → `… autonomous-lockout.js clear`. A blocked
@@ -326,13 +329,13 @@ step for item 3.
      → clear it. A lockout that still slips through (crash) expires on its
      own: `do-run` lockouts are stale after 6 h and are ignored and removed
      by every reader (`readLockout`, `check` reports `stale:true`).
-   - `$SHIP=manual` → no ship. Dabei: render the `ready` card via
-     `render_completion_card`; Weg: `modes/autonomous.md` Step 7 renders it.
+   - `$SHIP=manual` → no ship. Interaktiv: render the `ready` card via
+     `render_completion_card`; Autonom: `modes/autonomous.md` Step 7 renders it.
 
 Act on the auto-agents result block: `ship: auto` → item 3 above;
-`needs-decision` stops before Step 7 — Dabei → open an `auto-concept` page
+`needs-decision` stops before Step 7 — Interaktiv → open an `auto-concept` page
 for the fork (`Skill("devops:auto-concept")`) and call auto-agents again with
-the answer; Weg → log it, skip the fork, continue. The completion card is
+the answer; Autonom → log it, skip the fork, continue. The completion card is
 this router's (or do-run's composed do-ship's), never auto-agents'.
 
 ## Rules

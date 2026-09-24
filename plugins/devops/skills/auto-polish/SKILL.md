@@ -37,7 +37,7 @@ it is the layer this skill *executes through*.
 1. **Direct** — user asks for it (trigger phrase; the skill is hidden from the slash menu).
 2. **From `/do-run`** ("Polish danach") — `--invoked-by=do-run`, a full pass
    scoped to the run's changes, executed through auto-agents (§ Execution).
-   Under "Weg" do-run adds `--autonomous` (no prompts; structural changes
+   Under "Autonom" do-run adds `--autonomous` (no prompts; structural changes
    always flagged, never auto-applied); under "Nur das" it adds `--strict`.
    Skip self-spawned qa/redteam when the parent owns those waves. The
    pre-PR-2 values `--invoked-by=agents` and `--invoked-by=autonomous` (the

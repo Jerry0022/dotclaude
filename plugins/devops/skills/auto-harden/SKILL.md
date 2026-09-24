@@ -39,7 +39,7 @@ it is the layer this skill *executes through*. Four ways in:
    runs as documented below. Asks questions when `$AUTONOMOUS=0`.
 2. **From `/do-run`** ("Harden danach") — `--invoked-by=do-run`, a full pass
    scoped to the run's changes, executed through auto-agents (§ Execution).
-   Under "Weg" do-run adds `--autonomous`; under "Nur das" it adds
+   Under "Autonom" do-run adds `--autonomous`; under "Nur das" it adds
    `--strict`. The pre-PR-2 values `--invoked-by=agents` and
    `--invoked-by=autonomous` (the latter implies `--autonomous`) are read as
    `do-run`.
@@ -58,7 +58,7 @@ When `--invoked-by=do-run` is set, the skill adjusts:
   Skip Step 9 redteam, flag for parent's wave instead.
 - **No permission priming** assumed — parent handled it.
 - **AskUserQuestion suppressed** under `--autonomous`; otherwise the user is
-  present ("Dabei") and plan + confirm stays as documented.
+  present ("Interaktiv") and plan + confirm stays as documented.
 
 ## Execution — through auto-agents
 

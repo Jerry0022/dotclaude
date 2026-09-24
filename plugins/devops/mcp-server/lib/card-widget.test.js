@@ -11,6 +11,7 @@ import {
   writeCardWidgetFile,
   WIDGET_FILE_PREFIX,
   BUTTONS,
+  NO_OUTPUT_NUDGE_REPLY,
 } from "./card-widget.js";
 
 const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
@@ -368,6 +369,23 @@ describe("cardWidgetInstruction", () => {
     expect(text).not.toMatch(/skip silently/);
     const html = cardWidgetHtml(model, "");
     expect(text).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
+  });
+
+  // Regression 2026-09-24: the app nudges once for visible output after a
+  // widget-only turn; "answer with ONE short line" put a stray line under the
+  // card every time. The empty reply ends the turn with the card last.
+  test("the app's no-output nudge gets an empty reply, never a line under the card", () => {
+    const text = cardWidgetInstruction(baseModel(), "", desktop);
+    expect(text).toContain(NO_OUTPUT_NUDGE_REPLY);
+    expect(NO_OUTPUT_NUDGE_REPLY).toMatch(/reply to it with nothing — no text, no tool call/);
+    expect(text).toMatch(/Never show this card a second time/);
+    expect(text).not.toMatch(/ONE short line/);
+  });
+
+  test("hooks/lib/card-guard.js carries the identical nudge sentence", () => {
+    const require = createRequire(import.meta.url);
+    const guard = require("../../hooks/lib/card-guard.js");
+    expect(guard.NO_OUTPUT_NUDGE_REPLY).toBe(NO_OUTPUT_NUDGE_REPLY);
   });
 
   test("the fallback line reads as the error path, never a shortcut (#451)", () => {
