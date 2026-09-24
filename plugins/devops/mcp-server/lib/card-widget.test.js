@@ -267,7 +267,8 @@ describe("cardWidgetHtml", () => {
     expect(open[1]).toContain('role="button" tabindex="0" class="card-link"');
     expect(open[1]).toContain('data-prompt="Im Standardbrowser öffnen: http://127.0.0.1:5173/app"');
     expect(open[1]).toContain('data-sent="Im Eingabefeld, Enter öffnet die Seite"');
-    expect(open[1]).toMatch(/title="Öffnet die Seite im Standardbrowser/);
+    expect(open[1]).toMatch(/data-tip="Öffnet die Seite im Standardbrowser/);
+    expect(html, "app-styled tip, never the native title").not.toMatch(/\stitle="/);
     expect(open[1]).toContain('>http://127.0.0.1:5173/app<span aria-hidden="true"');
     expect(open[2]).toBe(".");
     // The click script shows the button's own status text.

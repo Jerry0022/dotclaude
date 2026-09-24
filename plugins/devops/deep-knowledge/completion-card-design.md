@@ -93,7 +93,8 @@ between posts, no `·` separators:
 - Released cards: slot 1–3 become the promotion facts (`✓ Tags beta/v0.179.0
   · v0.179.0`, `✓ bit-identisch mit alpha`, `✓ GitHub-Release` on stable).
 - Analysis cards: `✓ 12 Dateien gelesen`, `✓ 3 Befunde belegt`.
-- Widget: each post has a tooltip (after ~600 ms hover) with the details
+- Widget: each post has an app-styled tooltip (Info tier, 1500 ms;
+  `ui-defaults.md` R1) with the details
   (`144 Dateien · 3 übersprungen · 0 rot · 41 s`; the four live checks by name).
 
 ### 2.4 Budget line
@@ -251,8 +252,8 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   it in the `[CARD WIDGET]` block, and `stop.flow.guard` blocks a card turn
   on which `show_widget` was never called, pointing at that file. The widget draws the
   title (h3) and both blocks, colours (green `#8fae8f` posts, red
-  `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), tooltips (600 ms
-  delay), the budget bars, the quiet PR link and the buttons. Nothing is
+  `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), app-styled
+  tooltips (Info 1500 ms, Label 500 ms for the budget bars), the budget bars, the quiet PR link and the buttons. Nothing is
   drawn twice (observed 2026-09-21: widget + full markdown showed the whole
   card twice). The widget wraps result lines instead of cutting them — the
   120-char ellipsis of § 2.2 is a terminal budget, and a line cut mid-sentence
