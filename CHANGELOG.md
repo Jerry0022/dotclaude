@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.205.3] — 2026-09-25
+
+### Fixed
+- **A `git init` during a session gets the project-setup offer right away (#503).** `ss.project.setup` only ran at session start inside a repo, so a project Claude created with `git init` mid-session never got the setup hint or the runtime-ignores block until the next session. The new PostToolUse hook `post.project.setup` watches Bash and PowerShell for `git init`, `git init <dir>` and `git -C <dir> init`, writes the runtime-ignores block into `.git/info/exclude` at once, and injects the same one-time setup offer, recorded in `~/.claude/devops-project-setup.json`. A re-init of an established repo or a repeated `git init` stays silent.
+
 ## [0.205.2] — 2026-09-25
 
 ### Fixed
