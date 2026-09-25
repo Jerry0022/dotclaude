@@ -322,30 +322,40 @@ describe("state", () => {
     expect(evs.map(e => e.k)).toEqual(["measure", "block"]);
   });
 
+  function corruptCopies(cwd) {
+    const dir = path.join(cwd, ".claude");
+    const prefix = `${path.basename(R.contractPath(cwd))}.corrupt-`;
+    return fs.readdirSync(dir).filter((n) => n.startsWith(prefix)).sort();
+  }
+
   test("AUD-022: corrupt header → no contract, quarantined, one-shot notice", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
     fs.writeFileSync(R.contractPath(cwd), "{nope");
     expect(R.readContract(cwd)).toBeNull();
-    // Quarantined, not deleted: the header file is gone, its content lives on.
+    // Quarantined, not deleted: the header file is gone, its content lives on
+    // under a unique name (RT1-R4 — never a fixed `.corrupt`).
     expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
-    const corruptFile = `${R.contractPath(cwd)}.corrupt`;
-    expect(fs.existsSync(corruptFile)).toBe(true);
-    expect(fs.readFileSync(corruptFile, "utf8")).toBe("{nope");
+    const copies = corruptCopies(cwd);
+    expect(copies).toHaveLength(1);
+    expect(fs.readFileSync(path.join(cwd, ".claude", copies[0]), "utf8")).toBe("{nope");
     // Surfaced once, through the same channel expiryNotice() already uses.
     const notice = R.expiryNotice(cwd, { sessionId: "s1" });
     expect(notice).toMatch(/quarantined/);
     expect(R.expiryNotice(cwd, { sessionId: "s1" })).toBeNull();
   });
 
-  test("AUD-022: a second corruption replaces the earlier quarantine, not accumulates", () => {
+  test("AUD-022 / RT1-R4: a second corruption keeps both quarantine copies (unique names, no accumulation past the cap)", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
     fs.writeFileSync(R.contractPath(cwd), "{first");
     expect(R.readContract(cwd)).toBeNull();
     R.expiryNotice(cwd, { sessionId: "s1" }); // consume the first notice
     fs.writeFileSync(R.contractPath(cwd), "{second");
     expect(R.readContract(cwd)).toBeNull();
-    const corruptFile = `${R.contractPath(cwd)}.corrupt`;
-    expect(fs.readFileSync(corruptFile, "utf8")).toBe("{second");
+    const copies = corruptCopies(cwd);
+    expect(copies).toHaveLength(2); // under the keep-max: nothing dropped yet
+    const contents = copies.map((n) => fs.readFileSync(path.join(cwd, ".claude", n), "utf8"));
+    expect(contents).toContain("{first");
+    expect(contents).toContain("{second");
     expect(R.expiryNotice(cwd, { sessionId: "s1" })).toMatch(/quarantined/);
   });
 
