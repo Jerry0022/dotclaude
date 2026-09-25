@@ -5,7 +5,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  scanOpenTasks, openTaskNames, labelFor, isConceptInfra, responseTaskId,
+  scanOpenTasks, openTaskNames, labelFor, isConceptInfra, responseTaskId, responseLaunch,
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER,
 } from './pending-tasks.js';
 
@@ -592,6 +592,52 @@ describe('responseTaskId', () => {
     expect(responseTaskId(AUTO_BG_TEXT)).toBe('bad36w5pu');
     expect(responseTaskId(BASH_BG_TEXT)).toBe('b68oycrr6');
     expect(responseTaskId('s.jsonl:143:' + AUTO_BG_TEXT)).toBe('');
+  });
+});
+
+/**
+ * Every launch as PostToolUse sees it: the structured result, shapes copied from
+ * a live hook payload (2026-09-25) and the recorded toolUseResult of all 959
+ * agent and 63 workflow launches in the local transcripts.
+ */
+describe('responseLaunch', () => {
+  const ASYNC_AGENT = {
+    isAsync: true, status: 'async_launched', agentId: 'a3a8dbef8ee890dbf', description: 'Probe',
+    resolvedModel: 'claude-haiku-4-5-20251001', prompt: 'Reply OK.', outputFile: 'C:\\Temp\\x.output', canReadOutputFile: true,
+  };
+  const WORKFLOW = {
+    status: 'async_launched', taskId: 'wb74fu8mr', taskType: 'local_workflow', workflowName: 'verify-spec',
+    runId: 'wf_690f6b46-9b3', summary: 'Verify the spec', transcriptDir: 'C:\\x',
+  };
+  const BG_BASH = { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: 'bb3oqentv' };
+
+  test('reads each structured launch shape from the tool that makes it', () => {
+    expect(responseLaunch('Agent', ASYNC_AGENT)).toEqual({ kind: 'agent' });
+    expect(responseLaunch('Workflow', WORKFLOW)).toEqual({ kind: 'workflow', name: 'verify-spec' });
+    expect(responseLaunch('Bash', BG_BASH)).toEqual({ kind: 'task' });
+    expect(responseLaunch('PowerShell', { ...BG_BASH, timedOutAfterMs: 120000 })).toEqual({ kind: 'task' });
+  });
+
+  test('a finished call is no launch', () => {
+    expect(responseLaunch('Agent', { status: 'completed', agentId: 'a3a8dbef8ee890dbf', content: [] })).toBeNull();
+    expect(responseLaunch('Agent', { ...ASYNC_AGENT, isAsync: false })).toBeNull();
+    expect(responseLaunch('Bash', { stdout: 'ok', stderr: '', interrupted: false, isImage: false })).toBeNull();
+    expect(responseLaunch('Read', undefined)).toBeNull();
+  });
+
+  test('a shape from a tool that cannot launch that kind is no launch', () => {
+    expect(responseLaunch('Bash', ASYNC_AGENT)).toBeNull();
+    expect(responseLaunch('Agent', WORKFLOW)).toBeNull();
+    expect(responseLaunch('Read', BG_BASH)).toBeNull();
+    expect(responseLaunch(undefined, ASYNC_AGENT)).toBeNull();
+  });
+
+  test('a plain-string response needs the announcement at position 0', () => {
+    expect(responseLaunch('Agent', AGENT_LAUNCH_TEXT)).toEqual({ kind: 'agent' });
+    expect(responseLaunch('Workflow', WORKFLOW_LAUNCH_TEXT)).toEqual({ kind: 'workflow' });
+    expect(responseLaunch('Bash', AUTO_BG_TEXT)).toEqual({ kind: 'task' });
+    expect(responseLaunch('Agent', 'Summary of the run:\n' + AGENT_LAUNCH_TEXT)).toBeNull();
+    expect(responseLaunch('Read', AGENT_LAUNCH_TEXT)).toBeNull();
   });
 });
 

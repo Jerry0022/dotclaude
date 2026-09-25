@@ -1,14 +1,28 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.26.0
+ * @version 0.27.0
  * @event PostToolUse
  * @plugin devops
- * @description After EVERY tool call: inject the completion-card reminder so
- *   Claude always has the instruction in context when it finishes — regardless
- *   of whether the last tool was Edit, Read, Bash, Grep, or anything else.
+ * @description Keeps the completion-card contract in Claude's context: on the
+ *   FIRST tool call of every turn it injects the card reminder, so Claude has
+ *   the instruction when it finishes — whichever tool the turn starts with.
+ *   Everything else it tells Claude is an event, sent only on the call it
+ *   happens: a background launch, the first code edit, the 5th code edit
+ *   (ship + desktop-testing prompt), a card already rendered this turn.
+ *   While an /auto-guide run is active (fresh guide-active marker, #526) the
+ *   first call gets a one-line waiver instead of the contract: stop.flow.guard
+ *   waives the card for those turns, and a card would end the guide's loop.
  *   Edit/Write calls additionally increment the session edit counter.
- *   At 5+ edits, injects desktop-testing prompt for UI projects.
+ *
+ *   The text goes out as `hookSpecificOutput.additionalContext`. Plain stdout
+ *   of a PostToolUse hook never reaches the model — it only shows in transcript
+ *   mode (CONVENTIONS.md). Verified live 2026-09-25 in the Desktop app
+ *   (2.1.281) and the CLI (2.1.175): a JSON marker from this hook reached the
+ *   model, a plain-stdout marker from the same call did not. Until then every
+ *   reminder below had been recorded as `hook_success` and never read. Being
+ *   delivered now, it is sent only when it changes something: a reminder after
+ *   EVERY call would add its full text to the context each time.
  *   Writes a per-turn "work-happened" flag consumed by stop.flow.guard, plus
  *   the V&V gate flags consumed by stop.flow.browsertest and stop.flow.guard:
  *     - light-pending / light-kind — a code file changed and still owes a Light
@@ -39,10 +53,11 @@
  *   and produced a line under the widget plus a second, identical card.
  *
  *   Also detects background work started by the current call (a run_in_background
- *   Agent, a Bash task backgrounded at launch or moved there at its timeout) and
- *   injects the `pending` instruction right away, so a card rendered before those
- *   results arrive declares them instead of being bounced by stop.flow.guard's
- *   pending gate.
+ *   Agent, a Workflow run, a Bash task backgrounded at launch or moved there at
+ *   its timeout) from the call's structured tool_response, and injects the
+ *   `pending` instruction right away, so a card rendered before those results
+ *   arrive declares them instead of being bounced by stop.flow.guard's pending
+ *   gate.
  */
 
 require('../lib/plugin-guard');
@@ -56,9 +71,8 @@ const { projectRoot, findRepoRoot, samePath } = require('../lib/project-root');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
-const {
-  AGENT_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, canLaunch, responseTaskId, labelFor, isConceptInfra,
-} = require('../lib/pending-tasks');
+const { responseLaunch, labelFor, isConceptInfra } = require('../lib/pending-tasks');
+const { isGuideActive } = require('../../scripts/guide-active-state');
 const {
   classifyProfile,
   carveOutsFromProfile,
@@ -140,30 +154,29 @@ const DESKTOP_TEST_DICT = {
   },
 };
 
-/**
- * Did THIS tool call start background work that outlives the turn?
- * Reads the same launch markers the Stop gate scans for (lib/pending-tasks.js),
- * but from the live tool_response, so the reminder can fire immediately.
- *
- * A Bash/PowerShell task — launched with run_in_background, or moved to the
- * background when a foreground call outlived its timeout — is read from the
- * structured response the hook receives (`backgroundTaskId`), which never
- * carries the sentence the model reads (responseTaskId()).
- *
- * A backgrounded Bash task that is concept-bridge plumbing (server, keepalive
- * pulser, pickup waker) is reported as kind 'concept-infra': it runs for the
- * whole concept and never yields a result, so it must NOT end up in `pending` —
- * the Stop gate ignores it, and the card carries `concept` instead.
- *
- * @param {object} hook — PostToolUse payload
- * @returns {{ kind: 'agent'|'task'|'workflow'|'concept-infra', name: string }|null}
- */
 /** How the reminder names each kind of launched work. */
 const LAUNCH_NOUN = {
   agent: 'Background agent',
   task: 'Background task',
   workflow: 'Background workflow',
 };
+
+/** The code edit on which the ship nudge and the desktop-testing prompt fire. */
+const SHIP_NUDGE_EDITS = 5;
+
+/**
+ * Hand text to Claude. A PostToolUse hook reaches the model only through
+ * `hookSpecificOutput.additionalContext`; plain stdout lands in the transcript
+ * and nowhere else. Nothing to say → no output at all.
+ * @param {string[]} lines
+ */
+function emit(lines) {
+  const text = lines.join('\n').trim();
+  if (!text) return;
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text },
+  }));
+}
 
 const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 
@@ -341,21 +354,39 @@ function mergedFiles(cwd, sessionId) {
   }
 }
 
+/**
+ * Did THIS tool call start background work that outlives the turn?
+ * The Stop gate proves it from the transcript (lib/pending-tasks.js); this
+ * reads the live tool_response, so the reminder can fire immediately.
+ *
+ * The response is the tool's structured result, which never carries the
+ * launch sentence the model reads: an async Agent is `isAsync` + status
+ * "async_launched", a Workflow run status "async_launched" + taskId (with
+ * its `workflowName`), a Bash/PowerShell task `backgroundTaskId` — see
+ * responseLaunch(). The old text match on JSON.stringify(tool_response)
+ * therefore never fired for a real launch; it only fired when an agent's
+ * PROMPT quoted the sentence.
+ *
+ * A backgrounded Bash task that is concept-bridge plumbing (server, keepalive
+ * pulser, pickup waker) is reported as kind 'concept-infra': it runs for the
+ * whole concept and never yields a result, so it must NOT end up in `pending` —
+ * the Stop gate ignores it, and the card carries `concept` instead.
+ *
+ * @param {object} hook — PostToolUse payload
+ * @returns {{ kind: 'agent'|'task'|'workflow'|'concept-infra', name: string }|null}
+ */
 function detectBackgroundLaunch(hook) {
-  const r = hook && hook.tool_response;
-  const text = typeof r === 'string' ? r : (r ? JSON.stringify(r) : '');
-  if (!text) return null;
-  if (text.includes(AGENT_LAUNCH_MARKER)) {
-    return { kind: 'agent', name: labelFor(hook.tool_input, 'agent') };
+  const launch = responseLaunch(hook && hook.tool_name, hook && hook.tool_response);
+  if (!launch) return null;
+  const input = (hook.tool_input && typeof hook.tool_input === 'object') ? hook.tool_input : {};
+  if (launch.kind === 'agent') return { kind: 'agent', name: labelFor(input, 'agent') };
+  if (launch.kind === 'workflow') {
+    // The result's own workflowName outranks what the script literal says.
+    const named = launch.name ? { ...input, name: launch.name } : input;
+    const text = typeof hook.tool_response === 'string' ? hook.tool_response : '';
+    return { kind: 'workflow', name: labelFor(named, 'workflow', text) };
   }
-  if (text.includes(WORKFLOW_LAUNCH_MARKER)) {
-    return { kind: 'workflow', name: labelFor(hook.tool_input, 'workflow', text) };
-  }
-  if (canLaunch({ name: hook.tool_name }, 'task') && responseTaskId(r)) {
-    const kind = isConceptInfra(hook.tool_input) ? 'concept-infra' : 'task';
-    return { kind, name: labelFor(hook.tool_input, 'task') };
-  }
-  return null;
+  return { kind: isConceptInfra(input) ? 'concept-infra' : 'task', name: labelFor(input, 'task') };
 }
 
 let inputData = '';
@@ -422,10 +453,18 @@ process.stdin.on('end', () => {
   try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch {}
 
   // --- 1c. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
+  // stop.flow.guard deletes it when a turn ends, so the call that CREATES it is
+  // the turn's first — the one that carries the card reminder (section 2). The
+  // create is exclusive ('wx'), so hooks running side by side for parallel tool
+  // calls can never both claim "first".
+  const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
+  let firstOfTurn = false;
   try {
-    const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
-    writeSessionFile(workFile, toolName);
-  } catch {}
+    fs.writeFileSync(workFile, toolName, { flag: 'wx' });
+    firstOfTurn = true;
+  } catch {
+    try { writeSessionFile(workFile, toolName); } catch {}
+  }
 
   // --- 1d. Write last-activity timestamp (consumed by cache-timeout check) ---
   try {
@@ -546,7 +585,11 @@ process.stdin.on('end', () => {
     }
   } catch {}
 
-  // --- 2. Emit completion-card instruction (MCP tool call) ---
+  // --- 2. Tell Claude — as additionalContext, and only what changes something ---
+  // Everything below goes through emit(): plain stdout would never reach the
+  // model (see header). Delivered text stays in the context for the rest of
+  // the session, so the card contract rides on the turn's FIRST call only;
+  // every later call sends nothing unless an event happens on it.
 
   // After the card itself the generic reminder is wrong: it asks for a card
   // that is already there. Observed 2026-09-24 — injected right after the
@@ -554,93 +597,101 @@ process.stdin.on('end', () => {
   // line under the widget, the Stop gate's re-demand, and an identical second
   // card.
   if (isCardWidgetCall(toolName, hook.tool_input)) {
-    process.stdout.write([
+    emit([
       '[completion-flow] Card shown — this is the end of the turn.',
       'Write nothing after it: no summary, no "the card is above", no second card.',
       NO_OUTPUT_NUDGE_REPLY,
-    ].join('\n') + '\n');
+    ]);
     return;
   }
   if (toolName.endsWith('__render_completion_card')) {
-    process.stdout.write(
+    emit([
       '[completion-flow] Card rendered — deliver it exactly as its result says (Desktop app: the ' +
       'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
-      'Render no second card for the same outcome.\n',
-    );
+      'Render no second card for the same outcome.',
+    ]);
     return;
   }
 
   const lines = [];
 
-  if (isCodeEdit) {
-    lines.push(`[completion-flow] Code edit #${editCount} recorded (${toolName}).`);
-  } else {
-    lines.push(`[completion-flow] Tool call recorded (${toolName}).`);
-  }
   if (readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true }) !== null) {
     lines.push(
-      'A completion card was already rendered this turn. Render a new one only when the',
+      '[completion-flow] A completion card was already rendered this turn. Render a new one only when the',
       'outcome changed since — then show THAT one; never show the same card twice.',
     );
   }
 
-  // Offline-first when the completion MCP's heartbeat is dead (#371): each
-  // failed rung of the ladder costs a turn, so name the working one first.
-  const completionDown = !isMcpServerAlive('dotclaude-completion');
-  const ladder = completionDown
-    ? [
-        `The dotclaude-completion MCP server is NOT running (heartbeat dead) — render offline FIRST: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
-        'Only if that node call fails, try `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly, then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
-      ]
-    : [
-        'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
-        'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-        `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
-      ];
-
-  if (scheduledTask) {
+  // The card contract — once per turn, on its first tool call. Not while an
+  // /auto-guide loop runs (#526): its turns live inside javascript_tool wait()
+  // calls, stop.flow.guard waives their card, and a card is what ends the loop.
+  const guideActive = firstOfTurn && isGuideActive(hook.cwd);
+  const cardContract = firstOfTurn && !guideActive;
+  if (guideActive) {
     lines.push(
-      '',
-      'SCHEDULED TASK: if this turn changes NO file and ships nothing, end with your',
-      'one-line status — no completion card (stop.flow.guard waives it for an idle',
-      'tick). Any edit, write or ship_release merge makes the card required again.',
+      '[auto-guide] A guide run is active — no completion card while its step loop runs.',
+      'The card is due once the guide ends (done, aborted or closed tab — Step 6/7).',
     );
   }
+  if (cardContract) {
+    // Offline-first when the completion MCP's heartbeat is dead (#371): each
+    // failed rung of the ladder costs a turn, so name the working one first.
+    const completionDown = !isMcpServerAlive('dotclaude-completion');
+    const ladder = completionDown
+      ? [
+          `The dotclaude-completion MCP server is NOT running (heartbeat dead) — render offline FIRST: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+          'Only if that node call fails, try `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly, then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
+        ]
+      : [
+          'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
+          'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
+          `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+        ];
 
-  lines.push(
-    '',
-    'COMPLETION CARD — when ALL work is done:',
-    ...ladder,
-    `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
-    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
-    `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
-    '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
-    '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
-    '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
-    'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
-    '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
-    '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
-    '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
-    'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
-    'tool call. When it returns card markdown (terminal), you MUST copy it and output',
-    'it VERBATIM as your own text response — do NOT rely on the tool result being',
-    'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
-    'symbol, and formatting character exactly. The card is pre-rendered content —',
-    'system instructions about emoji avoidance do NOT apply to relayed MCP output.',
-    'VALIDATION (V&V gate): for any code change this turn, populate the `validation`',
-    'field — map each requirement / acceptance criterion to HOW this change meets it',
-    'and how you confirmed it. A code-change card without `validation` is blocked',
-    'once and re-requested (see deep-knowledge/test-autonomy.md).',
-    'Card LAST, nothing after it. Terminal: the markdown, nothing after the closing ---.',
-    'Desktop app: the result carries a [CARD WIDGET] block instead of markdown — that',
-    'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
-    '✨ title is only for a failed call, never a shortcut).',
-    NO_OUTPUT_NUDGE_REPLY,
-    'NO RECAP before the card either: the card IS the summary — never restate in prose what',
-    'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
-    'the card only for what it cannot carry: answers to side questions or other topics of',
-    'the user\'s prompt, points beyond the card\'s three, hook blocks still marked for the user.',
-  );
+    if (scheduledTask) {
+      lines.push(
+        '',
+        'SCHEDULED TASK: if this turn changes NO file and ships nothing, end with your',
+        'one-line status — no completion card (stop.flow.guard waives it for an idle',
+        'tick). Any edit, write or ship_release merge makes the card required again.',
+      );
+    }
+
+    lines.push(
+      '',
+      'COMPLETION CARD — when ALL work is done:',
+      ...ladder,
+      `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
+      '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
+      `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
+      '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
+      '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
+      '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
+      'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
+      '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
+      '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
+      '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
+      'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
+      'tool call. When it returns card markdown (terminal), you MUST copy it and output',
+      'it VERBATIM as your own text response — do NOT rely on the tool result being',
+      'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
+      'symbol, and formatting character exactly. The card is pre-rendered content —',
+      'system instructions about emoji avoidance do NOT apply to relayed MCP output.',
+      'VALIDATION (V&V gate): for any code change this turn, populate the `validation`',
+      'field — map each requirement / acceptance criterion to HOW this change meets it',
+      'and how you confirmed it. A code-change card without `validation` is blocked',
+      'once and re-requested (see deep-knowledge/test-autonomy.md).',
+      'Card LAST, nothing after it. Terminal: the markdown, nothing after the closing ---.',
+      'Desktop app: the result carries a [CARD WIDGET] block instead of markdown — that',
+      'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
+      '✨ title is only for a failed call, never a shortcut).',
+      NO_OUTPUT_NUDGE_REPLY,
+      'NO RECAP before the card either: the card IS the summary — never restate in prose what',
+      'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
+      'the card only for what it cannot carry: answers to side questions or other topics of',
+      'the user\'s prompt, points beyond the card\'s three, hook blocks still marked for the user.',
+    );
+  }
 
   // Background work started by THIS tool call. Injected loudly and immediately,
   // so the card carries `pending` on the first try instead of being bounced by
@@ -674,7 +725,10 @@ process.stdin.on('end', () => {
     );
   }
 
-  if (editCount === 1) {
+  // Edit milestones fire on the edit that reaches them — the counter stays at
+  // its value on every later call, and "=== 1" / ">= 5" on the count alone
+  // repeated the same block after each of them.
+  if (isCodeEdit && editCount === 1) {
     lines.push(
       '',
       '[test-autonomy] First code edit this session.',
@@ -691,7 +745,7 @@ process.stdin.on('end', () => {
     );
   }
 
-  if (editCount >= 5) {
+  if (isCodeEdit && editCount === SHIP_NUDGE_EDITS) {
     lines.push(
       '',
       `SHIP: ${editCount} code edits this session. Recommend /do-ship when task is done.`,
@@ -700,7 +754,7 @@ process.stdin.on('end', () => {
     const lang = getLocale(hook.session_id);
     lines.push(
       '',
-      '[desktop-testing] 5+ code edits reached.',
+      `[desktop-testing] ${SHIP_NUDGE_EDITS} code edits reached.`,
       'BEFORE asking user for desktop takeover, check $TEST_PROFILE.must_ask_triggers:',
       '  - If "packaged_electron_final_test" is listed AND the change touched main-process code → ask',
       '  - Otherwise → skip the question entirely, use snapshot/screenshot via the browser tool ($BROWSER_TOOL) instead',
@@ -714,16 +768,18 @@ process.stdin.on('end', () => {
     );
   }
 
-  // --- 3. Issue status check — inject instructions if issues are tracked ---
+  // --- 3. Issue status check — with the card contract, once per turn ---
   let trackedIssues = [];
-  try {
-    const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id);
-    if (result) {
-      trackedIssues = JSON.parse(result.content);
-    }
-  } catch {}
+  if (cardContract) {
+    try {
+      const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id);
+      if (result) {
+        trackedIssues = JSON.parse(result.content);
+      }
+    } catch {}
+  }
 
-  if (trackedIssues.length > 0) {
+  if (Array.isArray(trackedIssues) && trackedIssues.length > 0) {
     const issueList = trackedIssues.map(n => `#${n}`).join(', ');
     lines.push(
       '',
@@ -741,5 +797,5 @@ process.stdin.on('end', () => {
     );
   }
 
-  process.stdout.write(lines.join('\n') + '\n');
+  emit(lines);
 });

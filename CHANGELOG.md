@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.208.1] — 2026-09-25
+
+### Fixed
+- **The completion hook's reminders now reach Claude.** `post.flow.completion` wrote the card contract and its event reminders to plain stdout, which Claude Code records as a hook result and never shows the model (verified live in the Desktop app and the CLI). It now answers with `hookSpecificOutput.additionalContext`, and only when that changes something: the card contract on the turn's first tool call, then events as they happen — a background launch, the first and the 5th code edit, tracked issues, a card already rendered this turn. The stop guard's enforcement is unchanged.
+- **Agent and Workflow launches are read from the structured tool result.** The `pending` reminder recognised a background agent or workflow only by text markers, which the structured `tool_response` a PostToolUse hook receives never contains. It now reads `isAsync` / `status: "async_launched"` with the agent or task id, and names a workflow by its `workflowName`. A finished foreground agent whose prompt quotes a launch sentence opens nothing.
+- **No card push inside a running `/auto-guide` loop.** While the guide-active marker is fresh, the turn's first call gets a one-line waiver instead of the card contract, matching the stop guard's exemption from #526 — a card ends the guide's `wait()` loop.
+
 ## [0.208.0] — 2026-09-25
 
 ### Added
