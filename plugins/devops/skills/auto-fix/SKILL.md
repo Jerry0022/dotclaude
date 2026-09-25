@@ -81,7 +81,7 @@ Find the actual broken invariant — not just the symptom. Ask:
 | **Trivial fix** (typo, missing import, off-by-one) | Fix immediately, report what was wrong |
 | **Clear root cause, low risk** (single file) | Fix immediately, explain root cause |
 | **Clear root cause, medium risk** (multiple files) | Propose fix via `AskUserQuestion` |
-| **Unclear root cause** | Present findings, propose 2-3 hypotheses, ask user. **Automatically invoke** Codex via Bash: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<investigation prompt>"` for parallel independent investigation. Handle exit codes per codex-integration.md "Hard Timeout" section: rc=124 → continue without Codex findings, note "Codex timed out"; rc=75 → usage limit (stored until reset), continue without Codex, note it; rc=126/127 → skip silently. Never use the `/codex:rescue` Agent tool. |
+| **Unclear root cause** | Present findings, propose 2-3 hypotheses, ask user. **Automatically invoke** Codex via Bash: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<investigation prompt>"` for parallel independent investigation. Handle exit codes per codex-integration.md "Hard Timeout" section: rc=124 → continue without Codex findings, note "Codex timed out"; rc=75 → usage limit (stored until reset), continue without Codex, note it; rc=126/127 → skip silently. Never use the `/codex:rescue` Agent tool. |
 | **Architectural issue** | Report root cause, do NOT fix — recommend planned approach |
 
 ## Step 7 — Implement fix (if appropriate)

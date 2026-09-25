@@ -128,7 +128,7 @@ ever be answered**. A modal raised mid-pipeline would hang the entire night run 
 a single issue. Detect that state FIRST, before any other step:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" check
+node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check
 ```
 
 Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run
@@ -486,7 +486,7 @@ revert that fix, re-run the gate, and report the finding instead; a red
 build the passes did not cause is the normal `ship-blocked`. **Priority:** a
 more recent project convention from the mined PRs (1d) beats a standing rule.
 
-**Strict mode** (`node "$CLAUDE_PLUGIN_ROOT/hooks/lib/strict-state.js" status`
+**Strict mode** (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status`
 → `active: true`, or the `[claude-strict contract]` in context): the passes
 still run — reporting costs nothing and the diff is the user's own scope —
 but with `--strict` added, and nothing is applied: every finding, mechanical
@@ -519,7 +519,7 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
 
 **MUST run** if codex-plugin-cc is installed — not optional, not suggested.
 
-1. Invoke Codex via Bash with hard timeout: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
+1. Invoke Codex via Bash with hard timeout: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
 2. Evaluate by exit code (see `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
    - **rc=0, no findings / clean** → continue to Step 3
    - **rc=0, auto-fixable** (typos, missing imports, style) → fix inline, continue
@@ -528,7 +528,7 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
      **If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`,
      naming the finding). A design/logic/security concern must not merge
      unreviewed unattended; the caller parks the issue for the user.
-   - **rc=75** (Codex usage limit — stored per user, or just hit) → continue to Step 3 immediately; card `tests` line `{ method: "Codex-Review", result: "übersprungen — Limit bis <reset time from stderr>" }`. The wrapper skips Codex on its own until that time; the first ship after it runs Codex again. Do NOT retry. If the user says Codex is usable again before then (plan bought, limit raised), run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit` once, then call the gate normally.
+   - **rc=75** (Codex usage limit — stored per user, or just hit) → continue to Step 3 immediately; card `tests` line `{ method: "Codex-Review", result: "übersprungen — Limit bis <reset time from stderr>" }`. The wrapper skips Codex on its own until that time; the first ship after it runs Codex again. Do NOT retry. If the user says Codex is usable again before then (plan bought, limit raised), run `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit` once, then call the gate normally.
    - **rc=124** (timeout, 5 min) → log "Codex review timed out — proceeding without review" in the ship log, continue to Step 3. Do NOT retry, do NOT block the ship.
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
    - **other non-zero** → surface first line of stderr, continue to Step 3
@@ -544,7 +544,7 @@ ship-time counterpart to the docs upkeep implementation agents already do.
    subsystem, architecture/contract change, or removal. Use the diff since the
    merge-base, not intentions.
 2. Apply the **proportional** doc action per
-   `${CLAUDE_PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md` § Trigger Matrix:
+   `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md` § Trigger Matrix:
    - trivial (typo / refactor / dep or version bump / pure bugfix) → no
      living-doc change; note "no living-docs impact" and continue.
    - new or changed behavior, flow, or architecture → update the affected living
@@ -733,7 +733,7 @@ and (if configured) probes the production URL — all without blocking the ship 
 # during ship_cleanup, so the result must land in the main repo where the
 # ss.ship.verify hook (running from the main repo at the next SessionStart) can
 # still read it. No --state-dir flag is needed — the default handles this.
-nohup node "${CLAUDE_PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
+nohup node "{PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
   --cwd "<cwd>" \
   --base "main" \
   --merge-sha "<ship_release.mergeSha>" \
@@ -746,7 +746,7 @@ nohup node "${CLAUDE_PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
 
 On Windows (PowerShell), use `Start-Process` with `-WindowStyle Hidden` instead of `nohup`:
 ```powershell
-Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("$env:CLAUDE_PLUGIN_ROOT/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "main", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/do-ship/reference.md", "--version", "<vNew>")
+Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("{PLUGIN_ROOT}/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "main", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/do-ship/reference.md", "--version", "<vNew>")
 ```
 
 Always pass the `do-ship/` path: when it does not exist, the watcher falls back
@@ -1003,7 +1003,7 @@ Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1 (the ship
 ran directly from the main checkout, no path rewrite needed).
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" reopen-main \
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" reopen-main \
   --worktree="$WORKTREE_PATH"
 ```
 

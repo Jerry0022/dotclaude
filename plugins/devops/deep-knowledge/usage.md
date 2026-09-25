@@ -66,7 +66,7 @@ call to the internal API (`GET /api/organizations/{id}/usage` +
 never renders headless, so DOM parsing is only a single-grab last resort.
 Runs headless; the hidden instance is reused across runs.
 
-The script path is `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js` (use the plugin root, NOT a relative path).
+The script path is `{PLUGIN_ROOT}/scripts/refresh-usage-headless.js` (use the plugin root, NOT a relative path).
 
 ### 1a. Run the scraper (manual run — login allowed)
 
@@ -75,7 +75,7 @@ weeklySonnet) deliberately omits `--no-login`: a one-time login window may
 open here. The automatic card path uses `--no-login` and never does.
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
+node "{PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
 ```
 
 Exit codes:
@@ -137,4 +137,4 @@ ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Haiku empfohlen"
 - **Transient render failures never open a window.** A slow/unrendered page returns a scrape error (cache fallback), not code `2`. Only an explicit `/login` redirect or login UI counts as logged-out.
 - **Playwright fallback is acceptable** — if the scraper fails, opening a browser tab via Playwright to scrape is fine.
 - **Delta computation**: Read `usage-live.json` before and after refresh. Delta = new_pct - old_pct.
-- **Script path**: Always use `${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js`, never a relative path.
+- **Script path**: Always use `{PLUGIN_ROOT}/scripts/refresh-usage-headless.js`, never a relative path.

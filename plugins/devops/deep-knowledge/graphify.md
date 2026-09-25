@@ -45,7 +45,7 @@ Probe with the generic helper (resolves the plugin root via the cache path or
 this source repo):
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/check-tool.js" graphify --version
+node "{PLUGIN_ROOT}/scripts/check-tool.js" graphify --version
 ```
 
 Parse the single JSON line:
@@ -221,7 +221,7 @@ cost/saved line (not clamped to 0 — a bypassed gate is counted as a real
 loss, not zero):
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/graphify-audit.js" --sessions 10 --since 2026-09-01
+node "{PLUGIN_ROOT}/scripts/graphify-audit.js" --sessions 10 --since 2026-09-01
 ```
 
 Baseline 2026-09-17 (20 sessions): 1 session with a query, 3 gate blocks

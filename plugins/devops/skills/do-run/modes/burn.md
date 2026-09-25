@@ -69,7 +69,7 @@ this step only applies them.
 Fetch current usage data:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
+node "{PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
 ```
 
 Read `~/.claude/usage-live.json` and compute:

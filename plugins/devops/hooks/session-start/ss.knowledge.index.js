@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.6.0
+ * @version 0.7.0
  * @event SessionStart
  * @plugin devops
  * @description Inject deep-knowledge INDEX.md into context at session start,
@@ -16,11 +16,16 @@
  *   policy body is injected at all: `off` replaces it with the one-line
  *   `[delegation] off …` state (no need to preload 5 KB of tiers that must
  *   not be applied); `ask`/`auto` inject the policy and the line.
+ *   The index header carries the literal `{PLUGIN_ROOT} = <abs>` line
+ *   (lib/plugin-root): the placeholder is never substituted and
+ *   $CLAUDE_PLUGIN_ROOT is unset in the Bash tool, so without it the model
+ *   searched `/` for plugin docs (2026-09-24).
  */
 
 const { runOnce } = require('../lib/run-once');
 const { readBudget, maybeRefreshUsage, budgetLine } = require('../lib/budget');
 const { readDelegation, delegationLine } = require('../lib/delegation');
+const { pluginRootLine } = require('../lib/plugin-root');
 const fs = require('fs');
 const path = require('path');
 
@@ -51,6 +56,7 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
   const blocks = [
     '[deep-knowledge] The following reference docs are available.',
     'Read individual files from deep-knowledge/ when a topic is relevant to the task.',
+    pluginRootLine(pluginRoot),
     '',
     fs.readFileSync(indexPath, 'utf8').trim(),
   ];

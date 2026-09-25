@@ -134,7 +134,7 @@ allow-list. Prevents permission prompts from interrupting wave execution —
 especially painful with parallel agents.
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
+node "{PLUGIN_ROOT}/scripts/permission-audit.js" --days=7 --quiet
 ```
 
 Parse the JSON `suggestions` array:
@@ -155,7 +155,7 @@ Parse the JSON `suggestions` array:
   tamper-protected; the script writes directly via Node `fs.writeFileSync`):
 
   ```bash
-  node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
+  node "{PLUGIN_ROOT}/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
   ```
 
   The script re-validates each `--apply` rule against its own freshly-computed

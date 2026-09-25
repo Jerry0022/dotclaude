@@ -105,7 +105,7 @@ Hold the final name as `{active_profile}`.
 Resolve the profile JSON in this order (first that exists):
 
 1. `{project}/.claude/skills/devops-test-plan/profiles/{active_profile}.json` (extension)
-2. `${CLAUDE_PLUGIN_ROOT}/deep-knowledge/test-plan-profiles/{active_profile}.json` (plugin defaults)
+2. `{PLUGIN_ROOT}/deep-knowledge/test-plan-profiles/{active_profile}.json` (plugin defaults)
 
 Parse it: full `tool_chain`, `viewports`, `allowed_actions`, `blocked_actions`,
 `must_ask_triggers`. If neither exists, fall back to

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.3.0
+ * @version 0.3.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
@@ -25,6 +25,7 @@ const path = require('path');
 const os = require('os');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { resolveExtensionFile } = require('../lib/skill-names');
+const { deepKnowledgePath } = require('../lib/plugin-root');
 
 const DEFAULT_UI_EXTENSIONS = [
   '.tsx', '.jsx', '.vue', '.svelte', '.html', '.css', '.scss', '.sass',
@@ -186,10 +187,10 @@ function loadOverride(cwd) {
   return { disable, files, extra, delay };
 }
 
-function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY) {
+function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY, docPath = deepKnowledgePath('ui-defaults.md')) {
   const lines = [];
   lines.push(
-    '[ui-defaults] UI file touched — standing UI rules apply to the elements you are writing (deep-knowledge/ui-defaults.md):'
+    `[ui-defaults] UI file touched — standing UI rules apply to the elements you are writing (${docPath}):`
   );
   const enabled = RULES.filter(r => !disable.has(r.id));
   for (const r of enabled) {
@@ -203,7 +204,9 @@ function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY) {
   if (disabledIds.length > 0) {
     lines.push(`disabled by project override: ${disabledIds.join(', ')}`);
   }
-  lines.push('Read deep-knowledge/ui-defaults.md for the full rules and the detection allowlist.');
+  // Absolute path: a relative `deep-knowledge/…` does not exist in a consumer
+  // project, and the model then searched `/` for it (2026-09-24).
+  lines.push(`Read ${docPath} for the full rules and the detection allowlist.`);
   return lines.join('\n') + '\n';
 }
 

@@ -34,6 +34,7 @@ Prefixes:
   pre.     = PreToolUse
   post.    = PostToolUse (a post. hook may also register for PostToolUseFailure)
   prompt.  = UserPromptSubmit
+  sub.     = SubagentStart (additionalContext reaches the subagent; SessionStart context does not)
   stop.    = Stop
 
 Examples:
@@ -54,7 +55,7 @@ Every hook file starts with a JSDoc header:
 /**
  * @hook {prefix}.{domain}.{action}
  * @version X.Y.Z
- * @event {SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PostToolUseFailure|Stop}
+ * @event {SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PostToolUseFailure|SubagentStart|Stop}
  * @plugin devops
  * @description One-line description of what this hook does.
  */
@@ -375,8 +376,17 @@ Utility scripts use descriptive kebab-case: `build-id.js`, `render-diagram.js`.
 Scripts are NOT hooks — they are helpers invoked by hooks or skills.
 
 **Path rule**: Scripts live inside the plugin at `{PLUGIN_ROOT}/scripts/`. Reference them
-as `node {PLUGIN_ROOT}/scripts/{name}.js` (or `$CLAUDE_PLUGIN_ROOT` in bash). Never use
+as `node {PLUGIN_ROOT}/scripts/{name}.js`. Never use
 `~/.claude/scripts/` — that path is not managed by the plugin installer and may not exist.
+
+**`{PLUGIN_ROOT}`** is plugin prose, never substituted by Claude Code. The model gets its
+literal value from `lib/plugin-root.js`: `ss.knowledge.index` (main session) and
+`sub.plugin.root` (every subagent) inject `{PLUGIN_ROOT} = <abs path>`. `$CLAUDE_PLUGIN_ROOT`
+exists only in hook and MCP processes — in the Bash tool it is empty, so `$CLAUDE_PLUGIN_ROOT/…`
+expands to `/…`. A hook message that names a plugin file prints the absolute path
+(`deepKnowledgePath()`), never a bare `deep-knowledge/x.md`: a model that cannot resolve a
+plugin path searches the disk, and `find /` in Git Bash walks every mounted drive
+(`pre.crawl.guard` now blocks that).
 
 **Version-glob rule**: when a script must be located through the installed cache
 (`~/.claude/plugins/cache/dotclaude/devops/<version>/scripts/…`) instead of

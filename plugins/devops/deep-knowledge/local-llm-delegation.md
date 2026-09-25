@@ -8,7 +8,7 @@ on when to delegate mechanical code generation to the local-llm plugin.
 Before the first write, probe the local backend ONCE:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/check-local-llm.js"
+node "{PLUGIN_ROOT}/scripts/check-local-llm.js"
 ```
 
 Output is single-line JSON. Four shapes:

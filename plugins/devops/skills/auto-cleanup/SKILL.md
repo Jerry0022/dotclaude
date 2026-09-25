@@ -229,7 +229,7 @@ this check turns that silent loss into a visible finding.
 write every candidate as `[{ "branch", "ort" }]` and run
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/repo-health-audit.js" <repo> candidates.json --default <default-branch>
+node "{PLUGIN_ROOT}/scripts/repo-health-audit.js" <repo> candidates.json --default <default-branch>
 ```
 
 It confirms each entry exists as an exact ref where the Ort says (`refs/heads`
@@ -451,7 +451,7 @@ start "" msedge "file:///$(cygpath -m "{filepath}")"
 
 # Track the opened report so /do-ship can re-open it from the main-repo
 # path after a future worktree cleanup (issue #160).
-node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
   "$(cygpath -w "{filepath}")" \
   --context=repo-health
 ```

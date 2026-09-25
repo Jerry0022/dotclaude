@@ -287,7 +287,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
 hangs the night on a modal no one can answer:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm backlog-runner
+node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" arm backlog-runner
 ```
 
 `/do-ship` reads this in its Pre-Step A and turns each interactive gate
@@ -385,7 +385,7 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
 5. **Optional shutdown** — per the autonomous mode Step 8 decision matrix
    (`skills/do-run/modes/autonomous/deep-knowledge/shutdown-watchdog.md`): cancel the
    fail-safe timer FIRST, clear the autonomous lockout
-   (`node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" clear`), then act by
+   (`node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" clear`), then act by
    shutdown choice. **Never** auto-shutdown while the aggregate run status is
    BLOCKED. Write `BACKLOG-DONE.flag` for every terminal status so the watchdog
    stands down.

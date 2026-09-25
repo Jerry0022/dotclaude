@@ -75,7 +75,7 @@ and skip Steps 2–5:
 | `RUN_BACKLOG_AUTOSTART:` | `modes/backlog.md` Step 0.1 |
 
 The same holds while an AFK lockout is active
-(`node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" check` →
+(`node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check` →
 `active: true`): take the click-through answers (every first option, Step 3)
 without asking.
 
@@ -92,7 +92,7 @@ It never reorders the options that remain.
 | `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Autonom · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
-| strict already armed for this branch (`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
+| strict already armed for this branch (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
 
 The remaining tokens of `$ARGUMENTS` (or the prompt itself) are the task,
 the backlog filter or the audit target.
@@ -245,7 +245,7 @@ four-question cap is the only reason for a second follow-up.
   over a branch mode or a mode bound to a running concept / autonomous
   workflow (the CLI keeps those, `kept: true`):
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline
+  node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" inline
   ```
   It prints one JSON line and then the contract block — the block only when
   the mode is verifiably active. A non-zero exit means strict is NOT on:
@@ -314,7 +314,7 @@ step for item 3.
    - `$SHIP=auto`, Interaktiv → `Skill("devops:do-ship")`; it renders the card.
    - `$SHIP=auto`, Autonom → arm the lockout first so no ship gate can wedge the
      run on a modal, ship, clear it:
-     `node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm do-run` →
+     `node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" arm do-run` →
      `Skill("devops:do-ship")` → `… autonomous-lockout.js clear`. A blocked
      ship is reported, never retried interactively. **The clear runs on every
      exit of this step**, before anything else is reported:
