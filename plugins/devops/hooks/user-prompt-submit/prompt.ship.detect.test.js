@@ -132,6 +132,24 @@ describe("prompt.ship.detect — careful compact", () => {
   });
 });
 
+// "ja" ships only when THIS session edited: the ship pushes and merges, so the
+// counter it reads must be this session's own. The glob fallback returned the
+// newest counter of any session whenever this one had none.
+describe("prompt.ship.detect — affirmation reads only this session's edits", () => {
+  test("another session's edit counter does not turn 'ja' into a ship", () => {
+    writeSessionFile(path.join(tmp, "dotclaude-devops-edits-other-session"), "3");
+    const r = runHook({ prompt: "ja" });
+    expect(r.stdout).not.toContain('Skill("devops:do-ship")');
+    expect(r.stdout).not.toContain("[ship-compact]");
+  });
+
+  test("this session's own edit counter still does", () => {
+    writeSessionFile(privateSessionFile("dotclaude-devops-edits"), "3");
+    const r = runHook({ prompt: "ja" });
+    expect(r.stdout).toContain('Skill("devops:do-ship")');
+  });
+});
+
 // Skill restructure PR 2: promote folded into do-ship. The hook parses the
 // target channel (lib/ship-intent.js) and passes it as the skill argument;
 // do-ship ships anything unshipped to alpha, then promotes.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.7.0
+ * @version 0.7.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -106,7 +106,10 @@ process.stdin.on('end', () => {
 
   let isAffirmationAfterCompletion = false;
   if (affirmations.some(re => re.test(userMessage))) {
-    const counterResult = readSessionFile('dotclaude-devops-edits', hook.session_id);
+    // Exact read: an affirmation starts a ship, which pushes and merges — only
+    // THIS session's edits may arm it, never the newest counter of another
+    // session (what the glob fallback returns when this session has none).
+    const counterResult = readSessionFile('dotclaude-devops-edits', hook.session_id, { exact: true });
     if (counterResult) {
       const editCount = parseInt(counterResult.content, 10) || 0;
       if (editCount >= 1) {
