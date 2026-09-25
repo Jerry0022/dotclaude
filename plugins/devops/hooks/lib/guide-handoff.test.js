@@ -55,6 +55,44 @@ describe("detectWebHandoff — must trigger (real session examples)", () => {
   });
 });
 
+describe("detectWebHandoff — StretchTimer wording (#519)", () => {
+  test("Vercel Marketplace → Neon connect, arrow chain", () => {
+    const text =
+      "Neon musst du noch über den Vercel Marketplace verbinden: " +
+      "Storage → Create Database → Neon → Connect.";
+    expect(detectWebHandoff(text)).toEqual({ service: "Vercel" });
+  });
+
+  test("Vercel Marketplace → Neon connect, numbered German steps using 'erstellen' (no other UI verb)", () => {
+    const text = [
+      "Im Vercel Dashboard noch die Datenbank verbinden:",
+      "1. Im Marketplace-Tab Neon-Postgres erstellen",
+      "2. Projekt mit dem Konto verknüpfen",
+    ].join("\n");
+    expect(detectWebHandoff(text)).toEqual({ service: "Vercel" });
+  });
+
+  test("bare 'Neon' without database/postgres context does not name a service", () => {
+    expect(matchService("Die neon-farbene Schrift wirkt zu grell.")).toBeNull();
+  });
+
+  test("cron-job.org job, prose shape (service + credential noun + creation verb)", () => {
+    const text =
+      "Zuletzt noch bei cron-job.org einen Cronjob anlegen, der die " +
+      "Stretch-Reminder-URL alle 5 Minuten aufruft.";
+    expect(detectWebHandoff(text)).toEqual({ service: "cron-job.org" });
+  });
+
+  test("cron-job.org job, English prose shape", () => {
+    const text = "You still need to create a cron job on cron-job.org that pings the reminder URL every 5 minutes.";
+    expect(detectWebHandoff(text)).toEqual({ service: "cron-job.org" });
+  });
+
+  test("cron-job.org named as a service even standalone", () => {
+    expect(matchService("Öffne cron-job.org und leg den Job an.")).toEqual({ name: "cron-job.org", named: true });
+  });
+});
+
 describe("detectWebHandoff — prose shape (#506, exact session wording)", () => {
   const PROSE =
     "Dein Teil fürs Aktivieren von R2 ist, einen Cloudflare-Account mit R2 anzulegen (braucht eine Karte). " +
@@ -199,6 +237,12 @@ describe("IMPERATIVE_RE — Unicode word boundaries", () => {
   test("not inside a longer word", () => {
     expect(IMPERATIVE_RE.test("Eröffnung")).toBe(false);
     expect(IMPERATIVE_RE.test("reopened")).toBe(false);
+  });
+
+  test("erstellen / erstelle match (#519 — 'create' German counterpart)", () => {
+    expect(IMPERATIVE_RE.test("eine Datenbank erstellen")).toBe(true);
+    expect(IMPERATIVE_RE.test("erstelle die Datenbank")).toBe(true);
+    expect(IMPERATIVE_RE.test("wiederherstellen")).toBe(false);
   });
 });
 
