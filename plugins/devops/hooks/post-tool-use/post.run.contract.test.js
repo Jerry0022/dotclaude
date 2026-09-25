@@ -221,6 +221,17 @@ describe("harden pass (H-*)", () => {
     expect(RC.readContract(dir)).toMatchObject({ mode: "prompt", flow: "interactive", ship: "manual", strict: true });
   });
 
+  test("C3/AUD-001: arm() write failure (target blocked by a directory) leaves the pending marker for a retry", () => {
+    RC.markPendingArm(dir, { sessionId: "s", args: "" });
+    // Force arm()'s temp+rename write to fail: the target path is a directory.
+    fs.mkdirSync(path.join(dir, ".claude", "run-contract.json"));
+    run("AskUserQuestion", { questions: ROUTER_Q }, { answers: {
+      "Was soll dieser Run tun?": "Prompt umsetzen", "Bleibst du erreichbar?": "Autonom · Ship automatisch",
+      "Wie weit?": "Flexibel", "Welche Durchgänge?": ["Polish danach (Recommended)"] } });
+    expect(RC.readRawContract(dir)).toBeNull();
+    expect(RC.pendingArm(dir)).toMatchObject({ sessionId: "s" });
+  });
+
   test("H-C5: a ship_release acting on tool_input.cwd records its release there", () => {
     const other = fs.mkdtempSync(path.join(os.tmpdir(), "rc-post-other-"));
     try {

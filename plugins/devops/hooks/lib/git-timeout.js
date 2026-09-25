@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module git-timeout
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description The one git subprocess timeout, named once (AUD-031). Before
  *   this module the same idea lived in three places with two values —
@@ -16,6 +16,10 @@
  *   shared ceiling instead of letting each call re-arm its own.
  *
  *   GIT_TIMEOUT_MS       the one per-call timeout (ms)
+ *   SMALL_GIT_BUDGET_MS  a short shared budget (ms) for a 1-2 call git chain
+ *     (H8: named once — pre.run.contract's onMainBranch fallback and
+ *     post.run.contract's onMcpMerge origin check both used the bare
+ *     literal 3000 before this)
  *   gitBudget(totalMs)   → {timeout(), expired()} — a shared deadline for a
  *     chain of git calls; timeout() is the ms left, clamped to
  *     GIT_TIMEOUT_MS and never below 1 (execFileSync rejects 0 / negative).
@@ -23,6 +27,14 @@
 
 /** The single git subprocess timeout (ms) — see the module header. */
 const GIT_TIMEOUT_MS = 5000;
+
+/**
+ * H8: the short shared budget for a call site that only ever chains one or
+ * two git calls (onMainBranch's single rev-parse fallback, onMcpMerge's
+ * originMatches check) — smaller than TOTAL_GIT_BUDGET_MS, which bounds a
+ * whole gated call's full git chain instead.
+ */
+const SMALL_GIT_BUDGET_MS = 3000;
 
 /**
  * R13: the one shared ceiling for a whole gated call's git chain. Before this
@@ -56,4 +68,4 @@ function gitBudget(totalMs = GIT_TIMEOUT_MS) {
   };
 }
 
-module.exports = { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, gitBudget };
+module.exports = { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS, gitBudget };

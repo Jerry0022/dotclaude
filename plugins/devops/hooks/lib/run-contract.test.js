@@ -692,6 +692,13 @@ describe("CLI", () => {
     expect(run("arm", "--mode", "x").code).toBe(1);
     expect(run("arm", "--passes", "harden,rethink").code).toBe(1);
   });
+
+  test("C4: arm blocked by a directory at the contract path → exit 1, 'could not write the contract'", () => {
+    fs.mkdirSync(path.join(cwd, ".claude", "run-contract.json"), { recursive: true });
+    const r = run("arm", "--mode", "prompt");
+    expect(r.code).toBe(1);
+    expect(r.out).toEqual({ ok: false, error: "could not write the contract" });
+  });
 });
 
 // ── harden pass ────────────────────────────────────────────────────────────

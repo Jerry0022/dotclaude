@@ -624,4 +624,21 @@ describe("R5: the corrupt-quarantine notice is delivered even when run-contract.
     const r2 = run("Edit", { file_path: f("src/b.js") }, { session_id: "s" });
     expect(r2.stdout).toBe("");
   });
+
+  test("H9: the SAME call whose own readContract() quarantines a corrupt header returns the notice, not the next one", () => {
+    armPrompt({ passes: [] });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    // Hand-corrupt the live header — a gated call's own RC.readContract()
+    // below discovers this and quarantines it (AUD-022) during this same
+    // invocation, not before.
+    fs.writeFileSync(f(".claude/run-contract.json"), "{not json", "utf8");
+    const r1 = run("Edit", { file_path: f("src/a.js") }, { session_id: "s" });
+    expect(r1.code).toBe(0); // no contract left to gate against
+    expect(r1.stdout).toContain("quarantined");
+    expect(r1.stdout).toContain("run-contract.json.corrupt");
+    // One-shot: the very next call gets nothing more.
+    const r2 = run("Edit", { file_path: f("src/b.js") }, { session_id: "s" });
+    expect(r2.stdout).toBe("");
+  });
 });
