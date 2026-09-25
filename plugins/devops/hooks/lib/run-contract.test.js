@@ -683,6 +683,25 @@ describe("harden pass", () => {
     expect(R.followUpModeHint([{ header: "Issues", question: "x" }])).toBe("backlog");
   });
 
+  test("RT3-R7: numbered Issues / Milestones continuations match; look-alike headers do not", () => {
+    for (const header of ["Issues", "Issues 2", "Issues (2)", "Issues 2/2", "Issues 3"]) {
+      expect(R.parseFollowUp([{ header, question: "q?" }], { "q?": "#7 a" }), header).toMatchObject({ items: ["7"], modeHint: "backlog" });
+      expect(R.followUpModeHint([{ header, question: "q?" }]), header).toBe("backlog");
+    }
+    for (const header of ["Milestones", "Milestones 2", "Milestones (2)", "Milestones 2/3"]) {
+      expect(R.parseFollowUp([{ header, question: "q?" }], { "q?": "v1 (3)" }), header).toMatchObject({ milestones: ["v1 (3)"] });
+      expect(R.followUpModeHint([{ header, question: "q?" }]), header).toBe("backlog");
+    }
+    for (const header of ["Issues found", "Lose Issues", "Open issues list", "Milestones overview", "Issues 2 extra"]) {
+      expect(R.parseFollowUp([{ header, question: "q?" }], { "q?": "#9" }), header).toBeNull();
+      expect(R.followUpModeHint([{ header, question: "q?" }]), header).toBeNull();
+    }
+    const split = R.parseFollowUp(
+      [{ header: "Milestones", question: "a?" }, { header: "Milestones 2", question: "b?" }, { header: "Issues", question: "c?" }, { header: "Issues 2", question: "d?" }],
+      { "a?": "v1", "b?": "v2", "c?": "#1 x", "d?": "#2 y" });
+    expect(split).toMatchObject({ milestones: ["v1", "v2"], items: ["1", "2"] });
+  });
+
   test("H-B9: markPendingArm / markBatchHandoff retry a transient rename failure", () => {
     const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw enoent("EPERM"); });
     expect(R.markPendingArm(cwd, { sessionId: "s1", now: T0 })).toMatchObject({ sessionId: "s1" });
@@ -759,7 +778,7 @@ describe("harden pass", () => {
     expect(JSON.parse(fs.readFileSync(R.prevPath(cwd), "utf8")).id).toBe(a.id);
   });
 
-  test("H-C1: mergeRouterAnswers — partial call of the same session within 30 min merges", () => {
+  test("H-C1: mergeRouterAnswers — partial call of the same session merges", () => {
     const qs = [Q.passes];
     const fields = R.parseRouterAnswers(qs, { [Q.passes.question]: "Harden danach (Recommended)" });
     expect(R.isPartialRouterCall(qs)).toBe(true);
@@ -769,7 +788,16 @@ describe("harden pass", () => {
     expect(m).toMatchObject({ id: a.id, flow: "autonomous", ship: "auto", passes: ["harden"] });
     expect(R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s2" })).toBeNull();
     expect(R.mergeRouterAnswers(cwd, CURRENT, fields, { now: T0, sessionId: "s1" })).toBeNull();
-    R.arm(cwd, { flow: "autonomous", ship: "auto", sessionId: "s1" }, { now: T0 - 31 * 60_000 });
+  });
+
+  test("RT3-R8: mergeRouterAnswers — an active contract of any age merges; closed / expired do not", () => {
+    const qs = [Q.passes];
+    const fields = R.parseRouterAnswers(qs, { [Q.passes.question]: "Harden danach (Recommended)" });
+    const a = R.arm(cwd, { flow: "autonomous", ship: "auto", passes: [], sessionId: "s1" }, { now: T0 - 40 * 60_000 });
+    expect(R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s1" })).toMatchObject({ id: a.id, passes: ["harden"] });
+    R.close(cwd, "done", { now: T0 });
+    expect(R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s1" })).toBeNull();
+    R.arm(cwd, { flow: "interactive", sessionId: "s1" }, { now: T0 - 13 * 3600_000 });
     expect(R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s1" })).toBeNull();
   });
 

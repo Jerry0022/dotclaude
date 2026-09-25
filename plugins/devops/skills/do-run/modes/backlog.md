@@ -154,7 +154,10 @@ is still on screen, apply the Step 0.1 pending-question guard (re-arm + wait).
      + trusted open-issue count; description = the milestone description. All
      trusted open issues of a chosen milestone are taken **wholesale** — never
      offer per-issue selection inside a milestone. If there are **>4** milestones,
-     split the selection across several multi-select questions (max 4 options each).
+     split the selection across several multi-select questions of the same call
+     (max 4 options each): header `Milestones`, then `Milestones 2`, `Milestones 3` …
+     The loose-issue step below splits the same way: header `Issues`, then
+     `Issues 2`, `Issues 3` … The run contract records only these exact headers.
    - **Second step — only if** trusted open issues **without any milestone** exist →
      a separate multi-select over those loose issues
      (`gh issue list --state open --json number,title,labels,author,milestone` →
