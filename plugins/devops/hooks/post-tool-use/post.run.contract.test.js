@@ -363,6 +363,35 @@ describe("red-team pass 3 (RT3-*)", () => {
   });
 });
 
+describe("R1: an analysis card closes an AUDIT run only when nothing is left open", () => {
+  test("open harden obligation: stays open", () => {
+    RC.arm(dir, { mode: "audit", passes: ["harden"], ship: "manual", sessionId: "s" });
+    RC.record(dir, { k: "edit" });
+    run(CARD, { variant: "analysis" });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("non-empty pending: stays open", () => {
+    RC.arm(dir, { mode: "audit", passes: [], ship: "manual", sessionId: "s" });
+    RC.record(dir, { k: "edit" });
+    run(CARD, { variant: "analysis", pending: ["one more pass"] });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("open concept hand-off: stays open", () => {
+    RC.arm(dir, { mode: "audit", passes: [], ship: "manual", sessionId: "s" });
+    RC.record(dir, { k: "edit" });
+    run(CARD, { variant: "analysis", concept: { title: "next" } });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("a no-work audit run closes", () => {
+    RC.arm(dir, { mode: "audit", passes: [], ship: "manual", sessionId: "s" });
+    run(CARD, { variant: "analysis" });
+    expect(RC.readContract(dir)).toBeNull();
+  });
+});
+
 const P_backlogFinished = (h, evs) => require("./post.run.contract.js").backlogFinished(h, evs);
 
 test("no contract: Edit/Bash are a no-op and write nothing", () => {

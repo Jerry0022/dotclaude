@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -250,6 +251,92 @@ test("releaseResult", () => {
   expect(C.releaseResult({ content: [{ type: "text", text: 'Result: {"success":false}' }] })).toEqual({ ok: false, merged: false });
   expect(C.releaseResult({ success: true })).toEqual({ ok: true, merged: false });
   expect(C.releaseResult("nope")).toBeNull();
+});
+
+test("R2: mergeResult reads a real MCP envelope {content:[{type:'text',text:'{merged}'}]}, not just a bare {merged}", () => {
+  // The real GitHub MCP response shape (post.flow.completion.js documents
+  // it): the top-level object has no `merged` field of its own — before the
+  // fix, `typeof response === 'object'` alone made this THE result object,
+  // so `obj.merged` was undefined and every real merge recorded ok:false.
+  expect(C.mergeResult({ content: [{ type: "text", text: '{"merged":true,"message":"Pull Request successfully merged","sha":"abc"}' }] })).toEqual({ ok: true });
+  expect(C.mergeResult({ content: [{ type: "text", text: '{"merged":false,"message":"not mergeable"}' }] })).toEqual({ ok: false });
+  // A bare object that DOES carry its own boolean `merged` is still trusted directly.
+  expect(C.mergeResult({ merged: true })).toEqual({ ok: true });
+  expect(C.mergeResult("nope")).toBeNull();
+});
+
+describe("R11: baseBranch / shellCallFacts share one budget across their 2 git calls in the post path", () => {
+  test("baseBranch(after) threads a shared budget into both gitOut calls, not GIT_TIMEOUT_MS each", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-basebranch-"));
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    fs.writeFileSync(path.join(dir, "f.txt"), "x");
+    execFileSync("git", ["add", "."], { cwd: dir });
+    execFileSync("git", ["commit", "-q", "-m", "x"], { cwd: dir });
+    execFileSync("git", ["switch", "-q", "-c", "feat/new"], { cwd: dir });
+    let calls = 0;
+    const budget = { timeout: () => { calls++; return 3000; } };
+    // HEAD already is `feat/new` (after:true): baseBranch must make the
+    // second `@{-1}` call too — both share the SAME budget object.
+    const b = C.baseBranch(dir, "feat/new", true, budget);
+    expect(typeof b === "string" || b === null).toBe(true);
+    expect(calls).toBeGreaterThanOrEqual(2);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("shellCallFacts(after:true) resolves an item branch without throwing on a slow/expired shared budget", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-shellfacts-"));
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    fs.writeFileSync(path.join(dir, "f.txt"), "x");
+    execFileSync("git", ["add", "."], { cwd: dir });
+    execFileSync("git", ["commit", "-q", "-m", "x"], { cwd: dir });
+    execFileSync("git", ["switch", "-q", "-c", "item/1"], { cwd: dir });
+    const hook = { tool_name: "Bash", tool_input: { command: "git switch -c item/1" } };
+    // R11: must return promptly (well under the 10 s hooks.json post
+    // timeout) instead of two independent 5 s GIT_TIMEOUT_MS calls.
+    const started = Date.now();
+    const facts = C.shellCallFacts(hook, dir, dir, { after: true });
+    expect(Date.now() - started).toBeLessThan(6500);
+    expect(facts.branchName).toBe("item/1");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("R15: originMatches — a GitHub MCP merge's owner/repo vs this checkout's origin", () => {
+  function repoWithOrigin(url) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-origin-"));
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["remote", "add", "origin", url], { cwd: dir });
+    return dir;
+  }
+
+  test("matching owner/repo (https remote): true", () => {
+    const dir = repoWithOrigin("https://github.com/Jerry0022/dotclaude.git");
+    expect(C.originMatches(dir, "Jerry0022", "dotclaude")).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("mismatched owner/repo: false — an unrelated repo's merge must not count", () => {
+    const dir = repoWithOrigin("git@github.com:Jerry0022/dotclaude.git");
+    expect(C.originMatches(dir, "someone-else", "other-repo")).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("no owner/repo on the tool_input: true (nothing to check against)", () => {
+    const dir = repoWithOrigin("https://github.com/Jerry0022/dotclaude.git");
+    expect(C.originMatches(dir, undefined, undefined)).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("unknown origin (no remote): true — recorded, as before this check existed", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-origin-none-"));
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    expect(C.originMatches(dir, "someone", "somewhere")).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // ── RT3: red-team pass 3 + QA corpus ──────────────────────────────────────
@@ -524,5 +611,27 @@ describe("QA-T1: routerFromTranscript reads back past the 2 MB tail", () => {
     expect(capped.length).toBeGreaterThan(0);
     expect(capped.every(l => lines.includes(l))).toBe(true);
     expect([...C.linesBackward(path.join(t, "missing"))]).toEqual([]);
+  });
+
+  test("R12: linesBackward stops at an already-expired budget instead of reading the whole file", () => {
+    const t = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rc-t1-")), "l.txt");
+    const lines = Array.from({ length: 50 }, (_, i) => `line-${i}`);
+    fs.writeFileSync(t, `${lines.join("\n")}\n`);
+    const expired = { expired: () => true };
+    // Small chunks so an unbounded walk would need many iterations — an
+    // expired budget must stop before any of them are read.
+    expect([...C.linesBackward(t, { chunk: 5, budget: expired })]).toEqual([]);
+    // A live budget still reads normally.
+    const live = { expired: () => false };
+    expect([...C.linesBackward(t, { chunk: 5, budget: live })].filter(Boolean).length).toBeGreaterThan(0);
+  });
+
+  test("R12: routerFromTranscript honours an expired budget — the walk yields nothing rather than outrunning the deadline", () => {
+    const t = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rc-t1-")), "t.jsonl");
+    fs.writeFileSync(t, `${lineAt(Date.now() - 1000, Q, A)}\n`);
+    const expired = { expired: () => true };
+    expect(C.routerFromTranscript(t, null, RC_LIB, expired)).toBeNull();
+    // Without a budget (or a live one) the same file is still found.
+    expect(C.routerFromTranscript(t, null, RC_LIB)).not.toBeNull();
   });
 });

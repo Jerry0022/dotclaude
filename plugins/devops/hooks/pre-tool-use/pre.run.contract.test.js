@@ -39,7 +39,7 @@ function run(tool_name, tool_input, extra = {}, env = {}) {
     input: JSON.stringify({ cwd: dir, hook_event_name: "PreToolUse", tool_name, tool_input, ...extra }),
     cwd: dir, encoding: "utf8", env: { ...ENV, ...env },
   });
-  return { code: res.status, stderr: res.stderr || "" };
+  return { code: res.status, stderr: res.stderr || "", stdout: res.stdout || "" };
 }
 const f = (rel) => path.join(dir, rel);
 const armPrompt = (over = {}) => RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual", passes: ["harden", "polish"], ...over });

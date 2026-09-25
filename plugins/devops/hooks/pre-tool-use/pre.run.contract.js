@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.3.0
+ * @version 0.4.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -48,7 +48,7 @@ function batchBlock(RC) {
 // AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
 // named once in lib/git-timeout.js — this hook no longer keeps its own
 // GIT_TIMEOUT constant.
-const { gitBudget } = require('../lib/git-timeout');
+const { gitBudget, TOTAL_GIT_BUDGET_MS } = require('../lib/git-timeout');
 // AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
 // so run-contract-cli.js's `status` / `done` measure it exactly like this
 // gate does, instead of evaluating obligations against an empty ctx.
@@ -57,8 +57,9 @@ const { safeBase, resolveBase, codeFilesChanged } = require('../lib/run-contract
 // AUD-019: one deadline for a whole gated call's git chain (base resolution,
 // up to two diff attempts, ls-files, the release count and the pushHead
 // branch check) — comfortably under the 60 s worst case the audit measured
-// when each call re-armed its own 3-5 s timeout independently.
-const TOTAL_GIT_BUDGET_MS = 15000;
+// when each call re-armed its own 3-5 s timeout independently. R13: this
+// ceiling now lives in git-timeout.js (TOTAL_GIT_BUDGET_MS) so the CLI's
+// measureQa() shares it instead of falling back to a 5 s default.
 
 /**
  * RT3-R4: is the work tree's current branch main / master? Asked only for a
@@ -108,14 +109,19 @@ function classify(hook, root, cwd, C) {
   return null;
 }
 
-/** Spec B: a do-run started but its answers were never recorded — arm now. */
-function armFromPending(hook, root, RC, C, sessionId) {
+/**
+ * Spec B: a do-run started but its answers were never recorded — arm now.
+ * @param {object} [budget] R12: the invocation's one overall deadline
+ *   (git-timeout's gitBudget) — also bounds the transcript walk, not just
+ *   the git chain that follows.
+ */
+function armFromPending(hook, root, RC, C, sessionId, budget) {
   const marker = RC.pendingArm(root, { sessionId });
   if (!marker) return null;
   // R1: a do-run that skipped the router (resume, machine prompt, backlog's
   // own sub-run) never replaces the contract the user already chose.
   if (RC.readContract(root, { sessionId })) { RC.clearPendingArm(root); return null; }
-  const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC);
+  const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC, budget);
   let fields = null;
   let source = 'router';
   if (found) {
@@ -151,15 +157,25 @@ function main(hook) {
   // H-B1: ship_release / the card act on tool_input.cwd — its root is tried
   // second; post records into the same root.
   const { root, inputRoot, roots } = C.contractRoots(hook, projectRoot);
-  const hasState = (r) => ['run-contract.json', 'run-contract.pending', 'batch-handoff.json']
+  // R5: after a corrupt header is quarantined, run-contract.json is gone —
+  // only run-contract.json.corrupt.pending is left on disk — so this fast
+  // path used to return 0 before the notice was ever read. Counting the
+  // marker keeps the path open long enough to deliver it once.
+  const hasState = (r) => ['run-contract.json', 'run-contract.pending', 'batch-handoff.json', 'run-contract.json.corrupt.pending']
     .some(n => fs.existsSync(path.join(r, '.claude', n)));
   if (!roots.some(hasState)) return 0;
 
-  const call = classify(hook, root, cwd, C);
-  if (!call) return 0;
-
   // The kill switch is checked before main() runs (H-F20).
   const RC = require('../lib/run-contract');
+  // R5: deliver the corrupt/expiry one-shot notice here too, independent of
+  // whether this call hits a gate — PreToolUse never blocks on it (H-F20).
+  const notice = RC.expiryNotice(root, { sessionId: hook.session_id || null });
+  if (notice) {
+    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notice } })}\n`);
+  }
+
+  const call = classify(hook, root, cwd, C);
+  if (!call) return 0;
 
   const sessionId = hook.session_id || null;
   if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
@@ -171,7 +187,14 @@ function main(hook) {
     return 2;
   }
 
-  const armed = armFromPending(hook, root, RC, C, sessionId);
+  // R12: ONE overall deadline for the whole invocation — before this it
+  // bounded only the git chain below; the transcript walk (routerFromTrans
+  // cript, backward up to 32 MB) could run long past it and a timed-out
+  // PreToolUse fails open (exits 0, gating nothing). Created here, ahead of
+  // armFromPending, so the walk shares the exact same ceiling as the git
+  // calls that follow it, not a fresh one.
+  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
+  const armed = armFromPending(hook, root, RC, C, sessionId, budget);
   let croot = null;
   let contract = null;
   for (const r of roots) {
@@ -180,10 +203,9 @@ function main(hook) {
     if (contract) { croot = r; break; }
   }
   if (!contract) return 0;
-  // AUD-019: one deadline for every git call this gated call makes (base
-  // resolution, diffs, ls-files, the pushHead branch check) — an expired
-  // budget reads as unknown (never a block), it just stops asking git.
-  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
+  // AUD-019: the same deadline also bounds every git call this gated call
+  // makes (base resolution, diffs, ls-files, the pushHead branch check) — an
+  // expired budget reads as unknown (never a block), it just stops asking git.
   if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget)) {
     call.gates.push('release');
   }

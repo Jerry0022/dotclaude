@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
  *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
@@ -22,6 +22,10 @@ const { segments, openObligations, short } = require('./run-contract-obligations
 // ctx — qa was never measured there, so `done` could close a run while qa
 // was owed. measureQa() is the same helper pre.run.contract.js's gate uses.
 const { measureQa } = require('./run-contract-qa');
+// R13: share the gate's 15 s git-chain ceiling instead of measureQa()'s own
+// 5 s gitBudget() default — `status` / `done` must not see `qa: null` from a
+// budget the live pre-gate would not have run out of.
+const { TOTAL_GIT_BUDGET_MS } = require('./git-timeout');
 
 const OBLIGATIONS = Object.freeze(['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine', 'triage']);
 
@@ -57,7 +61,7 @@ const CLI_COMMANDS = {
     const segs = segments(c, evs);
     // AUD-010: measured exactly like the gate — an unknown count (git
     // failure / expired budget) reports as `qa: null` here, "QA ?" on the card.
-    const codeFilesChanged = measureQa(cwd, 'release');
+    const codeFilesChanged = measureQa(cwd, 'release', undefined, { totalMs: TOTAL_GIT_BUDGET_MS });
     write({
       ok: true, active: true, contract: c, segment: segs.length, events: evs.length,
       qa: codeFilesChanged, open: openObligations(c, evs, 'release', { codeFilesChanged }),
@@ -79,7 +83,7 @@ const CLI_COMMANDS = {
     const c = readContract(cwd, { now });
     // AUD-010: measured before deciding — `done` must not close a run while
     // qa is owed just because nobody ever asked git for the diff.
-    const codeFilesChanged = c ? measureQa(cwd, 'card') : null;
+    const codeFilesChanged = c ? measureQa(cwd, 'card', undefined, { totalMs: TOTAL_GIT_BUDGET_MS }) : null;
     const open = c ? openObligations(c, eventsOf(cwd, c), 'card', { codeFilesChanged }) : [];
     if (open.length) {
       const names = open.map(o => (o.item ? `${o.ob} #${o.item}` : o.ob)).join(', ');
@@ -88,11 +92,13 @@ const CLI_COMMANDS = {
       }
       const h = close(cwd, reason, { aborted: true, now });
       write({ ok: true, closed: !!h, aborted: true, open: names, id: h ? h.id : null });
-      return 0;
+      // R13: `closed: false` must not report success — a caller (or script)
+      // reading only the exit code would otherwise believe the run ended.
+      return h ? 0 : 1;
     }
     const h = close(cwd, reason || 'done', { now });
     write({ ok: true, closed: !!h, id: h ? h.id : null });
-    return 0;
+    return h ? 0 : 1;
   },
   park({ pos, cwd, now, reason, write, fail }) {
     const item = pos[1] ? String(pos[1]).replace(/^#/, '') : '';

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -102,19 +102,21 @@ function issueNamed(args, n) {
 // AUD-020: an unrelated Agent call (e.g. an Explore search) used to satisfy
 // backlog triage just by existing (`allEvs.some(ev => ev.k === 'agent')`).
 // PINNED rule: only an `agent` event whose recorded description (post.run.
-// contract.js's Agent handler) either contains the word "triage" (case-
-// insensitive) or names one of the contract's queued items (`#N` / "issue N",
-// the same matcher `refine` uses) counts. The do-run backlog mode's pinned
-// wording for a pre-triage agent call is "Triage #<N> — <title>" (docs/
-// skills/do-run/modes/backlog.md Step 2.1) — that satisfies both forms at
-// once. A description-less Agent event (older contracts, before AUD-020)
-// never counts.
-function isTriageAgent(ev, contract) {
+// contract.js's Agent handler) contains the word "triage" (case-insensitive)
+// counts — the do-run backlog mode's pinned wording for a pre-triage agent
+// call is "Triage #<N> — <title>" (docs/skills/do-run/modes/backlog.md Step
+// 2.1). RT3-R10: "look at #12" (an issue number with no "triage" word) must
+// NOT count — the issueNamed() alternative this rule used to allow is
+// dropped.
+// RT3-R10 grandfather: an agent event recorded BEFORE this AUD-020 upgrade
+// has no `description` field at all (a new event always carries one, empty
+// string when the Agent call passed no description) — a backlog run already
+// in flight across the plugin update must not have its triage step silently
+// re-open just because older events predate the field.
+function isTriageAgent(ev) {
   if (!ev || ev.k !== 'agent') return false;
-  const desc = String(ev.description || '');
-  if (/\btriage\b/i.test(desc)) return true;
-  const items = Array.isArray(contract && contract.items) ? contract.items : [];
-  return items.some(n => issueNamed(desc, n));
+  if (!Object.prototype.hasOwnProperty.call(ev, 'description')) return true;
+  return /\btriage\b/i.test(String(ev.description || ''));
 }
 
 function qaApplies(contract, ctx, seg) {
@@ -150,7 +152,7 @@ function obState(contract, seg, allEvs, ob, gate, ctx) {
     }
     case 'triage': {
       if (contract.mode !== 'backlog' || contract.presence === false) return null;
-      const done = allEvs.some(ev => isTriageAgent(ev, contract));
+      const done = allEvs.some(ev => isTriageAgent(ev));
       return done ? 'done' : skipOf(allEvs, 'triage') ? 'skipped' : 'open';
     }
     default:
