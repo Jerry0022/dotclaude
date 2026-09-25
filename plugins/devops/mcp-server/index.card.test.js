@@ -179,6 +179,33 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(test).toMatch(/^## 🧪 Test first\?$/m);
   });
 
+  test("an open point about another worktree's branch is dropped — that session ships it itself", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const { execFileSync } = await import("node:child_process");
+    const root = fs.mkdtempSync(join(os.tmpdir(), "card-foreign-"));
+    const git = (cwd, ...args) => execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const wt = join(root, ".claude", "worktrees", "parallel-ship-93ae10");
+    try {
+      git(root, "init", "-q", "-b", "main");
+      git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init");
+      git(root, "worktree", "add", "-q", "-b", "claude/parallel-ship-93ae10", wt);
+      const text = await cardText({
+        variant: "ship-successful", summary: "Ship ok", lang: "de", session_id: "test-foreign-open", cwd: root,
+        state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+        open: [
+          { text: "Branch claude/parallel-ship-93ae10 ist noch nicht geshippt — shippen?", reply: "Ja, shippen." },
+          "Alte Config löschen?",
+        ],
+      });
+      expect(text).not.toContain("parallel-ship-93ae10");
+      expect(text).toContain("Alte Config löschen?");
+    } finally {
+      try { git(root, "worktree", "remove", "--force", wt); } catch { /* best effort */ }
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("no remote is detected from cwd when the caller passes no state.mode (#500)", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");

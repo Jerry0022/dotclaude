@@ -46,6 +46,7 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
+import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
@@ -1777,6 +1778,17 @@ function buildCompletionCard(params) {
     params._downgradeReason = shipGuard.reason;
   }
 
+  // 0b. A branch checked out in another worktree belongs to the session there,
+  //     which ships it itself — an open point about it is a false alarm while
+  //     the user ships that very branch in parallel (lib/foreign-branches.js).
+  if (Array.isArray(params.open) && params.open.length) {
+    const foreign = dropForeignOpenItems(params.open, foreignTokensFor(params.cwd));
+    if (foreign.dropped) {
+      console.error(`[dotclaude-completion-mcp] dropped ${foreign.dropped} open point(s) naming another worktree's branch`);
+      params.open = foreign.open;
+    }
+  }
+
   // 1. Fetch fresh usage data
   const usageResult = refreshUsage();
   const usageData = usageResult.success ? usageResult.data : null;
@@ -2137,10 +2149,10 @@ server.registerTool(
           z.string(),
           z.object({
             text: z.string().describe("The open point as the card shows it."),
-            reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'feat/x bitte committen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
+            reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'Die Migration bitte gleich mitziehen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
           }),
         ])).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question ('feat/x liegt 70 PRs hinter main — committen oder verwerfen?'). Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
