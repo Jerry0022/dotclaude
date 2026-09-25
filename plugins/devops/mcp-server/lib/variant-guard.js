@@ -53,9 +53,11 @@ export function correctShipVariant(variant, state) {
         reason: 'file-only: no remote to push to, no PR to merge',
       };
     }
-    // Same for a git repo without a remote: the ship ends at the local commit,
-    // so "pass pushed + merged" is advice nobody can follow (#500).
+    // A git repo without a remote merges LOCALLY (ship_release): `merged` is
+    // the proof, there is nothing to push. Without it the ship ended at the
+    // commit, and "pass pushed + merged" is advice nobody can follow (#500).
     if (s.mode === 'git-no-remote') {
+      if (s.merged) return { variant, downgraded: false, reason: null };
       return {
         variant: 'ready',
         downgraded: true,

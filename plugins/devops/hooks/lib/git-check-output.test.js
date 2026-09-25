@@ -389,16 +389,15 @@ describe("repo without a remote", () => {
 
   test("uncommitted files ask for a local commit, not /do-ship", () => {
     const out = text(compose({ dirty: [currentRepo(localOnly)], cwd: CWD }));
-    expect(out).toContain("- 2 uncommitted file(s) → commit them locally on a feature branch (no remote, nothing to push)");
-    expect(out).not.toContain("run `/do-ship`");
+    expect(out).toContain("- 2 uncommitted file(s) → run `/do-ship` to commit and merge locally (no remote, nothing to push)");
+    expect(out).not.toContain("push & create PR");
   });
 
-  test("on main the ask recommends taking the changes along — a commit on main is blocked by pre.main.guard", () => {
+  test("the ask recommends a local ship — never a push", () => {
     const out = text(compose({ dirty: [currentRepo(localOnly)], workspace: onMain, cwd: CWD }));
-    expect(out).toContain("Changes mitnehmen in neuen Worktree (git stash → create → pop) (recommended)");
+    expect(out).toContain("Erst aktuelle Changes lokal shippen (commit + lokaler Merge), dann Worktree anlegen (recommended)");
+    expect(out).toContain("Ship-first: invoke /do-ship (no remote: commits and merges locally)");
     expect(out).not.toContain("shippen (commit + push)");
-    expect(out).not.toContain("Ship-first");
-    expect(out).not.toContain("invoke /do-ship");
   });
 
   test("a repo with a remote keeps the /do-ship CTA", () => {

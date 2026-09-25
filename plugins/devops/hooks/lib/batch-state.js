@@ -345,6 +345,9 @@ function archiveNotes(cwd, stampSource) {
     .toISOString().replace(/[:.]/g, '-');
   const dest = path.join(claudeDir(cwd), `batch-${stamp}.md`);
   fs.renameSync(file, dest);
+  // Image copies of long-finished collections go now (#490) — never those of
+  // the collection just archived, which the hand-off still points at.
+  try { pruneAssets(cwd); } catch { /* housekeeping only */ }
   return dest;
 }
 
@@ -513,6 +516,44 @@ function assignImagesToNotes(notes, images, markerAt) {
     byNote.get(best).push({ img, gapMs: gap });
   }
   return byNote;
+}
+
+/** Image copies older than this are removed when a collection is archived. */
+const ASSET_MAX_AGE_DAYS = 30;
+
+/**
+ * Remove image copies older than `maxAgeDays` and forget them in the manifest.
+ * Runs when a merge archives its notes: by then every copy of THAT collection
+ * is at most a few days old, so only collections long since implemented lose
+ * their images. The manifest keeps its source entries (so an old image is
+ * never claimed again) but drops the pointer to the deleted copy.
+ *
+ * @returns {string[]} removed copy paths
+ */
+function pruneAssets(cwd, { maxAgeDays = ASSET_MAX_AGE_DAYS, now = Date.now() } = {}) {
+  const dir = assetsDir(cwd);
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const cutoff = now - maxAgeDays * 86_400_000;
+  const removed = [];
+  for (const name of names) {
+    if (name === 'captured.json' || !IMAGE_EXT.test(name)) continue;
+    const file = path.join(dir, name);
+    try {
+      const st = fs.lstatSync(file);
+      if (st.isFile() && st.mtimeMs < cutoff) { fs.unlinkSync(file); removed.push(file); }
+    } catch { /* vanished */ }
+  }
+  if (removed.length) {
+    const gone = new Set(removed);
+    const captured = readCaptured(cwd);
+    // A truthy marker, not null: the source must still count as taken.
+    for (const [src, copy] of Object.entries(captured)) if (gone.has(copy)) captured[src] = 'pruned';
+    const tmp = `${capturedPath(cwd)}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(captured, null, 2), 'utf8');
+    fs.renameSync(tmp, capturedPath(cwd));
+  }
+  return removed;
 }
 
 /** The note lines that tie copies to their note — the merge opens each one. */
@@ -994,6 +1035,7 @@ module.exports = {
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   IMAGE_MATCH_WINDOW_MS, IMAGE_LATE_MATCH_MAX_MS, assetsDir, sessionImageDirs, listImagesIn, unclaimedImages,
   claimImages, imagesNear, captureSessionImages, assignImagesToNotes, attachmentFileLines,
+  ASSET_MAX_AGE_DAYS, pruneAssets,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode, renderHelp,

@@ -13,6 +13,7 @@ import { retryUntil } from "../lib/retry.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 import { clampText } from "../../lib/soft-limits.js";
 import { readVersion } from "../lib/version.js";
+import { localMerge, localTag, LocalMergeError } from "../lib/local-merge.js";
 
 /** Soft budget for the PR title — over-long titles are clamped, never rejected. */
 export const PR_TITLE_MAX = 70;
@@ -173,20 +174,54 @@ export async function handler(params) {
       result.commit = headShort(opts);
     }
 
-    // No remote → the local commit above IS the delivery. Everything past this
-    // point (fetch, rebase gate, push, PR, merge) requires an origin, so stop
-    // here and say so honestly rather than reporting a merge that never
-    // happened. `delivered` now reflects what actually occurred.
+    // No remote → land the commit locally: merge the branch into its local
+    // base (main, or the parent of a sub-branch) and tag it, just as the PR
+    // flow would on GitHub. Only push and PR are skipped. A base that moved
+    // ahead asks for a rebase and writes nothing — the same gate as below.
     if (noRemote) {
-      result.success = true;
-      result.skipped = true;
-      result.reason = "no-remote";
-      result.delivered = result.commit ? "local-commit-only" : "nothing-to-commit";
       result.pushed = false;
-      result.merged = null;
-      result.warnings = [
-        `No origin remote — committed locally on '${branch}'. Push, PR and merge were skipped.`,
-      ];
+      result.reason = "no-remote";
+      try {
+        const landed = localMerge({
+          branch, base, strategy: mergeStrategy, cwd,
+          message: `${title}\n\n${body}`.trim(),
+        });
+        result.success = true;
+        result.merged = base;
+        result.mergeSha = landed.mergeSha.slice(0, 8);
+        result.mergeStrategy = landed.noop ? "none" : landed.strategy;
+        result.localMerge = { via: landed.via, ...(landed.path && { path: landed.path }), ...(landed.noop && { noop: true }) };
+        result.delivered = "local-merge";
+        result.warnings = [
+          branch === base
+            ? `No origin remote — committed locally on '${base}'. Push and PR were skipped.`
+            : `No origin remote — '${branch}' merged locally into '${base}'. Push and PR were skipped.`,
+        ];
+      } catch (e) {
+        if (!(e instanceof LocalMergeError)) throw e;
+        result.success = false;
+        result.merged = null;
+        result.delivered = result.commit ? "local-commit-only" : "nothing-to-commit";
+        if (e.code === "rebase-required") result.rebaseRequired = true;
+        result.error = `Committed on '${branch}', but not merged into '${base}': ${e.message}`;
+        return result;
+      }
+      if (!intermediate && tag) {
+        const channelTag = `alpha/${tag}`;
+        try {
+          const t = localTag({ tag: channelTag, sha: result.mergeSha, version: tag.replace(/^v/, ""), cwd });
+          result.tag = channelTag;
+          result.channel = "alpha";
+          result.tagLocal = true;
+          if (tagDefaulted) result.tagDefaulted = true;
+          if (t.warning) result.tagWarning = t.warning;
+        } catch (e) {
+          result.tagError = `Local tag ${channelTag} failed: ${e.message.slice(0, 200)}`;
+        }
+      } else if (!intermediate) {
+        result.tagSkipped = true;
+        result.tagWarning = tagDefaultSkip || "tag: null — shipped without a ring tag";
+      }
       return result;
     }
 

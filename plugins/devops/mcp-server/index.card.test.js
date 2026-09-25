@@ -195,6 +195,47 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  test("no remote + unshipped work: no card, the caller is told to ship locally", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "card-local-ship-"));
+    const g = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+    try {
+      g("init", "-q", "-b", "main");
+      g("config", "user.email", "t@example.com");
+      g("config", "user.name", "t");
+      fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+      g("add", "a.txt");
+      g("commit", "-q", "-m", "init");
+      fs.writeFileSync(path.join(repo, "a.txt"), "two\n"); // the turn's change
+      const res = await render({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8f", cwd: repo });
+      const text = res.content.map(c => c.text).join("\n");
+      expect(text).toContain("LOCAL SHIP");
+      expect(text).toContain("devops:do-ship");
+      expect(text).not.toContain("✨✨✨");
+
+      // Once it is committed and on main, there is nothing left to ship: the card renders.
+      g("commit", "-q", "-am", "feat: two");
+      const after = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8g", cwd: repo });
+      expect(after).not.toContain("LOCAL SHIP");
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test("a local merge counts as the ship: ship-successful stays, the track shows the merge", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8h",
+      state: { mode: "git-no-remote", commit: "abc1234", merged: "main", pushed: false, delivered: "local-merge" },
+      delivery: { ship: { version: "1.2.3", base: "main" } },
+    });
+    expect(text).not.toContain("Variante auf `ready` korrigiert");
+    expect(text).toContain("✓ commit → ✓ merge main · nur lokal, kein Remote");
+    expect(text).toMatch(/^## 🚀 Shipped v1\.2\.3 → main\.$/m);
+  });
+
   test("ship-successful without a remote downgrades with a note that asks for nothing impossible (#500)", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8e",
