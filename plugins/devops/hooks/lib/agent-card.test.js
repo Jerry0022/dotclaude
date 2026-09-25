@@ -28,10 +28,10 @@ describe("agent card — one template for one agent or many", () => {
   });
 
   test("effort is one filled dot per level, never a hollow one — higher levels just add dots", () => {
-    const levels = ["low", "medium", "high", "xhigh", "max"];
+    const levels = ["low", "medium", "high", "xhigh", "max", "ultracode"];
     const card = renderAgentCard({ agents: levels.map((effort) => ({ ...core, effort })) });
     const efforts = rows(card).map((r) => r.split("|").slice(1, -1).map((c) => c.trim())[4]);
-    expect(efforts).toEqual(["● low", "●● medium", "●●● high", "●●●● xhigh", "●●●●● max"]);
+    expect(efforts).toEqual(["● low", "●● medium", "●●● high", "●●●● xhigh", "●●●●● max", "●●●●●● ultracode"]);
     expect(card).not.toMatch(/[○◯+]/);
   });
 

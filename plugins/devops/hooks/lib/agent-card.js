@@ -54,7 +54,7 @@ const ICON = {
 };
 
 // Filled dots only — one per level, so a higher level just adds a dot.
-const DOTS = { low: '●', medium: '●●', high: '●●●', xhigh: '●●●●', max: '●●●●●' };
+const DOTS = { low: '●', medium: '●●', high: '●●●', xhigh: '●●●●', max: '●●●●●', ultracode: '●●●●●●' };
 const ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable']);
 
 /** `[W1] Build contracts` → { wave: '1', task: 'Build contracts' }. */
