@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.206.1] — 2026-09-25
+
+### Fixed
+- **A command moved to the background at its timeout now counts as running work.** A foreground Bash or PowerShell call that outlives its timeout is not killed: the harness moves it to the background and answers "Command did not complete within its 120s timeout and was moved to the background (ID: …)". The Stop guard only knew the `run_in_background` launch, so it never saw these commands, and a completion card could say "all done" while one was still running. `scanOpenTasks` now opens a task on that answer too — only from Bash or PowerShell, only when the sentence opens the result, never for the concept bridge's own tasks — and closes it on its notification or on TaskStop. A command that finishes just as it is moved stays closed, even when its notification is written before the launch result. The PostToolUse `pending` reminder now reads a shell launch from the structured result the hook receives (`backgroundTaskId`), which never contains the sentence the model reads.
+
 ## [0.206.0] — 2026-09-25
 
 ### Added
