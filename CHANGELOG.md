@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.210.0] — 2026-09-26
+
+### Changed
+- **The card widget ends the turn — nothing appears under the card any more.** Of 208 Desktop card turns, 152 still had text under the widget: a recap, an answer to the app's "no visible output" nudge, or a closing line after a step that ran after the card. `post.flow.completion` now runs the plugin's Stop hooks itself on the card-widget call and, when none of them blocks, answers `continue: false` — Claude Code stops before another model call, so no text, no nudge and no tool call can follow the card (verified end to end on Claude Code 2.1.281). A Stop hook that would block (verification, card gate, web hand-off) keeps the turn going and hands Claude its reason instead. Autonomous runs and ship queues, which still work after their cards, keep the old flow; `DOTCLAUDE_CARD_HARD_STOP=0` turns it off.
+- **do-ship runs nothing after the card.** The memory pass runs before the card, and this repo's plugin self-sync runs between the card's render and its widget. A failed sync is one line before the card, never a line after it.
+- **A non-strict `/do-run` fixes what its agents left open before it ships.** In-scope findings are fixed, forks go to the user as decisions, and out-of-scope topics become task chips — so the ship card holds only decisions, not work to ask for with "Nachbessern" and ship again.
+
+### Fixed
+- **A topic Claude Code already offers as a task chip no longer lands on the completion card too.** Such points ("… — Task-Chip bereit", "(follow-up chip ready)", "als Folge-Task angelegt") went into the card's "Nachbessern" answer as well, so a user who had clicked the chip fixed the topic a second time in the session that had just shipped. The card now drops every open point that says a chip or follow-up task exists, or names a chip of this session by its title (10 of 451 real open points, no false hit), and Claude is told right when it creates a chip that the chip is the offer.
+
 ## [0.209.0] — 2026-09-26
 
 ### Added
