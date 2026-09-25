@@ -141,6 +141,33 @@ describe("post.flow.completion — completion-card instruction completeness", ()
   });
 });
 
+// R15 part 3: the refactored stdin 'end' handler (AUD-029's named sections)
+// has no try around its section calls — an internal error (e.g. a non-string
+// `tool_name` reaching `toolName.endsWith(...)` inside handleShipAndCardFlags)
+// used to crash the process with an uncaught TypeError (exit 1) instead of
+// exiting 0 silently like every other failure path in this hook.
+describe("post.flow.completion — R15 part 3: the end handler never crashes", () => {
+  test("a non-string tool_name (an internal TypeError) exits 0 silently, not 1", () => {
+    const dir = project();
+    const sid = "s-r15-crash";
+    const tmp = path.join(dir, ".tmp");
+    const res = spawnSync(process.execPath, [HOOK], {
+      cwd: dir,
+      input: JSON.stringify({
+        tool_name: 12345,
+        tool_input: { file_path: path.join(dir, "a.js") },
+        session_id: sid,
+        cwd: dir,
+      }),
+      encoding: "utf8",
+      env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout || "").toBe("");
+    cleanup(dir);
+  });
+});
+
 // A background agent keeps working after the turn hands back, so a card
 // rendered in the meantime must declare it — otherwise its CTA tells the user
 // to SHIP a result that does not exist yet. The Stop gate catches that, but a

@@ -69,7 +69,11 @@ const edit = { k: "edit" };
 const commit = { k: "commit" };
 const rel = (closes = []) => ({ k: "release", ok: true, merged: true, closes });
 const qaAgent = { k: "agent", type: "devops:qa" };
-const triaged = { k: "agent", type: "Explore" };
+// AUD-020: only an agent event whose description says "triage" (or names a
+// queued item) satisfies triage — `exploreAgent` below is the regression
+// case, an unrelated agent call that must NOT satisfy it.
+const triaged = { k: "agent", type: "Explore", description: "Triage backlog Step 2" };
+const exploreAgent = { k: "agent", type: "Explore", description: "look for existing patterns" };
 const C = (over = {}) => ({ v: 1, id: "rc-x", mode: "prompt", flow: "interactive", ship: "manual", strict: false,
   passes: ["harden", "polish"], presence: true, items: [], alsoAudit: false, ...over });
 const obs = (list) => list.map(o => (o.item ? `${o.ob}#${o.item}` : o.ob));
@@ -176,6 +180,14 @@ describe("extractAnswers", () => {
     const r = R.parseRouterAnswers(questions, answers, { doRunArgs: "backlog" });
     expect(r).toMatchObject({ mode: "backlog", flow: "autonomous", ship: "auto", passes: ["harden", "polish"] });
     expect(R.extractAnswers([{ type: "text", text }], {}).answers["Bist du dabei, und wer shippt am Ende?"]).toBe("Weg · Ship automatisch");
+  });
+
+  test("C5: the {content:[…]} MCP envelope and the {result:\"…\"} shape both feed textOf's \"Q\"=\"A\" parsing", () => {
+    const text = '"Umfang?"="Strikt"';
+    const envelope = { content: [{ type: "text", text }] };
+    expect(R.extractAnswers(envelope, {}).answers).toEqual({ "Umfang?": "Strikt" });
+    const resultShape = { result: text };
+    expect(R.extractAnswers(resultShape, {}).answers).toEqual({ "Umfang?": "Strikt" });
   });
 });
 
@@ -318,10 +330,41 @@ describe("state", () => {
     expect(evs.map(e => e.k)).toEqual(["measure", "block"]);
   });
 
-  test("corrupt header → no contract", () => {
+  function corruptCopies(cwd) {
+    const dir = path.join(cwd, ".claude");
+    const prefix = `${path.basename(R.contractPath(cwd))}.corrupt-`;
+    return fs.readdirSync(dir).filter((n) => n.startsWith(prefix)).sort();
+  }
+
+  test("AUD-022: corrupt header → no contract, quarantined, one-shot notice", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
     fs.writeFileSync(R.contractPath(cwd), "{nope");
     expect(R.readContract(cwd)).toBeNull();
+    // Quarantined, not deleted: the header file is gone, its content lives on
+    // under a unique name (RT1-R4 — never a fixed `.corrupt`).
+    expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
+    const copies = corruptCopies(cwd);
+    expect(copies).toHaveLength(1);
+    expect(fs.readFileSync(path.join(cwd, ".claude", copies[0]), "utf8")).toBe("{nope");
+    // Surfaced once, through the same channel expiryNotice() already uses.
+    const notice = R.expiryNotice(cwd, { sessionId: "s1" });
+    expect(notice).toMatch(/quarantined/);
+    expect(R.expiryNotice(cwd, { sessionId: "s1" })).toBeNull();
+  });
+
+  test("AUD-022 / RT1-R4: a second corruption keeps both quarantine copies (unique names, no accumulation past the cap)", () => {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(R.contractPath(cwd), "{first");
+    expect(R.readContract(cwd)).toBeNull();
+    R.expiryNotice(cwd, { sessionId: "s1" }); // consume the first notice
+    fs.writeFileSync(R.contractPath(cwd), "{second");
+    expect(R.readContract(cwd)).toBeNull();
+    const copies = corruptCopies(cwd);
+    expect(copies).toHaveLength(2); // under the keep-max: nothing dropped yet
+    const contents = copies.map((n) => fs.readFileSync(path.join(cwd, ".claude", n), "utf8"));
+    expect(contents).toContain("{first");
+    expect(contents).toContain("{second");
+    expect(R.expiryNotice(cwd, { sessionId: "s1" })).toMatch(/quarantined/);
   });
 
   test("kill switch", () => {
@@ -400,7 +443,7 @@ describe("openObligations", () => {
   });
 
   test("audited backlog session at its first ship_release", () => {
-    const evs = [{ k: "agent", type: "Explore" }, sk("auto-agents"), edit, commit];
+    const evs = [triaged, sk("auto-agents"), edit, commit];
     const open = R.openObligations(auto, evs, "release", { closes: ["473"], codeFilesChanged: 0 });
     expect(obs(open)).toEqual(["harden", "polish", "do-ship", "refine#473"]);
   });
@@ -448,7 +491,7 @@ describe("openObligations", () => {
 
   test("refine per Closes #N: auto-issue anywhere naming the item, or a per-item skip", () => {
     const c = C({ mode: "backlog", passes: [] });
-    const evs = [{ k: "agent", type: "Explore" }, sk("devops:setup-issue", "refine #473"), sk("auto-agents"), edit];
+    const evs = [triaged, sk("devops:setup-issue", "refine #473"), sk("auto-agents"), edit];
     expect(R.openObligations(c, evs, "release", { closes: ["473"] })).toEqual([]);
     expect(obs(R.openObligations(c, evs, "release", { closes: ["4730", "477"] }))).toEqual(["refine#4730", "refine#477"]);
     expect(R.openObligations(c, [sk("auto-issue", "issue 477 schärfen"), ...evs], "release", { closes: ["477"] })).toEqual([]);
@@ -459,11 +502,35 @@ describe("openObligations", () => {
   test("triage before the first auto-agents of a backlog contract", () => {
     const c = C({ mode: "backlog" });
     expect(obs(R.openObligations(c, [], "auto-agents"))).toEqual(["triage"]);
-    expect(R.openObligations(c, [{ k: "agent", type: "Explore" }], "auto-agents")).toEqual([]);
+    expect(R.openObligations(c, [triaged], "auto-agents")).toEqual([]);
+    // AUD-020: an unrelated Agent call (e.g. an Explore search with no
+    // "triage" description and no queued item name) does NOT satisfy triage.
+    expect(obs(R.openObligations(c, [exploreAgent], "auto-agents"))).toEqual(["triage"]);
     expect(R.openObligations(c, [{ k: "skip", ob: "triage", reason: "1 issue" }], "auto-agents")).toEqual([]);
     expect(R.openObligations(c, [sk("auto-agents"), edit, rel()], "auto-agents")).toEqual([]);
     expect(R.openObligations(C({ mode: "backlog", presence: false }), [], "auto-agents")).toEqual([]);
     expect(R.openObligations(C(), [], "auto-agents")).toEqual([]);
+  });
+
+  test("R10: a description-less agent event (pre-AUD-020) is grandfathered as satisfying triage", () => {
+    const c = C({ mode: "backlog" });
+    // No `description` key at all — an event recorded before AUD-020 added
+    // it. Must still count, else a backlog run already in flight across the
+    // plugin update re-opens triage and blocks.
+    const legacyAgent = { k: "agent", type: "Explore" };
+    expect(R.openObligations(c, [legacyAgent], "auto-agents")).toEqual([]);
+    // A NEW event with an explicit empty description does NOT get the
+    // grandfather pass — it must say "triage".
+    const newNoDesc = { k: "agent", type: "Explore", description: "" };
+    expect(obs(R.openObligations(c, [newNoDesc], "auto-agents"))).toEqual(["triage"]);
+  });
+
+  test("R10: an item mention with no \"triage\" word no longer satisfies it (issueNamed alternative dropped)", () => {
+    const c = C({ mode: "backlog", items: ["12"] });
+    const lookAt = { k: "agent", type: "Explore", description: "look at #12 for context" };
+    expect(obs(R.openObligations(c, [lookAt], "auto-agents"))).toEqual(["triage"]);
+    const named = { k: "agent", type: "Explore", description: "Triage #12 — fix the thing" };
+    expect(R.openObligations(c, [named], "auto-agents")).toEqual([]);
   });
 
   test("RT2-R10: triage also gates release/card — a typed /auto-agents skips the PreToolUse skill gate but not this", () => {
@@ -474,9 +541,12 @@ describe("openObligations", () => {
     const evs = [sk("auto-agents"), edit];
     expect(obs(R.openObligations(c, evs, "release"))).toEqual(["do-ship", "triage"]);
     expect(obs(R.openObligations(c, evs, "card"))).toEqual(["do-ship", "triage"]);
-    // A pre-triage `agent` event anywhere in the contract satisfies it.
-    const ok = [{ k: "agent", type: "Explore" }, ...evs];
+    // A pre-triage `agent` event (description matching "triage") anywhere in
+    // the contract satisfies it; an unrelated one (AUD-020) does not.
+    const ok = [triaged, ...evs];
     expect(R.openObligations(c, ok, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
+    const notTriage = [exploreAgent, ...evs];
+    expect(R.openObligations(c, notTriage, "release")).toContainEqual(expect.objectContaining({ ob: "triage" }));
     // A triage skip satisfies it too, and presence:false / non-backlog never gates it.
     const skipped = [{ k: "skip", ob: "triage", reason: "1 issue" }, ...evs];
     expect(R.openObligations(c, skipped, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
@@ -565,8 +635,8 @@ describe("summaryForCard", () => {
   test("backlog aggregates over segments with work, plus triage and refine", () => {
     const c = C({ mode: "backlog", flow: "autonomous", ship: "auto", items: ["1", "2"] });
     const item = (n, harden) => [sk("auto-agents"), edit, ...(harden ? [sk("auto-harden")] : []), sk("auto-polish"), sk("do-ship"), rel([n])];
-    const evs = [{ k: "agent", type: "Explore" }, sk("auto-issue", "#1"), ...item("1", true), ...item("2", false)];
-    expect(R.summaryForCard(c, evs, "de")).toBe("🧾 Run · Backlog · Autonom · Ship auto — Triage ✓ · Refine 1/2 ✗ · auto-agents 2/2 · Harden 1/2 ✗ · Polish 2/2 · do-ship 2/2");
+    const evs = [triaged, sk("auto-issue", "#1"), ...item("1", true), ...item("2", false)];
+    expect(R.summaryForCard(c, evs, "de")).toBe("🧾 Run · Backlog · Autonom · Ship auto — Triage ✓ · Refine 1/2 ✗ · auto-agents 2/2 ✓ · Harden 1/2 ✗ · Polish 2/2 ✓ · do-ship 2/2 ✓");
   });
 
   test("aborted contracts say so", () => {
@@ -614,12 +684,28 @@ describe("CLI", () => {
     try {
       expect(run("arm", "--cwd", other, "--passes", "none").out.contract.passes).toEqual([]);
       expect(fs.existsSync(path.join(other, ".claude", "run-contract.json"))).toBe(true);
-      expect(run("done", "--cwd", other).out).toMatchObject({ ok: true, closed: true });
-      expect(run("done").out).toMatchObject({ ok: true, closed: false });
+      const doneOk = run("done", "--cwd", other);
+      expect(doneOk.out).toMatchObject({ ok: true, closed: true });
+      // R13: `done` must not exit 0 while reporting closed:false — a caller
+      // reading only the exit code would otherwise believe the run ended.
+      expect(doneOk.code).toBe(0);
+      // R2 (red-team round 2 Q10): a defensive cleanup `done` with no active
+      // contract at all has nothing to refuse — exit 0, not 1. Exit 1 stays
+      // reserved for a contract that EXISTS and stays open (refused).
+      const doneNothing = run("done");
+      expect(doneNothing.out).toEqual({ ok: true, closed: false, reason: "no active contract" });
+      expect(doneNothing.code).toBe(0);
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
     expect(run().code).toBe(1);
     expect(run("arm", "--mode", "x").code).toBe(1);
     expect(run("arm", "--passes", "harden,rethink").code).toBe(1);
+  });
+
+  test("C4: arm blocked by a directory at the contract path → exit 1, 'could not write the contract'", () => {
+    fs.mkdirSync(path.join(cwd, ".claude", "run-contract.json"), { recursive: true });
+    const r = run("arm", "--mode", "prompt");
+    expect(r.code).toBe(1);
+    expect(r.out).toEqual({ ok: false, error: "could not write the contract" });
   });
 });
 

@@ -227,8 +227,8 @@ describe("--render-card CLI fallback", () => {
       userFinalTest: ["Im Desktop klicken"],
     };
     const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(stderr).toContain("Nachbessern ↗");
-    expect(stderr).not.toContain("Ändern ↗");
+    expect(stderr).toContain("Nachbessern<span aria-hidden=\"true\"> ↗</span>");
+    expect(stderr).not.toContain("Ändern<span aria-hidden=\"true\"> ↗</span>");
     expect(stderr).toContain(
       'data-prompt="Bitte noch alle offenen Punkte angehen:&#10;&#10;' +
       "- Ja, die Änderung bitte auch im Terminal-Renderer machen.&#10;" +
@@ -251,7 +251,7 @@ describe("--render-card CLI fallback", () => {
     const test = { variant: "test", summary: "Testen", lang: "de", session_id: S("conclude-test"), open, userTest: ["Seite öffnen"] };
     const testWidget = (await renderCardFull(test, desktop)).stderr;
     // the test card's own Nachbessern carries the answer — no second button
-    expect(testWidget.match(/Nachbessern ↗/g)).toHaveLength(1);
+    expect(testWidget.match(/Nachbessern<span aria-hidden="true"> ↗<\/span>/g)).toHaveLength(1);
     expect(testWidget).toContain(answer);
     expect(testWidget).not.toContain("frag mich, was");
     // the open points show on the test card, the steps tagged 🧪
@@ -265,12 +265,12 @@ describe("--render-card CLI fallback", () => {
       delivery: { ship: { version: "0.193.0" }, promote: { channels: { alpha: "0.193.0" }, current: "alpha" } },
     }, desktop)).stderr;
     expect(ring).toContain('data-prompt="promote beta 0.193.0"');
-    expect(ring).toContain("Nachbessern ↗");
+    expect(ring).toContain("Nachbessern<span aria-hidden=\"true\"> ↗</span>");
     expect(ring).toContain(answer);
 
     const plain = { variant: "ship-successful", summary: "Merge", lang: "de", session_id: S("conclude-plain"), state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.193.0" } } };
     const plainOpen = (await renderCardFull({ ...plain, open }, desktop)).stderr;
-    expect(plainOpen).toContain("Nachbessern ↗");
+    expect(plainOpen).toContain("Nachbessern<span aria-hidden=\"true\"> ↗</span>");
     expect(plainOpen).not.toContain("Promote");
     const plainNone = (await renderCardFull({ ...plain, session_id: S("conclude-plain-none") }, desktop)).stderr;
     expect(plainNone).not.toContain('<span role="button"');
@@ -281,7 +281,7 @@ describe("--render-card CLI fallback", () => {
       { variant: "ready", summary: "Ohne", lang: "de", session_id: S("conclude-none"), userFinalTest: ["Im Desktop klicken"] },
       { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     );
-    expect(stderr).toContain("Ändern ↗");
+    expect(stderr).toContain("Ändern<span aria-hidden=\"true\"> ↗</span>");
     expect(stderr).not.toContain("Nachbessern");
   });
 

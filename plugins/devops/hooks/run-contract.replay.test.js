@@ -203,7 +203,8 @@ describe("replay C — happy path (acceptance 2)", () => {
     post("AskUserQuestion", { questions: q }, { questions: q, answers: { "Welche Issues?": ["#473 issue.detect machine turns"] } });
     expect(RC.readContract(dir).items).toEqual(["473"]);
 
-    post("Agent", { subagent_type: "Explore", prompt: "triage" });
+    // AUD-020: only a triage-described (or item-named) agent event counts.
+    post("Agent", { subagent_type: "Explore", description: "Triage #473 — issue.detect machine turns", prompt: "triage" });
     skill("devops:auto-issue", "refine #473");
     expect(pre("Skill", { skill: "devops:auto-agents", args: "--from=do-run #473" }).code).toBe(0);
     skill("devops:auto-agents", "--from=do-run #473");

@@ -221,6 +221,17 @@ describe("harden pass (H-*)", () => {
     expect(RC.readContract(dir)).toMatchObject({ mode: "prompt", flow: "interactive", ship: "manual", strict: true });
   });
 
+  test("C3/AUD-001: arm() write failure (target blocked by a directory) leaves the pending marker for a retry", () => {
+    RC.markPendingArm(dir, { sessionId: "s", args: "" });
+    // Force arm()'s temp+rename write to fail: the target path is a directory.
+    fs.mkdirSync(path.join(dir, ".claude", "run-contract.json"));
+    run("AskUserQuestion", { questions: ROUTER_Q }, { answers: {
+      "Was soll dieser Run tun?": "Prompt umsetzen", "Bleibst du erreichbar?": "Autonom · Ship automatisch",
+      "Wie weit?": "Flexibel", "Welche Durchgänge?": ["Polish danach (Recommended)"] } });
+    expect(RC.readRawContract(dir)).toBeNull();
+    expect(RC.pendingArm(dir)).toMatchObject({ sessionId: "s" });
+  });
+
   test("H-C5: a ship_release acting on tool_input.cwd records its release there", () => {
     const other = fs.mkdtempSync(path.join(os.tmpdir(), "rc-post-other-"));
     try {
@@ -360,6 +371,35 @@ describe("red-team pass 3 (RT3-*)", () => {
   test("RT3-X2: another session's expired contract is not announced", () => {
     RC.arm(dir, { mode: "prompt", sessionId: "other" }, { now: Date.now() - 13 * 3600_000 });
     expect(run("Write", { file_path: path.join(dir, ".claude/x.md") }).stdout).toBe("");
+  });
+});
+
+describe("R1: an analysis card closes an AUDIT run only when nothing is left open", () => {
+  test("open harden obligation: stays open", () => {
+    RC.arm(dir, { mode: "audit", passes: ["harden"], ship: "manual", sessionId: "s" });
+    RC.record(dir, { k: "edit" });
+    run(CARD, { variant: "analysis" });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("non-empty pending: stays open", () => {
+    RC.arm(dir, { mode: "audit", passes: [], ship: "manual", sessionId: "s" });
+    RC.record(dir, { k: "edit" });
+    run(CARD, { variant: "analysis", pending: ["one more pass"] });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("open concept hand-off: stays open", () => {
+    RC.arm(dir, { mode: "audit", passes: [], ship: "manual", sessionId: "s" });
+    RC.record(dir, { k: "edit" });
+    run(CARD, { variant: "analysis", concept: { title: "next" } });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("a no-work audit run closes", () => {
+    RC.arm(dir, { mode: "audit", passes: [], ship: "manual", sessionId: "s" });
+    run(CARD, { variant: "analysis" });
+    expect(RC.readContract(dir)).toBeNull();
   });
 });
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.27.0
+ * @version 0.27.2
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -67,7 +67,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
-const { projectRoot, findRepoRoot, samePath } = require('../lib/project-root');
+const { projectRoot, inOwnWorkTree } = require('../lib/project-root');
+const { GIT_TIMEOUT_MS } = require('../lib/git-timeout');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
@@ -112,7 +113,7 @@ function readProfileConfig(sessionId, cwd) {
     profileClass = classifyProfile(json);
     carveOuts = carveOutsFromProfile(json);
     domPaths = domPathsFromProfile(json);
-  } catch {}
+  } catch { /* session profile cache not written yet — detection has not run */ }
   try {
     const p = path.join(cwd, '.claude', 'skills', 'devops-test-plan', 'profile.json');
     const json = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -122,7 +123,7 @@ function readProfileConfig(sessionId, cwd) {
     // not been written yet (detection has not run), so a consumer project is
     // classified correctly from turn one.
     if (profileClass === 'any') profileClass = classifyProfile(json);
-  } catch {}
+  } catch { /* absent — no project override file */ }
   return { profileClass, carveOuts, domPaths };
 }
 
@@ -250,51 +251,11 @@ function isSubagentCall(hook) {
   return !!hook && typeof hook.agent_id === 'string' && hook.agent_id !== '';
 }
 
-/** Is `child` the directory `parent` or below it? (win32: path.relative ignores case.) */
-function isInside(child, parent) {
-  const rel = path.relative(parent, child);
-  if (rel === '') return true;
-  if (path.isAbsolute(rel)) return false; // another drive
-  return rel !== '..' && !rel.startsWith('..' + path.sep);
-}
-
-/** Is `dir` a LINKED worktree — `.git` a FILE whose gitdir points into a `…/worktrees/…` admin dir? */
-function isLinkedWorktree(dir) {
-  try {
-    const dotGit = path.join(dir, '.git');
-    if (!fs.statSync(dotGit).isFile()) return false;
-    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
-    if (!m) return false;
-    return /(^|\/)worktrees\//.test(path.resolve(dir, m[1]).replace(/\\/g, '/'));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Does `file` belong to the session's own work tree? Outside `projectRoot(cwd)`
- * it does not; nor inside a linked worktree nested in it (an isolated agent's
- * `<main checkout>/.claude/worktrees/agent-*`). A submodule or a nested plain
- * repo stays inside. Pure fs walk, no git spawn.
- */
-function inOwnWorkTree(file, cwd) {
-  if (!file) return true;
-  const base = cwd || process.cwd();
-  const own = projectRoot(base);
-  const abs = path.resolve(base, String(file));
-  if (!isInside(abs, own)) return false;
-  const nearest = findRepoRoot(path.dirname(abs));
-  if (nearest && !samePath(nearest, own) && isInside(nearest, own) && isLinkedWorktree(nearest)) {
-    return false;
-  }
-  return true;
-}
-
 const MERGE_CMD_RE = /\bgit\b[\s\S]*\b(?:merge|pull|cherry-pick|rebase|am|revert|commit)\b/;
 // `commit (merge)` ends in `)`, where `\b` cannot match — kept outside the \b group.
 const MERGE_SUBJECT_RE = /^(?:(?:merge|pull|cherry-pick|rebase|am|revert)\b|commit \(merge\))/;
 const MERGE_MAX_AGE_S = 30 * 60;
-const GIT_OPTS = { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
+const GIT_OPTS = { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
 
 /**
  * Files a merge-like HEAD move of THIS call brought into the checkout.
@@ -389,58 +350,57 @@ function detectBackgroundLaunch(hook) {
   return { kind: isConceptInfra(input) ? 'concept-infra' : 'task', name: labelFor(input, 'task') };
 }
 
-let inputData = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
-process.stdin.on('end', () => {
-  let hook;
-  try { hook = JSON.parse(inputData); }
-  catch { process.exit(0); }
+/**
+ * Silent turn (cron git-sync, concept bridge poll, autonomous loop tick): the
+ * caller must skip the completion-card reminder and not mark work-happened.
+ * The real user turn already rendered its card; this background tick must
+ * not trigger a second one. Flag is written by prompt.flow.silent-turn and
+ * cleared by stop.flow.guard at turn end.
+ * Exact match only (issue #290): a neighbouring session's silent-turn flag
+ * must not suppress this session's card reminder and light-pending bookkeeping.
+ */
+function isSilentTurn(hook) {
+  return !!readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
+}
 
-  // Silent turn (cron git-sync, concept bridge poll, autonomous loop tick):
-  // skip the completion-card reminder and do not mark work-happened. The real
-  // user turn already rendered its card; this background tick must not trigger
-  // a second one. Flag is written by prompt.flow.silent-turn and cleared by
-  // stop.flow.guard at turn end.
-  // Exact match only (issue #290): a neighbouring session's silent-turn flag
-  // must not suppress this session's card reminder and light-pending bookkeeping.
-  const silentResult = readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
-  if (silentResult) process.exit(0);
-
-  // Subagent call: hooks fire for it with the PARENT's session_id, and all
-  // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
-  // counters, work-happened, the V&V gate flags, and a reminder PostToolUse
-  // stdout never delivers to the model anyway). Observed 2026-09-25: an
-  // isolated background agent's Edit inside its own worktree wrote the
-  // parent's validation-pending and deleted the validation-attested flag the
-  // parent's card had written four minutes earlier — both Stop gates then
-  // blocked an unchanged parent checkout. Its passing test run would equally
-  // have "verified" the parent, which delegation never may.
-  if (isSubagentCall(hook)) process.exit(0);
-
-  const toolName = hook.tool_name || '';
-  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
-
-  // --- 0. Ship happened this turn? (consumed by stop.flow.guard, #371) ---
-  // ship_release reporting `merged` is the one signal that a scheduled task
-  // did more than tick — its card is owed even with a clean tree afterwards.
+/**
+ * --- 0. Ship happened this turn? (consumed by stop.flow.guard, #371) ---
+ * ship_release reporting `merged` is the one signal that a scheduled task
+ * did more than tick — its card is owed even with a clean tree afterwards.
+ * Also adopts card flags a render_completion_card call just wrote, and reads
+ * whether this is a scheduled-task turn.
+ * @returns {{ scheduledTask: boolean }}
+ */
+function handleShipAndCardFlags(hook, toolName) {
   if (toolName === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
-    try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch {}
+    try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch { /* best effort */ }
   }
   if (toolName.endsWith('__render_completion_card')) adoptCardFlags(hook);
   const scheduledTask =
     readSessionFile('dotclaude-devops-scheduled-task', hook.session_id, { exact: true }) !== null;
+  return { scheduledTask };
+}
 
+/**
+ * --- 1. Edit/tool-call counters and V&V gate flags ---
+ * Increments the edit and tool-call counters (1, 1b), writes the per-turn
+ * work-happened flag and last-activity timestamp (1c, 1d), and updates the
+ * light-verification / validation gate flags consumed by stop.flow.browsertest
+ * and stop.flow.guard (1e).
+ * @returns {{ editCount: number, firstOfTurn: boolean }} the edit count after
+ *   this call, and whether this call created the turn's work-happened flag
+ */
+function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
   // --- 1. Increment edit counter (only for Edit/Write) ---
   let editCount = 0;
   const counterFile = sessionFile('dotclaude-devops-edits', hook.session_id);
   try {
     editCount = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0;
-  } catch {}
+  } catch { /* first edit this session */ }
 
   if (isCodeEdit) {
     editCount++;
-    try { writeSessionFile(counterFile, editCount.toString()); } catch {}
+    try { writeSessionFile(counterFile, editCount.toString()); } catch { /* best effort */ }
   }
 
   // --- 1b. Increment tool-call counter (all tool calls) ---
@@ -448,9 +408,9 @@ process.stdin.on('end', () => {
   let toolCallCount = 0;
   try {
     toolCallCount = parseInt(fs.readFileSync(toolCallFile, 'utf8'), 10) || 0;
-  } catch {}
+  } catch { /* first tool call this session */ }
   toolCallCount++;
-  try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch {}
+  try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch { /* best effort */ }
 
   // --- 1c. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
   // stop.flow.guard deletes it when a turn ends, so the call that CREATES it is
@@ -463,14 +423,16 @@ process.stdin.on('end', () => {
     fs.writeFileSync(workFile, toolName, { flag: 'wx' });
     firstOfTurn = true;
   } catch {
-    try { writeSessionFile(workFile, toolName); } catch {}
+    // Already there: a later call of this turn (or the exclusive create lost a
+    // race to a parallel call) — keep the flag's content current, best effort.
+    try { writeSessionFile(workFile, toolName); } catch { /* best effort */ }
   }
 
   // --- 1d. Write last-activity timestamp (consumed by cache-timeout check) ---
   try {
     const activityFile = sessionFile('dotclaude-devops-last-activity', hook.session_id);
     writeSessionFile(activityFile, Date.now().toString());
-  } catch {}
+  } catch { /* best effort */ }
 
   // --- 1e. Light-verification gate flags (consumed by stop.flow.browsertest) ---
   //   light-pending → a code file changed and still needs a Light check, scoped
@@ -488,7 +450,7 @@ process.stdin.on('end', () => {
       hook.cwd || process.cwd(),
     );
     const unlinkFlag = (prefix) => {
-      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
+      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch { /* not written this turn */ }
     };
 
     // What a change of `editedPath` owes — shared by edits and merged files, so
@@ -583,14 +545,24 @@ process.stdin.on('end', () => {
         );
       }
     }
-  } catch {}
+  } catch { /* profile/gate bookkeeping is best effort */ }
 
-  // --- 2. Tell Claude — as additionalContext, and only what changes something ---
-  // Everything below goes through emit(): plain stdout would never reach the
-  // model (see header). Delivered text stays in the context for the rest of
-  // the session, so the card contract rides on the turn's FIRST call only;
-  // every later call sends nothing unless an event happens on it.
+  return { editCount, firstOfTurn };
+}
 
+/**
+ * --- 2. Tell Claude — as additionalContext, and only what changes something ---
+ * Everything goes through emit(): plain stdout would never reach the model
+ * (see header). Delivered text stays in the context for the rest of the
+ * session, so the card contract rides on the turn's FIRST call only; every
+ * later call sends nothing unless an event happens on it.
+ * Emits and returns `null` for the two short-circuit cases (the card widget
+ * itself, or a render_completion_card call) — the caller must stop right
+ * there. Otherwise returns the `lines` array, not yet emitted, so section 3
+ * can still append to it, plus whether this call carried the card contract.
+ * @returns {{ lines: string[], cardContract: boolean }|null}
+ */
+function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn) {
   // After the card itself the generic reminder is wrong: it asks for a card
   // that is already there. Observed 2026-09-24 — injected right after the
   // card widget, it read as "the markdown card still follows" and produced a
@@ -602,7 +574,7 @@ process.stdin.on('end', () => {
       'Write nothing after it: no summary, no "the card is above", no second card.',
       NO_OUTPUT_NUDGE_REPLY,
     ]);
-    return;
+    return null;
   }
   if (toolName.endsWith('__render_completion_card')) {
     emit([
@@ -610,7 +582,7 @@ process.stdin.on('end', () => {
       'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
       'Render no second card for the same outcome.',
     ]);
-    return;
+    return null;
   }
 
   const lines = [];
@@ -768,7 +740,15 @@ process.stdin.on('end', () => {
     );
   }
 
-  // --- 3. Issue status check — with the card contract, once per turn ---
+  return { lines, cardContract };
+}
+
+/**
+ * --- 3. Issue status check — with the card contract, once per turn ---
+ * Appends the issue-status instruction to `lines` in place, only on the call
+ * that carries the card contract.
+ */
+function appendIssueStatusInstruction(hook, lines, cardContract) {
   let trackedIssues = [];
   if (cardContract) {
     try {
@@ -776,7 +756,7 @@ process.stdin.on('end', () => {
       if (result) {
         trackedIssues = JSON.parse(result.content);
       }
-    } catch {}
+    } catch { /* no tracked issues this session */ }
   }
 
   if (Array.isArray(trackedIssues) && trackedIssues.length > 0) {
@@ -796,6 +776,50 @@ process.stdin.on('end', () => {
       'Do this silently — no extra output to the user, just the API calls.',
     );
   }
+}
 
-  emit(lines);
+let inputData = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', d => { inputData += d; });
+process.stdin.on('end', () => {
+  let hook;
+  try { hook = JSON.parse(inputData); }
+  catch { process.exit(0); }
+
+  // R15 part 3: everything below is a refactor of one former ~380-line
+  // callback (AUD-029) into named sections, several of which parse untrusted
+  // hook/tool-response JSON (e.g. `JSON.parse('null')` throws a TypeError on
+  // the next property access) — wrapped so any of their internal errors exit
+  // 0 silently instead of crashing this PostToolUse hook, same as every
+  // other failure path here. The early-exit order and all behaviour below
+  // are unchanged.
+  try {
+    if (isSilentTurn(hook)) process.exit(0);
+
+    // Subagent call: hooks fire for it with the PARENT's session_id, and all
+    // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
+    // counters, work-happened, the V&V gate flags, and a card reminder that
+    // would land in the subagent's own context). Observed 2026-09-25: an
+    // isolated background agent's Edit inside its own worktree wrote the
+    // parent's validation-pending and deleted the validation-attested flag the
+    // parent's card had written four minutes earlier — both Stop gates then
+    // blocked an unchanged parent checkout. Its passing test run would equally
+    // have "verified" the parent, which delegation never may.
+    if (isSubagentCall(hook)) process.exit(0);
+
+    const toolName = hook.tool_name || '';
+    const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+
+    const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
+    const { editCount, firstOfTurn } = updateEditAndGateFlags(hook, toolName, isCodeEdit);
+
+    const out = emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn);
+    if (out === null) return;
+
+    appendIssueStatusInstruction(hook, out.lines, out.cardContract);
+
+    emit(out.lines);
+  } catch {
+    process.exitCode = 0;
+  }
 });

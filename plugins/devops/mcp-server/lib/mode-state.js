@@ -1,4 +1,7 @@
 /**
+ * @module mode-state
+ * @version 1.2.1
+ *
  * Mode state the card reads off the project — not off the caller.
  *
  * Two devops modes turn a session into a waiting room: an open /auto-concept page
@@ -114,7 +117,7 @@ export function releasedPrefix(channel) {
  *  prefix per channel. Longest first so "🚀 Shipping – " never loses to a
  *  shorter sibling. */
 const STRIPPABLE = Object.freeze(
-  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix)].sort((a, b) => b.length - a.length),
+  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix)].filter(Boolean).sort((a, b) => b.length - a.length),
 );
 
 /** `title` without any leading devops prefix (repeated prefixes included, so
@@ -414,13 +417,66 @@ export function readRunContractLine(cwd, lang = "de", sessionId = null) {
   if (!cwd) return null;
   try {
     const RC = hookRequire("lib", "run-contract.js");
-    // A contract of another session (Desktop copies the untracked `.claude/`
-    // into new worktrees) is never shown.
-    const contract = RC.readContractForCard(cwd, { sessionId: sessionId || null });
+    // R9: the model never passes the harness's real session id — it sends
+    // "self" (the ccd_session convention), the Desktop `local_…` id, or
+    // nothing (post.flow.completion.js#adoptCardFlags maps all three onto
+    // the harness id once the PostToolUse hook fires, but that happens AFTER
+    // this call). None of these three values can ever be a genuine foreign
+    // session's id, so they resolve to "this session" (the lenient path
+    // ownedBy() already gives an omitted sessionId) rather than the strict
+    // AUD-011 check, which otherwise hid the run line on most real cards. A
+    // session id the model could not have invented this way — anything else
+    // — keeps the strict, AUD-011 check: a truly foreign contract stays hidden.
+    const lenient = isSelfSessionMarker(sessionId);
+    const opts = lenient ? {} : { sessionId };
+    const contract = RC.readContractForCard(cwd, opts);
     if (!contract) return null;
+    // Q4: the lenient path above accepts ANY stored sessionId — it was only
+    // ever meant to say "this session asked in a way the harness could not
+    // attribute", not "this run-contract.json actually belongs to THIS
+    // worktree". Desktop can copy an untracked run-contract.json from the
+    // main checkout into a freshly created worktree; without this check the
+    // copied header's run line would render in the new worktree's card too.
+    // A header written before `root` existed reads back `null` and is left
+    // alone — same behaviour as today.
+    if (lenient && contract.root && !sameProjectRoot(contract.root, cwd)) return null;
     const evs = RC.events(cwd);
     return RC.summaryForCard(contract, evs, lang, { codeFilesChanged: null }) || null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Is `id` a convention marker for "the calling session itself" rather than a
+ * genuine harness session id? Mirrors the values
+ * `post.flow.completion.js#adoptCardFlags` moves flags away from: a falsy
+ * id, the `"self"` ccd_session convention, and the Desktop `local_…` prefix.
+ *
+ * @param {string|null|undefined} id
+ * @returns {boolean}
+ */
+function isSelfSessionMarker(id) {
+  if (!id) return true;
+  return id === "self" || id.startsWith("local_");
+}
+
+/**
+ * Does a header's stored `root` (RT2-Q4) match this card's own work-tree
+ * root? Delegates to `project-root.js`'s own `projectRoot`/`samePath` so the
+ * card and the store can never disagree on what "the same worktree" means.
+ *
+ * @param {string} storedRoot the header's `root` field
+ * @param {string|undefined} cwd the card's own cwd
+ * @returns {boolean}
+ */
+function sameProjectRoot(storedRoot, cwd) {
+  try {
+    const PR = hookRequire("lib", "project-root.js");
+    return PR.samePath(storedRoot, PR.projectRoot(cwd));
+  } catch {
+    // Cannot resolve project-root.js: fail open (unchanged, lenient
+    // behaviour) rather than hide a run line over an infra hiccup.
+    return true;
   }
 }

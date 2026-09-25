@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.7.1
+ * @version 0.8.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -440,6 +440,11 @@ function channelLadderHtml(ladder, lang) {
  * RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
  * neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss" as
  * an open step, so it gets the same readable colour.
+ * Polish: the state marks themselves carry the state, as the evidence row's
+ * glyphs do (glyphColor) — ✗ / ⚠ in the danger colour, a doubtful ` ?` in
+ * the warning colour — through the host's own tokens (the literal palette is
+ * only the fallback: it is tuned for the dark theme), so both themes keep
+ * their contrast. ✓ stays plain.
  *
  * @param {string} [text] the run-contract line, e.g. from `model.runContract`
  * @returns {string} the `<div class="card-run-contract">…</div>` fragment, or
@@ -449,7 +454,132 @@ export function runContractLineHtml(text) {
   if (!text) return "";
   const hasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(text);
   const color = hasOpenStep ? "var(--text-secondary)" : COLOR.watermark;
-  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:4px 0">${escapeHtml(text)}</div>`;
+  const marked = escapeHtml(text)
+    .replace(/[✗⚠]/g, (g) => `<span style="color:var(--text-danger, ${COLOR.red})">${g}</span>`)
+    .replace(/(\s)\?(?=\s|$)/g, `$1<span style="color:var(--text-warning, ${COLOR.yellow})">?</span>`);
+  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:4px 0">${marked}</div>`;
+}
+
+// › lines (result lines, context, points): the glyph visible — lilac,
+// weight 500 — and inset 6px from the heading edge; the text a step quieter
+// than the headings (`--text-secondary`), so the glyph leads and the line
+// does not shout. Deviation label kept red. Shared by resultLinesHtml,
+// contextHtml and pointsHtml below.
+function glyphLineHtml(cls, inner, extra = "") {
+  return `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
+}
+
+/** The "changes" › lines — the deviation label (`**…**` lead-in) kept red. */
+function resultLinesHtml(resultLines, lang) {
+  return (resultLines || [])
+    .map((l) => glyphLineHtml("card-result", linkifyHtml(l, lang).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
+    .join("\n  ");
+}
+
+/** The evidence row (tooltip posts), or '' with nothing to show. */
+function evidenceHtml(evidence) {
+  return Array.isArray(evidence) && evidence.length
+    ? `<div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px;font-size:14px">${evidence.map(evidencePostHtml).join(" ")}</div>`
+    : "";
+}
+
+/** The budget-bar row plus the optional context-health watermark, or '' when omitted. */
+function budgetRowHtml(budget) {
+  return budget && !budget.omitted
+    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(Array.isArray(budget.bars) ? budget.bars : []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
+    : "";
+}
+
+/** The pipeline line (commit → push → PR → merge), or '' without one. */
+function pipelineHtml(pipeline, pipelinePr, repoUrl) {
+  return pipeline
+    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(pipeline).replace(/#(\d+)/, () => pipelinePrHtml(pipelinePr, repoUrl))}</div>`
+    : "";
+}
+
+// The title lives in the widget: on Desktop there is no card markdown (§ 4),
+// so the whole card is drawn once and nothing follows the widget. card-guard
+// reads this h3 as the card title. h3 = the contract's 16px/500 — one step
+// below h2, which read too large in the chat column.
+function titleHtml(title) {
+  return title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(title)}</h3>` : "";
+}
+
+/**
+ * Block 1 — the "what happened" part: no box of its own. It is the top of
+ * the ONE outer surface (see `cardWidgetHtml`'s `return`), so the status and
+ * the decision read as one card; a second bordered panel made them look
+ * like two.
+ */
+function blockAHtml(model, lang, repoUrl) {
+  return [
+    `<div class="card-panel" style="display:flex;flex-direction:column;gap:6px;padding:0 0 2px">`,
+    titleHtml(model.title),
+    resultLinesHtml(model.resultLines, lang),
+    evidenceHtml(model.evidence),
+    pipelineHtml(model.pipeline, model.pipelinePr, repoUrl),
+    runContractLineHtml(model.runContract),
+    channelLadderHtml(model.ladder, lang),
+    budgetRowHtml(model.budget),
+    `</div>`,
+  ].filter(Boolean).join("\n  ");
+}
+
+// Heading at h3 size (16px/500, same step as the title).
+function headingHtml(heading) {
+  return heading ? `<h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(heading)}</h3>` : "";
+}
+
+// Context line: same › glyph, one size smaller.
+function contextHtml(context, lang) {
+  return context
+    ? glyphLineHtml("card-context", linkifyHtml(context.replace(/^›\s*/, ""), lang), ";font-size:13px;margin:0 0 4px")
+    : "";
+}
+
+// Points: › lines too (no numbers in the widget — the terminal markdown
+// keeps "1." for the same points), so both blocks speak the same language.
+function pointsHtml(points, lang) {
+  return Array.isArray(points) && points.length
+    ? `<div class="card-points" style="margin:2px 0 8px">${points.map((p) => glyphLineHtml("card-point", linkifyHtml(p, lang))).join("")}</div>`
+    : "";
+}
+
+/** The decision buttons row, plus the delivery-status span the script fills after a click. */
+function buttonsRowHtml(model, lang) {
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff });
+  if (!buttons.length) return "";
+  const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
+    buttons.map((a, i) => {
+      const accent = a.primary ? ";border-color:var(--border-accent);color:var(--text-accent)" : "";
+      // A multi-line prompt (the conclusion list) keeps its line breaks as
+      // &#10;: getAttribute hands them back as "\n", and a relayed widget
+      // cannot lose them to whitespace tidying.
+      return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
+        `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
+        `${escapeHtml(a.label)}<span aria-hidden="true"> ↗</span></span>`;
+    }).join("\n  ") +
+    // Delivery status: one quiet line right of the buttons, filled by the
+    // script after a click (green = in the composer, red = refused).
+    `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span>` +
+    `</div>`;
+}
+
+/**
+ * Block 2 — the decision box: a quiet accent wash (10 % of the accent fill —
+ * visible on the dark and the light page alike), no border. The outer
+ * surface already frames the card; a second line here cut it in two.
+ */
+function blockBHtml(model, lang) {
+  return [
+    `<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 14px;margin-top:10px">`,
+    headingHtml(model.heading),
+    contextHtml(model.context, lang),
+    pointsHtml(model.points, lang),
+    buttonsRowHtml(model, lang),
+    `</div>`,
+  ].filter(Boolean).join("\n  ");
 }
 
 /**
@@ -473,108 +603,17 @@ export function cardWidgetHtml(model, repoUrl) {
     ? "Completion card body: what happened, evidence, budget, and the decision with its actions."
     : "Completion-Card-Inhalt: was passiert ist, Belege, Budget und die Entscheidung mit ihren Aktionen.";
 
-  // › lines (result lines, context, points): the glyph visible — lilac,
-  // weight 500 — and inset 6px from the heading edge; the text a step
-  // quieter than the headings (`--text-secondary`), so the glyph leads and
-  // the line does not shout. Deviation label kept red.
-  const glyphLine = (cls, inner, extra = "") =>
-    `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
-  const resultLinesHtml = (model.resultLines || [])
-    .map((l) => glyphLine("card-result", linkifyHtml(l, lang).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
-    .join("\n  ");
-
-  const evidenceHtml = (model.evidence || []).length
-    ? `<div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px;font-size:14px">${model.evidence.map(evidencePostHtml).join(" ")}</div>`
-    : "";
-
-  const budgetHtml = model.budget && !model.budget.omitted
-    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(model.budget.bars || []).map(budgetBarHtml).join(" ")}${model.budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(model.budget.contextHealth)}</span>` : ""}</div>`
-    : "";
-
-  const pipelineHtml = model.pipeline
-    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
-    : "";
-
-  const runContractHtml = runContractLineHtml(model.runContract);
-
-  const ladderHtml = channelLadderHtml(model.ladder, lang);
-
-  // The title lives in the widget: on Desktop there is no card markdown
-  // (§ 4), so the whole card is drawn once and nothing follows the widget.
-  // card-guard reads this h3 as the card title. h3 = the contract's
-  // 16px/500 — one step below h2, which read too large in the chat column.
-  const titleHtml = model.title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.title)}</h3>` : "";
-
-  // Block 1 — the "what happened" part: no box of its own. It is the top of
-  // the ONE outer surface (see `return`), so the status and the decision read
-  // as one card; a second bordered panel made them look like two.
-  const blockA = [
-    `<div class="card-panel" style="display:flex;flex-direction:column;gap:6px;padding:0 0 2px">`,
-    titleHtml,
-    resultLinesHtml,
-    evidenceHtml,
-    pipelineHtml,
-    runContractHtml,
-    ladderHtml,
-    budgetHtml,
-    `</div>`,
-  ].filter(Boolean).join("\n  ");
-
-  // Block 2 — heading at h3 size (16px/500, same step as the title), the ›
-  // context line right under it, numbered points with lilac markers.
-  const headingHtml = model.heading ? `<h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(model.heading)}</h3>` : "";
-  // Context line: same › glyph, one size smaller. Points: › lines too (no
-  // numbers in the widget — the terminal markdown keeps "1." for the same
-  // points), so both blocks speak the same language.
-  const contextHtml = model.context
-    ? glyphLine("card-context", linkifyHtml(model.context.replace(/^›\s*/, ""), lang), ";font-size:13px;margin:0 0 4px")
-    : "";
-  const pointsHtml = (model.points || []).length
-    ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p, lang))).join("")}</div>`
-    : "";
-
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff });
-  const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
-  const buttonsHtml = buttons.length
-    ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
-      buttons.map((a, i) => {
-        const accent = a.primary ? ";border-color:var(--border-accent);color:var(--text-accent)" : "";
-        // A multi-line prompt (the conclusion list) keeps its line breaks as
-        // &#10;: getAttribute hands them back as "\n", and a relayed widget
-        // cannot lose them to whitespace tidying.
-        return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
-          `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
-          `${escapeHtml(a.label)} ↗</span>`;
-      }).join("\n  ") +
-      // Delivery status: one quiet line right of the buttons, filled by the
-      // script after a click (green = in the composer, red = refused).
-      `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span>` +
-      `</div>`
-    : "";
-
-  // The decision box: a quiet accent wash (10 % of the accent fill — visible
-  // on the dark and the light page alike), no border. The outer surface
-  // already frames the card; a second line here cut it in two.
-  const blockB = [
-    `<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 14px;margin-top:10px">`,
-    headingHtml,
-    contextHtml,
-    pointsHtml,
-    buttonsHtml,
-    `</div>`,
-  ].filter(Boolean).join("\n  ");
-
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}</style>`,
+    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}.card-pr-link:hover,.card-pr-link:focus-visible{text-decoration:underline;text-underline-offset:2px}[role="button"]:hover{background:rgba(55,138,221,0.06)}[role="button"]:active{background:var(--bg-accent-muted,rgba(55,138,221,0.10))}[role="button"]:focus-visible{outline:2px solid var(--border-accent,var(--border-strong));outline-offset:2px}[role="button"][data-busy]{opacity:.6;cursor:progress}</style>`,
     // ONE surface around everything: a faint blue wash (6 % of the accent
     // blue), the same hue as the decision box one step lighter, so the card is
     // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface
     // token: `--surface-1`/`-2` read as grey-on-grey ("too colourless") on the
     // dark page. No border — the tint alone says "one card".
     `<div class="card-surface" style="position:relative;background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
-    blockA,
-    blockB,
+    blockAHtml(model, lang, repoUrl),
+    blockBHtml(model, lang),
     `</div>`,
     `<script>`,
     cardWidgetScript(lang),
@@ -660,9 +699,9 @@ export function cardWidgetScript(lang = "de") {
     `  function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }`,
     `  function go(b) {`,
     `    if (b.getAttribute('data-busy')) return;`,
-    `    b.setAttribute('data-busy', '1'); b.style.opacity = '0.6';`,
+    `    b.setAttribute('data-busy', '1'); b.setAttribute('aria-busy', 'true');`,
     `    deliver(b.getAttribute('data-prompt'), function (success) {`,
-    `      b.removeAttribute('data-busy'); b.style.opacity = '';`,
+    `      b.removeAttribute('data-busy'); b.removeAttribute('aria-busy');`,
     `      mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');`,
     `    });`,
     `  }`,

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.2.0
+ * @version 0.4.2
  * @event PostToolUse
  * @plugin devops
- * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
+ * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
  * @description Record what happened for the do-run RUN CONTRACT (spec A
  *   events, B arming, E batch marker, H closing):
  *   - AskUserQuestion: router answers arm a new contract (and clear the arm
@@ -19,10 +19,17 @@
  *   - ship_release → `release` {ok, merged, closes}; a backlog contract closes
  *     once every item shipped or was parked (an obligation skip never
  *     finishes an item).
+ *   - GitHub MCP `*__merge_pull_request` (AUD-025) → `release` too, mirroring
+ *     ship_release: `ok` from the tool's own `{merged}` result shape, `closes`
+ *     from `Closes #N` in the commit title/message or the response text —
+ *     pre.run.contract gates this call as a release; without this handler the
+ *     contract never saw that the ship happened.
  *   - completion card (MCP or offline renderer) → `card`; a final card closes
  *     a prompt / audit contract (its PreToolUse gate already passed). An
- *     offline card post cannot read closes only with work done and nothing
- *     open at the card gate.
+ *     `analysis` card (AUD-012) is never a final variant — the PreToolUse
+ *     gate never refuses it — but still closes an AUDIT run. An offline card
+ *     post cannot read closes only with work done and nothing open at the
+ *     card gate.
  *   - A partial router call arms after a do-run, else merges into this
  *     session's active contract, else says it was not recorded. This
  *     session's contract expired unclosed → one notice.
@@ -67,8 +74,35 @@ function machineTurn(hook, C) {
   } catch { return false; }
 }
 
-function recordCard(root, variant, final, RC, s, { unreadable = false } = {}) {
+function recordCard(root, variant, final, RC, s, { unreadable = false, pending = false, concept = false } = {}) {
   RC.record(root, { k: 'card', variant: variant || null }, s);
+  // AUD-012: `analysis` is deliberately NOT in FINAL_VARIANTS — the
+  // PreToolUse gate must never refuse an analysis card — but a run ending on
+  // one must still close, else an AUDIT run never closes. Prompt/backlog
+  // runs are unaffected: an analysis card there is recorded but closes nothing.
+  if (variant === 'analysis') {
+    // R1: an analysis card can render mid-run (an auto-harden "nothing
+    // fixed" card, a concept hand-off) — closing unconditionally on ANY
+    // analysis card walked past a non-empty `pending`, an open `concept`,
+    // and open harden/polish/do-ship obligations. Close only when there is
+    // nothing left open: no pending, no concept, and (no work done yet OR
+    // no open card obligations).
+    if (pending || concept) return;
+    const h = RC.readContract(root, s);
+    if (!h || h.mode !== 'audit') return;
+    const evs = RC.events(root);
+    const hasWork = RC.segmentHasWork(evs);
+    // R2 (red-team round 2 Q2): auditResult 'implement' means the run owes a
+    // fix — an implement-mode audit's lenses can render an interim `analysis`
+    // card before the first Edit/commit (a turn boundary mid-lens-run). That
+    // must not close the run early and skip harden/polish/do-ship; only a
+    // 'concept' (or unset) audit result may close on a no-work analysis card.
+    if (h.auditResult === 'implement' && !hasWork) return;
+    if (!hasWork || !RC.openObligations(h, evs, 'card').length) {
+      RC.close(root, 'done: final card', s);
+    }
+    return;
+  }
   // H-B8: the close follows from the card being final and the contract's
   // mode — not from the append succeeding (a card that was shown but whose
   // event could not be written still ends a prompt / audit run).
@@ -151,7 +185,7 @@ function onShell({ hook, cwd, root, s, RC, C }) {
   const failed = r.interrupted || (r.exitCode !== null && r.exitCode !== 0);
   if (f.commit && !failed) RC.record(root, { k: 'commit' }, s);
   if (f.itemBranch && !failed) RC.record(root, { k: 'branch', name: f.branchName }, s);
-  if (f.card) recordCard(root, f.card.variant, f.card.final, RC, s, { unreadable: f.card.readable === false });
+  if (f.card) recordCard(root, f.card.variant, f.card.final, RC, s, { unreadable: f.card.readable === false, pending: f.card.pending, concept: f.card.concept });
 }
 
 /** `release` in the contract's root (ship_release acts on tool_input.cwd); a finished backlog closes. */
@@ -166,19 +200,59 @@ function onRelease({ hook, input, roots, sessionId, s, RC, C }) {
 /** H-B1: the MCP card takes `cwd` too — recorded and closed where pre gated it. */
 function onCard({ input, roots, sessionId, s, RC, C }) {
   const cf = C.cardFacts(input);
-  recordCard(contractRootOf(roots, RC, sessionId), cf.variant, cf.final, RC, s);
+  recordCard(contractRootOf(roots, RC, sessionId), cf.variant, cf.final, RC, s, { pending: cf.pending, concept: cf.concept });
+}
+
+/**
+ * AUD-025: a GitHub MCP `merge_pull_request` is gated as a release by
+ * pre.run.contract (C.MCP_MERGE_RE) but was never recorded here — the
+ * contract could not see that ship happened. Mirrors onRelease(): `ok` from
+ * the merge result (GitHub's own `{merged}` shape, C.mergeResult — not
+ * ship_release's `{success}` one), `closes` from `Closes #N` in the commit
+ * title/message the caller passed or the tool's own response text; a
+ * finished backlog closes the same way a ship_release does.
+ */
+function onMcpMerge({ input, roots, sessionId, s, RC, C, hook }) {
+  const r = contractRootOf(roots, RC, sessionId);
+  // R15: an unrelated repo's merge_pull_request must not count as this run's
+  // release — check tool_input.owner/repo against this checkout's `origin`
+  // (a budgeted git call; an unknown origin still records, as before this
+  // check existed). `closes` itself is still parsed only from commit_title /
+  // commit_message / the response text — a body that never writes "Closes
+  // #N" is silently attributed to nothing; that limit is unchanged.
+  const { gitBudget, SMALL_GIT_BUDGET_MS } = require('../lib/git-timeout');
+  if (!C.originMatches(r, input.owner, input.repo, gitBudget(SMALL_GIT_BUDGET_MS))) return;
+  const res = C.mergeResult(hook.tool_response) || { ok: false };
+  // Closes #N can be in the caller's commit title/message or the tool's own
+  // response text (GitHub echoes the merge commit's message back).
+  const text = [input.commit_title, input.commit_message, C.responseText(hook.tool_response)]
+    .filter(v => typeof v === 'string' && v).join('\n');
+  const closes = C.closesOf(text);
+  RC.record(r, { k: 'release', ok: res.ok, merged: res.ok, closes }, s);
+  const h = RC.readContract(r, s);
+  if (h && backlogFinished(h, RC.events(r))) RC.close(r, 'done: every queued item shipped', s);
 }
 
 function handlerFor(tool, C) {
   if (tool === 'AskUserQuestion') return onAsk;
   if (tool === 'Skill') return onSkill;
-  if (tool === 'Agent') return ({ input, root, s, RC }) => RC.record(root, { k: 'agent', type: input.subagent_type || 'general-purpose' }, s);
+  // AUD-020: the description is recorded (shortened) so run-contract-
+  // obligations.js's isTriageAgent() can tell a real pre-triage agent call
+  // apart from an unrelated one (e.g. an Explore search).
+  if (tool === 'Agent') {
+    return ({ input, root, s, RC }) => {
+      const { short } = require('../lib/run-contract-obligations');
+      const description = short(input.description || '', 120);
+      RC.record(root, { k: 'agent', type: input.subagent_type || 'general-purpose', description }, s);
+    };
+  }
   if (C.EDIT_TOOLS.has(tool)) {
     return ({ input, cwd, root, s, RC }) => { if (C.isGatedEdit(tool, input, root, cwd)) RC.record(root, { k: 'edit' }, s); };
   }
   if (C.SHELL_TOOLS.has(tool)) return onShell;
   if (tool === C.SHIP_RELEASE) return onRelease;
   if (tool === C.RENDER_CARD) return onCard;
+  if (C.MCP_MERGE_RE.test(tool)) return onMcpMerge;
   return null;
 }
 
@@ -192,34 +266,49 @@ function main(hook) {
   const { root, roots } = C.contractRoots(hook, projectRoot);
   const tool = hook.tool_name || '';
   // Fast path: only AskUserQuestion (arming) and Skill (arm / batch markers)
-  // can matter without a contract on disk.
+  // can matter without a contract on disk. R5: the corrupt-quarantine
+  // marker (run-contract.json.corrupt.pending) can be the ONLY file left in
+  // `.claude/` once the header itself was quarantined — count it too, else
+  // this path returns before the notice is ever read.
   if (tool !== 'AskUserQuestion' && tool !== 'Skill'
-    && !roots.some(r => fs.existsSync(path.join(r, '.claude', 'run-contract.json')))) return null;
+    && !roots.some(r => ['run-contract.json', 'run-contract.json.corrupt.pending']
+      .some(n => fs.existsSync(path.join(r, '.claude', n))))) return null;
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return null;
+  const ctxOut = (text) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text } });
   const handler = handlerFor(tool, C);
-  if (!handler) return null;
+  if (!handler) {
+    // R5: no handler for this tool still must not drop a pending notice.
+    const expired = RC.expiryNotice(root, { sessionId: hook.session_id || null });
+    return expired ? ctxOut(expired) : null;
+  }
   const sessionId = hook.session_id || null;
   const s = { sessionId };
   RC.claim(root, sessionId);
   // RT3-X2: read before the handler — its first write archives the expired header.
   const expired = RC.expiryNotice(root, s);
   const note = handler({ hook, input: C.toolInput(hook), cwd, root, roots, sessionId, s, RC, C });
-  const ctxOut = (text) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text } });
-  if (typeof note === 'string' && note) return ctxOut(note);
 
-  let h = RC.readContract(root, s);
-  // H-C5: an item parked AFTER the last release also finishes the backlog —
-  // not only a ship_release.
-  if (h && tool !== C.SHIP_RELEASE && backlogFinished(h, RC.events(root))) {
-    RC.close(root, 'done: every queued item shipped', s);
-    h = RC.readContract(root, s);
+  // R5: `expired` (the corrupt-quarantine notice rides this same one-shot
+  // channel) is consumed above and must never be lost — combine it with
+  // whatever else this call would have output instead of letting a
+  // handler's own note, or an announce/close write below, shadow it.
+  const parts = [];
+  if (typeof note === 'string' && note) parts.push(note);
+  if (!parts.length) {
+    let h = RC.readContract(root, s);
+    // H-C5: an item parked AFTER the last release also finishes the backlog —
+    // not only a ship_release.
+    if (h && tool !== C.SHIP_RELEASE && backlogFinished(h, RC.events(root))) {
+      RC.close(root, 'done: every queued item shipped', s);
+      h = RC.readContract(root, s);
+    }
+    if (h && (h.source === 'fallback' || h.source === 'machine') && !h.announced) {
+      if (RC.update(root, { announced: true }, s)) parts.push(announcement(h, RC));
+    }
   }
-  if (h && (h.source === 'fallback' || h.source === 'machine') && !h.announced) {
-    if (RC.update(root, { announced: true }, s)) return ctxOut(announcement(h, RC));
-  }
-  if (expired && !h) return ctxOut(expired);
-  return null;
+  if (expired) parts.push(expired);
+  return parts.length ? ctxOut(parts.join('\n\n')) : null;
 }
 
 if (require.main === module) {
@@ -238,4 +327,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { backlogFinished, recordCard, onAsk, onSkill, onShell, onRelease, onCard, main };
+module.exports = { backlogFinished, recordCard, onAsk, onSkill, onShell, onRelease, onCard, onMcpMerge, main };

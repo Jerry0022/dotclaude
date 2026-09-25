@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.209.0] — 2026-09-26
+
+### Added
+- **A turn that changes six files without a run mentions `auto-agents` once.** `post.agent.nudge` counts the distinct files the current turn changed in the session's own work tree. On the first call at 6 or more, it adds one note telling Claude to offer the `auto-agents` skill in a sentence. The note never auto-starts anything and never blocks. It stays silent inside an active run contract, after any devops skill ran this turn, on machine, scheduled and silent turns, for subagents' own edits, and when the delegation switch is off. Parallel edits that jump the count past 6 still get the note once. Details are in `deep-knowledge/run-contract.md` § Outside a run.
+- **The card's run line colours its own marks.** ✗ and ⚠ use the host's danger colour and a doubtful `?` its warning colour, while ✓ stays plain, so an open step stands out in both themes. A backlog step done for every item now reads `Harden 3/3 ✓`.
+- **Card buttons show hover, pressed, keyboard-focus and busy states.** The PR number underlines on hover as the card design always promised. Screen readers no longer read the ↗ arrow after each button label.
+
+### Fixed
+- **The delegation policy loads at every session start again.** The nudge section pushed `agent-proactivity.md` past the 7 KB always-on cap, and the session-start hook then skipped the whole policy. That section now lives in `run-contract.md`.
+- **`run-contract.js status` and `done` measure the QA duty the way the gate does.** `done` no longer closes a run while QA is still owed. `done` with no active contract exits 0.
+- **An audit run ends cleanly.** An `analysis` card closes an audit run without being gated. An audit with implementation is not closed early by an interim analysis card. "Audit + Umsetzung" now counts as implement.
+- **The run line shows only this worktree's contract.** A `run-contract.json` that Desktop copied into a new worktree no longer shows up on that worktree's card.
+- **A slow git never stalls a gated tool call.** Every git call of the run-contract gates has a 5 s timeout, and each gated call has a 15 s budget in total. When the budget runs out, the gate reads the result as unknown and never blocks.
+- **A corrupt `run-contract.json` is quarantined, not lost.** Its notice arrives on the very call that found it, blocked or not.
+- **The contract store holds up under contention.** A close always wins over a concurrent update. A lock that can't be read or taken over gives up at its deadline instead of spinning. A lock this process created but could not write is removed. Event compaction keeps the original order across run segments.
+- **Backlog runs pass the triage gate.** The gate's hint and `do-run` backlog Step 2.1 now both name the one agent-description format, `Triage #<N> — <title>`.
+- **A PR merged through the GitHub MCP tool counts as the run's release.** A merge that lands in a fork's upstream counts too.
+- **A transcript walk cut short by the time budget no longer arms a contract from partial answers.** The next gated call retries the walk.
+- **In-tree paths whose name starts with `..`, such as `..env`, are gated like any other file.**
+
 ## [0.208.3] — 2026-09-26
 
 ### Fixed
