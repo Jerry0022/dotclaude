@@ -516,3 +516,72 @@ describe("harden pass (H-*)", () => {
     expect(P.codeFilesChanged(dir, "card", "no-such-base")).toBeNull();
   });
 });
+
+describe("RT3: red-team pass 3 (pre)", () => {
+  const P = require("./pre.run.contract.js");
+  const withWork = (over = {}) => { armPrompt({ ship: "auto", passes: [], ...over }); ev({ k: "skill", name: "auto-agents" }); ev({ k: "edit" }); };
+  const MERGE = "mcp__plugin_github_github__merge_pull_request";
+
+  test("RT3-R4: a push of the current branch is a release only on main / master under ship: auto", () => {
+    withWork();
+    for (const command of ["git push", "git push origin HEAD", "git push -u origin HEAD"]) {
+      const r = run("Bash", { command });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("BLOCKED at release");
+    }
+    git("checkout", "-q", "-b", "feat/x");
+    expect(run("Bash", { command: "git push -u origin HEAD" }).code).toBe(0);
+    expect(run("Bash", { command: "git push" }).code).toBe(0);
+  });
+
+  test("RT3-R4: pushHead on main is not gated under ship: manual; do-ship clears it under auto", () => {
+    withWork({ ship: "manual" });
+    expect(run("Bash", { command: "git push" }).code).toBe(0);
+    withWork();
+    expect(RC.readContract(dir)).toMatchObject({ ship: "auto" });
+    expect(run("Bash", { command: "git push" }).code).toBe(2);
+    ev({ k: "skill", name: "do-ship" });
+    expect(run("Bash", { command: "git push" }).code).toBe(0);
+  });
+
+  test("RT3-R4: gh api PUT …/merge and a forced push onto main are releases", () => {
+    withWork();
+    expect(run("Bash", { command: "gh api -X PUT repos/o/r/pulls/7/merge" }).code).toBe(2);
+    expect(run("PowerShell", { command: "gh api --method PUT repos/o/r/pulls/7/merge" }).code).toBe(2);
+    expect(run("Bash", { command: "git push origin +main" }).code).toBe(2);
+    expect(run("Bash", { command: "gh api repos/o/r/pulls/7" }).code).toBe(0);
+  });
+
+  test("RT3-R4: a GitHub MCP merge_pull_request call hits the release gate under ship: auto only", () => {
+    withWork();
+    const r = run(MERGE, { owner: "o", repo: "r", pullNumber: 7 });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("BLOCKED at release");
+    expect(run("mcp__github__merge_pull_request", { pullNumber: 7 }).code).toBe(2);
+    expect(run("mcp__plugin_github_github__get_pull_request", { pullNumber: 7 }).code).toBe(0);
+    withWork({ ship: "manual" });
+    expect(RC.readContract(dir)).toMatchObject({ ship: "manual" });
+    expect(run(MERGE, { pullNumber: 7 }).code).toBe(0);
+  });
+
+  test("RT3-R5: the PowerShell tool reads backticks as escapes (no false release)", () => {
+    withWork();
+    expect(run("PowerShell", { command: 'gh issue comment 12 --body "merged via `gh pr merge 480`"' }).code).toBe(0);
+    expect(run("Bash", { command: "cat > f.md <<'EOF'\nrun `gh pr merge` and `git push origin main`\nEOF" }).code).toBe(0);
+    expect(run("Bash", { command: 'echo "$(gh pr merge 480)"' }).code).toBe(2);
+  });
+
+  test("RT3-R6: a failing ls-files keeps the diff count", () => {
+    const gitLines = (root, args) => {
+      if (args[0] === "ls-files") throw new Error("timeout");
+      if (args[0] === "diff" && args[2] === "HEAD") return ["b.js"];
+      return ["a.js", "README.md"];
+    };
+    expect(P.codeFilesChanged(dir, "card", "main", gitLines)).toBe(2);
+    expect(P.codeFilesChanged(dir, "release", "main", gitLines)).toBe(1);
+    const failDiff = () => { throw new Error("git gone"); };
+    expect(P.codeFilesChanged(dir, "card", "main", failDiff)).toBeNull();
+    const ok = (root, args) => (args[0] === "ls-files" ? ["c.js"] : []);
+    expect(P.codeFilesChanged(dir, "card", "main", ok)).toBe(1);
+  });
+});
