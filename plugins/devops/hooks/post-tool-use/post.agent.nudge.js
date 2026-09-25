@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.agent.nudge
- * @version 0.2.0
+ * @version 0.2.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -24,10 +24,12 @@
  *   it for free — no extra UserPromptSubmit hook needed. The nudge fires the
  *   one call where the running distinct-file count first reaches exactly 6;
  *   it stays silent before and after. A once-per-turn marker (R14d), keyed
- *   by the turn's opening prompt text, additionally guards against firing
- *   twice: the transcript is only read as a 1 MB tail, so on a very long
- *   turn older edits can slide out of the tail and the running count can
- *   drop back to exactly 6 a second time.
+ *   by the turn's opening prompt entry's `uuid` (its `timestamp` when no
+ *   `uuid`) — NOT its text, so a later turn that repeats the same short
+ *   prompt ("weiter", "continue") still gets its own marker and is nudged —
+ *   additionally guards against firing twice: the transcript is only read as
+ *   a 1 MB tail, so on a very long turn older edits can slide out of the tail
+ *   and the running count can drop back to exactly 6 a second time (Q8).
  *
  *   Silent when: the call is a subagent's (`hook.agent_id` set — a subagent's
  *   edits are not the parent's turn, same rule `post.flow.completion.js`
@@ -39,12 +41,16 @@
  *   apply instead); the turn was not typed by the user — silent, machine, or
  *   a scheduled task (R14c, `lib/non-user-prompt.js`'s classifiers, same as
  *   `stop.guide.handoff.js#isMachineDrivenTurn` — nobody to nudge); ANY
- *   devops skill (not just `auto-agents`) already ran this turn, via the
+ *   DEVOPS skill (not just `auto-agents`) already ran this turn, via the
  *   Skill tool OR a typed slash command (R14b/c,
  *   `lib/skill-invocations.js#skillInvokedThisTurn`'s command-name scan
- *   already covers a typed `/auto-agents`); the nudge already fired this
- *   turn (R14d); or the delegation kill switch (`lib/delegation.js`)
- *   resolves to `off`.
+ *   already covers a typed `/auto-agents`) — an un-namespaced name only
+ *   counts as a devops skill when it is one of THIS plugin's own skill
+ *   directory names (`skills/*` under `lib/plugin-root.js#pluginRoot()`,
+ *   read once and cached), so a user/consumer skill of the same shape
+ *   (e.g. `graphify`) never silences the nudge (Q8); the nudge already
+ *   fired this turn (R14d); or the delegation kill switch
+ *   (`lib/delegation.js`) resolves to `off`.
  *
  *   Never blocks: every failure path exits 0 silently.
  */
@@ -65,19 +71,21 @@ const FIRED_FLAG_PREFIX = 'dotclaude-devops-agent-nudge-fired';
 // call. Guarded here so a load error instead makes `run()` a silent no-op,
 // same as every other failure path.
 let projectRoot, findRepoRoot, samePath, readContract, readDelegation, safeReadTranscript,
-  skillInvokedThisTurn, isPromptEntry, lastUserPromptText, namespaceOf, isOldName,
-  isSilent, isMachineTurn, isScheduledTask, isMachinePrompt, sessionFile, readSessionFile, writeSessionFile;
+  skillInvokedThisTurn, isPromptEntry, lastUserPromptText, normalizeSkillName, namespaceOf,
+  isSilent, isMachineTurn, isScheduledTask, isMachinePrompt, sessionFile, readSessionFile, writeSessionFile,
+  pluginRoot;
 let loadError = false;
 try {
   ({ projectRoot, findRepoRoot, samePath } = require('../lib/project-root'));
   ({ readContract } = require('../lib/run-contract'));
   ({ readDelegation } = require('../lib/delegation'));
   ({ safeReadTranscript } = require('../lib/card-guard'));
-  ({ skillInvokedThisTurn, isPromptEntry, lastUserPromptText } = require('../lib/skill-invocations'));
-  ({ namespaceOf, isOldName } = require('../lib/skill-names'));
+  ({ skillInvokedThisTurn, isPromptEntry, lastUserPromptText, normalizeSkillName } = require('../lib/skill-invocations'));
+  ({ namespaceOf } = require('../lib/skill-names'));
   ({ isSilent, isMachineTurn, isScheduledTask } = require('../user-prompt-submit/prompt.flow.silent-turn'));
   ({ isMachinePrompt } = require('../lib/batch-state'));
   ({ sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id'));
+  ({ pluginRoot } = require('../lib/plugin-root'));
 } catch {
   loadError = true;
 }
@@ -200,26 +208,70 @@ function isMachineDrivenTurn(transcript) {
   return isSilent(prompt) || isMachinePrompt(prompt) || isMachineTurn(prompt) || isScheduledTask(prompt);
 }
 
+/** This plugin's own skill directory names (`skills/auto-agents`, `skills/do-ship`,
+ *  …), lowercased. Read once from disk and cached for the process lifetime —
+ *  a hook process is short-lived, so there is no staleness concern. Q8: an
+ *  un-namespaced skill name must match THIS list to count as a devops skill;
+ *  otherwise a user/consumer skill of the same bare shape (e.g. `graphify`)
+ *  would silently be treated as devops and silence the nudge. */
+let cachedSkillDirNames = null;
+function devopsSkillDirNames() {
+  if (cachedSkillDirNames) return cachedSkillDirNames;
+  const out = new Set();
+  try {
+    const skillsDir = path.join(pluginRoot(), 'skills');
+    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) out.add(entry.name.toLowerCase());
+    }
+  } catch { /* best effort: an empty set just means no bare name matches */ }
+  cachedSkillDirNames = out;
+  return cachedSkillDirNames;
+}
+
 /** Did THIS turn already invoke ANY devops skill (not just `auto-agents`),
  *  via the Skill tool or a typed slash command? A turn that is already
- *  delegating — to any devops skill — needs no nudge toward one. */
+ *  delegating — to any devops skill — needs no nudge toward one. An
+ *  un-namespaced name only counts when it is one of THIS plugin's own skill
+ *  directory names (Q8) — a bare old name (pre-rename) is deliberately NOT
+ *  in that list, same as a bare user/consumer skill. */
 function anyDevopsSkillInvokedThisTurn(transcript) {
   return skillInvokedThisTurn(transcript, (input) => {
     const raw = input && input.skill;
     if (typeof raw !== 'string' || !raw.trim()) return false;
     const ns = namespaceOf(raw);
     if (ns) return ns === 'devops';
-    return !isOldName(raw);
+    return devopsSkillDirNames().has(normalizeSkillName(raw));
   });
 }
 
+/** Identity of the turn's opening user-prompt entry: its `uuid`, or its
+ *  `timestamp` when no `uuid` is recorded. Q8: text is deliberately NOT used
+ *  — a later turn that repeats the same short prompt ("weiter", "continue")
+ *  must still get its own marker, not silently reuse an earlier turn's. */
+function lastUserPromptEntryId(transcriptContent) {
+  if (typeof transcriptContent !== 'string' || !transcriptContent) return '';
+  const lines = transcriptContent.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (!entry || entry.type !== 'user' || !isPromptEntry(entry)) continue;
+    if (typeof entry.uuid === 'string' && entry.uuid) return entry.uuid;
+    if (entry.timestamp) return String(entry.timestamp);
+    return '';
+  }
+  return '';
+}
+
 /** R14d: has the nudge already fired this turn? Keyed by session + cwd + the
- *  turn's opening prompt text, so a fresh turn (new prompt) always gets a
- *  fresh marker even though the 1 MB transcript tail can make the running
- *  distinct-file count dip back below 6 and cross it again later. */
+ *  turn's opening prompt entry's identity (Q8: uuid, falling back to
+ *  timestamp — never its text), so a fresh turn (new prompt entry) always
+ *  gets a fresh marker even though the 1 MB transcript tail can make the
+ *  running distinct-file count dip back below 6 and cross it again later. */
 function firedMarkerKey(hook, transcript) {
-  const prompt = lastUserPromptText(transcript);
-  const raw = `${hook.session_id || ''}|${hook.cwd || ''}|${prompt}`;
+  const id = lastUserPromptEntryId(transcript);
+  const raw = `${hook.session_id || ''}|${hook.cwd || ''}|${id}`;
   return crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20);
 }
 
@@ -291,4 +343,5 @@ if (require.main === module) {
 
 module.exports = {
   run, editedPathOf, editedFilesThisTurn, inOwnWorkTree, isSubagentCall, buildNudge, NUDGE_AT,
+  firedMarkerKey, lastUserPromptEntryId, devopsSkillDirNames, anyDevopsSkillInvokedThisTurn,
 };
