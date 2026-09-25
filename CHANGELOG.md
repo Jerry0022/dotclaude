@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.205.6] — 2026-09-25
+
+### Fixed
+- **A finished ship no longer tells you to ship the branch you are shipping in parallel.** When several sessions worked or shipped side by side, the first ship's card listed the other session's branch as an open point ("not shipped yet — ship it?"). The card's `open` example itself was a foreign branch ("feat/x liegt 70 PRs hinter main"), which taught that report. The card server now drops every open point that names a branch or folder checked out in another worktree (`lib/foreign-branches.js`); that session ships its own branch, and leftovers stay with `ship_hygiene` and the cleanup page. The do-ship skill and the card schema use an example about the shipped work itself and state the rule.
+
 ## [0.205.5] — 2026-09-25
 
 ### Fixed
