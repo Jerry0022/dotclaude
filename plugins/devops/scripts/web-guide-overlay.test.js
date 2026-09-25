@@ -12,7 +12,9 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // before the source ever reaches a transcript, so growth here doesn't scale
 // injection cost 1:1. Raised from 24 KB for #513/#514's new fields (location,
 // copy[], checklist[], heartbeat, sessionStorage-persisted queue, FAB icon).
-const MAX_BYTES = 34 * 1024;
+// Raised again from 34 KB for #529 (pendingWaiter staleness tracking) and
+// #516 (the "Guide ausblenden" edge tab + its docking logic).
+const MAX_BYTES = 37 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -178,7 +180,7 @@ function run(sandbox) {
 }
 
 describe("web-guide-overlay — shape", () => {
-  test("source is at most 24 KB", () => {
+  test("source is at most the raw-source budget", () => {
     expect(Buffer.byteLength(SRC, "utf8")).toBeLessThanOrEqual(MAX_BYTES);
   });
 
@@ -192,8 +194,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.8.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.8.0["']/);
+  test("defines VERSION 1.9.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.9.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -224,7 +226,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.8.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.9.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -241,7 +243,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.8.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.9.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -827,6 +829,115 @@ describe("web-guide-overlay — execution", () => {
     expect(sandbox.window._listenerCount("keydown", true)).toBe(0);
     expect(sandbox.window._listenerCount("keypress", true)).toBe(0);
     expect(sandbox.window._listenerCount("keyup", true)).toBe(0);
+  });
+});
+
+// #516: "Guide ausblenden" shrinks the FAB to a small edge tab without
+// aborting the guide; clicking the tab (or Escape) restores it.
+describe("web-guide-overlay — edge tab (#516)", () => {
+  let sandbox;
+
+  beforeEach(() => {
+    sandbox = makeSandbox();
+  });
+
+  test("clicking 'Guide ausblenden' hides the FAB/panel and shows the edge tab", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    const edgeBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0];
+    expect(edgeBtn).toBeTruthy();
+    edgeBtn.click();
+
+    expect(sandbox.window.claudeGuide.state().edgeTab).toBe(true);
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    const panel = findAll(host, (e) => e.className === "panel")[0];
+    expect(fab.style.display).toBe("none");
+    expect(panel.style.display).toBe("none");
+    const edgeTab = findAll(host, (e) => e.className === "edgetab")[0];
+    expect(edgeTab.style.display).toBe("flex");
+  });
+
+  test("clicking the edge tab restores the FAB/panel without aborting the guide", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0].click();
+
+    const edgeTab = findAll(host, (e) => e.className === "edgetab")[0];
+    edgeTab.click();
+
+    expect(sandbox.window.claudeGuide.state().edgeTab).toBe(false);
+    expect(sandbox.window.claudeGuide.state().stepId).toBe("1"); // guide still running
+    const fab = findAll(getHost(sandbox), (e) => e.className === "fab")[0];
+    expect(fab.style.display).toBe("flex");
+  });
+
+  test("Escape restores from the edge tab, same as clicking it", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0].click();
+    expect(sandbox.window.claudeGuide.state().edgeTab).toBe(true);
+
+    host.dispatch("keydown", { type: "keydown", key: "Escape", stopPropagation() {} });
+    expect(sandbox.window.claudeGuide.state().edgeTab).toBe(false);
+  });
+
+  test("the edge tab is accessible: a native button with an aria-label", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0].click();
+    const edgeTab = findAll(host, (e) => e.className === "edgetab")[0];
+    expect(edgeTab.tagName).toBe("BUTTON");
+    expect(edgeTab.getAttribute("aria-label")).toMatch(/wieder anzeigen/);
+    // the hotkey is surfaced in the control itself (ui-defaults.md — a hotkey
+    // on every interaction shown in the control or its tooltip)
+    expect(edgeTab.getAttribute("aria-label")).toMatch(/Esc/);
+  });
+
+  test("edgeTab state persists in sessionStorage and restores on re-injection, like collapsed", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0].click();
+    expect(sandbox.sessionStorage._data.__wg).toContain('"edgeTab":true');
+
+    const sb2 = makeSandbox();
+    sb2.sessionStorage._data.__wg = sandbox.sessionStorage._data.__wg;
+    run(sb2);
+    expect(sb2.window.claudeGuide.state().edgeTab).toBe(true);
+    const fab2 = findAll(getHost(sb2), (e) => e.className === "fab")[0];
+    expect(fab2.style.display).toBe("none");
+  });
+
+  test("docks to the nearest edge — bottom-right FAB position docks right", () => {
+    run(sandbox);
+    // default pos = { right: 24, bottom: 24 } on a 1280x800 viewport: the FAB
+    // sits close to both the right and bottom edges; "right" wins the tie.
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0].click();
+    const edgeTab = findAll(host, (e) => e.className === "edgetab")[0];
+    expect(edgeTab.style.right).toBe("0px");
+    expect(edgeTab.style.left).toBe("");
+  });
+
+  test("docks to the nearest edge — a FAB near the top-left docks to the top", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    // Drag the FAB near the top-left corner: pos.right/bottom are measured
+    // from the right/bottom edges, so a large right+bottom means top-left.
+    const host = getHost(sandbox);
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    fab.dispatch("pointerdown", { type: "pointerdown", pointerId: 1, clientX: 0, clientY: 0, target: fab, composedPath: () => [fab] });
+    fab.dispatch("pointermove", { type: "pointermove", clientX: -1148, clientY: -728 }); // right:1200 bottom:750 (clamped)
+    fab.dispatch("pointerup", { type: "pointerup", pointerId: 1, target: fab, composedPath: () => [fab] });
+
+    findAll(getHost(sandbox), (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide ausblenden")[0].click();
+    const edgeTab = findAll(getHost(sandbox), (e) => e.className === "edgetab")[0];
+    expect(edgeTab.style.top).toBe("0px");
   });
 });
 

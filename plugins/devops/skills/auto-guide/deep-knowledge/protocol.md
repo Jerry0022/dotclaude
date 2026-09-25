@@ -151,7 +151,7 @@ forever — it always gets a definitive (if unobserved) resolution.
 ### State
 
 ```json
-{ "version": "1.0.0", "stepId": "3", "collapsed": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null }
+{ "version": "1.0.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null }
 ```
 
 `pendingWaiter` is `true` while a `wait()` call is currently armed (waiting
@@ -162,11 +162,20 @@ a CDP timeout.
 
 ## UI state persistence
 
-`sessionStorage["__wg"]` stores `{ step, collapsed, pos, ts }` on every change.
-On re-injection after a navigation the overlay **restores the last step and
-position immediately**, before Claude re-issues `setStep` — the user sees
-continuity, not a blank FAB. `pos` (drag position) additionally goes to
-`localStorage` so it survives across sessions on the same origin.
+`sessionStorage["__wg"]` stores `{ step, collapsed, edgeTab, pos, ts }` on
+every change. On re-injection after a navigation the overlay **restores the
+last step and position immediately**, before Claude re-issues `setStep` —
+the user sees continuity, not a blank FAB. `pos` (drag position) additionally
+goes to `localStorage` so it survives across sessions on the same origin.
+
+**Edge tab (#516).** The panel header's **»** button ("Guide ausblenden")
+shrinks the FAB and panel to a small tab docked against whichever screen
+edge the FAB's current position is closest to (`edgeTab: true`). It never
+aborts the guide — `setStep`/`wait()` keep working exactly as before, only
+the visual chrome changes. Clicking the tab, or pressing Escape while focus
+is inside the overlay, restores the FAB/panel to whatever `collapsed` state
+they had before hiding. `edgeTab` persists in `sessionStorage["__wg"]` next
+to `collapsed`, so it survives a reload the same way.
 
 Storage is page-writable and therefore untrusted: the overlay validates the
 shape of everything it restores (numbers for `pos`, the Step schema for

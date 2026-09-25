@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.8.0
+ * @version 1.9.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.0";
+  var VERSION = "1.9.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -32,7 +32,7 @@
   var HEARTBEAT_TICK_MS = 2000;
   var INPUT_TYPES = ["text", "secret", "choice", "confirm"];
 
-  var currentStep = null, collapsed = true, pos = { right: 24, bottom: 24 };
+  var currentStep = null, collapsed = true, edgeTab = false, pos = { right: 24, bottom: 24 };
   var eventQueue = [], pendingWaiter = null, helpOpen = false, abortConfirm = false;
   var abortResetTimer = null, heartbeatTimer = null, activeBtns = [];
   var statusEl = null, spinnerEl = null, waitLabelEl = null, lastPoll = Date.now();
@@ -108,6 +108,7 @@
           if (sanitized) currentStep = sanitized;
         }
         collapsed = !!saved.collapsed;
+        edgeTab = !!saved.edgeTab; // #516: "Guide ausblenden" edge-tab state
       }
     } catch {}
     try {
@@ -118,7 +119,7 @@
 
   function saveState() {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ step: currentStep, collapsed, pos, ts: Date.now() }));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ step: currentStep, collapsed, edgeTab, pos, ts: Date.now() }));
     } catch {}
     try {
       localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos));
@@ -201,6 +202,11 @@
     ".tip{position:fixed;max-width:260px;padding:6px 10px;border-radius:8px;background:#fff;color:#111;border:1px solid #ddd;",
     "  box-shadow:0 6px 20px rgba(0,0,0,.25);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1.45;pointer-events:auto}",
     ".tip[hidden]{display:none}",
+    // #516: "Guide ausblenden" docks the FAB to the nearest screen edge as a
+    // small tab — same purple as .fab, which already reads fine unscheme'd.
+    ".edgetab{position:fixed;width:32px;height:32px;background:#6d28d9;color:#fff;",
+    "  border:none;border-radius:8px;align-items:center;justify-content:center;",
+    "  cursor:pointer;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.35);pointer-events:auto}",
     ".panel{scrollbar-width:thin;scrollbar-color:#ccc transparent}",
     ".panel::-webkit-scrollbar{width:8px}",
     ".panel::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}",
@@ -288,6 +294,20 @@
   panel.setAttribute("role", "dialog");
   panel.style.display = "none";
   shadow.appendChild(panel);
+
+  // #516: the edge tab is a persistent sibling of fab/panel (never rebuilt by
+  // render()'s panel.innerHTML reset) — restores the guide without aborting it.
+  var edgeTabBtn = mk("button", "edgetab");
+  edgeTabBtn.type = "button";
+  edgeTabBtn.style.display = "none";
+  edgeTabBtn.setAttribute("aria-label", "Claude Guide wieder anzeigen (Esc)");
+  edgeTabBtn.addEventListener("click", function () {
+    edgeTab = false;
+    render(true);
+    saveState();
+  });
+  shadow.appendChild(edgeTabBtn);
+
   document.documentElement.appendChild(host);
 
   function clampPosition() {
@@ -295,6 +315,35 @@
     var vh = window.innerHeight || 600;
     pos.right = Math.min(Math.max(pos.right, 8), Math.max(8, vw - 56 - 8));
     pos.bottom = Math.min(Math.max(pos.bottom, 8), Math.max(8, vh - 56 - 8));
+  }
+
+  // #516: dock the edge tab to whichever screen edge the FAB's current
+  // position is closest to, using the FAB's own on-screen center.
+  function applyEdgeTabPosition() {
+    var vw = window.innerWidth || 800;
+    var vh = window.innerHeight || 600;
+    var cx = vw - pos.right - 28, cy = vh - pos.bottom - 28;
+    var dl = cx, dr = vw - cx, dt = cy, db = vh - cy;
+    var min = Math.min(dl, dr, dt, db);
+    edgeTabBtn.style.left = edgeTabBtn.style.right = "";
+    edgeTabBtn.style.top = edgeTabBtn.style.bottom = "";
+    if (min === dl) {
+      edgeTabBtn.style.left = "0px";
+      edgeTabBtn.style.top = Math.max(8, Math.min(cy - 16, vh - 40)) + "px";
+      edgeTabBtn.textContent = "›";
+    } else if (min === dr) {
+      edgeTabBtn.style.right = "0px";
+      edgeTabBtn.style.top = Math.max(8, Math.min(cy - 16, vh - 40)) + "px";
+      edgeTabBtn.textContent = "‹";
+    } else if (min === dt) {
+      edgeTabBtn.style.top = "0px";
+      edgeTabBtn.style.left = Math.max(8, Math.min(cx - 16, vw - 40)) + "px";
+      edgeTabBtn.textContent = "▾";
+    } else {
+      edgeTabBtn.style.bottom = "0px";
+      edgeTabBtn.style.left = Math.max(8, Math.min(cx - 16, vw - 40)) + "px";
+      edgeTabBtn.textContent = "▴";
+    }
   }
 
   function applyPosition() {
@@ -356,7 +405,12 @@
     el.addEventListener("pointercancel", endDrag);
   }
 
-  window.addEventListener("resize", applyPosition);
+  // #516: resize repositions whichever of fab/panel or the edge tab is shown.
+  function onResize() {
+    if (edgeTab) applyEdgeTabPosition();
+    else applyPosition();
+  }
+  window.addEventListener("resize", onResize);
 
   function clearHeartbeat() {
     clearTimeout(heartbeatTimer);
@@ -468,13 +522,27 @@
     clearTimeout(abortResetTimer);
     abortResetTimer = null;
     clearHeartbeat();
-    applyPosition();
 
     if (!currentStep) {
+      edgeTab = false;
+      edgeTabBtn.style.display = "none";
+      applyPosition();
       panel.style.display = "none";
       fabButton.style.display = "none";
       return;
     }
+
+    // #516: an edge tab replaces fab+panel entirely — restoring it (click or
+    // Escape) does not abort the guide, it just flips edgeTab back off.
+    if (edgeTab) {
+      fabButton.style.display = "none";
+      panel.style.display = "none";
+      edgeTabBtn.style.display = "flex";
+      applyEdgeTabPosition();
+      return;
+    }
+    edgeTabBtn.style.display = "none";
+    applyPosition();
 
     fabButton.style.display = "flex";
     badge.textContent = currentStep.index + "/" + currentStep.total;
@@ -489,6 +557,15 @@
     var head = mk("div", "head");
     var headTitle = mk("b", null, "Claude Guide · " + currentStep.index + "/" + currentStep.total);
     head.appendChild(headTitle);
+    var edgeBtn = mk("button", "collapse", "»");
+    edgeBtn.type = "button";
+    edgeBtn.setAttribute("aria-label", "Guide ausblenden");
+    edgeBtn.addEventListener("click", function () {
+      edgeTab = true;
+      render();
+      saveState();
+    });
+    head.appendChild(edgeBtn);
     var collapseBtn = mk("button", "collapse", "–");
     collapseBtn.type = "button";
     collapseBtn.setAttribute("aria-label", "Einklappen");
@@ -716,10 +793,16 @@
   }
 
   function onHostKey(e) {
-    if (e.type === "keydown" && e.key === "Escape" && !collapsed) {
-      collapsed = true;
-      render();
-      saveState();
+    if (e.type === "keydown" && e.key === "Escape") {
+      if (edgeTab) {
+        edgeTab = false; // #516: Escape restores from the edge tab, too
+        render();
+        saveState();
+      } else if (!collapsed) {
+        collapsed = true;
+        render();
+        saveState();
+      }
     }
     e.stopPropagation();
   }
@@ -814,6 +897,7 @@
         version: VERSION,
         stepId: currentStep ? currentStep.id : null,
         collapsed,
+        edgeTab, // #516
         queued: eventQueue.length,
         url: window.location.href,
         // #529: lets the skill detect and drain a stranded event after a CDP
@@ -825,7 +909,7 @@
     },
     destroy: function () {
       if (host.parentNode) host.parentNode.removeChild(host);
-      window.removeEventListener("resize", applyPosition);
+      window.removeEventListener("resize", onResize);
       KEY_TYPES.forEach(function (type) {
         window.removeEventListener(type, onWinKeyCap, true);
       });
