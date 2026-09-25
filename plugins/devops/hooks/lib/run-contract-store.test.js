@@ -466,3 +466,175 @@ describe("RT2-Q4: arm() stamps the work-tree root", () => {
     expect(store.readContract(cwd, { now: T0 }).root).toBe(h.root);
   });
 });
+
+describe("H3: acquireLock cleans up its own orphaned lock file", () => {
+  test("a writeSync failure right after openSync('wx') succeeded leaves no lock file behind, and the next acquire succeeds at once", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    const lf = lockFile(cwd);
+    const realWriteSync = fs.writeSync.bind(fs);
+    let threw = false;
+    const spy = vi.spyOn(fs, "writeSync").mockImplementation((fd, ...rest) => {
+      if (!threw && fs.existsSync(lf)) {
+        threw = true;
+        const e = new Error("disk full");
+        e.code = "ENOSPC"; // not in LOCK_RETRIABLE: acquireLock gives up right away
+        throw e;
+      }
+      return realWriteSync(fd, ...rest);
+    });
+    try {
+      const patched = store.update(cwd, { mode: "audit" }, { now: T0, lockWaitMs: 20 });
+      expect(patched).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    // No orphaned zero-byte lock left behind by the failed write.
+    expect(fs.existsSync(lf)).toBe(false);
+    // A fresh acquire is not stuck waiting out the stale window on our own orphan.
+    const start = Date.now();
+    const patched2 = store.update(cwd, { mode: "audit" }, { now: T0 + 1000 });
+    expect(patched2).not.toBeNull();
+    expect(patched2.mode).toBe("audit");
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+});
+
+describe("H4: acquireLock rejects non-finite lockStaleMs/lockWaitMs overrides", () => {
+  test("lockWaitMs: NaN falls back to the default deadline instead of spinning forever", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    fs.writeFileSync(lockFile(cwd), "other-pid"); // fresh lock: never goes stale during this test
+    const start = Date.now();
+    const patched = store.update(cwd, { mode: "audit" }, { now: T0, lockWaitMs: NaN });
+    const elapsed = Date.now() - start;
+    expect(patched).toBeNull();
+    expect(elapsed).toBeLessThan(3000); // gave up around the default LOCK_MAX_WAIT_MS, not never
+  }, 10000);
+});
+
+describe("H5: takeoverStaleLock retries the rename-back once before giving up", () => {
+  test("a rename-back that always throws keeps the moved copy (never unlinked) and returns false", () => {
+    const lf = lockFile(cwd);
+    fs.mkdirSync(path.dirname(lf), { recursive: true });
+    fs.writeFileSync(lf, "fresh-token");
+    const realRenameSync = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((src, dest) => {
+      if (dest === lf) { const e = new Error("perm"); e.code = "EPERM"; throw e; }
+      return realRenameSync(src, dest);
+    });
+    let tookOver;
+    try {
+      tookOver = store.takeoverStaleLock(lf, "stale-observed-token");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(tookOver).toBe(false);
+    // The refreshed token was never dropped — it survives under its moved
+    // (junk) name since putting it back kept failing.
+    const dir = path.dirname(lf);
+    const junkFiles = fs.readdirSync(dir).filter((n) => n.startsWith(`${path.basename(lf)}.stale-`));
+    expect(junkFiles.length).toBe(1);
+    expect(fs.readFileSync(path.join(dir, junkFiles[0]), "utf8")).toBe("fresh-token");
+  });
+});
+
+describe("H6: compactEvents preserves original event order across a segment boundary", () => {
+  test("a same-millisecond tie and an event without a parseable t both keep their original segment", () => {
+    const { segments } = require("./run-contract-obligations.js");
+    store.arm(cwd, { mode: "prompt", flow: "interactive" }, { now: T0 });
+    const header = store.readRawContract(cwd);
+    const file = store.eventsPath(cwd);
+    const tieT = new Date(T0 + 1000).toISOString();
+    const raw = [
+      { k: "edit", t: tieT, c: header.id },
+      { k: "measure", codeFiles: 1, t: tieT, c: header.id },
+      { k: "release", ok: true, item: "0", t: tieT, c: header.id },
+      { k: "edit", c: header.id }, // no `t` at all — parses to NaN
+      { k: "commit", t: new Date(T0 + 2000).toISOString(), c: header.id },
+    ];
+    fs.writeFileSync(file, raw.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf8");
+    store.compactEvents(cwd, header);
+    const after = store.events(cwd);
+    const segs = segments(header, after);
+    expect(segs.length).toBe(2);
+    // segment 0 keeps its measure/release despite the tied `t`.
+    expect(segs[0].some((e) => e.k === "measure")).toBe(true);
+    expect(segs[0].some((e) => e.k === "release")).toBe(true);
+    // the `t`-less edit stays in segment 1, the one after the release — it
+    // never gets sorted to the front of the whole file.
+    expect(segs[1].some((e) => e.k === "edit" && !e.t)).toBe(true);
+    expect(segs[0].some((e) => e.k === "edit" && !e.t)).toBe(false);
+  });
+});
+
+describe("C1: compactEvents no-ops while the header lock is held by someone else", () => {
+  test("a lock held by another process leaves the events file uncompacted; a later record() compacts it once the lock is free", () => {
+    RC.arm(cwd, { mode: "prompt", flow: "interactive" }, { now: T0 });
+    const header = store.readRawContract(cwd);
+    const file = store.eventsPath(cwd);
+    let t = T0;
+    const lines = [];
+    for (let i = 0; i < store.EVENTS_COMPACT_LINES; i++) {
+      t += 1000;
+      lines.push(JSON.stringify({ k: "measure", codeFiles: i, t: new Date(t).toISOString(), c: header.id }));
+    }
+    fs.writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
+    const lf = lockFile(cwd);
+    fs.writeFileSync(lf, "other-holder");
+    // Keep the lock looking freshly written for the whole wait: on real
+    // wall-clock time a lock created just before a ~1s wait can cross the
+    // 1s stale threshold near the very end of that same wait and get taken
+    // over — not what this test means by "held by someone else".
+    const realStatSync = fs.statSync.bind(fs);
+    const statSpy = vi.spyOn(fs, "statSync").mockImplementation((file2, ...rest) => {
+      const st = realStatSync(file2, ...rest);
+      return file2 === lf ? { ...st, mtimeMs: Date.now() } : st;
+    });
+    t += 1000;
+    try {
+      RC.record(cwd, { k: "measure", codeFiles: 999999 }, { now: t }); // crosses the cap, triggers compactEvents()
+    } finally {
+      statSpy.mockRestore();
+    }
+    const linesLocked = fs.readFileSync(file, "utf8").split("\n").filter(Boolean).length;
+    expect(linesLocked).toBe(store.EVENTS_COMPACT_LINES + 1); // record() still appended; compaction was skipped
+    fs.unlinkSync(lf);
+    t += 1000;
+    RC.record(cwd, { k: "measure", codeFiles: 1000000 }, { now: t });
+    const linesAfter = fs.readFileSync(file, "utf8").split("\n").filter(Boolean).length;
+    expect(linesAfter).toBeLessThan(linesLocked + 1); // compacted once the lock was free
+  }, 10000);
+});
+
+describe("C2: update() refuses a write when a re-arm changed the header id between reads", () => {
+  test("id swapped between readContract's read and update()'s fresh re-read → null, the new header left intact", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    const headerFile = store.contractPath(cwd);
+    const realReadFileSync = fs.readFileSync.bind(fs);
+    let headerReads = 0;
+    let rearmedId = null;
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation((file, ...rest) => {
+      if (file !== headerFile) return realReadFileSync(file, ...rest);
+      headerReads++;
+      // Read #1 is archiveIfExpired()'s, #2 is readContract()'s own read.
+      // Read #3 is update()'s "fresh" re-read — simulate a concurrent
+      // re-arm() swapping in a brand new header id right in between.
+      if (headerReads === 3) {
+        const before = realReadFileSync(headerFile, "utf8");
+        const rearmed = { ...JSON.parse(before), id: "rearmed-id", mode: "backlog" };
+        rearmedId = rearmed.id;
+        fs.writeFileSync(headerFile, JSON.stringify(rearmed));
+        return JSON.stringify(rearmed);
+      }
+      return realReadFileSync(file, ...rest);
+    });
+    try {
+      const patched = store.update(cwd, { mode: "audit" }, { now: T0 });
+      expect(patched).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    const raw = store.readRawContract(cwd);
+    expect(raw.id).toBe(rearmedId);
+    expect(raw.mode).toBe("backlog"); // the re-armed header, untouched by the stale patch
+  });
+});
