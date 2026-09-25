@@ -539,19 +539,23 @@ Outside an active run contract, the delegation policy
 enforces it. This PostToolUse hook (matcher `Write|Edit|NotebookEdit`) counts
 the DISTINCT files the current turn has changed, from the transcript, scoped
 to the turn by the same turn-boundary walk `skill-invocations.js` and
-`card-guard.js` use, and filtered to the session's own work tree. At the call
-where that running count first reaches exactly 6 (`NUDGE_AT`), it emits ONE
+`card-guard.js` use, and filtered to the session's own work tree. At the
+first call where that running count is 6 or more (`NUDGE_AT` — the parallel
+Edit/Write calls of one message are already in the transcript when the first
+of them runs, so the count can jump from 5 straight past 6), it emits ONE
 `additionalContext` note telling the model to MENTION the `auto-agents` skill
 in one sentence — an offer, never an auto-start, never a block (agent-
-proactivity.md's Full-ceremony rule). It stays silent: before and after that
-one call; for a subagent's own edits (`hook.agent_id` set); outside the
+proactivity.md's Full-ceremony rule). It stays silent: before that call; for
+a subagent's own edits (`hook.agent_id` set); outside the
 session's own work tree; while a run contract is active for this session
 (the run's own gates apply instead); on a non-user-typed turn (machine,
 scheduled, silent); once ANY devops skill already ran this turn (Skill tool
 or a typed slash command); once the nudge already fired this turn (a
-once-per-turn marker keyed by the turn's opening prompt text — the
-transcript is only read as a 1 MB tail, so on a very long turn the running
-count can slide back to exactly 6 a second time without the marker); and
+once-per-turn marker keyed by the turn's opening prompt entry's `uuid`, its
+`timestamp` when it has none — not its text, so a later turn that repeats a
+short prompt such as "weiter" is nudged again (Q8); every later call of the
+turn also counts 6 or more, and the transcript is only read as a 1 MB tail,
+so on a very long turn the count can climb past 6 a second time); and
 when the delegation kill switch (`lib/delegation.js`) is off. Every failure
 path exits 0 silently.
 
