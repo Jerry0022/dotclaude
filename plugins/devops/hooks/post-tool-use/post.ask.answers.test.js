@@ -16,6 +16,13 @@ const HOOK = path.join(__dirname, "post.ask.answers.js");
 describe("answerChecks", () => {
   const q = { question: "Welche Issues?", options: [{ label: "#1 a" }, { label: "#2 b" }] };
 
+  test("H-C6: a header-only question is looked up by its header and labelled with it", () => {
+    const notes = answerChecks([{ header: "Umfang?", options: [{ label: "Flexibel" }] }], { "Umfang?": "Other" });
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('"Umfang?"');
+    expect(answerChecks([{ header: "Umfang?", options: [{ label: "Flexibel" }] }], { "Umfang?": "Flexibel" })).toEqual([]);
+  });
+
   test("Something else without text → the exact [answer-check] note", () => {
     const [note] = answerChecks([q], { "Welche Issues?": ["Something else", "#1 a"] });
     expect(note).toBe([

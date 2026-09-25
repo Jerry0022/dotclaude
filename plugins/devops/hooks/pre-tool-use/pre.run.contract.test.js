@@ -375,3 +375,127 @@ describe("AUD-007: an unsafe qa diff base is never trusted", () => {
     expect(fs.existsSync(evil)).toBe(false);
   });
 });
+
+describe("harden pass (H-*)", () => {
+  const P = require("./pre.run.contract.js");
+  const C = require("../lib/run-contract-calls.js");
+  const ROUTER = (over = {}) => [
+    { header: "Was?", question: "Was soll dieser Run tun?", options: [{ label: "Prompt umsetzen" }, { label: "Backlog" }] },
+    { header: "Ablauf?", question: "Bleibst du erreichbar?", options: [] },
+    { header: "Umfang?", question: "Wie weit darf die Änderung greifen?", options: [] },
+    { header: "Durchgänge?", question: "Welche Durchgänge?", options: [] },
+  ].filter(q => !over.only || over.only.includes(q.header));
+  const ROUTER_A = (mode = "Prompt umsetzen") => ({ "Was soll dieser Run tun?": mode, "Bleibst du erreichbar?": "Autonom · Ship automatisch",
+    "Wie weit darf die Änderung greifen?": "Flexibel", "Welche Durchgänge?": "keine" });
+  const line = (at, questions, answers) => JSON.stringify({ type: "user", timestamp: new Date(at).toISOString(), toolUseResult: { questions, answers } });
+  const transcript = (...lines) => {
+    const t = path.join(dir, ".claude", "t.jsonl");
+    fs.writeFileSync(t, `${lines.join("\n")}\n`);
+    return t;
+  };
+  const commitOnBranch = (name, files = ["a.js"]) => {
+    git("checkout", "-q", "-b", name);
+    for (const n of files) fs.writeFileSync(f(n), "1\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "x");
+  };
+  const readyBacklog = () => {
+    armBacklog({ passes: [], ship: "manual", presence: false });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+  };
+
+  test("H-B4: 6 new untracked code files in a prompt contract → the card gate names devops:qa", () => {
+    armPrompt({ passes: [] });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    fs.mkdirSync(f("src"));
+    for (let i = 0; i < 6; i++) fs.writeFileSync(f(`src/n${i}.js`), "1\n");
+    const r = run(CARD, { variant: "ready" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("devops:qa");
+    expect(RC.events(dir).filter(e => e.k === "measure").pop()).toMatchObject({ codeFiles: 6 });
+  });
+
+  test("H-C2a: a router line older than the marker (since cutoff) is ignored → fallback arm", () => {
+    RC.markPendingArm(dir, { args: "" });
+    const t = transcript(line(Date.now() - 3600_000, ROUTER(), ROUTER_A()));
+    expect(run("Edit", { file_path: f("src/a.js") }, { transcript_path: t }).code).toBe(2);
+    expect(RC.readContract(dir)).toMatchObject({ source: "fallback" });
+  });
+
+  test("H-C2b: follow-up lines after the router are applied (Issues #473 → items)", () => {
+    RC.markPendingArm(dir, { args: "" });
+    const now = Date.now();
+    const t = transcript(
+      line(now - 2000, ROUTER(), ROUTER_A("Backlog")),
+      line(now - 1000, [{ header: "Issues", question: "Welche Issues?" }], { "Welche Issues?": "#473 fix the thing" }),
+    );
+    run("Edit", { file_path: f("src/a.js") }, { transcript_path: t });
+    expect(RC.readContract(dir)).toMatchObject({ source: "router", mode: "backlog", items: ["473"] });
+  });
+
+  test("H-C2c: the newest router-shaped line being a partial re-ask wins over the earlier full router (current behaviour)", () => {
+    const now = Date.now();
+    const partialQ = ROUTER({ only: ["Umfang?"] }).concat([{ header: "Durchgänge?", question: "Welche Durchgänge?", options: [] }]);
+    const t = transcript(
+      line(now - 2000, ROUTER(), ROUTER_A()),
+      line(now - 1000, partialQ, { "Wie weit darf die Änderung greifen?": "Strikt", "Welche Durchgänge?": "keine" }),
+    );
+    const found = C.routerFromTranscript(t, new Date(now - 10_000).toISOString(), RC);
+    expect(found.questions.map(q => q.header)).toEqual(["Umfang?", "Durchgänge?"]);
+    RC.markPendingArm(dir, { args: "" });
+    run("Edit", { file_path: f("src/a.js") }, { transcript_path: t });
+    // Pinned: the earlier full answers (autonomous · ship auto) are lost —
+    // only the partial re-ask is parsed, the rest falls back to defaults.
+    expect(RC.readContract(dir)).toMatchObject({ source: "router", strict: true, flow: "interactive", ship: "manual" });
+  });
+
+  test("H-C3: resolveBase — explicit safe base, origin/HEAD, then main / master", () => {
+    expect(P.resolveBase(dir, "dev", C)).toBe("dev");
+    expect(P.resolveBase(dir, undefined, C)).toBe("main");
+    git("update-ref", "refs/remotes/origin/trunk", "HEAD");
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+    expect(P.resolveBase(dir, undefined, C)).toBe("trunk");
+  });
+
+  test("H-C3: an unsafe explicit base (--output=x, a..b) falls back to auto-detect (AUD-007)", () => {
+    expect(P.resolveBase(dir, "--output=x", C)).toBe("main");
+    expect(P.resolveBase(dir, "a..b", C)).toBe("main");
+  });
+
+  test("H-C3: a repo created on master, no base → master fallback → exit 2 naming devops:qa", () => {
+    git("branch", "-m", "main", "master");
+    expect(P.resolveBase(dir, undefined, C)).toBe("master");
+    readyBacklog();
+    commitOnBranch("fix/m");
+    const r = run(SHIP, { body: "" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("devops:qa");
+  });
+
+  test("H-C3: a repo on master with origin/HEAD → origin/master...HEAD → exit 2 naming devops:qa", () => {
+    git("branch", "-m", "main", "master");
+    git("update-ref", "refs/remotes/origin/master", "HEAD");
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master");
+    readyBacklog();
+    commitOnBranch("fix/o");
+    const r = run(SHIP, { body: "", base: "--output=x" });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("devops:qa");
+  });
+
+  test("H-C3: origin/<b>...HEAD missing → <b>...HEAD; non-release gates add the working-tree files", () => {
+    commitOnBranch("fix/c", ["a.js"]);
+    expect(P.codeFilesChanged(dir, "release", "main")).toBe(1);
+    fs.writeFileSync(f("a.js"), "2\n"); // tracked, modified, uncommitted
+    fs.writeFileSync(f("b.js"), "1\n"); // untracked (H-B4)
+    expect(P.codeFilesChanged(dir, "release", "main")).toBe(1);
+    expect(P.codeFilesChanged(dir, "card", "main")).toBe(2);
+    git("rm", "-q", "--cached", "a.js");
+    git("commit", "-q", "-m", "drop");
+    fs.writeFileSync(f("c.js"), "1\n");
+    expect(P.codeFilesChanged(dir, "branch", "main")).toBe(3); // a.js (untracked again), b.js, c.js
+    expect(P.codeFilesChanged(dir, "card", "no-such-base")).toBeNull();
+  });
+});
