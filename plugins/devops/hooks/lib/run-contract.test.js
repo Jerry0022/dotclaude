@@ -728,6 +728,23 @@ describe("harden pass", () => {
     expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(false);
   });
 
+  test("H-B14b: a transient read error (EBUSY / EPERM) keeps a valid marker on disk", () => {
+    R.markPendingArm(cwd, { now: T0, args: "backlog" });
+    R.markBatchHandoff(cwd, { now: T0 });
+    const real = fs.readFileSync;
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation((file, ...rest) => {
+      if (String(file).endsWith(".pending") || String(file).endsWith("batch-handoff.json")) throw enoent("EBUSY");
+      return real(file, ...rest);
+    });
+    expect(R.pendingArm(cwd, { now: T0 })).toBeNull();
+    expect(R.batchHandoffPending(cwd, { now: T0 })).toBeNull();
+    spy.mockRestore();
+    expect(fs.existsSync(R.pendingPath(cwd))).toBe(true);
+    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(true);
+    expect(R.pendingArm(cwd, { now: T0 })).toMatchObject({ args: "backlog" });
+    expect(R.batchHandoffPending(cwd, { now: T0 })).not.toBeNull();
+  });
+
   test("H-F19: a single transient failure still archives the replaced contract", () => {
     const a = R.arm(cwd, {}, { now: T0 });
     const real = fs.renameSync;

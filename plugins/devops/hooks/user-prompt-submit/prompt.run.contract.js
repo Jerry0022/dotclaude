@@ -21,7 +21,6 @@
 
 require('../lib/plugin-guard');
 
-const MACHINE_RE = /^\s*(RUN_BACKLOG_AUTOSTART|AUTONOMOUS_AUTOSTART)\s*:/i;
 const SLASH_RE = /^\s*\/(?:devops:)?do-run\b(.*)$/is;
 // RT2-R2: anchored to the START of the prompt (past an optional harness
 // `<command-message>…</command-message>` preamble, which always precedes
@@ -91,7 +90,11 @@ function main(hook) {
   const cmds = commandsIn(text);
   const hasAutoConcept = cmds.some(c => c.name === 'auto-concept');
   const recorded = cmds.filter(c => RECORDED_COMMANDS.has(c.name));
-  if (slashArgs === null && !hasAutoConcept && !recorded.length && !MACHINE_RE.test(text)) return;
+  // H-A5: run-contract-calls is dependency-free (fs / path), so the fast
+  // path stays free of the run-contract lib load. Required inside main (the
+  // stdin handler's try/catch), like the pre / post hooks (H-B17).
+  const { MACHINE_ARM_RE } = require('../lib/run-contract-calls');
+  if (slashArgs === null && !hasAutoConcept && !recorded.length && !MACHINE_ARM_RE.test(text)) return;
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return;
   const { projectRoot } = require('../lib/project-root');

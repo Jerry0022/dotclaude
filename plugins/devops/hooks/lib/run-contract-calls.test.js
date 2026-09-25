@@ -98,6 +98,50 @@ describe("H-X4: the executable at command position", () => {
     expect(C.commandFacts(cmd).commit).toBe(true);
   });
 
+  test.each([
+    ["(cd sub && git commit)"],
+    ["{ git add -A; git commit;}"],
+    ["git ls-files -m | xargs git commit -m x"],
+    ["find . -name '*.js' | xargs -0 -n 1 git commit -m x"],
+    ["echo $(git commit -m x)"],
+    ['msg="$(git commit -m x)"'],
+    ["out=`git commit -m x`"],
+    ['env -S "git commit -m x"'],
+    ["env --split-string='git commit -m x'"],
+    ["Start-Process git -ArgumentList 'commit -m x' -Wait -NoNewWindow"],
+    ["Start-Process -FilePath git -ArgumentList 'commit','-m','x'"],
+    ['Start-Process "C:\\Program Files\\Git\\cmd\\git.exe" \'commit -m x\''],
+    ["saps git -Args 'commit -m x'"],
+  ])("H-X4b: commit found: %s", (cmd) => {
+    expect(C.commandFacts(cmd).commit).toBe(true);
+  });
+
+  test.each([
+    ["(cd sub && git status)"],
+    ["git ls-files | xargs echo git commit"],
+    ["echo '$(git commit -m x)'"],
+    ['echo "\\$(git commit -m x)"'],
+    ["echo '`git commit`'"],
+    ["env git commit-tree -S x"],
+    ["Start-Process notepad -ArgumentList 'git commit'"],
+    ["Start-Process git -ArgumentList 'status'"],
+    ['Write-Host "HEAD: $(git rev-parse HEAD)"'],
+  ])("H-X4b: no commit: %s", (cmd) => {
+    expect(C.commandFacts(cmd).commit).toBe(false);
+  });
+
+  test("H-X4b: a heredoc message body is text — its lines are never branch creations", () => {
+    const cmd = "git commit -m \"$(cat <<'EOF'\nfeat: x\n\ngit checkout -b feat/y\nEOF\n)\"";
+    expect(C.commandFacts(cmd)).toMatchObject({ commit: true, branch: false });
+    const pr = "gh pr create --body \"$(cat <<'EOF'\ngit switch -c z\nEOF\n)\"";
+    expect(C.commandFacts(pr)).toMatchObject({ commit: false, branch: false });
+  });
+
+  test("H-X4b: env -S before the command only — `git commit -S` (sign) still is a commit", () => {
+    expect(C.commandFacts("env git commit -S -m x").commit).toBe(true);
+    expect(C.commandFacts("(git checkout -b feat/q)")).toMatchObject({ branch: true, branchName: "feat/q" });
+  });
+
   test("H-X4: pwsh -EncodedCommand payload is decoded", () => {
     expect(C.commandFacts(`pwsh -EncodedCommand ${enc("git commit -m x")}`).commit).toBe(true);
   });

@@ -29,24 +29,18 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 
-const LIB = path.resolve(__dirname, '..', 'lib', 'run-contract.js');
-
-const BATCH_BLOCK = [
-  '[run-contract] BLOCKED: a do-batch plan is waiting for its hand-off.',
-  'A ready plan goes to Skill("devops:do-run", "--from=do-batch …"), a plan with',
-  'open decisions to Skill("devops:auto-concept", "--from=do-batch …") — never',
-  'implemented directly. Reading, exploring and planning stay allowed.',
-  `Stale marker / not a do-batch hand-off: node "${LIB}" batch-clear --reason "<why>"`,
-  'Kill switch (every run-contract gate): DOTCLAUDE_RUN_CONTRACT=off',
-].join('\n');
-
-function gitNames(root, args) {
-  const { execFileSync } = require('child_process');
-  const out = execFileSync('git', args[0] === 'ls-files' ? args : ['diff', '--name-only', ...args], {
-    cwd: root, timeout: 5000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
-  });
-  return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+function batchBlock(RC) {
+  return [
+    '[run-contract] BLOCKED: a do-batch plan is waiting for its hand-off.',
+    'A ready plan goes to Skill("devops:do-run", "--from=do-batch …"), a plan with',
+    'open decisions to Skill("devops:auto-concept", "--from=do-batch …") — never',
+    'implemented directly. Reading, exploring and planning stay allowed.',
+    `Stale marker / not a do-batch hand-off: node "${RC.LIB_PATH}" batch-clear --reason "<why>"`,
+    'Kill switch (every run-contract gate): DOTCLAUDE_RUN_CONTRACT=off',
+  ].join('\n');
 }
+
+const GIT_TIMEOUT = { timeout: 5000 };
 
 // RT2-R7: widened to Unicode letters/digits (`größe`, non-ASCII branch
 // names are legal in git) plus `._/+@-` (`release/1.2`, `feat/a+b`,
@@ -81,13 +75,16 @@ function resolveBase(root, explicit, C) {
 /** Changed code files for the qa rule, or null (unknown). */
 function codeFilesChanged(root, gate, base) {
   try {
+    // H-A6: gitLines throws on a git failure → the catch below = unknown.
+    const { gitLines } = require('../lib/run-contract-calls');
+    const diff = (range) => gitLines(root, ['diff', '--name-only', range], GIT_TIMEOUT);
     let names;
-    try { names = gitNames(root, [`origin/${base}...HEAD`]); } catch { names = gitNames(root, [`${base}...HEAD`]); }
+    try { names = diff(`origin/${base}...HEAD`); } catch { names = diff(`${base}...HEAD`); }
     const set = new Set(names);
     if (gate !== 'release') {
-      for (const n of gitNames(root, ['HEAD'])) set.add(n);
+      for (const n of diff('HEAD')) set.add(n);
       // H-B4: new code files never `git add`ed count too.
-      for (const n of gitNames(root, ['ls-files', '--others', '--exclude-standard'])) set.add(n);
+      for (const n of gitLines(root, ['ls-files', '--others', '--exclude-standard'], GIT_TIMEOUT)) set.add(n);
     }
     const { isCodeChange } = require('../lib/browsertest-guard');
     return [...set].filter(f => isCodeChange(f)).length;
@@ -97,26 +94,19 @@ function codeFilesChanged(root, gate, base) {
 /** The gates this call hits: {gates:[], batch:boolean, closes, base}. */
 function classify(hook, root, cwd, C) {
   const tool = hook.tool_name || '';
-  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const input = C.toolInput(hook);
   if (C.EDIT_TOOLS.has(tool)) {
-    return C.isGatedPath(root, cwd, C.toolFilePath(tool, input)) ? { gates: ['edit'], batch: true } : null;
+    return C.isGatedEdit(tool, input, root, cwd) ? { gates: ['edit'], batch: true } : null;
   }
   if (C.SHELL_TOOLS.has(tool)) {
-    const f = C.commandFacts(input.command);
+    const f = C.shellCallFacts(hook, root, cwd, { after: false });
     const gates = [];
-    let batch = false;
-    if (f.commit) { gates.push('commit'); batch = true; }
-    if (f.branch && C.isItemBranch(f, hook, hook.agent_id || f.worktree || f.detach ? null : C.baseBranch(root, f.branchName, false))) {
-      gates.push('branch');
-    }
-    if (f.renderCard) {
-      // Unreadable payload (`-` = stdin, `$var`, missing file) → gated as a final card.
-      const payload = C.readCardPayload(f.renderCard, cwd);
-      if (!payload || C.cardFacts(payload).final) gates.push('card');
-    }
+    if (f.commit) gates.push('commit');
+    if (f.itemBranch) gates.push('branch');
+    if (f.card && f.card.final) gates.push('card');
     // gh pr merge / git push onto main|master → release gate (ship: auto only).
     if (f.release) gates.push('release');
-    return gates.length ? { gates, batch, shellRelease: f.release } : null;
+    return gates.length ? { gates, batch: f.commit, shellRelease: f.release } : null;
   }
   if (tool === 'Skill') {
     const RC = require('../lib/run-contract');
@@ -141,7 +131,14 @@ function armFromPending(hook, root, RC, C, sessionId) {
   const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC);
   let fields = null;
   let source = 'router';
-  if (found) fields = RC.parseRouterAnswers(found.questions, found.answers, { doRunArgs: marker.args });
+  if (found) {
+    // H-C2c: a partial re-ask merges over the full answers before it — only
+    // the fields it answered replace them (R7, like mergeRouterAnswers).
+    for (const call of [...(found.earlier || []), found]) {
+      const f = RC.parseRouterAnswers(call.questions, call.answers, { doRunArgs: marker.args });
+      if (f) fields = fields ? { ...fields, ...RC.answeredFields(f) } : f;
+    }
+  }
   if (!fields) {
     source = 'fallback';
     // The click-through defaults: parse an empty Q4 whose options carry the
@@ -183,7 +180,7 @@ function main(hook) {
     // contract is active yet (record() needs one) — the batch marker itself
     // is that trace then.
     RC.record(root, { k: 'block', gate: 'batch', open: [] }, { sessionId });
-    process.stderr.write(`${BATCH_BLOCK}\n`);
+    process.stderr.write(`${batchBlock(RC)}\n`);
     return 2;
   }
 
@@ -226,9 +223,9 @@ function main(hook) {
     // AUD-004: a refused call leaves a lasting trace (`block` never counts as
     // work or a boundary — it changes neither segments nor obligations).
     RC.record(croot, { k: 'block', gate, open: open.map(o => o.ob) }, { sessionId });
-    let msg = RC.formatBlock(contract, open, gate, { libPath: LIB });
+    let msg = RC.formatBlock(contract, open, gate);
     if (armed && armed.source === 'fallback') {
-      msg += `\nNote: this contract was armed from the click-through defaults (the do-run answers were not found). Wrong? node "${LIB}" arm --mode <m> --flow <f> --ship <s> --passes <p>`;
+      msg += `\nNote: this contract was armed from the click-through defaults (the do-run answers were not found). Wrong? ${RC.rearmHint()}`;
     }
     process.stderr.write(`${msg}\n`);
     return 2;
@@ -255,4 +252,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { safeBase, SAFE_BASE_RE, resolveBase, codeFilesChanged };
+module.exports = { safeBase, resolveBase, codeFilesChanged };

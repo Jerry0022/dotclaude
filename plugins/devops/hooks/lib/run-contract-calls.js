@@ -8,21 +8,31 @@
  *   call the same way. Pure parsing plus two small fs reads (card payload,
  *   transcript tail); no git, no contract state.
  *
- *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS   constants
+ *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS   constants
+ *   MACHINE_ARM_RE / MACHINE_TURN_RE / BACKLOG_AUTOSTART_RE   machine-prompt openers
+ *     (arming: RUN_BACKLOG_AUTOSTART + AUTONOMOUS_AUTOSTART · a machine turn:
+ *     those plus AUTONOMOUS_RESUME · backlog only)
  *   commandFacts(cmd)          → {commit, branch, branchName, renderCard, worktree, detach, release}
  *     (the executable at command position: quoted paths, wrapper prefixes,
- *     sh -c / cmd /c / pwsh -Command / eval payloads — H-X4)
+ *     sh -c / cmd /c / pwsh -Command / eval payloads — H-X4; xargs, env -S,
+ *     Start-Process, $(…) / backtick substitutions — H-X4b)
+ *   splitSegments(cmd) / commandAt(seg)   the command-position parser behind it
+ *   shellCallFacts(hook, root, cwd, {after}) → {commit, itemBranch, branchName, card, release}
+ *     (one Bash / PowerShell call as pre gates and post records it — H-A2)
  *   contractRoots(hook, projectRoot) → {root, inputRoot, roots[]} (H-B1)
+ *   toolInput(hook)            → the call's tool_input object ({} when none)
  *   toolFilePath(tool, input)  → string | null
  *   isGatedPath(root, cwd, p)  → boolean (inside the work tree, not exempt)
+ *   isGatedEdit(tool, input, root, cwd) → boolean (Edit/Write/NotebookEdit on a gated path)
  *   closesOf(body)             → ["473", …] from "Closes #473" / "Fixes #…"
  *   cardFacts(input)           → {variant, final}
  *   readCardPayload(file, cwd) → object | null
  *   releaseResult(response)    → {ok, merged} | null
- *   routerFromTranscript(transcriptPath, sinceIso, RC) → {questions, answers, followUps[]} | null
+ *   routerFromTranscript(transcriptPath, sinceIso, RC) → {questions, answers, followUps[], earlier[]} | null
  *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
  *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
- *   stripQuotes(cmd) / gitOut(root, args) / readTail(file)   helpers (AUD-015c: kept in sync with module.exports)
+ *   gitOut(root, args) → string | null · gitLines(root, args, {timeout}) → string[] (throws)
+ *   readTail(file)             → transcript tail (AUD-015c: this list matches module.exports)
  */
 
 const fs = require('fs');
@@ -32,6 +42,14 @@ const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 const RENDER_CARD = 'mcp__plugin_devops_dotclaude-completion__render_completion_card';
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
+
+// H-A5: the machine-prompt openers, named once. Arming reads the two
+// AUTOSTART forms; "did this turn open with a machine prompt" (R1) also
+// counts a resume.
+const MACHINE_ARM_RE = /^\s*(RUN_BACKLOG_AUTOSTART|AUTONOMOUS_AUTOSTART)\s*:/i;
+const MACHINE_TURN_RE = /^\s*(AUTONOMOUS_AUTOSTART|AUTONOMOUS_RESUME|RUN_BACKLOG_AUTOSTART)\s*:/i;
+const BACKLOG_AUTOSTART_RE = /^\s*RUN_BACKLOG_AUTOSTART\s*:/i;
+
 const FINAL_VARIANTS = new Set(['ship-successful', 'ready', 'ready-files', 'released', 'test']);
 
 /** Quoted strings emptied, so `grep "git commit"` and `-m "a && b"` never split or match. */
@@ -86,15 +104,41 @@ const PWSH_ARG_FLAG_RE = /^[-/](?:ex|ep|executionpolicy|wd|workingdirectory|conf
 const WRAPPERS = {
   sudo: /^-[ugCDpRrTUh]$/, doas: /^-[uC]$/, env: /^-[uCS]$/, command: null, exec: /^-a$/,
   time: /^-[fo]$/, nice: /^-n$/, nohup: null, timeout: /^-[sk]$/, builtin: null,
+  // H-X4b: `… | xargs [flags] git commit …` runs git.
+  xargs: /^-[ILnPdEsa]$/,
 };
+// H-X4b: PowerShell `Start-Process <file> [-ArgumentList] <args>` (alias saps).
+const START_PROCESS = new Set(['start-process', 'saps']);
+const SP_FILE_RE = /^-(?:f|fi|fil|file|filep|filepa|filepat|filepath|path|pspath|lp)$/i;
+const SP_ARGS_RE = /^-(?:a|ar|arg|args|argu|argum|argume|argumen|argument|argumentl|argumentli|argumentlis|argumentlist)$/i;
+const SP_VALUE_RE = /^-(?:wo\w*|verb|wi\w*|redirect\w*|cred\w*|env\w*)$/i;
+
+/** `Start-Process` tokens after the name → the command it launches, or null. */
+function startProcessPayload(t) {
+  let file = null;
+  let args = null;
+  for (let j = 0; j < t.length; j++) {
+    const v = t[j].value;
+    if (SP_FILE_RE.test(v)) { file = t[++j] ? t[j].value : null; continue; }
+    if (SP_ARGS_RE.test(v)) { args = t[++j] ? t[j].value : null; continue; }
+    if (SP_VALUE_RE.test(v)) { j++; continue; }
+    if (/^-/.test(v)) continue;
+    if (file === null) file = v;
+    else if (args === null) args = v;
+  }
+  if (!file) return null;
+  // `'commit','-m','x'` is an array: the commas separate arguments.
+  return `"${file.replace(/"/g, '')}" ${String(args || '').replace(/,/g, ' ')}`.trim();
+}
 
 /**
  * What runs at COMMAND POSITION of one raw segment (H-X4): leading `(`, `{`,
  * `!`, `&` (PowerShell call operator), `VAR=value` and the wrapper prefixes
- * (`sudo`, `env`, `command`, `exec`, `time`, `nice`, `nohup`, `timeout`)
- * skipped, a quoted executable unquoted. A shell payload (`sh -c`, `bash
- * -c`, `cmd /c`, `pwsh -Command` / `-EncodedCommand`, `eval`) comes back as
- * `{payload}` for the caller to parse again.
+ * (`sudo`, `doas`, `env`, `command`, `exec`, `time`, `nice`, `nohup`,
+ * `timeout`, `builtin`, `xargs`) skipped, a quoted executable unquoted. A
+ * shell payload (`sh -c`, `bash -c`, `cmd /c`, `pwsh -Command` /
+ * `-EncodedCommand`, `eval`, `env -S`, PowerShell `Start-Process <file>
+ * -ArgumentList …`) comes back as `{payload}` for the caller to parse again.
  * @returns {{exe:string, rest:string}|{payload:string}|null}
  */
 function commandAt(seg) {
@@ -116,6 +160,16 @@ function commandAt(seg) {
       i++;
       // `command -v git` only looks the name up.
       if (name === 'command' && i < t.length && /^-[vV]$/.test(t[i].value)) return null;
+      // H-X4b: `env -S "git commit …"` splits its string into the command.
+      if (name === 'env') {
+        // Only env's own options (before the command) count — `git commit -S` signs.
+        for (let j = i; j < t.length && /^-/.test(t[j].value) && t[j].value !== '--'; j++) {
+          const v = t[j].value;
+          if (v === '-S' || v === '--split-string') return j + 1 < t.length ? { payload: t.slice(j + 1).map(x => x.value).join(' ') } : null;
+          if (v.startsWith('--split-string=')) return { payload: [v.slice(15), ...t.slice(j + 1).map(x => x.value)].join(' ') };
+          if (/^-[uC]$/.test(v)) j++;
+        }
+      }
       skipFlags(WRAPPERS[name]);
       if (name === 'timeout' && i < t.length && /^\d/.test(t[i].value)) i++;
       continue;
@@ -157,6 +211,10 @@ function commandAt(seg) {
       return null;
     }
     if (name === 'eval') return { payload: t.slice(i + 1).map(x => x.value).join(' ') };
+    if (START_PROCESS.has(name)) {
+      const payload = startProcessPayload(t.slice(i + 1));
+      return payload ? { payload } : null;
+    }
     return { exe: name, rest: s.slice(t[i].end) };
   }
   return null;
@@ -177,9 +235,47 @@ const PAYLOAD_DEPTH = 4;
 const RENDER_CARD_FLAG_RE = /(^|\s)--render-card\b/;
 const RENDER_CARD_RE = /index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
 
+/**
+ * H-X4b: the payloads of `$(…)` and backtick command substitutions — outside
+ * single quotes, not backslash-escaped (they run inside double quotes too).
+ * A payload holding a heredoc (`$(cat <<'EOF' … EOF)`, the usual commit /
+ * PR body form) is text, not commands, and is skipped.
+ */
+function substitutions(cmd) {
+  const out = [];
+  let single = false;
+  let double = false;
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i];
+    if (ch === '\\' && !single) { i++; continue; }
+    if (ch === "'" && !double) { single = !single; continue; }
+    if (ch === '"' && !single) { double = !double; continue; }
+    if (single) continue;
+    let body = null;
+    if (ch === '$' && cmd[i + 1] === '(') {
+      let depth = 0;
+      let j = i + 1;
+      for (; j < cmd.length; j++) {
+        if (cmd[j] === '(') depth++;
+        else if (cmd[j] === ')' && --depth === 0) break;
+      }
+      body = cmd.slice(i + 2, j);
+      i = j;
+    } else if (ch === '`') {
+      let j = i + 1;
+      while (j < cmd.length && (cmd[j] !== '`' || cmd[j - 1] === '\\')) j++;
+      body = cmd.slice(i + 1, j);
+      i = j;
+    }
+    if (body && body.trim() && !body.includes('<<')) out.push(body);
+  }
+  return out;
+}
+
 function commandFacts(cmd, depth = 0) {
   const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false };
   if (typeof cmd !== 'string' || !cmd.trim()) return out;
+  if (depth < PAYLOAD_DEPTH) for (const p of substitutions(cmd)) mergeFacts(out, commandFacts(p, depth + 1));
   // H-B16 / RT2-R1: one quote-aware split, so the raw segment (branch
   // names, card payload paths) always belongs to the stripped one.
   for (const rawSeg of splitSegments(cmd)) {
@@ -206,7 +302,8 @@ function commandFacts(cmd, depth = 0) {
     if (at.exe !== 'git') continue;
     const m = `git${stripQuotes(at.rest)}`.match(GIT_RE);
     if (!m) continue;
-    const sub = m[1];
+    // H-X4b: `(cd x && git commit)` / `{ git commit;}` — the closing bracket is no part of the subcommand.
+    const sub = m[1].replace(/[)}]+$/, '');
     const rest = m[2] || '';
     if (sub === 'commit' && !/(^|\s)--dry-run\b/.test(rest)) out.commit = true;
     // A push straight onto main / master (`HEAD:main`, `:main`, `origin main`) is a ship.
@@ -235,7 +332,7 @@ function commandFacts(cmd, depth = 0) {
     if (hit) {
       out.branch = true;
       if (/(^|\s)--detach\b/.test(rest)) out.detach = true;
-      if (name && !out.branchName) out.branchName = name.replace(/^["']|["']$/g, '');
+      if (name && !out.branchName) out.branchName = name.replace(/[)}]+$/, '').replace(/^["']|["']$/g, '');
     }
   }
   return out;
@@ -256,19 +353,36 @@ function mergeFacts(out, f) {
  */
 function contractRoots(hook, projectRoot) {
   const root = projectRoot(hook.cwd || process.cwd());
-  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const input = toolInput(hook);
   const inputRoot = typeof input.cwd === 'string' && input.cwd.trim() && String(hook.tool_name || '').startsWith('mcp__')
     ? projectRoot(input.cwd) : null;
   return { root, inputRoot, roots: inputRoot && inputRoot !== root ? [root, inputRoot] : [root] };
 }
 
+/** The tool_input object of a hook payload ({} when missing / not an object). */
+function toolInput(hook) {
+  const i = hook && hook.tool_input;
+  return i && typeof i === 'object' ? i : {};
+}
+
+function gitRun(root, args, timeout) {
+  const { execFileSync } = require('child_process');
+  return execFileSync('git', args, {
+    cwd: root, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+  });
+}
+
+/** Trimmed git stdout, or null on an error AND on empty output. */
 function gitOut(root, args) {
-  try {
-    const { execFileSync } = require('child_process');
-    return execFileSync('git', args, {
-      cwd: root, timeout: 3000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
-    }).trim() || null;
-  } catch { return null; }
+  try { return gitRun(root, args, 3000).trim() || null; } catch { return null; }
+}
+
+/**
+ * H-A6: git stdout as non-empty lines. THROWS on a git failure, so a caller
+ * can tell "unknown" from "no lines" (pre's qa count).
+ */
+function gitLines(root, args, { timeout = 3000 } = {}) {
+  return gitRun(root, args, timeout).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
 /**
@@ -295,6 +409,32 @@ function isItemBranch(facts, hook, current) {
   return true;
 }
 
+/**
+ * H-A2: one Bash / PowerShell call as pre gates it and post records it.
+ * `itemBranch`: a branch creation that is a backlog item boundary — HEAD is
+ * asked only for a plain main-session creation (a subagent, `git worktree
+ * add` and `--detach` never are one). `after`: PostToolUse (HEAD already is
+ * the new branch). `card`: the offline `--render-card` call; an unreadable
+ * payload (`-` = stdin, `$VAR`, a missing file or one relative to a `cd` in
+ * the same command) counts as a FINAL card (H-B3).
+ * @returns {{commit:boolean, itemBranch:boolean, branchName:string|null,
+ *   card:{readable:boolean, variant:string|null, final:boolean}|null, release:boolean}}
+ */
+function shellCallFacts(hook, root, cwd, { after = false } = {}) {
+  const f = commandFacts(toolInput(hook).command);
+  let itemBranch = false;
+  if (f.branch) {
+    const plain = !(hook.agent_id || f.worktree || f.detach);
+    itemBranch = isItemBranch(f, hook, plain ? baseBranch(root, f.branchName, after) : null);
+  }
+  let card = null;
+  if (f.renderCard) {
+    const payload = readCardPayload(f.renderCard, cwd);
+    card = payload ? { readable: true, ...cardFacts(payload) } : { readable: false, variant: null, final: true };
+  }
+  return { commit: f.commit, itemBranch, branchName: f.branchName, card, release: f.release };
+}
+
 function toolFilePath(toolName, input) {
   if (!input || typeof input !== 'object') return null;
   if (toolName === 'NotebookEdit') return input.notebook_path || input.file_path || null;
@@ -318,6 +458,11 @@ function isGatedPath(root, cwd, file) {
   if (low.startsWith('docs/concepts/')) return false;
   if (/^(BACKLOG|AUTONOMOUS|BURN)-/i.test(path.posix.basename(p))) return false;
   return true;
+}
+
+/** H-A3: an Edit / Write / NotebookEdit call on a gated path. */
+function isGatedEdit(tool, input, root, cwd) {
+  return EDIT_TOOLS.has(tool) && isGatedPath(root, cwd, toolFilePath(tool, input));
 }
 
 /** Issue numbers a PR body closes. */
@@ -393,10 +538,15 @@ function readTail(file) {
 
 /**
  * Newest router answers in the transcript tail (spec B fallback), plus the
- * follow-up answer sets after it. Lines older than `sinceIso` are ignored.
+ * follow-up answer sets after the first router call of the chain. Lines
+ * older than `sinceIso` are ignored. H-C2c: a PARTIAL newest router call (a
+ * re-ask of some headers) does not hide the full answers before it — the
+ * scan goes on to the preceding full router call; `earlier` holds the older
+ * router calls, oldest first, for the caller to merge under (R7).
  * @param {string} transcriptPath
  * @param {string|null} sinceIso
- * @param {object} RC the run-contract lib (extractAnswers, isRouterCall, parseFollowUp)
+ * @param {object} RC the run-contract lib (extractAnswers, isRouterCall, isPartialRouterCall, parseFollowUp)
+ * @returns {{questions, answers, followUps:object[], earlier:{questions, answers}[]}|null}
  */
 function routerFromTranscript(transcriptPath, sinceIso, RC) {
   if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
@@ -404,7 +554,7 @@ function routerFromTranscript(transcriptPath, sinceIso, RC) {
   if (!text) return null;
   const since = sinceIso ? Date.parse(sinceIso) - 5000 : NaN;
   const lines = text.split('\n');
-  const followUps = [];
+  const seen = []; // newest first: {questions, answers} router calls and {followUp}
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
     if (!line.includes('toolUseResult')) continue;
@@ -414,16 +564,33 @@ function routerFromTranscript(transcriptPath, sinceIso, RC) {
     const t = Date.parse(obj.timestamp);
     if (Number.isFinite(since) && Number.isFinite(t) && t < since) break;
     const { questions, answers } = RC.extractAnswers(obj.toolUseResult, {});
-    if (RC.isRouterCall(questions)) return { questions, answers, followUps: followUps.reverse() };
+    if (RC.isRouterCall(questions)) {
+      seen.push({ questions, answers });
+      if (!RC.isPartialRouterCall(questions)) break;
+      continue;
+    }
     const f = RC.parseFollowUp(questions, answers);
-    if (f) followUps.push(f);
+    if (f) seen.push({ followUp: f });
   }
-  return null;
+  let oldest = -1;
+  seen.forEach((e, i) => { if (!e.followUp) oldest = i; });
+  if (oldest < 0) return null;
+  // Follow-ups older than the chain's first router call belong to no run.
+  const chain = seen.slice(0, oldest + 1).reverse();
+  const calls = chain.filter(e => !e.followUp);
+  const newest = calls[calls.length - 1];
+  return {
+    questions: newest.questions,
+    answers: newest.answers,
+    followUps: chain.filter(e => e.followUp).map(e => e.followUp),
+    earlier: calls.slice(0, -1),
+  };
 }
 
 module.exports = {
-  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS,
-  commandFacts, toolFilePath, isGatedPath, closesOf, cardFacts, readCardPayload,
-  releaseResult, routerFromTranscript, stripQuotes, gitOut, baseBranch, isItemBranch, readTail,
-  splitSegments, commandAt, contractRoots,
+  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS,
+  MACHINE_ARM_RE, MACHINE_TURN_RE, BACKLOG_AUTOSTART_RE,
+  commandFacts, splitSegments, commandAt, shellCallFacts, contractRoots,
+  toolInput, toolFilePath, isGatedPath, isGatedEdit, closesOf, cardFacts, readCardPayload,
+  releaseResult, routerFromTranscript, baseBranch, isItemBranch, gitOut, gitLines, readTail,
 };
