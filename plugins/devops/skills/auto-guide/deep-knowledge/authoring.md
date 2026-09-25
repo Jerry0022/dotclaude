@@ -28,6 +28,19 @@ is in [protocol.md](protocol.md); this file is about *content*.
   the final step (`done: true`) lists what now exists and where each collected
   value went.
 
+## `location`, `copy`, `checklist` — more guidance, same step count
+
+| Field | Use when | Don't |
+|-------|----------|-------|
+| `location` | The step needs the user somewhere specific and the exact path isn't obvious from context ("Wo: Account → API tokens → Create Token"). Put the navigation target here, not as inline bold text in `text`. | Repeat what `title` already says, or describe the *action* (that's `text`). |
+| `copy` | A value the project already knows and the user has to type verbatim on the site (a name, a scope string, a URL). One chip per value; the user clicks the clipboard button and pastes it themselves. | Put a `secret` value here — chips are plain text and not for tokens/keys the user is generating on the page. |
+| `checklist` | A single screen has 2-4 sub-actions the user should tick off before moving on (e.g. three scope checkboxes on a token-creation form) — keeps it **one step**, `index` doesn't advance for each checkbox. | Use it for the *primary* action of the step (that's the input/Weiter button), or for anything Claude needs to verify — checklist items are local UI state only, never an event. |
+
+**The user always submits.** Enter, Submit, Create and every other page-side
+commit action belongs to the user. `copy` chips save a retype, never a click;
+Claude never fills or submits a form field on the target site (SKILL.md §
+Rules).
+
 ## Inputs — ask only for what the project needs
 
 | Type | Use when | Don't |

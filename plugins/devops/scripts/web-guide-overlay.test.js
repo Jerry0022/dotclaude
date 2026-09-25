@@ -156,6 +156,7 @@ function makeSandbox({ setTimeoutFn, clearTimeoutFn } = {}) {
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     console,
+    navigator: { clipboard: { writeText: () => {} } },
     // Pass the outer realm's Date through so fake timers (which patch it) can
     // also advance the vm sandbox's Date.now() — a vm.createContext otherwise
     // gets its own, unrelated Date built-in.
@@ -185,8 +186,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.5.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.5.0["']/);
+  test("defines VERSION 1.6.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.6.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -217,7 +218,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.5.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.6.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -234,7 +235,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.5.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.6.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -553,6 +554,59 @@ describe("web-guide-overlay — execution", () => {
 
     const state = sandbox.window.claudeGuide.state();
     expect(state.queued).toBe(0);
+  });
+
+  // #514: location block, copy chips, checklist.
+  test("renders a location block, copy chips with a working clipboard button, and a checklist", () => {
+    sandbox.navigator.clipboard.writeText = vi.fn();
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go",
+      location: "Account API tokens → Create Token",
+      copy: [{ label: "Token name", value: "web-guide-test" }],
+      checklist: ["Scope contents:read gesetzt", "Ablaufdatum gewählt"],
+    });
+    const host = getHost(sandbox);
+
+    const loc = findAll(host, (e) => e._text && e._text.indexOf("Account API tokens") !== -1)[0];
+    expect(loc).toBeTruthy();
+
+    const chipCode = findAll(host, (e) => e.tagName === "CODE" && e._text === "web-guide-test")[0];
+    expect(chipCode).toBeTruthy();
+    const copyBtn = findAll(host, (e) => e.tagName === "BUTTON" && e._text.indexOf("Kopieren") !== -1)[0];
+    copyBtn.click();
+    expect(sandbox.navigator.clipboard.writeText).toHaveBeenCalledWith("web-guide-test");
+    expect(copyBtn.textContent).toBe("Kopiert!");
+
+    const checklistItems = findAll(host, (e) => e.tagName === "LI");
+    expect(checklistItems.length).toBe(2);
+    const checkboxes = findAll(host, (e) => e.type === "checkbox");
+    expect(checkboxes.length).toBe(2);
+  });
+
+  // #514: a step without the optional fields renders exactly as before.
+  test("location/copy/checklist are optional — a plain step renders unchanged", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    expect(findAll(host, (e) => e.className === "loc").length).toBe(0);
+    expect(findAll(host, (e) => e.className === "copylist").length).toBe(0);
+    expect(findAll(host, (e) => e.className === "checklist").length).toBe(0);
+  });
+
+  // #514: a malformed checklist (outside 2-4 items) is rejected by sanitizeStep
+  // when restored from storage — same defensive posture as every other field.
+  test("a checklist outside 2-4 items is discarded on restore", () => {
+    sandbox.sessionStorage.setItem(
+      "__wg",
+      JSON.stringify({
+        step: { id: "1", index: 1, total: 1, title: "T", text: "go", checklist: ["only one"] },
+        collapsed: false,
+        ts: Date.now(),
+      })
+    );
+    run(sandbox);
+    expect(sandbox.window.claudeGuide.state().stepId).toBe(null);
   });
 
   // #516: a pointerdown that starts on the collapse button must not arm the

@@ -61,6 +61,9 @@ interface WG {
   "total": 6,
   "title": "Token benennen",
   "text": "Gib im Feld **Note** den Namen `web-guide-test` ein.\nDann unten auf **Generate token** klicken.",
+  "location": "Settings → Developer settings → Personal access tokens → Fine-grained tokens",
+  "copy": [{ "label": "Token name", "value": "web-guide-test" }],
+  "checklist": ["Repository access auf das Zielrepo eingeschränkt", "Scope `contents:read` gesetzt"],
   "input": {
     "type": "text",
     "name": "token_name",
@@ -79,8 +82,20 @@ interface WG {
 | `index` / `total` | Progress badge `3/6`. `total` may grow as the guide learns more; it never shrinks below `index`. |
 | `title` | ≤ 40 chars. |
 | `text` | Plain text with three inline marks only: `**bold**`, `` `code` ``, and `\n` line breaks. **No HTML.** The overlay escapes everything first, then applies marks. |
+| `location` | Optional, 1-80 chars, no HTML. The navigation breadcrumb ("Wo: …"), rendered as its own prominent block at the top of the step — never buried inline in `text`. |
+| `copy` | Optional, non-empty array of `{ "value": string (1-200 chars), "label"?: string (1-40 chars) }`. Renders as chips with a clipboard button (`navigator.clipboard.writeText`, called only inside the click handler). The user still pastes the value in themselves — see § the user always submits. |
+| `checklist` | Optional, **2-4** strings (1-140 chars each, no HTML). Locally tickable sub-actions for one screen that needs more than one click; purely client-side UI state, never emitted as an event, and it does not participate in verification. |
 | `input` | Optional. Types: `text`, `secret`, `choice`, `confirm`. `secret` renders `<input type="password">` — value is still returned in the event (see § Secrets). `choice` renders one button per `options[]` entry; clicking one is the event (no separate Weiter). `confirm` is a checkbox the user must tick before Weiter. `required: true` disables Weiter until non-empty. |
 | `done` | `true` on the final step: panel shows a ✅ state, primary button reads **Fertig**, subtitle says the tab can be closed. |
+
+### The user always submits (#514)
+
+Enter, Submit, Create and every other page-side commit action on the target
+site is always pressed by the user — never by Claude. `copy` chips exist so
+the user doesn't have to retype a value the guide already knows, not so the
+guide can fill the field itself; nothing in this protocol lets Claude click,
+type into, or submit a form on the third-party page (see also SKILL.md §
+Rules, "The user operates, Claude guides").
 
 ### Event (overlay → Claude)
 

@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.5.0
+ * @version 1.6.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.5.0";
+  var VERSION = "1.6.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -41,6 +41,20 @@
     return typeof n === "number" && isFinite(n);
   }
 
+  // #514: copy[] chips and checklist[] sub-actions, validated the same
+  // defensive way as everything else restored from page-writable storage.
+  function isValidCopy(copy) {
+    return Array.isArray(copy) && copy.length > 0 && copy.every(function (c) {
+      return c && typeof c === "object" && typeof c.value === "string" && c.value.length > 0
+        && (c.label === undefined || typeof c.label === "string");
+    });
+  }
+
+  function isValidChecklist(list) {
+    return Array.isArray(list) && list.length >= 2 && list.length <= 4
+      && list.every((item) => typeof item === "string" && item.length > 0);
+  }
+
   function sanitizeStep(step) {
     if (!step || typeof step !== "object") return null;
     if (typeof step.id !== "string" || !step.id) return null;
@@ -48,8 +62,14 @@
     if (!Number.isInteger(step.total) || step.total < 1) return null;
     if (typeof step.title !== "string" || typeof step.text !== "string") return null;
     if (step.done !== undefined && typeof step.done !== "boolean") return null;
+    if (step.location !== undefined && typeof step.location !== "string") return null;
+    if (step.copy !== undefined && !isValidCopy(step.copy)) return null;
+    if (step.checklist !== undefined && !isValidChecklist(step.checklist)) return null;
     var out = { id: step.id, index: step.index, total: step.total, title: step.title, text: step.text };
     if (step.done !== undefined) out.done = step.done;
+    if (step.location !== undefined) out.location = step.location;
+    if (step.copy !== undefined) out.copy = step.copy.map((c) => ({ label: c.label, value: c.value }));
+    if (step.checklist !== undefined) out.checklist = step.checklist.slice();
     var input = step.input;
     if (input === undefined) return out;
     if (!input || typeof input !== "object") return null;
@@ -153,6 +173,14 @@
     ".body{padding:12px}",
     ".t{font-weight:700;margin:0 0 6px}",
     ".x{line-height:1.4;margin:0 0 10px}",
+    // #514: location breadcrumb, copy chips, local checklist.
+    ".loc{background:#f3e8ff;color:#5b21b6;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;margin:0 0 10px}",
+    ".copylist{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}",
+    ".chip{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f5f5f7;border-radius:8px;padding:6px 8px}",
+    ".chip code{font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-wrap:anywhere}",
+    ".chipbtn{background:#eee;color:#333;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;flex:none}",
+    ".checklist{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}",
+    ".checklist label{display:flex;gap:6px;align-items:flex-start;font-size:13px}",
     ".foot{padding:10px 12px;border-top:1px solid #eee;display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
     "button.btn{font:inherit;border:none;border-radius:8px;padding:8px 12px;cursor:pointer}",
     ".primary{background:#6d28d9;color:#fff}",
@@ -454,6 +482,13 @@
     var body = mk("div", "body");
     panel.appendChild(body);
 
+    // #514: the navigation target gets its own prominent block, not inline
+    // bold text buried in the step body.
+    if (currentStep.location) {
+      var locEl = mk("div", "loc", "📍 " + currentStep.location);
+      body.appendChild(locEl);
+    }
+
     var focusTarget = null;
 
     if (currentStep.done) {
@@ -484,6 +519,47 @@
       var textEl = mk("p", "x");
       textEl.innerHTML = formatText(currentStep.text || "");
       body.appendChild(textEl);
+
+      // #514: copyable values as chips with a clipboard button — the user
+      // still pastes them in themselves, the guide never fills the page.
+      if (currentStep.copy && currentStep.copy.length) {
+        var copyWrap = mk("div", "copylist");
+        currentStep.copy.forEach(function (c) {
+          var chip = mk("div", "chip");
+          chip.appendChild(mk("code", null, c.value));
+          var copyLabel = c.label ? "Kopieren: " + c.label : "Kopieren";
+          var copyBtn = makeButton(copyLabel, "chipbtn", function () {
+            try {
+              navigator.clipboard.writeText(c.value);
+            } catch {}
+            copyBtn.textContent = "Kopiert!";
+            setTimeout(function () {
+              copyBtn.textContent = copyLabel;
+            }, 1500);
+          });
+          chip.appendChild(copyBtn);
+          copyWrap.appendChild(chip);
+        });
+        body.appendChild(copyWrap);
+      }
+
+      // #514: 2-4 locally tickable sub-actions — one panel step can still
+      // cover a whole screen without the total step count exploding. Purely
+      // local UI state, never emitted: it does not change verification.
+      if (currentStep.checklist && currentStep.checklist.length) {
+        var checklistEl = mk("ul", "checklist");
+        currentStep.checklist.forEach(function (item) {
+          var li = mk("li");
+          var itemLabel = document.createElement("label");
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          itemLabel.appendChild(cb);
+          itemLabel.appendChild(mk("span", null, item));
+          li.appendChild(itemLabel);
+          checklistEl.appendChild(li);
+        });
+        body.appendChild(checklistEl);
+      }
 
       var input = currentStep.input;
       var readValue = function () {
