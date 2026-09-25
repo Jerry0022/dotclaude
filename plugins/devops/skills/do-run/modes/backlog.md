@@ -418,7 +418,10 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    aggregate status: `ship-successful` when ≥1 item shipped and nothing is
    BLOCKED; `ship-blocked` when items are blocked; `ready` / `analysis` when
    nothing shipped. Relay the card markdown VERBATIM as the last output.
-4. **Project ship-extension finalizer — once, after the final card.** Read
+4. **Project ship-extension finalizer — once, after the final card's render.**
+   It runs right after `render_completion_card` and before the card is
+   delivered (Desktop `show_widget` / terminal markdown), so no tool row lands
+   under the card; the extension's step names that position. Read
    `{project}/.claude/skills/do-ship/SKILL.md` (pre-PR-2 fallback: `ship/`; if present) for a post-ship
    self-update / finalizer step that the extension skips while a
    `backlog-runner` lockout is active (the dotclaude plugin-source repo has one:

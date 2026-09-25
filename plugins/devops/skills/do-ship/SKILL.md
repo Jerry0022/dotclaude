@@ -3,8 +3,8 @@ name: do-ship
 version: 0.12.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
-  ship_version_bump, ship_release, ship_cleanup, render_completion_card,
-  then silent memory consolidation.
+  ship_version_bump, ship_release, ship_cleanup, silent memory consolidation,
+  then render_completion_card as the last action.
   Supports hierarchical merges (sub-branch → feature → main).
   Use when work is ready to land. Ships to alpha; naming beta or stable
   ("ship stable", "promote to beta", "auf stable heben") ships anything
@@ -1110,6 +1110,32 @@ named) do exactly this and nothing else — `modes/promote.md` Steps 0–4, the
 version = latest alpha unless one was named; a bare "promote" asks its Step
 2 question. A named version never triggers a ship, whatever the tree holds.
 
+## Step 5e — Memory Dream (silent, before the card)
+
+Silent memory consolidation after shipping. Runs **before** the completion
+card: the card is the last action of the run (Step 6), and a memory pass after
+it left Read/Write rows under the card and a closing line the user did not ask
+for.
+
+**Skip condition:** If no memory files were written or updated during this session → skip silently.
+
+**If memories were touched this session**, run a lightweight dream pass:
+
+1. **Orient** — Read `MEMORY.md` index and list all `memory/*.md` files
+2. **Consolidate**:
+   - Merge overlapping entries (same topic, different sessions)
+   - Convert any relative dates to absolute (`"gestern"` → actual date)
+   - Remove entries contradicted by current code/repo state
+   - Remove implementation details derivable from code (file paths, line numbers, script commands)
+3. **Prune** — Delete memory files that are fully stale (topic resolved, info now in code/docs)
+4. **Update Index** — Rewrite `MEMORY.md` to match surviving files. Keep under 200 lines.
+
+**Rules:**
+- No user-visible output. This step is silent.
+- Max budget: ~5K tokens (reads + minimal writes)
+- Never touch `CLAUDE.md` — only `memory/` files
+- If consolidation finds nothing to change → done, no writes needed
+
 ## Step 6 — Completion Card
 
 Call `render_completion_card` MCP tool (dotclaude-completion server) with data from previous steps.
@@ -1209,7 +1235,7 @@ render_completion_card({
   tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit") and the Step 1e lines: { method: "Harden (Ship)", result: "1 Fix · 2 Hinweise" } whenever the harden pass ran, { method: "UI-Regeln", result: "2 Findings · R2b deaktiviert" } only when the diff had UI files. Rendered on the header line(s) under **Geprüft**.>],
   validation: [<requirement ≤ 70 → evidence ≤ 100 chars; partial/unmet items first. Long-form evidence belongs in the PR body.>],
   userFinalTest: [<ONLY real manual tests the user must run>],
-  open: [<decisions, cleanups, open questions about THIS work — NOT tests: "Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?"; as { text, reply } when the user's answer is clear — reply: "Bitte löschen.". Never another branch, worktree or session — the user may be shipping it in parallel right now; that session ships its own branch (the card drops such points).>],
+  open: [<decisions, cleanups, open questions about THIS work — NOT tests: "Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?"; as { text, reply } when the user's answer is clear — reply: "Bitte löschen.". Never another branch, worktree or session — the user may be shipping it in parallel right now; that session ships its own branch (the card drops such points). Never a side topic: that is a task chip (spawn_task), and a point naming a chip is dropped too.>],
   state: {
     branch: "main",
     commit: <from ship_release.commit>,
@@ -1306,6 +1332,15 @@ names the kept branch on the Delivery ship line (`· \`feat/x (kept locally)\``)
 
 Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
 
+**The card ends the run — nothing after it.** No memory pass, no extension
+step, no check of a background task, no line of text: on the Desktop app every
+tool call after the card widget shows as a row under it, and each one invites a
+closing sentence the user reads as noise. Everything the run still has to do
+happens before the card (Step 5e). A project extension step that cannot run
+before `render_completion_card` — it would stale the card's own MCP call — runs
+between that call and the Desktop `show_widget` call, never after the widget.
+When such a step fails, say it in ONE line before the widget, not after it.
+
 **No recap before the card.** The card (on Desktop: the widget) is the ship
 summary — never restate in prose what it already shows: changes, tests, skipped
 checks, version, PR, open items, a restart hint. Everything of that belongs in
@@ -1315,28 +1350,13 @@ user's prompt, points beyond the card's three, and hook blocks that are still
 marked for the user and still true (a session-start finding this ship resolved
 is dropped, not restated with an "outdated" note).
 
-## Step 7 — Memory Dream
-
-Silent memory consolidation after shipping. Runs **after** the completion card so it never delays user-facing output.
-
-**Skip condition:** If no memory files were written or updated during this session → skip silently.
-
-**If memories were touched this session**, run a lightweight dream pass:
-
-1. **Orient** — Read `MEMORY.md` index and list all `memory/*.md` files
-2. **Consolidate**:
-   - Merge overlapping entries (same topic, different sessions)
-   - Convert any relative dates to absolute (`"gestern"` → actual date)
-   - Remove entries contradicted by current code/repo state
-   - Remove implementation details derivable from code (file paths, line numbers, script commands)
-3. **Prune** — Delete memory files that are fully stale (topic resolved, info now in code/docs)
-4. **Update Index** — Rewrite `MEMORY.md` to match surviving files. Keep under 200 lines.
-
-**Rules:**
-- No user-visible output. This step is silent.
-- Max budget: ~5K tokens (reads + minimal writes)
-- Never touch `CLAUDE.md` — only `memory/` files
-- If consolidation finds nothing to change → done, no writes needed
+**No side topics on the ship card.** Its `open` points are decisions about THIS
+work. A finding outside it goes into a task chip (`spawn_task`, Desktop app) —
+the chip is the offer, one click starts the fix in its own session. Never both:
+the card drops a point that says a chip or follow-up task exists, and its
+"Nachbessern" answer would have the user fix the topic here a second time and
+ship again. Only where no chip exists (terminal) may a side finding stay an
+open point.
 
 ## Data Flow & Hierarchical Merges
 

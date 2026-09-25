@@ -431,6 +431,20 @@ for the fork (`Skill("devops:auto-concept")`) and call auto-agents again with
 the answer; Autonom → log it, skip the fork, continue. The completion card is
 this router's (or do-run's composed do-ship's), never auto-agents'.
 
+**Nothing left to fix at the ship (not under Strikt).** The block's `open`
+list is worked off BEFORE Step 7 — it never lands on the ship card as work the
+user has to ask for with "Nachbessern" and then ship again:
+- a finding or shortfall inside the task's scope → fix it now: call
+  auto-agents again with the list (or fix it inline), then re-check;
+- a fork only the user can decide → `needs-decision` as above (Autonom: take
+  the recommended option and report the choice);
+- something outside the task's scope → a task chip (`spawn_task`, Desktop app)
+  — the chip is the offer, and the card drops a point that repeats one.
+
+The card's `open` then holds only decisions the user must take, or a concept
+that needs their feedback. Under **Strikt** the scope is closed: a shortfall
+beyond the named scope is not widened into, it goes into the strict report.
+
 ## Rules
 
 - One base call, at most one follow-up — every other question a folded skill
