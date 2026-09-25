@@ -727,6 +727,44 @@ describe("gitStatusOf", () => {
 });
 
 // ---------------------------------------------------------------------------
+// CLI: guide active / clear (#526)
+// ---------------------------------------------------------------------------
+
+describe("CLI: guide active / clear", () => {
+  test("guide active writes a fresh marker under .claude/", () => {
+    const dir = makeTmpDir();
+    const r = run(["guide", "active"], { cwd: dir });
+    expect(r.code).toBe(0);
+    const file = path.join(dir, ".claude", "auto-guide-active.json");
+    expect(r.stdout.trim()).toBe(`guide-active ${file}`);
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect(typeof data.ts).toBe("number");
+  });
+
+  test("guide clear removes the marker", () => {
+    const dir = makeTmpDir();
+    run(["guide", "active"], { cwd: dir });
+    const file = path.join(dir, ".claude", "auto-guide-active.json");
+    expect(fs.existsSync(file)).toBe(true);
+    const r = run(["guide", "clear"], { cwd: dir });
+    expect(r.code).toBe(0);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("guide clear on a never-created marker does not error", () => {
+    const dir = makeTmpDir();
+    const r = run(["guide", "clear"], { cwd: dir });
+    expect(r.code).toBe(0);
+  });
+
+  test("unknown guide subcommand prints usage on stderr, exit 2", () => {
+    const r = run(["guide", "frobnicate"]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("usage:");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // CLI: usage / unknown command
 // ---------------------------------------------------------------------------
 

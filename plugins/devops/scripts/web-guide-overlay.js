@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.7.0
+ * @version 1.8.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.7.0";
+  var VERSION = "1.8.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -367,7 +367,9 @@
   // lost — the event is queued and, since it's now sessionStorage-backed,
   // survives a reload too) from an actually lost event. Ticks every
   // HEARTBEAT_TICK_MS and reflects lastPoll's age; the typed help text is
-  // never touched, so it stays exactly as the user left it.
+  // never touched, so it stays exactly as the user left it. This is also the
+  // visible "paused" message #526 asks for instead of a silently disabled
+  // panel once Claude's turn ends — reused rather than duplicated.
   function tickHeartbeat() {
     if (waitLabelEl) {
       waitLabelEl.textContent = Date.now() - lastPoll > HEARTBEAT_STALE_MS

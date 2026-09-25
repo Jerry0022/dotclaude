@@ -249,6 +249,34 @@ with none of it. Three fix ideas were weighed:
    header comment), so a loader would still need the full source pasted in a
    second call — no cheaper than lean already is, and one extra round trip.
 
+## Not ending the turn mid-loop (#526)
+
+The step loop lives entirely inside repeated `wait()` calls, one per
+`javascript_tool` invocation — from `stop.flow.guard`'s point of view a
+guide turn can look like "many tool calls, no completion card", which is
+exactly what it blocks on for every other skill. Forcing the card there
+would end Claude's turn while the panel still expects a `wait()` to be
+listening; the user's next click then queues an event nobody drains until
+the *next* prompt, and the panel visibly stalls ("Weiter" looks dead).
+
+`scripts/web-guide.js guide active` / `guide clear` write and remove
+`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms> }`).
+`stop.flow.guard` treats a marker younger than 30 minutes as "a guide is
+active" and skips the card requirement entirely for that turn (Gate 1 never
+fires) — see `hooks/lib/guide-active-state.js` — `isGuideActive`. SKILL.md
+writes the marker in Step 3 (and again on every turn that resumes the guide,
+Step 5's "Resuming in a new turn") and clears it in Step 6 (normal end) and
+Step 7 (aborted/closed). The 30-minute expiry means a guide that crashed
+before reaching Step 6/7 (tab killed, process crashed) does not silence the
+card gate for the rest of the session.
+
+While the panel is genuinely unattended (Claude's turn ended without
+clearing the marker, or between turns), the overlay's own #513 heartbeat
+already tells the user visibly instead of just disabling the button: once
+10 s pass without a `wait()` poll, the status line swaps "Warte auf
+Claude…" for "Claude hört gerade nicht zu — schreib im Chat „weiter"." — the
+"Claude is paused, type in chat" message #526 asks for.
+
 ## Payload helper — `scripts/web-guide.js`
 
 | Command | Output |
@@ -257,3 +285,4 @@ with none of it. Three fix ideas were weighed:
 | `payload step <step.json>` | `window.claudeGuide.setStep(<json>)` with the JSON validated against the schema above (exit 1 + reason on violation). |
 | `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default 30000, maximum 35000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |
+| `guide active` / `guide clear` | Writes / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). |

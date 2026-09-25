@@ -101,6 +101,12 @@ never used (`{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md` § Edge Cred
 2. If the call fails → show the "BROWSER TOOL NICHT VERFÜGBAR" block from
    browser-tool-strategy.md and stop; there is no fallback for this skill.
 3. `navigate({ tabId: $TAB_ID, url: $START_URL })`.
+4. `node "{PLUGIN_ROOT}/scripts/web-guide.js" guide active` (#526): marks the
+   guide active for `stop.flow.guard` so it does not force the completion
+   card that would end the wait() loop below. Re-run this on every turn that
+   resumes the guide (see "Resuming in a new turn" below) — the marker
+   expires after 30 minutes idle so a crashed guide cannot disable the gate
+   forever.
 
 ## Step 4 — Inject the overlay
 
@@ -125,18 +131,29 @@ guide — a step that needs several minutes is still just repeated 5c calls,
 never a return to chat between them.
 
 **Resuming in a new turn.** A reload or redirect can drop the overlay while
-Claude's turn has ended (no `wait()` was mid-flight to see the navigation).
-Before the first 5c of every turn that continues an already-running guide
-(i.e., not the guide's very first step), probe state first:
+Claude's turn has ended (no `wait()` was mid-flight to see the navigation);
+so can a completion card that ended the previous turn while the panel was
+mid-loop (#526 narrows this, but a stale marker or a first run before the
+fix can still hit it). Before the first 5c of every turn that continues an
+already-running guide (i.e., not the guide's very first step):
 
-```js
-JSON.stringify(window.claudeGuide && window.claudeGuide.state())
-```
+1. Re-run `node "{PLUGIN_ROOT}/scripts/web-guide.js" guide active` (Step 3.4)
+   — a resumed turn is exactly when the marker is closest to expiring.
+2. Probe state:
 
-`stepId` missing or the probe errors (`claudeGuide` undefined) → the overlay
-is gone: Step 4 (re-inject), then 5b with the current step, then continue to
-5c. `stepId` matches → skip straight to 5c; the overlay's own
-`sessionStorage` restore already reproduced the panel, so no need to re-show it.
+   ```js
+   JSON.stringify(window.claudeGuide && window.claudeGuide.state())
+   ```
+
+   `stepId` missing or the probe errors (`claudeGuide` undefined) → the
+   overlay is gone: Step 4 (re-inject), then 5b with the current step, then
+   continue to 5c. `stepId` matches but `queued > 0` → the panel collected an
+   event while nobody was listening (the previous turn ended mid-loop, #526);
+   drain it first with `node "{PLUGIN_ROOT}/scripts/web-guide.js" payload wait 0`
+   (paste into `javascript_tool`) and treat the result like any other 5c
+   result before continuing. `stepId` matches and `queued` is `0` → skip
+   straight to 5c; the overlay's own `sessionStorage` restore already
+   reproduced the panel, so no need to re-show it.
 
 ### 5a · Author step *n*
 
@@ -182,7 +199,21 @@ node "{PLUGIN_ROOT}/scripts/web-guide.js" payload wait
 ```
 
 Paste stdout into `javascript_tool`. The call blocks up to 30 s and returns
-one Event (`deep-knowledge/protocol.md` § Event):
+one Event (`deep-knowledge/protocol.md` § Event).
+
+**Hidden tab (#526).** A real `wait(30000)` against a hidden tab burns up to
+the full ~45 s CDP budget for nothing — the overlay arms no timer while
+`document.hidden` (protocol.md § spike), so it only resolves once the tab
+comes back to the foreground or the CDP eval itself times out. Before every
+5c, run the cheap sync probe from the "Resuming in a new turn" step (or reuse
+its last result) to check `hidden`. While hidden: call
+`node "{PLUGIN_ROOT}/scripts/web-guide.js" payload wait 0` instead of the
+real wait — it resolves immediately (queued event, or `{"type":"timeout"}` if
+none) without tying up any CDP budget. Treat `{"type":"timeout"}` as one
+ordinary timeout tick (same 10/30 counters below) and re-probe `hidden`
+before the next 5c. Only switch back to the real `payload wait` once the
+probe reports `hidden: false` — that is what lets the overlay's own
+visibility-triggered timer do its job.
 
 | Result | Action |
 |--------|--------|
@@ -237,18 +268,21 @@ with `done: true` — what was created, where each value went — and wait for
 
 1. If the tab is still alive: `javascript_tool` → `window.claudeGuide.destroy()`.
    Leave the tab open — closing it is the user's call.
-2. Report in chat (locale per `[ui-locale: …]`): what exists now on the site,
+2. `node "{PLUGIN_ROOT}/scripts/web-guide.js" guide clear` (#526): clears the
+   guide-active marker so `stop.flow.guard` goes back to its normal card
+   requirement for this session's next turn.
+3. Report in chat (locale per `[ui-locale: …]`): what exists now on the site,
    every non-secret value collected, and for each secret only
    `<KEY> → <file>`. If the guide ended early (abort / closed tab), say which
    step was last and what is still missing — never claim the goal is reached.
-3. The completion card renders through the normal stop flow.
+4. The completion card renders through the normal stop flow.
 
 ## Step 7 — Early ends
 
 | End | What to do |
 |-----|-----------|
-| **closed** | User closed the tab. Treat as "stop here". Report per Step 6.2. |
-| **aborted** | User pressed Abbrechen, or a tool failed twice. `destroy()` if possible, report per Step 6.2 incl. the error. |
+| **closed** | User closed the tab. Treat as "stop here". Clear the guide-active marker (Step 6.2) and report per Step 6.3. |
+| **aborted** | User pressed Abbrechen, or a tool failed twice. `destroy()` if possible, clear the guide-active marker (Step 6.2), report per Step 6.3 incl. the error. |
 
 ## Rules
 

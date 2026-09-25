@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.8.0
+ * @version 0.9.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -46,6 +46,14 @@
  *
  *   Offline-first (#371): when the completion MCP's heartbeat is dead, the
  *   block reason lists the offline renderer FIRST instead of third.
+ *
+ *   Guide-active exemption (#526): while a fresh
+ *   `<project>/.claude/auto-guide-active.json` marker exists (written by
+ *   `scripts/web-guide.js guide active`, cleared by `guide clear`) and no
+ *   card was rendered this turn, the turn is never forced to end — that
+ *   card requirement is what killed the /auto-guide panel's wait() loop.
+ *   The marker expires after 30 minutes idle, so a crashed guide cannot
+ *   disable this gate forever.
  */
 
 require('../lib/plugin-guard');
@@ -66,6 +74,7 @@ const {
 const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { releaseOnce } = require('../lib/run-once');
+const { isGuideActive } = require('../../scripts/guide-active-state');
 const { execFileSync } = require('child_process');
 
 /**
@@ -155,6 +164,9 @@ process.stdin.on('end', () => {
   // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
   const treeClean = (!silent && (scheduledTask || notificationTurn)) ? isTreeClean(hook.cwd, sessionId) : null;
   const completionMcpDown = silent ? false : !isMcpServerAlive('dotclaude-completion');
+  // #526: a fresh <project>/.claude/auto-guide-active.json marker means an
+  // /auto-guide run is mid-loop — never force the card that would end it.
+  const guideActive = silent ? false : isGuideActive(hook.cwd);
 
   // The sidebar prefix belongs to the turn that just ended (📦 Ready, 🧪 Test,
   // 🚀 Shipped, …). The next real prompt starts new work, so hand the wrench
@@ -189,6 +201,7 @@ process.stdin.on('end', () => {
     cardRelayed,
     widgetFile,
     widgetCalled,
+    guideActive,
   });
 
   if (decision.resetFlags) {
