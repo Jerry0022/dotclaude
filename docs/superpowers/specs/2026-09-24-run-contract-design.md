@@ -112,11 +112,11 @@ Events (`k` = kind, `t` = iso time):
 | `skill` | `name` (normalized, current name via `skill-names`), `args` (≤ 400 chars) | PostToolUse Skill, and UserPromptSubmit for a prompt that starts with a typed devops slash command (section G) |
 | `agent` | `type` (`subagent_type`, default `general-purpose`) | PostToolUse Agent |
 | `edit` | — (only when the previous event is not `edit`) | PostToolUse Edit/Write/NotebookEdit on a gated path |
-| `commit` | — | PostToolUse Bash/PowerShell `git commit` (exit 0) |
-| `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c` (exit 0) — an ITEM boundary only (R6): not from a subagent, not `git worktree add`, not `--detach`, not a `<current>-*` / `<current>/*` sub-branch. `git worktree add` never writes a `branch` event; `git branch <name>` is no branch creation at all (work starts on the branch `checkout -b` / `switch -c` switches to) |
+| `commit` | — | PostToolUse Bash/PowerShell `git commit` (exit 0: a non-zero exit fires PostToolUseFailure, which records nothing; an interrupted call or a non-zero exit code in `tool_response` records nothing either — RT3-X1) |
+| `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c`, `git branch X` followed by `git switch X` / `git checkout X` in the same command, `gh issue develop N -c` (exit 0, same failure rule as `commit`) — an ITEM boundary only (R6): not from a subagent, not `git worktree add`, not `--detach`, not a `<current>-*` / `<current>/*` sub-branch. `git worktree add` never writes a `branch` event; a lone `git branch <name>` is no branch creation (work starts only on a branch the command switches to) |
 | `release` | `ok`, `merged`, `closes: ["473"]` (from `Closes #N` in `tool_input.body`) | PostToolUse `ship_release` |
-| `card` | `variant` | PostToolUse `render_completion_card`, and Bash/PowerShell running the offline `--render-card` renderer (an unreadable payload is recorded as a final card, variant `null`) — never idle-expiry activity (H-B10) |
-| `skip` | `ob`, `reason`, `item?` | CLI `skip` |
+| `card` | `variant` | PostToolUse `render_completion_card`, and Bash/PowerShell running the offline `--render-card` renderer (an unreadable payload is recorded with variant `null`; whether it closes is H) — never idle-expiry activity (H-B10) |
+| `skip` | `ob`, `reason`, `item?` | CLI `skip` — satisfies that obligation only, never finishes a backlog item (RT3-R1) |
 | `park` | `item`, `reason` (ends the segment) | CLI `park` |
 | `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate — never counts as work, a segment boundary or idle-expiry activity (RT2-R3); not written again when the CURRENT segment's last `measure` has the same count (a new item still gets its own, H-B5) |
 | `block` | `gate`, `open` (obligation names refused) | PreToolUse, right before `return 2` — never counts as work, a segment boundary or idle-expiry activity (RT2-R3); not written again when the current segment's last `block` has the same gate and list |
@@ -133,6 +133,9 @@ Expiry: a contract with no activity for 12 h (interactive) / 30 h
 (autonomous or backlog) — every event but `block`, `measure` and `card`
 counts — reads as absent and is archived to `run-contract.prev.json` on the
 next write. A new router answer set replaces an active contract (archived).
+When post finds this session's contract expired unclosed (a Q&A-only run —
+cards are no activity), it says so once in `additionalContext` with the `arm`
+re-arm line and marks the header `expiryAnnounced` (RT3-X2).
 
 Kill switch: `DOTCLAUDE_RUN_CONTRACT=off` disables arming and every gate.
 
@@ -179,13 +182,15 @@ exact option label is split on `,` (older runtimes joined multi-select).
 
 Headers are normalised (NFC, trimmed, trailing `?` stripped, case-folded) and
 English aliases are accepted: `What`, `Flow`, `Scope`, `Passes`; follow-ups
-`Result`, `Audit scope`, `Milestones`, `Issues`, `PC after`. A later
-router-shaped call of the same session within 30 min that lacks one of
-`Ablauf` / `Umfang` / `Durchgänge` merges only its answered fields. Such a
-PARTIAL router call (Flow + Scope, or Passes alone) with no contract to merge
-into arms only after a fresh same-session do-run arm marker — a model-written
-question elsewhere never arms (H-B13); a FULL router call (Ablauf + Umfang +
-Durchgänge) is do-run's own signature and arms with or without the marker.
+`Result`, `Audit scope`, `Milestones`, `Issues`, `PC after`. A FULL router
+call (Ablauf + Umfang + Durchgänge) is do-run's own signature and arms with
+or without the marker. A PARTIAL router call (it lacks one of them: Flow +
+Scope, or Passes alone) is resolved in this order (H-B13, RT3-R8):
+(1) a fresh same-session do-run arm marker → a new run → arm;
+(2) else this session has an ACTIVE contract (not closed, not expired, any
+age) → merge only the answered fields into it;
+(3) else nothing is recorded, and `additionalContext` says so with the `arm`
+CLI line — a model-written question elsewhere never arms.
 
 Q1 missing (preset): mode = first token of the last `do-run` Skill args in
 the transcript (`backlog`, `audit`; `autonomous` / `burn` / `rethink` keep
@@ -201,7 +206,8 @@ mode its headers imply. A user-typed `/do-run …` makes no Skill call:
 by a machine prompt; an answered `Fortsetzen` (resume) question deletes it.
 The AskUserQuestion arm deletes it; an active same-session contract makes the
 PreToolUse hook delete it without re-arming. If it still exists when the PreToolUse hook sees a gated call
-(D), the hook scans the transcript tail once (`transcript_path`, last ~2 MB)
+(D), the hook scans the transcript once (`transcript_path`, read backwards in
+2 MB chunks, up to 32 MB)
 for the newest `toolUseResult` carrying router headers, arms from it and
 deletes the marker — when that newest one is a partial re-ask, the scan goes
 on to the full router call before it (same window) and the re-ask replaces
@@ -213,12 +219,15 @@ router call of that chain are applied. No such result → it arms the click-thro
 
 Follow-up call (same hook, updates the active contract):
 `Ergebnis` (`Audit als Concept` → `auditResult: concept`, passes cleared —
-the concept page owns what gets built), `Milestones` (titles), exactly the
-headers `Issues` and `Issues <n>` (the numbered continuation; every `#N` in
-the selected labels → `items` — `Issues found` or any other header merely
-starting with `Issues` is no follow-up), `PC danach` (recorded only). An
-empty or Other-placeholder `Milestones` / `Issues` answer leaves the recorded
-list unchanged (H-B7).
+the concept page owns what gets built), `Milestones` (titles), `Issues`
+(every `#N` in the selected labels → `items`), `PC danach` (recorded only).
+Only the exact headers do-run pins (SKILL.md F3 / F4, backlog.md Step 1.2)
+count: `Milestones` / `Issues` and their numbered continuations in the same
+call — `Issues 2`, `Issues (2)`, `Issues 2/3`, `Milestones 2`, `Milestones
+(2)` — whose selections are merged. `Issues found`, `Lose Issues`, `Open
+issues list` or any other header merely containing the word is no follow-up
+(H-B7, RT3-R7). An empty or Other-placeholder `Milestones` / `Issues` answer
+leaves the recorded list unchanged (H-B7).
 
 ### C. Obligations
 
@@ -238,7 +247,9 @@ boundary. Boundary: a `release` with `ok: true`, and in backlog mode also a
 | `triage` | backlog, `presence`: at the first `auto-agents` of the contract, at every release, and at the final card once the contract has work (an `edit`, `commit` or `auto-agents` anywhere — H-B2) | ≥ 1 `agent` event since arm |
 
 Every obligation is also satisfied by a matching `skip` event (for `refine`,
-one per item). `audit` contracts carry only `harden`, `polish`, `do-ship`
+one per item). Satisfying an obligation is not finishing an item: a skip —
+even `skip refine --item N` or `skip qa --item N` — never counts toward the
+backlog close (H, RT3-R1). `audit` contracts carry only `harden`, `polish`, `do-ship`
 (audit applies its fixes itself, `audit.md` 7a).
 
 ### D. Gates — `hooks/pre-tool-use/pre.run.contract.js`
@@ -257,8 +268,9 @@ hook pays — the early exit only keeps the hook from adding work on top.
 | Skill `auto-agents`, backlog, first of the contract | `triage` |
 | `mcp__plugin_devops_dotclaude-ship__ship_release` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`, `refine`, `triage` |
 | `mcp__plugin_devops_dotclaude-completion__render_completion_card`, variant ∈ `ship-successful · ready · ready-files · released · test`, no non-empty `pending`, no `concept` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`; `triage` for a backlog + presence contract with work |
-| Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file; an unreadable payload (`-`, `$var`, a missing file or one relative to a `cd` in the same command) counts as final — and is recorded and closes as one (H) |
-| Bash / PowerShell `gh pr merge` or `git push` onto `main` / `master`, contract `ship: auto` | same as `ship_release` |
+| Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file; an unreadable payload (`-`, `$var`, a missing file or one relative to a `cd` in the same command) is gated as final; post closes on it only under H's stricter rule (RT3-R2) |
+| Bash / PowerShell `gh pr merge`, `gh api -X PUT …/pulls/N/merge`, `git push` onto `main` / `master` (also `+main`), a bare `git push` / `git push origin HEAD` while HEAD is `main` / `master` (HEAD is resolved only under `ship: auto`); contract `ship: auto` | same as `ship_release` |
+| GitHub MCP `mcp__*__merge_pull_request`, contract `ship: auto` | same as `ship_release` (hooks.json matcher `mcp__.*__merge_pull_request`, RT3-R4) |
 | final card, backlog, `presence`, `ship: manual` | additionally `refine` of every item in `items` |
 
 Commands are read at COMMAND POSITION (`run-contract-calls.js`
@@ -275,6 +287,17 @@ looked through. Shell payloads are parsed again, up to 4 levels: `sh` /
 one holding a heredoc is text, so a commit / PR body never counts). Text
 inside quotes (`echo "git commit"`, `grep "gh pr merge"`) never matches.
 
+Also looked through (RT3): PowerShell `$x = …` assignments (the right-hand
+side is a command), bash `if` / `then` / `else` / `do` / `while` / `until`
+one-liners, PowerShell `{ … }` blocks, `iex` / `Invoke-Expression`, and line
+continuations (`\` / backtick + newline), joined before parsing. The shell is
+known from the tool: in the PowerShell tool the backtick is an escape, never a
+substitution. Heredoc bodies are data: a quoted delimiter's body is stripped,
+an unquoted one's is scanned only for `$(…)` / backticks, and a heredoc fed
+to a shell (`bash <<EOF`) is parsed as commands. PowerShell `@'…'@` is
+literal; `@"…"@` is scanned for `$(…)`. The parsed text is capped at 256 KB
+after heredoc stripping.
+
 Contract root (H-B1, identical in pre and post): the session root first,
 then — for the MCP tools only (`ship_release` and the MCP card, which act on
 `tool_input.cwd`) — `projectRoot(tool_input.cwd)`. The qa diff runs in the
@@ -282,8 +305,8 @@ input root when there is one; the MCP card is recorded and closes the
 contract in the root it was gated in. The base is `tool_input.base`, else
 `origin/HEAD`, else `main`, else `master`. At the card and branch gates the
 count also includes working-tree changes and untracked code files (`git
-ls-files --others --exclude-standard`, H-B4); the release gate counts the
-branch diff only. The gate records a `measure` event `{codeFiles:n|null}`
+ls-files --others --exclude-standard`, H-B4; an `ls-files` failure keeps the
+diff-based count); the release gate counts the branch diff only. The gate records a `measure` event `{codeFiles:n|null}`
 before deciding; the card shows `QA ?` when it is unknown.
 
 An interrupted or blocked run ends with `run-contract.js abort --reason
@@ -377,14 +400,20 @@ Writes the events of table A, arms/updates from router answers (B), deletes
 the batch marker (E), and closes:
 
 - `prompt` / `audit`: after a final-variant card (D) whose gate passed — MCP
-  or offline renderer (an unreadable payload counts as final). The close
-  follows from the card being final, not from its `card` event being
-  written: a card that was shown but whose append failed still ends the run
-  (H-B8).
-- `backlog`: on `done`, or when every item in `items` has a `release` closing
-  it, an item `skip` or a `park` — checked after `ship_release` and after
-  every other recorded call, so the park / skip that finishes the queue
-  closes it too (H-C5).
+  or a READABLE offline payload. The close follows from the card being
+  final, not from its `card` event being written: a card that was shown but
+  whose append failed still ends the run (H-B8). An offline payload post
+  cannot read (`-`, `$p`, a file removed in the same command) may be an
+  interim card pre let through, so it closes only when the contract has work
+  AND `openObligations(contract, events, 'card')` is empty — exactly where a
+  final card could have passed with nothing open (RT3-R2).
+- `backlog`: on `done`, or when every item in `items` has an ok `release`
+  closing `#N` or a `park N` — checked after `ship_release` and after every
+  other recorded call, so the park that finishes the queue closes it too
+  (H-C5). An obligation `skip` never finishes an item (RT3-R1).
+
+Post also answers a partial router call it could not record (B, case 3)
+and announces this session's expired contract once (A) via `additionalContext`.
 
 ### I. Skill and doc changes
 
@@ -437,9 +466,15 @@ runtime state to close:
 - A Windows path ending in `\` right before its closing quote
   (`"C:\tools\" commit`) reads as an escaped quote, so the quoted string
   runs on and the executable after it is missed.
-- cmd's `start git commit …`, a command assembled at runtime (`$cmd =
-  "git"; & $cmd commit`, `git $(echo commit)`), aliases and shell functions
-  are not resolved. `env -S` / `xargs` / `Start-Process` are read only in
+- cmd's `start git commit …` and a command assembled at runtime (`$cmd =
+  "git"; & $cmd commit`, `git $(echo commit)`) are out of scope; aliases and
+  shell functions are not resolved.
+- `git commit-tree` (plumbing) is not a commit.
+- A failed `git commit` whose exit is masked by a later command
+  (`git commit …; echo done`) reaches PostToolUse as a success and still
+  records `commit` — the harness reports only the last exit (RT3-X1).
+- The expiry notice (A) is emitted by post only (after the next matched
+  call), not by pre. `env -S` / `xargs` / `Start-Process` are read only in
   their plain forms (`Start-Process` flags other than the file / argument /
   value flags are assumed to take no value).
 - `lib/plugin-guard.js` still requires `project-root` at load time; H-B17

@@ -76,8 +76,24 @@
  *     contract has work (H-B2).
  *   - Headers are normalised on read (`sanitize()`, H-B6). A marker read
  *     but unparseable is deleted; a read error keeps it (H-B14, H-B14b).
- *   - Follow-ups: only the exact `Issues` / `Issues <n>` and `Milestones`
- *     headers; an empty / Other answer leaves the list unchanged (H-B7).
+ *   - Follow-ups: only the exact `Issues` / `Milestones` headers and their
+ *     numbered continuations (`Issues 2`, `Issues (2)`, `Issues 2/3`,
+ *     `Milestones 2`), merged within one call; an empty / Other answer
+ *     leaves the list unchanged (H-B7, RT3-R7).
+ *   - A partial router call merges into this session's active contract of
+ *     any age (no 30-min window); the post hook arms instead after a fresh
+ *     do-run marker and reports an unrecordable one (RT3-R8).
+ *   - A `skip` never finishes a backlog item; only `park N` or an ok
+ *     release closing #N does (post.run.contract, RT3-R1).
+ *   - An unreadable offline card closes a prompt / audit run only with work
+ *     and nothing open at the card gate (post.run.contract, RT3-R2).
+ *   - An expired, unclosed contract of the session is announced once
+ *     (`expiryNotice`, header flag `expiryAnnounced`, RT3-X2).
+ *   - Command reading (run-contract-calls.js, RT3): PowerShell assignments,
+ *     bash compound one-liners, `{ }` blocks, `iex`, joined continuations,
+ *     shell-aware backticks, heredoc bodies as data, a 256 KB parse cap;
+ *     `gh api -X PUT …/merge`, `git push +main`, a bare push on main and the
+ *     GitHub MCP merge count as releases under `ship: auto`.
  *   - Pending, batch and archive writes and event appends retry once (AUD-009).
  */
 
