@@ -1,9 +1,11 @@
 /**
  * @module pending-tasks
- * @version 0.5.0
+ * @version 0.6.0
  * @description Detects background work that is STILL RUNNING when a turn ends —
- *   subagents launched with run_in_background, backgrounded Bash tasks, and
- *   whole Workflow runs (which fan out to agents of their own).
+ *   subagents launched with run_in_background, backgrounded Bash tasks (started
+ *   with run_in_background, or moved to the background by the harness when a
+ *   foreground call outlived its timeout), and whole Workflow runs (which fan out
+ *   to agents of their own).
  *
  *   INFRASTRUCTURE IS NOT WORK. The auto-concept skill keeps three detached Bash
  *   tasks alive for as long as a concept page is open — the bridge server, the
@@ -24,6 +26,10 @@
  *     start  · agent    — tool_result text "Async agent launched successfully"
  *                         carrying "agentId: <id>"
  *     start  · task     — tool_result "Command running in background with ID: <id>"
+ *     start  · task     — tool_result "Command did not complete within its <n>s
+ *                         timeout and was moved to the background (ID: <id>)",
+ *                         a foreground call the harness backgrounded — see
+ *                         BASH_AUTO_BG_MARKER
  *     start  · workflow — tool_result "Workflow launched in background. Task ID: <id>"
  *     resume · agent    — a SendMessage tool_result naming the in-process agent
  *                         it set running (resumedAgentId / pin.id) — see
@@ -69,6 +75,19 @@ const AGENT_ID_RE = /agentId:\s*([A-Za-z0-9_-]+)/;
 /** Text a backgrounded Bash call returns, with its task id. */
 const BASH_LAUNCH_MARKER = 'Command running in background with ID:';
 const BASH_BG_RE = /Command running in background with ID:\s*([A-Za-z0-9_-]+)/;
+/**
+ * Text a FOREGROUND Bash/PowerShell call returns when it outlives its timeout:
+ * the harness moves the command to the background instead of killing it. From
+ * then on it is an ordinary background task — a <task-notification> when it
+ * ends, a TaskStop report when it is stopped — but this sentence is its only
+ * launch record. Verified against all 859 such results in the local transcripts
+ * (Bash 816, PowerShell 43): always the whole result, the sentence first. The
+ * timeout is the call's own (1s … 600s seen), so the marker is the constant
+ * opening and the regex, anchored to it, reads the id.
+ */
+const BASH_AUTO_BG_MARKER = 'Command did not complete within its';
+const BASH_AUTO_BG_RE =
+  /^Command did not complete within its \S+ timeout and was moved to the background \(ID:\s*([A-Za-z0-9_-]+)\)/;
 /** Text a Workflow launch returns — workflows are always backgrounded. */
 const WORKFLOW_LAUNCH_MARKER = 'Workflow launched in background.';
 const WORKFLOW_BG_RE = /Workflow launched in background\. Task ID:\s*([A-Za-z0-9_-]+)/;
@@ -133,6 +152,43 @@ const STOP_TOOLS = new Set(['TaskStop']);
  */
 function announces(text, marker) {
   return text.trimStart().startsWith(marker);
+}
+
+/**
+ * The task a Bash/PowerShell result announces it started, or '' — in either
+ * shape: launched with run_in_background, or moved to the background by the
+ * harness at its timeout. Each announcement must open the result (announces()).
+ * @param {string} text — the tool_result text
+ */
+function announcedTaskId(text) {
+  if (announces(text, BASH_LAUNCH_MARKER)) {
+    const m = text.match(BASH_BG_RE);
+    return m ? m[1] : '';
+  }
+  if (announces(text, BASH_AUTO_BG_MARKER)) {
+    const m = text.trimStart().match(BASH_AUTO_BG_RE);
+    return m ? m[1] : '';
+  }
+  return '';
+}
+
+/**
+ * The background task a live Bash/PowerShell tool_response reports, or ''.
+ *
+ * PostToolUse receives the tool's structured result (`{ stdout, stderr,
+ * interrupted, … }` for Bash), not the text the model reads, and that result
+ * never carries the announcement sentence. It names `backgroundTaskId` instead —
+ * the one the harness moved adds `timedOutAfterMs`. Checked against all 2,393
+ * structured Bash/PowerShell results in the local transcripts that name one:
+ * each is a background launch, and the field is exactly the task its text
+ * announces. A plain-string response is read like a transcript result.
+ *
+ * @param {*} toolResponse — the PostToolUse `tool_response`
+ */
+function responseTaskId(toolResponse) {
+  if (typeof toolResponse === 'string') return announcedTaskId(toolResponse);
+  const id = toolResponse && typeof toolResponse === 'object' ? toolResponse.backgroundTaskId : '';
+  return typeof id === 'string' && ID_ONLY_RE.test(id) ? id : '';
 }
 
 /**
@@ -356,6 +412,7 @@ function scanOpenTasks(transcriptContent) {
   // parsing.
   if (!transcriptContent.includes(AGENT_LAUNCH_MARKER) &&
       !transcriptContent.includes(BASH_LAUNCH_MARKER) &&
+      !transcriptContent.includes(BASH_AUTO_BG_MARKER) &&
       !transcriptContent.includes(WORKFLOW_LAUNCH_MARKER) &&
       !transcriptContent.includes(AGENT_RESUME_MARKER)) {
     return [];
@@ -469,15 +526,19 @@ function scanOpenTasks(transcriptContent) {
         open.set(wf[1], { kind: 'workflow', name });
         continue;
       }
-      const bg = canLaunch(launcher, 'task')
-        && announces(text, BASH_LAUNCH_MARKER) && text.match(BASH_BG_RE);
-      if (bg) {
+      const taskId = canLaunch(launcher, 'task') ? announcedTaskId(text) : '';
+      if (taskId) {
         // Concept bridge plumbing (server / pulser / waker) runs for the whole
         // concept session and yields no result — it is never "still running work".
         if (isConceptInfra(input)) continue;
+        // A task starts and ends once, and its end can be written first: a
+        // command that finishes just as the timeout moves it to the background
+        // has its notification enqueued between the call and this result (27
+        // of the 859 moved commands locally). An end on record means it is over.
+        if (closedAt.has(taskId)) continue;
         const name = labelFor(input, 'task');
-        known.set(bg[1], name);
-        open.set(bg[1], { kind: 'task', name });
+        known.set(taskId, name);
+        open.set(taskId, { kind: 'task', name });
       }
     }
   }
@@ -506,10 +567,13 @@ function openTaskNames(openTasks) {
 module.exports = {
   AGENT_LAUNCH_MARKER,
   BASH_LAUNCH_MARKER,
+  BASH_AUTO_BG_MARKER,
   WORKFLOW_LAUNCH_MARKER,
   LAUNCH_TOOLS,
   canLaunch,
   announces,
+  announcedTaskId,
+  responseTaskId,
   isConceptInfra,
   scanOpenTasks,
   openTaskNames,
