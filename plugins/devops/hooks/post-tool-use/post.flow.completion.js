@@ -10,6 +10,9 @@
  *   Everything else it tells Claude is an event, sent only on the call it
  *   happens: a background launch, the first code edit, the 5th code edit
  *   (ship + desktop-testing prompt), a card already rendered this turn.
+ *   While an /auto-guide run is active (fresh guide-active marker, #526) the
+ *   first call gets a one-line waiver instead of the contract: stop.flow.guard
+ *   waives the card for those turns, and a card would end the guide's loop.
  *   Edit/Write calls additionally increment the session edit counter.
  *
  *   The text goes out as `hookSpecificOutput.additionalContext`. Plain stdout
@@ -69,6 +72,7 @@ const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
 const { responseLaunch, labelFor, isConceptInfra } = require('../lib/pending-tasks');
+const { isGuideActive } = require('../../scripts/guide-active-state');
 const {
   classifyProfile,
   carveOutsFromProfile,
@@ -618,8 +622,18 @@ process.stdin.on('end', () => {
     );
   }
 
-  // The card contract — once per turn, on its first tool call.
-  if (firstOfTurn) {
+  // The card contract — once per turn, on its first tool call. Not while an
+  // /auto-guide loop runs (#526): its turns live inside javascript_tool wait()
+  // calls, stop.flow.guard waives their card, and a card is what ends the loop.
+  const guideActive = firstOfTurn && isGuideActive(hook.cwd);
+  const cardContract = firstOfTurn && !guideActive;
+  if (guideActive) {
+    lines.push(
+      '[auto-guide] A guide run is active — no completion card while its step loop runs.',
+      'The card is due once the guide ends (done, aborted or closed tab — Step 6/7).',
+    );
+  }
+  if (cardContract) {
     // Offline-first when the completion MCP's heartbeat is dead (#371): each
     // failed rung of the ladder costs a turn, so name the working one first.
     const completionDown = !isMcpServerAlive('dotclaude-completion');
@@ -756,7 +770,7 @@ process.stdin.on('end', () => {
 
   // --- 3. Issue status check — with the card contract, once per turn ---
   let trackedIssues = [];
-  if (firstOfTurn) {
+  if (cardContract) {
     try {
       const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id);
       if (result) {

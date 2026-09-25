@@ -424,6 +424,23 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     cleanup(dir);
   });
 
+  test("a running /auto-guide loop gets a waiver instead of the contract (#526)", () => {
+    const dir = project();
+    const marker = path.join(dir, ".claude", "auto-guide-active.json");
+    fs.writeFileSync(marker, JSON.stringify({ ts: Date.now() }));
+    fs.writeFileSync(flag(dir, "tracked-issues", "s-guide"), "[42]");
+    const out = runHook(dir, "s-guide", "mcp__claude-in-chrome__javascript_tool");
+    expect(out).toContain("[auto-guide] A guide run is active");
+    expect(out).not.toContain("COMPLETION CARD");
+    expect(out).not.toContain("[issue-status]");
+    // A marker past its TTL (a guide that crashed mid-loop) waives nothing.
+    fs.writeFileSync(marker, JSON.stringify({ ts: Date.now() - 31 * 60 * 1000 }));
+    const stale = runHook(dir, "s-guide-stale", "Read");
+    expect(stale).toContain("COMPLETION CARD");
+    expect(stale).not.toContain("[auto-guide]");
+    cleanup(dir);
+  });
+
   test("a call after this turn's card still warns against a second card", () => {
     const dir = project();
     const sid = "s-gate-after";

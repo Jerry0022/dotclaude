@@ -48,7 +48,8 @@ turn end (§ 7 of the design doc).
   count; writes the per-turn `work-happened` flag. It injects the card reminder
   (as `additionalContext`, the only PostToolUse channel that reaches the model)
   on the turn's first tool call, and events as they happen: a background launch,
-  the first and the 5th code edit, a card already rendered this turn.
+  the first and the 5th code edit, a card already rendered this turn. While an
+  `/auto-guide` loop is active it sends a one-line card waiver instead (#526).
 - `stop.flow.guard` (Stop) — fires at turn end; if `work-happened` flag exists but
   `card-rendered` flag is absent → injects carry-over reminder into next turn.
   Resets both flags so each turn is evaluated independently.
