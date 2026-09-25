@@ -65,7 +65,7 @@ function makeElement(tag) {
     },
     click() { (listeners.click || []).forEach((fn) => fn({ type: "click" })); },
     dispatch(type, evt) { (listeners[type] || []).forEach((fn) => fn(evt || { type })); },
-    focus() {},
+    focus() { this._focusCalled = true; },
     _pointerCaptures: [],
     setPointerCapture(id) { this._pointerCaptures.push(id); },
     // `opts.mode === "closed"` must NOT publish `shadowRoot` (real DOM behavior).
@@ -181,8 +181,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.3.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.3.0["']/);
+  test("defines VERSION 1.4.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.4.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -213,7 +213,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.3.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.4.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -230,7 +230,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.3.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.4.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -525,6 +525,53 @@ describe("web-guide-overlay — execution", () => {
     // Dragging the header itself (pointerdown target = head) still arms capture.
     head.dispatch("pointerdown", { type: "pointerdown", pointerId: 3, clientX: 0, clientY: 0, target: head, composedPath: () => [head] });
     expect(head._pointerCaptures).toEqual([3]);
+  });
+
+  // #507: a corrective/re-sent step must not pull focus out of a page field
+  // the user is actively typing into.
+  test("setStep does not steal focus when a page field outside the overlay is focused", () => {
+    run(sandbox);
+    const pageInput = sandbox.document.createElement("input");
+    sandbox.document.activeElement = pageInput;
+
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go",
+      input: { type: "text", name: "n" },
+    });
+
+    const host = getHost(sandbox);
+    const overlayInput = findAll(host, (e) => e.tagName === "INPUT")[0];
+    expect(overlayInput._focusCalled).toBeFalsy();
+    expect(pageInput._focusCalled).toBeFalsy(); // untouched, still holds focus
+
+    // Once nothing on the page holds focus (activeElement is body/null), a
+    // NEW step may focus the panel again.
+    sandbox.document.activeElement = null;
+    sandbox.window.claudeGuide.setStep({
+      id: "2", index: 2, total: 1, title: "T2", text: "go",
+      input: { type: "text", name: "n" },
+    });
+    const overlayInput2 = findAll(getHost(sandbox), (e) => e.tagName === "INPUT")[0];
+    expect(overlayInput2._focusCalled).toBe(true);
+  });
+
+  // #507: re-sending the same step id must neither re-expand a collapsed
+  // panel nor steal focus, even when the page has no active element.
+  test("a same-id re-send does not steal focus even when the page is idle", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go",
+      input: { type: "text", name: "n" },
+    });
+    const firstInput = findAll(getHost(sandbox), (e) => e.tagName === "INPUT")[0];
+    expect(firstInput._focusCalled).toBe(true);
+
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go, edited",
+      input: { type: "text", name: "n" },
+    });
+    const secondInput = findAll(getHost(sandbox), (e) => e.tagName === "INPUT")[0];
+    expect(secondInput._focusCalled).toBeFalsy();
   });
 
   // #516: re-sending / re-injecting the same step id must not force the

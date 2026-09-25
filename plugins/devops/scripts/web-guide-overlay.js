@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.3.0
+ * @version 1.4.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.3.0";
+  var VERSION = "1.4.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -572,6 +572,15 @@
 
   var KEY_TYPES = ["keydown", "keypress", "keyup"];
 
+  // #507: focus may move into the overlay only when it isn't already busy on
+  // a page field. A closed shadow root reports its host as activeElement
+  // while focus sits inside it, so "focus is on body/host" covers both the
+  // untouched-page case and "the user was already inside the panel".
+  function focusIsFreeForOverlay() {
+    var ae = document.activeElement;
+    return !ae || ae === document.body || ae === host;
+  }
+
   function onHostKey(e) {
     if (e.type === "keydown" && e.key === "Escape" && !collapsed) {
       collapsed = true;
@@ -601,7 +610,9 @@
       abortConfirm = false;
       eventQueue = [];
       clearNoResponseTimer();
-      render(isNewStep);
+      // Only steal focus for a genuinely new step, and only when the user
+      // isn't already typing into a page field (#507).
+      render(isNewStep && focusIsFreeForOverlay());
       saveState();
       return "ok";
     },

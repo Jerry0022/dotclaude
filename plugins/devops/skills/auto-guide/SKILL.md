@@ -182,7 +182,16 @@ one Event (`deep-knowledge/protocol.md` § Event):
   `javascript_tool` query (`!!document.querySelector(...)`, text match on
   `document.body.innerText`). If the
   signal is missing, author a short corrective step (still `index` *n*, new
-  `id`) instead of pretending progress.
+  `id`) instead of pretending progress — but check first whether the user is
+  still typing: a sync probe
+  `JSON.stringify({activeTag: document.activeElement && document.activeElement.tagName,
+  editable: !!(document.activeElement && (document.activeElement.isContentEditable ||
+  /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)))})`
+  answering `editable: true` means a multi-field form (payment, billing,
+  token settings) is mid-fill. Run 5c again instead of re-sending; a
+  same-`id` re-send never steals focus or re-opens a collapsed panel (the
+  overlay enforces this itself, #507/#516), but re-sending anyway is still
+  wasted motion while the user is mid-keystroke.
 - **Collect** `event.value` under `event.name` in `$RESULTS`.
 - **Secret** inputs arrive base64-encoded (`"encoding":"base64"`). Store
   immediately, pass the base64 string through untouched, never decode it
