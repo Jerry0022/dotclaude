@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.1
+ * @version 0.5.2
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -999,7 +999,11 @@ function isGatedPath(root, cwd, file) {
   if (typeof file !== 'string' || !file.trim()) return false;
   const abs = path.resolve(cwd || root, file);
   const rel = path.relative(root, abs);
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  // H2: `..` alone or a `..` + sep prefix means outside the work tree; an
+  // in-tree path whose first segment merely STARTS WITH `..` (`..env`,
+  // `..cache/x.js`) must not be treated as outside (post.agent.nudge.js:103
+  // uses the same check).
+  if (!rel || rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) return false;
   const p = rel.replace(/\\/g, '/');
   const low = p.toLowerCase();
   if (low === '.claude' || low.startsWith('.claude/')) return false;
@@ -1111,8 +1115,11 @@ function readTail(file) {
     const size = fs.fstatSync(fd).size;
     const start = Math.max(0, size - TAIL_BYTES);
     const buf = Buffer.alloc(size - start);
-    fs.readSync(fd, buf, 0, buf.length, start);
-    return buf.toString('utf8');
+    // H7: honour readSync's own bytesRead — a file that shrank after fstat()
+    // (a concurrent truncate/rewrite between the stat and the read) must not
+    // leave the unread tail of `buf` as NUL bytes in the result.
+    const bytesRead = fs.readSync(fd, buf, 0, buf.length, start);
+    return buf.toString('utf8', 0, bytesRead);
   } catch { return ''; } finally {
     if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* closed */ } }
   }
@@ -1142,24 +1149,36 @@ function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget
     const floor = Math.max(0, size - max);
     let end = size;
     let carry = Buffer.alloc(0);
+    let budgetStopped = false;
     while (end > floor) {
       if (budget && budget.expired()) {
         if (stats) stats.stoppedOnBudget = true;
+        budgetStopped = true;
         break;
       }
       const start = Math.max(floor, end - chunk);
       const buf = Buffer.alloc(end - start);
-      fs.readSync(fd, buf, 0, buf.length, start);
-      const all = carry.length ? Buffer.concat([buf, carry]) : buf;
+      // H7: honour readSync's own bytesRead (a file that shrank after fstat()
+      // must not yield NUL-filled lines from the unread tail of `buf`).
+      const bytesRead = fs.readSync(fd, buf, 0, buf.length, start);
+      const chunkBuf = bytesRead === buf.length ? buf : buf.subarray(0, bytesRead);
+      const all = carry.length ? Buffer.concat([chunkBuf, carry]) : chunkBuf;
       let hi = all.length;
       for (let k = all.lastIndexOf(0x0a, hi - 1); k >= 0; k = hi > 0 ? all.lastIndexOf(0x0a, hi - 1) : -1) {
-        yield all.toString('utf8', k + 1, hi);
+        // H7: skip empty segments (two adjacent newlines, or the trailing
+        // newline that splits off an empty "line" after the last real one).
+        if (hi > k + 1) yield all.toString('utf8', k + 1, hi);
         hi = k;
       }
       carry = all.subarray(0, hi);
       end = start;
     }
-    if (floor === 0 && carry.length) yield carry.toString('utf8');
+    // H7: the carried partial line is only a real line when the walk truly
+    // reached the file's start (floor === 0, not just this call's cap) AND
+    // did so without the budget cutting it short (break, above) — a
+    // budget-cut carry is a fragment sliced at an arbitrary chunk boundary,
+    // never a whole line; a cap-cut carry (MAX_BACK_BYTES) is the same.
+    if (!budgetStopped && floor === 0 && carry.length) yield carry.toString('utf8');
   } catch { /* unreadable: no more lines */ } finally {
     try { fs.closeSync(fd); } catch { /* closed */ }
   }
