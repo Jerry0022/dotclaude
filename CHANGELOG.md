@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.208.2] — 2026-09-25
+
+### Fixed
+- **The context-budget report and the UI-rules reminder now reach Claude.** `post.claude.budget` and `post.design.remind` wrote their text to plain stdout, which Claude Code records as a hook result and never shows the model, so no budget report and no UI-rules reminder was ever read. Both now answer with `hookSpecificOutput.additionalContext`; the one-line budget summary for the user stays on stderr.
+- **Each text lands once per context.** Delivered text stays in the context for the rest of the session, so neither hook repeats it. The budget report fires once per file and severity in each context — the second report two hours later is gone, while an escalation past the file's ceiling still reports once more. The UI rules arrive on a context's first UI edit, and parallel UI edits deliver them once. A subagent is its own context: it gets its own copy, and its copy no longer uses up the main thread's.
+
 ## [0.208.1] — 2026-09-25
 
 ### Fixed
