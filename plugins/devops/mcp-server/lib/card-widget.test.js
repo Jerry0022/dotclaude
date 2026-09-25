@@ -585,6 +585,45 @@ describe("cardWidgetHtml", () => {
     const buttonsBlock = html.slice(html.indexOf('<span role="button"'), html.indexOf("</script>"));
     expect(buttonsBlock).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
+
+  // AUD-030: pins the FULL rendered card byte-identical (every block: title,
+  // changes/resultLines, evidence, pipeline+PR, run-contract line, channel
+  // ladder, budget bars, decision heading/context/points, buttons) so the
+  // upcoming per-block-helper refactor cannot silently change the HTML.
+  test("full rich card renders byte-identical (AUD-030 refactor guard)", () => {
+    const richModel = baseModel({
+      title: "Ship erfolgreich",
+      resultLines: ["**Deviation:** nichts", "Zwei Dateien geändert"],
+      evidence: [
+        { glyph: "✓", text: "3/3 Anforderungen", dim: true },
+        { glyph: "◐", text: "1 offen", tooltip: "Tooltip-Text" },
+      ],
+      pipeline: "✓ commit → ✓ push → #42 PR → ○ merge · feat/x · Build abc123",
+      pipelinePr: { number: 42 },
+      runContract: "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓",
+      ladder: {
+        allEqual: false,
+        groups: [
+          { channels: ["alpha"], version: "0.200.0", top: true },
+          { channels: ["beta"], version: "0.199.0", lag: { versions: 1, days: 2 } },
+          { channels: ["stable"], skipped: true },
+        ],
+      },
+      budget: {
+        omitted: false,
+        contextHealth: "Kontext: gesund",
+        bars: [
+          { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "t" },
+        ],
+      },
+      heading: "📦 Shippen?",
+      context: "› Läuft auf http://127.0.0.1:5173/app.",
+      points: ["Noch offen: Doku", "Nach dem Deploy testen"],
+      buttonsKey: "ready",
+    });
+    const html = cardWidgetHtml(richModel, "https://github.com/example/repo");
+    expect(html).toMatchSnapshot();
+  });
 });
 
 describe("cardWidgetInstruction", () => {

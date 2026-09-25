@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.25.0
+ * @version 0.25.1
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -97,7 +97,7 @@ function readProfileConfig(sessionId, cwd) {
     profileClass = classifyProfile(json);
     carveOuts = carveOutsFromProfile(json);
     domPaths = domPathsFromProfile(json);
-  } catch {}
+  } catch { /* session profile cache not written yet — detection has not run */ }
   try {
     const p = path.join(cwd, '.claude', 'skills', 'devops-test-plan', 'profile.json');
     const json = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -107,7 +107,7 @@ function readProfileConfig(sessionId, cwd) {
     // not been written yet (detection has not run), so a consumer project is
     // classified correctly from turn one.
     if (profileClass === 'any') profileClass = classifyProfile(json);
-  } catch {}
+  } catch { /* absent — no project override file */ }
   return { profileClass, carveOuts, domPaths };
 }
 
@@ -352,58 +352,56 @@ function detectBackgroundLaunch(hook) {
   return null;
 }
 
-let inputData = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
-process.stdin.on('end', () => {
-  let hook;
-  try { hook = JSON.parse(inputData); }
-  catch { process.exit(0); }
+/**
+ * Silent turn (cron git-sync, concept bridge poll, autonomous loop tick): the
+ * caller must skip the completion-card reminder and not mark work-happened.
+ * The real user turn already rendered its card; this background tick must
+ * not trigger a second one. Flag is written by prompt.flow.silent-turn and
+ * cleared by stop.flow.guard at turn end.
+ * Exact match only (issue #290): a neighbouring session's silent-turn flag
+ * must not suppress this session's card reminder and light-pending bookkeeping.
+ */
+function isSilentTurn(hook) {
+  return !!readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
+}
 
-  // Silent turn (cron git-sync, concept bridge poll, autonomous loop tick):
-  // skip the completion-card reminder and do not mark work-happened. The real
-  // user turn already rendered its card; this background tick must not trigger
-  // a second one. Flag is written by prompt.flow.silent-turn and cleared by
-  // stop.flow.guard at turn end.
-  // Exact match only (issue #290): a neighbouring session's silent-turn flag
-  // must not suppress this session's card reminder and light-pending bookkeeping.
-  const silentResult = readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
-  if (silentResult) process.exit(0);
-
-  // Subagent call: hooks fire for it with the PARENT's session_id, and all
-  // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
-  // counters, work-happened, the V&V gate flags, and a reminder PostToolUse
-  // stdout never delivers to the model anyway). Observed 2026-09-25: an
-  // isolated background agent's Edit inside its own worktree wrote the
-  // parent's validation-pending and deleted the validation-attested flag the
-  // parent's card had written four minutes earlier — both Stop gates then
-  // blocked an unchanged parent checkout. Its passing test run would equally
-  // have "verified" the parent, which delegation never may.
-  if (isSubagentCall(hook)) process.exit(0);
-
-  const toolName = hook.tool_name || '';
-  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
-
-  // --- 0. Ship happened this turn? (consumed by stop.flow.guard, #371) ---
-  // ship_release reporting `merged` is the one signal that a scheduled task
-  // did more than tick — its card is owed even with a clean tree afterwards.
+/**
+ * --- 0. Ship happened this turn? (consumed by stop.flow.guard, #371) ---
+ * ship_release reporting `merged` is the one signal that a scheduled task
+ * did more than tick — its card is owed even with a clean tree afterwards.
+ * Also adopts card flags a render_completion_card call just wrote, and reads
+ * whether this is a scheduled-task turn.
+ * @returns {{ scheduledTask: boolean }}
+ */
+function handleShipAndCardFlags(hook, toolName) {
   if (toolName === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
-    try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch {}
+    try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch { /* best effort */ }
   }
   if (toolName.endsWith('__render_completion_card')) adoptCardFlags(hook);
   const scheduledTask =
     readSessionFile('dotclaude-devops-scheduled-task', hook.session_id, { exact: true }) !== null;
+  return { scheduledTask };
+}
 
+/**
+ * --- 1. Edit/tool-call counters and V&V gate flags ---
+ * Increments the edit and tool-call counters (1, 1b), writes the per-turn
+ * work-happened flag and last-activity timestamp (1c, 1d), and updates the
+ * light-verification / validation gate flags consumed by stop.flow.browsertest
+ * and stop.flow.guard (1e).
+ * @returns {number} editCount after this call
+ */
+function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
   // --- 1. Increment edit counter (only for Edit/Write) ---
   let editCount = 0;
   const counterFile = sessionFile('dotclaude-devops-edits', hook.session_id);
   try {
     editCount = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0;
-  } catch {}
+  } catch { /* first edit this session */ }
 
   if (isCodeEdit) {
     editCount++;
-    try { writeSessionFile(counterFile, editCount.toString()); } catch {}
+    try { writeSessionFile(counterFile, editCount.toString()); } catch { /* best effort */ }
   }
 
   // --- 1b. Increment tool-call counter (all tool calls) ---
@@ -411,21 +409,21 @@ process.stdin.on('end', () => {
   let toolCallCount = 0;
   try {
     toolCallCount = parseInt(fs.readFileSync(toolCallFile, 'utf8'), 10) || 0;
-  } catch {}
+  } catch { /* first tool call this session */ }
   toolCallCount++;
-  try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch {}
+  try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch { /* best effort */ }
 
   // --- 1c. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
   try {
     const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
     writeSessionFile(workFile, toolName);
-  } catch {}
+  } catch { /* best effort */ }
 
   // --- 1d. Write last-activity timestamp (consumed by cache-timeout check) ---
   try {
     const activityFile = sessionFile('dotclaude-devops-last-activity', hook.session_id);
     writeSessionFile(activityFile, Date.now().toString());
-  } catch {}
+  } catch { /* best effort */ }
 
   // --- 1e. Light-verification gate flags (consumed by stop.flow.browsertest) ---
   //   light-pending → a code file changed and still needs a Light check, scoped
@@ -443,7 +441,7 @@ process.stdin.on('end', () => {
       hook.cwd || process.cwd(),
     );
     const unlinkFlag = (prefix) => {
-      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
+      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch { /* not written this turn */ }
     };
 
     // What a change of `editedPath` owes — shared by edits and merged files, so
@@ -538,10 +536,21 @@ process.stdin.on('end', () => {
         );
       }
     }
-  } catch {}
+  } catch { /* profile/gate bookkeeping is best effort */ }
 
-  // --- 2. Emit completion-card instruction (MCP tool call) ---
+  return editCount;
+}
 
+/**
+ * --- 2. Emit completion-card instruction (MCP tool call) ---
+ * Writes stdout and returns `null` for the two short-circuit cases (the card
+ * widget itself, or a render_completion_card call) — the caller must stop
+ * right there, same as the original inline `return`. Otherwise returns the
+ * full `lines` array, not yet joined/written, so section 3 can still append
+ * to it.
+ * @returns {string[]|null}
+ */
+function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask) {
   // After the card itself the generic reminder is wrong: it asks for a card
   // that is already there. Observed 2026-09-24 — injected right after the
   // card widget, it read as "the markdown card still follows" and produced a
@@ -553,7 +562,7 @@ process.stdin.on('end', () => {
       'Write nothing after it: no summary, no "the card is above", no second card.',
       NO_OUTPUT_NUDGE_REPLY,
     ].join('\n') + '\n');
-    return;
+    return null;
   }
   if (toolName.endsWith('__render_completion_card')) {
     process.stdout.write(
@@ -561,7 +570,7 @@ process.stdin.on('end', () => {
       'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
       'Render no second card for the same outcome.\n',
     );
-    return;
+    return null;
   }
 
   const lines = [];
@@ -708,14 +717,22 @@ process.stdin.on('end', () => {
     );
   }
 
-  // --- 3. Issue status check — inject instructions if issues are tracked ---
+  return lines;
+}
+
+/**
+ * --- 3. Issue status check — inject instructions if issues are tracked ---
+ * Appends the issue-status instruction to `lines` in place, mirroring the
+ * original inline block.
+ */
+function appendIssueStatusInstruction(hook, lines) {
   let trackedIssues = [];
   try {
     const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id);
     if (result) {
       trackedIssues = JSON.parse(result.content);
     }
-  } catch {}
+  } catch { /* no tracked issues this session */ }
 
   if (trackedIssues.length > 0) {
     const issueList = trackedIssues.map(n => `#${n}`).join(', ');
@@ -734,6 +751,39 @@ process.stdin.on('end', () => {
       'Do this silently — no extra output to the user, just the API calls.',
     );
   }
+}
+
+let inputData = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', d => { inputData += d; });
+process.stdin.on('end', () => {
+  let hook;
+  try { hook = JSON.parse(inputData); }
+  catch { process.exit(0); }
+
+  if (isSilentTurn(hook)) process.exit(0);
+
+  // Subagent call: hooks fire for it with the PARENT's session_id, and all
+  // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
+  // counters, work-happened, the V&V gate flags, and a reminder PostToolUse
+  // stdout never delivers to the model anyway). Observed 2026-09-25: an
+  // isolated background agent's Edit inside its own worktree wrote the
+  // parent's validation-pending and deleted the validation-attested flag the
+  // parent's card had written four minutes earlier — both Stop gates then
+  // blocked an unchanged parent checkout. Its passing test run would equally
+  // have "verified" the parent, which delegation never may.
+  if (isSubagentCall(hook)) process.exit(0);
+
+  const toolName = hook.tool_name || '';
+  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+
+  const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
+  const editCount = updateEditAndGateFlags(hook, toolName, isCodeEdit);
+
+  const lines = emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask);
+  if (lines === null) return;
+
+  appendIssueStatusInstruction(hook, lines);
 
   process.stdout.write(lines.join('\n') + '\n');
 });
