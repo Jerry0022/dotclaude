@@ -8,6 +8,7 @@ import {
   buttonsFor,
   conclusionPrompt,
   cardWidgetHtml,
+  runContractLineHtml,
   cardWidgetInstruction,
   writeCardWidgetFile,
   WIDGET_FILE_PREFIX,
@@ -272,6 +273,49 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];
     expect(block).toContain("var(--text-secondary)");
     expect(block).not.toContain("#7d84a8");
+  });
+
+  test("H-D16: runContractLineHtml returns '' for empty/null text", () => {
+    expect(runContractLineHtml("")).toBe("");
+    expect(runContractLineHtml(null)).toBe("");
+    expect(runContractLineHtml(undefined)).toBe("");
+  });
+
+  test("H-D16: runContractLineHtml uses the watermark colour when every step is ✓", () => {
+    const html = runContractLineHtml("🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · QA ✓");
+    expect(html).toContain("#7d84a8");
+    expect(html).not.toContain("var(--text-secondary)");
+  });
+
+  test.each([
+    ["✗", "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · do-ship ✗"],
+    ["⚠", "🧾 Run · Backlog · Autonom · Ship auto — Polish ⚠ (skipped: no diff)"],
+    [" ?", "🧾 Run · Backlog · Autonom · Ship auto — QA ?"],
+  ])("H-D16: runContractLineHtml uses body text colour when the text carries %s", (_label, text) => {
+    const html = runContractLineHtml(text);
+    expect(html).toContain("var(--text-secondary)");
+    expect(html).not.toContain("#7d84a8");
+  });
+
+  test("H-D16: runContractLineHtml escapes < and &", () => {
+    const html = runContractLineHtml("a < b & c");
+    expect(html).toContain("a &lt; b &amp; c");
+    expect(html).not.toContain("a < b & c");
+  });
+
+  test("H-D16: runContractLineHtml never adds role, tabindex, data-prompt or data-tip", () => {
+    const html = runContractLineHtml("🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓");
+    expect(html).not.toContain("role=");
+    expect(html).not.toContain("tabindex");
+    expect(html).not.toContain("data-prompt");
+    expect(html).not.toContain("data-tip");
+  });
+
+  test("H-D16: cardWidgetHtml's run-contract div is byte-identical to runContractLineHtml's output", () => {
+    const runContract = "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · do-ship ✗";
+    const html = cardWidgetHtml(baseModel({ runContract }), "");
+    const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];
+    expect(block).toBe(runContractLineHtml(runContract));
   });
 
   test("the widget HTML puts the versioned prompt on the promote button", () => {

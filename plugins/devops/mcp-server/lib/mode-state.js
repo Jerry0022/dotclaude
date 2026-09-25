@@ -23,6 +23,20 @@ import { normalizeConcept } from "./pending.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+/** One `require` for the three CommonJS hook modules this file reads
+ *  (`ss.concept.resume.js`, `batch-state.js`, `run-contract.js`) — this file
+ *  is ESM, so each read needs its own `require`, and all three resolve the
+ *  same `hooks/` root relative to `here`.
+ *
+ * @param {...string} parts path segments under `hooks/`, e.g. `"lib", "run-contract.js"`
+ * @returns {*} the required module
+ * @throws when the module is missing or throws on load — callers wrap every
+ *   call site in a try/catch that swallows to `null` (H-G).
+ */
+export function hookRequire(...parts) {
+  return createRequire(import.meta.url)(join(here, "..", "..", "hooks", ...parts));
+}
+
 /** Session-title prefixes — emoji first so the sidebar scans on the icon.
  *  `concept` / `batch` are set by their skills while the mode is on and
  *  stripped by them on the way out. `concept` means "the page waits for
@@ -266,8 +280,7 @@ export function readConceptState(cwd) {
     if (!state || typeof state !== "object") return null;
     const port = Number(state.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
-    const require = createRequire(import.meta.url);
-    const R = require(join(here, "..", "..", "hooks", "session-start", "ss.concept.resume.js"));
+    const R = hookRequire("session-start", "ss.concept.resume.js");
     if (!R.isValidHtmlPath(state.html_path)) return null;
     if (R.isStale(state)) return null;
     return { port, html_path: state.html_path };
@@ -287,8 +300,7 @@ export function readConceptState(cwd) {
 export function readBatch(cwd) {
   if (!cwd) return null;
   try {
-    const require = createRequire(import.meta.url);
-    const B = require(join(here, "..", "..", "hooks", "lib", "batch-state.js"));
+    const B = hookRequire("lib", "batch-state.js");
     if (!B.isModeActive(cwd)) return null;
     // Same bounds describeMode() prints: the armed window's own length, else config.
     const mode = B.readMode(cwd) || {};
@@ -401,8 +413,7 @@ export function batchGuide(batch, lang) {
 export function readRunContractLine(cwd, lang = "de", sessionId = null) {
   if (!cwd) return null;
   try {
-    const require = createRequire(import.meta.url);
-    const RC = require(join(here, "..", "..", "hooks", "lib", "run-contract.js"));
+    const RC = hookRequire("lib", "run-contract.js");
     // A contract of another session (Desktop copies the untracked `.claude/`
     // into new worktrees) is never shown.
     const contract = RC.readContractForCard(cwd, { sessionId: sessionId || null });

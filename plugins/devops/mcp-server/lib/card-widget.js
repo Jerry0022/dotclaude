@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.7.0
+ * @version 0.7.1
  */
 
 import { writeFileSync } from "node:fs";
@@ -408,6 +408,28 @@ function channelLadderHtml(ladder, lang) {
 }
 
 /**
+ * The do-run run-contract line (§ J) — dim watermark treatment like the
+ * pipeline line right above it when every step is ✓ (purely informational),
+ * but the body-text colour (`--text-secondary`, same as `card-result` lines)
+ * when it carries an open step (✗) or a caveat (⚠) — AUD-021: the watermark
+ * colour fails WCAG AA contrast on the light card surface, and this is the
+ * one line the user must not miss.
+ * RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
+ * neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss" as
+ * an open step, so it gets the same readable colour.
+ *
+ * @param {string} [text] the run-contract line, e.g. from `model.runContract`
+ * @returns {string} the `<div class="card-run-contract">…</div>` fragment, or
+ *   '' when `text` is empty/nullish (H-D16).
+ */
+export function runContractLineHtml(text) {
+  if (!text) return "";
+  const hasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(text);
+  const color = hasOpenStep ? "var(--text-secondary)" : COLOR.watermark;
+  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:4px 0">${escapeHtml(text)}</div>`;
+}
+
+/**
  * Render the whole card body — both § 2 blocks — as one HTML fragment.
  * Follows the widget design contract: no emoji in buttons, Tabler outline
  * icons (`ti ti-*`), CSS variables for host-matching chrome, sr-only summary,
@@ -450,22 +472,7 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(model.pipeline).replace(/#(\d+)/, () => pipelinePrHtml(model.pipelinePr, repoUrl))}</div>`
     : "";
 
-  // The do-run run-contract line (§ J) — dim watermark treatment like the
-  // pipeline line right above it when every step is ✓ (purely informational),
-  // but the body-text colour (`--text-secondary`, same as `card-result`
-  // lines) when it carries an open step (✗) or a caveat (⚠) — AUD-021: the
-  // watermark colour fails WCAG AA contrast on the light card surface, and
-  // this is the one line the user must not miss.
-  // RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
-  // neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss"
-  // as an open step, so it gets the same readable colour.
-  const runContractHasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(model.runContract || "");
-  const runContractColor = runContractHasOpenStep
-    ? "var(--text-secondary)"
-    : COLOR.watermark;
-  const runContractHtml = model.runContract
-    ? `<div class="card-run-contract" style="font-size:13px;color:${runContractColor};padding:4px 0">${escapeHtml(model.runContract)}</div>`
-    : "";
+  const runContractHtml = runContractLineHtml(model.runContract);
 
   const ladderHtml = channelLadderHtml(model.ladder, lang);
 
