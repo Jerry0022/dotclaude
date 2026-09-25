@@ -1031,6 +1031,62 @@ describe("decideAction — notification turn", () => {
 });
 
 // ---------------------------------------------------------------------------
+// decideAction — guide-active exemption (#526)
+// ---------------------------------------------------------------------------
+
+describe("decideAction — guide active", () => {
+  test("no card owed while a guide is active, even with substantial work", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      guideActive: true,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(true);
+    expect(d.exempt).toBe("guide-active");
+  });
+
+  test("unlike the scheduled-task/notification exemptions, a dirty tree does not defeat it", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      guideActive: true,
+      treeClean: false,
+      shipped: false,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.exempt).toBe("guide-active");
+  });
+
+  test("a card that DID render on a guide turn still goes through the normal gates", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: true,
+      guideActive: true,
+    });
+    expect(d.action).toBe("pass");
+    expect(d.exempt).toBeUndefined();
+  });
+
+  test("guideActive false behaves exactly as before", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      guideActive: false,
+    });
+    expect(d.action).toBe("block");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // decideAction — line-budget report (design § 2.4 / § 5.4)
 // ---------------------------------------------------------------------------
 

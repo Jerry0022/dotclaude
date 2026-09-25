@@ -109,6 +109,7 @@ Rules, "The user operates, Claude guides").
 | `help` | User pressed **Ich komme nicht weiter** | optional `value` = free text the user typed into the help box |
 | `abort` | User pressed **Abbrechen** (confirmed) | — |
 | `timeout` | `wait(ms)` elapsed with no event | — |
+| `superseded` | A new `wait()` call resolved a still-registered, older `wait()` call instead of leaving it live (#529) | — never delivered from the panel; only ever the resolution of the *older* call |
 
 Events queue: if the user clicks between two `wait()` calls the event is not
 lost — the next `wait()` resolves immediately with the oldest queued event.
@@ -135,19 +136,46 @@ Claude loop separately re-sends the current step after 10 consecutive
 `wait()` timeouts and ends the guide after 30 (≈ 17 min of silence) —
 unrelated to the heartbeat, which only concerns the status text.
 
+**Surviving a dead caller (#529).** `deliverEvent` (fired by every panel
+button) **always** pushes onto `eventQueue` first. It hands the event to the
+current `pendingWaiter` only when that waiter was armed less than ~44 s ago
+(just under the CDP `Runtime.evaluate` hard limit, see the spike table
+above) — a waiter older than that almost certainly belongs to a
+`javascript_tool` call whose 45 s client-side timeout already fired, so
+resolving it would drop the event into a promise nobody reads. In that case
+the event stays queued and a fresh `wait()` call drains it. Every `wait()`
+call also resolves any still-registered older `pendingWaiter` with
+`{"type":"superseded"}` first, so a stale registration never lingers
+forever — it always gets a definitive (if unobserved) resolution.
+
 ### State
 
 ```json
-{ "version": "1.0.0", "stepId": "3", "collapsed": false, "queued": 0, "url": "https://…" }
+{ "version": "1.0.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null }
 ```
+
+`pendingWaiter` is `true` while a `wait()` call is currently armed (waiting
+for a timer, a visibility change, or an event). `lastDeliveredId` is the id
+of the most recently delivered event (`null` before the first one) — the
+skill can compare it against an expected id to detect a stranded event after
+a CDP timeout.
 
 ## UI state persistence
 
-`sessionStorage["__wg"]` stores `{ step, collapsed, pos, ts }` on every change.
-On re-injection after a navigation the overlay **restores the last step and
-position immediately**, before Claude re-issues `setStep` — the user sees
-continuity, not a blank FAB. `pos` (drag position) additionally goes to
-`localStorage` so it survives across sessions on the same origin.
+`sessionStorage["__wg"]` stores `{ step, collapsed, edgeTab, pos, ts }` on
+every change. On re-injection after a navigation the overlay **restores the
+last step and position immediately**, before Claude re-issues `setStep` —
+the user sees continuity, not a blank FAB. `pos` (drag position) additionally
+goes to `localStorage` so it survives across sessions on the same origin.
+
+**Edge tab (#516).** The panel header's **»** button ("Guide ausblenden")
+shrinks the FAB and panel to a small tab docked against whichever screen
+edge the FAB's current position is closest to (`edgeTab: true`). It never
+aborts the guide — `setStep`/`wait()` keep working exactly as before, only
+the visual chrome changes. Clicking the tab, or pressing Escape while focus
+is inside the overlay, restores the FAB/panel to whatever `collapsed` state
+they had before hiding. `edgeTab` persists in `sessionStorage["__wg"]` next
+to `collapsed`, so it survives a reload the same way.
 
 Storage is page-writable and therefore untrusted: the overlay validates the
 shape of everything it restores (numbers for `pos`, the Step schema for
@@ -230,11 +258,40 @@ with none of it. Three fix ideas were weighed:
    header comment), so a loader would still need the full source pasted in a
    second call — no cheaper than lean already is, and one extra round trip.
 
+## Not ending the turn mid-loop (#526)
+
+The step loop lives entirely inside repeated `wait()` calls, one per
+`javascript_tool` invocation — from `stop.flow.guard`'s point of view a
+guide turn can look like "many tool calls, no completion card", which is
+exactly what it blocks on for every other skill. Forcing the card there
+would end Claude's turn while the panel still expects a `wait()` to be
+listening; the user's next click then queues an event nobody drains until
+the *next* prompt, and the panel visibly stalls ("Weiter" looks dead).
+
+`scripts/web-guide.js guide active` / `guide clear` write and remove
+`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms> }`).
+`stop.flow.guard` treats a marker younger than 30 minutes as "a guide is
+active" and skips the card requirement entirely for that turn (Gate 1 never
+fires) — see `hooks/lib/guide-active-state.js` — `isGuideActive`. SKILL.md
+writes the marker in Step 3 (and again on every turn that resumes the guide,
+Step 5's "Resuming in a new turn") and clears it in Step 6 (normal end) and
+Step 7 (aborted/closed). The 30-minute expiry means a guide that crashed
+before reaching Step 6/7 (tab killed, process crashed) does not silence the
+card gate for the rest of the session.
+
+While the panel is genuinely unattended (Claude's turn ended without
+clearing the marker, or between turns), the overlay's own #513 heartbeat
+already tells the user visibly instead of just disabling the button: once
+10 s pass without a `wait()` poll, the status line swaps "Warte auf
+Claude…" for "Claude hört gerade nicht zu — schreib im Chat „weiter"." — the
+"Claude is paused, type in chat" message #526 asks for.
+
 ## Payload helper — `scripts/web-guide.js`
 
 | Command | Output |
 |---------|--------|
 | `payload inject` | The complete overlay source wrapped as an idempotent IIFE, ending with `"injected"` / `"already-injected"` — paste into `javascript_tool.text`. |
 | `payload step <step.json>` | `window.claudeGuide.setStep(<json>)` with the JSON validated against the schema above (exit 1 + reason on violation). |
-| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default 30000, maximum 35000 — the CDP limit is ≈ 45 s). |
+| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default 30000, maximum 35000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |
+| `guide active` / `guide clear` | Writes / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). |

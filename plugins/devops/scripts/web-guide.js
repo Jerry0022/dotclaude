@@ -23,11 +23,16 @@
  *   store --file <path> --key <KEY> [--b64 <value>]
  *                                      → upserts KEY=<value> into a dotenv
  *     file; value is base64-decoded from --b64 or read from stdin.
+ *   guide active                      → marks a guide run active in
+ *     <project>/.claude/auto-guide-active.json (#526) so stop.flow.guard
+ *     does not force the completion card that would end the wait() loop.
+ *   guide clear                       → clears that marker (guide ended).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { markGuideActive, clearGuideActive } = require('./guide-active-state');
 
 // All file operations here are synchronous and local (no network, no child
 // processes), so no explicit timeout wrapper is needed per CONVENTIONS.md
@@ -41,11 +46,18 @@ const WAIT_MAX_MS = 35000;
 const USAGE = `usage:
   node web-guide.js payload inject [--raw]
   node web-guide.js payload step <step.json>|-
-  node web-guide.js payload wait [ms]
+  node web-guide.js payload wait [ms]                  (0 drains a stranded
+                                                        event without a real
+                                                        wait, see #529)
   node web-guide.js store --file <path> --key <KEY> [--b64 <value>]
                                                         (value read from
                                                         stdin if --b64 is
                                                         omitted)
+  node web-guide.js guide active                       (#526: mark a guide
+                                                        run active so
+                                                        stop.flow.guard does
+                                                        not force the card)
+  node web-guide.js guide clear                        (clear that marker)
   node web-guide.js --help
 
 payload inject prints the overlay source lean by default (strips full-line
@@ -344,10 +356,14 @@ function payloadStep(arg) {
 // payload wait
 // ---------------------------------------------------------------------------
 
+// #529: `wait(0)` is the "drain" call — SKILL.md 5c runs it after a CDP
+// timeout to reclaim a stranded event without arming a real ~30s wait. It is
+// the one value allowed below WAIT_MIN_MS.
 function payloadWait(msArg) {
   const ms = msArg === undefined ? WAIT_DEFAULT_MS : Number(msArg);
-  if (!Number.isInteger(ms) || ms < WAIT_MIN_MS || ms > WAIT_MAX_MS) {
-    process.stderr.write(`ms must be an integer between ${WAIT_MIN_MS} and ${WAIT_MAX_MS}\n`);
+  const isDrain = ms === 0;
+  if (!Number.isInteger(ms) || (!isDrain && (ms < WAIT_MIN_MS || ms > WAIT_MAX_MS))) {
+    process.stderr.write(`ms must be 0 (drain) or an integer between ${WAIT_MIN_MS} and ${WAIT_MAX_MS}\n`);
     process.exitCode = 1;
     return;
   }
@@ -555,6 +571,22 @@ function main(argv) {
 
   if (cmd === 'store') {
     return store([sub, ...rest].filter((v) => v !== undefined));
+  }
+
+  if (cmd === 'guide') {
+    if (sub === 'active') {
+      const file = markGuideActive(process.cwd());
+      process.stdout.write(`guide-active ${file}\n`);
+      return;
+    }
+    if (sub === 'clear') {
+      const file = clearGuideActive(process.cwd());
+      process.stdout.write(`guide-cleared ${file}\n`);
+      return;
+    }
+    process.stderr.write(`${USAGE}\n`);
+    process.exitCode = 2;
+    return;
   }
 
   process.stderr.write(`${USAGE}\n`);
