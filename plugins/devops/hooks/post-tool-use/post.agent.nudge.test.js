@@ -37,9 +37,12 @@ function skillEntry(skill) {
   return { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Skill", input: { skill } }] } };
 }
 
-/** A real user prompt entry — opens a new turn. */
-function promptEntry(text = "do stuff") {
-  return { type: "user", message: { role: "user", content: [{ type: "text", text }] } };
+/** A real user prompt entry — opens a new turn. `uuid`, when given, is the
+ *  entry's turn-identity (Q8: the once-per-turn marker key). */
+function promptEntry(text = "do stuff", uuid) {
+  const entry = { type: "user", message: { role: "user", content: [{ type: "text", text }] } };
+  if (uuid) entry.uuid = uuid;
+  return entry;
 }
 
 function writeTranscript(dir, entries) {
@@ -240,6 +243,44 @@ describe("post.agent.nudge", () => {
     // (files.size recomputes to exactly 6 again) — must stay silent now.
     const second = run(hookFor(dir, t, sixth));
     expect(second).toBe("");
+  });
+
+  // Q8 (red-team round 2): the once-per-turn marker must key on the opening
+  // prompt entry's identity, not its text — two distinct turns that happen to
+  // share the same short prompt text ("weiter") must each be nudged.
+  test("Q8: two turns with the same prompt text both nudge", () => {
+    const dir = project();
+    const filesA = Array.from({ length: 5 }, (_, i) => path.join(dir, `q8a${i}.js`));
+    const entriesA = [promptEntry("weiter", "uuid-turn-1"), ...filesA.map((p) => editEntry("Edit", p))];
+    const tA = writeTranscript(dir, entriesA);
+    expect(run(hookFor(dir, tA, path.join(dir, "q8a5.js")))).not.toBe("");
+
+    const filesB = Array.from({ length: 5 }, (_, i) => path.join(dir, `q8b${i}.js`));
+    const entriesB = [promptEntry("weiter", "uuid-turn-2"), ...filesB.map((p) => editEntry("Edit", p))];
+    const tB = writeTranscript(dir, entriesB);
+    expect(run(hookFor(dir, tB, path.join(dir, "q8b5.js")))).not.toBe("");
+  });
+
+  // Q8: an un-namespaced skill that is NOT one of this plugin's own skill
+  // directory names (a user/consumer skill, e.g. "graphify") must not be
+  // mistaken for a devops skill and must not silence the nudge.
+  test("Q8: a non-devops un-namespaced skill does not silence the nudge", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `q8c${i}.js`));
+    const entries = [promptEntry("Q8c prompt"), skillEntry("graphify"), ...files.map((p) => editEntry("Edit", p))];
+    const t = writeTranscript(dir, entries);
+    expect(run(hookFor(dir, t, path.join(dir, "q8c5.js")))).not.toBe("");
+  });
+
+  // Q8: a bare (un-namespaced) devops skill name — one of this plugin's own
+  // skill directory names — must still silence the nudge, same as the
+  // namespaced form.
+  test("Q8: a bare devops skill name silences the nudge", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `q8d${i}.js`));
+    const entries = [promptEntry("Q8d prompt"), skillEntry("do-ship"), ...files.map((p) => editEntry("Edit", p))];
+    const t = writeTranscript(dir, entries);
+    expect(run(hookFor(dir, t, path.join(dir, "q8d5.js")))).toBe("");
   });
 
   test("e2e: malformed stdin exits 0 silently", () => {
