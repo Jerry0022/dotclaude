@@ -59,7 +59,10 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
   styled tooltip component with the Info/Label delay tiers, never `title`;
   dropdowns styled with the app's tokens and uniform per menu; same component
   → same spacing tokens; a hotkey on every interaction shown in the control or
-  its tooltip; scrollbars styled once, globally, from tokens) plus the
+  its tooltip; scrollbars styled once, globally, from tokens; design,
+  interactions and function checked on Windows + Linux desktop, Android + iOS
+  tablet and Android + iOS phone — no hover-, right-click- or shortcut-only
+  action without a touch path) plus the
   project's `## UI rules` override in `.claude/skills/auto-polish/reference.md` (pre-PR-2: `tune-polish/`).
   No app-styled tooltip component or scrollbar style yet → build it first,
   then the element that needs it. `/do-ship` measures the static halves on

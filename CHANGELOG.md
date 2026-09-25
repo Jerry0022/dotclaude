@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.208.0] — 2026-09-25
+
+### Added
+- **New standing UI rule R6: the platform matrix.** Every UI change is now checked in look, UX and function on Windows desktop, Linux desktop, Android tablet, iOS tablet, Android phone and iOS phone. The static half flags constructs that work on only one platform: an action reachable only by hover, right-click or a shortcut with no touch path, `100vh` layouts, a missing viewport meta tag, iOS inputs under 16 px, edge bars without safe-area insets, Windows- or macOS-only font stacks, and shortcut hints hard-coded to one OS. The runtime half walks each changed view on every target. Anything emulation cannot show goes to the user's final test, with the platform named. A project narrows the matrix with `platforms:` in its `## UI rules` override. The design reminder hook, `/auto-polish` and the frontend and designer agents all carry the rule.
+
+## [0.207.0] — 2026-09-25
+
+### Added
+- **"Guide ausblenden" docks the web guide to a small edge tab (#516).** A **»** button in the panel header shrinks the FAB and panel to a tab on the nearest screen edge without ending the guide. A click on the tab or Escape brings it back; the state survives a reload.
+
+### Fixed
+- **A submit in the guide panel is never lost to a timed-out wait (#529).** When the tab was hidden, Claude's `wait()` call gave up after the 45 s CDP timeout but left its waiter alive in the page. The user's next **Weiter** went to that orphan and vanished. Events are now always queued and removed only by a live `wait()`; a newer `wait()` supersedes an older one; `state()` reports `pendingWaiter` and `lastDeliveredId`, and `payload wait 0` drains a stranded event.
+- **The Weiter button no longer goes dead when Claude's turn ends (#526).** While a guide runs, the skill keeps a marker (`.claude/auto-guide-active.json`, 30 min idle expiry), and the stop guard no longer forces the completion card that ended the guide loop. On the next prompt Claude first drains queued panel events. A hidden tab uses a zero-cost `state()` poll instead of burning 45 s per round.
+
 ## [0.206.2] — 2026-09-25
 
 ### Changed

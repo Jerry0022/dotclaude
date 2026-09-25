@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.8.0
+ * @version 0.9.0
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -43,6 +43,11 @@
  *     - (design § 5.5) a notification turn (background-task notification,
  *       wake-up or cron tick, no user prompt) carries no card obligation at
  *       all when nothing changed (tree clean, nothing shipped).
+ *     - (#526) a running /auto-guide loop (a fresh guide-active marker) never
+ *       owes a card — the loop lives inside javascript_tool wait() calls, and
+ *       forcing the turn to end there is what killed the panel. Unlike the
+ *       two exemptions above this one does not require a clean tree: the
+ *       guide can legitimately write a secret to .env mid-loop.
  *
  *   Line budget (design § 2.4 / § 5.4) is reported, never enforced by cutting —
  *   the renderer is the one that trims. `lineBudgetReport` returns a `warning`
@@ -396,6 +401,12 @@ function lastUserEntryIsNotification(transcriptContent) {
  * @param {boolean} [s.notificationTurn] — this turn started from a background-task
  *                                     notification, a wake-up or a cron tick, with no
  *                                     user prompt (design § 5.5)
+ * @param {boolean} [s.guideActive]   — an `/auto-guide` run is active (#526): a fresh
+ *                                     `<project>/.claude/auto-guide-active.json` marker.
+ *                                     While active and no card was rendered, the turn is
+ *                                     never forced to end — that would kill the panel's
+ *                                     wait() loop. The marker itself expires after 30 min
+ *                                     idle, so a crashed guide cannot disable this forever.
  * @param {string}  [s.cardText]      — the rendered card's markdown (last assistant text),
  *                                     used for the content gates (title / result lines /
  *                                     points) and the notification-turn duplicate check
@@ -417,7 +428,7 @@ function decideAction({
   validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
-  widgetFile, widgetCalled,
+  widgetFile, widgetCalled, guideActive,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -447,6 +458,18 @@ function decideAction({
   // carries no card obligation at all when nothing changed.
   if (notificationTurn && !cardRendered && treeClean === true && !shipped) {
     return { action: 'pass', resetFlags: true, exempt: 'notification-no-change' };
+  }
+
+  // Guide-active exemption (#526): a running /auto-guide loop lives entirely
+  // inside javascript_tool wait() calls, never a card, until the guide ends
+  // (done/aborted/closed). Forcing a card mid-loop is what killed the panel —
+  // the turn ended, the tab went to the background, and every wait() then
+  // burned its full CDP budget for nothing. Narrow like the other pre-Gate-1
+  // exemptions: only when no card was actually rendered this turn (a real
+  // card, e.g. because the guide just ended, still passes through the normal
+  // gates below).
+  if (guideActive && !cardRendered) {
+    return { action: 'pass', resetFlags: true, exempt: 'guide-active' };
   }
 
   // Gate 1 — completion card must exist.
