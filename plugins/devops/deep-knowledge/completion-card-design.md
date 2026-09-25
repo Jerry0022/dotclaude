@@ -180,6 +180,15 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
   Card neu."; `Trotzdem shippen` → "Ship mit skipChecks — die roten Tests
   landen als Issue."). Equal height, 13px; only border/text colour differs.
+- **`Web-Guide starten` button** (#506/#519): when `hooks/lib/guide-handoff.js`
+  `detectCardHandoff` finds a manual web hand-off in `open`/`userFinalTest`
+  (a marketplace integration, API key, OAuth app, account, terms, a
+  cron-job.org job — the same trigger `auto-guide`'s SKILL.md names), the
+  widget adds this button so the point never ships as a plain text step the
+  user has to execute by hand; non-Desktop clients get no button, so the
+  hit also records the pending hint `prompt.skill.enforce` offers on the
+  next real prompt. Writing such a point without checking this first is the
+  bug the button exists to catch.
 - **Prepared answer (`ready`, `test`, `ship-successful`)**: when the card has
   open points, a `Nachbessern` button carries the prepared answer:
   `ready`'s `Ändern` becomes it, `test`'s own `Nachbessern` swaps its "frag

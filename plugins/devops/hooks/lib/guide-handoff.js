@@ -1,6 +1,6 @@
 /**
  * @module guide-handoff
- * @version 0.4.0
+ * @version 0.5.0
  * @description Detection + pending-hint state for stop.guide.handoff —
  *   decides whether the turn's own final answer hands the user a manual,
  *   click-through job on an external website/dashboard instead of invoking
@@ -73,6 +73,13 @@ const SERVICE_PATTERNS = [
   { name: 'AWS Console', re: /\baws\s+console\b/i },
   { name: 'OpenAI Console', re: /\bopenai\s+console\b/i },
   { name: 'Anthropic Console', re: /\banthropic\s+console\b/i },
+  { name: 'cron-job.org', re: /\bcron-job\.org\b/i },
+  // "Neon" alone is too common a word (colour, sign) — only counts near its
+  // Postgres/database context (#519, StretchTimer: Vercel Marketplace → Neon).
+  {
+    name: 'Neon',
+    re: /\bneon\b(?=[\s\S]{0,40}?\b(?:postgres|database|datenbank|db)\b)|\b(?:postgres|database|datenbank|db)\b(?=[\s\S]{0,40}?\bneon\b)/i,
+  },
 ];
 
 /** Every http(s) URL in a text. */
@@ -91,7 +98,7 @@ const CREDENTIAL_NOUN_RE_SRC = [
   String.raw`accounts?`, String.raw`konten?`, String.raw`konto`,
   String.raw`api[-\s]?tokens?`, String.raw`api[-\s]?keys?`,
   String.raw`buckets?`, String.raw`secrets?`, String.raw`oauth[-\s]?apps?`,
-  String.raw`webhooks?`,
+  String.raw`webhooks?`, String.raw`cron[-\s]?jobs?`,
 ];
 
 /** User-directed creation verbs (de+en, incl. zu-infinitives) — signal (c). */
@@ -119,7 +126,8 @@ const IMPERATIVE_RE = new RegExp(
     // German
     String.raw`öffnen?`, String.raw`klick(?:e|en)?`, String.raw`w[äa]hlen?`,
     String.raw`autorisier(?:e|en)`, String.raw`authentifizier(?:e|en)`,
-    String.raw`durchlaufen`, String.raw`anlegen`, String.raw`leg(?:e)?\s+[^\n]*?an`,
+    String.raw`durchlaufen`, String.raw`anlegen`, String.raw`erstell(?:e|en)`,
+    String.raw`leg(?:e)?\s+[^\n]*?an`,
     String.raw`eintragen`, String.raw`trag(?:e)?\s+[^\n]*?ein`, String.raw`einloggen`,
     String.raw`anmelden`, String.raw`kopier(?:e|en)`, String.raw`einfügen`,
     String.raw`aktivier(?:e|en)`, String.raw`navigier(?:e|en)`,
