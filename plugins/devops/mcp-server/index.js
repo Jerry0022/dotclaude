@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.11.0
+ * @version 0.11.1
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -1479,10 +1479,10 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
 /**
  * Render the completion card markdown — "one page, three lines, one
  * decision" (§ 2 of the design doc). Two blocks: block 1 (title, result
- * lines, evidence row, budget line, pipeline line) and block 2 (decision
- * heading, optional context line, points, no buttons — the terminal never
- * renders buttons; the Desktop widget draws them separately, see
- * `lib/card-widget.js`).
+ * lines, evidence row, pipeline line, run-contract line, channel ladder,
+ * budget line) and block 2 (decision heading, optional context line, points,
+ * no buttons — the terminal never renders buttons; the Desktop widget draws
+ * them separately, see `lib/card-widget.js`).
  */
 function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { titleOnly = false } = {}) {
   const variant = input.variant || 'fallback';

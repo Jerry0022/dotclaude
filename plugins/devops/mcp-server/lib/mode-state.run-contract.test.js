@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readRunContractLine } from "./mode-state.js";
+import { readRunContractLine, hookRequire } from "./mode-state.js";
 import * as RC from "../../hooks/lib/run-contract.js";
 
 // `readRunContractLine` is a pure read of the do-run run-contract state
@@ -53,5 +53,15 @@ describe("readRunContractLine", () => {
     RC.record(cwd, { k: "edit" });
     RC.close(cwd, "done");
     expect(readRunContractLine(cwd)).toMatch(/^🧾 Run · Prompt/);
+  });
+});
+
+describe("hookRequire", () => {
+  test("H-G: resolves under hooks/ and throws for a missing module (every call site swallows this to null)", () => {
+    expect(() => hookRequire("lib", "does-not-exist.js")).toThrow();
+  });
+
+  test("H-G: resolves a real hook module the same way the three call sites do", () => {
+    expect(typeof hookRequire("lib", "run-contract.js").summaryForCard).toBe("function");
   });
 });
