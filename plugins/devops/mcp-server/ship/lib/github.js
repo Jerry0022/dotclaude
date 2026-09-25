@@ -7,6 +7,22 @@ import { execFileSync } from "node:child_process";
 
 const DEFAULT_TIMEOUT = 30_000;
 
+// #508 — grace window for an immediate "no checks" right after a push: an
+// external status provider (Vercel etc.) can register seconds after the push
+// that immediately precedes the checks gate, so a single probe cannot tell
+// "nothing is wired up" from "not registered yet". Configurable via env for
+// operators; tests override via the `noChecksGraceMs` option instead of the
+// env var, so the suite never depends on process.env state.
+const DEFAULT_NO_CHECKS_GRACE_MS = 90_000;
+const DEFAULT_NO_CHECKS_GRACE_INTERVAL_MS = 5_000;
+
+function envInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // ANSI escape pattern built at runtime to avoid literal control chars in source.
 const ANSI_PATTERN = new RegExp(String.fromCharCode(27) + "\\[[0-9;]*[A-Za-z]", "g");
 
@@ -237,11 +253,46 @@ export function findExistingPR({ base, head }, opts) {
 }
 
 /**
+ * Best-effort signal: did this PR carry CI checks/statuses on an earlier
+ * commit? Used to decide whether an immediate "no checks" on a freshly
+ * pushed head deserves the full checks timeout as its wait budget, instead
+ * of just the short grace window (#508: a PR/repo that HAS reported checks
+ * before is not "no CI configured" — the new head just hasn't been picked
+ * up by the status provider yet). Never throws and never blocks a ship on
+ * its own failure — an unreadable history just means "assume no signal",
+ * which only shortens the wait.
+ */
+function hadRecentChecks(prNumber, opts) {
+  try {
+    const raw = gh(["pr", "view", String(prNumber), "--json", "commits"], opts);
+    const commits = JSON.parse(raw)?.commits || [];
+    // Exclude the current head (last entry); look at up to 5 earlier commits,
+    // most recent first.
+    const earlier = commits.slice(0, -1).slice(-5).reverse();
+    for (const c of earlier) {
+      if (!c?.oid) continue;
+      try {
+        const runs = gh(["api", `repos/{owner}/{repo}/commits/${c.oid}/check-runs`, "-q", ".total_count"], opts);
+        if (parseInt(runs, 10) > 0) return true;
+      } catch { /* fall through to combined status */ }
+      try {
+        const statuses = gh(["api", `repos/{owner}/{repo}/commits/${c.oid}/status`, "-q", ".total_count"], opts);
+        if (parseInt(statuses, 10) > 0) return true;
+      } catch { /* keep looking at the next commit */ }
+    }
+  } catch { /* no readable commit history — assume no signal */ }
+  return false;
+}
+
+/**
  * Watch a PR's CI checks until they complete, fail, or timeout.
  *
  * Returns:
  *   { status: "passed",      checks: [...] }                       — all green
- *   { status: "no-checks",   checks: [] }                          — no CI configured on this PR
+ *   { status: "no-checks",   checks: [], noChecksReason? }          — no CI configured on this PR; `noChecksReason` is
+ *                                                                    set when we actually waited (grace window elapsed)
+ *                                                                    before concluding it — never a silent verdict on a
+ *                                                                    head that simply hasn't reported yet (#508)
  *   { status: "failed",      checks, failed, pending, error }      — at least one check failed
  *   { status: "timeout",     checks, failed, pending, error }      — did not complete within timeoutSec, OR
  *                                                                    watch exited unexpectedly while checks were still pending
@@ -251,37 +302,83 @@ export function findExistingPR({ base, head }, opts) {
  *
  * Never throws — callers branch on `status`.
  */
-export function watchPRChecks(prNumber, opts, { timeoutSec = 600, intervalSec = 10 } = {}) {
-  // Initial probe — distinguishes "no checks at all" from "checks present".
-  // gh exits non-zero with "no checks reported" when nothing is wired up.
-  let initial;
-  try {
-    initial = gh(
-      ["pr", "checks", String(prNumber), "--json", "bucket,state,name,workflow,link"],
-      opts,
-    );
-  } catch (e) {
-    const stderr = (e.stderr?.toString() || e.message || "").replace(ANSI_PATTERN, "");
-    if (/no checks/i.test(stderr) || /no required checks/i.test(stderr)) {
-      return { status: "no-checks", checks: [] };
+export function watchPRChecks(prNumber, opts, {
+  timeoutSec = 600,
+  intervalSec = 10,
+  // #508: an immediate "no checks" right after a push is ambiguous — ride it
+  // out for a grace window before concluding there is no CI. `0` (tests) skips
+  // the wait entirely and preserves the old immediate verdict.
+  noChecksGraceMs = envInt("DEVOPS_SHIP_NO_CHECKS_GRACE_MS", DEFAULT_NO_CHECKS_GRACE_MS),
+  noChecksGraceIntervalMs = envInt("DEVOPS_SHIP_NO_CHECKS_GRACE_INTERVAL_MS", DEFAULT_NO_CHECKS_GRACE_INTERVAL_MS),
+  sleep = sleepSync,
+  now = Date.now,
+} = {}) {
+  // One probe — distinguishes "no checks at all" from "checks present" (incl.
+  // pending). gh exits non-zero with "no checks reported" when nothing is
+  // wired up, and exit 8 when checks are pending.
+  function probeOnce() {
+    let raw;
+    try {
+      raw = gh(["pr", "checks", String(prNumber), "--json", "bucket,state,name,workflow,link"], opts);
+    } catch (e) {
+      const stderr = (e.stderr?.toString() || e.message || "").replace(ANSI_PATTERN, "");
+      if (/no checks/i.test(stderr) || /no required checks/i.test(stderr)) {
+        return { kind: "no-checks", checks: [] };
+      }
+      if (e.status !== 8) {
+        // Real failure (auth, network, PR not found) — fail-closed: do NOT
+        // silently treat as "no checks", or the gate becomes a no-op when
+        // auth breaks.
+        return { kind: "probe-error", error: `gh pr checks probe failed: ${stderr.slice(0, 300)}` };
+      }
+      raw = e.stdout?.toString() || "[]";
     }
-    // gh exits 8 = checks pending — that's expected, fall through to watch
-    if (e.status !== 8) {
-      // Real failure (auth, network, PR not found) — fail-closed: do NOT silently
-      // treat as "no checks", or the gate becomes a no-op when auth breaks.
-      return { status: "probe-error", error: `gh pr checks probe failed: ${stderr.slice(0, 300)}` };
+    let checks;
+    try {
+      checks = JSON.parse(raw);
+    } catch {
+      checks = [];
     }
-    initial = e.stdout?.toString() || "[]";
+    if (!checks || checks.length === 0) return { kind: "no-checks", checks: [] };
+    return { kind: "checks", checks };
   }
 
-  let initialChecks;
-  try {
-    initialChecks = JSON.parse(initial);
-  } catch {
-    initialChecks = [];
+  let probe = probeOnce();
+  if (probe.kind === "probe-error") {
+    return { status: "probe-error", error: probe.error };
   }
-  if (!initialChecks || initialChecks.length === 0) {
-    return { status: "no-checks", checks: [] };
+
+  if (probe.kind === "no-checks") {
+    const graceMs = Math.max(0, noChecksGraceMs);
+    // Only bother asking history when we're actually going to wait — a
+    // grace-less caller (tests, skipChecks-adjacent flows) gets the old
+    // immediate verdict with zero extra gh calls.
+    const hasHistory = graceMs > 0 ? hadRecentChecks(prNumber, opts) : false;
+    // Plain case: wait out the grace window. Stronger signal (this PR/repo
+    // HAS reported checks before): wait up to the full checks timeout for
+    // the new head to pick them up, per #508.
+    const waitBudgetMs = hasHistory ? Math.max(graceMs, timeoutSec * 1000) : graceMs;
+    const deadline = now() + waitBudgetMs;
+    let waited = false;
+    while (probe.kind === "no-checks" && now() < deadline) {
+      const step = Math.min(noChecksGraceIntervalMs, deadline - now());
+      if (step <= 0) break;
+      sleep(step);
+      waited = true;
+      probe = probeOnce();
+      if (probe.kind === "probe-error") return { status: "probe-error", error: probe.error };
+    }
+    if (probe.kind === "no-checks") {
+      const result = { status: "no-checks", checks: [] };
+      if (waited) {
+        result.noChecksReason = hasHistory
+          ? `PR #${prNumber} had earlier commits with CI checks, but none appeared on this head within ${Math.round(waitBudgetMs / 1000)}s — proceeding as no-checks; verify CI is wired up on this head.`
+          : `No CI checks reported within ${Math.round(waitBudgetMs / 1000)}s of the push — proceeding as no-checks.`;
+      }
+      return result;
+    }
+    // Checks showed up during the grace window — fall through to the watch
+    // loop below exactly as if the very first probe had seen them.
   }
 
   // Block on gh's own --watch loop. Wrap with our own timeout to bound it hard.

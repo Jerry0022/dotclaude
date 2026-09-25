@@ -308,6 +308,10 @@ export async function handler(params) {
         failed: checkResult.failed?.length || 0,
         pending: checkResult.pending?.length || 0,
       };
+      // #508: watchPRChecks only reaches "no-checks" after riding out its grace
+      // window when the initial probe found nothing — `noChecksReason` says so
+      // instead of a silent verdict on a head that simply hasn't reported yet.
+      if (checkResult.noChecksReason) result.checks.noChecksReason = checkResult.noChecksReason;
       if (checkResult.status === "failed" || checkResult.status === "timeout" || checkResult.status === "probe-error") {
         result.success = false;
         result.checksBlocked = true;
