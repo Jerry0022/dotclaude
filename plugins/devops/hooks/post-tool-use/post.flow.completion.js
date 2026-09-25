@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.26.1
+ * @version 0.26.2
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -768,29 +768,40 @@ process.stdin.on('end', () => {
   try { hook = JSON.parse(inputData); }
   catch { process.exit(0); }
 
-  if (isSilentTurn(hook)) process.exit(0);
+  // R15 part 3: everything below is a refactor of one former ~380-line
+  // callback (AUD-029) into named sections, several of which parse untrusted
+  // hook/tool-response JSON (e.g. `JSON.parse('null')` throws a TypeError on
+  // the next property access) — wrapped so any of their internal errors exit
+  // 0 silently instead of crashing this PostToolUse hook, same as every
+  // other failure path here. The early-exit order and all behaviour below
+  // are unchanged.
+  try {
+    if (isSilentTurn(hook)) process.exit(0);
 
-  // Subagent call: hooks fire for it with the PARENT's session_id, and all
-  // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
-  // counters, work-happened, the V&V gate flags, and a reminder PostToolUse
-  // stdout never delivers to the model anyway). Observed 2026-09-25: an
-  // isolated background agent's Edit inside its own worktree wrote the
-  // parent's validation-pending and deleted the validation-attested flag the
-  // parent's card had written four minutes earlier — both Stop gates then
-  // blocked an unchanged parent checkout. Its passing test run would equally
-  // have "verified" the parent, which delegation never may.
-  if (isSubagentCall(hook)) process.exit(0);
+    // Subagent call: hooks fire for it with the PARENT's session_id, and all
+    // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
+    // counters, work-happened, the V&V gate flags, and a reminder PostToolUse
+    // stdout never delivers to the model anyway). Observed 2026-09-25: an
+    // isolated background agent's Edit inside its own worktree wrote the
+    // parent's validation-pending and deleted the validation-attested flag the
+    // parent's card had written four minutes earlier — both Stop gates then
+    // blocked an unchanged parent checkout. Its passing test run would equally
+    // have "verified" the parent, which delegation never may.
+    if (isSubagentCall(hook)) process.exit(0);
 
-  const toolName = hook.tool_name || '';
-  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+    const toolName = hook.tool_name || '';
+    const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
 
-  const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
-  const editCount = updateEditAndGateFlags(hook, toolName, isCodeEdit);
+    const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
+    const editCount = updateEditAndGateFlags(hook, toolName, isCodeEdit);
 
-  const lines = emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask);
-  if (lines === null) return;
+    const lines = emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask);
+    if (lines === null) return;
 
-  appendIssueStatusInstruction(hook, lines);
+    appendIssueStatusInstruction(hook, lines);
 
-  process.stdout.write(lines.join('\n') + '\n');
+    process.stdout.write(lines.join('\n') + '\n');
+  } catch {
+    process.exitCode = 0;
+  }
 });

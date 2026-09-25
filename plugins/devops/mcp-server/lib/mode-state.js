@@ -1,6 +1,6 @@
 /**
  * @module mode-state
- * @version 1.0.0
+ * @version 1.1.0
  *
  * Mode state the card reads off the project — not off the caller.
  *
@@ -417,13 +417,36 @@ export function readRunContractLine(cwd, lang = "de", sessionId = null) {
   if (!cwd) return null;
   try {
     const RC = hookRequire("lib", "run-contract.js");
-    // A contract of another session (Desktop copies the untracked `.claude/`
-    // into new worktrees) is never shown.
-    const contract = RC.readContractForCard(cwd, { sessionId: sessionId || null });
+    // R9: the model never passes the harness's real session id — it sends
+    // "self" (the ccd_session convention), the Desktop `local_…` id, or
+    // nothing (post.flow.completion.js#adoptCardFlags maps all three onto
+    // the harness id once the PostToolUse hook fires, but that happens AFTER
+    // this call). None of these three values can ever be a genuine foreign
+    // session's id, so they resolve to "this session" (the lenient path
+    // ownedBy() already gives an omitted sessionId) rather than the strict
+    // AUD-011 check, which otherwise hid the run line on most real cards. A
+    // session id the model could not have invented this way — anything else
+    // — keeps the strict, AUD-011 check: a truly foreign contract stays hidden.
+    const opts = isSelfSessionMarker(sessionId) ? {} : { sessionId };
+    const contract = RC.readContractForCard(cwd, opts);
     if (!contract) return null;
     const evs = RC.events(cwd);
     return RC.summaryForCard(contract, evs, lang, { codeFilesChanged: null }) || null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Is `id` a convention marker for "the calling session itself" rather than a
+ * genuine harness session id? Mirrors the values
+ * `post.flow.completion.js#adoptCardFlags` moves flags away from: a falsy
+ * id, the `"self"` ccd_session convention, and the Desktop `local_…` prefix.
+ *
+ * @param {string|null|undefined} id
+ * @returns {boolean}
+ */
+function isSelfSessionMarker(id) {
+  if (!id) return true;
+  return id === "self" || id.startsWith("local_");
 }
