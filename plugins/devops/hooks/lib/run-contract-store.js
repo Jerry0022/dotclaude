@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.2.0
+ * @version 0.2.1
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -12,7 +12,8 @@
  *   `strict-mode.json`:
  *     .claude/run-contract.json          header (atomic temp + rename writes)
  *     .claude/run-contract.json.lock     short-lived mutex for update()/close() (AUD-017)
- *     .claude/run-contract.json.corrupt          quarantined unreadable header (AUD-022)
+ *     .claude/run-contract.json.corrupt-<ts>-<pid>-<rand>  quarantined unreadable
+ *                                         header copies, a few kept, oldest dropped (AUD-022, RT1-R4)
  *     .claude/run-contract.json.corrupt.pending  one-shot "announce it" marker (AUD-022)
  *     .claude/run-contract.events.jsonl  append-only events, one JSON per line
  *     .claude/run-contract.prev.json     archive of the replaced / expired one
@@ -30,13 +31,30 @@
  * AUD-017 (close always wins): `update()` and `close()` both take a short
  *   file lock (`fs 'wx'`, stale after 1 s) around their read-modify-write so
  *   a close() landing between update()'s read and write can no longer be
- *   overwritten by update()'s stale patch.
+ *   overwritten by update()'s stale patch. RT1-R6: `close()` never gives up
+ *   just because the lock could not be taken — it writes without the lock
+ *   rather than silently drop the close. RT1-R7: the lock file carries a
+ *   pid+nonce token; `releaseLock()` only unlinks a lock that still holds
+ *   its own token, and a stale takeover renames the file away (verifying it
+ *   is really the stale copy) instead of unlinking it outright.
  * AUD-018 (events cap): `readEventLines()` caches by file size + mtime
  *   (cheap re-read within one process); `record()` compacts the JSONL past
  *   a line threshold, dropping foreign/previous-contract lines and, within
  *   each segment, the `block`/`measure`/`card` lines obligations never read
  *   (only the segment's last `measure` and any release-equivalent `card`
- *   matter — see run-contract-obligations.js).
+ *   matter — see run-contract-obligations.js). RT1-R8: compaction runs
+ *   under the header lock, re-checks the events file size right before the
+ *   rename (a lock-free `record()` append that raced in is never silently
+ *   lost — the compaction is simply skipped, tried again next time), and
+ *   the header persists the line count as of the last compaction so the
+ *   trigger is "grown past the cap since then", not "still above the cap"
+ *   (a compacted-but-still-large file no longer gets rewritten on every
+ *   single record() call).
+ * RT1-R3 (corrupt vs transient read error): `readJsonStrict()` tells a
+ *   read failure (EBUSY/EPERM — a scanner/indexer holding the file) apart
+ *   from a successful read whose bytes fail to parse. Only the latter is
+ *   ever quarantined; a read error leaves the header alone and this call
+ *   just sees "no contract", same as any other transient fs hiccup.
  */
 
 const fs = require('fs');
@@ -88,6 +106,10 @@ const DEFAULT_HEADER = Object.freeze({
   closedAt: null,
   closeReason: null,
   aborted: false,
+  // RT1-R8: events line count as of the last compaction — record()'s
+  // auto-compact trigger is "grown past the cap since then", not "still
+  // above the cap" (see compactEvents()).
+  compactedAtLines: 0,
 });
 
 // ── paths / io ─────────────────────────────────────────────────────────────
@@ -103,7 +125,14 @@ function prevPath(cwd) { return fileIn(cwd, FILES.prev); }
 function pendingPath(cwd) { return fileIn(cwd, FILES.pending); }
 function batchHandoffPath(cwd) { return fileIn(cwd, FILES.batch); }
 function lockPath(cwd) { return fileIn(cwd, `${FILES.header}.lock`); }
-function corruptPath(cwd) { return fileIn(cwd, `${FILES.header}.corrupt`); }
+// RT1-R4: each quarantine gets its own unique name (never a fixed
+// `.corrupt` that a second quarantining process could unlink from under the
+// first one, or that could clobber a fresh header raced in by a concurrent
+// arm()). `corruptPrefix` is the common prefix every quarantine copy shares.
+function corruptPrefix() { return `${FILES.header}.corrupt-`; }
+function corruptUniquePath(cwd, now) {
+  return fileIn(cwd, `${corruptPrefix()}${now}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`);
+}
 function corruptPendingPath(cwd) { return fileIn(cwd, `${FILES.header}.corrupt.pending`); }
 
 function nowOf(opts) { return opts && typeof opts.now === 'number' ? opts.now : Date.now(); }
@@ -137,6 +166,30 @@ function readJson(file) {
     const v = JSON.parse(fs.readFileSync(file, 'utf8'));
     return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
   } catch { return null; }
+}
+
+/**
+ * RT1-R3: like readJson(), but tells apart a READ failure (file missing, or
+ * a transient EBUSY/EPERM from an AV scanner / indexer holding the file for
+ * a few ms) from bytes that were read fine but fail to parse (or parse to
+ * something that isn't a header-shaped object). Only the latter is real
+ * corruption — a caller must never quarantine on a read error.
+ * @returns {{value: object|null, readError?: true, parseError?: true}}
+ */
+function readJsonStrict(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return { value: null, readError: true };
+  }
+  try {
+    const v = JSON.parse(text);
+    if (v && typeof v === 'object' && !Array.isArray(v)) return { value: v };
+    return { value: null, parseError: true };
+  } catch {
+    return { value: null, parseError: true };
+  }
 }
 
 function writeTextAtomic(file, text) {
@@ -195,44 +248,113 @@ function unlinkQuiet(file) { try { fs.unlinkSync(file); } catch { /* already gon
 const LOCK_STALE_MS = 1000;
 const LOCK_RETRY_MS = 5;
 const LOCK_MAX_WAIT_MS = 1000;
+// RT1-R6: on Windows, open('wx') on a lock file that is delete-pending (a
+// concurrent unlink/rename mid-flight) surfaces as EPERM/EBUSY/EACCES, not
+// EEXIST. Treated as "someone else has it" too — retried until the
+// deadline, not given up on immediately (which used to silently answer
+// update()/close() with null and drop the write).
+const LOCK_RETRIABLE = new Set(['EEXIST', 'EPERM', 'EBUSY', 'EACCES']);
 
+/**
+ * RT1-R7: rename the stale lock out of the way instead of unlinking it —
+ * unlink-after-stat is a race (a second process can unlink the fresh lock
+ * the first process just re-created). The renamed copy's content is
+ * compared against what was observed at staleness-detection time; a
+ * mismatch means someone refreshed the lock between the stat and this
+ * rename, so it is put back rather than dropped.
+ * @returns {boolean} true if the stale lock was actually taken over
+ */
+function takeoverStaleLock(file, observedContent) {
+  const junk = `${file}.stale-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    fs.renameSync(file, junk);
+  } catch {
+    return false; // already gone / already taken over by someone else
+  }
+  let content = null;
+  try { content = fs.readFileSync(junk, 'utf8'); } catch { /* best effort */ }
+  if (content !== null && content !== observedContent) {
+    try { fs.renameSync(junk, file); return false; } catch { /* fall through: drop our copy */ }
+  }
+  unlinkQuiet(junk);
+  return true;
+}
+
+/** @returns {string|null} the lock token to pass to releaseLock(), or null (gave up) */
 function acquireLock(cwd, opts = {}) {
   const file = lockPath(cwd);
   const staleMs = typeof opts.lockStaleMs === 'number' ? opts.lockStaleMs : LOCK_STALE_MS;
   const maxWaitMs = typeof opts.lockWaitMs === 'number' ? opts.lockWaitMs : LOCK_MAX_WAIT_MS;
   const deadline = Date.now() + maxWaitMs;
+  const token = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   for (;;) {
     let fd;
     try {
       fd = fs.openSync(file, 'wx');
-      fs.writeSync(fd, String(process.pid));
+      fs.writeSync(fd, token);
       fs.closeSync(fd);
-      return true;
+      return token;
     } catch (e) {
       if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* already closed */ } }
-      if (!e || e.code !== 'EEXIST') return false; // unexpected fs error: don't block
-      try {
-        const st = fs.statSync(file);
-        if (Date.now() - st.mtimeMs > staleMs) { unlinkQuiet(file); continue; }
-      } catch { continue; } // lock vanished between EEXIST and stat: retry now
-      if (Date.now() >= deadline) return false;
+      if (!e || !LOCK_RETRIABLE.has(e.code)) return null; // unexpected fs error: don't block
+      if (e.code === 'EEXIST') {
+        let st, content;
+        try {
+          st = fs.statSync(file);
+          content = fs.readFileSync(file, 'utf8');
+        } catch { continue; } // lock vanished between EEXIST and stat/read: retry now
+        if (Date.now() - st.mtimeMs > staleMs) { takeoverStaleLock(file, content); continue; }
+      }
+      if (Date.now() >= deadline) return null;
       sleepSync(LOCK_RETRY_MS);
     }
   }
 }
 
-function releaseLock(cwd) { unlinkQuiet(lockPath(cwd)); }
+/** Unlink the lock only if it still holds `token` — never remove a lock someone else took over. */
+function releaseLock(cwd, token) {
+  const file = lockPath(cwd);
+  let content;
+  try { content = fs.readFileSync(file, 'utf8'); } catch { return; } // already gone
+  if (content !== token) return; // no longer ours (a stale takeover raced past us)
+  unlinkQuiet(file);
+}
 
 // ── AUD-022: quarantine an unreadable header rather than lose it ───────────
 const CORRUPT_RETRY_MS = 30;
+const CORRUPT_KEEP_MAX = 3;
 
-/** Rename the corrupt header out of the way; never overwrite older data silently. */
-function quarantineCorrupt(cwd) {
+/** Drop all but the newest CORRUPT_KEEP_MAX quarantine copies (oldest first). */
+function pruneQuarantine(cwd) {
+  const dir = projectClaudeDir(cwd);
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return; }
+  const prefix = corruptPrefix();
+  const matches = names.filter(n => n.startsWith(prefix)).sort(); // ts prefix sorts chronologically
+  for (const n of matches.slice(0, -CORRUPT_KEEP_MAX)) unlinkQuiet(path.join(dir, n));
+}
+
+/**
+ * Rename the corrupt header out of the way; never overwrite older data
+ * silently. RT1-R4: renamed to a unique name (not a fixed `.corrupt`) so a
+ * second quarantining process can never unlink the first one's copy, and
+ * the renamed bytes are re-read and put back if they turn out to parse —
+ * a fresh header a concurrent arm() raced in under us, not real corruption.
+ */
+function quarantineCorrupt(cwd, opts = {}) {
   const file = contractPath(cwd);
+  const dest = corruptUniquePath(cwd, nowOf(opts));
   try {
-    unlinkQuiet(corruptPath(cwd)); // replace an older quarantine, not accumulate
-    fs.renameSync(file, corruptPath(cwd));
-  } catch { /* best effort: still mark it pending below so it isn't lost silently */ }
+    fs.renameSync(file, dest);
+  } catch {
+    return; // already gone / raced away: nothing left to quarantine
+  }
+  const r = readJsonStrict(dest);
+  if (r.value && r.value.v === 1 && typeof r.value.id === 'string') {
+    try { fs.renameSync(dest, file); return; } catch { /* `file` reappeared meanwhile:
+      fall through and keep the copy quarantined below rather than lose it */ }
+  }
+  pruneQuarantine(cwd);
   try { fs.writeFileSync(corruptPendingPath(cwd), '', 'utf8'); } catch { /* best effort */ }
 }
 
@@ -240,7 +362,7 @@ function quarantineCorrupt(cwd) {
 function corruptNotice(cwd) {
   if (!fileExists(corruptPendingPath(cwd))) return null;
   unlinkQuiet(corruptPendingPath(cwd));
-  return `[run-contract] A corrupt run-contract.json was found and quarantined as run-contract.json.corrupt — its gates were off. Still in a do-run? Re-arm: ${rearmHint()}`;
+  return `[run-contract] A corrupt run-contract.json was found and quarantined (run-contract.json.corrupt-*) — its gates were off. Still in a do-run? Re-arm: ${rearmHint()}`;
 }
 
 function strList(v) {
@@ -265,24 +387,28 @@ function sanitize(h) {
   return out;
 }
 
-function readRawContract(cwd) {
+function readRawContract(cwd, opts = {}) {
   const file = contractPath(cwd);
-  let h = readJson(file);
-  // AUD-022: readJson() can't tell "no file" from "unreadable JSON". Only
-  // chase the corrupt path when a regular file is actually there — a
-  // directory sitting at the path (AUD-001's fallback-arm write-failure
-  // fixture) is a structural obstruction, not a corrupt header.
-  if (h === null && isRegularFile(file)) {
+  // AUD-022 / RT1-R3: readJsonStrict() tells "unreadable" (transient — a
+  // scanner/indexer holding the file, or no file at all) apart from
+  // "readable but fails to parse" (real corruption). Only the latter, and
+  // only when a regular file is actually there — a directory sitting at the
+  // path (AUD-001's fallback-arm write-failure fixture) is a structural
+  // obstruction, not a corrupt header — ever gets quarantined. A read error
+  // just behaves as "no contract this call", same as any other fs hiccup.
+  let r = readJsonStrict(file);
+  if (r.parseError && isRegularFile(file)) {
     // A concurrent atomic rename (arm/update/close all write temp+rename)
     // can be caught mid-flight — one short retry before treating it as real
     // corruption.
     sleepSync(CORRUPT_RETRY_MS);
-    h = readJson(file);
-    if (h === null && isRegularFile(file)) {
-      quarantineCorrupt(cwd);
+    r = readJsonStrict(file);
+    if (r.parseError && isRegularFile(file)) {
+      quarantineCorrupt(cwd, opts);
       return null;
     }
   }
+  const h = r.value;
   // H-B6: normalised on read — a hand-edited / older header without the
   // `passes` / `items` arrays must not throw in the gates (pre's catch-all
   // would turn that into "allow every call").
@@ -342,26 +468,68 @@ function events(cwd) {
 const EVENTS_COMPACT_LINES = 500;
 const CARD_KEEP_VARIANTS = new Set(['ship-blocked', 'aborted']);
 
-/** Unconditional rewrite — callers (record()) decide when it is worth it. */
+/**
+ * Callers (record()) decide when it is worth it; this always attempts the
+ * rewrite. RT1-R8: runs under the header lock (append itself stays
+ * lock-free — taking a lock on every record() would slow the hot path) and
+ * re-checks the events file size right before the rename: a parallel
+ * appendFileSync that raced in after we read the file would otherwise be
+ * silently dropped by our rewrite. If it grew, or the lock could not be
+ * taken at all, this is a no-op — the next record() past the cap tries
+ * again. On success, the header's `compactedAtLines` is bumped so the
+ * auto-compact trigger in record() is "grown past the cap since the last
+ * compaction", not "still above the cap" (which used to rewrite the whole
+ * file on every single record() once a segment structure keeps it >500
+ * lines forever).
+ */
 function compactEvents(cwd, header) {
-  const all = readEventLines(cwd);
-  const own = all.filter(ev => !ev.c || ev.c === header.id);
-  // Lazy require: breaks the store ↔ obligations circular dependency.
-  const { segments } = require('./run-contract-obligations');
-  const kept = [];
-  for (const seg of segments(header, own)) {
-    let lastMeasure = null;
-    for (const ev of seg) {
-      if (ev.k === 'block') continue;
-      if (ev.k === 'measure') { lastMeasure = ev; continue; }
-      if (ev.k === 'card') { if (CARD_KEEP_VARIANTS.has(ev.variant)) kept.push(ev); continue; }
-      kept.push(ev);
+  const token = acquireLock(cwd);
+  if (!token) return; // best effort: try again next time
+  try {
+    const file = eventsPath(cwd);
+    let beforeStat;
+    try { beforeStat = fs.statSync(file); } catch { beforeStat = null; }
+    const all = readEventLines(cwd);
+    const own = all.filter(ev => !ev.c || ev.c === header.id);
+    // Lazy require: breaks the store ↔ obligations circular dependency.
+    const { segments } = require('./run-contract-obligations');
+    const kept = [];
+    for (const seg of segments(header, own)) {
+      let lastMeasure = null;
+      for (const ev of seg) {
+        if (ev.k === 'block') continue;
+        if (ev.k === 'measure') { lastMeasure = ev; continue; }
+        if (ev.k === 'card') { if (CARD_KEEP_VARIANTS.has(ev.variant)) kept.push(ev); continue; }
+        kept.push(ev);
+      }
+      if (lastMeasure) kept.push(lastMeasure);
     }
-    if (lastMeasure) kept.push(lastMeasure);
+    kept.sort((a, b) => (Date.parse(a.t) || 0) - (Date.parse(b.t) || 0));
+    const body = kept.map(ev => JSON.stringify(ev)).join('\n') + (kept.length ? '\n' : '');
+    const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(tmp, body, 'utf8');
+      // Right before the rename: has the file grown since we read it? A
+      // grow means a lock-free append landed in between — abort, it would
+      // be lost by our rename.
+      let afterStat;
+      try { afterStat = fs.statSync(file); } catch { afterStat = null; }
+      const grew = beforeStat ? (!afterStat || afterStat.size !== beforeStat.size) : !!afterStat;
+      if (grew) { unlinkQuiet(tmp); return; }
+      fs.renameSync(tmp, file);
+    } catch {
+      unlinkQuiet(tmp);
+      return;
+    }
+    eventsCache = null;
+    const fresh = readRawContract(cwd);
+    if (fresh && fresh.id === header.id) {
+      writeJsonRetry(contractPath(cwd), { ...fresh, compactedAtLines: kept.length });
+    }
+  } finally {
+    releaseLock(cwd, token);
   }
-  kept.sort((a, b) => (Date.parse(a.t) || 0) - (Date.parse(b.t) || 0));
-  const body = kept.map(ev => JSON.stringify(ev)).join('\n') + (kept.length ? '\n' : '');
-  if (writeTextAtomic(eventsPath(cwd), body)) eventsCache = null;
 }
 
 // ── lifecycle ──────────────────────────────────────────────────────────────
@@ -516,7 +684,8 @@ function arm(cwd, header = {}, opts = {}) {
 function update(cwd, patch = {}, opts = {}) {
   const now = nowOf(opts);
   archiveIfExpired(cwd, now);
-  if (!acquireLock(cwd, opts)) return null;
+  const token = acquireLock(cwd, opts);
+  if (!token) return null;
   try {
     const h = readContract(cwd, { now, sessionId: opts.sessionId });
     if (!h) return null;
@@ -532,7 +701,7 @@ function update(cwd, patch = {}, opts = {}) {
     const next = sanitize({ ...fresh, ...rest });
     return writeJsonRetry(contractPath(cwd), next) ? next : null;
   } finally {
-    releaseLock(cwd);
+    releaseLock(cwd, token);
   }
 }
 
@@ -596,8 +765,11 @@ function record(cwd, event, opts = {}) {
   ev.t = new Date(now).toISOString();
   ev.c = h.id;
   const written = appendRetry(eventsPath(cwd), JSON.stringify(ev) + '\n') ? ev : null;
-  // AUD-018: only pay for the rewrite once the file has grown past the cap.
-  if (written && readEventLines(cwd).length > EVENTS_COMPACT_LINES) compactEvents(cwd, h);
+  // AUD-018 / RT1-R8: trigger on growth since the last compaction, not on
+  // being (still) above the cap — a compacted file whose kept lines still
+  // exceed EVENTS_COMPACT_LINES (many live segments) would otherwise be
+  // rewritten again on every single subsequent record() call.
+  if (written && readEventLines(cwd).length - (h.compactedAtLines || 0) > EVENTS_COMPACT_LINES) compactEvents(cwd, h);
   return written;
 }
 
@@ -610,7 +782,11 @@ function record(cwd, event, opts = {}) {
  */
 function close(cwd, reason, opts = {}) {
   const now = nowOf(opts);
-  if (!acquireLock(cwd, opts)) return null;
+  // RT1-R6: close must always win. If the lock cannot be taken in time (a
+  // delete-pending lock racing EPERM/EBUSY past the retry loop, or a busy
+  // holder) close still writes — better a rare lost concurrent update()
+  // patch than a lost close that leaves the contract's gates stuck open.
+  const token = acquireLock(cwd, opts);
   try {
     const h = readContract(cwd, { now, sessionId: opts.sessionId });
     if (!h) return null;
@@ -622,7 +798,7 @@ function close(cwd, reason, opts = {}) {
     };
     return writeJsonRetry(contractPath(cwd), next) ? next : null;
   } finally {
-    releaseLock(cwd);
+    if (token) releaseLock(cwd, token);
   }
 }
 
@@ -680,6 +856,6 @@ module.exports = {
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   // shared with the sibling modules (not part of the facade's public list)
   nowOf, eventsOf, readJson, strList, sanitize,
-  // internal, exposed for this module's own tests only (AUD-017 / AUD-018)
-  compactEvents, EVENTS_COMPACT_LINES,
+  // internal, exposed for this module's own tests only (AUD-017 / AUD-018 / RT1)
+  compactEvents, EVENTS_COMPACT_LINES, readJsonStrict, corruptPrefix, takeoverStaleLock,
 };
