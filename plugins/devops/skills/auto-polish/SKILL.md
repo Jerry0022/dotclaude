@@ -205,12 +205,14 @@ Spawn parallel Explore agents (single message, multiple Agent calls):
    no internal seams, hook-reuse opportunities (same effect logic in
    3+ components).
 
-8. **Standing UI rules (`$UI_RULES`)** — R0–R5, each with a static and a
+8. **Standing UI rules (`$UI_RULES`)** — R0–R6, each with a static and a
    runtime half. `deep-knowledge/ui-defaults.md` (loaded in Step 0) is the
    single source for what each half checks — work from it, not from memory:
    R0 app style · R1 tooltips (app-styled, Info/Label delay tiers) · R2a
    dropdowns styled · R2b uniform menu items · R3 spacing · R4 hotkeys ·
-   R5 scrollbars. **R0 is part of every rule**, project rules included.
+   R5 scrollbars · R6 platform matrix (Windows / Linux desktop, Android /
+   iOS tablet, Android / iOS phone — design, UX and function on each).
+   **R0 is part of every rule**, project rules included.
    Detection uses the allowlist from `ui-defaults.md` merged with the
    override. A rule whose mechanism class has zero matches in the whole
    project (e.g. no hotkey mechanism anywhere) is reported once as *not
@@ -240,7 +242,7 @@ polish pass (agents, browser, viewports).
    the override names a scope file: that explicit opt-in counts as a UI
    profile for the files it names (how a CLI or plugin repo checks its own UI
    sources).
-2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4, R5),
+2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4, R5, R6),
    inline — no Explore agents, no browser, no screenshots. Runtime halves
    are never attempted here; they are listed once as
    `skipped: runtime rules (full /auto-polish)`.
@@ -393,8 +395,11 @@ halves** of the standing UI rules (Step 4 #8) over the scope: time an Info
 and a Label tooltip against their tiers (plus the 300 ms skip delay and
 focus-open), open each changed tooltip, menu and scroll container and
 compare it to a card/dialog of the app in every theme (R0/R5), measure touch
-targets on the phone viewport, and tab-walk every changed view (focus order,
-Escape/Enter/arrows, focus ring). Findings follow the same score/approval
+targets on the phone viewport, tab-walk every changed view (focus order,
+Escape/Enter/arrows, focus ring), and walk every changed view on each target
+of the R6 platform matrix (layout, touch vs. mouse/keyboard interactions,
+the flow completing) — what emulation cannot show goes to `userFinalTest`
+with the target named. Findings follow the same score/approval
 rules as every other polish item; R0/R1/R4/R5 stay report-only (R0 token
 swaps excepted). Without a browser tool: list them once as skipped in
 Step 12.

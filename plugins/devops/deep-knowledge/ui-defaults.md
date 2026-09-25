@@ -4,9 +4,9 @@ Standing UI conventions every project using the devops plugin gets by default.
 The same recurring defects — tooltips and scrollbars left at the browser's
 look, icon buttons without tooltips, dropdowns left at the native look,
 spacing that differs between two identical cards, actions that only a mouse
-can reach — show up in every new project. This file names
-the outcome each rule expects so that it is in context **while the UI is
-written**, and is checked **after** it is written by `/auto-polish`.
+can reach, layouts that only work on the developer's own desktop — show up
+in every new project. This file names the outcome each rule expects so that
+it is in context **while the UI is written**, and is checked **after** it is written by `/auto-polish`.
 
 Three readers, one source:
 
@@ -125,7 +125,7 @@ No rule repeats it.
   and ≤ 3 outliers; otherwise report.
 - **Runtime:** interactive targets keep a minimum hit area (44 px on touch
   form factors) and adjacent actions do not touch; verified across the
-  `/auto-polish` viewport matrix.
+  R6 platform matrix.
 
 ### 4 · Hotkeys and keyboard operability
 
@@ -164,6 +164,53 @@ No rule repeats it.
   toggles).
 - **Fix policy:** report-only — thumb and track colours are design.
   Mechanical only when the project already has scrollbar tokens.
+
+### 6 · Platform matrix — every target, every change
+
+- **Outcome:** design **and** interactions are tuned — visually, in UX and in
+  function — for every platform the app runs on, not just the one it was
+  built on. A change is not done until it has been checked on each target of
+  the matrix:
+
+  | Target | Viewport (`responsive-testing.md` preset) | Primary input |
+  |---|---|---|
+  | Windows desktop | `desktop` 1280 × 800 | mouse + keyboard (hover, right-click, `Ctrl` shortcuts) |
+  | Linux desktop | `desktop` 1280 × 800 | mouse + keyboard; other font stack and scrollbar/GTK look than Windows |
+  | Android tablet | `tablet-android` 800 × 1280, plus landscape | touch, optional hardware keyboard |
+  | iOS tablet (iPad) | `tablet-ios` 768 × 1024, plus landscape | touch, optional hardware keyboard / pointer |
+  | Android phone | `mobile-android` 393 × 851 | touch, on-screen keyboard |
+  | iOS phone | `mobile-ios` 375 × 667 | touch, on-screen keyboard, safe-area insets |
+
+  A project that provably does not ship to a target (a desktop-only Electron
+  tool, a phone-only PWA) narrows the matrix through the override
+  (`platforms:`, § Project override); the narrowed matrix is named on the
+  card like a disabled rule.
+- **Static:** new or changed UI has no construct that only works on one row
+  of the matrix: an action reachable **only** by hover, right-click,
+  double-click or a keyboard shortcut without a touch path (tap, long-press,
+  visible button); hover styles outside `@media (hover: hover)`; a fixed
+  width / `min-width` wider than the phone viewport without a breakpoint;
+  `100vh` for a full-height layout (use `100dvh` / `svh`); no
+  `<meta name="viewport">` on a web entry page; iOS form inputs below 16 px
+  font size (Safari zooms on focus); edge-anchored bars without
+  `env(safe-area-inset-*)`; a font stack that names only a Windows or macOS
+  font without a generic fallback (Linux renders the default serif);
+  shortcut hints hard-coded to one OS (`Ctrl` vs `⌘`) instead of derived from
+  the platform.
+- **Runtime:** every changed view is walked on each target of the matrix —
+  layout (no horizontal page scroll, nothing clipped, hit areas per R3,
+  readable type), interactions (tap, long-press, swipe, drag on touch;
+  hover, right-click, keyboard per R4 on desktop; the on-screen keyboard
+  never covers the focused input) and function (the flow completes, same
+  result on every target). Emulate with the browser tool's viewport/touch
+  emulation (`responsive-testing.md`); what emulation cannot show — real
+  Linux font rendering and scrollbars, iOS Safari quirks, native share /
+  file pickers — goes to `userFinalTest` with the target named, never
+  silently assumed.
+- **Fix policy:** mechanical only for a missing viewport meta tag,
+  `100vh` → `100dvh` and a hover style wrapped in `@media (hover: hover)`;
+  everything else (a touch path for a hover-only action, a breakpoint
+  layout) is report-only — it is design.
 
 ## Common rules
 
@@ -221,10 +268,11 @@ section:
 
 ```markdown
 ## UI rules
-- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5 (static halves) — a disabled rule is named on the ship card
+- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5, R6 (static halves) — a disabled rule is named on the ship card
 - tooltip.mechanisms: appTooltip, <HelpHint>
 - tooltip.delay: info 1200, label 400   # ms, the two R1 tier values; project beats user-global
 - hotkey.mechanisms: useShortcut(, data-hotkey
+- platforms: windows, linux, android-tablet, ios-tablet   # narrows the R6 matrix; default: windows, linux, android-tablet, ios-tablet, android-phone, ios-phone
 - menu.components: <AppMenu>, <ContextMenu>
 - files: src/renderer/**/*.ts   # extra UI file globs
 - Icon-only buttons in the title bar are exempt from R1 (platform chrome).

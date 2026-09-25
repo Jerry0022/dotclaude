@@ -76,7 +76,7 @@ describe("post.design.remind (hook)", () => {
     expect(res.stdout).toBe("");
   });
 
-  test("UI file produces the reminder with R0..R5", () => {
+  test("UI file produces the reminder with R0..R6", () => {
     const dir = project();
     const res = runHook(dir, {
       filePath: path.join(dir, "src", "App.tsx"),
@@ -84,13 +84,14 @@ describe("post.design.remind (hook)", () => {
     });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("[ui-defaults]");
-    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4", "R5"]) {
+    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4", "R5", "R6"]) {
       expect(res.stdout).toContain(`${id} `);
     }
     expect(res.stdout).toContain("part of every rule");
     expect(res.stdout).toContain("never a native title");
     expect(res.stdout).toContain("Info 1500 ms (default), Label 500 ms");
     expect(res.stdout).toContain("R5 scrollbars");
+    expect(res.stdout).toContain("R6 platform matrix");
   });
 
   test("the reminder names ui-defaults.md by its absolute plugin path, never a bare relative one", () => {
