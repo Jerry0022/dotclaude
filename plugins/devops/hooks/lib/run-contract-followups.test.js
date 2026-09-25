@@ -171,6 +171,19 @@ describe("AUD-025: a GitHub MCP merge_pull_request is recorded as a release", ()
 
 // ── AUD-023 ──────────────────────────────────────────────────────────────
 
+describe("C7: measureQa with an already-expired budget", () => {
+  test("returns null and makes zero git calls", () => {
+    let calls = 0;
+    const stubC = {
+      gitOut: (...a) => { calls++; return C.gitOut(...a); },
+      gitLines: (...a) => { calls++; return C.gitLines(...a); },
+    };
+    const n = Q.measureQa(dir, "card", undefined, { C: stubC, budget: { expired: () => true } });
+    expect(n).toBeNull();
+    expect(calls).toBe(0);
+  });
+});
+
 describe("AUD-023: the release gate's git cost on a real multi-file diff", () => {
   test("resolveBase + codeFilesChanged spawn exactly 3 git processes (a deterministic cost budget, not a timing)", () => {
     git("checkout", "-q", "-b", "feat");
@@ -359,6 +372,26 @@ describe("R2 Q9: originMatches also accepts a fork's upstream remote", () => {
   test("neither origin nor any other remote matches → still dropped", () => {
     git("remote", "add", "origin", "https://github.com/me/fork.git");
     expect(C.originMatches(dir, "someone-else", "other-repo")).toBe(false);
+  });
+});
+
+describe("C9: a GitLab origin", () => {
+  test("originMatches: an unreadable (non-github.com) origin still matches — recorded, as before this check existed", () => {
+    git("remote", "add", "origin", "https://gitlab.com/acme/real.git");
+    expect(C.originMatches(dir, "acme", "real")).toBe(true);
+  });
+
+  test("post.run.contract still records a GitHub MCP merge_pull_request as a release with a GitLab origin", () => {
+    git("remote", "add", "origin", "https://gitlab.com/acme/real.git");
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "auto", passes: [], presence: false, items: ["9"] });
+    const hook = {
+      cwd: dir, session_id: "s1", hook_event_name: "PostToolUse", tool_name: "mcp__plugin_github_github__merge_pull_request",
+      tool_input: { owner: "acme", repo: "real", pullNumber: 9, commit_title: "Closes #9" },
+      tool_response: { merged: true, message: "Pull Request successfully merged", sha: "abc123" },
+    };
+    postMod.main(hook);
+    const rel = RC.events(dir).filter((e) => e.k === "release").pop();
+    expect(rel).toMatchObject({ ok: true, closes: ["9"] });
   });
 });
 

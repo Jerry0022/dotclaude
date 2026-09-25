@@ -258,6 +258,20 @@ test("cardFacts", () => {
   expect(C.cardFacts({ variant: "ship-blocked" }).final).toBe(false);
 });
 
+test("C8: readCardPayload — a BOM-prefixed payload is readable; non-object JSON → null", () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), "rc-cardpayload-"));
+  const bomFile = path.join(d, "bom.json");
+  fs.writeFileSync(bomFile, `﻿${JSON.stringify({ variant: "ready" })}`, "utf8");
+  expect(C.readCardPayload(bomFile, d)).toEqual({ variant: "ready" });
+  const arrFile = path.join(d, "arr.json");
+  fs.writeFileSync(arrFile, "[1,2,3]", "utf8");
+  expect(C.readCardPayload(arrFile, d)).toBeNull();
+  const strFile = path.join(d, "str.json");
+  fs.writeFileSync(strFile, '"just a string"', "utf8");
+  expect(C.readCardPayload(strFile, d)).toBeNull();
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
 test("releaseResult", () => {
   expect(C.releaseResult([{ type: "text", text: '{"success":true,"merged":true}' }])).toEqual({ ok: true, merged: true });
   expect(C.releaseResult({ content: [{ type: "text", text: 'Result: {"success":false}' }] })).toEqual({ ok: false, merged: false });
