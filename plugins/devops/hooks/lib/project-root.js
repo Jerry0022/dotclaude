@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module project-root
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Anchor for every PROJECT-rooted `.claude/` runtime file.
  *
@@ -73,6 +73,48 @@ function projectClaudeDir(cwd) {
   return path.join(projectRoot(cwd), '.claude');
 }
 
+/** Is `child` the directory `parent` or below it? (win32: path.relative ignores case.) */
+function isInside(child, parent) {
+  const rel = path.relative(parent, child);
+  if (rel === '') return true;
+  if (path.isAbsolute(rel)) return false; // another drive
+  return rel !== '..' && !rel.startsWith('..' + path.sep);
+}
+
+/** Is `dir` a LINKED worktree — `.git` a FILE whose gitdir points into a `…/worktrees/…` admin dir? */
+function isLinkedWorktree(dir) {
+  try {
+    const dotGit = path.join(dir, '.git');
+    if (!fs.statSync(dotGit).isFile()) return false;
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
+    if (!m) return false;
+    return /(^|\/)worktrees\//.test(path.resolve(dir, m[1]).replace(/\\/g, '/'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Does `file` belong to the session's own work tree? Outside `projectRoot(cwd)`
+ * it does not; nor inside a linked worktree nested in it (an isolated agent's
+ * `<main checkout>/.claude/worktrees/agent-*`). A submodule or a nested plain
+ * repo stays inside. No path → true. Pure fs walk, no git spawn.
+ * Shared by post.flow.completion (which edits owe the V&V gates) and
+ * post.agent.nudge (which edits count toward the 6-file nudge).
+ */
+function inOwnWorkTree(file, cwd) {
+  if (!file) return true;
+  const base = cwd || process.cwd();
+  const own = projectRoot(base);
+  const abs = path.resolve(base, String(file));
+  if (!isInside(abs, own)) return false;
+  const nearest = findRepoRoot(path.dirname(abs));
+  if (nearest && !samePath(nearest, own) && isInside(nearest, own) && isLinkedWorktree(nearest)) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * The git common dir of the work tree enclosing `cwd` — the main checkout's
  * `.git`, also from a linked worktree (its `.git` file names the worktree's
@@ -99,4 +141,7 @@ function gitCommonDir(cwd) {
   }
 }
 
-module.exports = { findRepoRoot, projectRoot, projectClaudeDir, samePath, gitCommonDir };
+module.exports = {
+  findRepoRoot, projectRoot, projectClaudeDir, samePath, gitCommonDir,
+  isInside, isLinkedWorktree, inOwnWorkTree,
+};

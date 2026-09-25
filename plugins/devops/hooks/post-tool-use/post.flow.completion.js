@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.27.1
+ * @version 0.27.2
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -67,7 +67,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
-const { projectRoot, findRepoRoot, samePath } = require('../lib/project-root');
+const { projectRoot, inOwnWorkTree } = require('../lib/project-root');
 const { GIT_TIMEOUT_MS } = require('../lib/git-timeout');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
@@ -249,46 +249,6 @@ function adoptCardFlags(hook) {
 /** A subagent's tool call: the harness sets `agent_id`, but keeps the PARENT's session_id. */
 function isSubagentCall(hook) {
   return !!hook && typeof hook.agent_id === 'string' && hook.agent_id !== '';
-}
-
-/** Is `child` the directory `parent` or below it? (win32: path.relative ignores case.) */
-function isInside(child, parent) {
-  const rel = path.relative(parent, child);
-  if (rel === '') return true;
-  if (path.isAbsolute(rel)) return false; // another drive
-  return rel !== '..' && !rel.startsWith('..' + path.sep);
-}
-
-/** Is `dir` a LINKED worktree — `.git` a FILE whose gitdir points into a `…/worktrees/…` admin dir? */
-function isLinkedWorktree(dir) {
-  try {
-    const dotGit = path.join(dir, '.git');
-    if (!fs.statSync(dotGit).isFile()) return false;
-    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
-    if (!m) return false;
-    return /(^|\/)worktrees\//.test(path.resolve(dir, m[1]).replace(/\\/g, '/'));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Does `file` belong to the session's own work tree? Outside `projectRoot(cwd)`
- * it does not; nor inside a linked worktree nested in it (an isolated agent's
- * `<main checkout>/.claude/worktrees/agent-*`). A submodule or a nested plain
- * repo stays inside. Pure fs walk, no git spawn.
- */
-function inOwnWorkTree(file, cwd) {
-  if (!file) return true;
-  const base = cwd || process.cwd();
-  const own = projectRoot(base);
-  const abs = path.resolve(base, String(file));
-  if (!isInside(abs, own)) return false;
-  const nearest = findRepoRoot(path.dirname(abs));
-  if (nearest && !samePath(nearest, own) && isInside(nearest, own) && isLinkedWorktree(nearest)) {
-    return false;
-  }
-  return true;
 }
 
 const MERGE_CMD_RE = /\bgit\b[\s\S]*\b(?:merge|pull|cherry-pick|rebase|am|revert|commit)\b/;

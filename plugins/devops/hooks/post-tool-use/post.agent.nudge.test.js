@@ -90,13 +90,42 @@ describe("post.agent.nudge", () => {
     expect(parsed.hookSpecificOutput.additionalContext).toContain("auto-agents");
   });
 
-  test("file 7+ in the same turn: silent again", () => {
+  test("file 7+ in the same turn, after the nudge at 6: silent again", () => {
     const dir = project();
-    const files = Array.from({ length: 6 }, (_, i) => path.join(dir, `h${i}.js`));
-    const entries = [promptEntry(), ...files.map((p) => editEntry("Edit", p))];
-    const t = writeTranscript(dir, entries);
-    const seventh = path.join(dir, "h6.js");
-    expect(run(hookFor(dir, t, seventh))).toBe("");
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `h${i}.js`));
+    const sixth = path.join(dir, "h5.js");
+    const t5 = writeTranscript(dir, [promptEntry(), ...files.map((p) => editEntry("Edit", p))]);
+    expect(run(hookFor(dir, t5, sixth))).not.toBe("");
+    const t6 = writeTranscript(dir, [promptEntry(), ...[...files, sixth].map((p) => editEntry("Edit", p))]);
+    expect(run(hookFor(dir, t6, path.join(dir, "h6.js")))).toBe("");
+  });
+
+  // Harden H-N1: parallel Edit/Write blocks of one message are already in the
+  // transcript when the first of their PostToolUse calls runs, so the count
+  // can jump from 5 straight to 7 — `=== 6` never fired for such a turn.
+  test("a count that jumps past 6 (parallel edits) still nudges, once", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `jump${i}.js`));
+    const a = path.join(dir, "jump5.js");
+    const b = path.join(dir, "jump6.js");
+    // Both parallel edits are in the transcript before either hook call runs.
+    const t = writeTranscript(dir, [promptEntry(), ...[...files, a, b].map((p) => editEntry("Edit", p))]);
+    expect(run(hookFor(dir, t, a))).not.toBe("");
+    expect(run(hookFor(dir, t, b))).toBe("");
+  });
+
+  test("edits inside a linked worktree nested in the project do not count toward 6", () => {
+    const dir = project();
+    const wt = path.join(dir, ".claude", "worktrees", "agent-x");
+    fs.mkdirSync(wt, { recursive: true });
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${path.join(dir, ".git", "worktrees", "agent-x")}\n`);
+    const nested = Array.from({ length: 5 }, (_, i) => path.join(wt, `n${i}.js`));
+    const own = path.join(dir, "own.js");
+    const t = writeTranscript(dir, [promptEntry(), ...nested.map((p) => editEntry("Edit", p))]);
+    // Five nested-worktree edits + one own edit = 1 own file, not 6.
+    expect(run(hookFor(dir, t, own))).toBe("");
+    // The nested worktree's own edit is not the session's either.
+    expect(run(hookFor(dir, t, path.join(wt, "n5.js")))).toBe("");
   });
 
   test("re-editing the same file does not advance the count", () => {

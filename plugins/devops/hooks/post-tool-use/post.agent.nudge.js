@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.agent.nudge
- * @version 0.2.1
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -21,22 +21,24 @@
  *   session's own work tree (R14a) the same way the CURRENT call's file is.
  *   Because the count is recomputed fresh from the transcript every call
  *   (never a session counter that needs resetting), a new user turn resets
- *   it for free — no extra UserPromptSubmit hook needed. The nudge fires the
- *   one call where the running distinct-file count first reaches exactly 6;
- *   it stays silent before and after. A once-per-turn marker (R14d), keyed
+ *   it for free — no extra UserPromptSubmit hook needed. The nudge fires on
+ *   the first call where the running distinct-file count is 6 or more — the
+ *   parallel Edit/Write calls of one message can already be in the transcript
+ *   when the first of them runs, so the count may jump from 5 straight past
+ *   6 (harden H-N1); it stays silent before. A once-per-turn marker (R14d), keyed
  *   by the turn's opening prompt entry's `uuid` (its `timestamp` when no
  *   `uuid`) — NOT its text, so a later turn that repeats the same short
  *   prompt ("weiter", "continue") still gets its own marker and is nudged —
- *   additionally guards against firing twice: the transcript is only read as
- *   a 1 MB tail, so on a very long turn older edits can slide out of the tail
- *   and the running count can drop back to exactly 6 a second time (Q8).
+ *   keeps it silent after: every later call of the turn also counts 6 or
+ *   more, and on a very long turn older edits can slide out of the 1 MB
+ *   transcript tail and the count can climb past 6 a second time (Q8).
  *
  *   Silent when: the call is a subagent's (`hook.agent_id` set — a subagent's
  *   edits are not the parent's turn, same rule `post.flow.completion.js`
  *   applies); the edited file is outside the session's own work tree (outside
- *   `projectRoot(cwd)`, or inside a nested linked worktree — same rule as
- *   `post.flow.completion.js#inOwnWorkTree`, copied locally since that file
- *   exports nothing); a run contract is active for this session
+ *   `projectRoot(cwd)`, or inside a nested linked worktree —
+ *   `lib/project-root.js#inOwnWorkTree`, the rule `post.flow.completion.js`
+ *   applies too); a run contract is active for this session
  *   (`lib/run-contract.js#readContract` — the run's own delegation gates
  *   apply instead); the turn was not typed by the user — silent, machine, or
  *   a scheduled task (R14c, `lib/non-user-prompt.js`'s classifiers, same as
@@ -70,13 +72,13 @@ const FIRED_FLAG_PREFIX = 'dotclaude-devops-agent-nudge-fired';
 // mid-update) crashed this hook on every single Edit/Write/NotebookEdit
 // call. Guarded here so a load error instead makes `run()` a silent no-op,
 // same as every other failure path.
-let projectRoot, findRepoRoot, samePath, readContract, readDelegation, safeReadTranscript,
+let inOwnWorkTree, readContract, readDelegation, safeReadTranscript,
   skillInvokedThisTurn, isPromptEntry, lastUserPromptText, normalizeSkillName, namespaceOf,
   isSilent, isMachineTurn, isScheduledTask, isMachinePrompt, sessionFile, readSessionFile, writeSessionFile,
   pluginRoot;
 let loadError = false;
 try {
-  ({ projectRoot, findRepoRoot, samePath } = require('../lib/project-root'));
+  ({ inOwnWorkTree } = require('../lib/project-root'));
   ({ readContract } = require('../lib/run-contract'));
   ({ readDelegation } = require('../lib/delegation'));
   ({ safeReadTranscript } = require('../lib/card-guard'));
@@ -93,46 +95,6 @@ try {
 /** A subagent's tool call: the harness sets `agent_id`, but keeps the PARENT's session_id. */
 function isSubagentCall(hook) {
   return !!hook && typeof hook.agent_id === 'string' && hook.agent_id !== '';
-}
-
-/** Is `child` the directory `parent` or below it? (win32: path.relative ignores case.) */
-function isInside(child, parent) {
-  const rel = path.relative(parent, child);
-  if (rel === '') return true;
-  if (path.isAbsolute(rel)) return false; // another drive
-  return rel !== '..' && !rel.startsWith('..' + path.sep);
-}
-
-/** Is `dir` a LINKED worktree — `.git` a FILE whose gitdir points into a `…/worktrees/…` admin dir? */
-function isLinkedWorktree(dir) {
-  try {
-    const dotGit = path.join(dir, '.git');
-    if (!fs.statSync(dotGit).isFile()) return false;
-    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
-    if (!m) return false;
-    return /(^|\/)worktrees\//.test(path.resolve(dir, m[1]).replace(/\\/g, '/'));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Does `file` belong to the session's own work tree? Local copy of
- * `post.flow.completion.js#inOwnWorkTree` (not exported there, and that file
- * is out of scope here) — outside `projectRoot(cwd)` it does not; nor inside
- * a linked worktree nested in it (an isolated agent's own worktree).
- */
-function inOwnWorkTree(file, cwd) {
-  if (!file) return true;
-  const base = cwd || process.cwd();
-  const own = projectRoot(base);
-  const abs = path.resolve(base, String(file));
-  if (!isInside(abs, own)) return false;
-  const nearest = findRepoRoot(path.dirname(abs));
-  if (nearest && !samePath(nearest, own) && isInside(nearest, own) && isLinkedWorktree(nearest)) {
-    return false;
-  }
-  return true;
 }
 
 /** Edit/Write/NotebookEdit target path, per tool (NotebookEdit uses `notebook_path`). */
@@ -315,7 +277,7 @@ function run(hook) {
 
     const files = editedFilesThisTurn(transcript, cwd);
     files.add(path.resolve(cwd, String(filePath)));
-    if (files.size !== NUDGE_AT) return '';
+    if (files.size < NUDGE_AT) return '';
 
     const key = firedMarkerKey(hook, transcript);
     if (alreadyFiredThisTurn(key)) return '';

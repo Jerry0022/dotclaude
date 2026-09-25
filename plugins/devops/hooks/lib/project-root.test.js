@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findRepoRoot, projectRoot, projectClaudeDir } from "./project-root.js";
+import { findRepoRoot, projectRoot, projectClaudeDir, isInside, isLinkedWorktree, inOwnWorkTree } from "./project-root.js";
 
 let tmp;
 
@@ -77,5 +77,45 @@ describe("projectRoot — .claude/ state is anchored at the work-tree root, neve
 
   test("no cwd argument means process.cwd()", () => {
     expect(same(projectRoot(), projectRoot(process.cwd()))).toBe(true);
+  });
+});
+
+describe("work-tree membership (shared by post.flow.completion and post.agent.nudge)", () => {
+  test("isInside: the dir itself and its children, never a sibling that shares a prefix", () => {
+    const parent = path.join(tmp, "a", "b");
+    expect(isInside(parent, parent)).toBe(true);
+    expect(isInside(path.join(parent, "c", "d.js"), parent)).toBe(true);
+    expect(isInside(path.join(tmp, "a", "b..c", "x.js"), parent)).toBe(false);
+    expect(isInside(path.join(tmp, "a"), parent)).toBe(false);
+  });
+
+  test("isLinkedWorktree: only a .git FILE whose gitdir points into a worktrees admin dir", () => {
+    const linked = path.join(tmp, "linked");
+    fs.mkdirSync(linked);
+    fs.writeFileSync(path.join(linked, ".git"), `gitdir: ${path.join(tmp, "main", ".git", "worktrees", "linked")}\n`);
+    expect(isLinkedWorktree(linked)).toBe(true);
+
+    const submodule = path.join(tmp, "sub");
+    fs.mkdirSync(submodule);
+    fs.writeFileSync(path.join(submodule, ".git"), `gitdir: ${path.join(tmp, "main", ".git", "modules", "sub")}\n`);
+    expect(isLinkedWorktree(submodule)).toBe(false);
+
+    expect(isLinkedWorktree(gitRepo(path.join(tmp, "plain")))).toBe(false);
+    expect(isLinkedWorktree(path.join(tmp, "missing"))).toBe(false);
+  });
+
+  test("inOwnWorkTree: a nested linked worktree is not the session's, a nested plain repo is", () => {
+    const own = gitRepo(path.join(tmp, "own"));
+    const wt = path.join(own, ".claude", "worktrees", "agent-x");
+    fs.mkdirSync(wt, { recursive: true });
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${path.join(own, ".git", "worktrees", "agent-x")}\n`);
+    const nestedRepo = gitRepo(path.join(own, "vendor", "lib"));
+
+    expect(inOwnWorkTree(path.join(own, "src", "a.js"), own)).toBe(true);
+    expect(inOwnWorkTree("src/a.js", own)).toBe(true); // relative to cwd
+    expect(inOwnWorkTree(path.join(wt, "b.js"), own)).toBe(false);
+    expect(inOwnWorkTree(path.join(nestedRepo, "c.js"), own)).toBe(true);
+    expect(inOwnWorkTree(path.join(tmp, "elsewhere", "d.js"), own)).toBe(false);
+    expect(inOwnWorkTree("", own)).toBe(true);
   });
 });
