@@ -153,7 +153,7 @@ if (require.main === module) {
       if (!state || !isOpenRun(state)) process.exit(0);
       const sessionId = hook.session_id || null;
       let asked = false;
-      try { asked = !!(sessionId && readSessionFile(ASKED_PREFIX, sessionId, { exact: true })); } catch {}
+      try { asked = !!(sessionId && readSessionFile(ASKED_PREFIX, sessionId, { exact: true })); } catch { /* unreadable marker = not asked yet */ }
       const block = decide({
         prompt: hook.prompt || '',
         state,
@@ -165,7 +165,7 @@ if (require.main === module) {
       });
       if (!block) process.exit(0);
       if (/AskUserQuestion/.test(block) && sessionId) {
-        try { writeSessionFile(sessionFile(ASKED_PREFIX, sessionId), String(Date.now())); } catch {}
+        try { writeSessionFile(sessionFile(ASKED_PREFIX, sessionId), String(Date.now())); } catch { /* worst case: the question comes once more */ }
       }
       process.stdout.write(block + '\n');
     } catch {

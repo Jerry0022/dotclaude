@@ -1116,7 +1116,7 @@ function refreshUsage() {
     spawnSync(process.execPath, [path.join(__dirname, 'refresh-usage-headless.js'), '--no-login', '--quiet'], {
       cwd: os.tmpdir(), timeout: 90_000, stdio: 'ignore',
     });
-  } catch {}
+  } catch { /* usage stays as last read; the gate copes with stale data */ }
 }
 
 function readUsage(opts, maxAgeMin) {
@@ -1150,7 +1150,7 @@ function ensureGitExcluded(dir) {
     if (!text.split(/\r?\n/).includes('/BURN-*')) {
       fs.appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}/BURN-*\n`);
     }
-  } catch {}
+  } catch { /* no writable .git: the BURN-* files just stay visible */ }
 }
 
 function parseQueueArg(value) {

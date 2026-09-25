@@ -79,7 +79,7 @@ function readTail(file, bytes = TAIL_BYTES) {
   } catch {
     return '';
   } finally {
-    if (fd !== undefined) try { fs.closeSync(fd); } catch {}
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already closed */ }
   }
 }
 

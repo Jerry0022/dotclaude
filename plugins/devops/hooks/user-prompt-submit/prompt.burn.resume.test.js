@@ -109,7 +109,7 @@ describe("another session opens the worktree of a quiet open run", () => {
 describe("end to end — the hook process", () => {
   let tmp;
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "burn-hook-")); });
-  afterEach(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} });
+  afterEach(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* temp cleanup is best effort */ } });
 
   const runHook = (payload) => spawnSync(process.execPath, [HOOK], { input: JSON.stringify(payload), encoding: "utf8", cwd: tmp });
 

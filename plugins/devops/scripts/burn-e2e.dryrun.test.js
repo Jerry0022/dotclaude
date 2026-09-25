@@ -68,7 +68,7 @@ beforeAll(() => {
   transcript = path.join(tmp, "transcript.jsonl");
   clock = Date.parse("2026-09-25T10:00:00.000Z");
 });
-afterAll(() => { try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch {} });
+afterAll(() => { try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp cleanup is best effort */ } });
 
 describe("a burn is stopped by the 5-hour limit and nudged by hand", () => {
   let wt;

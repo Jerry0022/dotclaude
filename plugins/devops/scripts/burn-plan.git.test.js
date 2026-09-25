@@ -43,7 +43,7 @@ function run(args, extraEnv = {}) {
     },
   });
   let json = null;
-  try { json = JSON.parse(r.stdout); } catch {}
+  try { json = JSON.parse(r.stdout); } catch { /* non-JSON output: json stays null */ }
   return { code: r.status, json, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -79,7 +79,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch {}
+  try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp cleanup is best effort */ }
 });
 
 describe("prune-check — only clean AND merged worktrees may go", () => {
