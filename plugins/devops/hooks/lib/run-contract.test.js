@@ -666,8 +666,14 @@ describe("CLI", () => {
     try {
       expect(run("arm", "--cwd", other, "--passes", "none").out.contract.passes).toEqual([]);
       expect(fs.existsSync(path.join(other, ".claude", "run-contract.json"))).toBe(true);
-      expect(run("done", "--cwd", other).out).toMatchObject({ ok: true, closed: true });
-      expect(run("done").out).toMatchObject({ ok: true, closed: false });
+      const doneOk = run("done", "--cwd", other);
+      expect(doneOk.out).toMatchObject({ ok: true, closed: true });
+      // R13: `done` must not exit 0 while reporting closed:false — a caller
+      // reading only the exit code would otherwise believe the run ended.
+      expect(doneOk.code).toBe(0);
+      const doneNothing = run("done");
+      expect(doneNothing.out).toMatchObject({ ok: true, closed: false });
+      expect(doneNothing.code).not.toBe(0);
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
     expect(run().code).toBe(1);
     expect(run("arm", "--mode", "x").code).toBe(1);
