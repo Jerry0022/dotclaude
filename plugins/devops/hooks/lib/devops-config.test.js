@@ -9,7 +9,6 @@ const require = createRequire(import.meta.url);
 const cfg = require("./devops-config.js");
 
 const SCRIPT = path.resolve(import.meta.dirname, "..", "..", "scripts", "devops-config.js");
-vi.setConfig({ testTimeout: 30_000 });
 
 const tmp = [];
 function mkTmp(prefix) {

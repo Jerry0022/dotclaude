@@ -12,12 +12,6 @@ process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
 // started from a Desktop session inherits that entrypoint — pin the terminal.
 process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 
-// Every render() shells out to git (build-ID, repo URL). Under full parallel
-// suite load a single call has exceeded the 5s per-test default, failing
-// whichever tests happened to run first — a flake unrelated to what they
-// assert. These tests check rendering, not speed, so give them real headroom.
-vi.setConfig({ testTimeout: 30_000 });
-
 const captured = vi.hoisted(() => ({ handlers: {} }));
 
 vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
@@ -160,6 +154,55 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     });
     expect(text).toContain("📂 9 Dateien geändert");
     expect(text).toContain("kein Repo");
+  });
+
+  test("no remote: the track ends at the local commit and nothing asks to ship (#500)", async () => {
+    const ready = await cardText({
+      variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8b",
+      state: { mode: "git-no-remote", commit: "abc1234", branch: "main", pushed: false, delivered: "local-commit-only" },
+      open: ["Doku fehlt", "Test fehlt"],
+    });
+    expect(ready).toContain("✓ commit · nur lokal, kein Remote · main");
+    expect(ready).not.toMatch(/push|PR|merge/);
+    expect(ready).toMatch(/^## 📦 Lokal fertig trotz 2 Vorbehalten — noch etwas\?$/m);
+    expect(ready).not.toMatch(/^## .*[Ss]hippen\?/m);
+
+    const test = await cardText({
+      variant: "test", summary: "Lokal", lang: "en", session_id: "test-anatomy-8c",
+      state: { mode: "git-no-remote", branch: "main" },
+    });
+    expect(test).toContain("○ commit · local only, no remote · main");
+    expect(test).toMatch(/^## 🧪 Test first\?$/m);
+  });
+
+  test("no remote is detected from cwd when the caller passes no state.mode (#500)", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "card-no-remote-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+      const text = await cardText({
+        variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8d", cwd: repo,
+        state: { commit: "abc1234", branch: "main" },
+        delivery: { ship: { version: "1.2.3" } },
+      });
+      expect(text).toContain("✓ commit · nur lokal, kein Remote · main · v1.2.3");
+      expect(text).toMatch(/^## 📦 Lokal fertig — noch etwas\?$/m);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test("ship-successful without a remote downgrades with a note that asks for nothing impossible (#500)", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8e",
+      state: { mode: "git-no-remote", commit: "abc1234", branch: "main" },
+    });
+    expect(text).toContain("kein Remote");
+    expect(text).not.toContain("pushed:true");
+    expect(text).toMatch(/^## 📦 Lokal fertig/m);
   });
 
   test("analysis pipeline says no changes to the repo", async () => {

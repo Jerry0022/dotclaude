@@ -5,8 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const HOOK = fileURLToPath(new URL("./prompt.skill.enforce.js", import.meta.url));
 const SESSION = "skill-enforce-e2e";
 

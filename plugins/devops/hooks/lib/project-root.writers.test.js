@@ -16,10 +16,6 @@ import * as S from "./strict-state.js";
 import * as Sentinel from "./ship-sentinel.js";
 import { sentinelPath as mcpSentinelPath, writeSentinel } from "../../mcp-server/ship/lib/sentinel.js";
 
-// Spawns cold `node` hooks alongside the rest of the suite — see the note in
-// pre.tokens.guard.graphgate.test.js.
-vi.setConfig({ testTimeout: 30_000 });
-
 const HOOKS = fileURLToPath(new URL("..", import.meta.url));
 const BATCH_HOOK = path.join(HOOKS, "user-prompt-submit", "prompt.batch.collect.js");
 const TOKENS_SCAN = path.join(HOOKS, "session-start", "ss.tokens.scan.js");

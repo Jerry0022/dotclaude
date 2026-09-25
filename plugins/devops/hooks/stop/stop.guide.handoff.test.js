@@ -67,8 +67,6 @@ function pendingFile(dir) {
   return path.join(dir + "-tmp", `dotclaude-devops-guide-handoff-pending-${SESSION}`);
 }
 
-vi.setConfig({ testTimeout: 30_000 });
-
 describe("stop.guide.handoff", () => {
   test("web hand-off without a card and without auto-guide → block once", async () => {
     const dir = project();

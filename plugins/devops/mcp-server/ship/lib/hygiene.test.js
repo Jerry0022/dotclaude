@@ -7,9 +7,6 @@ import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
 } from "./hygiene.js";
 
-// Real git repos in temp dirs; each spawn costs ~30 ms on Windows.
-vi.setConfig({ testTimeout: 60_000 });
-
 const DAY = 86_400_000;
 const NOW = Date.now();
 const daysAgo = (n) => new Date(NOW - n * DAY).toISOString();

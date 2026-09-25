@@ -10,8 +10,6 @@ import { createRequire } from "node:module";
 // more; the first substantial README write of a session gets a pointer to
 // deep-knowledge/readme-standards.md.
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.readme.standards.js");

@@ -6,8 +6,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const require = createRequire(import.meta.url);
 const { isNonUserPrompt } = require("../lib/non-user-prompt.js");
 

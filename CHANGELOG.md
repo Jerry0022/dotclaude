@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.201.4] — 2026-09-25
+
+### Fixed
+- **do-batch keeps images you paste in the Desktop app (#490).** The Desktop app sends a pasted image as its own block, so the collect hook used to store the note as text only, and at merge time nobody could see what "siehe Bild in rot eingezeichnet" referred to. The note is now collected with its image: the hook finds the image the harness saved for this session, copies it to `.claude/batch-assets/` and adds an `[Anhang-Datei]` line to the note. The collect panel says "📎 Das Bild ist mit der Notiz gespeichert". An image the hook missed at collect time is matched at merge time to the note nearest to it; a match more than 3 s off is labelled "prüfen" so the merge checks it instead of trusting it. In the CLI, `[Image #N]` and `@file` still pass through as before.
+
+## [0.201.3] — 2026-09-25
+
+### Fixed
+- **A repo without a remote no longer gets a Ship button (#500).** In a repo with no `origin`, the `ready` and `test` cards stop asking "Shippen?": the heading becomes „📦 Lokal fertig — noch etwas?" or „🧪 Erst testen?", and the widget drops the Ship button. The pipeline line ends at the local commit (`✓ commit · nur lokal, kein Remote · main · v1.2.3`) with no pending push → PR → merge steps. The card finds this on its own from `cwd` when the caller passes no `state.mode`, so it also works for cards rendered outside `/do-ship`. A `ship-successful` card in such a repo drops to `ready` with a note that does not ask for a push or merge that cannot happen. Cards that follow a ship attempt keep their buttons, since a local ship still commits.
+- **The card renderer no longer prints `error: No such remote 'origin'`.** It checks which remotes exist before asking for `origin`'s URL.
+- **SessionStart stops recommending `/do-ship` where there is nothing to push.** In a repo without an origin, uncommitted files get „commit them locally on a feature branch". On main, the workspace question now recommends taking the changes along into a new worktree, because pre.main.guard blocks a commit on main. If the remote check itself fails, the hook keeps the usual advice and does not claim the repo is local-only.
+
+## [0.201.2] — 2026-09-24
+
+### Fixed
+- **The full test suite no longer fails under machine load while every test passes.** vitest's runner moves from one test to the next through promise continuations only, so a file of tests that spawn hooks, git or servers synchronously kept its worker's event loop busy for the whole file. The reply to vitest's `onTaskUpdate` report sat unread, and after 60 s the run ended with "Timeout calling onTaskUpdate" and exit 1: a red ship gate caused by load alone. The new `vitest.yield-setup.mjs` lets pending replies through before each test and yields one loop turn after it. Reproduced with 70 tests of 1 s synchronous work and with one 70 s test: exit 1 before, exit 0 after.
+- **The global 60 s test timeout applies again.** 28 test files still pinned `vi.setConfig({ testTimeout: 30_000 })` from the days of vitest's 5 s default and so halved the budget (`index.cli.test.js` timed out under load). The pins are gone, and `vitest.config.mjs` says why they must not come back.
+- **`prompt.ship.detect` no longer fails when test runs overlap.** Its tests use a fixed session id, so parallel runs shared the hook's marker files in the system temp folder ("careful compact › never twice in a row" failed in 3 of 4 concurrent runs). Each test now gives the hook a private temp folder.
+
 ## [0.201.1] — 2026-09-24
 
 ### Fixed

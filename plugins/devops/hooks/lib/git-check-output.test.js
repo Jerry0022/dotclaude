@@ -379,3 +379,31 @@ describe("robustness", () => {
     expect(out).toContain("unknown branch");
   });
 });
+
+// ---------------------------------------------------------------------------
+// No remote (#500) — /do-ship cannot run, so no CTA may point at it
+// ---------------------------------------------------------------------------
+
+describe("repo without a remote", () => {
+  const localOnly = { ...issue("uncommitted", 2, "2 uncommitted file(s)"), noRemote: true };
+
+  test("uncommitted files ask for a local commit, not /do-ship", () => {
+    const out = text(compose({ dirty: [currentRepo(localOnly)], cwd: CWD }));
+    expect(out).toContain("- 2 uncommitted file(s) → commit them locally on a feature branch (no remote, nothing to push)");
+    expect(out).not.toContain("run `/do-ship`");
+  });
+
+  test("on main the ask recommends taking the changes along — a commit on main is blocked by pre.main.guard", () => {
+    const out = text(compose({ dirty: [currentRepo(localOnly)], workspace: onMain, cwd: CWD }));
+    expect(out).toContain("Changes mitnehmen in neuen Worktree (git stash → create → pop) (recommended)");
+    expect(out).not.toContain("shippen (commit + push)");
+    expect(out).not.toContain("Ship-first");
+    expect(out).not.toContain("invoke /do-ship");
+  });
+
+  test("a repo with a remote keeps the /do-ship CTA", () => {
+    const out = text(compose({ dirty: [currentRepo(issue("uncommitted", 2, "2 uncommitted file(s)"))], workspace: onMain, cwd: CWD }));
+    expect(out).toContain("run `/do-ship` to commit, push & create PR");
+    expect(out).toContain("Ship-first: invoke /do-ship");
+  });
+});

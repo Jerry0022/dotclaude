@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.5.0
+ * @version 0.6.0
  * @description State and classification for the `/do-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -346,6 +346,178 @@ function archiveNotes(cwd, stampSource) {
   const dest = path.join(claudeDir(cwd), `batch-${stamp}.md`);
   fs.renameSync(file, dest);
   return dest;
+}
+
+// ── pasted images (Desktop app) ───────────────────────────────────────────
+
+/**
+ * The Desktop app sends a pasted image as its own content block: the
+ * UserPromptSubmit payload carries neither an `[Image #N]` placeholder nor an
+ * attachment key, so `hasAttachment()` cannot see it and the prompt is
+ * collected as text only (#490). The image is not lost, though — the harness
+ * saves every image pasted into a session to
+ * `<tmp>/claude/<project-slug>/<session_id>/images/<n>.<ext>` when the prompt
+ * is submitted, and its mtime matches the note's timestamp to the
+ * millisecond. A note finds its image by time; a copy next to the notes
+ * survives a temp cleanup.
+ *
+ * Time is the only link the hook has, so it is used carefully: the collect
+ * hook takes only images written within IMAGE_MATCH_WINDOW_MS of the prompt,
+ * and the merge gives every image still unclaimed to the note NEAREST to it
+ * (never simply the first match), marking a match beyond that window as
+ * uncertain.
+ */
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+
+/** How far an image's mtime may sit from its note for a certain match. */
+const IMAGE_MATCH_WINDOW_MS = 3000;
+
+/** Beyond this gap the merge does not guess at all. */
+const IMAGE_LATE_MATCH_MAX_MS = 60_000;
+
+/** Copies live here, covered by the same `/.claude/batch*` exclude as the notes.
+ *  They are never moved — archived notes keep pointing at valid files. */
+function assetsDir(cwd) { return path.join(claudeDir(cwd), 'batch-assets'); }
+
+/** Source image path → its copy, so no image is ever assigned twice. The
+ *  harness never reuses an image name within a session, so the path is key. */
+function capturedPath(cwd) { return path.join(assetsDir(cwd), 'captured.json'); }
+
+/**
+ * Every `images` directory the harness keeps for this session. The project
+ * slug is the harness's own encoding of the cwd, so it is globbed, not derived.
+ * Symlinked folders are skipped: only what the harness wrote itself counts.
+ * @returns {string[]}
+ */
+function sessionImageDirs(sessionId, tmpRoot = os.tmpdir()) {
+  if (typeof sessionId !== 'string' || !/^[\w-]+$/.test(sessionId)) return [];
+  const base = path.join(tmpRoot, 'claude');
+  let slugs;
+  try { slugs = fs.readdirSync(base); } catch { return []; }
+  const dirs = [];
+  for (const slug of slugs) {
+    const dir = path.join(base, slug, sessionId, 'images');
+    try { if (fs.lstatSync(dir).isDirectory()) dirs.push(dir); } catch { /* not this slug */ }
+  }
+  return dirs;
+}
+
+/** @returns {{file:string, mtimeMs:number, size:number}[]} plain image files, no symlinks */
+function listImagesIn(dirs) {
+  const out = [];
+  for (const dir of dirs) {
+    let names;
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!IMAGE_EXT.test(name)) continue;
+      const file = path.join(dir, name);
+      try {
+        const st = fs.lstatSync(file);
+        if (st.isFile()) out.push({ file, mtimeMs: st.mtimeMs, size: st.size });
+      } catch { /* vanished */ }
+    }
+  }
+  return out;
+}
+
+function readCaptured(cwd) {
+  try {
+    const v = JSON.parse(fs.readFileSync(capturedPath(cwd), 'utf8'));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/** This session's images that no note has taken yet. */
+function unclaimedImages(cwd, dirs) {
+  const captured = readCaptured(cwd);
+  return listImagesIn(dirs).filter(img => !captured[img.file]);
+}
+
+/**
+ * Copy images into `.claude/batch-assets/` under the note's timestamp and
+ * record them as taken. The manifest is written via rename, so a hook killed
+ * mid-write never leaves a torn file.
+ * @returns {string[]} absolute paths of the copies, oldest image first
+ */
+function claimImages(cwd, images, at) {
+  if (!images.length) return [];
+  const sorted = [...images].sort((a, b) => a.mtimeMs - b.mtimeMs);
+  fs.mkdirSync(assetsDir(cwd), { recursive: true });
+  const stamp = new Date(at).toISOString().replace(/[:.]/g, '-');
+  const captured = readCaptured(cwd);
+  let n = 0;
+  const copies = sorted.map((img) => {
+    // A note can gain images twice (collect + merge): never overwrite a copy.
+    let dest;
+    do {
+      n += 1;
+      dest = path.join(assetsDir(cwd), `${stamp}-${n}${path.extname(img.file).toLowerCase()}`);
+    } while (fs.existsSync(dest));
+    fs.copyFileSync(img.file, dest);
+    captured[img.file] = dest;
+    return dest;
+  });
+  const tmp = `${capturedPath(cwd)}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(captured, null, 2), 'utf8');
+  fs.renameSync(tmp, capturedPath(cwd));
+  return copies;
+}
+
+/**
+ * The unclaimed images written within the window of `at` — the ones pasted
+ * into the prompt submitted at that moment.
+ * @param {{tmpRoot?:string, windowMs?:number, dirs?:string[]}} [opts]
+ */
+function imagesNear(cwd, sessionId, at, opts = {}) {
+  const windowMs = opts.windowMs ?? IMAGE_MATCH_WINDOW_MS;
+  const dirs = opts.dirs || sessionImageDirs(sessionId, opts.tmpRoot);
+  return unclaimedImages(cwd, dirs).filter(img => Math.abs(img.mtimeMs - at) <= windowMs);
+}
+
+/**
+ * Copy this session's images pasted at `at` next to the notes.
+ * @returns {string[]} absolute paths of the copies
+ */
+function captureSessionImages(cwd, sessionId, at, opts = {}) {
+  return claimImages(cwd, imagesNear(cwd, sessionId, at, opts), at);
+}
+
+/**
+ * Merge-time assignment: every unclaimed image goes to the note whose
+ * timestamp is NEAREST to it — two notes seconds apart must not both reach
+ * for one image, and the earlier one must not win just by coming first. An
+ * image nearer to the marker prompt than to any note belongs to that prompt
+ * and is left alone; one further than IMAGE_LATE_MATCH_MAX_MS from every note
+ * is not guessed at.
+ *
+ * @param {{at:string}[]} notes
+ * @param {{file:string, mtimeMs:number}[]} images
+ * @param {number} markerAt epoch ms of the prompt that fired the merge
+ * @returns {Map<number, {img:object, gapMs:number}[]>} note index → its images
+ */
+function assignImagesToNotes(notes, images, markerAt) {
+  const times = notes.map(n => Date.parse(n.at));
+  const byNote = new Map();
+  for (const img of images) {
+    let best = -1;
+    let gap = Infinity;
+    times.forEach((t, i) => {
+      const d = Math.abs(img.mtimeMs - t);
+      if (Number.isFinite(d) && d < gap) { gap = d; best = i; }
+    });
+    if (best < 0 || gap > IMAGE_LATE_MATCH_MAX_MS) continue;
+    if (Number.isFinite(markerAt) && Math.abs(img.mtimeMs - markerAt) < gap) continue;
+    if (!byNote.has(best)) byNote.set(best, []);
+    byNote.get(best).push({ img, gapMs: gap });
+  }
+  return byNote;
+}
+
+/** The note lines that tie copies to their note — the merge opens each one. */
+function attachmentFileLines(copies) {
+  return copies.map(p => `[Anhang-Datei] ${p}`).join('\n');
 }
 
 // ── activity clock ─────────────────────────────────────────────────────────
@@ -820,6 +992,8 @@ module.exports = {
   loadConfig, saveConfig,
   readMode, isModeActive, expiryReason, activate, deactivate,
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
+  IMAGE_MATCH_WINDOW_MS, IMAGE_LATE_MATCH_MAX_MS, assetsDir, sessionImageDirs, listImagesIn, unclaimedImages,
+  claimImages, imagesNear, captureSessionImages, assignImagesToNotes, attachmentFileLines,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,
   parseBatchCommand, REARM_ROUTES, renderModeSummary, describeMode, renderHelp,
