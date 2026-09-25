@@ -82,6 +82,12 @@ When a `do-batch` merge fires, `prompt.batch.collect.js` shows its merge context
 
 After every `AskUserQuestion`, `hooks/post-tool-use/post.ask.answers.js` checks for an answer token that equals an "Other" placeholder (the one list, `run-contract.js` `OTHER_PLACEHOLDERS`: `Something else`, `Other`, `Etwas anderes`, `Sonstiges`, `andere`, …) with no typed text — that combination means the user wanted something the options did not offer, not that they picked nothing. It injects a context note telling the model to ask what, in one more question, before acting on that answer.
 
+## Outside a run — the 6-file nudge
+
+The delegation policy (`agent-proactivity.md`) is advisory outside an active run contract — nothing refuses a call on it. The one exception: `post.agent.nudge.js` (PostToolUse, `Write|Edit|NotebookEdit`) counts the DISTINCT files the current turn has changed (from the transcript, scoped to the turn, filtered to the session's own work tree) and, at the first call where that count is 6 or more, adds one `additionalContext` note to MENTION the `auto-agents` skill in one sentence — an offer, per the policy's Full-ceremony rule, never an auto-start and never a block. It stays silent: for a subagent's own edits; outside the session's own work tree; while a run contract is active for this session (the run's own gates apply instead); on a machine, scheduled or silent turn; once any devops skill already ran this turn (Skill tool or a typed slash command); once it already fired this turn; and when the delegation kill switch (`mode: off`) is set. Every failure path is silent — it never blocks a tool call.
+
+This lives here, not in `agent-proactivity.md`: that file is injected in full at every session start and `ss.knowledge.index.js` skips it entirely past `MAX_ALWAYS_ON_BYTES` — the nudge explains itself in the note it adds.
+
 ## Kill switch and state
 
 `DOTCLAUDE_RUN_CONTRACT=off` disables arming and every gate — use it if a misfiring gate wedges a session; the CLI verbs above are the normal escape hatches, the kill switch is the emergency one. State lives in the work-tree root, next to `strict-mode.json`: `.claude/run-contract.json`, `.claude/run-contract.events.jsonl`, `.claude/run-contract.prev.json` (archive), `.claude/run-contract.pending` (arm marker) and `.claude/batch-handoff.json`. All are runtime-ignored (`runtime-ignores.js` `PLUGIN_STATE`) — never commit them.

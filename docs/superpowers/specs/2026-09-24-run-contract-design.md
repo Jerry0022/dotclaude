@@ -511,10 +511,12 @@ and announces this session's expired contract once (A) via `additionalContext`.
   MCP tools directly; each is gated. Step 5 ends with `run-contract.js done`.
 - `skills/do-run/modes/autonomous.md` — Step 7 / 8: `done` after the report.
 - `skills/do-batch/SKILL.md` — the hand-off is hook-enforced (E).
-- `deep-knowledge/run-contract.md` — the mechanism for readers; regenerate
-  the deep-knowledge index (`scripts/gen-dk-index.mjs`).
-- `deep-knowledge/agent-proactivity.md` — the 6-file nudge (K), the one
-  enforcement mechanism that reaches outside an active run.
+- `deep-knowledge/run-contract.md` — the mechanism for readers, including
+  the 6-file nudge (K), the one enforcement mechanism that reaches outside
+  an active run; regenerate the deep-knowledge index
+  (`scripts/gen-dk-index.mjs`). Not `agent-proactivity.md`: it is injected
+  in full at every session start and skipped entirely past
+  `MAX_ALWAYS_ON_BYTES` (`ss.knowledge.index.js`), with no room left.
 - `hooks/hooks.json` — register the hooks (matchers per D, F, G, H, K).
 
 ### J. Completion card
