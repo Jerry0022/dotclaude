@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.2.0
+ * @version 1.3.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.2.0";
+  var VERSION = "1.3.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -238,11 +238,27 @@
     panel.style.bottom = pos.bottom + 68 + "px";
   }
 
+  var INTERACTIVE_TAGS = ["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A"];
+
+  function startsOnInteractive(el, e) {
+    var path = typeof e.composedPath === "function" ? e.composedPath() : null;
+    if (!path) return !!(e.target && INTERACTIVE_TAGS.indexOf(e.target.tagName) !== -1);
+    for (var i = 0; i < path.length; i++) {
+      if (path[i] === el) return false;
+      if (path[i] && INTERACTIVE_TAGS.indexOf(path[i].tagName) !== -1) return true;
+    }
+    return false;
+  }
+
   function makeDraggable(el, onClick) {
     var dragging = false, dragged = false;
     var startX, startY, startRight, startBottom;
 
     el.addEventListener("pointerdown", function (e) {
+      // Don't drag/capture when the pointerdown starts on an interactive
+      // child (the collapse button etc.) — capture on `el` would route the
+      // matching click to `el`, never to the child (#516).
+      if (startsOnInteractive(el, e)) return;
       dragging = true;
       dragged = false;
       startX = e.clientX;
@@ -576,13 +592,16 @@
   var api = {
     version: VERSION,
     setStep: function (step) {
+      // A re-send/re-inject of the SAME step id must not force the panel
+      // open again or steal focus — only a genuinely new step does (#516/#507).
+      var isNewStep = !currentStep || !step || currentStep.id !== step.id;
       currentStep = step;
-      collapsed = false;
+      if (isNewStep) collapsed = false;
       helpOpen = false;
       abortConfirm = false;
       eventQueue = [];
       clearNoResponseTimer();
-      render(true);
+      render(isNewStep);
       saveState();
       return "ok";
     },

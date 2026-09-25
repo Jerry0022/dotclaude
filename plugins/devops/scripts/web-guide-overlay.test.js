@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_PATH = path.join(__dirname, "web-guide-overlay.js");
 const SRC = fs.readFileSync(SRC_PATH, "utf8");
-const MAX_BYTES = 24 * 1024;
+// Raw-source budget. This is an anti-bloat guard, not a hard technical limit:
+// `web-guide.js payload inject` strips comments/whitespace (leanSource())
+// before the source ever reaches a transcript, so growth here doesn't scale
+// injection cost 1:1. Raised from 24 KB for #513/#514's new fields (location,
+// copy[], checklist[], heartbeat, sessionStorage-persisted queue, FAB icon).
+const MAX_BYTES = 34 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -59,7 +64,10 @@ function makeElement(tag) {
       if (i >= 0) arr.splice(i, 1);
     },
     click() { (listeners.click || []).forEach((fn) => fn({ type: "click" })); },
+    dispatch(type, evt) { (listeners[type] || []).forEach((fn) => fn(evt || { type })); },
     focus() {},
+    _pointerCaptures: [],
+    setPointerCapture(id) { this._pointerCaptures.push(id); },
     // `opts.mode === "closed"` must NOT publish `shadowRoot` (real DOM behavior).
     // `_shadow` is an internal test-only handle so findAll() can still walk in.
     attachShadow(opts) {
@@ -173,8 +181,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.2.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.2.0["']/);
+  test("defines VERSION 1.3.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.3.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -205,7 +213,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.2.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.3.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -222,7 +230,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.2.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.3.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -487,6 +495,57 @@ describe("web-guide-overlay — execution", () => {
 
     const state = sandbox.window.claudeGuide.state();
     expect(state.queued).toBe(0);
+  });
+
+  // #516: a pointerdown that starts on the collapse button must not arm the
+  // header's drag/pointer-capture — capturing on the header would route the
+  // matching click away from the button in a real browser.
+  test("pointerdown on the collapse button skips setPointerCapture on the draggable header", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
+    const head = collapseBtn.parentNode;
+
+    head.dispatch("pointerdown", {
+      type: "pointerdown", pointerId: 1, clientX: 0, clientY: 0,
+      target: collapseBtn, composedPath: () => [collapseBtn, head],
+    });
+    expect(head._pointerCaptures).toEqual([]);
+    head.dispatch("pointerup", { type: "pointerup", pointerId: 1, target: collapseBtn, composedPath: () => [collapseBtn, head] });
+
+    // Real pointerdown/pointerup + click on the button itself (not a synthetic
+    // el.click() bypassing pointer events) must still collapse the panel.
+    collapseBtn.dispatch("pointerdown", { type: "pointerdown", pointerId: 2, target: collapseBtn, composedPath: () => [collapseBtn] });
+    collapseBtn.dispatch("pointerup", { type: "pointerup", pointerId: 2, target: collapseBtn, composedPath: () => [collapseBtn] });
+    collapseBtn.dispatch("click", { type: "click", target: collapseBtn });
+
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+
+    // Dragging the header itself (pointerdown target = head) still arms capture.
+    head.dispatch("pointerdown", { type: "pointerdown", pointerId: 3, clientX: 0, clientY: 0, target: head, composedPath: () => [head] });
+    expect(head._pointerCaptures).toEqual([3]);
+  });
+
+  // #516: re-sending / re-injecting the same step id must not force the
+  // panel open again once the user collapsed it.
+  test("setStep keeps the user's collapsed state when the step id is unchanged", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 2, title: "T1", text: "go" });
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(false);
+
+    const host = getHost(sandbox);
+    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
+    collapseBtn.click();
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+
+    // Same id re-sent (re-send / re-inject) — stays collapsed.
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 2, title: "T1", text: "go, edited" });
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+
+    // A genuinely new step opens the panel again.
+    sandbox.window.claudeGuide.setStep({ id: "2", index: 2, total: 2, title: "T2", text: "go" });
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(false);
   });
 
   // Fix 7: capture-phase key isolation.
