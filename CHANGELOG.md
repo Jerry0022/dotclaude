@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.205.1] — 2026-09-25
+
+### Fixed
+- **An expanded concept question keeps its answer field inside the bubble.** The concept page has no global `box-sizing` reset, so a `width: 100%` textarea with padding and a border rendered wider than its container. Opening a pinned question showed the answer field sticking out past the bubble's right edge. The annotation answer, the feedback-dock notes and the decision-note fields now size as `border-box`; the answer field is also capped at the bubble's width.
+
 ## [0.205.0] — 2026-09-25
 
 ### Added
