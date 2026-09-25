@@ -1,6 +1,6 @@
 # dotclaude — DevOps Plugin for Claude Code
 
-See @.claude/project-map.md for directory structure.
+Directory structure: `.claude/project-map.md` — not auto-loaded; the token guard regenerates and injects it before the first repo-wide Grep/Glob of a session.
 
 ## Build & Test
 - `npm test` — run vitest suite

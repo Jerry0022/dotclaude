@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.13.1
+ * @version 0.14.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -37,12 +37,17 @@
  *   defeats "retry to proceed", and a block in one project no longer
  *   pre-authorises another.
  *
- *   Session-start injection: on the FIRST broad Grep/Glob (no `path`) of a
- *   session, attaches orientation as additionalContext and ALLOWS the search,
- *   so Claude can scope subsequent calls with a `path` instead of only being
+ *   "Broad" means no `path`, `.`, `/`, or a path that resolves to the project
+ *   root itself (isRepoWide) — the absolute cwd used to slip past every check.
+ *
+ *   Session-start injection: on the FIRST broad Grep/Glob of a session,
+ *   attaches orientation as additionalContext and ALLOWS the search, so
+ *   Claude can scope subsequent calls with a `path` instead of only being
  *   nagged after a block. Injected at most once per session (temp flag); later
  *   broad searches still hit the normal block. The injection combines:
- *     - `.claude/project-map.md` (file-structure re-scoping hint), and
+ *     - `.claude/project-map.md` (file-structure re-scoping hint), regenerated
+ *       right before it is injected so a months-old copy never lands in
+ *       context (recorded as `map_injected` for graphify-audit), and
  *     - an ambient graphify nudge when `graphify-out/graph.json` exists
  *       (steer toward `graphify query` over grepping — see hooks/lib/graph-nudge).
  *   Fires if EITHER source is present.
@@ -128,6 +133,42 @@ function loadConfig() {
     const defaults = PLAN_DEFAULTS.pro;
     return { ...defaults, tokensPerByte: 0.25, expensiveFiles: [] };
   }
+}
+
+/**
+ * A search scoped to the project root is as broad as one with no `path`.
+ * Claude often passes the absolute cwd; only `''`, `.` and `/` used to count,
+ * so a root-scoped Grep/Glob skipped both the block and the project-map
+ * injection.
+ */
+function isRepoWide(searchPath) {
+  if (!searchPath || searchPath === '.' || searchPath === '/') return true;
+  try {
+    const norm = (p) => {
+      const r = path.resolve(p).replace(/[\\/]+$/, '');
+      return process.platform === 'win32' ? r.toLowerCase() : r;
+    };
+    return norm(path.resolve(cwd, searchPath)) === norm(cwd);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Regenerate `.claude/project-map.md` right before it is injected. The file is
+ * gitignored in many checkouts and seeded into new worktrees as a copy, so the
+ * one on disk can be months old (observed: 291 of 1074 files, from July). Runs
+ * at most once per session and only when a broad search is about to happen;
+ * any failure keeps the existing map.
+ */
+function refreshProjectMap() {
+  const gen = path.join(__dirname, '..', '..', 'scripts', 'gen-project-map.mjs');
+  if (!fs.existsSync(gen)) return;
+  try {
+    require('child_process').execFileSync(process.execPath, [gen, cwd], {
+      stdio: 'ignore', timeout: 5000, windowsHide: true,
+    });
+  } catch { /* keep the existing map */ }
 }
 
 function flagPath(key) {
@@ -352,7 +393,7 @@ process.stdin.on('end', () => {
             // `/`); a directory+content-mode search never reaches that check
             // at all (see the per-tool Grep branch below), so writing its
             // flag there would just be a stray file for no behavioural gain.
-            if (!searchPath || searchPath === '.' || searchPath === '/') {
+            if (isRepoWide(searchPath)) {
               try { fs.writeFileSync(flagPath(searchKey), Date.now().toString()); } catch {}
             }
             // Bypass streak: only counts when this IS the most recently
@@ -598,7 +639,7 @@ process.stdin.on('end', () => {
 
   else if (toolName === 'Glob') {
     const pattern = toolInput.pattern || '';
-    if (/^\*\*\/\*$|^\*\*$|^\.\*\*/.test(pattern) || (pattern.includes('**') && !toolInput.path)) {
+    if (/^\*\*\/\*$|^\*\*$|^\.\*\*/.test(pattern) || (pattern.includes('**') && isRepoWide(toolInput.path))) {
       estimatedTokens = THRESHOLD;
       description = `Glob: broad pattern "${pattern}" on entire repo`;
     } else {
@@ -607,8 +648,7 @@ process.stdin.on('end', () => {
   }
 
   else if (toolName === 'Grep') {
-    const searchPath = toolInput.path || '';
-    if (!searchPath || searchPath === '.' || searchPath === '/') {
+    if (isRepoWide(toolInput.path)) {
       estimatedTokens = THRESHOLD;
       description = 'Grep: full-repo search';
     } else {
@@ -627,7 +667,7 @@ process.stdin.on('end', () => {
   // additionalContext and ALLOW the search, so Claude can scope the next
   // calls with a `path`. Falls through to the normal block on later broad
   // searches (map already in context by then).
-  if ((toolName === 'Grep' || toolName === 'Glob') && !toolInput.path) {
+  if ((toolName === 'Grep' || toolName === 'Glob') && isRepoWide(toolInput.path)) {
     const projectMap = path.join(cwd, '.claude', 'project-map.md');
     const sid = hook.session_id || hook.sessionId || 'nosid';
     const mapKey = crypto.createHash('md5').update(`${sid}:${cwd}`).digest('hex').slice(0, 12);
@@ -644,9 +684,11 @@ process.stdin.on('end', () => {
       try {
         const sections = [];
         if (hasMap) {
+          refreshProjectMap();
           const mapBody = fs.readFileSync(projectMap, 'utf8').trim();
+          recordMetric('map_injected', { tool: toolName, bytes: mapBody.length }, { cwd, sid });
           sections.push([
-            `[project-map] Before this broad ${toolName} (no \`path\` set), here is the project's file structure.`,
+            `[project-map] Before this broad ${toolName} (no narrower \`path\` set), here is the project's file structure.`,
             'Use it to re-scope: pick the directory that contains your target and pass it as the `path`',
             'parameter on this and future Grep/Glob calls instead of scanning the whole repo.',
             '',

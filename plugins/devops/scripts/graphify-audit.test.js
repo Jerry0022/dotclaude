@@ -96,6 +96,7 @@ describe("aggregateMetricsBySession — per-session telemetry rollup", () => {
       ev("gate_relented", "s1", "P"),
       ev("guard_blocked", "s1", "P"),
       ev("guard_released", "s1", "P"),
+      ev("map_injected", "s1", "P", { bytes: 1093 }),
       ev("query_ran", "nosid", "P", { responseChars: 999 }),      // excluded
       ev("query_ran", "s2", "Q", { responseChars: 10 }),
     ];
@@ -105,7 +106,7 @@ describe("aggregateMetricsBySession — per-session telemetry rollup", () => {
     expect(s1).toMatchObject({
       project: "P", queries: 1, queryChars: 100, searches: 2, searchChars: 80,
       gatesFired: 1, gatesBypassed: 1, gatesNoAnswer: 1, gatesRelented: 1,
-      guardBlocks: 1, guardReleases: 1,
+      guardBlocks: 1, guardReleases: 1, mapInjections: 1,
     });
     const s2 = rows.find((r) => r.sid === "s2");
     expect(s2).toMatchObject({ project: "Q", queries: 1, queryChars: 10 });
