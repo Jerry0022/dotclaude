@@ -206,6 +206,11 @@
     "  .foot{border-top-color:#333}",
     "  .secondary{background:#333;color:#eee}",
     "  input.f,textarea.f{background:#2a2a31;color:#eee;border-color:#444}",
+    // #514 blocks: their light backgrounds would carry the panel's light
+    // dark-mode text, which left a copy chip's value near-invisible.
+    "  .loc{background:#2e1065;color:#e9d5ff}",
+    "  .chip{background:#2a2a31}",
+    "  .chipbtn{background:#3a3a44;color:#eee}",
     "}",
   ].join("\n");
   shadow.appendChild(styleEl);

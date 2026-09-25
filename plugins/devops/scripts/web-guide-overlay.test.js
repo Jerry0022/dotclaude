@@ -765,4 +765,13 @@ describe("web-guide-overlay — app-styled FAB tooltip (ui-defaults.md R0/R1)", 
     expect(SRC, "dark scheme").toMatch(/\.panel\{background:#1e1e24;scrollbar-color:#444 transparent\}/);
     expect(SRC, "native parts follow the scheme").toMatch(/:host\{[^}]*color-scheme:light dark/);
   });
+
+  // #514: the dark panel's light text must not land on the chips' light
+  // backgrounds — a copy chip's value was near-invisible in a real browser.
+  test("the location block and copy chips have dark-scheme backgrounds", () => {
+    const dark = SRC.slice(SRC.indexOf("@media(prefers-color-scheme:dark)"));
+    expect(dark).toMatch(/\.loc\{background:#2e1065/);
+    expect(dark).toMatch(/\.chip\{background:#2a2a31/);
+    expect(dark).toMatch(/\.chipbtn\{background:#3a3a44/);
+  });
 });
