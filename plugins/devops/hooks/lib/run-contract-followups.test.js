@@ -169,7 +169,7 @@ describe("AUD-025: a GitHub MCP merge_pull_request is recorded as a release", ()
 // ── AUD-023 ──────────────────────────────────────────────────────────────
 
 describe("AUD-023: the release gate's git cost on a real 300-file diff", () => {
-  test("resolveBase + codeFilesChanged spawn exactly 3 git processes; wall time stays well under budget", () => {
+  test("resolveBase + codeFilesChanged spawn exactly 3 git processes (a deterministic cost budget, not a timing)", () => {
     git("checkout", "-q", "-b", "feat");
     fs.mkdirSync(path.join(dir, "src"));
     for (let i = 0; i < 300; i++) fs.writeFileSync(path.join(dir, "src", `f${i}.js`), `// ${i}\n`);
@@ -190,10 +190,8 @@ describe("AUD-023: the release gate's git cost on a real 300-file diff", () => {
     const gitLinesCalls = [];
     const gitLinesSpy = (...args) => { gitLinesCalls.push(args); return C.gitLines(...args); };
 
-    const t0 = Date.now();
     const base = P.resolveBase(dir, undefined, C);
     const n = P.codeFilesChanged(dir, "release", base, gitLinesSpy);
-    const ms = Date.now() - t0;
     // Read the count before mockRestore() — it also mockClear()s the history.
     const totalGitSpawns = gitOutSpy.mock.calls.length + gitLinesCalls.length;
     gitOutSpy.mockRestore();
@@ -203,8 +201,7 @@ describe("AUD-023: the release gate's git cost on a real 300-file diff", () => {
     // Static analysis (AUD-023 finding): symbolic-ref (resolveBase) + the
     // failed origin/main...HEAD diff + the main...HEAD fallback that succeeds.
     expect(totalGitSpawns).toBe(3);
-    // Generous sanity bound, not a tight perf assertion — the audit's live
-    // number was 403 ms median on a comparable 301-file diff.
-    expect(ms).toBeLessThan(5000);
-  });
+    // No wall-time assertion: under a loaded machine the same 3 spawns took
+    // seconds (#502). The measured numbers live in the design spec's Limits.
+  }, 120_000);
 });
