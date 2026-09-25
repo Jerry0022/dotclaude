@@ -112,7 +112,9 @@ writes (`mayWrite`): `init` and `state integration` refuse a protected
 branch as the conveyor's merge target unless it is the session's own branch
 (backlog budget mode merges into each issue's branch, switched per issue
 with `state integration`), and a salvage never commits onto a protected
-branch above the session's.
+branch above the session's. A merge onto the session's own `main`, or in a
+repo without a remote, stays local (`state land --pushed=false`): pushing
+`main` remains the ship's job.
 
 ## Dry runs (no tokens)
 

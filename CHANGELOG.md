@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.204.0] — 2026-09-25
+
+### Added
+- **`/do-run burn` runs on code, not on prose.** `scripts/burn-plan.js` computes the offer, the plan, every gate decision and every state change; auto-agents runs it as the `--burn` conveyor. Each task lands on its own: gate → spawn → checkpoint commits → one redteam pass → targeted tests → merge → `state land`. The model never computes a lane, a reserve or a fit.
+- **The 5-hour window is part of the gate.** A task starts only if its whole run, with every busy lane, stays under 92 % of the window. If nothing fits, the run pauses until the reset instead of hitting a hard stop. With auto-resume armed a one-shot cron resumes it; without it, the user's next prompt resumes it.
+- **After a limit, the burn is never continued silently.** When the user nudges the stopped session by hand, `prompt.burn.resume` asks: Burn abschalten (recommended), Burn fortsetzen or Run beenden. When the user picks auto-resume, the new follow-up F7 asks whether the burn resumes with it. A weekly reset since the burn started always switches it off.
+- **Checkpoint commits for every agent that writes code** (core, frontend, ai, windows, designer, feature), not only in a burn. They commit `wip(<scope>): …` after every green sub-step, so a limit or crash cannot take uncommitted work with it. A cut-off agent's worktree is salvaged without secret-shaped files and the agent is continued, not restarted. `prune-check` keeps a worktree unless it is both merged and clean.
+- **Checkpoints never land above the session's branch.** In a folder without git there are no commits. In a session on a feature branch, checkpoints never touch `main`, `master` or the default branch. When the session itself works on `main`, they land there. `burn-plan.js` refuses a protected merge target unless it is the session's own branch, and a merge onto `main` or in a repo without a remote stays local.
+- **Dry runs only:** `burn-plan.js simulate --all --text` plays 11 scenarios, comparing the old burn with the new one, against a synthetic account. It spends no tokens.
+
+### Changed
+- **Depth instead of breadth, at a cost that pays off.** The deep and max profiles add one redteam pass; the PO review and second QA pass are gone. Mechanical and filler tasks always run at standard depth. A plan is refused when it cannot buy at least 1.5× the standard depth. The reserve is `max(5 %, lanes × one L task)`. When usage cannot be read, the burn falls to blind mode with one lane and half the budget, then drains.
+- **Q4 offers the burn based on the weekly pace**: only when at least 10 % above the reserve would expire unused. Task sources are chosen in the new router follow-up F8, and the separate plan confirmation is gone.
+
 ## [0.203.0] — 2026-09-25
 
 ### Added
