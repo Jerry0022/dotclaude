@@ -130,6 +130,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.agent.nudge.js" }
+        ],
+        "matcher": "Write|Edit|NotebookEdit"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.design.remind.js" }
         ],
         "matcher": "Edit|Write"
