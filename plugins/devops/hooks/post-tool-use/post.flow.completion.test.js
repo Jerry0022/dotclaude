@@ -25,7 +25,23 @@ function project() {
   return dir;
 }
 
+/**
+ * What the model reads from one hook run: the additionalContext of the JSON
+ * envelope. Plain (non-JSON) stdout would never reach the model, so it comes
+ * back as-is and fails the channel tests below.
+ */
 function runHook(dir, sid, toolName = "Read", extra = {}) {
+  const raw = runHookRaw(dir, sid, toolName, extra);
+  if (!raw) return "";
+  try {
+    const out = JSON.parse(raw);
+    return (out && out.hookSpecificOutput && out.hookSpecificOutput.additionalContext) || raw;
+  } catch {
+    return raw;
+  }
+}
+
+function runHookRaw(dir, sid, toolName = "Read", extra = {}) {
   // The full suite runs 60+ files in parallel; on a loaded machine spawnSync
   // can fail to start the child at all (status null, res.error set), and the
   // hook's stdout then comes back empty — which reads as "the hook emitted no
@@ -274,6 +290,192 @@ describe("post.flow.completion — pending reminder", () => {
       tool_response: "Here is the review: everything looks fine.",
     });
     expect(out).not.toContain("[pending]");
+    cleanup(dir);
+  });
+});
+
+// PostToolUse receives each tool's STRUCTURED result, never the launch sentence
+// the model reads (verified live 2026-09-25, shapes from every recorded result
+// in the local transcripts). The old text match on JSON.stringify(tool_response)
+// never fired for a real agent or workflow launch — and did fire once for a
+// foreground agent whose prompt quoted the sentence.
+describe("post.flow.completion — launches are read from the structured tool_response", () => {
+  const ASYNC_AGENT = {
+    isAsync: true, status: "async_launched", agentId: "a3a8dbef8ee890dbf",
+    description: "Review the diff", resolvedModel: "claude-sonnet-5", prompt: "Review the diff.",
+    outputFile: "C:\\Temp\\tasks\\a3a8dbef8ee890dbf.output", canReadOutputFile: true,
+  };
+  const FOREGROUND_AGENT = {
+    status: "completed", agentId: "a3a8dbef8ee890dbf",
+    content: [{ type: "text", text: "The diff is fine." }], totalDurationMs: 1200,
+    prompt: "Quote this: Async agent launched successfully. Workflow launched in background.",
+  };
+  const WORKFLOW = {
+    status: "async_launched", taskId: "wb74fu8mr", taskType: "local_workflow",
+    workflowName: "verify-spec", runId: "wf_690f6b46-9b3", summary: "Verify every primitive the spec depends on",
+    transcriptDir: "C:\\Users\\x\\.claude\\projects\\p\\s\\subagents\\workflows\\wf_690f6b46-9b3",
+  };
+
+  test("an async Agent launch fires [pending], named by its type, never by its id", () => {
+    const dir = project();
+    const out = runHook(dir, "s-struct-agent", "Agent", {
+      tool_input: { subagent_type: "devops:qa", description: "Review the diff", run_in_background: true },
+      tool_response: ASYNC_AGENT,
+    });
+    expect(out).toContain("[pending] Background agent started: devops:qa");
+    expect(out).toContain('kind: "agent"');
+    expect(out).not.toContain("a3a8dbef8ee890dbf");
+    cleanup(dir);
+  });
+
+  test("a foreground agent stays quiet — even when its prompt quotes the launch sentences", () => {
+    const dir = project();
+    const out = runHook(dir, "s-struct-fg", "Agent", {
+      tool_input: { subagent_type: "devops:qa", description: "Review the diff" },
+      tool_response: FOREGROUND_AGENT,
+    });
+    expect(out).toContain("COMPLETION CARD");
+    expect(out).not.toContain("[pending]");
+    cleanup(dir);
+  });
+
+  test("a Workflow run fires [pending] under the name its result carries", () => {
+    const dir = project();
+    const out = runHook(dir, "s-struct-wf", "Workflow", {
+      tool_input: { script: "export const meta = {\n  name: 'older-name',\n};" },
+      tool_response: WORKFLOW,
+    });
+    expect(out).toContain("[pending] Background workflow started: verify-spec");
+    expect(out).toContain('kind: "workflow"');
+    cleanup(dir);
+  });
+
+  test("a launch shape reported by a tool that cannot launch that kind stays quiet", () => {
+    const dir = project();
+    for (const [tool, response] of [["Bash", ASYNC_AGENT], ["Agent", WORKFLOW], ["Read", { backgroundTaskId: "bb3oqentv" }]]) {
+      const out = runHook(dir, `s-struct-bound-${tool}`, tool, { tool_response: response });
+      expect(out).not.toContain("[pending]");
+    }
+    cleanup(dir);
+  });
+});
+
+// A PostToolUse hook reaches the model only through
+// hookSpecificOutput.additionalContext — its plain stdout lands in the
+// transcript as `hook_success` and nowhere else. Verified live 2026-09-25 in
+// the Desktop app and the CLI: a JSON marker arrived, a plain one did not.
+// Delivered, every word stays in the context, so the hook says only what
+// changes something.
+describe("post.flow.completion — reaches the model, and only when it changes something", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+  const envelope = (raw) => {
+    const out = JSON.parse(raw);
+    expect(Object.keys(out)).toEqual(["hookSpecificOutput"]);
+    expect(out.hookSpecificOutput.hookEventName).toBe("PostToolUse");
+    return out.hookSpecificOutput.additionalContext;
+  };
+  const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+
+  test("stdout is one additionalContext envelope, never plain text", () => {
+    const dir = project();
+    expect(envelope(runHookRaw(dir, "s-env"))).toContain("COMPLETION CARD");
+    expect(envelope(runHookRaw(dir, "s-env-render", RENDER, { tool_input: { variant: "ready" } })))
+      .toContain("Card rendered");
+    expect(envelope(runHookRaw(dir, "s-env-widget", "mcp__visualize__show_widget", {
+      tool_input: { title: "completion_card_body" },
+    }))).toContain("Card shown");
+    cleanup(dir);
+  });
+
+  test("the card contract rides on the turn's first call; later calls say nothing", () => {
+    const dir = project();
+    const sid = "s-gate-turn";
+    expect(runHook(dir, sid, "Read")).toContain("COMPLETION CARD");
+    expect(runHookRaw(dir, sid, "Grep")).toBe("");
+    expect(runHookRaw(dir, sid, "Bash", { tool_input: { command: "ls" }, tool_response: { stdout: "a" } })).toBe("");
+    cleanup(dir);
+  });
+
+  test("a new turn — stop.flow.guard cleared the per-turn flag — gets the contract again", () => {
+    const dir = project();
+    const sid = "s-gate-next";
+    runHook(dir, sid, "Read");
+    expect(runHookRaw(dir, sid, "Read")).toBe("");
+    fs.rmSync(flag(dir, "work-happened", sid));
+    expect(runHook(dir, sid, "Read")).toContain("COMPLETION CARD");
+    cleanup(dir);
+  });
+
+  test("a background launch later in the turn sends [pending] without repeating the contract", () => {
+    const dir = project();
+    const sid = "s-gate-launch";
+    runHook(dir, sid, "Read");
+    const out = runHook(dir, sid, "Bash", {
+      tool_input: { command: "npm test", description: "Run the suite", run_in_background: true },
+      tool_response: { stdout: "", stderr: "", interrupted: false, isImage: false, backgroundTaskId: "b68oycrr6" },
+    });
+    expect(out).toContain("[pending] Background task started: Run the suite");
+    expect(out).not.toContain("COMPLETION CARD");
+    cleanup(dir);
+  });
+
+  test("the first code edit brings [test-autonomy] once", () => {
+    const dir = project();
+    const sid = "s-gate-edit1";
+    fs.writeFileSync(flag(dir, "work-happened", sid), "Read");
+    expect(runHook(dir, sid, "Edit")).toContain("[test-autonomy]");
+    expect(runHookRaw(dir, sid, "Read")).toBe("");
+    cleanup(dir);
+  });
+
+  test("the 5th code edit brings the ship nudge and [desktop-testing]; the 6th does not", () => {
+    const dir = project();
+    const sid = "s-gate-edit5";
+    fs.writeFileSync(flag(dir, "work-happened", sid), "Read");
+    fs.writeFileSync(flag(dir, "edits", sid), "4");
+    const fifth = runHook(dir, sid, "Edit");
+    expect(fifth).toContain("SHIP: 5 code edits");
+    expect(fifth).toContain("[desktop-testing]");
+    const sixth = runHook(dir, sid, "Edit");
+    expect(sixth).not.toContain("[desktop-testing]");
+    expect(sixth).not.toContain("SHIP:");
+    cleanup(dir);
+  });
+
+  test("tracked issues come with the contract, not on every call", () => {
+    const dir = project();
+    const sid = "s-gate-issues";
+    fs.writeFileSync(flag(dir, "tracked-issues", sid), "[42]");
+    expect(runHook(dir, sid, "Read")).toContain("[issue-status] Tracked issues this session: #42");
+    expect(runHookRaw(dir, sid, "Read")).toBe("");
+    cleanup(dir);
+  });
+
+  test("a running /auto-guide loop gets a waiver instead of the contract (#526)", () => {
+    const dir = project();
+    const marker = path.join(dir, ".claude", "auto-guide-active.json");
+    fs.writeFileSync(marker, JSON.stringify({ ts: Date.now() }));
+    fs.writeFileSync(flag(dir, "tracked-issues", "s-guide"), "[42]");
+    const out = runHook(dir, "s-guide", "mcp__claude-in-chrome__javascript_tool");
+    expect(out).toContain("[auto-guide] A guide run is active");
+    expect(out).not.toContain("COMPLETION CARD");
+    expect(out).not.toContain("[issue-status]");
+    // A marker past its TTL (a guide that crashed mid-loop) waives nothing.
+    fs.writeFileSync(marker, JSON.stringify({ ts: Date.now() - 31 * 60 * 1000 }));
+    const stale = runHook(dir, "s-guide-stale", "Read");
+    expect(stale).toContain("COMPLETION CARD");
+    expect(stale).not.toContain("[auto-guide]");
+    cleanup(dir);
+  });
+
+  test("a call after this turn's card still warns against a second card", () => {
+    const dir = project();
+    const sid = "s-gate-after";
+    fs.writeFileSync(flag(dir, "work-happened", sid), "render");
+    fs.writeFileSync(flag(dir, "card-rendered", sid), "t");
+    const out = runHook(dir, sid, "mcp__ccd_session_mgmt__set_session_title");
+    expect(out).toContain("already rendered this turn");
+    expect(out).not.toContain("COMPLETION CARD");
     cleanup(dir);
   });
 });

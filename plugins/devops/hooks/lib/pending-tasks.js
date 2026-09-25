@@ -1,6 +1,6 @@
 /**
  * @module pending-tasks
- * @version 0.6.0
+ * @version 0.7.0
  * @description Detects background work that is STILL RUNNING when a turn ends —
  *   subagents launched with run_in_background, backgrounded Bash tasks (started
  *   with run_in_background, or moved to the background by the harness when a
@@ -189,6 +189,50 @@ function responseTaskId(toolResponse) {
   if (typeof toolResponse === 'string') return announcedTaskId(toolResponse);
   const id = toolResponse && typeof toolResponse === 'object' ? toolResponse.backgroundTaskId : '';
   return typeof id === 'string' && ID_ONLY_RE.test(id) ? id : '';
+}
+
+/** Every async launch reports this status in its structured result. */
+const ASYNC_LAUNCHED = 'async_launched';
+
+/**
+ * The background work a live tool_response reports starting, or null.
+ *
+ * PostToolUse gets each tool's structured result — the transcript's
+ * `toolUseResult`, verified live 2026-09-25 for an async Agent and a Bash call —
+ * never the announcement the model reads, so the text markers above cannot
+ * match it. Shapes, from every recorded result in the local transcripts:
+ *   agent     Agent     { isAsync: true, status: "async_launched", agentId, description, … }
+ *   workflow  Workflow  { status: "async_launched", taskType: "local_workflow", taskId, workflowName, summary, … }
+ *   task      Bash/PowerShell { backgroundTaskId, … } — see responseTaskId()
+ * All 959 agent and 63 workflow launches matched their shape, and all 136
+ * foreground agent results (`status: "completed"`, no isAsync) did not. The kind
+ * stays bound to the tool that can launch it (LAUNCH_TOOLS). A plain-string
+ * response is read like a transcript result: the announcement at position 0.
+ *
+ * @param {string} toolName — the PostToolUse `tool_name`
+ * @param {*} toolResponse — the PostToolUse `tool_response`
+ * @returns {{ kind: 'agent'|'workflow'|'task', name?: string }|null} — `name`
+ *   is the workflow's own name when the result carries one
+ */
+function responseLaunch(toolName, toolResponse) {
+  const launcher = { name: toolName };
+  if (typeof toolResponse === 'string') {
+    if (canLaunch(launcher, 'agent') && announces(toolResponse, AGENT_LAUNCH_MARKER)) return { kind: 'agent' };
+    if (canLaunch(launcher, 'workflow') && announces(toolResponse, WORKFLOW_LAUNCH_MARKER)) return { kind: 'workflow' };
+    if (canLaunch(launcher, 'task') && announcedTaskId(toolResponse)) return { kind: 'task' };
+    return null;
+  }
+  const r = toolResponse && typeof toolResponse === 'object' && !Array.isArray(toolResponse) ? toolResponse : null;
+  if (!r) return null;
+  const isId = v => typeof v === 'string' && ID_ONLY_RE.test(v);
+  if (canLaunch(launcher, 'agent') && r.isAsync === true && r.status === ASYNC_LAUNCHED && isId(r.agentId)) {
+    return { kind: 'agent' };
+  }
+  if (canLaunch(launcher, 'workflow') && r.status === ASYNC_LAUNCHED && isId(r.taskId)) {
+    return { kind: 'workflow', name: typeof r.workflowName === 'string' ? r.workflowName : '' };
+  }
+  if (canLaunch(launcher, 'task') && responseTaskId(r)) return { kind: 'task' };
+  return null;
 }
 
 /**
@@ -574,6 +618,7 @@ module.exports = {
   announces,
   announcedTaskId,
   responseTaskId,
+  responseLaunch,
   isConceptInfra,
   scanOpenTasks,
   openTaskNames,
