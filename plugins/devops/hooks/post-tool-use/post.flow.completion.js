@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.24.0
+ * @version 0.25.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -23,7 +23,15 @@
  *       'unknown' and touches neither flag.
  *     - validation-pending — any source change owes a validation attestation in
  *       the completion card; a new edit clears a prior validation-attested flag.
- *   Subagent delegation does not satisfy any of these gates.
+ *   Subagent delegation does not satisfy any of these gates, and a subagent
+ *   call (payload carries `agent_id`) touches none of the parent's state: no
+ *   counter, no work-happened flag, no gate flag is written or cleared.
+ *   Only edits inside the session's own work tree owe the gates: a file outside
+ *   projectRoot(cwd), or inside a LINKED worktree nested in it (an isolated
+ *   agent's .claude/worktrees/agent-*), owes nothing.
+ *   Merged work owes them like an edit: after a parent Bash/PowerShell git
+ *   merge / pull / cherry-pick / rebase / am / revert, every code file the new
+ *   HEAD reflog entries brought in owes exactly what an edit of it owes.
  *
  *   Except after the card itself: the render's result carries its own relay
  *   contract, and the card widget ends the turn — there the generic reminder
@@ -41,7 +49,9 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
+const { projectRoot, findRepoRoot, samePath } = require('../lib/project-root');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
@@ -216,6 +226,115 @@ function adoptCardFlags(hook) {
   return moved;
 }
 
+/** A subagent's tool call: the harness sets `agent_id`, but keeps the PARENT's session_id. */
+function isSubagentCall(hook) {
+  return !!hook && typeof hook.agent_id === 'string' && hook.agent_id !== '';
+}
+
+/** Is `child` the directory `parent` or below it? (win32: path.relative ignores case.) */
+function isInside(child, parent) {
+  const rel = path.relative(parent, child);
+  if (rel === '') return true;
+  if (path.isAbsolute(rel)) return false; // another drive
+  return rel !== '..' && !rel.startsWith('..' + path.sep);
+}
+
+/** Is `dir` a LINKED worktree — `.git` a FILE whose gitdir points into a `…/worktrees/…` admin dir? */
+function isLinkedWorktree(dir) {
+  try {
+    const dotGit = path.join(dir, '.git');
+    if (!fs.statSync(dotGit).isFile()) return false;
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
+    if (!m) return false;
+    return /(^|\/)worktrees\//.test(path.resolve(dir, m[1]).replace(/\\/g, '/'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Does `file` belong to the session's own work tree? Outside `projectRoot(cwd)`
+ * it does not; nor inside a linked worktree nested in it (an isolated agent's
+ * `<main checkout>/.claude/worktrees/agent-*`). A submodule or a nested plain
+ * repo stays inside. Pure fs walk, no git spawn.
+ */
+function inOwnWorkTree(file, cwd) {
+  if (!file) return true;
+  const base = cwd || process.cwd();
+  const own = projectRoot(base);
+  const abs = path.resolve(base, String(file));
+  if (!isInside(abs, own)) return false;
+  const nearest = findRepoRoot(path.dirname(abs));
+  if (nearest && !samePath(nearest, own) && isInside(nearest, own) && isLinkedWorktree(nearest)) {
+    return false;
+  }
+  return true;
+}
+
+const MERGE_CMD_RE = /\bgit\b[\s\S]*\b(?:merge|pull|cherry-pick|rebase|am|revert|commit)\b/;
+// `commit (merge)` ends in `)`, where `\b` cannot match — kept outside the \b group.
+const MERGE_SUBJECT_RE = /^(?:(?:merge|pull|cherry-pick|rebase|am|revert)\b|commit \(merge\))/;
+const MERGE_MAX_AGE_S = 30 * 60;
+const GIT_OPTS = { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
+
+/**
+ * Files a merge-like HEAD move of THIS call brought into the checkout.
+ *
+ * Reads HEAD's reflog rather than ORIG_HEAD: cherry-pick does not reliably set
+ * ORIG_HEAD, and after an "Already up to date" merge a stale ORIG_HEAD would
+ * re-owe an older merge. A per-session watermark (newest reflog time + entry
+ * seen at the previous read, rewritten on every read) keeps one merge from
+ * being owed twice; the second line disambiguates entries in the same second.
+ *
+ * @returns {string[]} absolute paths (unfiltered — the caller applies the gates' rules)
+ */
+function mergedFiles(cwd, sessionId) {
+  const root = projectRoot(cwd || process.cwd());
+  let out;
+  try {
+    out = execFileSync('git', ['reflog', '-n', '200', '--format=%H %gd %gs', '--date=unix', 'HEAD'],
+      { ...GIT_OPTS, cwd: root });
+  } catch {
+    return [];
+  }
+  const entries = [];
+  for (const line of String(out).split(/\r?\n/)) {
+    const m = /^([0-9a-f]{7,64}) \S*?@\{(\d+)\} ?(.*)$/.exec(line);
+    if (m) entries.push({ line, sha: m[1], time: Number(m[2]), subject: m[3] });
+  }
+  const wmFile = sessionFile('dotclaude-devops-reflog-seen', sessionId);
+  let wmTime = 0, wmLine = '';
+  try {
+    const [t, l] = fs.readFileSync(wmFile, 'utf8').split('\n');
+    wmTime = Number(t) || 0;
+    wmLine = l || '';
+  } catch { /* absent on the session's first read */ }
+  if (entries.length) {
+    try { writeSessionFile(wmFile, `${entries[0].time}\n${entries[0].line}`); } catch { /* best effort */ }
+  }
+
+  // New = above the entry seen last time; when that entry is gone, newer than its time.
+  let seenAt = wmLine ? entries.findIndex(e => e.line === wmLine) : -1;
+  if (seenAt < 0) seenAt = entries.findIndex(e => e.time <= wmTime && wmTime > 0);
+  const fresh = seenAt < 0 ? entries.length : seenAt;
+  const minTime = Math.floor(Date.now() / 1000) - MERGE_MAX_AGE_S;
+
+  let i = 0;
+  while (i < fresh && !MERGE_SUBJECT_RE.test(entries[i].subject)) i++;
+  const top = i;
+  while (i < fresh && MERGE_SUBJECT_RE.test(entries[i].subject) && entries[i].time >= minTime) i++;
+  if (i === top || i >= entries.length) return [];
+  if (entries[top].time < minTime) return [];
+  const before = entries[i].sha;
+  const after = entries[top].sha;
+  try {
+    const names = execFileSync('git', ['diff', '--name-only', before, after], { ...GIT_OPTS, cwd: root });
+    return String(names).split(/\r?\n/).filter(Boolean).map(p => path.join(root, p));
+  } catch {
+    return [];
+  }
+}
+
 function detectBackgroundLaunch(hook) {
   const r = hook && hook.tool_response;
   const text = typeof r === 'string' ? r : (r ? JSON.stringify(r) : '');
@@ -250,6 +369,17 @@ process.stdin.on('end', () => {
   // must not suppress this session's card reminder and light-pending bookkeeping.
   const silentResult = readSessionFile('dotclaude-devops-silent-turn', hook.session_id, { exact: true });
   if (silentResult) process.exit(0);
+
+  // Subagent call: hooks fire for it with the PARENT's session_id, and all
+  // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
+  // counters, work-happened, the V&V gate flags, and a reminder PostToolUse
+  // stdout never delivers to the model anyway). Observed 2026-09-25: an
+  // isolated background agent's Edit inside its own worktree wrote the
+  // parent's validation-pending and deleted the validation-attested flag the
+  // parent's card had written four minutes earlier — both Stop gates then
+  // blocked an unchanged parent checkout. Its passing test run would equally
+  // have "verified" the parent, which delegation never may.
+  if (isSubagentCall(hook)) process.exit(0);
 
   const toolName = hook.tool_name || '';
   const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
@@ -316,8 +446,9 @@ process.stdin.on('end', () => {
       try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
     };
 
-    if (isCodeEdit) {
-      const editedPath = hook.tool_input && hook.tool_input.file_path;
+    // What a change of `editedPath` owes — shared by edits and merged files, so
+    // the last file's kind wins exactly like consecutive edits.
+    const oweFor = (editedPath) => {
       // Light gate — scoped per FILE, not per profile: under a DOM profile a
       // renderer file owes a browser check while a backend file owes a test run.
       const owedKind = resolveVerificationKind(profileClass, editedPath, { carveOuts, domPaths });
@@ -345,12 +476,29 @@ process.stdin.on('end', () => {
         );
         unlinkFlag('dotclaude-devops-validation-attested');
       }
+    };
+
+    // Only the session's own work tree owes: an edit in a sibling checkout or
+    // in an isolated agent's nested worktree changes nothing this turn ships.
+    if (isCodeEdit) {
+      const editedPath = hook.tool_input && hook.tool_input.file_path;
+      if (inOwnWorkTree(editedPath, hook.cwd)) oweFor(editedPath);
+    }
+
+    const command = hook.tool_input && hook.tool_input.command;
+
+    // Merged work owes like an edit — this is where delegated work lands.
+    // Before the verification observation, so `git pull && npm test` passing
+    // ends verified.
+    if ((toolName === 'Bash' || toolName === 'PowerShell') && command && MERGE_CMD_RE.test(String(command))) {
+      for (const file of mergedFiles(hook.cwd, hook.session_id)) {
+        if (isCodeChange(file, carveOuts)) oweFor(file);
+      }
     }
 
     // Verification observation. Split browser vs test-runner so the runner path
     // can require a PASSING run (Kern ②). A red run sets light-red and does NOT
     // clear the pending state.
-    const command = hook.tool_input && hook.tool_input.command;
     // Match against the kind actually OWED (written per edited file above), not
     // the profile class — otherwise a backend edit under a DOM profile could
     // never be satisfied by the test run it legitimately requires. Falls back to

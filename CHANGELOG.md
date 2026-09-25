@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.204.2] — 2026-09-25
+
+### Fixed
+- **A background agent's edits no longer block the main session's card.** `post.flow.completion` wrote the session's verification flags on every Edit/Write, including those of subagents working in their own worktrees. Each agent edit marked the main session as owing a test run and a validation and deleted its evidence, so the next card was blocked with "no passing test run" or "Validation required" although the session's own checkout had not changed. Subagent calls now leave the flags alone: they neither owe nor satisfy either gate. An edit outside the session's own work tree (a sibling checkout, an isolated agent's nested worktree) owes nothing.
+- **Merged work owes the gates like an edit.** A merge, pull, cherry-pick, rebase, am or revert in the session's checkout (typically an agent's branch merged back) now owes the test run and the validation for each code file it brought in. The hook reads HEAD's reflog with a per-session watermark, so one merge is owed once, and skips entries older than 30 minutes.
+
+## [0.204.1] — 2026-09-25
+
+### Fixed
+- **A message to another Claude session no longer counts as a running agent.** The Stop guard treated every `SendMessage` recipient as a resumed background agent. A message to a peer session picked from `ListAgents`, or a send that failed, never produces a completion notice, so the entry never closed: every later turn was blocked once with "Background work is STILL RUNNING … - agent" and asked for a card with an invented `pending` field. Now the send's own result decides. Only an in-process agent the harness reports as resumed or still running is re-opened, under its agentId even when it was addressed by name, so its next notice closes it again. A peer delivery or an error opens nothing, and an unfamiliar result format falls back to the address only for an agent this session launched.
+- **An agent launched in the foreground and later continued with `SendMessage` counts as running until it reports back.** Before, the guard missed it in sessions without any background launch.
+
 ## [0.204.0] — 2026-09-25
 
 ### Added

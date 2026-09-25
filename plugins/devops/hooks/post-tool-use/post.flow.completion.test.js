@@ -413,3 +413,230 @@ describe("post.flow.completion — quiet after the card itself", () => {
     cleanup(dir);
   });
 });
+
+// Hooks fire for a subagent's tool calls with the PARENT's session_id. Observed
+// 2026-09-25: an isolated background agent's Edit in its own worktree wrote the
+// parent's validation-pending and deleted the validation-attested flag the
+// parent's card had written — both Stop gates then blocked an unchanged
+// checkout. Subagent calls now touch nothing of the parent; only the session's
+// own work tree owes the gates; and merged work (where delegation lands) owes
+// them like an edit.
+describe("post.flow.completion — subagent and out-of-tree changes do not touch the parent's gates", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+  const seed = (dir, sid) => {
+    fs.writeFileSync(flag(dir, "validation-attested", sid), "seed");
+    fs.writeFileSync(flag(dir, "light-verified", sid), "seed");
+  };
+  const has = (dir, name, sid) => fs.existsSync(flag(dir, name, sid));
+  const read = (dir, name, sid) => fs.readFileSync(flag(dir, name, sid), "utf8");
+  const expectUntouched = (dir, sid) => {
+    expect(has(dir, "light-pending", sid)).toBe(false);
+    expect(has(dir, "validation-pending", sid)).toBe(false);
+    expect(read(dir, "validation-attested", sid)).toBe("seed");
+    expect(read(dir, "light-verified", sid)).toBe("seed");
+  };
+  const expectOwed = (dir, sid) => {
+    expect(has(dir, "light-pending", sid)).toBe(true);
+    expect(has(dir, "validation-pending", sid)).toBe(true);
+    expect(has(dir, "validation-attested", sid)).toBe(false);
+    expect(has(dir, "light-verified", sid)).toBe(false);
+  };
+  const PASS = { exit_code: 0, stdout: "ℹ tests 9\nℹ pass 9\nℹ fail 0" };
+  const FAIL = { exit_code: 1, stdout: "ℹ tests 9\nℹ pass 8\nℹ fail 1" };
+
+  test("subagent-gates: a subagent Edit owes nothing and keeps both seeded flags", () => {
+    const dir = project();
+    const sid = "s-sub-edit";
+    seed(dir, sid);
+    runHook(dir, sid, "Edit", { agent_id: "agent-1" });
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: a subagent Write in its own sibling worktree owes nothing", () => {
+    const dir = project();
+    const sib = fs.mkdtempSync(path.join(os.tmpdir(), "completion-flow-sib-"));
+    const sid = "s-sub-write";
+    seed(dir, sid);
+    runHook(dir, sid, "Write", { agent_id: "agent-2", tool_input: { file_path: path.join(sib, "x.js") } });
+    expectUntouched(dir, sid);
+    cleanup(dir); cleanup(sib);
+  });
+
+  test("subagent-gates: a subagent's passing test run writes no light-verified, a failing one no light-red", () => {
+    const dir = project();
+    const sid = "s-sub-run";
+    fs.writeFileSync(flag(dir, "light-pending", sid), "a.js");
+    runHook(dir, sid, "Bash", { agent_id: "agent-3", tool_input: { command: "npm run test:gate" }, tool_response: PASS });
+    expect(has(dir, "light-verified", sid)).toBe(false);
+    runHook(dir, sid, "Bash", { agent_id: "agent-3", tool_input: { command: "npm run test:gate" }, tool_response: FAIL });
+    expect(has(dir, "light-red", sid)).toBe(false);
+    expect(read(dir, "light-pending", sid)).toBe("a.js");
+    cleanup(dir);
+  });
+
+  test("subagent-gates: a subagent call writes no work-happened and does not bump the edits counter", () => {
+    const dir = project();
+    const sid = "s-sub-work";
+    seed(dir, sid);
+    fs.writeFileSync(flag(dir, "edits", sid), "3");
+    runHook(dir, sid, "Edit", { agent_id: "agent-4" });
+    runHook(dir, sid, "Read", { agent_id: "agent-4" });
+    expect(has(dir, "work-happened", sid)).toBe(false);
+    expect(read(dir, "edits", sid)).toBe("3");
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: the parent's Edit outside its work tree owes nothing", () => {
+    const dir = project();
+    const sib = fs.mkdtempSync(path.join(os.tmpdir(), "completion-flow-sib-"));
+    const sid = "s-out-tree";
+    seed(dir, sid);
+    runHook(dir, sid, "Edit", { tool_input: { file_path: path.join(sib, "x.js") } });
+    expectUntouched(dir, sid);
+    cleanup(dir); cleanup(sib);
+  });
+
+  test("subagent-gates: an Edit in a linked worktree nested in the project owes nothing", () => {
+    const dir = project();
+    fs.mkdirSync(path.join(dir, ".git"), { recursive: true });
+    const wt = path.join(dir, ".claude", "worktrees", "agent-x");
+    fs.mkdirSync(path.join(wt, "src"), { recursive: true });
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${path.join(dir, ".git", "worktrees", "agent-x")}\n`);
+    const sid = "s-nested-wt";
+    seed(dir, sid);
+    runHook(dir, sid, "Edit", { tool_input: { file_path: path.join(wt, "src", "x.js") } });
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: the parent's own Edit still owes both and clears both seeded flags", () => {
+    const dir = project();
+    const sid = "s-own-edit";
+    seed(dir, sid);
+    runHook(dir, sid, "Edit");
+    expectOwed(dir, sid);
+    cleanup(dir);
+  });
+
+  // --- merged work, in a real temp git repo ---
+  const gitEnv = {
+    ...process.env,
+    GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid",
+    GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid",
+  };
+  const git = (dir, args, env = {}) => {
+    const r = spawnSync("git", ["-c", "commit.gpgsign=false", ...args], {
+      cwd: dir, encoding: "utf8", env: { ...gitEnv, ...env },
+    });
+    if (r.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = (dir, name, msg) => {
+    fs.writeFileSync(path.join(dir, name), `${msg}\n`);
+    git(dir, ["add", name]);
+    git(dir, ["commit", "-q", "-m", msg]);
+    return git(dir, ["rev-parse", "HEAD"]);
+  };
+  // main with a README, branch `b` carrying `file`, back on main.
+  const repo = (file = "lib.js") => {
+    const dir = project();
+    git(dir, ["init", "-q", "-b", "main"]);
+    commitFile(dir, "README.md", "base");
+    git(dir, ["checkout", "-q", "-b", "b"]);
+    const sha = commitFile(dir, file, "on b");
+    git(dir, ["checkout", "-q", "main"]);
+    return { dir, sha };
+  };
+  const bash = (dir, sid, command, extra = {}) =>
+    runHook(dir, sid, "Bash", { tool_input: { command }, tool_response: { exit_code: 0, stdout: "" }, ...extra });
+
+  test("subagent-gates: `git merge b` bringing a .js file owes both", () => {
+    const { dir } = repo();
+    const sid = "s-merge";
+    seed(dir, sid);
+    git(dir, ["merge", "-q", "b"]);
+    bash(dir, sid, "git merge b");
+    expectOwed(dir, sid);
+    expect(read(dir, "validation-pending", sid)).toContain("lib.js");
+    cleanup(dir);
+  });
+
+  test("subagent-gates: `git cherry-pick <sha>` of a code commit owes both", () => {
+    const { dir, sha } = repo("pick.js");
+    const sid = "s-pick";
+    seed(dir, sid);
+    git(dir, ["cherry-pick", sha]);
+    bash(dir, sid, `git cherry-pick ${sha}`);
+    expectOwed(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: a docs-only merge owes nothing", () => {
+    const { dir } = repo("GUIDE.md");
+    const sid = "s-merge-docs";
+    seed(dir, sid);
+    git(dir, ["merge", "-q", "b"]);
+    bash(dir, sid, "git merge b");
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: a merge dated 2 h ago owes nothing", () => {
+    const { dir } = repo();
+    const sid = "s-merge-old";
+    seed(dir, sid);
+    const old = Math.floor(Date.now() / 1000) - 2 * 3600;
+    git(dir, ["merge", "-q", "b"], { GIT_COMMITTER_DATE: `@${old} +0000` });
+    bash(dir, sid, "git merge b");
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: the same merge is owed once (watermark)", () => {
+    const { dir } = repo();
+    const sid = "s-merge-once";
+    git(dir, ["merge", "-q", "b"]);
+    bash(dir, sid, "git merge b");
+    expect(has(dir, "validation-pending", sid)).toBe(true);
+    for (const f of ["light-pending", "light-kind", "validation-pending"]) fs.rmSync(flag(dir, f, sid));
+    seed(dir, sid);
+    bash(dir, sid, "git merge b");
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: a plain `git commit` owes nothing via the merge path", () => {
+    const { dir } = repo();
+    const sid = "s-commit";
+    seed(dir, sid);
+    commitFile(dir, "c.js", "plain");
+    bash(dir, sid, "git commit -m plain");
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: a subagent's merge owes nothing", () => {
+    const { dir } = repo();
+    const sid = "s-sub-merge";
+    seed(dir, sid);
+    git(dir, ["merge", "-q", "b"]);
+    bash(dir, sid, "git merge b", { agent_id: "agent-5" });
+    expectUntouched(dir, sid);
+    cleanup(dir);
+  });
+
+  test("subagent-gates: `git merge b && npm run test:gate` passing ends verified", () => {
+    const { dir } = repo();
+    const sid = "s-merge-test";
+    seed(dir, sid);
+    git(dir, ["merge", "-q", "b"]);
+    bash(dir, sid, "git merge b && npm run test:gate", { tool_response: PASS });
+    expect(has(dir, "light-pending", sid)).toBe(true);
+    expect(has(dir, "validation-pending", sid)).toBe(true);
+    expect(has(dir, "validation-attested", sid)).toBe(false);
+    expect(read(dir, "light-verified", sid)).toBe("Bash");
+    cleanup(dir);
+  });
+});
