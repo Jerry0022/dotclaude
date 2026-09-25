@@ -166,7 +166,10 @@ describe("auto-agents gate (triage)", () => {
     const r = run("Skill", { skill: "devops:auto-agents", args: "x" });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("triage");
-    ev({ k: "agent", type: "Explore" });
+    // AUD-020: only a triage-described (or item-named) agent event satisfies it.
+    ev({ k: "agent", type: "Explore", description: "look around" });
+    expect(run("Skill", { skill: "devops:auto-agents", args: "x" }).code).toBe(2);
+    ev({ k: "agent", type: "Explore", description: "Triage #1 — the queued item" });
     expect(run("Skill", { skill: "devops:auto-agents", args: "x" }).code).toBe(0);
   });
 

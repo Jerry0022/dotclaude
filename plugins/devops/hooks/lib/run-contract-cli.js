@@ -1,12 +1,16 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
  *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
  *   run-contract.js stays the facade and the CLI entry point (its
  *   `require.main` guard still calls this module's `cli()`).
+ *
+ *   AUD-010: `status` / `done` measure qa through lib/run-contract-qa.js's
+ *   measureQa() — the same helper pre.run.contract.js's gate uses — instead
+ *   of evaluating obligations against an empty ctx.
  */
 
 const {
@@ -14,6 +18,10 @@ const {
   clearBatchHandoff, eventsOf, readJson, nowOf,
 } = require('./run-contract-store');
 const { segments, openObligations, short } = require('./run-contract-obligations');
+// AUD-010: `status` / `done` used to evaluate obligations against an empty
+// ctx — qa was never measured there, so `done` could close a run while qa
+// was owed. measureQa() is the same helper pre.run.contract.js's gate uses.
+const { measureQa } = require('./run-contract-qa');
 
 const OBLIGATIONS = Object.freeze(['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine', 'triage']);
 
@@ -47,7 +55,13 @@ const CLI_COMMANDS = {
     if (!c) { write({ ok: true, active: false, disabled: disabled(), path: contractPath(cwd) }); return 0; }
     const evs = eventsOf(cwd, c);
     const segs = segments(c, evs);
-    write({ ok: true, active: true, contract: c, segment: segs.length, events: evs.length, open: openObligations(c, evs, 'release', {}) });
+    // AUD-010: measured exactly like the gate — an unknown count (git
+    // failure / expired budget) reports as `qa: null` here, "QA ?" on the card.
+    const codeFilesChanged = measureQa(cwd, 'release');
+    write({
+      ok: true, active: true, contract: c, segment: segs.length, events: evs.length,
+      qa: codeFilesChanged, open: openObligations(c, evs, 'release', { codeFilesChanged }),
+    });
     return 0;
   },
   skip({ pos, flags, cwd, now, reason, write, fail }) {
@@ -63,7 +77,10 @@ const CLI_COMMANDS = {
   },
   done({ cwd, now, reason, write, fail }) {
     const c = readContract(cwd, { now });
-    const open = c ? openObligations(c, eventsOf(cwd, c), 'card', {}) : [];
+    // AUD-010: measured before deciding — `done` must not close a run while
+    // qa is owed just because nobody ever asked git for the diff.
+    const codeFilesChanged = c ? measureQa(cwd, 'card') : null;
+    const open = c ? openObligations(c, eventsOf(cwd, c), 'card', { codeFilesChanged }) : [];
     if (open.length) {
       const names = open.map(o => (o.item ? `${o.ob} #${o.item}` : o.ob)).join(', ');
       if (!reason) {
