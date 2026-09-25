@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.3.0
+ * @version 0.3.1
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -751,6 +751,8 @@ function update(cwd, patch = {}, opts = {}) {
     const rest = { ...(patch || {}) };
     delete rest.id; delete rest.armedAt; delete rest.v;
     delete rest.closedAt; delete rest.closeReason; delete rest.aborted;
+    // RT2-Q4: `root` is arm()'s own work-tree root — never patchable either.
+    delete rest.root;
     // Re-read right before the write: `closedAt`/`closeReason`/`aborted` are
     // always stripped from the patch above, so even if a close() landed
     // (real concurrency the lock already prevents, or a stale read this

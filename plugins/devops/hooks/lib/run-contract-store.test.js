@@ -457,4 +457,12 @@ describe("RT2-Q4: arm() stamps the work-tree root", () => {
     expect(typeof h.root).toBe("string");
     expect(h.root.length).toBeGreaterThan(0);
   });
+
+  test("update() never patches root either", () => {
+    const h = store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    const u = store.update(cwd, { root: "/some/other/root", strict: true }, { now: T0 });
+    expect(u.strict).toBe(true);
+    expect(u.root).toBe(h.root);
+    expect(store.readContract(cwd, { now: T0 }).root).toBe(h.root);
+  });
 });

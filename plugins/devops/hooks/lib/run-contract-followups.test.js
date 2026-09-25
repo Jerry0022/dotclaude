@@ -217,6 +217,35 @@ describe("R2 Q1: fixFor('triage') names the pinned pre-triage agent description"
   });
 });
 
+describe("R2 Q1: the triage format pinned in backlog.md satisfies the gate end to end", () => {
+  // Read from the skill doc itself, so a reworded Step 2.1 fails here
+  // instead of silently leaving every backlog run stuck at the triage gate.
+  const pinned = () => {
+    const doc = fs.readFileSync(new URL("../../skills/do-run/modes/backlog.md", import.meta.url), "utf8");
+    const m = doc.match(/pinned form `([^`]+)`/);
+    expect(m, "backlog.md Step 2.1 no longer pins the pre-triage description").not.toBeNull();
+    return m[1];
+  };
+
+  test("fixFor('triage') hints exactly the documented format", () => {
+    expect(OB.fixFor({ mode: "backlog" }, "triage", [])).toContain(pinned());
+  });
+
+  test("an Agent call titled in that format, recorded by post.run.contract, clears triage", () => {
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "auto", passes: [], items: ["12"] });
+    RC.record(dir, { k: "skill", name: "auto-agents" });
+    const open = () => RC.openObligations(RC.readContract(dir), RC.events(dir), "card").map((o) => o.ob);
+    expect(open()).toContain("triage");
+    const description = pinned().replace("<N>", "12").replace("<title>", "Fix the login redirect");
+    postMod.main({
+      cwd: dir, session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Agent",
+      tool_input: { subagent_type: "Explore", description, prompt: "classify #12" },
+      tool_response: {},
+    });
+    expect(open()).not.toContain("triage");
+  });
+});
+
 describe("R2 Q2: an implement-mode audit's analysis card must not close before work", () => {
   test("no work yet + auditResult 'implement' → the card is recorded but the run stays open", () => {
     RC.arm(dir, { mode: "audit", flow: "interactive", ship: "manual", passes: [], auditResult: "implement" });
