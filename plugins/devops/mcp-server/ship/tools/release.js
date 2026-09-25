@@ -198,6 +198,7 @@ export async function handler(params) {
           ...(landed.path && { path: landed.path }),
           ...(landed.noop && { noop: true }),
           ...(landed.branchSynced && { branchSynced: true }),
+          ...(landed.branchSyncWarning && { branchSyncWarning: landed.branchSyncWarning }),
         };
         result.delivered = "local-merge";
         result.warnings = [

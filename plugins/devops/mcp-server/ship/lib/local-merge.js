@@ -126,7 +126,12 @@ export function localMerge({ branch, base, strategy = "squash", message, cwd }) 
   // A ref move, not a reset: target's tree IS HEAD's tree, so index and working
   // tree already match it, and the old-value guard refuses if HEAD moved.
   if (target !== headSha) {
-    if (tryRun(["update-ref", `refs/heads/${branch}`, target, headSha], cwd) !== null) landed.branchSynced = true;
+    try {
+      run(["update-ref", `refs/heads/${branch}`, target, headSha], cwd);
+      landed.branchSynced = true;
+    } catch (e) {
+      landed.branchSyncWarning = firstLine(e);
+    }
   }
   return landed;
 }

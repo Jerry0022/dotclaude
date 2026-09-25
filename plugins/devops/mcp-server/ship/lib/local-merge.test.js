@@ -110,7 +110,10 @@ describe("localMerge — landing a branch on its local base without a remote", (
   test("after a squash the branch points at what landed, so the next ship needs no rebase", () => {
     git(["switch", "-q", "-c", "feat/k"]);
     commitFile("k.txt", "k\n", "feat: k");
-    const res = localMerge({ branch: "feat/k", base: "main", strategy: "squash", message: "feat: k", cwd: root });
+    // A message unlike the commit's: a same-second squash of one commit with the
+    // same message would BE that commit, bit for bit, and need no move.
+    const res = localMerge({ branch: "feat/k", base: "main", strategy: "squash", message: "feat: k (squashed)", cwd: root });
+    expect(res.branchSyncWarning).toBeUndefined();
     expect(res.branchSynced).toBe(true);
     expect(git(["rev-parse", "HEAD"])).toBe(res.mergeSha);
     commitFile("k2.txt", "k2\n", "feat: k2");
