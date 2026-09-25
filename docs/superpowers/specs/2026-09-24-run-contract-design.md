@@ -269,7 +269,7 @@ hook pays — the early exit only keeps the hook from adding work on top.
 | `mcp__plugin_devops_dotclaude-ship__ship_release` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`, `refine`, `triage` |
 | `mcp__plugin_devops_dotclaude-completion__render_completion_card`, variant ∈ `ship-successful · ready · ready-files · released · test`, no non-empty `pending`, no `concept` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`; `triage` for a backlog + presence contract with work |
 | Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file; an unreadable payload (`-`, `$var`, a missing file or one relative to a `cd` in the same command) is gated as final; post closes on it only under H's stricter rule (RT3-R2) |
-| Bash / PowerShell `gh pr merge`, `gh api -X PUT …/pulls/N/merge`, `git push` onto `main` / `master` (also `+main`), a bare `git push` / `git push origin HEAD` while HEAD is `main` / `master` (HEAD is resolved only under `ship: auto`); contract `ship: auto` | same as `ship_release` |
+| Bash / PowerShell `gh pr merge`, `gh api -X PUT …/pulls/N/merge`, `gh api graphql … mergePullRequest`, `git push` onto `main` / `master` (also `+main`, `+HEAD:main`), a bare `git push` / `git push origin` / `git push origin HEAD` while HEAD is `main` / `master` (HEAD is resolved only under `ship: auto`; a git error or timeout there reads as no release); contract `ship: auto` | same as `ship_release` |
 | GitHub MCP `mcp__*__merge_pull_request`, contract `ship: auto` | same as `ship_release` (hooks.json matcher `mcp__.*__merge_pull_request`, RT3-R4) |
 | final card, backlog, `presence`, `ship: manual` | additionally `refine` of every item in `items` |
 
@@ -287,16 +287,20 @@ looked through. Shell payloads are parsed again, up to 4 levels: `sh` /
 one holding a heredoc is text, so a commit / PR body never counts). Text
 inside quotes (`echo "git commit"`, `grep "gh pr merge"`) never matches.
 
-Also looked through (RT3): PowerShell `$x = …` assignments (the right-hand
-side is a command), bash `if` / `then` / `else` / `do` / `while` / `until`
-one-liners, PowerShell `{ … }` blocks, `iex` / `Invoke-Expression`, and line
-continuations (`\` / backtick + newline), joined before parsing. The shell is
-known from the tool: in the PowerShell tool the backtick is an escape, never a
-substitution. Heredoc bodies are data: a quoted delimiter's body is stripped,
-an unquoted one's is scanned only for `$(…)` / backticks, and a heredoc fed
-to a shell (`bash <<EOF`) is parsed as commands. PowerShell `@'…'@` is
-literal; `@"…"@` is scanned for `$(…)`. The parsed text is capped at 256 KB
-after heredoc stripping.
+Also looked through (RT3): PowerShell `$x = …` / `$x += …` assignments (the
+right-hand side is a command), the keywords `if` / `then` / `else` / `elif` /
+`elseif` / `do` / `while` / `until` / `for` / `foreach` / `try` / `catch` /
+`finally` before a command, PowerShell `(cond) { … }` blocks (`{` / `}` split
+commands there, so `} else { git commit }` is read) and `ForEach-Object { … }`
+/ `% { … }`, `iex` / `Invoke-Expression [-Command]`, and line continuations
+(`\` / backtick + newline), joined before parsing. The shell is known from the
+tool: in the PowerShell tool the backtick is an escape, never a substitution,
+and `$(…)` is code. Heredoc bodies are data: a quoted delimiter's body is
+stripped, an unquoted one's is scanned only for `$(…)` / backticks, a heredoc
+fed to a shell (`bash|sh|zsh|dash|ksh <<EOF`, `pwsh -Command - <<EOF`) is parsed
+as a script, and a heredoc without a terminator line is not stripped.
+PowerShell `@'…'@` is literal; `@"…"@` is scanned for `$(…)`. The parsed text
+is capped at 256 KB after heredoc stripping (`MAX_PARSE`).
 
 Contract root (H-B1, identical in pre and post): the session root first,
 then — for the MCP tools only (`ship_release` and the MCP card, which act on
@@ -470,6 +474,14 @@ runtime state to close:
   "git"; & $cmd commit`, `git $(echo commit)`) are out of scope; aliases and
   shell functions are not resolved.
 - `git commit-tree` (plumbing) is not a commit.
+- `git push --all` / `--mirror` can push `main` without being read as a
+  release.
+- PowerShell `for (…; …; …) { git commit }` is missed: the `;` inside the
+  parentheses splits the command. A command inside a PowerShell `if (…)`
+  condition (`if (git push origin main) { … }`) is not read either.
+- A heredoc whose terminator shares its line with the closing `)`
+  (`… EOF)`) is not stripped; that substitution falls back to "holds a
+  heredoc → text".
 - A failed `git commit` whose exit is masked by a later command
   (`git commit …; echo done`) reaches PostToolUse as a success and still
   records `commit` — the harness reports only the last exit (RT3-X1).
