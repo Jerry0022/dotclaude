@@ -52,6 +52,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { projectRoot, findRepoRoot, samePath } = require('../lib/project-root');
+const { GIT_TIMEOUT_MS } = require('../lib/git-timeout');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
@@ -275,7 +276,7 @@ const MERGE_CMD_RE = /\bgit\b[\s\S]*\b(?:merge|pull|cherry-pick|rebase|am|revert
 // `commit (merge)` ends in `)`, where `\b` cannot match — kept outside the \b group.
 const MERGE_SUBJECT_RE = /^(?:(?:merge|pull|cherry-pick|rebase|am|revert)\b|commit \(merge\))/;
 const MERGE_MAX_AGE_S = 30 * 60;
-const GIT_OPTS = { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
+const GIT_OPTS = { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
 
 /**
  * Files a merge-like HEAD move of THIS call brought into the checkout.
