@@ -202,3 +202,33 @@ describe("post.claude.budget — once per file per severity per context", () => 
     expect(runHook(dir, write(file, 40))).toContain("[claude-file-budget]");
   });
 });
+
+// A deep-knowledge report names the index generator by absolute path: in a
+// checkout of the plugin source the checkout's own — the installed copy can lag
+// the checkout whose INDEX.md it rewrites — everywhere else the installed one.
+describe("post.claude.budget — the index generator a report names", () => {
+  const slash = (p) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+
+  test("in the plugin source, the checkout's own generator", () => {
+    const dir = project();
+    fs.mkdirSync(path.join(dir, ".git"));
+    fs.mkdirSync(path.join(dir, "plugins", "devops", ".claude-plugin"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "plugins", "devops", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "devops" })
+    );
+    const doc = path.join(dir, "plugins", "devops", "deep-knowledge", "big.md");
+    expect(runHook(dir, write(doc, 700), { sessionId: nextSid() })).toContain(
+      `\`node "${slash(dir)}/plugins/devops/scripts/gen-dk-index.mjs" <dir>\``
+    );
+  });
+
+  test("in a project, the installed plugin's", () => {
+    const dir = project();
+    const installed = slash(process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", ".."));
+    const doc = path.join(dir, ".claude", "deep-knowledge", "big.md");
+    const context = runHook(dir, write(doc, 700), { sessionId: nextSid() });
+    expect(context).toContain(`\`node "${installed}/scripts/gen-dk-index.mjs" <dir>\``);
+    expect(context).not.toContain("{PLUGIN_ROOT}");
+  });
+});

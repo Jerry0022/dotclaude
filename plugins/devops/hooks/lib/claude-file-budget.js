@@ -24,7 +24,7 @@
  */
 
 const path = require('path');
-const { deepKnowledgePath } = require('./plugin-root');
+const { deepKnowledgePath, scriptPath } = require('./plugin-root');
 
 /**
  * Line budgets per file kind. `warn` is the re-route trigger from
@@ -73,10 +73,11 @@ const BUDGETS = {
     label: 'deep-knowledge',
     warn: 600,
     critical: null,
-    remedy:
+    // A function of the generator's absolute path, which buildInstruction picks.
+    remedy: ({ indexScript }) =>
       'Depth is the point here, so there is no hard ceiling — but a doc read in full\n' +
       '  costs its whole length every time. Split by topic and regenerate the index:\n' +
-      '  `node {PLUGIN_ROOT}/scripts/gen-dk-index.mjs <dir>`.',
+      `  \`node "${indexScript}" <dir>\`.`,
   },
 };
 
@@ -203,10 +204,20 @@ function buildSummary(file, result) {
 
 /** Instruction for Claude's context (stdout). Names the file, the overage,
  *  where the bulk belongs, and the norm — enough to act without a lookup.
- *  `docPath` is the norm's absolute path: a model that cannot resolve a
- *  plugin path searches the disk for it (CONVENTIONS.md, Script Conventions). */
-function buildInstruction(file, result, docPath = deepKnowledgePath('content-conventions.md')) {
+ *  Plugin files appear by absolute path: a model that cannot resolve a plugin
+ *  path searches the disk for it (CONVENTIONS.md, Script Conventions).
+ *  `docPath` is the norm; `sourceRoot` is the plugin source checkout the file
+ *  lives in, or null. There the index generator is the checkout's own — the
+ *  installed copy can lag the checkout whose INDEX.md it rewrites. */
+function buildInstruction(file, result, {
+  docPath = deepKnowledgePath('content-conventions.md'),
+  sourceRoot = null,
+} = {}) {
   const budget = BUDGETS[result.kind];
+  const indexScript = sourceRoot
+    ? scriptPath('gen-dk-index.mjs', path.join(sourceRoot, 'plugins', 'devops'))
+    : scriptPath('gen-dk-index.mjs');
+  const remedy = typeof budget.remedy === 'function' ? budget.remedy({ indexScript }) : budget.remedy;
   const growth =
     result.delta == null ? 'got rewritten in full' : `grew by ${result.delta} lines`;
   const ceiling =
@@ -219,7 +230,7 @@ function buildInstruction(file, result, docPath = deepKnowledgePath('content-con
     `${result.label} is now ${result.lines} lines against a ${result.budget}-line budget, ` +
       `and just ${growth}${ceiling}.`,
     '',
-    `  ${budget.remedy}`,
+    `  ${remedy}`,
     '',
     'Budgets, extraction categories, and the fix procedure:',
     `  ${docPath}`,

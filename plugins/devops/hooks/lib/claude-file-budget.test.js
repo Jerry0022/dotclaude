@@ -13,6 +13,11 @@ import {
 } from "./claude-file-budget.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// The installed plugin root as plugin-root.js resolves it: the hook env's
+// CLAUDE_PLUGIN_ROOT, else this lib's own plugin directory.
+const PLUGIN_DIR = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", ".."))
+  .replace(/\\/g, "/")
+  .replace(/\/+$/, "");
 
 const lines = n => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n") + "\n";
 
@@ -59,7 +64,9 @@ describe("classify", () => {
   test("every classified kind has a budget entry", () => {
     for (const kind of ["claude-md", "skill", "agent", "reference", "deep-knowledge"]) {
       expect(BUDGETS[kind], `missing budget for ${kind}`).toBeTruthy();
-      expect(BUDGETS[kind].remedy.length, `${kind} needs a written remedy`).toBeGreaterThan(40);
+      const { remedy } = BUDGETS[kind];
+      const text = typeof remedy === "function" ? remedy({ indexScript: "/p/scripts/gen-dk-index.mjs" }) : remedy;
+      expect(text.length, `${kind} needs a written remedy`).toBeGreaterThan(40);
     }
   });
 });
@@ -236,16 +243,28 @@ describe("messages", () => {
   // A hook message names a plugin file by its absolute path (CONVENTIONS.md):
   // a model that cannot resolve a plugin path searches the disk for it.
   test("the conventions pointer is an absolute path, never a placeholder", () => {
-    const root = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", ".."))
-      .replace(/\\/g, "/")
-      .replace(/\/+$/, "");
     const rows = buildInstruction(file, result).split("\n");
     const pointer = rows[rows.indexOf("Budgets, extraction categories, and the fix procedure:") + 1].trim();
-    expect(pointer).toBe(`${root}/deep-knowledge/content-conventions.md`);
+    expect(pointer).toBe(`${PLUGIN_DIR}/deep-knowledge/content-conventions.md`);
     expect(path.isAbsolute(pointer)).toBe(true);
     expect(rows.join("\n")).not.toContain("{PLUGIN_ROOT}");
     // Only a default: a given path is used as-is, so the function stays pure.
-    expect(buildInstruction(file, result, "/x/content-conventions.md")).toContain("\n  /x/content-conventions.md\n");
+    expect(buildInstruction(file, result, { docPath: "/x/content-conventions.md" })).toContain(
+      "\n  /x/content-conventions.md\n"
+    );
+  });
+
+  // The index generator is a plugin file too. In the plugin source it is the
+  // checkout's own: the installed copy can lag the checkout whose INDEX.md it
+  // rewrites.
+  test("deep-knowledge remedy names the index generator by absolute path", () => {
+    const dk = "/repo/.claude/deep-knowledge/notes.md";
+    const over = evaluate({ file: dk, content: lines(700), delta: 5 });
+    const installed = buildInstruction(dk, over);
+    expect(installed).toContain(`\`node "${PLUGIN_DIR}/scripts/gen-dk-index.mjs" <dir>\``);
+    expect(installed).not.toContain("{PLUGIN_ROOT}");
+    const source = buildInstruction("/src/plugins/devops/deep-knowledge/x.md", over, { sourceRoot: "/src" });
+    expect(source).toContain('`node "/src/plugins/devops/scripts/gen-dk-index.mjs" <dir>`');
   });
 
   test("critical instruction states the ceiling", () => {
