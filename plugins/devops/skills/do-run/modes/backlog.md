@@ -189,7 +189,11 @@ This is the only phase allowed to ask the user things and to write to GitHub.
 Everything decision-shaped happens here, while the user is still around.
 
 1. **Pre-triage** — spawn one lightweight analysis agent per queued issue (fan
-   out per `deep-knowledge/agent-orchestration.md`). Classify each:
+   out per `deep-knowledge/agent-orchestration.md`), each with a `description`
+   of the pinned form `Triage #<N> — <title>` (`N` the issue number). The run
+   contract's `triage` obligation (`deep-knowledge/run-contract.md`) only
+   counts an agent event whose `description` names "triage" — an
+   untitled or differently-worded call does not satisfy it. Classify each:
    - `ready` — actionable as a single-issue ship.
    - `needs-decision` — several viable implementation paths or an open
      product/UX question.
