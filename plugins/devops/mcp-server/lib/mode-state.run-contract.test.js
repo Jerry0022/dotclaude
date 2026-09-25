@@ -55,15 +55,9 @@ describe("readRunContractLine", () => {
     expect(readRunContractLine(cwd)).toMatch(/^🧾 Run · Prompt/);
   });
 
-  // AUD-011: a card rendered without a session_id must not show another
-  // session's contract just because the asking session id is missing.
+  // AUD-011: a card rendered with an EXPLICIT, genuinely different session
+  // id must not show another session's contract.
   describe("AUD-011: session ownership", () => {
-    test("null session id + a header that stores one → null", () => {
-      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
-      RC.record(cwd, { k: "edit" });
-      expect(readRunContractLine(cwd, "de", null)).toBeNull();
-    });
-
     test("a foreign session id → null", () => {
       RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
       RC.record(cwd, { k: "edit" });
@@ -74,6 +68,36 @@ describe("readRunContractLine", () => {
       RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
       RC.record(cwd, { k: "edit" });
       expect(readRunContractLine(cwd, "de", "owner-session")).toMatch(/^🧾 Run · Prompt/);
+    });
+  });
+
+  // R9: the model never sends the harness's real session id on
+  // render_completion_card — it sends "self", a Desktop `local_…` id, or
+  // nothing. None of the three can be a genuine foreign session's id, so
+  // they must resolve to the owning session, not be hidden by AUD-011.
+  describe("R9: self/local_/missing session markers resolve to the owner", () => {
+    test("missing (null) session id + a header that stores one → still renders", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", null)).toMatch(/^🧾 Run · Prompt/);
+    });
+
+    test('"self" (ccd_session convention) → renders', () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", "self")).toMatch(/^🧾 Run · Prompt/);
+    });
+
+    test("a Desktop local_… id → renders", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", "local_abc123")).toMatch(/^🧾 Run · Prompt/);
+    });
+
+    test("a truly foreign session id still hides the line", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", "some-other-real-session")).toBeNull();
     });
   });
 });

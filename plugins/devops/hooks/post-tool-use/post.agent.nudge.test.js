@@ -168,6 +168,80 @@ describe("post.agent.nudge", () => {
     expect(out).not.toBe("");
   });
 
+  // R14a: a path outside the session's own work tree, mixed in with in-tree
+  // edits, must not count toward the 6.
+  test("R14a: an out-of-tree path in the transcript does not count toward 6", () => {
+    const dir = project();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "agent-nudge-outside-"));
+    dirs.push(outside);
+    const inTree = Array.from({ length: 5 }, (_, i) => path.join(dir, `r14a-${i}.js`));
+    const entries = [
+      promptEntry("R14a prompt"),
+      editEntry("Edit", path.join(outside, "scratch.js")),
+      ...inTree.map((p) => editEntry("Edit", p)),
+    ];
+    const t = writeTranscript(dir, entries);
+    // 5 in-tree files from the transcript + the current call = 6 distinct
+    // in-tree files; the out-of-tree one must not have pushed it to 7 (silent).
+    expect(run(hookFor(dir, t, path.join(dir, "r14a-5.js")))).not.toBe("");
+  });
+
+  // R14c: a scheduled-task / machine-driven turn stays silent even past 6
+  // distinct files — nobody to mention the skill to.
+  test("R14c: a scheduled-task turn stays silent", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `sched${i}.js`));
+    const entries = [
+      { type: "user", message: { role: "user", content: "<scheduled-task>nightly housekeeping run</scheduled-task>" } },
+      ...files.map((p) => editEntry("Edit", p)),
+    ];
+    const t = writeTranscript(dir, entries);
+    expect(run(hookFor(dir, t, path.join(dir, "sched5.js")))).toBe("");
+  });
+
+  // R14c: any devops skill (not just auto-agents) already running this turn
+  // suppresses the nudge.
+  test("R14c: a different devops skill invoked this turn: silent", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `sk${i}.js`));
+    const entries = [promptEntry("R14c skill prompt"), skillEntry("devops:do-ship"), ...files.map((p) => editEntry("Edit", p))];
+    const t = writeTranscript(dir, entries);
+    expect(run(hookFor(dir, t, path.join(dir, "sk5.js")))).toBe("");
+  });
+
+  // R14b: a typed /auto-agents slash command (no Skill tool_use) suppresses
+  // the nudge just like invoking the Skill tool would.
+  test("R14b: a typed /auto-agents slash command: silent", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `cmd${i}.js`));
+    const commandEntry = {
+      type: "user",
+      message: {
+        role: "user",
+        content: "<command-name>/auto-agents</command-name>\n<command-message>auto-agents</command-message>\n<command-args></command-args>",
+      },
+    };
+    const entries = [commandEntry, ...files.map((p) => editEntry("Edit", p))];
+    const t = writeTranscript(dir, entries);
+    expect(run(hookFor(dir, t, path.join(dir, "cmd5.js")))).toBe("");
+  });
+
+  // R14d: a sliding transcript tail could otherwise recount to exactly 6
+  // twice in one turn; the once-per-turn marker must suppress the second.
+  test("R14d: the nudge fires only once per turn even if recomputed at exactly 6 again", () => {
+    const dir = project();
+    const files = Array.from({ length: 5 }, (_, i) => path.join(dir, `once${i}.js`));
+    const entries = [promptEntry("R14d prompt"), ...files.map((p) => editEntry("Edit", p))];
+    const t = writeTranscript(dir, entries);
+    const sixth = path.join(dir, "once5.js");
+    const first = run(hookFor(dir, t, sixth));
+    expect(first).not.toBe("");
+    // Same turn (same session + cwd + opening prompt), same transcript state
+    // (files.size recomputes to exactly 6 again) — must stay silent now.
+    const second = run(hookFor(dir, t, sixth));
+    expect(second).toBe("");
+  });
+
   test("e2e: malformed stdin exits 0 silently", () => {
     const { spawnSync } = require("node:child_process");
     const dir = project();

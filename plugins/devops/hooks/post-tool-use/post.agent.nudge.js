@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.agent.nudge
- * @version 0.1.0
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -9,19 +9,25 @@
  *   files without ever spawning an auto-agent, and nothing points that out —
  *   the delegation policy (deep-knowledge/agent-proactivity.md) is prompt-
  *   level advice only. At the 6th DISTINCT file a turn changes, this hook
- *   tells Claude once, via `hookSpecificOutput.additionalContext`, to OFFER
- *   the `auto-agents` skill — never to auto-start it (offer vs. auto-start,
- *   agent-proactivity.md § Full ceremony).
+ *   tells Claude once, via `hookSpecificOutput.additionalContext`, to
+ *   MENTION the `auto-agents` skill in one sentence — never to auto-start it
+ *   or to stall on it (offer vs. auto-start, agent-proactivity.md § Full
+ *   ceremony).
  *
  *   Distinct files are counted from the transcript, scoped to the current
  *   turn by walking backward to the turn's opening user-prompt entry — the
  *   same turn-boundary walk `lib/skill-invocations.js#skillInvokedThisTurn`
- *   and `lib/card-guard.js#showWidgetCalledThisTurn` use. Because the count
- *   is recomputed fresh from the transcript every call (never a session
- *   counter that needs resetting), a new user turn resets it for free — no
- *   extra UserPromptSubmit hook needed. The nudge fires the one call where
- *   the running distinct-file count first reaches 6; it stays silent before
- *   and after (a 7th+ file sees the count already past 6).
+ *   and `lib/card-guard.js#showWidgetCalledThisTurn` use, and filtered to the
+ *   session's own work tree (R14a) the same way the CURRENT call's file is.
+ *   Because the count is recomputed fresh from the transcript every call
+ *   (never a session counter that needs resetting), a new user turn resets
+ *   it for free — no extra UserPromptSubmit hook needed. The nudge fires the
+ *   one call where the running distinct-file count first reaches exactly 6;
+ *   it stays silent before and after. A once-per-turn marker (R14d), keyed
+ *   by the turn's opening prompt text, additionally guards against firing
+ *   twice: the transcript is only read as a 1 MB tail, so on a very long
+ *   turn older edits can slide out of the tail and the running count can
+ *   drop back to exactly 6 a second time.
  *
  *   Silent when: the call is a subagent's (`hook.agent_id` set — a subagent's
  *   edits are not the parent's turn, same rule `post.flow.completion.js`
@@ -30,9 +36,15 @@
  *   `post.flow.completion.js#inOwnWorkTree`, copied locally since that file
  *   exports nothing); a run contract is active for this session
  *   (`lib/run-contract.js#readContract` — the run's own delegation gates
- *   apply instead); the `auto-agents` skill was already invoked via the
- *   Skill tool this turn; or the delegation kill switch
- *   (`lib/delegation.js`) resolves to `off`.
+ *   apply instead); the turn was not typed by the user — silent, machine, or
+ *   a scheduled task (R14c, `lib/non-user-prompt.js`'s classifiers, same as
+ *   `stop.guide.handoff.js#isMachineDrivenTurn` — nobody to nudge); ANY
+ *   devops skill (not just `auto-agents`) already ran this turn, via the
+ *   Skill tool OR a typed slash command (R14b/c,
+ *   `lib/skill-invocations.js#skillInvokedThisTurn`'s command-name scan
+ *   already covers a typed `/auto-agents`); the nudge already fired this
+ *   turn (R14d); or the delegation kill switch (`lib/delegation.js`)
+ *   resolves to `off`.
  *
  *   Never blocks: every failure path exits 0 silently.
  */
@@ -41,15 +53,34 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { projectRoot, findRepoRoot, samePath } = require('../lib/project-root');
-const { readContract } = require('../lib/run-contract');
-const { readDelegation } = require('../lib/delegation');
-const { safeReadTranscript } = require('../lib/card-guard');
-const { skillInvokedThisTurn, isPromptEntry } = require('../lib/skill-invocations');
-const { isDevopsSkill } = require('../lib/skill-names');
+const crypto = require('crypto');
 
 const NUDGE_AT = 6;
 const TRANSCRIPT_TAIL_BYTES = 1024 * 1024;
+const FIRED_FLAG_PREFIX = 'dotclaude-devops-agent-nudge-fired';
+
+// R15 part 2: these sibling lib requires sat unguarded at module scope — a
+// load error during a plugin update (a half-written file, a version skew
+// mid-update) crashed this hook on every single Edit/Write/NotebookEdit
+// call. Guarded here so a load error instead makes `run()` a silent no-op,
+// same as every other failure path.
+let projectRoot, findRepoRoot, samePath, readContract, readDelegation, safeReadTranscript,
+  skillInvokedThisTurn, isPromptEntry, lastUserPromptText, namespaceOf, isOldName,
+  isSilent, isMachineTurn, isScheduledTask, isMachinePrompt, sessionFile, readSessionFile, writeSessionFile;
+let loadError = false;
+try {
+  ({ projectRoot, findRepoRoot, samePath } = require('../lib/project-root'));
+  ({ readContract } = require('../lib/run-contract'));
+  ({ readDelegation } = require('../lib/delegation'));
+  ({ safeReadTranscript } = require('../lib/card-guard'));
+  ({ skillInvokedThisTurn, isPromptEntry, lastUserPromptText } = require('../lib/skill-invocations'));
+  ({ namespaceOf, isOldName } = require('../lib/skill-names'));
+  ({ isSilent, isMachineTurn, isScheduledTask } = require('../user-prompt-submit/prompt.flow.silent-turn'));
+  ({ isMachinePrompt } = require('../lib/batch-state'));
+  ({ sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id'));
+} catch {
+  loadError = true;
+}
 
 /** A subagent's tool call: the harness sets `agent_id`, but keeps the PARENT's session_id. */
 function isSubagentCall(hook) {
@@ -137,7 +168,12 @@ function editedFilesThisTurn(transcriptContent, cwd) {
       const input = block.input && typeof block.input === 'object' ? block.input : {};
       const p = editedPathOf(m[1], input);
       if (!p) continue;
-      try { out.add(path.resolve(cwd || process.cwd(), String(p))); } catch { /* skip */ }
+      let abs;
+      try { abs = path.resolve(cwd || process.cwd(), String(p)); } catch { continue; }
+      // R14a: a memory / scratchpad / out-of-repo path must not count toward
+      // the 6, same rule as the CURRENT call's own file below.
+      if (!inOwnWorkTree(abs, cwd)) continue;
+      out.add(abs);
     }
   }
   return out;
@@ -149,10 +185,50 @@ function buildNudge() {
       hookEventName: 'PostToolUse',
       additionalContext:
         '[agent-nudge] This turn has changed 6+ distinct files without auto-agents. ' +
-        'Per deep-knowledge/agent-proactivity.md, OFFER the `auto-agents` skill in one ' +
-        'sentence (never auto-start it) — let the user decide before continuing.',
+        'Per deep-knowledge/agent-proactivity.md, mention the `auto-agents` skill in one ' +
+        'sentence (never auto-start it) and continue.',
     },
   });
+}
+
+/** Turn opened by a cron / loop / scheduled task / notification, or an
+ *  explicitly silent one — nobody to nudge. Same classifiers as
+ *  `stop.guide.handoff.js#isMachineDrivenTurn`. */
+function isMachineDrivenTurn(transcript) {
+  const prompt = lastUserPromptText(transcript);
+  if (!prompt) return false;
+  return isSilent(prompt) || isMachinePrompt(prompt) || isMachineTurn(prompt) || isScheduledTask(prompt);
+}
+
+/** Did THIS turn already invoke ANY devops skill (not just `auto-agents`),
+ *  via the Skill tool or a typed slash command? A turn that is already
+ *  delegating — to any devops skill — needs no nudge toward one. */
+function anyDevopsSkillInvokedThisTurn(transcript) {
+  return skillInvokedThisTurn(transcript, (input) => {
+    const raw = input && input.skill;
+    if (typeof raw !== 'string' || !raw.trim()) return false;
+    const ns = namespaceOf(raw);
+    if (ns) return ns === 'devops';
+    return !isOldName(raw);
+  });
+}
+
+/** R14d: has the nudge already fired this turn? Keyed by session + cwd + the
+ *  turn's opening prompt text, so a fresh turn (new prompt) always gets a
+ *  fresh marker even though the 1 MB transcript tail can make the running
+ *  distinct-file count dip back below 6 and cross it again later. */
+function firedMarkerKey(hook, transcript) {
+  const prompt = lastUserPromptText(transcript);
+  const raw = `${hook.session_id || ''}|${hook.cwd || ''}|${prompt}`;
+  return crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20);
+}
+
+function alreadyFiredThisTurn(key) {
+  try { return readSessionFile(FIRED_FLAG_PREFIX, key, { exact: true }) !== null; } catch { return false; }
+}
+
+function markFiredThisTurn(key) {
+  try { writeSessionFile(sessionFile(FIRED_FLAG_PREFIX, key), '1'); } catch { /* best effort */ }
 }
 
 /**
@@ -164,6 +240,7 @@ function buildNudge() {
  */
 function run(hook) {
   try {
+    if (loadError) return '';
     if (!hook || typeof hook !== 'object') return '';
     if (isSubagentCall(hook)) return '';
 
@@ -181,14 +258,17 @@ function run(hook) {
     if (delegation.mode === 'off') return '';
 
     const transcript = safeReadTranscript(hook.transcript_path, TRANSCRIPT_TAIL_BYTES);
-    if (skillInvokedThisTurn(transcript, (input) => isDevopsSkill(input && input.skill, 'auto-agents'))) {
-      return '';
-    }
+    if (isMachineDrivenTurn(transcript)) return '';
+    if (anyDevopsSkillInvokedThisTurn(transcript)) return '';
 
     const files = editedFilesThisTurn(transcript, cwd);
     files.add(path.resolve(cwd, String(filePath)));
+    if (files.size !== NUDGE_AT) return '';
 
-    return files.size === NUDGE_AT ? buildNudge() : '';
+    const key = firedMarkerKey(hook, transcript);
+    if (alreadyFiredThisTurn(key)) return '';
+    markFiredThisTurn(key);
+    return buildNudge();
   } catch {
     return '';
   }
