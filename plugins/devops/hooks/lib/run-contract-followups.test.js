@@ -20,6 +20,8 @@ const { cli } = require("./run-contract-cli.js");
 const P = require("../pre-tool-use/pre.run.contract.js");
 const C = require("./run-contract-calls.js");
 const postMod = require("../post-tool-use/post.run.contract.js");
+const OB = require("./run-contract-obligations.js");
+const A = require("./run-contract-answers.js");
 
 let dir;
 const git = (...a) => execFileSync("git", a, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -204,4 +206,144 @@ describe("AUD-023: the release gate's git cost on a real multi-file diff", () =>
     // No wall-time assertion: under a loaded machine the same 3 spawns took
     // seconds (#502). The measured numbers live in the design spec's Limits.
   }, 120_000);
+});
+
+// ── red-team round 2 (2026-09-25-run-contract-followups) ──────────────────
+
+describe("R2 Q1: fixFor('triage') names the pinned pre-triage agent description", () => {
+  test("hints the exact backlog.md Step 2.1 format so a blocked model can satisfy it", () => {
+    const hint = OB.fixFor({ mode: "backlog" }, "triage", []);
+    expect(hint).toContain("Triage #<N> — <title>");
+  });
+});
+
+describe("R2 Q2: an implement-mode audit's analysis card must not close before work", () => {
+  test("no work yet + auditResult 'implement' → the card is recorded but the run stays open", () => {
+    RC.arm(dir, { mode: "audit", flow: "interactive", ship: "manual", passes: [], auditResult: "implement" });
+    postMod.recordCard(dir, "analysis", false, RC, {});
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("work done + nothing open + auditResult 'implement' → the card still closes", () => {
+    RC.arm(dir, { mode: "audit", flow: "interactive", ship: "manual", passes: [], auditResult: "implement" });
+    RC.record(dir, { k: "edit" });
+    postMod.recordCard(dir, "analysis", false, RC, {});
+    expect(RC.readContract(dir)).toBeNull();
+  });
+
+  test("no work yet + auditResult 'concept' (unaffected) → the card still closes as before", () => {
+    RC.arm(dir, { mode: "audit", flow: "interactive", ship: "manual", passes: [], auditResult: "concept" });
+    postMod.recordCard(dir, "analysis", false, RC, {});
+    expect(RC.readContract(dir)).toBeNull();
+  });
+});
+
+describe("R2 Q2: parseFollowUp maps the exact do-run 'Ergebnis' labels to auditResult", () => {
+  const q = [{ header: "Ergebnis", question: "Ergebnis" }];
+  test.each([
+    ["Audit umsetzen (Recommended)", "implement"], // SKILL.md F1
+    ["Audit als Concept", "concept"], // SKILL.md F1
+    ["Audit + Umsetzung (Recommended)", "implement"], // modes/audit.md Q2 (de)
+    ["Audit + implementation (Recommended)", "implement"], // modes/audit.md Q2 (en)
+    ["Audit als DevOps-Concept", "concept"], // modes/audit.md Q2 (de)
+    ["Audit as DevOps concept", "concept"], // modes/audit.md Q2 (en)
+  ])("%s → %s", (label, expected) => {
+    const patch = A.parseFollowUp(q, { Ergebnis: label });
+    expect(patch.auditResult).toBe(expected);
+  });
+});
+
+describe("R2 Q5: a budget-cut transcript walk must not arm from an incomplete answer", () => {
+  test("linesBackward sets stats.stoppedOnBudget only when the budget (not the file end) stopped it", () => {
+    const file = path.join(dir, "transcript.jsonl");
+    fs.writeFileSync(file, "line one\nline two\nline three\n");
+    const expiredBudget = { expired: () => true };
+    const stoppedStats = {};
+    expect([...C.linesBackward(file, { budget: expiredBudget, stats: stoppedStats })]).toEqual([]);
+    expect(stoppedStats.stoppedOnBudget).toBe(true);
+
+    const openStats = {};
+    const lines = [...C.linesBackward(file, { budget: { expired: () => false }, stats: openStats })];
+    expect(lines.length).toBeGreaterThan(0);
+    expect(openStats.stoppedOnBudget).toBeFalsy();
+  });
+
+  test("routerFromTranscript propagates stoppedOnBudget through the info out-param", () => {
+    const file = path.join(dir, "transcript.jsonl");
+    fs.writeFileSync(file, "not json\n");
+    const info = {};
+    C.routerFromTranscript(file, null, RC, { expired: () => true }, info);
+    expect(info.stoppedOnBudget).toBe(true);
+  });
+
+  test("armFromPending returns null and keeps the marker when the walk was cut short", () => {
+    const fakeRC = {
+      pendingArm: () => ({ at: "2026-01-01T00:00:00.000Z", args: "", sessionId: "s1" }),
+      readContract: () => null,
+      clearPendingArm: vi.fn(),
+      arm: vi.fn(() => ({ id: "x" })),
+      parseRouterAnswers: vi.fn(),
+      applyFollowUp: vi.fn(),
+      answeredFields: vi.fn(),
+    };
+    const fakeC = {
+      routerFromTranscript: (transcriptPath, sinceIso, rc, budget, info) => {
+        if (info) info.stoppedOnBudget = true;
+        return null;
+      },
+    };
+    const result = P.armFromPending({ transcript_path: "/fake" }, dir, fakeRC, fakeC, "s1", {});
+    expect(result).toBeNull();
+    expect(fakeRC.clearPendingArm).not.toHaveBeenCalled();
+    expect(fakeRC.arm).not.toHaveBeenCalled();
+  });
+});
+
+describe("R2 Q6: the corrupt/expiry notice survives an exit-2 (BLOCKED) call", () => {
+  test("a refused call's stderr still carries the one-shot notice", () => {
+    // A corrupt header quarantines to run-contract.json.corrupt.pending and
+    // leaves the notice queued (R5); arm a fresh contract with an open
+    // obligation so the very same call also hits a gate and exits 2.
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "manual", passes: [], presence: false });
+    fs.writeFileSync(path.join(dir, ".claude", "run-contract.json.corrupt.pending"), "");
+    // auto-agents deliberately never ran → the commit gate is open.
+    const hook = {
+      cwd: dir, session_id: "s1", hook_event_name: "PreToolUse",
+      tool_name: "Bash", tool_input: { command: "git commit -m x" },
+    };
+    const res = require("node:child_process").spawnSync(process.execPath, [require.resolve("../pre-tool-use/pre.run.contract.js")], {
+      input: JSON.stringify(hook), cwd: dir, encoding: "utf8",
+    });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain("BLOCKED at commit");
+  });
+});
+
+describe("R2 Q9: originMatches also accepts a fork's upstream remote", () => {
+  test("origin is the fork, upstream is the real repo → a merge into upstream still matches", () => {
+    git("remote", "add", "origin", "https://github.com/me/fork.git");
+    git("remote", "add", "upstream", "git@github.com:acme/real.git");
+    expect(C.originMatches(dir, "acme", "real")).toBe(true);
+  });
+
+  test("neither origin nor any other remote matches → still dropped", () => {
+    git("remote", "add", "origin", "https://github.com/me/fork.git");
+    expect(C.originMatches(dir, "someone-else", "other-repo")).toBe(false);
+  });
+});
+
+describe("R2 Q10: a defensive `done` without an active contract must not fail", () => {
+  test("no active contract → exit 0, ok:true, closed:false", () => {
+    const d = runCli("done");
+    expect(d.code).toBe(0);
+    expect(d.out).toEqual({ ok: true, closed: false, reason: "no active contract" });
+  });
+
+  test("an active contract with open obligations and no --reason still refuses (unchanged)", () => {
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "manual", passes: [], presence: false });
+    RC.record(dir, { k: "edit" }); // auto-agents never ran → open at the card gate
+    const d = runCli("done");
+    expect(d.code).toBe(1);
+    expect(d.out.error).toContain("auto-agents");
+  });
 });

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-answers
- * @version 0.1.0
+ * @version 0.1.1
  * @plugin devops
  * @description Run-contract answer extraction: the do-run router / follow-up
  *   AskUserQuestion parsing (spec B) and the machine-prompt parsing
@@ -391,8 +391,12 @@ function parseFollowUp(questions, answers) {
     if (/^ergebnis$/i.test(h)) {
       hit = true;
       const s = tokens.join(' ').toLowerCase();
+      // R2 (red-team round 2 Q2): SKILL.md F1 ("Audit umsetzen") and
+      // modes/audit.md Q2 ("Audit + Umsetzung (Recommended)") use different
+      // German nouns/verbs for the same choice — "umsetz" (not "umsetzen")
+      // covers both "umsetzen" and "Umsetzung".
       if (/concept/.test(s)) { patch.auditResult = 'concept'; patch.passes = []; }
-      else if (/umsetzen|implement/.test(s)) patch.auditResult = 'implement';
+      else if (/umsetz|implement/.test(s)) patch.auditResult = 'implement';
     } else if (MILESTONES_HEADER_RE.test(h)) {
       hit = true;
       // H-B7: only a real selection patches — an empty / "Other" answer

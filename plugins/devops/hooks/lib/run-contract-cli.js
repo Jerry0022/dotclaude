@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.3.0
+ * @version 0.3.1
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
  *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
@@ -81,6 +81,15 @@ const CLI_COMMANDS = {
   },
   done({ cwd, now, reason, write, fail }) {
     const c = readContract(cwd, { now });
+    // R2 (red-team round 2 Q10): a defensive cleanup `done` (no active
+    // contract at all) has nothing to refuse and nothing to close — it must
+    // not exit 1. Only a contract that EXISTS and stays open (refused below)
+    // keeps the non-zero exit; `ok:true` and exit 1 together used to mislead
+    // a caller reading only the exit code into believing the run failed.
+    if (!c) {
+      write({ ok: true, closed: false, reason: 'no active contract' });
+      return 0;
+    }
     // AUD-010: measured before deciding — `done` must not close a run while
     // qa is owed just because nobody ever asked git for the diff.
     const codeFilesChanged = c ? measureQa(cwd, 'card', undefined, { totalMs: TOTAL_GIT_BUDGET_MS }) : null;

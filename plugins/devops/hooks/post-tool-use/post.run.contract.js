@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.4.0
+ * @version 0.4.1
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
@@ -91,7 +91,14 @@ function recordCard(root, variant, final, RC, s, { unreadable = false, pending =
     const h = RC.readContract(root, s);
     if (!h || h.mode !== 'audit') return;
     const evs = RC.events(root);
-    if (!RC.segmentHasWork(evs) || !RC.openObligations(h, evs, 'card').length) {
+    const hasWork = RC.segmentHasWork(evs);
+    // R2 (red-team round 2 Q2): auditResult 'implement' means the run owes a
+    // fix — an implement-mode audit's lenses can render an interim `analysis`
+    // card before the first Edit/commit (a turn boundary mid-lens-run). That
+    // must not close the run early and skip harden/polish/do-ship; only a
+    // 'concept' (or unset) audit result may close on a no-work analysis card.
+    if (h.auditResult === 'implement' && !hasWork) return;
+    if (!hasWork || !RC.openObligations(h, evs, 'card').length) {
       RC.close(root, 'done: final card', s);
     }
     return;

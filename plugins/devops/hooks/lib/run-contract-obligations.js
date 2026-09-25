@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.3.0
+ * @version 0.3.1
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -203,7 +203,7 @@ function fixFor(contract, ob, allEvs, item) {
         ? `Skill("devops:do-ship", "${queuedArg(contract, allEvs)} --keep")`
         : 'Skill("devops:do-ship")') + '   ← never the ship_* MCP tools directly';
     case 'refine': return `Skill("devops:auto-issue", "#${item} <refine before shipping>")`;
-    case 'triage': return 'Agent(...) pre-triage agents per do-run modes/backlog.md Step 2';
+    case 'triage': return 'Agent(..., description: "Triage #<N> — <title>") per do-run modes/backlog.md Step 2.1';
     default: return '';
   }
 }

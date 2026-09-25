@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.0
+ * @version 0.4.1
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -121,7 +121,15 @@ function armFromPending(hook, root, RC, C, sessionId, budget) {
   // R1: a do-run that skipped the router (resume, machine prompt, backlog's
   // own sub-run) never replaces the contract the user already chose.
   if (RC.readContract(root, { sessionId })) { RC.clearPendingArm(root); return null; }
-  const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC, budget);
+  const info = { stoppedOnBudget: false };
+  const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC, budget, info);
+  // R2 (red-team round 2 Q5): the budget cut the transcript walk short — arming
+  // now would either use an incomplete router chain (found but partial) or
+  // fall through to the click-through defaults though the real answers may
+  // still be further back. Neither is the user's actual choice, so this call
+  // arms nothing and — critically — keeps the marker: the NEXT gated call
+  // (a fresh budget) retries the walk instead of silently losing the arm.
+  if (info.stoppedOnBudget) return null;
   let fields = null;
   let source = 'router';
   if (found) {
@@ -169,13 +177,25 @@ function main(hook) {
   const RC = require('../lib/run-contract');
   // R5: deliver the corrupt/expiry one-shot notice here too, independent of
   // whether this call hits a gate — PreToolUse never blocks on it (H-F20).
+  // R2 (red-team round 2 Q6): the notice is consumed (one-shot) right here,
+  // but must NOT go to stdout yet — Claude Code ignores stdout on an exit-2
+  // hook result, so writing it immediately loses the notice on every gate
+  // this same call goes on to hit. `ok()` emits it on the exit-0 paths below;
+  // the exit-2 paths append it to the stderr block instead.
   const notice = RC.expiryNotice(root, { sessionId: hook.session_id || null });
-  if (notice) {
-    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notice } })}\n`);
-  }
+  const ok = () => {
+    if (notice) {
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notice } })}\n`);
+    }
+    return 0;
+  };
+  const blocked = (msg) => {
+    process.stderr.write(`${msg}${notice ? `\n\n${notice}` : ''}\n`);
+    return 2;
+  };
 
   const call = classify(hook, root, cwd, C);
-  if (!call) return 0;
+  if (!call) return ok();
 
   const sessionId = hook.session_id || null;
   if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
@@ -183,8 +203,7 @@ function main(hook) {
     // contract is active yet (record() needs one) — the batch marker itself
     // is that trace then.
     RC.record(root, { k: 'block', gate: 'batch', open: [] }, { sessionId });
-    process.stderr.write(`${batchBlock(RC)}\n`);
-    return 2;
+    return blocked(batchBlock(RC));
   }
 
   // R12: ONE overall deadline for the whole invocation — before this it
@@ -202,14 +221,14 @@ function main(hook) {
     contract = RC.readContract(r, { sessionId });
     if (contract) { croot = r; break; }
   }
-  if (!contract) return 0;
+  if (!contract) return ok();
   // AUD-019: the same deadline also bounds every git call this gated call
   // makes (base resolution, diffs, ls-files, the pushHead branch check) — an
   // expired budget reads as unknown (never a block), it just stops asking git.
   if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget)) {
     call.gates.push('release');
   }
-  if (!call.gates.length) return 0;
+  if (!call.gates.length) return ok();
   const evs = RC.events(croot);
   const seg = RC.currentSegment(contract, evs);
   const gitRoot = inputRoot || root;
@@ -244,10 +263,9 @@ function main(hook) {
     if (armed && armed.source === 'fallback') {
       msg += `\nNote: this contract was armed from the click-through defaults (the do-run answers were not found). Wrong? ${RC.rearmHint()}`;
     }
-    process.stderr.write(`${msg}\n`);
-    return 2;
+    return blocked(msg);
   }
-  return 0;
+  return ok();
 }
 
 if (require.main === module) {
@@ -269,4 +287,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { safeBase, resolveBase, codeFilesChanged };
+module.exports = { safeBase, resolveBase, codeFilesChanged, armFromPending };
