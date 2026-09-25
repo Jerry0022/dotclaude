@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.2.1
+ * @version 0.3.0
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -55,11 +55,36 @@
  *   from a successful read whose bytes fail to parse. Only the latter is
  *   ever quarantined; a read error leaves the header alone and this call
  *   just sees "no contract", same as any other transient fs hiccup.
+ * RT2-Q3 (lock deadline vs spin): `acquireLock()`'s two EEXIST branches
+ *   (stat/read failing, and `takeoverStaleLock()` returning false) now hit
+ *   the same deadline check + sleep as every other retry before looping —
+ *   an unreadable/unrenamable stale lock (Windows) no longer spins at
+ *   100% CPU forever; it gives up at `lockWaitMs` like any other contention.
+ * RT2-Q7a (update() vs a lock it lost): `update()` can lose its header lock
+ *   to the 1 s stale-lock takeover while still mid read-modify-write; a
+ *   close() landing AFTER `update()`'s own "fresh" read but BEFORE its write
+ *   used to be silently dropped. `update()` now re-reads the header once
+ *   more, immediately before the atomic write and still under whatever lock
+ *   it holds, and refuses ONLY the write that would drop a closedAt the
+ *   fresh read never saw (a close landing before the fresh read already
+ *   survives — `next` merges fresh's closedAt through untouched).
+ * RT2-Q7b (quarantine rename-back): `renameSync` REPLACES an existing
+ *   target on both Windows and POSIX, so putting a false-positive
+ *   quarantine copy back could clobber a header a concurrent `arm()` wrote
+ *   at the live path in the meantime. `quarantineCorrupt()` now checks the
+ *   live path is still empty right before the rename-back and keeps the
+ *   quarantined copy instead of overwriting an occupied one.
+ * RT2-Q4 (worktree root, display-only guard): the header now carries `root`
+ *   — the work-tree root `arm()` ran in — so `mode-state.js`'s lenient
+ *   sessionId path (a run-contract.json Desktop copied into a fresh
+ *   worktree) can tell it apart from this worktree's own contract. A header
+ *   without the field (written before this change) reads back `root: null`
+ *   and behaves exactly as before.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { projectClaudeDir } = require('./project-root');
+const { projectClaudeDir, projectRoot } = require('./project-root');
 
 const FILES = Object.freeze({
   header: 'run-contract.json',
@@ -110,6 +135,13 @@ const DEFAULT_HEADER = Object.freeze({
   // auto-compact trigger is "grown past the cap since then", not "still
   // above the cap" (see compactEvents()).
   compactedAtLines: 0,
+  // RT2-Q4: the work-tree root arm() ran in (project-root.js), normalised.
+  // Desktop can copy an untracked run-contract.json from the main checkout
+  // into a fresh worktree; mode-state.js's lenient sessionId path uses this
+  // to tell "this worktree's own contract" from a copied-in stranger's. A
+  // header written before this field existed reads back as null and the
+  // lenient path behaves exactly as it always has.
+  root: null,
 });
 
 // ── paths / io ─────────────────────────────────────────────────────────────
@@ -302,8 +334,25 @@ function acquireLock(cwd, opts = {}) {
         try {
           st = fs.statSync(file);
           content = fs.readFileSync(file, 'utf8');
-        } catch { continue; } // lock vanished between EEXIST and stat/read: retry now
-        if (Date.now() - st.mtimeMs > staleMs) { takeoverStaleLock(file, content); continue; }
+        } catch {
+          // Q3: lock vanished, or is unreadable (Windows: a stale lock whose
+          // stat/read keeps throwing) between EEXIST and stat/read. Retry,
+          // but through the SAME deadline check + sleep every other branch
+          // uses — without it this spins at 100% CPU forever instead of
+          // giving up at lockWaitMs.
+          if (Date.now() >= deadline) return null;
+          sleepSync(LOCK_RETRY_MS);
+          continue;
+        }
+        if (Date.now() - st.mtimeMs > staleMs) {
+          // Q3: takeoverStaleLock() can itself fail to rename (unrenamable
+          // stale lock) and return false — still subject to the deadline
+          // and sleep before the next loop iteration, not an immediate spin.
+          takeoverStaleLock(file, content);
+          if (Date.now() >= deadline) return null;
+          sleepSync(LOCK_RETRY_MS);
+          continue;
+        }
       }
       if (Date.now() >= deadline) return null;
       sleepSync(LOCK_RETRY_MS);
@@ -351,8 +400,15 @@ function quarantineCorrupt(cwd, opts = {}) {
   }
   const r = readJsonStrict(dest);
   if (r.value && r.value.v === 1 && typeof r.value.id === 'string') {
-    try { fs.renameSync(dest, file); return; } catch { /* `file` reappeared meanwhile:
-      fall through and keep the copy quarantined below rather than lose it */ }
+    // Q7b: renameSync REPLACES an existing target on both Windows and POSIX
+    // — a plain rename-back could clobber a fresh header a concurrent arm()
+    // already wrote at `file` in the gap since we renamed it out. Check
+    // right before renaming back; if `file` is occupied again, keep the
+    // quarantined copy instead of overwriting whatever is there now.
+    if (!fileExists(file)) {
+      try { fs.renameSync(dest, file); return; } catch { /* `file` reappeared meanwhile:
+        fall through and keep the copy quarantined below rather than lose it */ }
+    }
   }
   pruneQuarantine(cwd);
   try { fs.writeFileSync(corruptPendingPath(cwd), '', 'utf8'); } catch { /* best effort */ }
@@ -663,6 +719,9 @@ function arm(cwd, header = {}, opts = {}) {
     closedAt: null,
     closeReason: null,
     aborted: false,
+    // RT2-Q4: always the actual arming cwd's work-tree root — never
+    // caller-supplied, same as id/armedAt above.
+    root: projectRoot(cwd),
   });
   // The new header is written FIRST (temp + rename, one retry): a failed
   // rename leaves the old contract in place instead of no contract at all.
@@ -699,6 +758,20 @@ function update(cwd, patch = {}, opts = {}) {
     const fresh = readRawContract(cwd);
     if (!fresh || fresh.id !== h.id) return null;
     const next = sanitize({ ...fresh, ...rest });
+    // Q7a: a slow update() can lose its lock to the 1s stale takeover
+    // (LOCK_STALE_MS) and keep running after a concurrent close() acquires a
+    // fresh lock and writes closedAt. When `fresh` (above) already saw that
+    // closedAt, `next` already carries it through the merge (the comment
+    // above) — the write below is a harmless no-op re-write, and this must
+    // still return the merged header, not null. The real gap is a close()
+    // landing AFTER `fresh` was read but BEFORE this write: re-read once
+    // more, immediately before the atomic write (still under whatever lock
+    // this call holds), and refuse ONLY the write that would silently drop
+    // a closedAt `fresh` never saw.
+    if (!fresh.closedAt) {
+      const justBeforeWrite = readRawContract(cwd);
+      if (justBeforeWrite && justBeforeWrite.id === h.id && justBeforeWrite.closedAt) return null;
+    }
     return writeJsonRetry(contractPath(cwd), next) ? next : null;
   } finally {
     releaseLock(cwd, token);
@@ -856,6 +929,6 @@ module.exports = {
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   // shared with the sibling modules (not part of the facade's public list)
   nowOf, eventsOf, readJson, strList, sanitize,
-  // internal, exposed for this module's own tests only (AUD-017 / AUD-018 / RT1)
-  compactEvents, EVENTS_COMPACT_LINES, readJsonStrict, corruptPrefix, takeoverStaleLock,
+  // internal, exposed for this module's own tests only (AUD-017 / AUD-018 / RT1 / RT2)
+  compactEvents, EVENTS_COMPACT_LINES, readJsonStrict, corruptPrefix, takeoverStaleLock, quarantineCorrupt,
 };

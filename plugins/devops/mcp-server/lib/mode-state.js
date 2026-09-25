@@ -1,6 +1,6 @@
 /**
  * @module mode-state
- * @version 1.1.0
+ * @version 1.2.0
  *
  * Mode state the card reads off the project — not off the caller.
  *
@@ -427,9 +427,19 @@ export function readRunContractLine(cwd, lang = "de", sessionId = null) {
     // AUD-011 check, which otherwise hid the run line on most real cards. A
     // session id the model could not have invented this way — anything else
     // — keeps the strict, AUD-011 check: a truly foreign contract stays hidden.
-    const opts = isSelfSessionMarker(sessionId) ? {} : { sessionId };
+    const lenient = isSelfSessionMarker(sessionId);
+    const opts = lenient ? {} : { sessionId };
     const contract = RC.readContractForCard(cwd, opts);
     if (!contract) return null;
+    // Q4: the lenient path above accepts ANY stored sessionId — it was only
+    // ever meant to say "this session asked in a way the harness could not
+    // attribute", not "this run-contract.json actually belongs to THIS
+    // worktree". Desktop can copy an untracked run-contract.json from the
+    // main checkout into a freshly created worktree; without this check the
+    // copied header's run line would render in the new worktree's card too.
+    // A header written before `root` existed reads back `null` and is left
+    // alone — same behaviour as today.
+    if (lenient && contract.root && !sameProjectRoot(contract.root, cwd)) return null;
     const evs = RC.events(cwd);
     return RC.summaryForCard(contract, evs, lang, { codeFilesChanged: null }) || null;
   } catch {
@@ -449,4 +459,24 @@ export function readRunContractLine(cwd, lang = "de", sessionId = null) {
 function isSelfSessionMarker(id) {
   if (!id) return true;
   return id === "self" || id.startsWith("local_");
+}
+
+/**
+ * Does a header's stored `root` (RT2-Q4) match this card's own work-tree
+ * root? Delegates to `project-root.js`'s own `projectRoot`/`samePath` so the
+ * card and the store can never disagree on what "the same worktree" means.
+ *
+ * @param {string} storedRoot the header's `root` field
+ * @param {string|undefined} cwd the card's own cwd
+ * @returns {boolean}
+ */
+function sameProjectRoot(storedRoot, cwd) {
+  try {
+    const PR = hookRequire("lib", "project-root.js");
+    return PR.samePath(storedRoot, PR.projectRoot(cwd));
+  } catch {
+    // Cannot resolve project-root.js: fail open (unchanged, lenient
+    // behaviour) rather than hide a run line over an infra hiccup.
+    return true;
+  }
 }
