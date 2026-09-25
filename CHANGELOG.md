@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.205.7] — 2026-09-25
+
+### Fixed
+- **A web hand-off in prose or on the card now offers the web guide (#506).** The hand-off detector only knew numbered click lists and arrow paths, and it stripped the completion card before scanning. A sentence like "leg einen Cloudflare-Account mit R2 an … und einen API-Token" or a card item asking the user to create an account went unnoticed, and nobody offered `auto-guide`. The detector now also matches one sentence that names a service, an account or credential (Account, API token, bucket, secret, OAuth app, webhook) and a creation verb, and skips sentences that report Claude's own work ("ich habe … angelegt"). The completion card scans its own `userFinalTest` and `open` items the same way and, on a hit, adds a **Web-Guide starten** button that asks for a guided run through that service.
+
 ## [0.205.6] — 2026-09-25
 
 ### Fixed
