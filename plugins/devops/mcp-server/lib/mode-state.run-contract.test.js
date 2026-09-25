@@ -100,6 +100,55 @@ describe("readRunContractLine", () => {
       expect(readRunContractLine(cwd, "de", "some-other-real-session")).toBeNull();
     });
   });
+
+  // RT2-Q4: the lenient path (no sessionId / "self" / local_…) used to accept
+  // ANY stored sessionId, so a run-contract.json Desktop copied from the
+  // main checkout into a fresh worktree rendered the OTHER worktree's run
+  // line here too. The header now carries `root` (the work-tree root arm()
+  // ran in); the lenient path hides the line when it does not match this
+  // card's own cwd.
+  describe("RT2-Q4: worktree-root guard on the lenient path", () => {
+    function headerFile(dir) { return path.join(dir, ".claude", "run-contract.json"); }
+    function rewriteHeader(dir, mutate) {
+      const h = JSON.parse(fs.readFileSync(headerFile(dir), "utf8"));
+      mutate(h);
+      fs.writeFileSync(headerFile(dir), JSON.stringify(h));
+    }
+
+    test("a header copied from another worktree (different root) + \"self\" → hidden", () => {
+      const otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mode-state-other-root-"));
+      try {
+        RC.arm(cwd, { mode: "prompt", flow: "interactive" });
+        RC.record(cwd, { k: "edit" });
+        rewriteHeader(cwd, (h) => { h.root = otherRoot; });
+        expect(readRunContractLine(cwd, "de", "self")).toBeNull();
+        expect(readRunContractLine(cwd, "de", null)).toBeNull();
+        expect(readRunContractLine(cwd, "de", "local_abc123")).toBeNull();
+      } finally {
+        try { fs.rmSync(otherRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+      }
+    });
+
+    test("a header whose stored root matches this cwd + \"self\" → still renders", () => {
+      RC.arm(cwd, { mode: "prompt", flow: "interactive" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", "self")).toMatch(/^🧾 Run · Prompt/);
+    });
+
+    test("a header without `root` (written before this change) → unchanged lenient behaviour", () => {
+      RC.arm(cwd, { mode: "prompt", flow: "interactive" });
+      RC.record(cwd, { k: "edit" });
+      rewriteHeader(cwd, (h) => { delete h.root; });
+      expect(readRunContractLine(cwd, "de", "self")).toMatch(/^🧾 Run · Prompt/);
+    });
+
+    test("a genuinely foreign session id (strict path) is unaffected by root", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      // Strict path already hides this — root must not be what decides it.
+      expect(readRunContractLine(cwd, "de", "some-other-real-session")).toBeNull();
+    });
+  });
 });
 
 describe("hookRequire", () => {

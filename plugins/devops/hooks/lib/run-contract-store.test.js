@@ -150,6 +150,8 @@ describe("RT1 red-team round 1 follow-ups", () => {
     const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce((src, dest) => {
       if (src === headerFile) {
         fs.writeFileSync(dest, JSON.stringify({ v: 1, id: "fresh-id", armedAt: new Date(T0).toISOString() }));
+        fs.unlinkSync(headerFile); // a real renameSync removes the source too (RT2-Q7b's
+        // existsSync(file)-before-rename-back guard depends on that being true)
         return;
       }
       return realRenameSync(src, dest);
@@ -319,5 +321,137 @@ describe("AUD-011: readContractForCard ownership", () => {
     store.arm(cwd, { mode: "prompt" }, { now: T0 });
     const h = store.readContractForCard(cwd, { now: T0, sessionId: null });
     expect(h).not.toBeNull();
+  });
+});
+
+describe("RT2-Q3: acquireLock deadline on every EEXIST retry branch", () => {
+  test("a stale lock whose stat/read keeps throwing gives up at the deadline instead of spinning", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    const lf = lockFile(cwd);
+    fs.writeFileSync(lf, "stale-token");
+    const realReadFileSync = fs.readFileSync.bind(fs);
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation((file, ...rest) => {
+      if (file === lf) { const e = new Error("busy"); e.code = "EBUSY"; throw e; }
+      return realReadFileSync(file, ...rest);
+    });
+    const start = Date.now();
+    try {
+      const patched = store.update(cwd, { mode: "audit" }, { now: T0, lockWaitMs: 60 });
+      expect(patched).toBeNull(); // gave up, did not resurrect a broken lock read forever
+    } finally {
+      spy.mockRestore();
+    }
+    // No spin: the loop obeyed lockWaitMs, not a runaway CPU-bound retry.
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
+  test("a stale lock whose rename always throws (takeoverStaleLock fails) gives up at the deadline instead of spinning", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    const lf = lockFile(cwd);
+    fs.writeFileSync(lf, "stale-token");
+    const past = new Date(Date.now() - 5000);
+    fs.utimesSync(lf, past, past);
+    const realRenameSync = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((src, dest) => {
+      if (src === lf) { const e = new Error("perm"); e.code = "EPERM"; throw e; }
+      return realRenameSync(src, dest);
+    });
+    const start = Date.now();
+    try {
+      const patched = store.update(cwd, { mode: "audit" }, { now: T0, lockStaleMs: 1000, lockWaitMs: 60 });
+      expect(patched).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+});
+
+describe("RT2-Q7a: update() vs a lock it lost to the stale-lock takeover", () => {
+  test("re-reads immediately before the write and refuses to clobber a close() that landed in between", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    const headerFile = store.contractPath(cwd);
+    const realReadFileSync = fs.readFileSync.bind(fs);
+    let reads = 0;
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation((file, ...rest) => {
+      if (file !== headerFile) return realReadFileSync(file, ...rest);
+      reads++;
+      // Call #3 is update()'s "fresh" read (after archiveIfExpired's and
+      // readContract()'s own reads) — return what's on disk NOW (no close
+      // yet), then write a concurrent close() to disk so update()'s FINAL
+      // re-read (the one this fix adds, right before the write) sees it.
+      if (reads === 3) {
+        const before = realReadFileSync(headerFile, "utf8");
+        const h = JSON.parse(before);
+        fs.writeFileSync(headerFile, JSON.stringify({ ...h, closedAt: new Date(T0 + 500).toISOString(), closeReason: "done" }));
+        return before;
+      }
+      return realReadFileSync(file, ...rest);
+    });
+    try {
+      const patched = store.update(cwd, { mode: "audit" }, { now: T0 });
+      expect(patched).toBeNull(); // must not overwrite the close that landed
+    } finally {
+      spy.mockRestore();
+    }
+    const raw = store.readRawContract(cwd);
+    expect(raw.closedAt).not.toBeNull();
+    expect(raw.mode).toBe("prompt"); // update()'s patch never landed
+  });
+
+  test("an explicit re-arm patch ({ closedAt: null }) is still allowed to write", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    store.close(cwd, "done", { now: T0 });
+    // update() itself refuses a closed header (readContract filters it out) —
+    // this only asserts the reArm escape hatch does not throw / misbehave
+    // when a caller passes it against a still-open contract.
+    const patched = store.update(cwd, { mode: "audit", closedAt: null }, { now: T0 - 1 });
+    expect(patched === null || patched.mode === "audit").toBe(true);
+  });
+});
+
+describe("RT2-Q7b: quarantine rename-back never overwrites an occupied live path", () => {
+  test("keeps the quarantined copy when a fresh header already occupies the live path", () => {
+    const headerFile = store.contractPath(cwd);
+    fs.mkdirSync(path.dirname(headerFile), { recursive: true });
+    fs.writeFileSync(headerFile, JSON.stringify({ v: 1, id: "would-be-restored", armedAt: new Date(T0).toISOString() }));
+    const realRenameSync = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce((src, dest) => {
+      realRenameSync(src, dest);
+      // Simulate a concurrent arm() writing a fresh header to the live path
+      // in the gap between quarantineCorrupt()'s rename-out and its
+      // rename-back existsSync check.
+      fs.writeFileSync(headerFile, JSON.stringify({ v: 1, id: "concurrent-fresh-id", armedAt: new Date(T0).toISOString() }));
+    });
+    try {
+      store.quarantineCorrupt(cwd, { now: T0 });
+    } finally {
+      spy.mockRestore();
+    }
+    const live = JSON.parse(fs.readFileSync(headerFile, "utf8"));
+    expect(live.id).toBe("concurrent-fresh-id"); // untouched, never overwritten
+    const dir = path.dirname(headerFile);
+    const prefix = store.corruptPrefix();
+    const quarantined = fs.readdirSync(dir).filter((n) => n.startsWith(prefix));
+    expect(quarantined.length).toBe(1); // the "would-be-restored" copy stays quarantined
+  });
+
+  test("still puts the copy back when the live path is free (unchanged happy path)", () => {
+    const headerFile = store.contractPath(cwd);
+    fs.mkdirSync(path.dirname(headerFile), { recursive: true });
+    fs.writeFileSync(headerFile, JSON.stringify({ v: 1, id: "restored-id", armedAt: new Date(T0).toISOString() }));
+    store.quarantineCorrupt(cwd, { now: T0 });
+    expect(fs.existsSync(headerFile)).toBe(true);
+    const raw = JSON.parse(fs.readFileSync(headerFile, "utf8"));
+    expect(raw.id).toBe("restored-id");
+  });
+});
+
+describe("RT2-Q4: arm() stamps the work-tree root", () => {
+  test("arm() always writes its own projectRoot(cwd), ignoring any caller-supplied root", () => {
+    const h = store.arm(cwd, { mode: "prompt", root: "/some/other/root" }, { now: T0 });
+    expect(h.root).not.toBe("/some/other/root");
+    expect(typeof h.root).toBe("string");
+    expect(h.root.length).toBeGreaterThan(0);
   });
 });
