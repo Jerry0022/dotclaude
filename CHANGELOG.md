@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.208.0] — 2026-09-25
+
+### Added
+- **New standing UI rule R6: the platform matrix.** Every UI change is now checked in look, UX and function on Windows desktop, Linux desktop, Android tablet, iOS tablet, Android phone and iOS phone. The static half flags constructs that work on only one platform: an action reachable only by hover, right-click or a shortcut with no touch path, `100vh` layouts, a missing viewport meta tag, iOS inputs under 16 px, edge bars without safe-area insets, Windows- or macOS-only font stacks, and shortcut hints hard-coded to one OS. The runtime half walks each changed view on every target. Anything emulation cannot show goes to the user's final test, with the platform named. A project narrows the matrix with `platforms:` in its `## UI rules` override. The design reminder hook, `/auto-polish` and the frontend and designer agents all carry the rule.
+
 ## [0.207.0] — 2026-09-25
 
 ### Added

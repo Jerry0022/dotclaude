@@ -126,7 +126,9 @@ DESIGN_RESULT:
   element and every rule, app-styled tooltips with an Info/Label delay tier,
   dropdowns styled and uniform, consistent spacing per component type, a
   discreetly shown hotkey on every interaction, keyboard-operable flows,
-  scrollbars in the app's style) and the project's `## UI rules` override;
+  scrollbars in the app's style, every design and interaction tuned for
+  Windows + Linux desktop, Android + iOS tablet and Android + iOS phone) and
+  the project's `## UI rules` override;
   every spec you hand to frontend names how each rule is met, or why the
   project convention overrides it.
 - **Existing design systems and style guides are binding.** If the project has a design system, component library, Figma library, style guide, or established design tokens, they MUST be treated as the authoritative source of truth. All new work MUST conform to them — colors, typography, spacing, components, patterns. Deviate ONLY when the user explicitly approves a departure. At the start of every task, run `search_design_system` and check the project for existing token files, style guides, or component libraries.
