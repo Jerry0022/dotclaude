@@ -1301,6 +1301,22 @@ const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
  * all: the ship halted before it started and only the user can compact, so
  * that is the one decision — an open concept page must not hide it.
  */
+/**
+ * A manual web hand-off hiding in the card's OWN `userFinalTest`/`open`
+ * payload (#506) — the completion-card region is out of scope for
+ * stop.guide.handoff (hooks/lib/guide-handoff.js), so a hand-off that lives
+ * only here would otherwise never be seen. Never fatal: a missing/dangling
+ * lib just means no guide button, not a broken card.
+ */
+function detectGuideHandoff(input) {
+  try {
+    const { detectCardHandoff } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'guide-handoff.js'));
+    return detectCardHandoff({ userFinalTest: input.userFinalTest, open: input.open });
+  } catch {
+    return null;
+  }
+}
+
 function buildDecisionBlock(input, lang, key, delivery, state) {
   const T = HEADINGS[lang] || HEADINGS.de;
   const compact = shipCompactInfo(input.compact, lang);
@@ -1371,7 +1387,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
-  return { heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip };
+  return {
+    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip,
+    guideHandoff: detectGuideHandoff(input),
+  };
 }
 
 function readToolCallCount(sessionId) {
@@ -1474,6 +1493,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     promoteVersion: decision.version || null,
     replies: decision.replies || [],
     noShip: !!decision.noShip,
+    guideHandoff: decision.guideHandoff || null,
   };
 }
 
@@ -1824,6 +1844,18 @@ function buildCompletionCard(params) {
     usageData, delta5h, deltaWk, healthLine,
     params.delivery || {}, params.state || {},
   );
+
+  // 4b. A hand-off found in the card's OWN payload (#506) renders the
+  //     "Web-Guide starten" button on Desktop (card-widget.js#buttonsFor
+  //     above); non-Desktop clients get no button (renderCard never draws
+  //     one), so the same hit also records the existing pending hint —
+  //     prompt.skill.enforce offers auto-guide on the next real prompt.
+  if (params._cardModel.guideHandoff && params._cardModel.guideHandoff.service) {
+    try {
+      const { writePendingHandoff } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'guide-pending.js'));
+      writePendingHandoff(params.session_id, params._cardModel.guideHandoff.service);
+    } catch { /* advisory */ }
+  }
 
   // 5. Write completion flags for stop.flow.guard:
   //    - card-rendered satisfies the card gate.
