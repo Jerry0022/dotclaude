@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.25.0
+ * @version 0.26.0
  * @event PostToolUse
  * @plugin devops
  * @description After EVERY tool call: inject the completion-card reminder so
@@ -39,9 +39,10 @@
  *   and produced a line under the widget plus a second, identical card.
  *
  *   Also detects background work started by the current call (a run_in_background
- *   Agent, a backgrounded Bash task) and injects the `pending` instruction right
- *   away, so a card rendered before those results arrive declares them instead of
- *   being bounced by stop.flow.guard's pending gate.
+ *   Agent, a Bash task backgrounded at launch or moved there at its timeout) and
+ *   injects the `pending` instruction right away, so a card rendered before those
+ *   results arrive declares them instead of being bounced by stop.flow.guard's
+ *   pending gate.
  */
 
 require('../lib/plugin-guard');
@@ -56,7 +57,7 @@ const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
 const {
-  AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, labelFor, isConceptInfra,
+  AGENT_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, canLaunch, responseTaskId, labelFor, isConceptInfra,
 } = require('../lib/pending-tasks');
 const {
   classifyProfile,
@@ -143,6 +144,11 @@ const DESKTOP_TEST_DICT = {
  * Did THIS tool call start background work that outlives the turn?
  * Reads the same launch markers the Stop gate scans for (lib/pending-tasks.js),
  * but from the live tool_response, so the reminder can fire immediately.
+ *
+ * A Bash/PowerShell task — launched with run_in_background, or moved to the
+ * background when a foreground call outlived its timeout — is read from the
+ * structured response the hook receives (`backgroundTaskId`), which never
+ * carries the sentence the model reads (responseTaskId()).
  *
  * A backgrounded Bash task that is concept-bridge plumbing (server, keepalive
  * pulser, pickup waker) is reported as kind 'concept-infra': it runs for the
@@ -345,7 +351,7 @@ function detectBackgroundLaunch(hook) {
   if (text.includes(WORKFLOW_LAUNCH_MARKER)) {
     return { kind: 'workflow', name: labelFor(hook.tool_input, 'workflow', text) };
   }
-  if (text.includes(BASH_LAUNCH_MARKER)) {
+  if (canLaunch({ name: hook.tool_name }, 'task') && responseTaskId(r)) {
     const kind = isConceptInfra(hook.tool_input) ? 'concept-infra' : 'task';
     return { kind, name: labelFor(hook.tool_input, 'task') };
   }
