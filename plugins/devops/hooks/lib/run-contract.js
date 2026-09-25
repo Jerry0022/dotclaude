@@ -69,6 +69,15 @@
  *     segment (else the card after a successful release would re-block).
  *   - Events carry the contract id (`c`); `events()` ignores foreign lines.
  *   - The archive holds the header plus its last 200 events.
+ *   - `card` events, like `block` / `measure`, are no idle-expiry activity;
+ *     `measure` / `block` dedup within the current segment only (H-B5, H-B10).
+ *   - The card gate owes `triage` too (backlog + presence) once the
+ *     contract has work (H-B2).
+ *   - Headers are normalised on read (`sanitize()`, H-B6). A marker read
+ *     but unparseable is deleted; a read error keeps it (H-B14, H-B14b).
+ *   - Follow-ups: only the exact `Issues` / `Issues <n>` and `Milestones`
+ *     headers; an empty / Other answer leaves the list unchanged (H-B7).
+ *   - Pending, batch and archive writes and event appends retry once (AUD-009).
  */
 
 const fs = require('fs');

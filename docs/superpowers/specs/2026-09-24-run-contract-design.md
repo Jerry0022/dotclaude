@@ -92,6 +92,19 @@ Header:
 `presence` is false when the contract was armed from a machine prompt
 (`RUN_BACKLOG_AUTOSTART:` presence timeout skips backlog Step 2).
 
+A header is normalised on read as well as on write (`sanitize()`): a
+hand-edited or older header with a missing / non-array `passes`, `items` or
+`milestones` reads as `[]`, unknown `mode` / `flow` / `ship` values fall back
+to `prompt` / `interactive` / `manual` — the gates never throw on it (H-B6).
+
+Writes: the header, the pending and batch markers and the archive go through
+temp + rename with one retry after 50 ms, and an event append retries once
+the same way (AUD-009: Windows EPERM / EBUSY from AV / indexers). A marker
+(`run-contract.pending`, `batch-handoff.json`) that was read but does not
+parse, is no object or lacks a valid timestamp is deleted on read, so it
+cannot defeat the fast path forever (H-B14); a READ error (EBUSY / EPERM)
+keeps the file and only reads as "no marker" this once (H-B14b).
+
 Events (`k` = kind, `t` = iso time):
 
 | k | fields | written by |
@@ -100,13 +113,13 @@ Events (`k` = kind, `t` = iso time):
 | `agent` | `type` (`subagent_type`, default `general-purpose`) | PostToolUse Agent |
 | `edit` | — (only when the previous event is not `edit`) | PostToolUse Edit/Write/NotebookEdit on a gated path |
 | `commit` | — | PostToolUse Bash/PowerShell `git commit` (exit 0) |
-| `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c` (exit 0) — an ITEM boundary only (R6): not from a subagent, not `git worktree add`, not `--detach`, not a `<current>-*` / `<current>/*` sub-branch. `git worktree add` never writes a `branch` event |
+| `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c` (exit 0) — an ITEM boundary only (R6): not from a subagent, not `git worktree add`, not `--detach`, not a `<current>-*` / `<current>/*` sub-branch. `git worktree add` never writes a `branch` event; `git branch <name>` is no branch creation at all (work starts on the branch `checkout -b` / `switch -c` switches to) |
 | `release` | `ok`, `merged`, `closes: ["473"]` (from `Closes #N` in `tool_input.body`) | PostToolUse `ship_release` |
-| `card` | `variant` | PostToolUse `render_completion_card` |
+| `card` | `variant` | PostToolUse `render_completion_card`, and Bash/PowerShell running the offline `--render-card` renderer (an unreadable payload is recorded as a final card, variant `null`) — never idle-expiry activity (H-B10) |
 | `skip` | `ob`, `reason`, `item?` | CLI `skip` |
 | `park` | `item`, `reason` (ends the segment) | CLI `park` |
-| `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate — never counts as work, a segment boundary or idle-expiry activity (RT2-R3) |
-| `block` | `gate`, `open` (obligation names refused) | PreToolUse, right before `return 2` — never counts as work, a segment boundary or idle-expiry activity (RT2-R3) |
+| `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate — never counts as work, a segment boundary or idle-expiry activity (RT2-R3); not written again when the CURRENT segment's last `measure` has the same count (a new item still gets its own, H-B5) |
+| `block` | `gate`, `open` (obligation names refused) | PreToolUse, right before `return 2` — never counts as work, a segment boundary or idle-expiry activity (RT2-R3); not written again when the current segment's last `block` has the same gate and list |
 
 API (CommonJS, pure where possible, every fs error swallowed → "no contract"):
 `readContract(cwd)`, `arm(cwd, header)`, `update(cwd, patch)`,
@@ -116,8 +129,9 @@ API (CommonJS, pure where possible, every fs error swallowed → "no contract"):
 `parseMachinePrompt(text)`, `formatBlock(contract, open, gate)`,
 `summaryForCard(contract, events, lang)`.
 
-Expiry: a contract with no event for 12 h (interactive) / 30 h (autonomous
-or backlog) reads as absent and is archived to `run-contract.prev.json` on the
+Expiry: a contract with no activity for 12 h (interactive) / 30 h
+(autonomous or backlog) — every event but `block`, `measure` and `card`
+counts — reads as absent and is archived to `run-contract.prev.json` on the
 next write. A new router answer set replaces an active contract (archived).
 
 Kill switch: `DOTCLAUDE_RUN_CONTRACT=off` disables arming and every gate.
@@ -167,7 +181,11 @@ Headers are normalised (NFC, trimmed, trailing `?` stripped, case-folded) and
 English aliases are accepted: `What`, `Flow`, `Scope`, `Passes`; follow-ups
 `Result`, `Audit scope`, `Milestones`, `Issues`, `PC after`. A later
 router-shaped call of the same session within 30 min that lacks one of
-`Ablauf` / `Umfang` / `Durchgänge` merges only its answered fields.
+`Ablauf` / `Umfang` / `Durchgänge` merges only its answered fields. Such a
+PARTIAL router call (Flow + Scope, or Passes alone) with no contract to merge
+into arms only after a fresh same-session do-run arm marker — a model-written
+question elsewhere never arms (H-B13); a FULL router call (Ablauf + Umfang +
+Durchgänge) is do-run's own signature and arms with or without the marker.
 
 Q1 missing (preset): mode = first token of the last `do-run` Skill args in
 the transcript (`backlog`, `audit`; `autonomous` / `burn` / `rethink` keep
@@ -185,16 +203,22 @@ The AskUserQuestion arm deletes it; an active same-session contract makes the
 PreToolUse hook delete it without re-arming. If it still exists when the PreToolUse hook sees a gated call
 (D), the hook scans the transcript tail once (`transcript_path`, last ~2 MB)
 for the newest `toolUseResult` carrying router headers, arms from it and
-deletes the marker; no such result → it arms the click-through defaults
+deletes the marker — when that newest one is a partial re-ask, the scan goes
+on to the full router call before it (same window) and the re-ask replaces
+only the fields it answered (R7, H-C2c); follow-up answers after the first
+router call of that chain are applied. No such result → it arms the click-through defaults
 (Prompt umsetzen · Interaktiv · Ship manuell · Flexibel · Harden + Polish) with
 `source: fallback` and says so in `additionalContext`. A marker older than
 2 h is ignored and removed.
 
 Follow-up call (same hook, updates the active contract):
 `Ergebnis` (`Audit als Concept` → `auditResult: concept`, passes cleared —
-the concept page owns what gets built), `Milestones` (titles), headers
-starting `Issues` (every `#N` in the selected labels → `items`),
-`PC danach` (recorded only).
+the concept page owns what gets built), `Milestones` (titles), exactly the
+headers `Issues` and `Issues <n>` (the numbered continuation; every `#N` in
+the selected labels → `items` — `Issues found` or any other header merely
+starting with `Issues` is no follow-up), `PC danach` (recorded only). An
+empty or Other-placeholder `Milestones` / `Issues` answer leaves the recorded
+list unchanged (H-B7).
 
 ### C. Obligations
 
@@ -211,7 +235,7 @@ boundary. Boundary: a `release` with `ok: true`, and in backlog mode also a
 | `qa` | segment has work, and changed **code** files (git, `browsertest-guard.isCodeChange`) ≥ 1 in backlog or > 5 in prompt mode | `agent` of type `devops:qa` |
 | `do-ship` | `ship: auto`, segment has work | release gate: a `skill` `do-ship` in the segment · card/branch gate: a `release` ok, or a `card` `ship-blocked` / `aborted` in the segment |
 | `refine` | backlog, `presence`, release closes `#N` | a `skill` `auto-issue` anywhere in the contract whose args name `#N` (or `issue` … `N`) |
-| `triage` | backlog, `presence`, first `auto-agents` of the contract | ≥ 1 `agent` event since arm |
+| `triage` | backlog, `presence`: at the first `auto-agents` of the contract, at every release, and at the final card once the contract has work (an `edit`, `commit` or `auto-agents` anywhere — H-B2) | ≥ 1 `agent` event since arm |
 
 Every obligation is also satisfied by a matching `skip` event (for `refine`,
 one per item). `audit` contracts carry only `harden`, `polish`, `do-ship`
@@ -231,18 +255,36 @@ hook pays — the early exit only keeps the hook from adding work on top.
 | Bash / PowerShell `git commit` | `auto-agents`; batch handoff |
 | Bash / PowerShell branch creation, backlog mode, segment has work — only an item branch: no `agent_id`, not `git worktree add` / `--detach`, not `<current>-*` / `<current>/*` | `harden`, `polish`, `qa`, `do-ship` of the segment being left |
 | Skill `auto-agents`, backlog, first of the contract | `triage` |
-| `mcp__plugin_devops_dotclaude-ship__ship_release` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`, `refine` |
-| `mcp__plugin_devops_dotclaude-completion__render_completion_card`, variant ∈ `ship-successful · ready · ready-files · released · test`, no non-empty `pending`, no `concept` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship` |
-| Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file; an unreadable payload (`-`, `$var`) counts as final |
+| `mcp__plugin_devops_dotclaude-ship__ship_release` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`, `refine`, `triage` |
+| `mcp__plugin_devops_dotclaude-completion__render_completion_card`, variant ∈ `ship-successful · ready · ready-files · released · test`, no non-empty `pending`, no `concept` | `auto-agents`, `harden`, `polish`, `qa`, `do-ship`; `triage` for a backlog + presence contract with work |
+| Bash / PowerShell running the offline card renderer (`mcp-server/index.js --render-card <payload.json>` — the path `stop.flow.guard` prescribes when the MCP server is dead) | same as the card row, read from the payload file; an unreadable payload (`-`, `$var`, a missing file or one relative to a `cd` in the same command) counts as final — and is recorded and closes as one (H) |
 | Bash / PowerShell `gh pr merge` or `git push` onto `main` / `master`, contract `ship: auto` | same as `ship_release` |
 | final card, backlog, `presence`, `ship: manual` | additionally `refine` of every item in `items` |
 
-Commands are normalised before matching (`&`, `git.exe`, git's global flags
-such as `--no-pager`, `-C`, `-c`). Release / card gates look up the contract
-in the session root first, then `projectRoot(tool_input.cwd)`, and run the qa
-diff there; the base is `tool_input.base`, else `origin/HEAD`, else `main`,
-else `master`. The gate records a `measure` event `{codeFiles:n|null}` before
-deciding; the card shows `QA ?` when it is unknown.
+Commands are read at COMMAND POSITION (`run-contract-calls.js`
+`commandFacts`, shared by pre and post): the line is split quote-aware at
+`&&`, `||`, `;`, `|`, a lone `&` (not `2>&1` / `&>`) and newlines; a quoted
+executable (`"C:\…\git.exe"`, `& '…'`), `git.exe`, git's global flags (`-C`,
+`-c`, `--no-pager`, …), `VAR=value`, leading `(` / `{` / `!` and a trailing
+`)` / `}` on the subcommand, and the wrapper prefixes `sudo`, `doas`, `env`,
+`command`, `exec`, `time`, `nice`, `nohup`, `timeout`, `builtin`, `xargs` are
+looked through. Shell payloads are parsed again, up to 4 levels: `sh` /
+`bash` / `zsh` `-c`, `cmd /c`, `pwsh` / `powershell` `-Command` and
+`-EncodedCommand`, `eval`, `env -S`, PowerShell `Start-Process <file>
+-ArgumentList …`, and `$(…)` / backtick substitutions (outside single quotes;
+one holding a heredoc is text, so a commit / PR body never counts). Text
+inside quotes (`echo "git commit"`, `grep "gh pr merge"`) never matches.
+
+Contract root (H-B1, identical in pre and post): the session root first,
+then — for the MCP tools only (`ship_release` and the MCP card, which act on
+`tool_input.cwd`) — `projectRoot(tool_input.cwd)`. The qa diff runs in the
+input root when there is one; the MCP card is recorded and closes the
+contract in the root it was gated in. The base is `tool_input.base`, else
+`origin/HEAD`, else `main`, else `master`. At the card and branch gates the
+count also includes working-tree changes and untracked code files (`git
+ls-files --others --exclude-standard`, H-B4); the release gate counts the
+branch diff only. The gate records a `measure` event `{codeFiles:n|null}`
+before deciding; the card shows `QA ?` when it is unknown.
 
 An interrupted or blocked run ends with `run-contract.js abort --reason
 "<status>: <why>"` before its card; an aborted contract passes the card gate
@@ -277,9 +319,10 @@ under Strikt.
 
 ### E. Batch hand-off gate
 
-`prompt.batch.collect.js`, when a batch fires, writes
-`.claude/batch-handoff.json` `{ firedAt, sessionId }` (runtime-ignored) and
-says in its merge context that the hand-off is enforced. While it exists and is
+`prompt.batch.collect.js`, when a batch fires, shows its merge context (which
+says the hand-off is enforced) and only then writes
+`.claude/batch-handoff.json` `{ firedAt, sessionId }` (runtime-ignored). A
+corrupt marker is deleted when read (A). While it exists and is
 younger than 6 h, the PreToolUse hook refuses Edit / Write / NotebookEdit on
 gated paths and `git commit` with:
 
@@ -333,9 +376,15 @@ the same take-over the Skill-tool path already does.
 Writes the events of table A, arms/updates from router answers (B), deletes
 the batch marker (E), and closes:
 
-- `prompt` / `audit`: after a final-variant card (D) whose gate passed.
+- `prompt` / `audit`: after a final-variant card (D) whose gate passed — MCP
+  or offline renderer (an unreadable payload counts as final). The close
+  follows from the card being final, not from its `card` event being
+  written: a card that was shown but whose append failed still ends the run
+  (H-B8).
 - `backlog`: on `done`, or when every item in `items` has a `release` closing
-  it or an item `skip`.
+  it, an item `skip` or a `park` — checked after `ship_release` and after
+  every other recorded call, so the park / skip that finishes the queue
+  closes it too (H-C5).
 
 ### I. Skill and doc changes
 
@@ -381,6 +430,23 @@ machine-prompt run is not gated at all: outside a run, the delegation policy
 The one place outside an active run where a mechanism still forces a skill is
 the do-batch hand-off gate (E) — its `.claude/batch-handoff.json` blocks Edit
 / Write / NotebookEdit and `git commit` regardless of any contract.
+
+Known gaps of the command reading (D), each needing a real shell parser or
+runtime state to close:
+
+- A Windows path ending in `\` right before its closing quote
+  (`"C:\tools\" commit`) reads as an escaped quote, so the quoted string
+  runs on and the executable after it is missed.
+- cmd's `start git commit …`, a command assembled at runtime (`$cmd =
+  "git"; & $cmd commit`, `git $(echo commit)`), aliases and shell functions
+  are not resolved. `env -S` / `xargs` / `Start-Process` are read only in
+  their plain forms (`Start-Process` flags other than the file / argument /
+  value flags are assumed to take no value).
+- `lib/plugin-guard.js` still requires `project-root` at load time; H-B17
+  only moved the hooks' own requires into their try/catch.
+- Two sessions in ONE checkout share one contract file: the second
+  session's router answers archive the first one's contract (B11); worktree
+  isolation (one work tree per session) avoids it.
 
 ## Acceptance
 
