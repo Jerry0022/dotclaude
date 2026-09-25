@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.claude.budget
- * @version 0.1.1
+ * @version 0.2.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit
@@ -16,9 +16,14 @@
  *
  *   Never blocks (always exit 0): the file is already written, and an
  *   over-budget doc is a debt to schedule, not a broken artifact. It reports
- *   once per file per severity per session, and only when the edit made the
- *   file bigger — see claude-file-budget.js for why growth, not size, is the
- *   trigger.
+ *   only when the edit made the file bigger — see claude-file-budget.js for
+ *   why growth, not size, is the trigger — and once per file per severity per
+ *   context: the main thread and each subagent (`agent_id`) count separately.
+ *
+ *   The instruction goes out as `hookSpecificOutput.additionalContext`: plain
+ *   stdout of a PostToolUse hook only shows in transcript mode and never
+ *   reaches the model (CONVENTIONS.md), so before 0.2.0 no report was ever
+ *   read. The one-line summary stays on stderr for the user.
  */
 
 require('../lib/plugin-guard');
@@ -53,21 +58,29 @@ process.stdin.on('end', () => {
   const result = evaluate({ file, content, delta: editDelta(toolName, input) });
   if (result.silent) process.exit(0);
 
-  // One report per file per severity per session. A refactor pass touching the
+  // One report per file per severity per context. A refactor pass touching the
   // same file five times should say this once; an escalation from warn to
-  // critical is genuinely new information and gets its own report.
+  // critical is genuinely new information and gets its own report. A delivered
+  // report stays in the context for the rest of the session, so "once" is
+  // strict — a time window would only land the same text there a second time.
   //
-  // A cooldown rather than strict-once, deliberately: runOnce keys on
-  // session_id, which falls back to the literal "unknown" when a hook payload
-  // carries none. Strict-once would then write one marker shared by every
-  // session that ever lacks an id — and since the marker outlives the process,
-  // the hook would go permanently silent for that file. A window degrades to
-  // "reports again later" instead of "never reports again".
+  // A subagent is its own context: its report never reaches the main thread,
+  // so it must not spend the main thread's (keyed like post.flow.debug).
+  //
+  // Without a session_id, runOnce falls back to the literal "unknown": one
+  // marker shared by every session that ever lacks an id, and since the marker
+  // outlives the process, strict-once would silence the hook for that file for
+  // good. There the 2-hour window stays — "reports again later" beats "never
+  // reports again".
   const fileKey = crypto.createHash('sha1').update(path.resolve(file)).digest('hex').slice(0, 12);
   const dedupeKey = `claude-budget-${fileKey}-${result.severity}`;
-  if (!runOnce(dedupeKey, hook.session_id, { cooldownMs: 2 * 60 * 60 * 1000 })) process.exit(0);
+  const contextKey = hook.agent_id ? `${hook.session_id || 'unknown'}-agent-${hook.agent_id}` : hook.session_id;
+  const cooldownMs = hook.session_id ? 0 : 2 * 60 * 60 * 1000;
+  if (!runOnce(dedupeKey, contextKey, { cooldownMs })) process.exit(0);
 
   process.stderr.write(buildSummary(file, result) + '\n');
-  process.stdout.write(buildInstruction(file, result) + '\n');
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: buildInstruction(file, result) },
+  }));
   process.exit(0);
 });

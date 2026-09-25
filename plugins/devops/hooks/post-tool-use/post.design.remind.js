@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.3.1
+ * @version 0.4.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
- * @description Once per session, when a UI file is written or edited,
+ * @description Once per context, when a UI file is written or edited,
  *   reminds Claude of the standing UI rules (deep-knowledge/ui-defaults.md)
  *   so the app-style, tooltip, dropdown, spacing, hotkey and scrollbar
  *   conventions are in context while the element is written — not only
@@ -16,6 +16,13 @@
  *   plugin source that is excluded by default) and change the two tooltip
  *   delay tiers. Concept pages get the reminder like any other page. Never
  *   blocks: every failure path exits 0 silently.
+ *
+ *   The reminder goes out as `hookSpecificOutput.additionalContext`: plain
+ *   stdout of a PostToolUse hook only shows in transcript mode and never
+ *   reaches the model (CONVENTIONS.md), so before 0.4.0 it was never read.
+ *   Delivered, it stays in the context for the rest of the session, so each
+ *   context gets it once: the main thread and every subagent (`agent_id`) on
+ *   their own first UI edit.
  */
 
 require('../lib/plugin-guard');
@@ -23,7 +30,7 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
+const { sessionFile } = require('../lib/session-id');
 const { resolveExtensionFile } = require('../lib/skill-names');
 const { deepKnowledgePath } = require('../lib/plugin-root');
 
@@ -208,7 +215,7 @@ function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY, docPath = 
   // Absolute path: a relative `deep-knowledge/…` does not exist in a consumer
   // project, and the model then searched `/` for it (2026-09-24).
   lines.push(`Read ${docPath} for the full rules and the detection allowlist.`);
-  return lines.join('\n') + '\n';
+  return lines.join('\n');
 }
 
 function main() {
@@ -232,13 +239,25 @@ function main() {
 
       if (!isUiFile(filePath, override.files)) process.exit(0);
 
-      const markerFile = sessionFile('dotclaude-devops-design-reminded', hook.session_id);
-      const already = readSessionFile('dotclaude-devops-design-reminded', hook.session_id, { exact: true });
-      if (already) process.exit(0);
+      // Once per context: a delivered reminder stays there for the rest of
+      // the session. A subagent is its own context — its copy never reaches
+      // the main thread, so it must not spend the main thread's (keyed like
+      // post.flow.debug). The exclusive create is the claim: parallel UI edits
+      // run this hook side by side, and only one of them may send it. A marker
+      // that cannot be written sends nothing — never the same text every call.
+      const contextKey = hook.agent_id ? `${hook.session_id || 'unknown'}-agent-${hook.agent_id}` : hook.session_id;
+      try {
+        fs.writeFileSync(sessionFile('dotclaude-devops-design-reminded', contextKey), '1', { flag: 'wx' });
+      } catch {
+        process.exit(0);
+      }
 
-      try { writeSessionFile(markerFile, '1'); } catch {}
-
-      process.stdout.write(buildReminder(override.disable, override.extra, override.delay));
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUse',
+          additionalContext: buildReminder(override.disable, override.extra, override.delay),
+        },
+      }));
       process.exit(0);
     } catch {
       process.exit(0);
