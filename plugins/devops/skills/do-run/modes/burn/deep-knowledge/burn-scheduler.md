@@ -1,217 +1,236 @@
-# Burn Scheduler — Depth, Breadth, Reserve, Durability
+# Burn Scheduler — Depth, Breadth, Reserve, Window, Durability
 
-Read this at the start of `/do-run burn` Step 2. It defines how a burn plan is
-derived, what makes a burn worth running at all, and how work is kept durable
-when the weekly limit lands mid-run.
+Read this at the start of `/do-run burn` Step 2. It explains the rules that
+`{PLUGIN_ROOT}/scripts/burn-plan.js` implements — the script is the source of
+truth for every number; this file is the why. Nothing here is computed by
+the model.
 
 ## Why this file exists
 
-Burn's earlier guidance was "always use the maximum agent count, never be idle".
-That maximizes *spend rate* while leaving every task unfinished at the moment the
-limit hits — the run ends with N in-flight agents and nothing landed. Burn's goal
-is **landed, verified work per token**, with spend as the means, not the end.
+The first burn said "always use the maximum agent count, never be idle": spend
+rate up, nothing landed when the limit hit. The #335 redesign fixed the
+philosophy (depth before breadth, per-task landing) but left it as prose the
+execution path never saw: `auto-agents` knew nothing about lanes, the
+conveyor or `BURN-STATE.json`; the uplift gate could never fire; the 5-hour
+window was not modelled; a hard stop lost the in-flight work, and a resume
+silently burned on. The 2026-09-25 audit moved every rule that is arithmetic
+or bookkeeping into `burn-plan.js`, wired it into `auto-agents --burn`, and
+dry-runs whole burns in `burn-sim.js`.
+
+Burn's goal is **landed, verified work from budget that would otherwise
+expire** — spend is the means, never the measure.
 
 ## The two spend dimensions
 
-There are exactly two ways to consume the remaining budget, and they fail
-differently:
-
 | Dimension | Spends by | In-flight unlanded work | Loss on hard stop |
 |-----------|-----------|-------------------------|-------------------|
-| **Depth** | Better model, higher effort, higher tool-call ceiling, extra review passes per task | unchanged | at most 1 task |
-| **Breadth** | More lanes working different tasks at once | grows linearly with lane count | up to N tasks |
+| **Depth** | Opus instead of Sonnet, a redteam pass, a higher tool-call ceiling | unchanged | the unfinished part of one task |
+| **Breadth** | More lanes working different tasks at once | grows with lane count | one unfinished part per lane |
 
-Depth is the cheaper failure mode: it raises the cost of a task without raising
-the number of tasks that can be lost. **Prefer depth. Use breadth only as a
-throughput filler** when depth alone cannot consume the budget in the remaining
-wall-clock window.
-
-## The uplift floor — what makes a burn a burn
-
-Burn must be *noticeably* more than a normal `/auto-agents` run on at least one
-dimension. A burn that lands at baseline is a burn the user did not need.
-
-```
-baselineLanes  = lanes /auto-agents would pick for this task set (complexity tier)
-breadthFactor  = lanes / baselineLanes
-depthFactor    = from the profile table below
-uplift         = max(depthFactor, breadthFactor)
-```
-
-**Floor: `uplift >= 1.5`.** If the derived plan does not clear it, do not run a
-burn — report:
-
-> Restbudget und Zeitfenster tragen keinen spuerbaren Burn-Effekt (uplift {x}x).
-> Nimm `/auto-agents` — gleiches Ergebnis, weniger Aufwand.
+Depth first; lanes only fill a time gap depth cannot close.
 
 ## Depth profiles
 
-| Profile | Model | Effort | Tool-call ceiling | Extra passes per task | depthFactor |
-|---------|-------|--------|-------------------|-----------------------|-------------|
-| `standard` | per `agent-orchestration.md` § Model & Effort Defaults | default | 15–30 | — | 1.0 |
-| `deep` | opus for core, frontend, ai, windows, qa (po/research/redteam are opus already) | high | 40–60 | redteam review + second QA | 1.8 |
-| `max` | opus for every agent | high | 60+ | redteam + second QA + po review | 2.6 |
+| Profile | Opus for | Extra pass | Tool calls | depthFactor |
+|---------|----------|------------|------------|-------------|
+| `standard` | per `agent-orchestration.md` § Model & Effort Defaults | — | 15–30 | 1.0 |
+| `deep` | core, frontend, ai, windows, designer | redteam on the task diff | 30–45 | 1.5 |
+| `max` | deep + qa, gamer | redteam on the task diff | 45–60 | 2.0 |
 
-`Effort` is a **prompt directive**, not a tool parameter: the Agent tool has no
-effort parameter, so each agent's frontmatter effort stays the effective
-reasoning effort. A profile asks for more depth in the prompt text — the higher
-tool-call ceiling and the extra passes are what actually change.
+The first version's per-task **PO review** and **second QA** are gone: the
+second QA re-ran what the first had verified, and a PO weighs trade-offs that
+nobody decides while the user is away. Effort is not a tool parameter (the
+Agent tool has none) — the model, the pass and the ceiling are what change.
 
-`depthFactor` values are **planning estimates** used for the floor check and the
-lane maths. They are not measured token ratios and must not be reported as spend
-predictions.
+Mechanical tasks (lint, rename, import sort, dependency bump) and filler
+(P3–P5, discovery sources) always run at `standard`. Only the user's own work
+— the prompt and assigned issues — gets depth.
 
-This is the one place burn is allowed to override
-`agent-orchestration.md` § Model & Effort Defaults — and it overrides **upward
-only**. Burn never downgrades a model for cost; that is what `/auto-agents` is for.
+## When the option is offered — `offer`
 
-**Depth is capped by task substance, not only by budget.** A mechanical task
-(lint fix, import sort, rename, dependency bump, generated-file refresh) stays at
-`standard` regardless of the run's profile — opus on a lint fix is spend without
-quality. Substantive tasks (feature, refactor, bugfix with an unclear root cause,
-API or contract design) take the run's profile. Record the profile actually used
-per task in `BURN-STATE.json` so the report shows where the budget went.
+Q4 shows "Budget verbrennen" when, at the user's own pace this week
+(`used % ÷ elapsed hours`, at least 12 h elapsed), at least 10 % above the
+reserve would expire unused. The first version showed it above 80 % used —
+where little is left and a normal run uses it anyway.
 
-## Deriving the plan
+## Deriving the plan — `plan`
 
-```
-RESERVE                = 5      # % of weekly budget
-LANE_CAP               = 4      # override via skill extension
-BASE_PCT_PER_LANE_HOUR = 1.5    # calibrate per project
+1. **Profile** — `max`; `deep` when less than 10 % is spendable, or when the
+   core queue fits the budget at deep but not at max (finishing the user's
+   tasks beats half of them at maximum depth).
+2. **Lanes** — as many as it takes to spend the affordable part of the queue
+   (`min(queue cost, spendable)`) within 80 % of the time left, clamped to
+   `LANE_CAP` (4). Usually one.
+3. **Reserve** — `max(5 %, lanes × one L task at the profile)`. A fixed 5 %
+   is overrun when several lanes are still finishing as the drain starts.
+4. **Uplift gate** — spendable ÷ the core queue's cost at **standard** depth.
+   Below 1.5 a normal run spends the budget anyway: the plan is refused
+   (`no-uplift`) and the mode stops. (The first gate compared depth factors
+   that were always ≥ 1.8 and could never fire.)
+5. **Honest gaps** — `gapPct` (time too short for the lanes) and
+   `leftoverPct` (the queue needs less than the budget) are reported, never
+   filled with invented tasks or lanes.
 
-spendable       = remainingPct - RESERVE
-requiredPerHour = spendable / hoursUntilReset
-laneHourly(p)   = BASE_PCT_PER_LANE_HOUR * depthFactor(p)
-```
+Estimates: a standard lane spends `laneHourlyPct` of the weekly budget per
+hour, a task costs `unitCostPct × size weight (S 1 · M 2.5 · L 5) ×
+depthFactor`. Defaults are set for Max 20x and scaled by plan capacity (Max
+5x ×4, Pro ×20). After every finished run `state finish` records one sample
+of each, normalized to standard depth, in `~/.claude/burn-calibration.json`;
+from three samples on, the median replaces the default. Usage numbers are
+account-wide — another session's spend makes the samples more conservative,
+never less.
 
-Selection order — **depth first, breadth only to fill**:
+## The gate — before every spawn
 
-1. If `spendable < 10`, cap the profile at `deep` and `lanes` at 1. A near-empty
-   budget cannot support max-depth fan-out; the floor check then decides whether
-   the run is worth starting at all.
-2. Otherwise start at profile `max`. Compute
-   `lanes = ceil(requiredPerHour / laneHourly(max))`.
-3. `lanes <= 1` → one lane at `max`. Depth alone consumes the budget; adding
-   lanes would only add loss surface.
-4. Otherwise clamp `lanes` to `LANE_CAP`.
-5. If `lanes` hit the cap and `lanes * laneHourly(max) < requiredPerHour`, the
-   budget cannot be consumed in the window. Say so plainly, run at the cap, and
-   do not invent extra lanes to close a gap that fan-out cannot close.
-6. Run the floor check.
+`burn-plan.js gate` decides and claims (the task moves to `inFlight` before
+the agent starts). Order:
 
-## In-run recalibration
+1. Finished / paused → `stop`. Drained → `wait` until the lanes are empty,
+   then `finish`.
+2. **Usage unreadable** (scraper down, cache served, stale) → `hold` twice
+   (each call retries the refresh). From the third on: **blind mode** — one
+   lane, at most half of what was spendable at the last reading, every
+   estimate counted 1.5×; when that allowance is used up → drain
+   (`usage-unknown`). A fresh reading ends blind mode. The first version
+   acted on whatever number was cached and ran the account into the limit.
+3. **Week reset** since the start → drain (`week-reset`): the budget being
+   burned is gone.
+4. **Reserve** reached → drain (`reserve`).
+5. **Recalibration** — observed weekly spend per hour vs the plan's required
+   rate, one step per 30 min: under-burning (< 0.6×) raises the profile
+   before it adds a lane; over-burning (> 1.6×) drops a lane.
+6. **Lanes full** → `wait`. **Queue empty** → `wait`, then `finish`.
+7. **Pick** the first queue item (priority order) that fits
+   - the weekly budget above the reserve,
+   - the **5-hour window**: its whole run, with every busy lane, must stay
+     under 92 % — projected from the window rate measured in this window's
+     readings (fallback: weekly lane rate × 10). A window under 10 % takes
+     any task, so a task bigger than a window cannot wait forever;
+   - no file of a task in flight.
 
-Per-agent token consumption is not observable from the orchestrator — only the
-aggregate weekly number is. That aggregate is the only feedback loop burn has.
-Before each new task spawn:
-
-```
-observedPerHour = (remainingAtStart - remainingNow) / hoursElapsed
-```
-
-- `observedPerHour < 0.6 * requiredPerHour` → under-burning. Add a lane (up to
-  `LANE_CAP`) or raise the profile for the next task.
-- `observedPerHour > 1.6 * requiredPerHour` → over-burning; the reserve will be
-  reached early. Drop a lane.
-
-Log every adjustment as one line in `AUTONOMOUS-LOG.md`.
-
-## Reserve and drain
-
-- Re-read usage before each new task spawn. A snapshot 60 s old or newer counts
-  as fresh; otherwise refresh:
-  ```bash
-  node "{PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
-  ```
-  Re-check **per task**, never per tool call — the headless scrape costs seconds.
-- `remainingPct <= RESERVE` → **drain phase**: spawn nothing new, let in-flight
-  lanes finish, merge, push, render the report and the completion card.
-- Never start a task whose size class cannot plausibly fit in `spendable`. Size
-  classes are S / M / L, assigned in Step 6 — a coarse guard, not a token
-  estimate.
+   A smaller task may go ahead of a bigger one only because the bigger one
+   cannot start now anyway.
+8. Budget left but no window → `wait` while lanes are busy, then **`pause`**
+   — never an end: the run stays resumable after the reset. With auto-resume
+   armed the result carries a one-shot cron for the window reset + 15 min
+   (`resumeCron`) — arm it with `CronCreate` and `burn-plan.js state
+   resume-cron --for=<resumeAt> --job=<id>`. Without it (`resumeCron: null`)
+   the run waits for the user: their next prompt is a manual nudge and gets
+   the burn-on/off question.
+9. A new 5-hour window since the last resume cron → `rearmResumeCron` on the
+   result: arm it the same way, so a hard stop in this window is resumed too.
 
 ## Landing protocol — the conveyor
 
-Every queue item must be an **independently landable unit**: one coherent commit,
-its own targeted tests green, no dependency on a later item to be meaningful. An
-item that is not independently landable is split in Step 6 or dropped.
+Every queue item is an **independently landable unit**: one coherent commit,
+its own targeted tests green, meaningful without a later item. Per task:
 
-Per task, in order:
+1. `gate` → `spawn`: the agent works on `burn/<slug>-<role>-<n>` in its own
+   worktree. `burn-plan.js state agent <id> --agent-id=<id> --agent=<role>
+   --branch=<b> --worktree=<w>` right after the spawn — the agent id is what
+   lets a cut-off agent be continued with its context.
+2. **Checkpoint commits while working** — the rule every implementing agent
+   follows (`{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md` § Checkpoint
+   commits), here as `wip(burn): …`; the orchestrator records them with
+   `state checkpoint <id>`. The first version's "commit before returning"
+   saved nothing: an agent killed by a limit never returns.
+3. Passes per profile — `redteam` reviews a substantive task diff; a
+   high-severity finding goes back to the implementing agent once.
+4. Targeted tests for the changed modules only.
+5. Merge the sub-branch into `burn/<slug>`; `git push -u origin burn/<slug>`
+   (non-force, no PR, no ship — `autonomous-execution.md` § Safety
+   Guardrails). `init` and `state integration` refuse `main`, `master` and
+   the remote's default branch as the integration branch, and a salvage never
+   commits onto them — unless the session itself works on that branch (no
+   feature branch, by necessity). From a feature branch, `main` is reached
+   only through `/do-ship`.
+6. `burn-plan.js state land <id> --sha=<sha>`.
+7. `gate` for the next task.
 
-1. Agent implements on `burn/<slug>-<role>-<n>`.
-2. Agent commits **before returning**. Unfinished work is committed as `wip:`
-   with a message naming what is missing — nothing is left uncommitted.
-3. Targeted tests for the changed modules only, not the full suite.
-4. Orchestrator merges the sub-branch into the integration branch `burn/<slug>`.
-5. `git push -u origin burn/<slug>` — non-force, never `main`/`master`, no PR,
-   no ship. See `autonomous-execution.md` § Safety Guardrails.
-6. Update `BURN-STATE.json`.
-7. Pull the next task.
-
-The full QA run is an ordinary queue task at the end, **not a gate**. No task
-waits on it to count as done. This is what makes a mid-run limit cost one task
-instead of all of them.
+The full QA run is an ordinary queue task at the end, not a gate.
 
 ## Lane mechanics
 
-- `lanes == 1` → spawn **foreground**. This avoids the spawn-triggered worktree
-  re-sync window documented in `agent-orchestration.md` § Inter-Wave Verification
-  Gate.
-- `lanes > 1` → spawn with `run_in_background: true`. Merge and push on each
-  completion, one at a time — never two merges concurrently.
-- **Never remove or prune a worktree** whose branch holds commits not reachable
-  from the integration branch. Check before any cleanup:
-  ```bash
-  git merge-base --is-ancestor <sub-branch> burn/<slug> || echo "unmerged — keep"
-  ```
+- `foreground: true` (one lane) → spawn in the foreground; more lanes →
+  `run_in_background: true`, and only one merge at a time.
+- **Never remove a burn worktree without `burn-plan.js prune-check
+  --branch=<b> --worktree=<w>`** — exit 0 only when the branch has nothing the
+  integration branch lacks AND the worktree is clean. `git merge-base
+  --is-ancestor` alone called a worktree with no commits "safe" while it held
+  the only copy of an agent's uncommitted work.
 
-## BURN-STATE.json
+## Resume after a limit stop
 
-Written to the project root after **every** state transition (task started, task
-landed, lane count changed, profile changed, drain entered).
+A hard stop (5-hour or weekly limit, crash) leaves `status` running or
+paused and the tasks in `inFlight`. Who decides what happens next:
+
+| Entry | Who | Choice |
+|-------|-----|--------|
+| The user types after the stop (same session) | `prompt.burn.resume` → one question | **Burn abschalten** (recommended) · Burn fortsetzen · Run beenden |
+| Another session opens the worktree of a quiet run | same hook, once per session | same question |
+| `/do-run` in a new session | router Step 2 | **Ohne Burn fortsetzen** (recommended) · Mit Burn fortsetzen · Run neu starten |
+| `BURN_RESUME:` (window pause cron) / `AUTONOMOUS_RESUME:` | hook, no question (user away) | the user's F7 answer — **Burn fortsetzen** (recommended) or Burn abschalten |
+| Any entry after the weekly reset | `resumed` | burn **off**, whatever was asked |
+
+`burn-plan.js resumed --trigger=… --choice=…`:
+
+- **off** — the burn stops, the run does not: open core tasks finish at
+  standard depth on one lane; filler moves to `skipped`.
+- **continue** — profile and lanes are re-derived from the **current** usage
+  (the old window's numbers are stale); a plan that no longer clears the
+  uplift gate, or a weekly reset, falls back to off (`why`).
+- **end** — drain: finish what is in flight, report, card.
+
+Then `resume-check --apply` for the in-flight tasks: a dirty worktree is
+salvaged as a `wip(burn):` commit on its own branch (a refusing pre-commit
+hook → `BURN-SALVAGE-<id>.patch`; hooks are never skipped); then
+`continue-agent` (same session, agent id known → `SendMessage`, context
+intact) · `merge` · `requeue-with-branch` (a fresh agent continues the wip
+branch — it re-reads, it does not redo) · `requeue`.
+
+## BURN-STATE.json (v2)
+
+Written only through `burn-plan.js`, atomically, after every transition.
+Project root of the run's worktree; git-excluded (`/BURN-*`, autonomous Step
+3c).
 
 ```json
 {
-  "version": 1,
-  "slug": "burn-2026-09-06-1420",
-  "integrationBranch": "burn/burn-2026-09-06-1420",
-  "profile": "max",
-  "lanes": 3,
-  "laneCap": 4,
-  "reservePct": 5,
-  "plan": {
-    "requiredPerHour": 6.2,
-    "baselineLanes": 2,
-    "uplift": 2.6
-  },
-  "budgetAt": { "remainingPct": 41, "checkedAt": "2026-09-06T14:20:00Z" },
-  "queue": [
-    { "id": "t7", "task": "...", "size": "M", "priority": "P2", "profile": "max" }
-  ],
-  "done": [
-    { "id": "t1", "task": "...", "sha": "abc1234", "pushed": true, "profile": "max" }
-  ],
-  "inFlight": [
-    { "id": "t4", "task": "...", "agent": "core", "branch": "burn/...-core-4", "worktree": "..." }
-  ],
-  "drained": false
+  "version": 2,
+  "slug": "burn-2026-09-25-1420",
+  "integrationBranch": "burn/burn-2026-09-25-1420",
+  "status": "running | paused | draining | finished",
+  "burn": { "active": true },
+  "profile": "max", "lanes": 1, "laneCap": 4, "reservePct": 5,
+  "plan": { "requiredPerHour": 0.4, "uplift": 6.7, "reservePct": 5, "remainingAtStart": 30, "startedAt": "…", "planName": "Max 20x", "estimates": {} },
+  "weekResetAt": "…",
+  "sessionId": "<CLAUDE_CODE_SESSION_ID>",
+  "resume": { "auto": "continue | off", "autoArmed": true, "cronFor": "…" },
+  "budgetAt": { "remainingPct": 28, "sessionPct": 41, "checkedAt": "…" },
+  "readings": [{ "at": "…", "weeklyRemaining": 28, "sessionUsed": 41, "lanesBusy": 1 }],
+  "holds": 0, "blind": null,
+  "queue":    [{ "id": "t7", "task": "…", "size": "M", "priority": "P2", "source": "issue", "files": [], "branch": "…(after a requeue)" }],
+  "inFlight": [{ "id": "t4", "profile": "max", "agent": "core", "agentId": "…", "sessionId": "…", "branch": "burn/…-core-4", "worktree": "…", "checkpoints": 3 }],
+  "done":     [{ "id": "t1", "sha": "abc1234", "pushed": true, "profile": "max", "claimedAt": "…", "landedAt": "…" }],
+  "failed": [], "skipped": [],
+  "drained": false, "drainReason": null, "pause": null,
+  "lastResume": { "at": "…", "trigger": "manual", "requested": "off", "applied": "off", "why": null },
+  "events": [{ "at": "…", "type": "claim | land | requeue | hold | blind | drain | pause | resumed | recalibrate | …" }],
+  "heartbeatAt": "…"
 }
 ```
 
-## Resume
+A v1 file (no `status`) is still recognized as an open run by the router and
+the hook; `resumed` upgrades nothing it does not need.
 
-`/do-run burn` Step 0.5 checks for `BURN-STATE.json` before anything else.
+## Dry runs — `burn-plan.js simulate`
 
-If it exists with a non-empty `queue` or `inFlight`:
-
-1. Offer resume via `AskUserQuestion` — resume, or discard and start fresh.
-2. On resume: adopt `integrationBranch`, skip everything in `done`, re-derive
-   `profile` and `lanes` from **current** usage (the previous window's numbers
-   are stale), and treat `inFlight` entries as unverified — check each branch for
-   commits and either merge them or requeue the task.
-3. On discard: archive the file to `BURN-STATE.prev.json` and start fresh. Never
-   delete it outright — it is the only record of the previous run's branches.
-
-This composes with the existing `AUTONOMOUS-RESUME.json` mechanism from
-autonomous mode Step 0.5; it does not replace it. `BURN-STATE.json` tracks the
-task conveyor, `AUTONOMOUS-RESUME.json` tracks the autonomous session envelope.
+`node burn-plan.js simulate --all --text` plays whole burns against a
+synthetic account — weekly budget, rolling 5-hour window, other sessions
+spending in parallel, a scraper that goes blind — with the real decision
+code, the pre-audit burn next to this one. No tokens. Scenarios:
+happy-path · five-hour-window · weekly-stop-other-session · usage-blind ·
+multi-lane-drain · manual-resume-after-limit · window-pause-manual ·
+auto-resume-burn-off · no-uplift · filler-heavy · agent-cannot-continue. `scripts/burn-sim.test.js`
+pins their outcomes; add a scenario for every new failure mode before
+changing the gate.

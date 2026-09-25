@@ -75,11 +75,12 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
   The Agent tool accepts `sonnet`, `opus`, `haiku` and `fable` — `fable` is an
   accepted value for upward overrides, not only `opus`.
 - **`/do-run burn` inverts this**: it overrides **upward only** (sonnet → opus)
-  per its depth profile, and never downgrades for cost. The profile's
-  `effort: high` is a prompt directive, not a tool parameter — the frontmatter
-  value stays the effective reasoning effort. Its goal is to consume the
-  remaining weekly budget as depth-per-task rather than as
-  breadth-of-unfinished-tasks. See
+  per its depth profile, and never downgrades for cost. The overrides come
+  from `scripts/burn-plan.js gate` (`models`), applied by auto-agents' burn
+  conveyor (`--burn`); mechanical and filler tasks keep the defaults. Effort
+  is not a tool parameter — the frontmatter value stays the effective
+  reasoning effort. Its goal is to turn budget that would expire into
+  depth-per-task rather than breadth-of-unfinished-tasks. See
   `skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` § Depth profiles.
 - **Never downgrade to haiku** for agents with `effort: high` (po, research) — haiku + high effort wastes tokens without quality gain
 - Upgrading to opus or fable is fine for any agent when task complexity warrants it
@@ -123,7 +124,14 @@ Every spawned agent MUST receive:
 1. **Parent branch name** — for branch inheritance protocol
 2. **Task description** — specific to their role, not the full user request
 3. **Context from previous waves** — handoff data (contracts, findings, decisions)
-4. **Commit instruction** — follow `deep-knowledge/commit-conventions.md`
+4. **Commit instruction** — follow `deep-knowledge/commit-conventions.md`;
+   for every agent that writes code, include the checkpoint rule verbatim:
+   *"Commit `wip(<scope>): <what>` on your branch after every green sub-step
+   and at the latest every ~10 file-changing tool calls — an agent cut off by
+   a usage limit never gets to commit at the end. Only on your own sub-branch
+   or the session's branch — never above it: while the session is on a
+   feature branch, never on main, master or the default branch. No git repo:
+   no commits."* (§ Checkpoint commits there)
 5. **Interaction directive** — set by the calling skill (see below)
 6. **Effort budget** — a tool-call / scope ceiling scaled to the complexity tier
    (see § Complexity Tiers). Counters the "over-investment on simple work" failure
@@ -313,6 +321,34 @@ before a wave consumes the prior wave's handoff:
 If the environment is prone to between-wave resets, prefer **inline (foreground)
 wave handoffs** over background-agent spawns — a foreground handoff has no
 spawn-triggered refresh window.
+
+### Recovering a cut-off agent
+
+A usage limit, a crash or a closed session stops agents mid-task. Their
+checkpoint commits (`commit-conventions.md` § Checkpoint commits) are on
+their branches; anything after the last checkpoint is uncommitted in their
+worktrees. Before the run continues, per cut-off agent:
+
+1. **Secure the rest** — its worktree shows changes (`git status
+   --porcelain`) → commit them on its branch as `wip(<scope>): salvage after
+   a stop` (stage the task's files; never secrets; hooks stay on). Never
+   above the session's branch: while the session is on a feature branch, a
+   worktree on `main`, `master` or the default branch keeps its changes
+   uncommitted.
+2. **Continue, don't restart** — same session and the agent id is known →
+   `SendMessage` to it ("You were cut off; your work so far is committed on
+   `<branch>`. Finish the task, commit, report."), context intact. Otherwise a
+   fresh agent of the same role continues **on that branch** from the last
+   commit, never from scratch.
+3. **Never remove its worktree** while its branch has commits the target
+   branch lacks or the worktree has changes. `node
+   "{PLUGIN_ROOT}/scripts/burn-plan.js" prune-check --branch=<b>
+   --worktree=<w> --integration=<target>` checks both (exit 1 = keep);
+   `git merge-base --is-ancestor` alone calls a worktree without commits
+   "safe" while it holds the only copy of the work.
+
+A burn run does all three through `burn-plan.js resume-check --apply`
+(`skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` § Resume).
 
 ## QA Wave — Testing Protocol
 

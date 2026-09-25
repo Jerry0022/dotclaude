@@ -5,8 +5,8 @@
  * - ONE base AskUserQuestion call with the four spec questions, fixed option
  *   order, the agnostic recommendation first (the only single-select option
  *   labelled "(Recommended)"), parallel short labels, never "Ja"/"Nein".
- * - "Budget verbrennen" is last in Q4, conditional on weekly usage > 80 %
- *   (get_usage) and never recommended.
+ * - "Budget verbrennen" is last in Q4, conditional on burn-plan.js offer
+ *   (budget that would expire unused at the user's pace) and never recommended.
  * - An empty Q4 answer means the recommended set, so click-through is a run.
  * - The follow-up obeys the same label rules, and the questions the folded
  *   skills used to ask are gone from their mode files.
@@ -135,13 +135,14 @@ describe("base call: conditional options", () => {
     expect(skill).toMatch(/omit it silently/);
   });
 
-  test("Budget verbrennen is last, gated on get_usage weekly > 80 %", () => {
+  test("Budget verbrennen is last, gated on burn-plan.js offer (not on > 80 % used)", () => {
     const q4 = byId(base, "Q4");
     const budget = q4.options.at(-1);
     expect(budget.label).toBe("Budget verbrennen");
-    expect(budget.note).toMatch(/weekly usage > 80 %/);
+    expect(budget.note).toMatch(/only when burn-plan\.js offer says so/);
     expect(skill).toMatch(/get_usage/);
-    expect(skill).toMatch(/weekly\.pct > 80/);
+    expect(skill).toContain('scripts/burn-plan.js" offer');
+    expect(skill).toMatch(/"offer": true/);
   });
 
   test("Q1 is skipped when started from do-batch", () => {
@@ -186,7 +187,7 @@ describe("label rules (base call and follow-up)", () => {
 
   test("fixtures parsed", () => {
     expect(all.length).toBeGreaterThan(15);
-    expect(followUp.map((q) => q.id)).toEqual(["F1", "F2", "F3", "F4", "F5", "F6"]);
+    expect(followUp.map((q) => q.id)).toEqual(["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"]);
   });
 
   test.each(all)("%s %j is never a Ja/Nein answer", (_id, label) => {
@@ -222,6 +223,26 @@ describe("label rules (base call and follow-up)", () => {
     for (const o of byId(followUp, "F6").options) expect(o.label).toMatch(/^PC (an|aus) · (mit|ohne) Resume$/);
   });
 
+  test("F7 asks the burn's auto-resume policy: continue recommended, switch-off second", () => {
+    const f7 = byId(followUp, "F7");
+    expect(f7.header).toBe("Burn-Resume");
+    expect(f7.multi).toBe(false);
+    expect(f7.options.map((o) => o.label)).toEqual(["Burn fortsetzen", "Burn abschalten"]);
+    expect(f7.options[0].recommended).toBe(true);
+    const step4 = section(skill, "## Step 4 — Follow-up", "## Step 5");
+    expect(step4).toMatch(/only with Budget verbrennen/);
+    expect(step4).toMatch(/Gilt nur mit »PC an · mit Resume«/);
+  });
+
+  test("F8 collects burn task sources (multi-select, empty = only the prompt); backlog skips it", () => {
+    const f8 = byId(followUp, "F8");
+    expect(f8.multi).toBe(true);
+    expect(f8.options.map((o) => o.label)).toEqual(["Issues", "TODO/FIXME", "Lint & Typen", "Coverage-Lücken"]);
+    const step4 = section(skill, "## Step 4 — Follow-up", "## Step 5");
+    expect(step4).toMatch(/Leer lassen = nur dein Prompt/);
+    expect(step4).toContain("| Budget verbrennen with Backlog | additionally F6 (if not already asked) + F7; no F8");
+  });
+
   test("F6 never pairs shutdown with resume (autonomous HARD GATE by construction)", () => {
     const labels = byId(followUp, "F6").options.map((o) => o.label);
     expect(labels).not.toContain("PC aus · mit Resume");
@@ -247,10 +268,21 @@ describe("folded questions are answered by the router, not asked by the modes", 
     expect(b).toMatch(/answered by the do-run router/);
   });
 
-  test("burn: no confirm question left", () => {
+  test("burn: no confirm, no source and no plan question left", () => {
     const b = mode("burn");
     expect(b).not.toMatch(/"Ja, burn starten"/);
     expect(b).toMatch(/Answered by the do-run router — do not ask/);
+    expect(b).not.toMatch(/Soll ich zusaetzlich zu deinem Prompt/);
+    expect(b).not.toMatch(/Wait for user confirmation/);
+    expect(section(b, "## Step 4 — Task Sources", "## Step 5")).toMatch(/Answered by the do-run router — do not ask/);
+    expect(b).toMatch(/\*\*no separate confirmation\*\*/);
+  });
+
+  test("a stopped burn is resumed without burning on silently", () => {
+    const step2 = section(skill, "## Step 2 — Resume before anything else", "## Step 3");
+    expect(step2).toContain('"Ohne Burn fortsetzen (Recommended)"');
+    expect(step2).toContain('"Mit Burn fortsetzen"');
+    expect(skill).toContain("| `BURN_RESUME:` | `modes/burn.md` Step 0.6");
   });
 
   test("autonomous: no analyse-vs-implement question left, HARD GATE kept", () => {

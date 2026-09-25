@@ -34,7 +34,7 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
      report `branch: none (file-only)` in your handoff. Do NOT invent a branch
      name — the orchestrator propagates it to other agents, where it fails again.
 3. Create your working branch: `git checkout -b <parent_branch>/windows`
-4. Work, then commit per `{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md` and push your branch
+4. Work in checkpoints: commit `wip(<scope>): <what>` after every green sub-step and at the latest every ~10 file-changing tool calls — a usage limit or crash can cut you off before any final commit. Only on your own branch from step 3 — never above the session's branch: while the session works on a feature branch, never on main, master or the default branch; no repo, no commits (`{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md` § Checkpoint commits). Finish with a conventional commit per the same file and push your branch
 5. Report your branch name in the handoff — the orchestrator runs `/do-ship` for landing (never call `gh pr create` directly)
 
 ## Responsibilities
