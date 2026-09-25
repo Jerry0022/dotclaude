@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.205.2] — 2026-09-25
+
+### Fixed
+- **The ship no longer merges before a late CI check shows up (#508).** `ship_release` pushes its own release commit and probes the PR checks right after. External status providers (Vercel and the like) register seconds after a push, so the single probe read "no checks" and the PR merged unchecked. An immediate "no checks" now waits out a grace window (90 s, `DEVOPS_SHIP_NO_CHECKS_GRACE_MS`) and re-probes. When earlier commits of the same PR carried checks, it waits up to the full checks timeout for them to appear on the new head. A `no-checks` verdict reached after waiting carries `checks.noChecksReason` in the release result instead of passing silently.
+
 ## [0.205.1] — 2026-09-25
 
 ### Fixed
