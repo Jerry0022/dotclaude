@@ -28,12 +28,13 @@ automatically sync to every ship.
 2. Read installed version: `~/.claude/plugins/installed_plugins.json` → `plugins["devops@dotclaude"][0].version`.
 3. Add exactly one `userFinalTest` item, in the user's language:
    - **Pin is `alpha`** — the install tracks alpha, so the Step 8 finalizer moves it to vNew.
-     Assert the sync only after Step 8's verify loop has CONFIRMED the clone is on vNew:
-     > `{ action: "devops lokal (alpha) auf v<vNew> synchronisiert — Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
+     The card is rendered before the finalizer runs, so the item names the sync
+     that follows, never a finished one:
+     > `{ action: "devops lokal (alpha) wird auf v<vNew> synchronisiert — danach Claude einmal neu starten, dann ist die neue Version aktiv.", afterDeployment: true }`
 
-     When the loop gives up (the clone still reports vOld after three attempts), say so
-     instead — never claim a sync that did not happen:
-     > `{ action: "devops lokal (alpha) steht noch auf v<vOld> — der Sync-Hook hat das Tag alpha/v<vNew> nicht gesehen. Claude »devops update« sagen, dann Claude einmal neu starten.", afterDeployment: true }`
+     When Step 8's verify loop gives up (the clone still reports vOld after three
+     attempts), that is said in ONE line before the card widget (Step 8) — never
+     after the card, and never as a claimed sync.
    - **Pin is `alpha` AND a `backlog-runner` lockout is active** (Step 8 guard below —
      this ship is one of several in a `/do-run backlog` queue): the finalizer is deferred
      to the runner's own Step 5, so do not claim a sync yet:
@@ -52,13 +53,18 @@ sync failure (observed 2026-07-19). This keeps the completion card the **last vi
 output** (per plugin Step 6); do **not** print the notice as separate prose after the
 card — the card carries it.
 
-## Step 8 — Self-update finalizer (silent, runs LAST)
+## Step 8 — Self-update finalizer (silent, between the render and the card widget)
 
 > **Ordering is mandatory.** This MUST run **after** `render_completion_card` (Step 6)
-> and after Memory Dream (Step 7). The sync rebuilds the cache to a new `installPath`
-> and writes `~/.claude/plugins/.mcp-stale.json`; once that sentinel exists,
-> `pre.mcp.health` blocks every further MCP call (including the completion card).
-> Running it before the card would brick the card render.
+> and **before** the card reaches the user: on the Desktop app before the
+> `show_widget` call the render result asks for, in the terminal before the card
+> markdown is output. The sync rebuilds the cache to a new `installPath` and writes
+> `~/.claude/plugins/.mcp-stale.json`; once that sentinel exists, `pre.mcp.health`
+> blocks every further `mcp__plugin_devops_*` call — running it before the render
+> would brick the card. `show_widget` belongs to the Desktop app, not to this
+> plugin, so the sentinel never blocks it. This step used to run after the card:
+> its Bash row sat under the widget and drew a closing "synced, restart" sentence
+> the card already carried (observed 2026-09-25).
 
 > **Channel-aware — NOT a guaranteed move to vNew.** The finalizer runs
 > `ss.plugin.update`, which is channel-pinned (ring model): it reconciles the local
@@ -85,8 +91,8 @@ card — the card carries it.
   from ONE session. The finalizer marks the MCP servers stale, and `pre.mcp.health`
   would then block the `ship_*` / card calls of every issue still in the queue — on
   2026-09-18 the deferral had to be done by hand (PRs #401/#402/#404). Skip here; the
-  runner runs this finalizer exactly once at its Step 5, after its final card. Use the
-  deferred Step 6.5 wording for the card item.
+  runner runs this finalizer exactly once at its Step 5, after its final card's render
+  and before that card is delivered. Use the deferred Step 6.5 wording for the card item.
 - **A ship-queue marker exists.** `{project}/.claude/.ship-queue` (written by
   the auto-cleanup skill's Step 10b — or any orchestrator that lands several PRs from one
   session, see the plugin `/do-ship` → *Composed ships*) means the same thing as the
@@ -164,10 +170,16 @@ The hook handles `git pull --ff-only` on the marketplace clone, cache rebuild to
 shipped version, `installed_plugins.json` update, and the MCP-stale sentinel on a real
 version move.
 
-**Produce NO visible output after this.** The completion card (with the restart item from
-Step 6.5) is the last thing the user sees. Capture the hook's stdout into the tool result
-only — do not echo it into the chat. The session is now in a deliberately MCP-stale state;
-that is expected and resolves on the user's single restart.
+**Then deliver the card — and nothing after it.** The completion card (with the restart
+item from Step 6.5) is the last thing the user sees: call `show_widget` (Desktop) or output
+the markdown (terminal) right after this step. Capture the hook's stdout into the tool
+result only — do not echo it into the chat. Only when the verify loop gave up (the clone
+still on vOld) write ONE line before the card, in the user's language — never a claimed
+sync:
+> `{ line: "devops lokal (alpha) steht noch auf v<vOld> — der Sync-Hook hat das Tag alpha/v<vNew> nicht gesehen. Claude »devops update« sagen, dann Claude einmal neu starten." }`
+
+The session is now in a deliberately MCP-stale state; that is expected and resolves on the
+user's single restart.
 
 ### After-restart contract
 

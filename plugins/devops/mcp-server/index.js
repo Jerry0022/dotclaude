@@ -1317,6 +1317,19 @@ function detectGuideHandoff(input) {
   }
 }
 
+/**
+ * Open points without the ones a task chip of this session already offers
+ * (hooks/lib/task-chips.js). Never fatal: a missing lib drops nothing.
+ */
+function dropChipOpenItems(open, sessionId, cwd) {
+  try {
+    const lib = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'task-chips.js'));
+    return lib.dropChipOpenItems(open, lib.readChips(sessionId, cwd));
+  } catch {
+    return { open, dropped: 0 };
+  }
+}
+
 function buildDecisionBlock(input, lang, key, delivery, state) {
   const T = HEADINGS[lang] || HEADINGS.de;
   const compact = shipCompactInfo(input.compact, lang);
@@ -1809,6 +1822,18 @@ function buildCompletionCard(params) {
     }
   }
 
+  // 0c. A topic flagged as a task chip (Desktop spawn_task) is offered by the
+  //     app already — the chip IS the offer. As an open point it also landed in
+  //     the "Nachbessern" answer, and the user fixed it a second time in the
+  //     session that had just shipped (hooks/lib/task-chips.js).
+  if (Array.isArray(params.open) && params.open.length) {
+    const chipped = dropChipOpenItems(params.open, params.session_id, params.cwd);
+    if (chipped.dropped) {
+      console.error(`[dotclaude-completion-mcp] dropped ${chipped.dropped} open point(s) a task chip already offers`);
+      params.open = chipped.open;
+    }
+  }
+
   // 1. Fetch fresh usage data
   const usageResult = refreshUsage();
   const usageData = usageResult.success ? usageResult.data : null;
@@ -2184,7 +2209,7 @@ server.registerTool(
             reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'Die Migration bitte gleich mitziehen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
           }),
         ])).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Never a topic you flagged with spawn_task: the task chip IS the offer (the user starts it with one click), so a point that says a chip or follow-up task exists, or names a chip of this session, is dropped — and on the Desktop app a finding outside this work's scope goes into such a chip, not onto the card. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope (outside the Desktop app, where no chip exists) — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

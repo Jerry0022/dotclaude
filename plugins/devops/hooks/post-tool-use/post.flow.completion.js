@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.27.2
+ * @version 0.28.0
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -58,6 +58,15 @@
  *   `pending` instruction right away, so a card rendered before those results
  *   arrive declares them instead of being bounced by stop.flow.guard's pending
  *   gate.
+ *
+ *   Task chips (Desktop `spawn_task` / `dismiss_task`): records each chip of
+ *   the session for the card server and tells Claude right there that the chip
+ *   IS the offer — the card drops open points that repeat it
+ *   (hooks/lib/task-chips.js).
+ *
+ *   The card widget ends the turn: this hook runs the plugin's Stop hooks and,
+ *   when none blocks, answers `{"continue": false}` — no model call follows the
+ *   card, so no recap, no nudge reply, no post-card step (hooks/lib/card-turn-end.js).
  */
 
 require('../lib/plugin-guard');
@@ -73,6 +82,12 @@ const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
 const { responseLaunch, labelFor, isConceptInfra } = require('../lib/pending-tasks');
+const { SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = require('../lib/task-chips');
+const {
+  decideCardTurnEnd,
+  blockedLines: cardTurnBlockedLines,
+  STOP_REASON: CARD_STOP_REASON,
+} = require('../lib/card-turn-end');
 const { isGuideActive } = require('../../scripts/guide-active-state');
 const {
   classifyProfile,
@@ -551,6 +566,24 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
 }
 
 /**
+ * --- 1f. Task chips — the chip is the offer, never an open point too ---
+ * Records a spawn_task / dismiss_task call for the card server
+ * (lib/task-chips.js) and returns the reminder a new chip earns.
+ * @returns {string[]}
+ */
+function recordTaskChip(hook, toolName) {
+  try {
+    if (SPAWN_TOOL_RE.test(toolName)) {
+      const chip = recordSpawn(hook);
+      if (chip) return chipReminder(chip.title);
+    } else if (DISMISS_TOOL_RE.test(toolName)) {
+      recordDismiss(hook);
+    }
+  } catch { /* advisory — the card's own phrase check still applies */ }
+  return [];
+}
+
+/**
  * --- 2. Tell Claude — as additionalContext, and only what changes something ---
  * Everything goes through emit(): plain stdout would never reach the model
  * (see header). Delivered text stays in the context for the rest of the
@@ -568,10 +601,26 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
   // card widget, it read as "the markdown card still follows" and produced a
   // line under the widget, the Stop gate's re-demand, and an identical second
   // card.
+  //
+  // The card widget ends the turn itself (lib/card-turn-end.js): the plugin's
+  // Stop hooks run here, and when none of them blocks, `continue: false` stops
+  // the loop before another model call — nothing can land under the card, and
+  // the app's no-output nudge never comes. A blocking Stop hook hands Claude its
+  // reason instead; an orchestrator working past its cards keeps the old reminder.
   if (isCardWidgetCall(toolName, hook.tool_input)) {
+    let end = { end: false };
+    try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
+    if (end.end) {
+      process.stdout.write(JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON }));
+      return null;
+    }
+    if (end.reason) {
+      emit(cardTurnBlockedLines(end));
+      return null;
+    }
     emit([
-      '[completion-flow] Card shown — this is the end of the turn.',
-      'Write nothing after it: no summary, no "the card is above", no second card.',
+      '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
+      'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
       NO_OUTPUT_NUDGE_REPLY,
     ]);
     return null;
@@ -585,7 +634,7 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
     return null;
   }
 
-  const lines = [];
+  const lines = [...recordTaskChip(hook, toolName)];
 
   if (readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true }) !== null) {
     lines.push(

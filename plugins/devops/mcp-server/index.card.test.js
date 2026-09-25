@@ -206,6 +206,39 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  test("an open point a task chip already offers is dropped — the chip is the offer", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Ship ok", lang: "de", session_id: "test-chip-open",
+      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+      open: [
+        { text: "Reload zeigt wieder den Bereit-Zustand — als Folge-Task angelegt", reply: "Bitte den Reload-Fix auch hier machen." },
+        "post.claude.budget schreibt noch Plain-stdout (Chip liegt bereit)",
+        "Alte Config löschen?",
+      ],
+    });
+    expect(text).not.toContain("Folge-Task");
+    expect(text).not.toContain("Chip liegt bereit");
+    expect(text).toContain("Alte Config löschen?");
+  });
+
+  test("an open point naming a chip of this session by its title is dropped", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const sid = "test-chip-title-" + process.pid;
+    const file = join(os.tmpdir(), `dotclaude-devops-task-chips-${sid}`);
+    fs.writeFileSync(file, JSON.stringify({ cwd: "", chips: [{ id: "task_x1", title: "Fix item spawn landing on an occupied tile" }] }));
+    try {
+      const text = await cardText({
+        variant: "ready", summary: "Karte", lang: "de", session_id: sid,
+        open: ["Kachel-Bug gefunden (Fix item spawn landing on an occupied tile) — mitmachen?", "Alte Config löschen?"],
+      });
+      expect(text).not.toContain("Kachel-Bug");
+      expect(text).toContain("Alte Config löschen?");
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
   test("no remote is detected from cwd when the caller passes no state.mode (#500)", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");

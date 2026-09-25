@@ -30,8 +30,8 @@ function project() {
  * envelope. Plain (non-JSON) stdout would never reach the model, so it comes
  * back as-is and fails the channel tests below.
  */
-function runHook(dir, sid, toolName = "Read", extra = {}) {
-  const raw = runHookRaw(dir, sid, toolName, extra);
+function runHook(dir, sid, toolName = "Read", extra = {}, envExtra) {
+  const raw = runHookRaw(dir, sid, toolName, extra, envExtra);
   if (!raw) return "";
   try {
     const out = JSON.parse(raw);
@@ -41,7 +41,7 @@ function runHook(dir, sid, toolName = "Read", extra = {}) {
   }
 }
 
-function runHookRaw(dir, sid, toolName = "Read", extra = {}) {
+function runHookRaw(dir, sid, toolName = "Read", extra = {}, envExtra = { DOTCLAUDE_CARD_HARD_STOP: "0" }) {
   // The full suite runs 60+ files in parallel; on a loaded machine spawnSync
   // can fail to start the child at all (status null, res.error set), and the
   // hook's stdout then comes back empty — which reads as "the hook emitted no
@@ -60,7 +60,10 @@ function runHookRaw(dir, sid, toolName = "Read", extra = {}) {
         ...extra,
       }),
       encoding: "utf8",
-      env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+      // The card widget runs the real Stop hooks before it ends the turn
+      // (lib/card-turn-end.js) — off by default here; the hard-stop tests
+      // below turn it on against a fake plugin root.
+      env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp, ...envExtra },
     });
     if (res.status !== null || attempt >= 3) {
       if (res.status === null) {
@@ -929,5 +932,124 @@ describe("post.flow.completion — subagent and out-of-tree changes do not touch
     expect(has(dir, "validation-attested", sid)).toBe(false);
     expect(read(dir, "light-verified", sid)).toBe("Bash");
     cleanup(dir);
+  });
+});
+
+// A task chip (Desktop spawn_task) is the offer for an out-of-scope topic. The
+// same topic on the card went into "Nachbessern" too and was fixed twice.
+describe("post.flow.completion — task chips", () => {
+  const SPAWN = "mcp__ccd_session__spawn_task";
+  const DISMISS = "mcp__ccd_session__dismiss_task";
+  const stateFile = (dir, sid) => path.join(dir, ".tmp", `dotclaude-devops-task-chips-${sid}`);
+  const spawnResult = (id, title) => [{
+    type: "text",
+    text: `Noted (position 1, task_id: ${id}). A chip is showing for the user. Currently pending: ${id} "${title}". Continue your current work.`,
+  }];
+
+  test("a spawned chip is recorded and Claude is told the chip is the offer", () => {
+    const dir = project();
+    const sid = "s-chip-1";
+    const out = runHook(dir, sid, SPAWN, {
+      tool_input: { title: "Fix flaky mtime test in graph-nudge", tldr: "Seen while shipping.", prompt: "…" },
+      tool_response: spawnResult("task_ab12", "Fix flaky mtime test in graph-nudge"),
+    });
+    expect(out).toContain('Chip offered: "Fix flaky mtime test in graph-nudge"');
+    expect(out).toMatch(/chip IS the offer/);
+    const state = JSON.parse(fs.readFileSync(stateFile(dir, sid), "utf8"));
+    expect(state.chips.map((c) => [c.id, c.title])).toEqual([["task_ab12", "Fix flaky mtime test in graph-nudge"]]);
+    cleanup(dir);
+  });
+
+  test("a withdrawn chip is marked, so it no longer counts as an offer", () => {
+    const dir = project();
+    const sid = "s-chip-2";
+    runHook(dir, sid, SPAWN, {
+      tool_input: { title: "Route two PostToolUse hooks through additionalContext" },
+      tool_response: spawnResult("task_cd34", "Route two PostToolUse hooks through additionalContext"),
+    });
+    runHook(dir, sid, DISMISS, {
+      tool_input: { task_id: "task_cd34", reason: "fixed in this session" },
+      tool_response: [{ type: "text", text: "Task task_cd34 withdrawn — the chip is no longer shown to the user." }],
+    });
+    const state = JSON.parse(fs.readFileSync(stateFile(dir, sid), "utf8"));
+    expect(state.chips[0].dismissed).toBe(true);
+    cleanup(dir);
+  });
+});
+
+// The card widget ends the turn (lib/card-turn-end.js): the plugin's Stop hooks
+// run inside this hook, and when none blocks the answer is `continue: false` —
+// no model call after the card, so nothing can land under it. Driven against a
+// fake plugin root whose Stop hooks only log, so no real Stop hook runs here.
+describe("post.flow.completion — the card widget ends the turn", () => {
+  const WIDGET = "mcp__visualize__show_widget";
+  const CARD = { title: "completion_card_body", widget_code: "<h3 class=\"card-title\">T</h3>" };
+
+  function fakeRoot({ blockFirst = false } = {}) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "card-stop-root-"));
+    fs.mkdirSync(path.join(root, "hooks", "stop"), { recursive: true });
+    const log = path.join(root, "stop.log");
+    const script = (name, block) => [
+      "let raw='';process.stdin.on('data',d=>raw+=d);process.stdin.on('end',()=>{",
+      "  const h=JSON.parse(raw||'{}');",
+      `  require('fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify({ name: ${JSON.stringify(name)}, ev: h.hook_event_name, active: h.stop_hook_active, sid: h.session_id }) + String.fromCharCode(10));`,
+      block ? "  process.stdout.write(JSON.stringify({ decision: 'block', reason: 'Validation required — pass validation' }));" : "",
+      "});",
+    ].join("\n");
+    fs.writeFileSync(path.join(root, "hooks", "stop", "stop.one.js"), script("one", blockFirst));
+    fs.writeFileSync(path.join(root, "hooks", "stop", "stop.two.js"), script("two", false));
+    fs.writeFileSync(path.join(root, "hooks", "hooks.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [
+      { type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.one.js" },
+      { type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.two.js" },
+    ] }] } }));
+    const ran = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+    return { root, ran };
+  }
+
+  test("no Stop hook blocks → continue:false, every Stop hook ran once as a Stop event", () => {
+    const dir = project();
+    const { root, ran } = fakeRoot();
+    const raw = runHookRaw(dir, "s-hard-1", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root });
+    const out = JSON.parse(raw);
+    expect(out.continue).toBe(false);
+    expect(out.stopReason).toMatch(/devops/);
+    expect(ran().map((r) => [r.name, r.ev, r.active, r.sid])).toEqual([
+      ["one", "Stop", false, "s-hard-1"],
+      ["two", "Stop", false, "s-hard-1"],
+    ]);
+    cleanup(dir); cleanup(root);
+  });
+
+  test("a blocking Stop hook keeps the turn going and hands Claude its reason", () => {
+    const dir = project();
+    const { root, ran } = fakeRoot({ blockFirst: true });
+    const raw = runHookRaw(dir, "s-hard-2", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root });
+    const out = JSON.parse(raw);
+    expect(out.continue).toBeUndefined();
+    const text = out.hookSpecificOutput.additionalContext;
+    expect(text).toContain("[card-turn-end]");
+    expect(text).toContain("Validation required");
+    expect(ran().map((r) => r.name)).toEqual(["one"]);
+    cleanup(dir); cleanup(root);
+  });
+
+  test("an active ship queue keeps the turn: the old reminder, no Stop hook run", () => {
+    const dir = project();
+    fs.writeFileSync(path.join(dir, ".claude", ".ship-queue"), JSON.stringify({ owner: "auto-cleanup", since: new Date().toISOString() }));
+    const { root, ran } = fakeRoot();
+    const out = runHook(dir, "s-hard-3", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root });
+    expect(out).toContain("Card shown");
+    expect(out).toMatch(/reply to it with nothing/);
+    expect(ran()).toEqual([]);
+    cleanup(dir); cleanup(root);
+  });
+
+  test("any other widget never ends the turn", () => {
+    const dir = project();
+    const { root, ran } = fakeRoot();
+    const raw = runHookRaw(dir, "s-hard-4", WIDGET, { tool_input: { title: "q4_revenue_chart" } }, { CLAUDE_PLUGIN_ROOT: root });
+    expect(raw).not.toContain('"continue":false');
+    expect(ran()).toEqual([]);
+    cleanup(dir); cleanup(root);
   });
 });

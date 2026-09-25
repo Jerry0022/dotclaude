@@ -175,6 +175,17 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
   artifacts on a deploy card. More than three → `+N weitere` appended to the
   heading and the rest written in the answer text above the card.
+- **A task chip is no point.** On the Desktop app a finding outside the work
+  is flagged with `spawn_task`: the chip is the offer, one click starts the fix
+  in its own session. The card server drops every point that says a chip or
+  follow-up task exists (`… — Task-Chip bereit`, `(follow-up chip ready)`,
+  `als Folge-Task angelegt`) or names a chip of this session by its title
+  (`hooks/lib/task-chips.js`; `post.flow.completion` records the chips and
+  reminds Claude when one is created). Matched by the point's own words, never
+  by topic similarity — a decision that merely shares words with a chip stays.
+  Such points were 10 of 451 between 2026-08-20 and 2026-09-25; on a ship card
+  their `Nachbessern` answer had the user fix the topic a second time in the
+  session that had just shipped, and ship again.
 - **Buttons** (Desktop widget only, hidden in the terminal): the two verbs
   of the variant, primary first; each has a tooltip explaining what it
   triggers (`Fix` → "Ich repariere die zwei Tests zuerst, dann kommt die
@@ -241,10 +252,12 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   (`deliveredCardText`: a card-body `show_widget` after the turn's last
   render stands in as `✨✨✨ {title} ✨✨✨`, the title taken from the
   widget's h3).
-- **Ending on the widget (Desktop).** A turn whose last model call follows
+- **Ending on the widget (Desktop).** Since the widget ends the turn itself
+  (next bullet), what follows applies only where the turn is held
+  open (an orchestrator, the opt-out, a blocking Stop hook). A turn whose last model call follows
   a tool result without text gets ONE meta nudge from Claude Code —
   `[Your previous response had no visible output…]` — and a widget-only
-  card turn always ends that way. The nudge fires once per turn; an empty
+  card turn always ended that way. The nudge fires once per turn; an empty
   reply (no text, no tool call) ends the turn with the card last. Every
   line written for it ("Die Card steht oben …") lands under the card, so
   the card contract says to reply with nothing (`NO_OUTPUT_NUDGE_REPLY`,
@@ -274,6 +287,41 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   120-char ellipsis of § 2.2 is a terminal budget, and a line cut mid-sentence
   read as "the card only shows half". `cardSignature` (§ 5.5) falls back to
   the title for such a title-only card.
+- **The widget ends the turn — nothing can follow it.** Of 208 Desktop card
+  turns on 0.200–0.208 (2026-09-24/25), 152 had text under the card (a turn
+  can count twice): 108 wrote right after the widget — mostly a recap, 29
+  times only a zero-width space to dodge the nudge — 28 after a tool call
+  that followed the card (do-ship's memory pass, the plugin-source repo's
+  self-sync finalizer, a status check), 19 answered the nudge, 6 followed a
+  Stop-gate block. No instruction fixed that (render result, output style,
+  and from 0.208.1 the PostToolUse reminder #534 all said "nothing after the
+  card"). So `post.flow.completion` ends the turn on the card-body widget
+  call itself (`hooks/lib/card-turn-end.js`): it runs the plugin's Stop hooks
+  in hooks.json order with the Stop payload Claude Code would send, and when
+  none blocks it answers `{"continue": false}` — Claude Code stops the loop
+  before another model call, so no text, no nudge and no post-card tool call
+  can follow (verified end to end on 2.1.281: widget, then `result` with
+  `stop_reason: tool_use`, no further message; the Stop gate's flags were
+  reset by the in-hook run). The in-hook run is needed because after a
+  PostToolUse stop Claude Code runs no command Stop hook, only the session's
+  own callbacks (`turn_end_reactions`). A Stop hook that blocks (V&V gate,
+  card gate, web hand-off) keeps the turn going: its reason reaches Claude as
+  `[card-turn-end] …`, the fix happens, and the next widget tries again with
+  `stop_hook_active: true`. The turn is never ended while an orchestrator
+  still works after its cards — an active autonomous lockout (do-run AFK and
+  backlog: shutdown and finalizers follow the card) or a fresh
+  `.claude/.ship-queue` (several ships and cards in one turn);
+  `DOTCLAUDE_CARD_HARD_STOP=0` turns it off. The stop notice
+  (`[devops] Card shown — turn ended.`) is not part of the SDK stream the
+  Desktop renders. So do-ship's memory pass runs before the card (Step 5e),
+  and a step that cannot run before `render_completion_card` runs between the
+  render and the `show_widget` call. Rejected alternatives: a
+  `MessageDisplay` hook only swaps the final message while the SDK streams the
+  raw text live (the Desktop consumes partial messages) — at best a flicker;
+  an MCP result with `_meta: { "claude/endTurn": true }` and
+  `CLAUDE_CODE_TERMINAL_MCP_TOOLS` both end or quiet a turn, but only for
+  tools that return that meta or that the Desktop lists — `show_widget` is
+  the Desktop app's tool.
 - **Desktop surfaces and sizes** (feedback 2026-09-21: two bordered boxes did
   not read as one card; both titles and the detail text were a step too
   large; the grey surface tokens read "too colourless" on the dark page):

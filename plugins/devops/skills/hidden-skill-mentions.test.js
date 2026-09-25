@@ -42,9 +42,10 @@ describe("user-facing texts never tell the user to type a hidden skill's slash c
   const userFacing = [
     ["INSTALL.md", read(path.join(repoRoot, "INSTALL.md"))],
     ["CLAUDE.md", read(path.join(repoRoot, "CLAUDE.md"))],
-    // the project ship extension: only its card items reach the user
+    // the project ship extension: only its card items and the one line its
+    // finalizer writes before the card on a failed sync reach the user
     [".claude/skills/do-ship/SKILL.md (card items)",
-      (read(path.join(repoRoot, ".claude", "skills", "do-ship", "SKILL.md")).match(/\{ action: "[^"]*"/g) || []).join("\n")],
+      (read(path.join(repoRoot, ".claude", "skills", "do-ship", "SKILL.md")).match(/\{ (?:action|line): "[^"]*"/g) || []).join("\n")],
     ["pre.ship.guard.js", read(path.join(pluginRoot, "hooks", "pre-tool-use", "pre.ship.guard.js"))],
     ["ss.mcp.verify.js", read(path.join(pluginRoot, "hooks", "session-start", "ss.mcp.verify.js"))],
   ];
