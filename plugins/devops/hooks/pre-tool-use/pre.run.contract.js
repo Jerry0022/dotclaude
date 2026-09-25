@@ -49,11 +49,15 @@ function gitNames(root, args) {
   return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
-/** A safe git ref/range token: no leading `-` (flag injection), only ref-ish chars. */
-const SAFE_BASE_RE = /^[A-Za-z0-9._/-]+$/;
+// RT2-R7: widened to Unicode letters/digits (`größe`, non-ASCII branch
+// names are legal in git) plus `._/+@-` (`release/1.2`, `feat/a+b`,
+// `user@x`). Still rejects a leading `-` (flag injection), `..` anywhere
+// (path-traversal-ish ref, also invalid in a git refname) and anything
+// with whitespace / control characters (excluded by the character class).
+const SAFE_BASE_RE = /^[\p{L}\p{N}._/+@-]+$/u;
 function safeBase(explicit) {
   const b = typeof explicit === 'string' ? explicit.trim() : '';
-  if (!b || b.startsWith('-') || !SAFE_BASE_RE.test(b)) return '';
+  if (!b || b.startsWith('-') || b.includes('..') || !SAFE_BASE_RE.test(b)) return '';
   return b;
 }
 
@@ -217,19 +221,23 @@ function main(hook) {
   return 0;
 }
 
-let inputData = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
-process.stdin.on('end', () => {
-  let code = 0;
-  try {
-    if (String(process.env.DOTCLAUDE_RUN_CONTRACT || '').trim().toLowerCase() === 'off') process.exit(0);
-    const { parseHookInput } = require('../lib/hook-input');
-    const hook = parseHookInput(inputData);
-    if (!hook) process.exit(0);
-    code = main(hook);
-  } catch {
-    code = 0; // an internal error never surfaces as a hook failure
-  }
-  process.exit(code);
-});
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', d => { inputData += d; });
+  process.stdin.on('end', () => {
+    let code = 0;
+    try {
+      if (String(process.env.DOTCLAUDE_RUN_CONTRACT || '').trim().toLowerCase() === 'off') process.exit(0);
+      const { parseHookInput } = require('../lib/hook-input');
+      const hook = parseHookInput(inputData);
+      if (!hook) process.exit(0);
+      code = main(hook);
+    } catch {
+      code = 0; // an internal error never surfaces as a hook failure
+    }
+    process.exit(code);
+  });
+}
+
+module.exports = { safeBase, SAFE_BASE_RE };

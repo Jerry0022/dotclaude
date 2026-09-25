@@ -23,7 +23,13 @@ require('../lib/plugin-guard');
 
 const MACHINE_RE = /^\s*(RUN_BACKLOG_AUTOSTART|AUTONOMOUS_AUTOSTART)\s*:/i;
 const SLASH_RE = /^\s*\/(?:devops:)?do-run\b(.*)$/is;
-const TAG_RE = /<command-name>\s*\/?(?:devops:)?do-run\s*<\/command-name>/i;
+// RT2-R2: anchored to the START of the prompt (past an optional harness
+// `<command-message>…</command-message>` preamble, which always precedes
+// `<command-name>` in the real transcript shape) — an UNANCHORED test
+// matched a pasted transcript/JSONL excerpt containing this tag ANYWHERE in
+// the prompt text, not just a genuine harness-recorded slash invocation.
+const LEAD = '^\\s*(?:<command-message>[^<]*<\\/command-message>\\s*)?';
+const TAG_RE = new RegExp(`${LEAD}<command-name>\\s*\\/?(?:devops:)?do-run\\s*<\\/command-name>`, 'i');
 const TAG_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/i;
 
 /** Args of a user-typed do-run slash command, or null when the prompt is none. */
@@ -44,9 +50,18 @@ function doRunSlashArgs(text) {
 const RECORDED_COMMANDS = new Set(['auto-harden', 'auto-polish', 'do-ship', 'auto-agents', 'auto-issue']);
 const TYPED_CMD_RE = /^\s*\/(?:devops:)?([\w-]+)\b([\s\S]*)$/;
 
+// RT2-R2: the tag form must be anchored to the prompt start too — an
+// unanchored matchAll recorded a fake skill event (and cleared a pending
+// hand-off / wrote an arm marker) for a `<command-name>` tag pasted
+// mid-prompt, e.g. a transcript/JSONL excerpt quoted back at Claude. Only
+// the FIRST tag counts, and only a bare name or an explicit `devops:`
+// prefix — `/other:do-ship` is a foreign plugin's command, not ours.
+const LEADING_TAG_RE = new RegExp(`${LEAD}<command-name>`);
+
 /** Every devops slash-command name + args in the prompt text (typed `/x args`
- *  form, and the harness `<command-name>…<command-args>` form). Not filtered
- *  to RECORDED_COMMANDS — callers decide what a name means. */
+ *  form, and the harness `<command-name>…<command-args>` form, both only
+ *  when they open the prompt). Not filtered to RECORDED_COMMANDS — callers
+ *  decide what a name means. */
 function commandsIn(text) {
   if (typeof text !== 'string' || !text) return [];
   const out = [];
@@ -55,15 +70,17 @@ function commandsIn(text) {
     out.push({ name: typed[1].toLowerCase(), args: typed[2].trim() });
     return out; // a typed prompt is exactly one slash command
   }
-  if (!text.includes('<command-name>')) return out;
+  if (!LEADING_TAG_RE.test(text)) return out;
   const { COMMAND_NAME_RE, COMMAND_ARGS_AFTER_RE } = require('../lib/skill-invocations');
-  for (const m of text.matchAll(COMMAND_NAME_RE)) {
-    const raw = m[1].replace(/^\//, '').toLowerCase();
-    const name = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
-    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 2000);
-    const a = COMMAND_ARGS_AFTER_RE.exec(after);
-    out.push({ name, args: a ? a[1].trim() : '' });
-  }
+  COMMAND_NAME_RE.lastIndex = 0;
+  const m = COMMAND_NAME_RE.exec(text);
+  if (!m) return out;
+  const raw = m[1].replace(/^\//, '').toLowerCase();
+  if (raw.includes(':') && !raw.startsWith('devops:')) return out; // foreign plugin prefix
+  const name = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
+  const after = text.slice(m.index + m[0].length, m.index + m[0].length + 2000);
+  const a = COMMAND_ARGS_AFTER_RE.exec(after);
+  out.push({ name, args: a ? a[1].trim() : '' });
   return out;
 }
 

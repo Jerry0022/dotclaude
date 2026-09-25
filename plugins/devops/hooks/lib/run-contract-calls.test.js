@@ -49,6 +49,18 @@ describe("commandFacts", () => {
   test("AUD-008: a quoted renderer path (Windows path with spaces) is still found", () => {
     expect(C.commandFacts('node "C:/p/mcp server/index.js" --render-card "C:/t/card one.json"').renderCard).toBe("C:/t/card one.json");
   });
+
+  test("RT2-R1: a `;` inside an earlier quoted string still finds the renderer call", () => {
+    expect(C.commandFacts('echo "a;b"; node "C:/p/mcp-server/index.js" --render-card c.json').renderCard).toBe("c.json");
+  });
+
+  test("RT2-R1: a `|` inside an earlier quoted string still finds the renderer call", () => {
+    expect(C.commandFacts('echo "a|b" | node "C:/p/index.js" --render-card "C:/t/c.json"').renderCard).toBe("C:/t/c.json");
+  });
+
+  test("RT2-R1: the already-working single-segment case is unaffected", () => {
+    expect(C.commandFacts('node "C:/p/mcp-server/index.js" --render-card c.json').renderCard).toBe("c.json");
+  });
 });
 
 describe("isGatedPath", () => {

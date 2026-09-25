@@ -13,6 +13,7 @@ const RC = require("../lib/run-contract.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.run.contract.js");
+const { safeBase } = require("./pre.run.contract.js");
 const SHIP = "mcp__plugin_devops_dotclaude-ship__ship_release";
 const CARD = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
 const ENV = { ...process.env };
@@ -347,6 +348,20 @@ describe("AUD-004: a refused call records a block event", () => {
     const r = run("Edit", { file_path: f("src/a.ts") });
     expect(r.code).toBe(2);
     expect(RC.events(dir).some((e) => e.k === "block" && e.gate === "batch")).toBe(true);
+  });
+});
+
+describe("RT2-R7: safeBase accepts legal Unicode/symbol branch names, still rejects the unsafe ones", () => {
+  test.each([
+    ["release/1.2"], ["feat/a+b"], ["user@x"], ["größe"],
+  ])("accepted: %s", (name) => {
+    expect(safeBase(name)).toBe(name);
+  });
+
+  test.each([
+    ["--output=x"], ["a..b"], ["-x"],
+  ])("rejected: %s", (name) => {
+    expect(safeBase(name)).toBe("");
   });
 });
 

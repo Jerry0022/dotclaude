@@ -456,7 +456,10 @@ export function cardWidgetHtml(model, repoUrl) {
   // lines) when it carries an open step (✗) or a caveat (⚠) — AUD-021: the
   // watermark colour fails WCAG AA contrast on the light card surface, and
   // this is the one line the user must not miss.
-  const runContractHasOpenStep = /[✗⚠]/.test(model.runContract || "");
+  // RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
+  // neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss"
+  // as an open step, so it gets the same readable colour.
+  const runContractHasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(model.runContract || "");
   const runContractColor = runContractHasOpenStep
     ? "var(--text-secondary)"
     : COLOR.watermark;

@@ -63,4 +63,36 @@ describe("hook", () => {
     const bad = spawnSync(process.execPath, [HOOK], { input: "{", cwd: dir, encoding: "utf8" });
     expect(bad.status).toBe(0);
   });
+
+  test("RT2-R8: a broken run-contract lib never crashes the hook — exits 0 silently", () => {
+    // Preload a stub that makes every require() of lib/run-contract throw,
+    // simulating a load error. Before the fix this require sat at module top
+    // level, OUTSIDE the stdin handler's try/catch, so the process crashed.
+    const stub = path.join(dir, "stub-run-contract-throw.js");
+    fs.writeFileSync(
+      stub,
+      [
+        "const Module = require('module');",
+        "const orig = Module.prototype.require;",
+        "Module.prototype.require = function (id) {",
+        "  if (typeof id === 'string' && id.replace(/\\\\/g, '/').includes('lib/run-contract')) {",
+        "    throw new Error('RT2-R8 stub: run-contract failed to load');",
+        "  }",
+        "  return orig.apply(this, arguments);",
+        "};",
+      ].join("\n"),
+    );
+    const res = spawnSync(process.execPath, ["--require", stub, HOOK], {
+      input: JSON.stringify({
+        cwd: dir,
+        tool_name: "AskUserQuestion",
+        tool_input: { questions: [{ question: "Q?", options: [{ label: "A" }] }] },
+        tool_response: { answers: { "Q?": "Something else" } },
+      }),
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toBe("");
+  });
 });
