@@ -101,6 +101,9 @@ polls or scans exactly that path:
 | `AUTONOMOUS-RESUME.json` | late-permission / bail protocol | Step 0.5 resume detection |
 | `AUTONOMOUS-STALLED.txt` | notify-mode watchdog | user (visible stall signal) |
 | `AUTONOMOUS-INTERRUPTED.txt` | bail protocol (report throttled) | user |
+| `BURN-STATE.json` | `scripts/burn-plan.js` (burn and backlog budget mode) | burn gate, `prompt.burn.resume`, router resume, Step 0.2 |
+| `BURN-STATE.prev.json` | `burn-plan.js init --force` (archive) | user — the previous run's branches |
+| `BURN-SALVAGE-<id>.patch` | `burn-plan.js resume-check --apply` when a hook refused the wip commit | the next agent on that task |
 
 Two hard rules follow:
 
@@ -111,7 +114,7 @@ Two hard rules follow:
 2. **They must be invisible to git.** Untracked `AUTONOMOUS-*` files make session
    archiving warn about "uncommitted changes that will be permanently discarded",
    pollute `git status` in preflight checks, and get swept into commits by
-   `git add -A`. Step 3c therefore registers `/AUTONOMOUS-*` in
+   `git add -A`. Step 3c therefore registers `/AUTONOMOUS-*` and `/BURN-*` in
    `$(git rev-parse --git-common-dir)/info/exclude` before execution starts —
    repo-local, never committed (no `.gitignore` noise in consumer projects), and
    the common git dir means one entry covers every worktree of the repo.

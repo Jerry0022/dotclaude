@@ -30,7 +30,7 @@ triggers:
   de: ["backlog abarbeiten", "arbeite den backlog ab", "milestones abarbeiten", "arbeite die milestones ab", "arbeite den milestone ab", "festgefahren", "wir drehen uns im Kreis", "neu denken", "frischer Ansatz", "komplett neu denken", "das führt zu nichts", "voller Audit", "auditiere", "auditieren", "prüf alles", "komplett durchchecken", "health check der App", "Qualitätsaudit"]
 argument-hint: "[backlog | autonomous | burn | rethink | audit] [--from=do-batch] [task, filter or target]"
 allowed-tools: >-
-  Bash(*), Read, Write, Edit, Glob, Grep, Agent, Skill,
+  Bash(*), Read, Write, Edit, Glob, Grep, Agent, SendMessage, Skill,
   AskUserQuestion, CronCreate, CronDelete, CronList,
   EnterWorktree, ExitWorktree, TodoWrite,
   WebFetch, WebSearch,
@@ -73,6 +73,7 @@ and skip Steps 2–5:
 | `AUTONOMOUS_AUTOSTART:` | `modes/autonomous.md` Step 0.1 |
 | `AUTONOMOUS_RESUME:` | `modes/autonomous.md` Step 0.2 |
 | `RUN_BACKLOG_AUTOSTART:` | `modes/backlog.md` Step 0.1 |
+| `BURN_RESUME:` | `modes/burn.md` Step 0.6 (the `prompt.burn.resume` hook names the policy) |
 
 The same holds while an AFK lockout is active
 (`node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check` →
@@ -109,13 +110,19 @@ Ask ONE `AskUserQuestion` (header `"Fortsetzen"`, question names the task
 and, for autonomous, the missing permission; for burn, `{done}` landed ·
 `{queue}` open · `{inFlight}` unclear):
 
-1. `"Run fortsetzen (Recommended)"` — continue where it stopped.
-2. `"Run neu starten"` — drop the old run (burn archives it to
-   `BURN-STATE.prev.json`, autonomous deletes the resume file), then Step 3.
+- **Autonomous:**
+  1. `"Run fortsetzen (Recommended)"` — continue where it stopped.
+  2. `"Run neu starten"` — drop the old run (the resume file is deleted), then Step 3.
+- **Burn** — a stopped burn is never silently burned on; the default
+  finishes the user's tasks without it:
+  1. `"Ohne Burn fortsetzen (Recommended)"` — open core tasks at standard
+     depth on one lane; filler dropped.
+  2. `"Mit Burn fortsetzen"` — plan re-derived from the current usage.
+  3. `"Run neu starten"` — archive to `BURN-STATE.prev.json`, then Step 3.
 
-"Run fortsetzen" skips Steps 3–5 and enters the mode's resume path with that
-answer: `modes/autonomous.md` Step 0.5 "If resuming" or `modes/burn.md`
-Step 0.5 "Fortsetzen". The modes do not ask again.
+Every answer but "Run neu starten" skips Steps 3–5 and enters the mode's
+resume path with it: `modes/autonomous.md` Step 0.5 "If resuming" or
+`modes/burn.md` Step 0.5. The modes do not ask again.
 
 ## Step 3 — Base call: four questions, one `AskUserQuestion`
 
@@ -157,7 +164,7 @@ Q4  header: "Durchgänge?"   multiSelect: true
     1. "Harden danach (Recommended)"    — Tests, Bugs, Konsistenz über die Änderung.
     2. "Polish danach (Recommended)"    — UI-Feinschliff über die Änderung.
     3. "Rethink vorher"                 — Erst frisch neu denken (Concept-Seite), dann umsetzen.   [+ " (Recommended)" when the prompt reads stuck]
-    4. "Budget verbrennen"              — Restbudget der Woche als Tiefe pro Task verbrauchen.   [only when weekly usage > 80 %; never recommended]
+    4. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
 ```
 
 **Conditions, computed before the call:**
@@ -167,9 +174,13 @@ Q4  header: "Durchgänge?"   multiSelect: true
   Output `1` → show it. `0`, a non-zero exit, no `gh`, no remote, no auth →
   omit it silently (Q1 then has two options). Skipped when Q1 is preset.
 - **Budget verbrennen** — call `mcp__plugin_devops_dotclaude-completion__get_usage`
-  once. Show the option only when the result has no `error` and
-  `weekly.pct > 80`. It is always the last option and never carries
-  `(Recommended)`.
+  once (it freshens `~/.claude/usage-live.json`), then
+  `node "{PLUGIN_ROOT}/scripts/burn-plan.js" offer --no-refresh`.
+  Show the option only when it prints `"offer": true`: at the user's own
+  pace this week, at least 10 % above the reserve would expire unused. (The
+  old rule, `weekly.pct > 80`, showed it exactly where little is left and a
+  normal run uses it anyway.) It is always the last option and never
+  carries `(Recommended)`.
 - **Rethink marker** — "reads stuck" means a stuck phrase from Step 1 or an
   explicit `rethink` argument; nothing else.
 - **Last choice for Q3.** Scan this conversation for the most recent answer
@@ -206,6 +217,8 @@ four questions). No follow-up when nothing is open.
 | Q1 Backlog | F3 Milestones (and F4 Issues when loose issues exist) — run `modes/backlog.md` Step 1 fetch, trust gate and presence-cron arm first; they feed the options |
 | Q2 Autonom (not Backlog), or Budget verbrennen | F5 Desktop + F6 PC danach |
 | Q2 Autonom with Backlog | F6 PC danach (backlog never asks Desktop) |
+| Budget verbrennen (not Backlog) | additionally F7 Burn-Resume + F8 Zusatz-Tasks — four questions, the tool maximum |
+| Budget verbrennen with Backlog | additionally F6 (if not already asked) + F7; no F8 — the backlog is the queue |
 
 ```
 F1  header: "Ergebnis"      multiSelect: false
@@ -235,7 +248,28 @@ F6  header: "PC danach"     multiSelect: false
     1. "PC an · mit Resume (Recommended)"  — PC bleibt an; nach dem 5h-Reset werden hängende Worktrees mit »weiter« angestoßen.
     2. "PC an · ohne Resume"               — PC bleibt an; kein automatischer Anstoß.
     3. "PC aus · ohne Resume"              — PC fährt nach Abschluss herunter (wartet auf andere Sessions).
+
+F7  header: "Burn-Resume"   multiSelect: false   [only with Budget verbrennen]
+    question: "Stoppt das Limit den Burn und der Auto-Resume stößt nach dem Reset an: weiterbrennen? (Gilt nur mit »PC an · mit Resume«.)"
+    1. "Burn fortsetzen (Recommended)"     — Nach dem Reset läuft der Burn mit neu berechnetem Plan weiter.
+    2. "Burn abschalten"                   — Nach dem Reset nur noch die offenen Hauptaufgaben, Standard-Tiefe; Füll-Tasks entfallen.
+
+F8  header: "Zusatz-Tasks"  multiSelect: true    [only with Budget verbrennen, not with Backlog]
+    question: "Welche Quellen sollen zusätzlich Tasks liefern? (Leer lassen = nur dein Prompt)"
+    1. "Issues"                            — Offene, vertrauenswürdige Issues.   [only when open issues exist — the Backlog probe]
+    2. "TODO/FIXME"                        — TODO/FIXME/HACK-Kommentare im Code.
+    3. "Lint & Typen"                      — Lint- und Typfehler.
+    4. "Coverage-Lücken"                   — Ungetestete Dateien und Funktionen.
 ```
+
+F7 is the auto-resume answer for the burn: whatever the user types after a
+limit is asked again by `prompt.burn.resume` (manual nudge, "Burn
+abschalten" recommended there); only the unattended resume follows F7. A
+week that has reset since the burn started switches it off regardless. F8
+feeds `modes/burn.md` Step 5: issues assigned to the user are core work
+(P2); lint and type fixes are mechanical (P1); TODOs, coverage gaps and
+unassigned issues are filler (P3–P5). Mechanical and filler tasks always run
+at standard depth.
 
 F6 folds the autonomous shutdown and auto-resume questions into one: no
 option pairs shutdown with resume, so the HARD GATE of
@@ -341,10 +375,10 @@ around loading the skill (run-contract's `auto-agents` obligation, Step 5b).
 |---|---|---|---|
 | Prompt umsetzen | Interaktiv | [Rethink vorher → `modes/rethink.md`] → `auto-agents` → Step 7 | — |
 | Prompt umsetzen | Autonom | [Rethink vorher → `modes/rethink.md`, while the user is still here] → `modes/autonomous.md` from Step 0.7 with the prompt as task, `$EXEC_MODE=implement`; its Step 6.5 hands back to Step 7 | autonomous Step 1 intake, Step 2 Q1–Q4 (Q1 → implement, Q2 ← F5, Q3+Q4 ← F6) |
-| Prompt umsetzen + Budget verbrennen | either | `modes/burn.md` from Step 2 with the prompt as primary task → its Step 7 autonomous frame (F5/F6 answers) → Step 7 | burn Step 1 confirmation (the tick is the confirmation), Step 3 intake; autonomous Step 2 |
+| Prompt umsetzen + Budget verbrennen | either | `modes/burn.md` from Step 2 with the prompt as primary task → its Step 7 autonomous frame (F5/F6 answers) → Step 7 | burn Step 1 confirmation (the tick is the confirmation), Step 3 intake, Step 4 task sources (F8), Step 6 plan confirmation (autonomous Step 4 with its 3-minute autostart), resume policy (F7); autonomous Step 2 |
 | Audit | Interaktiv | `modes/audit.md` with `--scope=<F2> --mode=<F1>` → Step 7 when `implement` | audit Step 2 intake |
 | Audit | Autonom | `modes/autonomous.md` frame; its Step 5 work unit is `modes/audit.md` with `--autonomous --scope=<F2> --mode=<F1>`; `$EXEC_MODE` = `implement` (umsetzen) or `analyze` (Concept — the page waits for the user's return) | autonomous Steps 1–2, audit Step 2 |
-| Backlog | Interaktiv / Autonom | `modes/backlog.md` from Step 1.3 with F3/F4 as the selection; shutdown/resume ← F6 (Autonom) or `no`/`no` (Interaktiv); `$BURN_MODE` ← Budget verbrennen; ship mandate ← `$SHIP`; passes run per issue | backlog Step 1.2 selection, Step 3.2 ship mandate, Step 3.3 shutdown/resume + budget mode |
+| Backlog | Interaktiv / Autonom | `modes/backlog.md` from Step 1.3 with F3/F4 as the selection; shutdown/resume ← F6 (Autonom) or `no`/`no` (Interaktiv); `$BURN_MODE` ← Budget verbrennen, its resume policy ← F7; ship mandate ← `$SHIP`; passes run per issue | backlog Step 1.2 selection, Step 3.2 ship mandate, Step 3.3 shutdown/resume + budget mode |
 
 Combinations without a meaning are dropped with one line, never asked:
 Rethink vorher with Audit or Backlog; Budget verbrennen with Audit; Harden /
@@ -402,8 +436,11 @@ this router's (or do-run's composed do-ship's), never auto-agents'.
   used to ask is answered by them and skipped in its mode file.
 - Option order is fixed; the agnostic recommendation is first; click-through
   is a valid run; labels are parallel and never "Ja" / "Nein".
-- Budget verbrennen is never recommended and only visible above 80 % weekly
-  usage or on the literal `burn` argument.
+- Budget verbrennen is never recommended and only visible when
+  `burn-plan.js offer` says budget would expire unused, or on the literal
+  `burn` argument. A burn stopped by a limit is never burned on silently:
+  a manual nudge is asked (`prompt.burn.resume`), an automatic resume
+  follows F7.
 - Ship authority lives in this router (Q2) and in backlog mode's per-issue
   loop. The autonomous engine itself still never ships.
 - Every chosen pass runs, or is skipped with a reason that the card shows —

@@ -1,73 +1,53 @@
 # Burn — Composite Prompt Template
 
 Build the autonomous task prompt as follows, then pass it as `$ARGUMENTS`
-to `/do-run autonomous`. The autonomous skill handles Steps 2–8 of its
-own flow (desktop questions, permission priming, execution, reporting,
-optional shutdown).
+to autonomous mode (`modes/autonomous.md`, same skill). Autonomous mode
+handles permission priming, the 3-minute start confirmation, execution,
+reporting and optional shutdown; its Step 5 runs auto-agents with
+`--burn=<project root>/BURN-STATE.json`.
 
-The plan values below (`profile`, `lanes`, `RESERVE`, `requiredPerHour`,
-`integrationBranch`) come from `/do-run burn` Step 2. The autonomous run **applies**
-them — it does not re-derive them. It may only recalibrate per
-`skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md` § In-run recalibration.
+The plan lives in `BURN-STATE.json` (written by `burn-plan.js init` in burn
+Step 7). The run never re-derives it and never computes a lane, a reserve or
+a fit by hand — `burn-plan.js gate` decides every spawn and recalibrates.
 
 ```
-BURN MODE ACTIVE — Tiefe vor Breite, jeder Task landet einzeln.
+BURN MODE ACTIVE — Tiefe vor Breite, jeder Task landet einzeln, das Skript entscheidet.
 
 ## Hauptauftrag
 {user's primary task from Step 3}
 
-## Task-Queue (nach Prioritaet, mit Size + Profil)
-{P1 tasks}   [size, profile]
-{P2 tasks}   [size, profile]
-{P3–P5 tasks} [size, profile]
+## Task-Queue (steht in BURN-STATE.json — nur zur Übersicht)
+{P0–P2 tasks}   [size, profile]
+{P3–P5 tasks}   [size, standard]
 
-## Burn-Plan (abgeleitet — nicht neu herleiten)
-- Profil: {profile}          # standard | deep | max
-- Lanes: {lanes}
-- Reserve: {RESERVE}% weekly
-- requiredPerHour: {x}%/h
+## Burn-Plan (aus burn-plan.js init — nicht neu herleiten)
+- Profil: {profile} · Lanes: {lanes} · Reserve: {reservePct}% · Uplift: {uplift}×
 - Integration-Branch: burn/{slug}
-- Uplift ggue. /auto-agents: {x}x
+- Auto-Resume nach Limit: {continue | off} (F7)
+- State: {project root}/BURN-STATE.json
 
-## Burn-Guidance
+## Ausführung
+auto-agents mit --burn={project root}/BURN-STATE.json — Conveyor statt Waves
+(skills/auto-agents/SKILL.md § Burn conveyor):
+1. node burn-plan.js gate → spawn · wait · hold · pause · finish
+2. spawn: Agent mit den models-Overrides aus dem Gate, danach
+   burn-plan.js state agent <id> --agent-id=… --branch=… --worktree=…
+3. Agent committet `wip(burn): …` nach jedem grünen Teilschritt (mind. alle ~10 Tool-Calls)
+4. passes aus dem Gate (redteam) für substanzielle Diffs
+5. gezielte Tests → Merge in burn/{slug} → git push -u origin burn/{slug}
+   (non-force, nie main, kein PR, kein Ship) → burn-plan.js state land <id> --sha=…
+6. pause → Cron aus dem Gate armen (state resume-cron), Report „pausiert bis …", Turn beenden
+7. finish → voller QA-Lauf als letzter Task (kein Gate), dann Report
 
 ### Browser — Edge Credo
 - Alle Browser-Interaktion folgt dem Edge Credo (deep-knowledge/browser-tool-strategy.md § Edge Credo)
-- Edge only, Claude Extension only, User-Context, Tab-Reuse — auch im Burn-Modus
 
-### Tiefe (der primaere Hebel)
-- Modelle gemaess Profil AUFWERTEN, nie fuer Kosten downgraden
-- Effort und Tool-Call-Ceiling gemaess Profil-Tabelle setzen
-- Extra-Passes pro Task gemaess Profil (redteam-Review, zweiter QA, po-Review)
-- Mechanische Tasks (Lint, Rename, Import-Sort, Dependency-Bump) bleiben auf
-  `standard` — opus auf einem Lint-Fix ist Verbrauch ohne Qualitaet
-
-### Breite (nur zum Auffuellen)
-- Genau {lanes} Lanes, nicht mehr. Lanes sind budget-abgeleitet, kein Maximum.
-- lanes == 1 → Agent im Vordergrund spawnen (vermeidet das Worktree-Resync-Fenster)
-- lanes > 1  → run_in_background, aber immer nur EIN Merge gleichzeitig
-- Agent-Auswahl folgt deep-knowledge/agent-orchestration.md § Agent Selection:
-  nur Rollen mit konkretem Beitrag, nicht der volle Roster zur Abdeckung
-
-### Landing-Protokoll (pro Task, in dieser Reihenfolge)
-1. Agent implementiert auf burn/{slug}-<role>-<n>
-2. Agent committet VOR der Rueckmeldung — Unfertiges als `wip:` mit Angabe was fehlt
-3. Gezielte Tests nur fuer die geaenderten Module, nicht die volle Suite
-4. Merge in burn/{slug}
-5. git push -u origin burn/{slug}   (non-force, nie main, kein PR, kein Ship)
-6. BURN-STATE.json aktualisieren
-7. Naechsten Task ziehen
-
-### Reserve-Gate
-- Vor JEDEM neuen Spawn Usage pruefen (Snapshot <= 60s gilt als frisch)
-- remaining <= {RESERVE}% → Drain: nichts Neues spawnen, laufende Lanes zu Ende,
-  mergen, pushen, Report + Completion-Card
-- Task nie starten, dessen Size-Klasse nicht mehr in `spendable` passt
+### Nie
+- Lanes, Reserve oder Profil selbst ändern — nur burn-plan.js
+- Einen Worktree ohne `burn-plan.js prune-check` entfernen
+- Nach einem Limit-Stopp einfach weiterbrennen — der [burn-resume]-Block entscheidet
 
 ### Abschluss
-- Der volle QA-Durchlauf ist ein normaler Task am Ende der Queue, KEIN Gate.
-  Kein Task wartet auf ihn, um als erledigt zu zaehlen.
-- AUTONOMOUS-REPORT.html enthaelt alle Tasks mit Status, verwendetem Profil und
-  Landing-SHA
-- Nie einen Worktree entfernen, dessen Branch unmerged Commits hat
+- burn-plan.js state finish --status=<COMPLETED|INTERRUPTED|BLOCKED> (misst die Kalibrierung)
+- AUTONOMOUS-REPORT.html: alle Tasks mit Status, Profil und Landing-SHA; übersprungene Füll-Tasks
 ```

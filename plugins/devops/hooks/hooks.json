@@ -184,6 +184,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.strict.enforce.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.ship.detect.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.flow.appstart.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.burn.resume.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.worktree.branch-guard.js" }
         ]
       }

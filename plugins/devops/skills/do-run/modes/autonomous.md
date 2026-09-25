@@ -44,12 +44,19 @@ questions, then stop. Steps 1-8 do NOT apply.
    `auto-cleanup`).
 2. Classify each. A worktree is **done** if its root holds `AUTONOMOUS-DONE.flag`,
    or an `AUTONOMOUS-REPORT.html` with COMPLETED status and **no**
-   `AUTONOMOUS-RESUME.json`. Skip done worktrees — never re-trigger finished work.
-3. For each remaining (mid-task / hard-capped) worktree, resume it with a single
-   `weiter`: use `mcp__ccd_session_mgmt__list_sessions` to find the live session
-   bound to that worktree path, then `mcp__ccd_session_mgmt__send_message` with the
-   one word `weiter`. If the session-mgmt tools are unavailable, list the worktree
-   paths that need a manual `weiter` instead of nudging.
+   `AUTONOMOUS-RESUME.json` — unless its root holds an open `BURN-STATE.json`
+   (`node "{PLUGIN_ROOT}/scripts/burn-plan.js" status --state=<root>/BURN-STATE.json`
+   → `open: true`). Skip done worktrees — never re-trigger finished work.
+3. For each remaining (mid-task / hard-capped) worktree, resume it with one
+   message: `BURN_RESUME: token-window reset reached` when it holds an open
+   burn (the `prompt.burn.resume` hook in that session applies the user's F7
+   policy without asking), else the one word `weiter`. Use
+   `mcp__ccd_session_mgmt__list_sessions` to find the live session bound to
+   that worktree path, then `mcp__ccd_session_mgmt__send_message`. **This
+   session's own worktree is not messaged:** if it holds an open burn, the
+   hook has already injected the `[burn-resume]` block for this prompt —
+   follow it (`modes/burn.md` Step 0.6). If the session-mgmt tools are
+   unavailable, list the worktree paths that need a manual nudge instead.
 4. Output a short summary: nudged / skipped-done / manual-needed. Do not start new
    work — only continue what was interrupted.
 
@@ -252,11 +259,13 @@ if [ -n "$gcd" ]; then
   x="$gcd/info/exclude"
   mkdir -p "${x%/*}"
   grep -qxF '/AUTONOMOUS-*' "$x" 2>/dev/null || echo '/AUTONOMOUS-*' >> "$x"
+  grep -qxF '/BURN-*' "$x" 2>/dev/null || echo '/BURN-*' >> "$x"
 fi
 ```
 
 Idempotent; `.git/info/exclude` is never committed and one entry covers every
-worktree of the repo. On failure (exotic git layout): log one journal line and
+worktree of the repo. `/BURN-*` covers a burn's `BURN-STATE.json`, its
+`.prev` archive and `BURN-SALVAGE-*.patch` files. On failure (exotic git layout): log one journal line and
 continue — never block the run. Rationale + full artifact family:
 `{PLUGIN_ROOT}/deep-knowledge/autonomous-execution.md` § Artifact Hygiene.
 
@@ -408,6 +417,10 @@ Save the returned `jobId` as `$RESUME_JOB_ID` and log `fireAtLocal` + `source` t
 - NOT cancelled on this run's completion — its purpose is global (sibling worktrees
   may still be capped). It self-expires after firing once. Step 0.2 skips any
   worktree that already finished, so a completed run is never re-triggered.
+- Under burn this single cron is not the only one: every new 5-hour window
+  makes `burn-plan.js gate` return `rearmResumeCron`, and a window pause
+  returns `resumeCron` — both are armed as one-shot `BURN_RESUME:` crons, so a
+  stop in a later window is resumed too.
 
 ### Post-Confirmation Lockout
 
@@ -421,8 +434,11 @@ If something unexpected happens during autonomous execution:
 - **Blocked action** → log it, continue with remaining work
 - **Shutdown was requested** → always execute shutdown, even if work is incomplete (after saving progress)
 
-This lockout is absolute. There is no exception. The only user interaction point
-after confirmation is the next session (via Resume Detection in Step 0.5).
+This lockout is absolute. There is no exception. The only user interaction points
+after confirmation are the next session (via Resume Detection in Step 0.5)
+and a burn stopped by a usage limit that the user nudges by hand — then the
+user is demonstrably back, and `prompt.burn.resume` asks its one question
+(`modes/burn.md` Step 0.6).
 
 ## Step 5 — Autonomous Execution
 
@@ -497,7 +513,11 @@ Quick summary:
 Run the work through `auto-agents`, the single execution path —
 `Skill("devops:auto-agents")` with `--from=do-run --mode=background
 --ship=<$SHIP> <task>` (an audit work unit runs `modes/audit.md` with
-`--autonomous` instead; its implement step goes through auto-agents too). It
+`--autonomous` instead; its implement step goes through auto-agents too).
+**Under burn** (the task is burn's composite prompt and `BURN-STATE.json`
+exists), add `--burn=<project root>/BURN-STATE.json`: auto-agents then runs
+its burn conveyor — `burn-plan.js gate` before every spawn, per-task landing
+— instead of waves. Without `--burn` it
 selects agents and executes waves per `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md`:
 - § Agent Selection for roster, criteria, and complexity tiers + per-agent effort budget
 - § Wave Execution for spawning mechanics, prompt template (budget, stopping criteria, distinct scope), and branch strategy

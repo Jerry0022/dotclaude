@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.203.0**
+**Version: 0.204.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -210,7 +210,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->61<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->62<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -221,7 +221,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->61<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->62<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -266,6 +266,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.strict.enforce` — Arms and enforces strict mode — literal scope, discretionary parameters.
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
+- `prompt.burn.resume` — After a usage limit stopped a burn: ask on a manual nudge, apply the chosen policy on…
 - `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
 
 #### PreToolUse — runs before each tool call
@@ -342,6 +343,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.batch.collect` — Collect prompts instead of executing them, in `/do-batch` mode *(UserPromptSubmit)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
 - `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
+- `prompt.burn.resume` — After a usage limit stopped a burn: ask on a manual nudge, apply the chosen policy on an automatic resume *(UserPromptSubmit)*
 - `stop.flow.guard` — Enforce completion card before response ends *(Stop)*
 - `stop.flow.selfcalibration` — Run self-calibration at end of turn *(Stop)*
 
@@ -394,7 +396,7 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/auto-concept` | Hidden · Router | Interactive HTML page for analysis, plans, concepts, and prototypes |
 | `/auto-agents` | Hidden | Full-ceremony orchestration (plan → confirm → waves) for Complex-tier work; everyday delegation runs automatically via the always-on policy |
 | `/do-run autonomous` | Explicit | Fully autonomous agent orchestration while user is AFK |
-| `/do-run burn` | Explicit | High-throughput autonomous task runner with aggressive parallelization |
+| `/do-run burn` | Explicit | Turns budget that would expire this week into landed work: depth per task first, lanes only to fill time; a limit stop is asked about, never burned through |
 | `/do-run backlog` | Explicit | Milestone-centric backlog runner: refine, implement, test/QA, and ship selected milestones/issues unsupervised |
 | `/do-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
 | `/auto-harden` | Hidden · Router | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
@@ -441,13 +443,18 @@ something**, reach for `/do-run`. There are two ways in:
 - **`/do-run backlog` — Claude picks the topics itself.** It pulls the planned
   backlog (open milestones, else loose issues), then refines → implements → tests →
   **ships** each item unsupervised. An optional **budget mode** (asked at the gate,
-  default *no*) runs it in burn-mode style. Under the hood it composes the other
+  default *no*) adds burn depth per issue. Under the hood it composes the other
   runs, so you don't invoke them separately.
 - **You pick the topic** with the other three:
   - **`/do-run autonomous`** — one ad-hoc task, fully AFK (never ships).
   - **`/auto-agents`** — multi-agent orchestration while you stay present.
-  - **`/do-run burn`** — budget-driven: maximize the remaining weekly token
-    window (explicit `/do-run burn` only).
+  - **`/do-run burn`** — budget-driven: turns budget that would expire this
+    week into landed work — stronger models and a redteam pass per task, lanes
+    only to fill time, a pause instead of a hard stop at the 5-hour window.
+    After a usage limit it asks before it burns on (auto-resume follows your
+    answer given up front). Every decision is `scripts/burn-plan.js`; try it
+    token-free with `node plugins/devops/scripts/burn-plan.js simulate --all --text`
+    (explicit `/do-run burn` only).
 
 Backlog mode uses autonomous mode (implementation) and the same role-agent
 orchestration as `auto-agents` in the background — plus burn mode when budget mode
@@ -580,7 +587,7 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->61<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->62<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

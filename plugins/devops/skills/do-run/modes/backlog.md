@@ -249,11 +249,11 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    `$AUTO_RESUME=no`). Interaktiv → `shutdown=no`, `autoResume=no`.
 
    **Budget-Modus (`$BURN_MODE`)** — answered by the router's Q4: "Budget
-   verbrennen" ticked → `yes` (work the backlog like `/do-run burn`:
-   budget assessment + aggressive agent parallelization per issue, plus extra
-   tasks from TODOs/Lint/Coverage), otherwise `no` (sequential, one issue at
-   a time). The presence-timeout value is always `no`. It is threaded into
-   the autostart marker below and consumed in Step 4.
+   verbrennen" ticked → `yes` (work the backlog with burn depth per issue —
+   see Step 4), otherwise `no` (sequential, standard depth). Its resume
+   policy after a limit stop comes from the router's F7. The
+   presence-timeout value is always `no`. It is threaded into the autostart
+   marker below and consumed in Step 4.
 4. **Confirmation + timers** — arm the external watchdog (`register`) and the
    auto-resume cron (if shutdown=no + resume=yes) per autonomous mode Step 4
    and `skills/do-run/modes/autonomous/deep-knowledge/shutdown-watchdog.md`. **Watchdog
@@ -308,15 +308,35 @@ append-only `BACKLOG-LOG.md` decision journal (one timestamped line per judgment
 call). Run the mandatory pre-mortem (`deep-knowledge/pre-mortem.md`) before the
 first state-mutating op.
 
-**Budget-Modus (`$BURN_MODE=yes`).** When the user opted into budget mode at the
-gate, run the queue in `/do-run burn` style: first do a **budget assessment**
-(`/do-run burn` Step 2 — `refresh-usage-headless.js`, weekly-remaining %), then
-drive each issue's IMPLEMENT with burn mode's aggressive agent parallelization and
-throughput guidance (`skills/do-run/modes/burn/deep-knowledge/composite-prompt.md`),
-and optionally fold in extra tasks from burn mode's discovery sources (TODOs, lint,
-coverage) alongside the milestone issues. **Per-issue shipping still holds** — burn
-mode amplifies per-issue throughput, not parallel ships (main stays incrementally
-green). When `$BURN_MODE=no` (default), run strictly one issue at a time as below.
+**Budget-Modus (`$BURN_MODE=yes`).** Burn adds **depth per issue**, never
+parallel issues and never filler: the queue stays the selected issues, one at
+a time, and main stays incrementally green through per-issue shipping.
+
+1. At the first issue, right after its WORKTREE step: write the queue (one
+   entry per issue: `id` = issue number, `size`, `priority: "P2"`,
+   `source: "issue"`) and run
+   `node "{PLUGIN_ROOT}/scripts/burn-plan.js" init --queue=@<file> --slug=<slug>
+   --integration-branch=<this issue's branch> --resume-auto=<F7> --auto-armed=<F6>`.
+   Every later issue, after its WORKTREE step:
+   `burn-plan.js state integration --branch=<its branch>`. The conveyor merges
+   agent sub-branches into the **issue branch** — never into the base branch;
+   `main` is reached only through the per-issue ship (both commands refuse
+   `main`, `master` and the default branch unless the session itself works
+   on it).
+   `plan` refusing with `no-uplift` means the selected issues already use the
+   budget at standard depth — log it, set `$BURN_MODE=no`, continue normally.
+2. Per issue, IMPLEMENT runs auto-agents with `--burn=<project root>/BURN-STATE.json`:
+   the gate decides the profile (Opus for the implementers, a redteam pass),
+   the 5-hour window, the reserve and blind usage exactly as in burn mode
+   (`{PLUGIN_ROOT}/skills/do-run/modes/burn/deep-knowledge/burn-scheduler.md`).
+   A gate `finish` or `pause` ends the loop like a budget stop (Step 5 report).
+   Landing is this loop's own per-issue ship (step 4 SHIP below); after it,
+   `burn-plan.js state land <issue> --sha=<merge sha>`. Without a ship
+   mandate, `land` records the issue branch head instead.
+3. A limit stop resumes through `prompt.burn.resume` like any burn — asked on a
+   manual nudge, F7 on an automatic resume.
+
+When `$BURN_MODE=no` (default), run strictly one issue at a time as below.
 
 Loop the queue, **one issue at a time**:
 
