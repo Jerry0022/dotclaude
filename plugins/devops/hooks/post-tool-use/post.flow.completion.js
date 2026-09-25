@@ -308,9 +308,9 @@ function mergedFiles(cwd, sessionId) {
     const [t, l] = fs.readFileSync(wmFile, 'utf8').split('\n');
     wmTime = Number(t) || 0;
     wmLine = l || '';
-  } catch {}
+  } catch { /* absent on the session's first read */ }
   if (entries.length) {
-    try { writeSessionFile(wmFile, `${entries[0].time}\n${entries[0].line}`); } catch {}
+    try { writeSessionFile(wmFile, `${entries[0].time}\n${entries[0].line}`); } catch { /* best effort */ }
   }
 
   // New = above the entry seen last time; when that entry is gone, newer than its time.

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.204.2] — 2026-09-25
+
+### Fixed
+- **A background agent's edits no longer block the main session's card.** `post.flow.completion` wrote the session's verification flags on every Edit/Write, including those of subagents working in their own worktrees. Each agent edit marked the main session as owing a test run and a validation and deleted its evidence, so the next card was blocked with "no passing test run" or "Validation required" although the session's own checkout had not changed. Subagent calls now leave the flags alone: they neither owe nor satisfy either gate. An edit outside the session's own work tree (a sibling checkout, an isolated agent's nested worktree) owes nothing.
+- **Merged work owes the gates like an edit.** A merge, pull, cherry-pick, rebase, am or revert in the session's checkout (typically an agent's branch merged back) now owes the test run and the validation for each code file it brought in. The hook reads HEAD's reflog with a per-session watermark, so one merge is owed once, and skips entries older than 30 minutes.
+
 ## [0.204.1] — 2026-09-25
 
 ### Fixed
