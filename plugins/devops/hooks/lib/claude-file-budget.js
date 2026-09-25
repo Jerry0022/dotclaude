@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module claude-file-budget
- * @version 0.1.0
+ * @version 0.1.1
  * @description Context-budget classifier for Claude configuration files.
  *
  *   Every file Claude loads as context costs tokens in every session that
@@ -24,6 +24,7 @@
  */
 
 const path = require('path');
+const { deepKnowledgePath, scriptPath } = require('./plugin-root');
 
 /**
  * Line budgets per file kind. `warn` is the re-route trigger from
@@ -52,9 +53,14 @@ const BUDGETS = {
     label: 'agent definition',
     warn: 150,
     critical: 300,
+    // Never `{PLUGIN_ROOT}`: that is the installed plugin cache, replaced on
+    // every plugin update. A project agent's docs moved there vanish with the
+    // next update, and the plugin's own land in the cache instead of the repo.
     remedy:
       'An agent prompt is loaded whole on every dispatch. Move reference material to\n' +
-      '  `{PLUGIN_ROOT}/deep-knowledge/<topic>.md` and point at it by name.',
+      '  `deep-knowledge/<topic>.md` beside this agent\'s own `agents/` directory\n' +
+      '  (`plugins/devops/deep-knowledge/` in the plugin source,\n' +
+      '  `<project>/.claude/deep-knowledge/` in a project) and point at it by name.',
   },
   reference: {
     label: 'reference.md',
@@ -67,10 +73,11 @@ const BUDGETS = {
     label: 'deep-knowledge',
     warn: 600,
     critical: null,
-    remedy:
+    // A function of the generator's absolute path, which buildInstruction picks.
+    remedy: ({ indexScript }) =>
       'Depth is the point here, so there is no hard ceiling — but a doc read in full\n' +
       '  costs its whole length every time. Split by topic and regenerate the index:\n' +
-      '  `node {PLUGIN_ROOT}/scripts/gen-dk-index.mjs <dir>`.',
+      `  \`node "${indexScript}" <dir>\`.`,
   },
 };
 
@@ -196,9 +203,21 @@ function buildSummary(file, result) {
 }
 
 /** Instruction for Claude's context (stdout). Names the file, the overage,
- *  where the bulk belongs, and the norm — enough to act without a lookup. */
-function buildInstruction(file, result) {
+ *  where the bulk belongs, and the norm — enough to act without a lookup.
+ *  Plugin files appear by absolute path: a model that cannot resolve a plugin
+ *  path searches the disk for it (CONVENTIONS.md, Script Conventions).
+ *  `docPath` is the norm; `sourceRoot` is the plugin source checkout the file
+ *  lives in, or null. There the index generator is the checkout's own — the
+ *  installed copy can lag the checkout whose INDEX.md it rewrites. */
+function buildInstruction(file, result, {
+  docPath = deepKnowledgePath('content-conventions.md'),
+  sourceRoot = null,
+} = {}) {
   const budget = BUDGETS[result.kind];
+  const indexScript = sourceRoot
+    ? scriptPath('gen-dk-index.mjs', path.join(sourceRoot, 'plugins', 'devops'))
+    : scriptPath('gen-dk-index.mjs');
+  const remedy = typeof budget.remedy === 'function' ? budget.remedy({ indexScript }) : budget.remedy;
   const growth =
     result.delta == null ? 'got rewritten in full' : `grew by ${result.delta} lines`;
   const ceiling =
@@ -211,10 +230,10 @@ function buildInstruction(file, result) {
     `${result.label} is now ${result.lines} lines against a ${result.budget}-line budget, ` +
       `and just ${growth}${ceiling}.`,
     '',
-    `  ${budget.remedy}`,
+    `  ${remedy}`,
     '',
     'Budgets, extraction categories, and the fix procedure:',
-    '  {PLUGIN_ROOT}/deep-knowledge/content-conventions.md',
+    `  ${docPath}`,
     '',
     'Do this now if the edit you just made is what pushed it over, and the extraction ' +
       'is mechanical. Otherwise say so in your response and leave it — do not silently ' +

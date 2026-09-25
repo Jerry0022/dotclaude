@@ -1,6 +1,6 @@
 /**
  * @module plugin-root
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The absolute devops plugin root, and the one sentence that
  *   hands it to the model.
@@ -43,6 +43,15 @@ function deepKnowledgePath(file, root = pluginRoot()) {
 }
 
 /**
+ * Absolute path of a plugin script, forward slashes.
+ * @param {string} file e.g. 'gen-dk-index.mjs'
+ * @param {string} [root]
+ */
+function scriptPath(file, root = pluginRoot()) {
+  return `${toSlash(root).replace(/\/+$/, '')}/scripts/${file}`;
+}
+
+/**
  * The context line that resolves `{PLUGIN_ROOT}` for the model.
  * @param {string} [root]
  * @returns {string}
@@ -57,4 +66,4 @@ function pluginRootLine(root = pluginRoot()) {
   );
 }
 
-module.exports = { pluginRoot, pluginRootLine, deepKnowledgePath, toSlash };
+module.exports = { pluginRoot, pluginRootLine, deepKnowledgePath, scriptPath, toSlash };

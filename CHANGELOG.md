@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.208.3] — 2026-09-26
+
+### Fixed
+- **The budget report sends an over-budget agent's reference material to the right place.** The agent remedy told Claude to move it to `{PLUGIN_ROOT}/deep-knowledge/`, the installed plugin cache, which every plugin update replaces: a project agent's docs vanished with the next update, and the plugin's own landed in the cache instead of the repo. It now names `deep-knowledge/` beside the agent's own `agents/` directory — `plugins/devops/deep-knowledge/` in the plugin source, `<project>/.claude/deep-knowledge/` in a project. `content-conventions.md` says the same.
+- **Every plugin path in the budget report is absolute.** The pointer to `content-conventions.md` and the `gen-dk-index` command named `{PLUGIN_ROOT}`, a placeholder the model has to resolve and otherwise searches the disk for. Both are now absolute paths. In a checkout of the plugin source the report names the checkout's own index generator, since the installed copy can lag the checkout whose `INDEX.md` it rewrites.
+
 ## [0.208.2] — 2026-09-25
 
 ### Fixed
