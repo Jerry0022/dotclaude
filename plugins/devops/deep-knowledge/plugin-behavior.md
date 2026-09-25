@@ -44,8 +44,11 @@ turn end (§ 7 of the design doc).
 - `prompt.flow.selfcalibration` (UserPromptSubmit) — fires on first user prompt;
   registers the self-calibration cron task and runs it immediately so the
   completion flow is internalized before the first task begins.
-- `post.flow.completion` (PostToolUse) — fires after every tool call; injects card
-  reminder into context; tracks edit count; writes per-turn `work-happened` flag.
+- `post.flow.completion` (PostToolUse) — fires after every tool call; tracks edit
+  count; writes the per-turn `work-happened` flag. It injects the card reminder
+  (as `additionalContext`, the only PostToolUse channel that reaches the model)
+  on the turn's first tool call, and events as they happen: a background launch,
+  the first and the 5th code edit, a card already rendered this turn.
 - `stop.flow.guard` (Stop) — fires at turn end; if `work-happened` flag exists but
   `card-rendered` flag is absent → injects carry-over reminder into next turn.
   Resets both flags so each turn is evaluated independently.
