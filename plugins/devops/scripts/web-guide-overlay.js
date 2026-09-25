@@ -556,6 +556,9 @@
 
     var head = mk("div", "head");
     var headTitle = mk("b", null, "Claude Guide · " + currentStep.index + "/" + currentStep.total);
+    // flex:1 keeps » and – together at the right edge; with space-between
+    // alone a third child floated » into the middle of the header.
+    headTitle.style.flex = "1";
     head.appendChild(headTitle);
     var edgeBtn = mk("button", "collapse", "»");
     edgeBtn.type = "button";
