@@ -238,7 +238,9 @@ test("closesOf", () => {
 });
 
 test("cardFacts", () => {
-  expect(C.cardFacts({ variant: "ready" })).toEqual({ variant: "ready", final: true });
+  // R1: cardFacts also exposes pending/concept presence now (post.run.
+  // contract's analysis-card close check reads them).
+  expect(C.cardFacts({ variant: "ready" })).toEqual({ variant: "ready", final: true, pending: false, concept: false });
   expect(C.cardFacts({ variant: "ready", pending: [] }).final).toBe(true);
   expect(C.cardFacts({ variant: "ready", pending: [""] }).final).toBe(true);
   expect(C.cardFacts({ variant: "ready", pending: "x" }).final).toBe(false);
