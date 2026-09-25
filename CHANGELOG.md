@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.205.5] — 2026-09-25
+
+### Fixed
+- **`ship_build` no longer rewrites the README roster with an older generator.** A session's ship server keeps the plugin version the session started with, and the plugin-source repo can be ahead of it. A 0.201.4 server on a 0.203.0 repo rewrote README.md and architecture.html with 57 instead of 58 hooks, dropped the SubagentStart section and then failed its own `gen-readme-sections` test. When the repo ships its own `plugins/devops/scripts/gen-readme-sections.mjs`, `ship_build` now runs that copy. Without one, the bundled generator runs only if its plugin version is provably not older than the repo's; otherwise the markers stay untouched and a `readme-sections` warning says why. Consumer repos are unchanged.
+- **The project map a session sees is current, and repo-wide searches get it.** The map this repo loaded into every session was from July (291 of 1074 tracked files): it is gitignored here, `ship_build` regenerates it only inside throwaway worktrees, and the Desktop app seeds each new worktree with the main checkout's stale copy. `pre.tokens.guard` now regenerates the map right before injecting it, once per session and only when a repo-wide Grep/Glob is about to run; it never creates a map that does not exist. A `path` that resolves to the project root now counts as repo-wide, like no path, `.` or `/`: before, the absolute cwd slipped past both the broad-search block and the map injection.
+- **Map use is measurable.** Each injection is recorded as `map_injected`, and `graphify-audit` shows it per session (column `map`).
+
+### Changed
+- **This repo's CLAUDE.md no longer auto-imports the project map.** The guard delivers a fresh map exactly when a search needs it, instead of a stale copy costing context in every session.
+
 ## [0.205.4] — 2026-09-25
 
 ### Fixed
