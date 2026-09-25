@@ -8,13 +8,21 @@
  *   call the same way. Pure parsing plus two small fs reads (card payload,
  *   transcript tail); no git, no contract state.
  *
- *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS   constants
+ *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS   constants
+ *   MACHINE_ARM_RE / MACHINE_TURN_RE / BACKLOG_AUTOSTART_RE   machine-prompt openers
+ *     (arming: RUN_BACKLOG_AUTOSTART + AUTONOMOUS_AUTOSTART · a machine turn:
+ *     those plus AUTONOMOUS_RESUME · backlog only)
  *   commandFacts(cmd)          → {commit, branch, branchName, renderCard, worktree, detach, release}
  *     (the executable at command position: quoted paths, wrapper prefixes,
  *     sh -c / cmd /c / pwsh -Command / eval payloads — H-X4)
+ *   splitSegments(cmd) / commandAt(seg)   the command-position parser behind it
+ *   shellCallFacts(hook, root, cwd, {after}) → {commit, itemBranch, branchName, card, release}
+ *     (one Bash / PowerShell call as pre gates and post records it — H-A2)
  *   contractRoots(hook, projectRoot) → {root, inputRoot, roots[]} (H-B1)
+ *   toolInput(hook)            → the call's tool_input object ({} when none)
  *   toolFilePath(tool, input)  → string | null
  *   isGatedPath(root, cwd, p)  → boolean (inside the work tree, not exempt)
+ *   isGatedEdit(tool, input, root, cwd) → boolean (Edit/Write/NotebookEdit on a gated path)
  *   closesOf(body)             → ["473", …] from "Closes #473" / "Fixes #…"
  *   cardFacts(input)           → {variant, final}
  *   readCardPayload(file, cwd) → object | null
@@ -22,7 +30,8 @@
  *   routerFromTranscript(transcriptPath, sinceIso, RC) → {questions, answers, followUps[]} | null
  *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
  *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
- *   stripQuotes(cmd) / gitOut(root, args) / readTail(file)   helpers (AUD-015c: kept in sync with module.exports)
+ *   gitOut(root, args) → string | null · gitLines(root, args, {timeout}) → string[] (throws)
+ *   readTail(file)             → transcript tail (AUD-015c: this list matches module.exports)
  */
 
 const fs = require('fs');
@@ -32,6 +41,14 @@ const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 const RENDER_CARD = 'mcp__plugin_devops_dotclaude-completion__render_completion_card';
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
+
+// H-A5: the machine-prompt openers, named once. Arming reads the two
+// AUTOSTART forms; "did this turn open with a machine prompt" (R1) also
+// counts a resume.
+const MACHINE_ARM_RE = /^\s*(RUN_BACKLOG_AUTOSTART|AUTONOMOUS_AUTOSTART)\s*:/i;
+const MACHINE_TURN_RE = /^\s*(AUTONOMOUS_AUTOSTART|AUTONOMOUS_RESUME|RUN_BACKLOG_AUTOSTART)\s*:/i;
+const BACKLOG_AUTOSTART_RE = /^\s*RUN_BACKLOG_AUTOSTART\s*:/i;
+
 const FINAL_VARIANTS = new Set(['ship-successful', 'ready', 'ready-files', 'released', 'test']);
 
 /** Quoted strings emptied, so `grep "git commit"` and `-m "a && b"` never split or match. */
@@ -256,19 +273,36 @@ function mergeFacts(out, f) {
  */
 function contractRoots(hook, projectRoot) {
   const root = projectRoot(hook.cwd || process.cwd());
-  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const input = toolInput(hook);
   const inputRoot = typeof input.cwd === 'string' && input.cwd.trim() && String(hook.tool_name || '').startsWith('mcp__')
     ? projectRoot(input.cwd) : null;
   return { root, inputRoot, roots: inputRoot && inputRoot !== root ? [root, inputRoot] : [root] };
 }
 
+/** The tool_input object of a hook payload ({} when missing / not an object). */
+function toolInput(hook) {
+  const i = hook && hook.tool_input;
+  return i && typeof i === 'object' ? i : {};
+}
+
+function gitRun(root, args, timeout) {
+  const { execFileSync } = require('child_process');
+  return execFileSync('git', args, {
+    cwd: root, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+  });
+}
+
+/** Trimmed git stdout, or null on an error AND on empty output. */
 function gitOut(root, args) {
-  try {
-    const { execFileSync } = require('child_process');
-    return execFileSync('git', args, {
-      cwd: root, timeout: 3000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
-    }).trim() || null;
-  } catch { return null; }
+  try { return gitRun(root, args, 3000).trim() || null; } catch { return null; }
+}
+
+/**
+ * H-A6: git stdout as non-empty lines. THROWS on a git failure, so a caller
+ * can tell "unknown" from "no lines" (pre's qa count).
+ */
+function gitLines(root, args, { timeout = 3000 } = {}) {
+  return gitRun(root, args, timeout).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
 /**
@@ -295,6 +329,32 @@ function isItemBranch(facts, hook, current) {
   return true;
 }
 
+/**
+ * H-A2: one Bash / PowerShell call as pre gates it and post records it.
+ * `itemBranch`: a branch creation that is a backlog item boundary — HEAD is
+ * asked only for a plain main-session creation (a subagent, `git worktree
+ * add` and `--detach` never are one). `after`: PostToolUse (HEAD already is
+ * the new branch). `card`: the offline `--render-card` call; an unreadable
+ * payload (`-` = stdin, `$VAR`, a missing file or one relative to a `cd` in
+ * the same command) counts as a FINAL card (H-B3).
+ * @returns {{commit:boolean, itemBranch:boolean, branchName:string|null,
+ *   card:{readable:boolean, variant:string|null, final:boolean}|null, release:boolean}}
+ */
+function shellCallFacts(hook, root, cwd, { after = false } = {}) {
+  const f = commandFacts(toolInput(hook).command);
+  let itemBranch = false;
+  if (f.branch) {
+    const plain = !(hook.agent_id || f.worktree || f.detach);
+    itemBranch = isItemBranch(f, hook, plain ? baseBranch(root, f.branchName, after) : null);
+  }
+  let card = null;
+  if (f.renderCard) {
+    const payload = readCardPayload(f.renderCard, cwd);
+    card = payload ? { readable: true, ...cardFacts(payload) } : { readable: false, variant: null, final: true };
+  }
+  return { commit: f.commit, itemBranch, branchName: f.branchName, card, release: f.release };
+}
+
 function toolFilePath(toolName, input) {
   if (!input || typeof input !== 'object') return null;
   if (toolName === 'NotebookEdit') return input.notebook_path || input.file_path || null;
@@ -318,6 +378,11 @@ function isGatedPath(root, cwd, file) {
   if (low.startsWith('docs/concepts/')) return false;
   if (/^(BACKLOG|AUTONOMOUS|BURN)-/i.test(path.posix.basename(p))) return false;
   return true;
+}
+
+/** H-A3: an Edit / Write / NotebookEdit call on a gated path. */
+function isGatedEdit(tool, input, root, cwd) {
+  return EDIT_TOOLS.has(tool) && isGatedPath(root, cwd, toolFilePath(tool, input));
 }
 
 /** Issue numbers a PR body closes. */
@@ -422,8 +487,9 @@ function routerFromTranscript(transcriptPath, sinceIso, RC) {
 }
 
 module.exports = {
-  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS,
-  commandFacts, toolFilePath, isGatedPath, closesOf, cardFacts, readCardPayload,
-  releaseResult, routerFromTranscript, stripQuotes, gitOut, baseBranch, isItemBranch, readTail,
-  splitSegments, commandAt, contractRoots,
+  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS,
+  MACHINE_ARM_RE, MACHINE_TURN_RE, BACKLOG_AUTOSTART_RE,
+  commandFacts, splitSegments, commandAt, shellCallFacts, contractRoots,
+  toolInput, toolFilePath, isGatedPath, isGatedEdit, closesOf, cardFacts, readCardPayload,
+  releaseResult, routerFromTranscript, baseBranch, isItemBranch, gitOut, gitLines, readTail,
 };

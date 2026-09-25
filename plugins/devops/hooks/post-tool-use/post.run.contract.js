@@ -29,15 +29,13 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 
-const LIB = path.resolve(__dirname, '..', 'lib', 'run-contract.js');
-
 function announcement(h, RC) {
   const from = h.source === 'machine' ? 'a machine prompt (autostart)' : 'the click-through defaults — the do-run answers were not found';
   return [
     `[run-contract] A run contract was armed from ${from}: ${RC.chosenLine(h)}.`,
     'Its gates now refuse edits, commits, ship_release and final cards that walk past an open obligation.',
-    `Wrong choice? Re-arm: node "${LIB}" arm --mode <prompt|backlog|audit> --flow <interactive|autonomous> --ship <auto|manual> --passes <harden,polish|none>`,
-    `Not a run at all: node "${LIB}" done`,
+    `Wrong choice? Re-arm: ${RC.rearmHint()}`,
+    `Not a run at all: node "${RC.LIB_PATH}" done`,
   ].join('\n');
 }
 
@@ -51,14 +49,12 @@ function backlogFinished(h, evs) {
   return h.items.every(n => closed.has(String(n)));
 }
 
-const MACHINE_OPENER = /^\s*(AUTONOMOUS_AUTOSTART|AUTONOMOUS_RESUME|RUN_BACKLOG_AUTOSTART)\s*:/i;
-
 /** Did the current turn open with a machine prompt (R1)? */
 function machineTurn(hook, C) {
   if (typeof hook.transcript_path !== 'string' || !hook.transcript_path) return false;
   try {
     const { lastUserPromptText } = require('../lib/skill-invocations');
-    return MACHINE_OPENER.test(lastUserPromptText(C.readTail(hook.transcript_path)) || '');
+    return C.MACHINE_TURN_RE.test(lastUserPromptText(C.readTail(hook.transcript_path)) || '');
   } catch { return false; }
 }
 
@@ -81,6 +77,80 @@ function contractRootOf(roots, RC, sessionId) {
   return roots[0];
 }
 
+// H-D15: one handler per tool kind. Each gets the call context
+// `{hook, input, cwd, root, roots, sessionId, s, RC, C}`.
+
+/** Router answers arm (or merge into) a contract; follow-up answers patch it. */
+function onAsk({ hook, input, root, sessionId, s, RC }) {
+  const { questions, answers } = RC.extractAnswers(hook.tool_response, input);
+  if (!RC.isRouterCall(questions)) {
+    // "Run fortsetzen" answered → the resume path asks no router questions.
+    if (RC.hasHeader(questions, 'Fortsetzen') && RC.pendingArm(root, s)) RC.clearPendingArm(root);
+    const patch = RC.parseFollowUp(questions, answers);
+    if (patch) RC.applyFollowUp(root, patch, s);
+    return;
+  }
+  const marker = RC.pendingArm(root, s);
+  const fields = RC.parseRouterAnswers(questions, answers, { doRunArgs: marker && marker.args });
+  // A partial router call (only some headers) merges into this session's
+  // fresh contract instead of re-arming with defaults (R7). H-B13: with no
+  // merge target it arms only after a do-run (fresh same-session arm
+  // marker) — a model-written Flow + Scope / Passes question elsewhere never
+  // arms. A FULL router call (Ablauf + Umfang + Durchgänge) is do-run's own
+  // signature and arms with or without the marker.
+  const partial = RC.isPartialRouterCall(questions);
+  if (fields && !RC.mergeRouterAnswers(root, questions, fields, s) && (!partial || marker)) {
+    // A failed write must not delete the marker (AUD-001): keep it so the
+    // next gated call's pre-hook fallback arm can retry.
+    if (RC.arm(root, { ...fields, source: 'router', sessionId })) RC.clearPendingArm(root);
+  }
+}
+
+/** `skill` event; do-run writes the arm marker; do-run / auto-concept take over a batch hand-off. */
+function onSkill({ hook, input, root, sessionId, s, RC, C }) {
+  const name = RC.skillName(input.skill || input.name);
+  const args = typeof input.args === 'string' ? input.args : '';
+  if (name === 'do-run' && !machineTurn(hook, C)) RC.markPendingArm(root, { sessionId, args });
+  if ((name === 'do-run' || name === 'auto-concept') && RC.batchHandoffPending(root, s)) RC.clearBatchHandoff(root);
+  RC.record(root, { k: 'skill', name, args }, s);
+}
+
+/** `commit`, item `branch` and an offline `--render-card` card (H-A2: the facts pre gated on). */
+function onShell({ hook, cwd, root, s, RC, C }) {
+  const f = C.shellCallFacts(hook, root, cwd, { after: true });
+  if (f.commit) RC.record(root, { k: 'commit' }, s);
+  if (f.itemBranch) RC.record(root, { k: 'branch', name: f.branchName }, s);
+  if (f.card) recordCard(root, f.card.variant, f.card.final, RC, s);
+}
+
+/** `release` in the contract's root (ship_release acts on tool_input.cwd); a finished backlog closes. */
+function onRelease({ hook, input, roots, sessionId, s, RC, C }) {
+  const r = contractRootOf(roots, RC, sessionId);
+  const res = C.releaseResult(hook.tool_response) || { ok: false, merged: false };
+  RC.record(r, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) }, s);
+  const h = RC.readContract(r, s);
+  if (h && backlogFinished(h, RC.events(r))) RC.close(r, 'done: every queued item shipped', s);
+}
+
+/** H-B1: the MCP card takes `cwd` too — recorded and closed where pre gated it. */
+function onCard({ input, roots, sessionId, s, RC, C }) {
+  const cf = C.cardFacts(input);
+  recordCard(contractRootOf(roots, RC, sessionId), cf.variant, cf.final, RC, s);
+}
+
+function handlerFor(tool, C) {
+  if (tool === 'AskUserQuestion') return onAsk;
+  if (tool === 'Skill') return onSkill;
+  if (tool === 'Agent') return ({ input, root, s, RC }) => RC.record(root, { k: 'agent', type: input.subagent_type || 'general-purpose' }, s);
+  if (C.EDIT_TOOLS.has(tool)) {
+    return ({ input, cwd, root, s, RC }) => { if (C.isGatedEdit(tool, input, root, cwd)) RC.record(root, { k: 'edit' }, s); };
+  }
+  if (C.SHELL_TOOLS.has(tool)) return onShell;
+  if (tool === C.SHIP_RELEASE) return onRelease;
+  if (tool === C.RENDER_CARD) return onCard;
+  return null;
+}
+
 function main(hook) {
   const cwd = hook.cwd || process.cwd();
   // H-B17: required here, inside the stdin handler's try/catch.
@@ -96,75 +166,12 @@ function main(hook) {
     && !roots.some(r => fs.existsSync(path.join(r, '.claude', 'run-contract.json')))) return null;
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return null;
-  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const handler = handlerFor(tool, C);
+  if (!handler) return null;
   const sessionId = hook.session_id || null;
   const s = { sessionId };
   RC.claim(root, sessionId);
-
-  if (tool === 'AskUserQuestion') {
-    const { questions, answers } = RC.extractAnswers(hook.tool_response, input);
-    if (RC.isRouterCall(questions)) {
-      const marker = RC.pendingArm(root, s);
-      const fields = RC.parseRouterAnswers(questions, answers, { doRunArgs: marker && marker.args });
-      // A partial router call (only some headers) merges into this session's
-      // fresh contract instead of re-arming with defaults (R7). H-B13: with
-      // no merge target it arms only after a do-run (fresh same-session arm
-      // marker) — a model-written Flow + Scope / Passes question elsewhere
-      // never arms. A FULL router call (Ablauf + Umfang + Durchgänge) is
-      // do-run's own signature and arms with or without the marker.
-      const partial = RC.isPartialRouterCall(questions);
-      if (fields && !RC.mergeRouterAnswers(root, questions, fields, s) && (!partial || marker)) {
-        const h = RC.arm(root, { ...fields, source: 'router', sessionId });
-        // A failed write must not delete the marker (AUD-001): keep it so the
-        // next gated call's pre-hook fallback arm can retry.
-        if (h) RC.clearPendingArm(root);
-      }
-    } else {
-      // "Run fortsetzen" answered → the resume path asks no router questions.
-      if (RC.hasHeader(questions, 'Fortsetzen') && RC.pendingArm(root, s)) RC.clearPendingArm(root);
-      const patch = RC.parseFollowUp(questions, answers);
-      if (patch) RC.applyFollowUp(root, patch, s);
-    }
-  } else if (tool === 'Skill') {
-    const name = RC.skillName(input.skill || input.name);
-    const args = typeof input.args === 'string' ? input.args : '';
-    if (name === 'do-run' && !machineTurn(hook, C)) RC.markPendingArm(root, { sessionId, args });
-    if (name === 'do-run' || name === 'auto-concept') {
-      if (RC.batchHandoffPending(root, s)) RC.clearBatchHandoff(root);
-    }
-    RC.record(root, { k: 'skill', name, args }, s);
-  } else if (tool === 'Agent') {
-    RC.record(root, { k: 'agent', type: input.subagent_type || 'general-purpose' }, s);
-  } else if (C.EDIT_TOOLS.has(tool)) {
-    if (C.isGatedPath(root, cwd, C.toolFilePath(tool, input))) RC.record(root, { k: 'edit' }, s);
-  } else if (C.SHELL_TOOLS.has(tool)) {
-    const f = C.commandFacts(input.command);
-    if (f.commit) RC.record(root, { k: 'commit' }, s);
-    if (f.branch && C.isItemBranch(f, hook, hook.agent_id || f.worktree || f.detach ? null : C.baseBranch(root, f.branchName, true))) {
-      RC.record(root, { k: 'branch', name: f.branchName }, s);
-    }
-    if (f.renderCard) {
-      // H-B3: pre's rule — an unreadable payload (`-`, `$VAR`, a path gone
-      // or relative to a `cd` in the same command) was gated as a final card,
-      // so it is recorded (and closes) as one too.
-      const payload = C.readCardPayload(f.renderCard, cwd);
-      const cf = payload ? C.cardFacts(payload) : { variant: null, final: true };
-      recordCard(root, cf.variant, cf.final, RC, s);
-    }
-  } else if (tool === C.SHIP_RELEASE) {
-    // ship_release acts on tool_input.cwd: the session root first, then that one.
-    const r = contractRootOf(roots, RC, sessionId);
-    const res = C.releaseResult(hook.tool_response) || { ok: false, merged: false };
-    RC.record(r, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(input.body) }, s);
-    const h = RC.readContract(r, s);
-    if (h && backlogFinished(h, RC.events(r))) RC.close(r, 'done: every queued item shipped', s);
-  } else if (tool === C.RENDER_CARD) {
-    // H-B1: the card takes `cwd` too — recorded and closed where pre gated it.
-    const cf = C.cardFacts(input);
-    recordCard(contractRootOf(roots, RC, sessionId), cf.variant, cf.final, RC, s);
-  } else {
-    return null;
-  }
+  handler({ hook, input: C.toolInput(hook), cwd, root, roots, sessionId, s, RC, C });
 
   let h = RC.readContract(root, s);
   // H-C5: an item parked / skipped (run-contract CLI, a Bash call) AFTER the
@@ -197,4 +204,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { backlogFinished, recordCard, main };
+module.exports = { backlogFinished, recordCard, onAsk, onSkill, onShell, onRelease, onCard, main };
