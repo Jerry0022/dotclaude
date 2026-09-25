@@ -582,3 +582,49 @@ describe("C — atomic arm and update", () => {
     expect(out.closedAt).not.toBeNull();
   });
 });
+
+// ── RT3: red-team pass 3 (hook level) ─────────────────────────────────────
+
+describe("RT3 — command-position false passes and false blocks (hook level)", () => {
+  const withWork = (over = {}) => { armS1(over); ev({ k: "skill", name: "auto-agents" }); ev({ k: "edit" }); };
+  const backlogWithWork = () => {
+    RC.arm(dir, { mode: "backlog", flow: "autonomous", ship: "auto", passes: ["harden"], sessionId: "s1", presence: false });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+  };
+
+  test.each([
+    ["PowerShell", "$r = git commit -m x 2>&1"],
+    ["PowerShell", "if ($x) { git commit -m x }"],
+    ["PowerShell", 'iex "git commit -m x"'],
+    ["Bash", "if true; then git commit -m x; fi"],
+    ["Bash", "for f in a; do git commit -m $f; done"],
+    ["Bash", "bash <<'EOF'\ngit commit -m x\nEOF"],
+  ])("RT3-R3: %s `%s` hits the commit gate", (tool, command) => {
+    armS1();
+    expect(pre(tool, { command }).code).toBe(2);
+  });
+
+  test.each([
+    ["PowerShell", "$null = git push origin main"],
+    ["PowerShell", "try { git push origin main } catch {}"],
+    ["Bash", "git push \\\n  origin main"],
+  ])("RT3-R3: %s `%s` hits the release gate under ship: auto", (tool, command) => {
+    withWork({ ship: "auto", passes: [] });
+    expect(pre(tool, { command }).code).toBe(2);
+  });
+
+  test("RT3-QA: the corpus false positive passes (quoted heredoc with code spans)", () => {
+    withWork({ ship: "auto", passes: [] });
+    const command = "cat > f.js <<'EOF'\n// run `gh pr merge` via do-ship, never `git push` to main\nEOF";
+    expect(pre("Bash", { command }).code).toBe(0);
+  });
+
+  test("RT3-R10: `git branch X && git switch X` is an item boundary; switching to an existing branch is not", () => {
+    backlogWithWork();
+    expect(pre("Bash", { command: "git branch fix/8 && git switch fix/8" }).code).toBe(2);
+    expect(pre("Bash", { command: "gh issue develop 8 -c --name fix/8" }).code).toBe(2);
+    expect(pre("Bash", { command: "git switch existing" }).code).toBe(0);
+    expect(pre("Bash", { command: "git branch main-core && git switch main-core" }).code).toBe(0);
+  });
+});

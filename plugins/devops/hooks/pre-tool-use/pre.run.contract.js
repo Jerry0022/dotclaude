@@ -15,7 +15,10 @@
  *   segment's harden/polish/qa/do-ship · first Skill auto-agents (backlog) →
  *   triage · ship_release → everything incl. refine · a final completion card
  *   (MCP or the offline `--render-card <payload.json>` renderer) → auto-agents,
- *   harden, polish, qa, do-ship.
+ *   harden, polish, qa, do-ship. Under ship: auto a shell release (`gh pr
+ *   merge`, `gh api -X PUT …/pulls/N/merge`, a push onto main / master, a
+ *   push of the current branch while that is main / master) and a GitHub MCP
+ *   `*__merge_pull_request` call hit the release gate too (RT3-R4).
  *
  *   Fast path: none of run-contract.json / run-contract.pending /
  *   batch-handoff.json in the work-tree root → exit 0 before loading the lib.
@@ -41,6 +44,19 @@ function batchBlock(RC) {
 }
 
 const GIT_TIMEOUT = { timeout: 5000 };
+const MCP_MERGE_RE = /^mcp__.*__merge_pull_request$/;
+
+/**
+ * RT3-R4: is the work tree's current branch main / master? Asked only for a
+ * `pushHead` call under ship: auto; a git failure or timeout means no (the
+ * gate never blocks on unknown).
+ */
+function onMainBranch(root, C) {
+  try {
+    const b = C.gitLines(root, ['rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 3000 })[0];
+    return b === 'main' || b === 'master';
+  } catch { return false; }
+}
 
 // RT2-R7: widened to Unicode letters/digits (`größe`, non-ASCII branch
 // names are legal in git) plus `._/+@-` (`release/1.2`, `feat/a+b`,
@@ -73,18 +89,20 @@ function resolveBase(root, explicit, C) {
 }
 
 /** Changed code files for the qa rule, or null (unknown). */
-function codeFilesChanged(root, gate, base) {
+function codeFilesChanged(root, gate, base, gitLines = require('../lib/run-contract-calls').gitLines) {
   try {
     // H-A6: gitLines throws on a git failure → the catch below = unknown.
-    const { gitLines } = require('../lib/run-contract-calls');
     const diff = (range) => gitLines(root, ['diff', '--name-only', range], GIT_TIMEOUT);
     let names;
     try { names = diff(`origin/${base}...HEAD`); } catch { names = diff(`${base}...HEAD`); }
     const set = new Set(names);
     if (gate !== 'release') {
       for (const n of diff('HEAD')) set.add(n);
-      // H-B4: new code files never `git add`ed count too.
-      for (const n of gitLines(root, ['ls-files', '--others', '--exclude-standard'], GIT_TIMEOUT)) set.add(n);
+      // H-B4: new code files never `git add`ed count too. RT3-R6: a failing
+      // or slow ls-files keeps the diff count instead of making it unknown.
+      try {
+        for (const n of gitLines(root, ['ls-files', '--others', '--exclude-standard'], GIT_TIMEOUT)) set.add(n);
+      } catch { /* untracked files unknown: the diff count stands */ }
     }
     const { isCodeChange } = require('../lib/browsertest-guard');
     return [...set].filter(f => isCodeChange(f)).length;
@@ -106,8 +124,12 @@ function classify(hook, root, cwd, C) {
     if (f.card && f.card.final) gates.push('card');
     // gh pr merge / git push onto main|master → release gate (ship: auto only).
     if (f.release) gates.push('release');
-    return gates.length ? { gates, batch: f.commit, shellRelease: f.release } : null;
+    // RT3-R4: a push of the current branch is a release only on main / master (asked in main()).
+    if (gates.length || f.pushHead) return { gates, batch: f.commit, shellRelease: true, pushHead: f.pushHead && !f.release };
+    return null;
   }
+  // RT3-R4: a GitHub MCP merge is a release, gated like a shell one (ship: auto only).
+  if (MCP_MERGE_RE.test(tool)) return { gates: ['release'], batch: false, shellRelease: true };
   if (tool === 'Skill') {
     const RC = require('../lib/run-contract');
     return RC.skillName(input.skill || input.name) === 'auto-agents' ? { gates: ['auto-agents'], batch: false } : null;
@@ -193,6 +215,10 @@ function main(hook) {
     if (contract) { croot = r; break; }
   }
   if (!contract) return 0;
+  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C)) {
+    call.gates.push('release');
+  }
+  if (!call.gates.length) return 0;
   const evs = RC.events(croot);
   const seg = RC.currentSegment(contract, evs);
   const gitRoot = inputRoot || root;
