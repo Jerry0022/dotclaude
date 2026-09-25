@@ -478,6 +478,14 @@ describe("CLI: payload wait", () => {
     expect(r.stdout).toBe("");
   });
 
+  // #529: 0 is the one value allowed below WAIT_MIN_MS — the "drain" call
+  // SKILL.md 5c runs after a CDP timeout to reclaim a stranded event.
+  test("0 (drain) is accepted despite being below the minimum bound", () => {
+    const r = run(["payload", "wait", "0"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(0))");
+  });
+
   test("above maximum bound rejected", () => {
     const r = run(["payload", "wait", "35001"]);
     expect(r.code).toBe(1);

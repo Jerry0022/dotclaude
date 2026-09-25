@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.6.0
+ * @version 1.7.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.6.0";
+  var VERSION = "1.7.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -36,6 +36,13 @@
   var eventQueue = [], pendingWaiter = null, helpOpen = false, abortConfirm = false;
   var abortResetTimer = null, heartbeatTimer = null, activeBtns = [];
   var statusEl = null, spinnerEl = null, waitLabelEl = null, lastPoll = Date.now();
+  // #529: a pendingWaiter belongs to a `javascript_tool`/CDP eval that has its
+  // own ~45s hard limit (protocol.md § spike). The page has no signal when
+  // that eval gives up, so a waiter older than CALLER_TIMEOUT_MS is treated as
+  // dead: its event stays queued instead of resolving into a promise nobody
+  // reads. lastEventId/lastDeliveredId let the skill detect a stranded event.
+  var CALLER_TIMEOUT_MS = 44000;
+  var pendingWaiterArmedAt = 0, lastEventId = 0, lastDeliveredId = null;
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
@@ -376,13 +383,21 @@
   }
 
   function deliverEvent(event) {
-    if (pendingWaiter) {
-      var resolve = pendingWaiter;
+    event.id = ++lastEventId;
+    eventQueue.push(event);
+    saveQueue();
+    // Hand off to the current pendingWaiter only while it is young enough to
+    // plausibly still be alive. Once it has plausibly already exceeded the
+    // CDP eval's hard limit, resolving it here would drop the event into a
+    // promise nobody reads (#529) — leave it queued and let a fresh wait()
+    // (which supersedes any stale pendingWaiter first) drain it instead.
+    if (pendingWaiter && Date.now() - pendingWaiterArmedAt < CALLER_TIMEOUT_MS) {
+      var waiterFn = pendingWaiter;
       pendingWaiter = null;
-      resolve(event);
-    } else {
-      eventQueue.push(event);
+      var queued = eventQueue.shift();
       saveQueue();
+      lastDeliveredId = queued.id;
+      waiterFn(queued);
     }
     disableActiveButtons();
     armHeartbeat();
@@ -736,11 +751,28 @@
     },
     wait: function (ms) {
       lastPoll = Date.now(); // #513: heartbeat — every wait() records a poll.
+      // #529: a new wait() call proves the previous call's caller has moved
+      // on (the protocol never runs two wait()s from one live loop). Give any
+      // still-registered pendingWaiter a definitive resolution now instead of
+      // leaving it dangling forever.
+      if (pendingWaiter) {
+        var stale = pendingWaiter;
+        pendingWaiter = null;
+        stale({ type: "superseded" });
+      }
       return new Promise(function (resolve) {
         if (eventQueue.length) {
           var queued = eventQueue.shift();
           saveQueue();
+          lastDeliveredId = queued.id;
           resolve(queued);
+          return;
+        }
+        // #529: ms=0 is the "drain" call — it must resolve right away even in
+        // a hidden tab (the whole point is a cheap, immediate check), never
+        // wait for a visibilitychange that may not come for minutes.
+        if (ms === 0) {
+          resolve({ type: "timeout" });
           return;
         }
         var timer = null;
@@ -772,6 +804,7 @@
           armTimer();
         }
         pendingWaiter = waiter;
+        pendingWaiterArmedAt = Date.now();
       });
     },
     state: function () {
@@ -781,6 +814,11 @@
         collapsed,
         queued: eventQueue.length,
         url: window.location.href,
+        // #529: lets the skill detect and drain a stranded event after a CDP
+        // timeout — pendingWaiter true means a wait() call is still armed;
+        // lastDeliveredId is the id of the most recently delivered event.
+        pendingWaiter: !!pendingWaiter,
+        lastDeliveredId,
       };
     },
     destroy: function () {

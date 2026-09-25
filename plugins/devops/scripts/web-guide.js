@@ -41,7 +41,9 @@ const WAIT_MAX_MS = 35000;
 const USAGE = `usage:
   node web-guide.js payload inject [--raw]
   node web-guide.js payload step <step.json>|-
-  node web-guide.js payload wait [ms]
+  node web-guide.js payload wait [ms]                  (0 drains a stranded
+                                                        event without a real
+                                                        wait, see #529)
   node web-guide.js store --file <path> --key <KEY> [--b64 <value>]
                                                         (value read from
                                                         stdin if --b64 is
@@ -344,10 +346,14 @@ function payloadStep(arg) {
 // payload wait
 // ---------------------------------------------------------------------------
 
+// #529: `wait(0)` is the "drain" call — SKILL.md 5c runs it after a CDP
+// timeout to reclaim a stranded event without arming a real ~30s wait. It is
+// the one value allowed below WAIT_MIN_MS.
 function payloadWait(msArg) {
   const ms = msArg === undefined ? WAIT_DEFAULT_MS : Number(msArg);
-  if (!Number.isInteger(ms) || ms < WAIT_MIN_MS || ms > WAIT_MAX_MS) {
-    process.stderr.write(`ms must be an integer between ${WAIT_MIN_MS} and ${WAIT_MAX_MS}\n`);
+  const isDrain = ms === 0;
+  if (!Number.isInteger(ms) || (!isDrain && (ms < WAIT_MIN_MS || ms > WAIT_MAX_MS))) {
+    process.stderr.write(`ms must be 0 (drain) or an integer between ${WAIT_MIN_MS} and ${WAIT_MAX_MS}\n`);
     process.exitCode = 1;
     return;
   }

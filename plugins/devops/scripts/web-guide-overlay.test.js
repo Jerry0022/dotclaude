@@ -121,6 +121,12 @@ function makeSandbox({ setTimeoutFn, clearTimeoutFn } = {}) {
     documentElement,
     createElement: makeElement,
     addEventListener(type, fn) { (docListeners[type] = docListeners[type] || []).push(fn); },
+    removeEventListener(type, fn) {
+      const arr = docListeners[type];
+      if (!arr) return;
+      const i = arr.indexOf(fn);
+      if (i >= 0) arr.splice(i, 1);
+    },
     _dispatch(type, evt) { (docListeners[type] || []).forEach((fn) => fn(evt || {})); },
   };
   const window = {
@@ -186,8 +192,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.6.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.6.0["']/);
+  test("defines VERSION 1.7.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.7.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -218,7 +224,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.6.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.7.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -235,7 +241,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.6.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.7.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -509,8 +515,11 @@ describe("web-guide-overlay — execution", () => {
     expect(icon).toBeTruthy();
   });
 
-  // Fix 5: pendingWaiter per call — timeout for A must not clear B's resolver.
-  test("an overlapping wait's timeout does not orphan the next wait's resolver", async () => {
+  // Fix 5 / #529: a new wait() call supersedes an older, still-registered
+  // pendingWaiter with {type:"superseded"} instead of leaving it live (the
+  // protocol never runs two wait()s from one live loop, so a second call
+  // proves the first one's caller has moved on).
+  test("a new wait() supersedes an older pendingWaiter instead of leaving it live", async () => {
     vi.useFakeTimers();
     try {
       const sb = makeSandbox({
@@ -520,12 +529,11 @@ describe("web-guide-overlay — execution", () => {
       run(sb);
       sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
 
-      const waitA = sb.window.claudeGuide.wait(1000);
+      const waitA = sb.window.claudeGuide.wait(60000);
       const waitB = sb.window.claudeGuide.wait(60000);
 
-      await vi.advanceTimersByTimeAsync(1000);
       const evA = await waitA;
-      expect(evA).toEqual({ type: "timeout" });
+      expect(evA).toEqual({ type: "superseded" });
 
       const host = getHost(sb);
       const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
@@ -535,6 +543,78 @@ describe("web-guide-overlay — execution", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // #529: an event handed to a waiter must survive the waiter's caller dying.
+  // Hidden tab -> wait() -> the caller (a CDP eval with its own ~45s hard
+  // limit) abandons it without the page ever knowing -> the user emits
+  // "next" while that waiter is still registered but stale -> a LATER wait()
+  // call must still return the event, not lose it to the dead waiter.
+  test("hidden tab: an abandoned wait()'s event survives for a later wait()", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      sb.document.hidden = true;
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+
+      const waitA = sb.window.claudeGuide.wait(30000); // caller abandons this — never awaited
+      void waitA;
+
+      // The CDP hard limit elapses while the tab stays hidden; no page timer
+      // ever armed (document.hidden), so nothing here resolves waitA.
+      await vi.advanceTimersByTimeAsync(44000);
+      expect(sb.window.claudeGuide.state().pendingWaiter).toBe(true);
+
+      const host = getHost(sb);
+      const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+      primary.click(); // user emits "next" — must not be swallowed by the dead waiter
+
+      expect(sb.window.claudeGuide.state().queued).toBe(1);
+
+      const evB = await sb.window.claudeGuide.wait(1000); // a later wait() call
+      expect(evB.type).toBe("next");
+      expect(sb.window.claudeGuide.state().queued).toBe(0);
+      expect(sb.window.claudeGuide.state().pendingWaiter).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #529: wait(0) is the "drain" call SKILL.md 5c runs after a CDP timeout —
+  // it must resolve immediately even in a hidden tab, never wait for a
+  // visibilitychange that may not come for minutes.
+  test("wait(0) resolves immediately in a hidden tab, queued event or not", async () => {
+    run(sandbox);
+    sandbox.document.hidden = true;
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+
+    const emptyDrain = await sandbox.window.claudeGuide.wait(0);
+    expect(emptyDrain).toEqual({ type: "timeout" });
+
+    const host = getHost(sandbox);
+    const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+    primary.click();
+    const drained = await sandbox.window.claudeGuide.wait(0);
+    expect(drained.type).toBe("next");
+  });
+
+  // #529: state() exposes pendingWaiter and lastDeliveredId for the skill to
+  // detect and drain a stranded event.
+  test("state() exposes pendingWaiter and lastDeliveredId", async () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    expect(sandbox.window.claudeGuide.state().pendingWaiter).toBe(false);
+    expect(sandbox.window.claudeGuide.state().lastDeliveredId).toBe(null);
+
+    const host = getHost(sandbox);
+    const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+    primary.click();
+    const ev = await sandbox.window.claudeGuide.wait(1000);
+    expect(sandbox.window.claudeGuide.state().lastDeliveredId).toBe(ev.id);
   });
 
   // Fix 6: abort confirmation resets on re-render.

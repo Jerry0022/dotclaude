@@ -109,6 +109,7 @@ Rules, "The user operates, Claude guides").
 | `help` | User pressed **Ich komme nicht weiter** | optional `value` = free text the user typed into the help box |
 | `abort` | User pressed **Abbrechen** (confirmed) | — |
 | `timeout` | `wait(ms)` elapsed with no event | — |
+| `superseded` | A new `wait()` call resolved a still-registered, older `wait()` call instead of leaving it live (#529) | — never delivered from the panel; only ever the resolution of the *older* call |
 
 Events queue: if the user clicks between two `wait()` calls the event is not
 lost — the next `wait()` resolves immediately with the oldest queued event.
@@ -135,11 +136,29 @@ Claude loop separately re-sends the current step after 10 consecutive
 `wait()` timeouts and ends the guide after 30 (≈ 17 min of silence) —
 unrelated to the heartbeat, which only concerns the status text.
 
+**Surviving a dead caller (#529).** `deliverEvent` (fired by every panel
+button) **always** pushes onto `eventQueue` first. It hands the event to the
+current `pendingWaiter` only when that waiter was armed less than ~44 s ago
+(just under the CDP `Runtime.evaluate` hard limit, see the spike table
+above) — a waiter older than that almost certainly belongs to a
+`javascript_tool` call whose 45 s client-side timeout already fired, so
+resolving it would drop the event into a promise nobody reads. In that case
+the event stays queued and a fresh `wait()` call drains it. Every `wait()`
+call also resolves any still-registered older `pendingWaiter` with
+`{"type":"superseded"}` first, so a stale registration never lingers
+forever — it always gets a definitive (if unobserved) resolution.
+
 ### State
 
 ```json
-{ "version": "1.0.0", "stepId": "3", "collapsed": false, "queued": 0, "url": "https://…" }
+{ "version": "1.0.0", "stepId": "3", "collapsed": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null }
 ```
+
+`pendingWaiter` is `true` while a `wait()` call is currently armed (waiting
+for a timer, a visibility change, or an event). `lastDeliveredId` is the id
+of the most recently delivered event (`null` before the first one) — the
+skill can compare it against an expected id to detect a stranded event after
+a CDP timeout.
 
 ## UI state persistence
 
@@ -236,5 +255,5 @@ with none of it. Three fix ideas were weighed:
 |---------|--------|
 | `payload inject` | The complete overlay source wrapped as an idempotent IIFE, ending with `"injected"` / `"already-injected"` — paste into `javascript_tool.text`. |
 | `payload step <step.json>` | `window.claudeGuide.setStep(<json>)` with the JSON validated against the schema above (exit 1 + reason on violation). |
-| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default 30000, maximum 35000 — the CDP limit is ≈ 45 s). |
+| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>))` (default 30000, maximum 35000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |
