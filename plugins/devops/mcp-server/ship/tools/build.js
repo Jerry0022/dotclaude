@@ -11,6 +11,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareVersions } from "../lib/channels.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -58,6 +59,47 @@ const BUILD_ID_SCRIPT = () => scriptPath("build-id.js");
 const DK_INDEX_SCRIPT = () => scriptPath("gen-dk-index.mjs");
 const PROJECT_MAP_SCRIPT = () => scriptPath("gen-project-map.mjs");
 const README_SECTIONS_SCRIPT = () => scriptPath("gen-readme-sections.mjs");
+
+/** x.y.z from a plugin dir's .claude-plugin/plugin.json, or null when unreadable. */
+function pluginVersion(dir) {
+  try {
+    const { version } = JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"));
+    const m = /^(\d+\.\d+\.\d+)/.exec(typeof version === "string" ? version : "");
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pick the gen-readme-sections.mjs that rewrites the roster markers. The markers
+ * live only in the plugin source repo, and that repo can be AHEAD of the plugin
+ * version this MCP server was spawned from — servers keep the version the
+ * session started with. A bundled generator that predates a new hook event drops
+ * it from the roster (2026-09-25: a 0.201.4 server on a 0.203.0 repo wrote 57
+ * instead of 58 hooks and removed the SubagentStart section).
+ *   1. The repo ships its own generator → run that one (as ship_preflight does).
+ *   2. The repo has plugins/devops but no generator → run the bundled copy only
+ *      when it is provably not older than the repo's plugin; otherwise skip.
+ *   3. Consumer repo (no plugins/devops) → bundled copy, which no-ops there.
+ * Returns { script } or { skip: <reason> }.
+ */
+function readmeSectionsScript(cwd) {
+  const repoPluginDir = join(cwd, "plugins", "devops");
+  const repoScript = join(repoPluginDir, "scripts", "gen-readme-sections.mjs");
+  if (existsSync(repoScript)) return { script: repoScript };
+  const bundled = README_SECTIONS_SCRIPT();
+  if (!existsSync(repoPluginDir)) return { script: bundled };
+  const repoVersion = pluginVersion(repoPluginDir);
+  const bundledVersion = pluginVersion(pluginRoot());
+  if (repoVersion && bundledVersion && compareVersions(bundledVersion, repoVersion) >= 0) {
+    return { script: bundled };
+  }
+  return {
+    skip: `skipped — bundled generator (v${bundledVersion ?? "?"}) may be older than the repo's plugin ` +
+      `(v${repoVersion ?? "?"}); roster markers left untouched`,
+  };
+}
 
 export const schema = z.object({
   buildCmd: z.string().nullable().default(null).describe("Build command (null = auto-detect from package.json)"),
@@ -156,8 +198,14 @@ export async function handler(params) {
   // 3. Project map (full codebase index)
   runGenerator("project-map", `"${process.execPath}" "${PROJECT_MAP_SCRIPT()}" "${cwd}"`);
   // 4. README + architecture.html auto-marker sections (no-ops outside the
-  //    plugin source repo, i.e. when cwd/plugins/devops is absent)
-  runGenerator("readme-sections", `"${process.execPath}" "${README_SECTIONS_SCRIPT()}" "${cwd}"`);
+  //    plugin source repo, i.e. when cwd/plugins/devops is absent). Prefers the
+  //    repo's own generator — see readmeSectionsScript().
+  const readme = readmeSectionsScript(cwd);
+  if (readme.script) {
+    runGenerator("readme-sections", `"${process.execPath}" "${readme.script}" "${cwd}"`);
+  } else {
+    genWarnings.push({ generator: "readme-sections", error: readme.skip });
+  }
 
   // Build (skip if no build script detected/provided)
   if (buildCmd) {

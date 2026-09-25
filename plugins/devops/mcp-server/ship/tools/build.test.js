@@ -18,7 +18,7 @@ vi.mock("node:fs", () => ({
 
 import { handler } from "./build.js";
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const PLUGIN_ROOT = "/plugin-root";
 const CWD = "/consumer-repo";
@@ -45,6 +45,7 @@ beforeEach(() => {
     return false; // package.json absent → no build/lint/test commands
   });
   execSync.mockReturnValue(""); // every generator + build-id succeeds by default
+  readFileSync.mockImplementation(() => "{}"); // clearAllMocks keeps per-test implementations
 });
 
 afterEach(() => {
@@ -118,6 +119,78 @@ describe("ship_build — generator failures surfaced, not swallowed", () => {
   test("all generators succeed → empty warnings array", async () => {
     const res = await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: null, buildIdOnly: false });
     expect(res.success).toBe(true);
+    expect(res.warnings).toEqual([]);
+  });
+});
+
+describe("ship_build — README roster generator (stale MCP server regression)", () => {
+  // 2026-09-25: the session's ship server ran from cache devops/0.201.4 while the
+  // repo was at 0.203.0; its bundled gen-readme-sections.mjs did not know
+  // SubagentStart and rewrote README.md + architecture.html with 57 of 58 hooks.
+  const SRC = "/dotclaude";
+  const REPO_GEN = `${SRC}/plugins/devops/scripts/gen-readme-sections.mjs`;
+  const BUNDLED_GEN = `${PLUGIN_ROOT}/scripts/gen-readme-sections.mjs`;
+  const readmeCalls = () => execCommands().filter((c) => c.includes("gen-readme-sections.mjs"));
+  const build = (cwd) => handler({ cwd, buildCmd: null, lintCmd: null, testCmd: null, buildIdOnly: false });
+
+  function pluginSourceRepo({ repoGenerator, repoVersion = null, bundledVersion = null }) {
+    existsSync.mockImplementation((p) => {
+      const s = norm(p);
+      if (s === PLUGIN_ROOT || s === `${SRC}/plugins/devops`) return true;
+      if (s === REPO_GEN) return repoGenerator;
+      return false;
+    });
+    const versions = {
+      [`${SRC}/plugins/devops/.claude-plugin/plugin.json`]: repoVersion,
+      [`${PLUGIN_ROOT}/.claude-plugin/plugin.json`]: bundledVersion,
+    };
+    readFileSync.mockImplementation((p) => {
+      const version = versions[norm(p)];
+      if (!version) throw new Error(`ENOENT: ${p}`);
+      return JSON.stringify({ name: "devops", version });
+    });
+  }
+
+  test("plugin source repo runs its OWN generator, never the older bundled one", async () => {
+    pluginSourceRepo({ repoGenerator: true, repoVersion: "0.203.0", bundledVersion: "0.201.4" });
+    const res = await build(SRC);
+    const calls = readmeCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain(`"${REPO_GEN}" "${SRC}"`);
+    expect(calls[0]).not.toContain(BUNDLED_GEN);
+    expect(res.warnings).toEqual([]);
+  });
+
+  test("consumer repo keeps the bundled generator (unchanged behavior)", async () => {
+    await build(CWD);
+    const calls = readmeCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain(`"${BUNDLED_GEN}" "${CWD}"`);
+  });
+
+  test.each([
+    ["older", "0.201.4", "0.203.0"],
+    ["numerically older (not lexicographic)", "0.99.0", "0.100.0"],
+    ["unknown version", null, "0.203.0"],
+    ["repo version unknown", "0.203.0", null],
+  ])("repo without its own generator + %s bundled one → markers left untouched, warning", async (_, bundledVersion, repoVersion) => {
+    pluginSourceRepo({ repoGenerator: false, repoVersion, bundledVersion });
+    const res = await build(SRC);
+    expect(readmeCalls()).toEqual([]);
+    const warning = res.warnings.find((w) => w.generator === "readme-sections");
+    expect(warning?.error).toMatch(/skipped/);
+    expect(res.success).toBe(true);
+  });
+
+  test.each([
+    ["same", "0.203.0", "0.203.0"],
+    ["newer", "0.204.0", "0.203.0"],
+  ])("repo without its own generator + %s bundled one → bundled runs", async (_, bundledVersion, repoVersion) => {
+    pluginSourceRepo({ repoGenerator: false, repoVersion, bundledVersion });
+    const res = await build(SRC);
+    const calls = readmeCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain(`"${BUNDLED_GEN}" "${SRC}"`);
     expect(res.warnings).toEqual([]);
   });
 });
