@@ -69,6 +69,7 @@ const edit = { k: "edit" };
 const commit = { k: "commit" };
 const rel = (closes = []) => ({ k: "release", ok: true, merged: true, closes });
 const qaAgent = { k: "agent", type: "devops:qa" };
+const triaged = { k: "agent", type: "Explore" };
 const C = (over = {}) => ({ v: 1, id: "rc-x", mode: "prompt", flow: "interactive", ship: "manual", strict: false,
   passes: ["harden", "polish"], presence: true, items: [], alsoAudit: false, ...over });
 const obs = (list) => list.map(o => (o.item ? `${o.ob}#${o.item}` : o.ob));
@@ -414,7 +415,7 @@ describe("openObligations", () => {
 
   test("skip satisfies for the current segment only", () => {
     const c = C({ mode: "backlog", ship: "manual", passes: ["polish"] });
-    const s1 = [sk("auto-agents"), edit, { k: "skip", ob: "polish", reason: "keine UI" }];
+    const s1 = [triaged, sk("auto-agents"), edit, { k: "skip", ob: "polish", reason: "keine UI" }];
     expect(R.openObligations(c, s1, "card")).toEqual([]);
     const s2 = [...s1, rel(), sk("auto-agents"), edit];
     expect(obs(R.openObligations(c, s2, "card"))).toEqual(["polish"]);
@@ -424,9 +425,10 @@ describe("openObligations", () => {
     const evs = [sk("auto-agents"), edit];
     const bl = C({ mode: "backlog", passes: [] });
     const pr = C({ passes: [] });
-    expect(obs(R.openObligations(bl, evs, "card", { codeFilesChanged: 1 }))).toEqual(["qa"]);
-    expect(R.openObligations(bl, evs, "card", { codeFilesChanged: 0 })).toEqual([]);
-    expect(R.openObligations(bl, evs, "card", { codeFilesChanged: null })).toEqual([]);
+    const blEvs = [triaged, ...evs];
+    expect(obs(R.openObligations(bl, blEvs, "card", { codeFilesChanged: 1 }))).toEqual(["qa"]);
+    expect(R.openObligations(bl, blEvs, "card", { codeFilesChanged: 0 })).toEqual([]);
+    expect(R.openObligations(bl, blEvs, "card", { codeFilesChanged: null })).toEqual([]);
     expect(R.openObligations(pr, evs, "card", { codeFilesChanged: 5 })).toEqual([]);
     expect(obs(R.openObligations(pr, evs, "card", { codeFilesChanged: 6 }))).toEqual(["qa"]);
     expect(R.openObligations(pr, [...evs, qaAgent], "card", { codeFilesChanged: 6 })).toEqual([]);
@@ -471,6 +473,7 @@ describe("openObligations", () => {
     // gate (section G), so triage must still be caught somewhere before ship.
     const evs = [sk("auto-agents"), edit];
     expect(obs(R.openObligations(c, evs, "release"))).toEqual(["do-ship", "triage"]);
+    expect(obs(R.openObligations(c, evs, "card"))).toEqual(["do-ship", "triage"]);
     // A pre-triage `agent` event anywhere in the contract satisfies it.
     const ok = [{ k: "agent", type: "Explore" }, ...evs];
     expect(R.openObligations(c, ok, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
@@ -617,6 +620,175 @@ describe("CLI", () => {
     expect(run().code).toBe(1);
     expect(run("arm", "--mode", "x").code).toBe(1);
     expect(run("arm", "--passes", "harden,rethink").code).toBe(1);
+  });
+});
+
+// ── harden pass ────────────────────────────────────────────────────────────
+
+describe("harden pass", () => {
+  const enoent = (code) => Object.assign(new Error(code), { code });
+
+  test("H-B2: the card gate owes triage in a backlog ship-manual run once work happened", () => {
+    const c = C({ mode: "backlog", ship: "manual", passes: [] });
+    const evs = [sk("auto-agents"), edit];
+    expect(obs(R.openObligations(c, evs, "card"))).toEqual(["triage"]);
+    expect(R.openObligations(c, [triaged, ...evs], "card")).toEqual([]);
+    expect(R.openObligations(c, [{ k: "skip", ob: "triage", reason: "1 issue" }, ...evs], "card")).toEqual([]);
+    // No work yet → the card is not re-blocked by triage.
+    expect(R.openObligations(c, [], "card")).toEqual([]);
+    expect(R.openObligations(C({ mode: "backlog", ship: "manual", passes: [], presence: false }), evs, "card")).toEqual([]);
+  });
+
+  test("H-B5: measure / block dedup only within the current segment; the card shows segment 2's QA", () => {
+    R.arm(cwd, { mode: "backlog", ship: "manual", passes: [], presence: false }, { now: T0 });
+    let t = T0;
+    const rec = (ev) => R.record(cwd, ev, { now: (t += 1000) });
+    rec(sk("auto-agents")); rec(edit);
+    expect(rec({ k: "measure", codeFiles: 3 })).not.toBeNull();
+    expect(rec({ k: "block", gate: "card", open: ["qa"] })).not.toBeNull();
+    rec(qaAgent); rec(rel());
+    rec(sk("auto-agents")); rec(edit);
+    expect(rec({ k: "measure", codeFiles: 3 })).not.toBeNull();
+    expect(rec({ k: "block", gate: "card", open: ["qa"] })).not.toBeNull();
+    expect(rec({ k: "measure", codeFiles: 3 })).toBeNull();
+    const evs = R.events(cwd);
+    expect(evs.filter(e => e.k === "measure")).toHaveLength(2);
+    expect(evs.filter(e => e.k === "block")).toHaveLength(2);
+    expect(R.summaryForCard(R.readContract(cwd, { now: t }), evs, "de", { codeFilesChanged: null })).toContain("QA 1/2 ✗");
+  });
+
+  test("H-B6: a header without passes / items still gates and renders", () => {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(R.contractPath(cwd), JSON.stringify({ v: 1, id: "rc-hand", mode: "backlog", flow: "interactive", ship: "manual", armedAt: new Date(T0).toISOString() }));
+    const h = R.readContract(cwd, { now: T0 });
+    expect(h).toMatchObject({ passes: [], items: [], milestones: [] });
+    expect(obs(R.openObligations(h, [], "edit"))).toEqual(["auto-agents"]);
+    expect(() => R.openObligations(h, [sk("auto-agents"), edit], "card")).not.toThrow();
+    expect(R.summaryForCard(h, [sk("auto-agents"), edit], "de")).toMatch(/^🧾 Run · Backlog/);
+    expect(R.readRawContract(cwd).passes).toEqual([]);
+  });
+
+  test("H-B7: an empty / Other Issues answer keeps the recorded queue; only the exact headers match", () => {
+    R.arm(cwd, { mode: "backlog", items: ["473"], milestones: ["v1"] }, { now: T0 });
+    const q = [{ header: "Issues", question: "Welche Issues?" }, { header: "Milestones", question: "Welche Milestones?" }];
+    for (const answer of ["", "Other", []]) {
+      const p = R.parseFollowUp(q, { "Welche Issues?": answer, "Welche Milestones?": answer });
+      expect(p).not.toHaveProperty("items");
+      expect(p).not.toHaveProperty("milestones");
+      expect(R.applyFollowUp(cwd, p, { now: T0 + 1000 })).toMatchObject({ items: ["473"], milestones: ["v1"] });
+    }
+    expect(R.parseFollowUp([{ header: "Issues found", question: "Welche Issues found?" }], { "Welche Issues found?": "#9" })).toBeNull();
+    expect(R.followUpModeHint([{ header: "Issues found", question: "x" }])).toBeNull();
+    expect(R.parseFollowUp([{ header: "Issues 2", question: "Mehr?" }], { "Mehr?": "#12 a" })).toMatchObject({ items: ["12"], modeHint: "backlog" });
+    expect(R.followUpModeHint([{ header: "Issues", question: "x" }])).toBe("backlog");
+  });
+
+  test("H-B9: markPendingArm / markBatchHandoff retry a transient rename failure", () => {
+    const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw enoent("EPERM"); });
+    expect(R.markPendingArm(cwd, { sessionId: "s1", now: T0 })).toMatchObject({ sessionId: "s1" });
+    expect(fs.existsSync(R.pendingPath(cwd))).toBe(true);
+    spy.mockImplementationOnce(() => { throw enoent("EPERM"); });
+    expect(R.markBatchHandoff(cwd, { sessionId: "s1", now: T0 })).toMatchObject({ sessionId: "s1" });
+    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(true);
+    spy.mockRestore();
+  });
+
+  test("H-B10: only card events after the last work still expire at 12 h", () => {
+    R.arm(cwd, { flow: "interactive" }, { now: T0 });
+    R.record(cwd, sk("auto-agents"), { now: T0 + 5 * H });
+    R.record(cwd, { k: "card", variant: "ready" }, { now: T0 + 10 * H });
+    R.record(cwd, { k: "card", variant: "test" }, { now: T0 + 16.5 * H });
+    expect(R.readContract(cwd, { now: T0 + 16.9 * H })).not.toBeNull();
+    expect(R.readContract(cwd, { now: T0 + 17.1 * H })).toBeNull();
+  });
+
+  test("H-B12: a temp write that throws after creating the file leaves no .tmp behind", () => {
+    const real = fs.writeFileSync;
+    const spy = vi.spyOn(fs, "writeFileSync").mockImplementation((file, ...rest) => {
+      if (String(file).endsWith(".tmp")) { real(file, "{partial"); throw enoent("ENOSPC"); }
+      return real(file, ...rest);
+    });
+    expect(R.markPendingArm(cwd, { now: T0 })).toBeNull();
+    spy.mockRestore();
+    const dir = path.join(cwd, ".claude");
+    expect(fs.readdirSync(dir).filter(f => f.endsWith(".tmp"))).toEqual([]);
+    expect(fs.existsSync(R.pendingPath(cwd))).toBe(false);
+  });
+
+  test("H-B14: an unparseable marker is removed", () => {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(R.pendingPath(cwd), "{garbage");
+    expect(R.pendingArm(cwd, { now: T0 })).toBeNull();
+    expect(fs.existsSync(R.pendingPath(cwd))).toBe(false);
+    fs.writeFileSync(R.batchHandoffPath(cwd), "[1,2]");
+    expect(R.batchHandoffPending(cwd, { now: T0 })).toBeNull();
+    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(false);
+    fs.writeFileSync(R.batchHandoffPath(cwd), JSON.stringify({ sessionId: "s" }));
+    expect(R.batchHandoffPending(cwd, { now: T0 })).toBeNull();
+    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(false);
+  });
+
+  test("H-F19: a single transient failure still archives the replaced contract", () => {
+    const a = R.arm(cwd, {}, { now: T0 });
+    const real = fs.renameSync;
+    let n = 0;
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      n++;
+      if (n === 2) throw enoent("EPERM"); // 1 = new header, 2 = first archive attempt
+      return real(from, to);
+    });
+    R.arm(cwd, { mode: "audit" }, { now: T0 + 1000 });
+    spy.mockRestore();
+    expect(JSON.parse(fs.readFileSync(R.prevPath(cwd), "utf8")).id).toBe(a.id);
+  });
+
+  test("H-C1: mergeRouterAnswers — partial call of the same session within 30 min merges", () => {
+    const qs = [Q.passes];
+    const fields = R.parseRouterAnswers(qs, { [Q.passes.question]: "Harden danach (Recommended)" });
+    expect(R.isPartialRouterCall(qs)).toBe(true);
+    expect(R.answeredFields(fields)).toMatchObject({ passes: ["harden"] });
+    const a = R.arm(cwd, { flow: "autonomous", ship: "auto", sessionId: "s1" }, { now: T0 - 5 * 60_000 });
+    const m = R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s1" });
+    expect(m).toMatchObject({ id: a.id, flow: "autonomous", ship: "auto", passes: ["harden"] });
+    expect(R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s2" })).toBeNull();
+    expect(R.mergeRouterAnswers(cwd, CURRENT, fields, { now: T0, sessionId: "s1" })).toBeNull();
+    R.arm(cwd, { flow: "autonomous", ship: "auto", sessionId: "s1" }, { now: T0 - 31 * 60_000 });
+    expect(R.mergeRouterAnswers(cwd, qs, fields, { now: T0, sessionId: "s1" })).toBeNull();
+  });
+
+  test("H-C7: cli arm — --flow / --ship failures, bare --passes, --items, --session", () => {
+    expect(run("arm", "--flow", "x").code).toBe(1);
+    expect(run("arm", "--ship", "x").code).toBe(1);
+    expect(run("arm", "--passes").out.contract.passes).toEqual([]);
+    const r = run("arm", "--passes", "--items", "1,#2", "--session", "s1");
+    expect(r.code).toBe(0);
+    expect(r.out.contract).toMatchObject({ passes: [], items: ["1", "2"], sessionId: "s1" });
+  });
+
+  test("H-C8: parseQ1 — option order mapping, audit beats backlog, alsoAudit only with prompt", () => {
+    const reordered = { ...Q.was, options: [{ label: "Backlog" }, { label: "Prompt umsetzen (Recommended)" }, { label: "Audit" }] };
+    const qs = (was) => [was, Q.ablauf, Q.umfang, Q.passes];
+    expect(R.parseRouterAnswers(qs(reordered), ans("1", "Interaktiv · Ship manuell", "Flexibel", []))).toMatchObject({ mode: "backlog", alsoAudit: false });
+    expect(R.parseRouterAnswers(qs(Q.was), ans("2 und 3", "Interaktiv · Ship manuell", "Flexibel", []))).toMatchObject({ mode: "audit", alsoAudit: false });
+    expect(R.parseRouterAnswers(qs(reordered), ans("2 und 3", "Interaktiv · Ship manuell", "Flexibel", []))).toMatchObject({ mode: "prompt", alsoAudit: true });
+  });
+
+  test("H-C9: machinePatch — mode=analyze only clears passes over audit; phase=presence drops triage / refine", () => {
+    const analyze = "AUTONOMOUS_AUTOSTART: task=x, mode=analyze";
+    expect(R.machinePatch(C({ mode: "prompt" }), analyze)).toEqual({});
+    expect(R.machinePatch(C({ mode: "backlog" }), analyze)).toEqual({});
+    expect(R.machinePatch(C({ mode: "prompt" }), `${analyze}, passes=harden`)).toEqual({ passes: ["harden"] });
+    expect(R.machinePatch(C({ mode: "audit" }), analyze)).toEqual({ passes: [], auditResult: "concept" });
+    R.arm(cwd, { mode: "prompt", passes: ["harden", "polish"] }, { now: T0 });
+    expect(R.update(cwd, R.machinePatch(R.readContract(cwd, { now: T0 }), analyze), { now: T0 }).passes).toEqual(["harden", "polish"]);
+
+    const bl = C({ mode: "backlog", ship: "manual", passes: [], items: ["1"] });
+    const p = R.machinePatch(bl, "RUN_BACKLOG_AUTOSTART: presence timeout. phase=presence, queue=1");
+    expect(p).toEqual({ presence: false, items: ["1"], mode: "backlog" });
+    const after = { ...bl, ...p };
+    expect(R.openObligations(after, [], "auto-agents")).toEqual([]);
+    expect(R.openObligations(after, [sk("auto-agents"), edit], "card")).toEqual([]);
+    expect(obs(R.openObligations(bl, [sk("auto-agents"), edit], "card"))).toEqual(["refine#1", "triage"]);
   });
 });
 

@@ -149,16 +149,18 @@ function readJson(file) {
 }
 
 function writeJsonAtomic(file, obj) {
+  // H-B12: `tmp` lives outside the try so a write that created the temp file
+  // and then threw (ENOSPC / EPERM mid-write) does not leave it behind.
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-    try { fs.renameSync(tmp, file); } catch (err) {
-      try { fs.unlinkSync(tmp); } catch { /* gone */ }
-      throw err;
-    }
+    fs.renameSync(tmp, file);
     return true;
-  } catch { return false; }
+  } catch {
+    unlinkQuiet(tmp);
+    return false;
+  }
 }
 
 function sleepSync(ms) {
@@ -176,7 +178,10 @@ function unlinkQuiet(file) { try { fs.unlinkSync(file); } catch { /* already gon
 
 function readRawContract(cwd) {
   const h = readJson(contractPath(cwd));
-  return h && h.v === 1 && typeof h.id === 'string' ? h : null;
+  // H-B6: normalised on read — a hand-edited / older header without the
+  // `passes` / `items` arrays must not throw in the gates (pre's catch-all
+  // would turn that into "allow every call").
+  return h && h.v === 1 && typeof h.id === 'string' ? sanitize(h) : null;
 }
 
 function readEventLines(cwd) {
@@ -214,7 +219,9 @@ function expiryMs(header) {
 // boundary — they are written by hooks reacting to a call the contract
 // still refuses, so a leftover contract that keeps getting probed (and kept
 // refusing) would never reach its 12h/30h idle expiry if they counted.
-const NON_ACTIVITY_KINDS = new Set(['block', 'measure']);
+// H-B10: `card` likewise — every rendered card (Q&A-only turns too) would
+// otherwise reset the idle clock of a contract left open.
+const NON_ACTIVITY_KINDS = new Set(['block', 'measure', 'card']);
 
 function lastActivity(header, evs) {
   let last = Date.parse(header.armedAt) || 0;
@@ -263,7 +270,7 @@ function readContractForCard(cwd, opts = {}) {
 function archive(cwd, header, now) {
   try {
     const evs = eventsOf(cwd, header).slice(-ARCHIVE_EVENTS);
-    writeJsonAtomic(prevPath(cwd), { ...header, archivedAt: new Date(now).toISOString(), events: evs });
+    writeJsonRetry(prevPath(cwd), { ...header, archivedAt: new Date(now).toISOString(), events: evs });
   } catch { /* best effort */ }
   unlinkQuiet(contractPath(cwd));
   unlinkQuiet(eventsPath(cwd));
@@ -331,7 +338,7 @@ function arm(cwd, header = {}, opts = {}) {
   // rename leaves the old contract in place instead of no contract at all.
   if (!writeJsonRetry(contractPath(cwd), h)) return null;
   if (existing) {
-    writeJsonAtomic(prevPath(cwd), { ...existing, archivedAt: new Date(now).toISOString(), events: oldEvents });
+    writeJsonRetry(prevPath(cwd), { ...existing, archivedAt: new Date(now).toISOString(), events: oldEvents });
   }
   unlinkQuiet(eventsPath(cwd));
   return h;
@@ -394,14 +401,17 @@ function record(cwd, event, opts = {}) {
   // lines (archive's last-200 slice then fills with retry noise). Likewise
   // dedup an identical consecutive `block {gate, open}` against the last
   // `block`.
+  // H-B5: both dedups look only at the CURRENT segment — a new item whose
+  // count equals the previous item's must still get its own `measure` (the
+  // card reads the per-segment measure for `QA ✗` / `QA ?`).
   if (ev.k === 'measure') {
-    const evs = eventsOf(cwd, h);
-    const last = [...evs].reverse().find(e => e.k === 'measure');
+    const seg = currentSegment(h, eventsOf(cwd, h));
+    const last = [...seg].reverse().find(e => e.k === 'measure');
     if (last && last.codeFiles === ev.codeFiles) return null;
   }
   if (ev.k === 'block') {
-    const evs = eventsOf(cwd, h);
-    const last = [...evs].reverse().find(e => e.k === 'block');
+    const seg = currentSegment(h, eventsOf(cwd, h));
+    const last = [...seg].reverse().find(e => e.k === 'block');
     if (last && last.gate === ev.gate && JSON.stringify(last.open) === JSON.stringify(ev.open)) return null;
   }
   ev.t = new Date(now).toISOString();
@@ -449,13 +459,18 @@ function markPendingArm(cwd, opts = {}) {
   if (disabled()) return null;
   const m = { at: new Date(nowOf(opts)).toISOString(), sessionId: opts.sessionId || null };
   if (typeof opts.args === 'string' && opts.args.trim()) m.args = opts.args.slice(0, ARGS_MAX);
-  return writeJsonAtomic(pendingPath(cwd), m) ? m : null;
+  return writeJsonRetry(pendingPath(cwd), m) ? m : null;
 }
 
 function freshMarker(file, field, maxMs, opts = {}) {
   if (disabled()) return null;
   const m = readJson(file);
-  if (!m) return null;
+  if (!m) {
+    // H-B14: a marker that exists but does not parse is removed — left in
+    // place it defeats pre's existsSync fast path forever.
+    if (fs.existsSync(file)) unlinkQuiet(file);
+    return null;
+  }
   const t = Date.parse(m[field]);
   const now = nowOf(opts);
   if (!Number.isFinite(t) || now - t > maxMs) {
@@ -473,7 +488,7 @@ function clearPendingArm(cwd) { unlinkQuiet(pendingPath(cwd)); }
 function markBatchHandoff(cwd, opts = {}) {
   if (disabled()) return null;
   const m = { firedAt: new Date(nowOf(opts)).toISOString(), sessionId: opts.sessionId || null };
-  return writeJsonAtomic(batchHandoffPath(cwd), m) ? m : null;
+  return writeJsonRetry(batchHandoffPath(cwd), m) ? m : null;
 }
 
 /** The batch hand-off marker, or null (none, or older than 6 h → removed). */
@@ -789,12 +804,17 @@ function mergeRouterAnswers(cwd, questions, fields, opts = {}) {
   return update(cwd, answeredFields(fields), { now, sessionId: opts.sessionId });
 }
 
+// H-B7: exactly the Issues headers do-run emits — F4 "Issues" (SKILL.md) and
+// the numbered continuation ("Issues 2") of backlog.md Step 1.2 — never any
+// header that merely starts with "Issues".
+const ISSUES_HEADER_RE = /^issues(?: \d+)?$/;
+
 /** Mode a follow-up header implies (Q1 was preset away): backlog | audit | null. */
 function followUpModeHint(questions) {
   let hint = null;
   for (const q of Array.isArray(questions) ? questions : []) {
     const h = canonHeader(headerOf(q));
-    if (h === 'milestones' || /^issues/.test(h)) return 'backlog';
+    if (h === 'milestones' || ISSUES_HEADER_RE.test(h)) return 'backlog';
     if (h === 'ergebnis' || h === 'audit-umfang') hint = hint || 'audit';
   }
   return hint;
@@ -846,12 +866,15 @@ function parseFollowUp(questions, answers) {
       else if (/umsetzen|implement/.test(s)) patch.auditResult = 'implement';
     } else if (/^milestones$/i.test(h)) {
       hit = true;
-      patch.milestones = tokens;
-    } else if (/^issues/i.test(h)) {
+      // H-B7: only a real selection patches — an empty / "Other" answer
+      // must not overwrite a recorded list with [].
+      const picked = tokens.filter(t => !PLACEHOLDER_RE.test(t.trim()));
+      if (picked.length) patch.milestones = picked;
+    } else if (ISSUES_HEADER_RE.test(h)) {
       hit = true;
       const nums = [];
       for (const t of tokens) for (const m of t.matchAll(/#(\d+)/g)) nums.push(m[1]);
-      patch.items = [...new Set([...(patch.items || []), ...nums])];
+      if (nums.length) patch.items = [...new Set([...(patch.items || []), ...nums])];
     } else if (/^pc danach$/i.test(h)) {
       hit = true;
       patch.pcAfter = tokens.join(', ') || null;
@@ -1063,7 +1086,9 @@ const GATE_OBS = {
   branch: ['harden', 'polish', 'qa', 'do-ship'],
   'auto-agents': ['triage'],
   release: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine', 'triage'],
-  card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
+  // H-B2: `triage` here too — a backlog run with ship manual never reaches
+  // ship_release, so the final card is its only safety net.
+  card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine', 'triage'],
 };
 const AUDIT_OBS = new Set(['harden', 'polish', 'do-ship']);
 
@@ -1137,6 +1162,10 @@ function openObligations(contract, evs, gate, ctx = {}) {
       }
       continue;
     }
+    // H-B2: at the card, triage is owed only once the run did work (like the
+    // card line, which shows Triage only after auto-agents ran) — a backlog
+    // run that stopped before any item does not re-block its own card.
+    if (ob === 'triage' && gate === 'card' && !segmentHasWork(all)) continue;
     if (obState(contract, seg, all, ob, gate, ctx) === 'open') {
       out.push({ ob, why: WHY[ob], fix: fixFor(contract, ob, all) });
     }
