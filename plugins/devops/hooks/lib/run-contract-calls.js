@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -35,13 +35,15 @@
  *   routerFromTranscript(transcriptPath, sinceIso, RC) → {questions, answers, followUps[], earlier[]} | null
  *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
  *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
- *   gitOut(root, args) → string | null · gitLines(root, args, {timeout}) → string[] (throws)
+ *   gitOut(root, args, {budget}) → string | null · gitLines(root, args, {timeout, budget}) → string[]
+ *     (throws; `budget` is an optional git-timeout gitBudget() shared across a chain of calls — AUD-031)
  *   readTail(file)             → transcript tail (AUD-015c: this list matches module.exports)
  *   linesBackward(file)        → generator: whole lines newest first, 2 MB chunks, ≤ 32 MB (QA-T1)
  */
 
 const fs = require('fs');
 const path = require('path');
+const { GIT_TIMEOUT_MS } = require('./git-timeout');
 
 const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 const RENDER_CARD = 'mcp__plugin_devops_dotclaude-completion__render_completion_card';
@@ -201,6 +203,98 @@ function findLine(idx, word, dash, from) {
  * `hd`: scan a heredoc body — quotes are literal, only substitutions count.
  * @returns {{text:string, subs:string[], feeds:{body:string, lang:string}[]}}
  */
+/**
+ * `<<WORD`/`<<-WORD`/`<<'WORD'` at `i` (`<<<` is a here-string word, no
+ * body): `advance` is how far the caller's index moves; `entry` (word,
+ * dash-stripped, quoted, which shell feeds on it) is set only when a real
+ * heredoc opener matched with a non-empty word.
+ */
+function matchHeredocOpen(cmd, i, lineStart) {
+  if (cmd[i + 2] === '<') return { advance: 2 };
+  HEREDOC_RE.lastIndex = i;
+  const m = HEREDOC_RE.exec(cmd);
+  if (!m) return { advance: 1 };
+  const word = m[2] ?? m[3] ?? m[5];
+  const out = { advance: m[0].length - 1 };
+  if (word) {
+    const prefix = cmd.slice(Math.max(lineStart, i - 200), i);
+    const feed = FEED_SH_RE.test(prefix) ? 'sh' : FEED_PS_RE.test(prefix) ? 'ps' : null;
+    out.entry = { word, dash: !!m[1], quoted: m[2] !== undefined || m[3] !== undefined || !!m[4], feed };
+  }
+  return out;
+}
+
+/**
+ * A PowerShell here-string `@'…'@` / `@"…"@` opener at `i`, or null (no
+ * opener, or one already known to have no terminator — `noHs` memoizes
+ * that per quote character so a missing `'@`/`"@` is not searched twice).
+ */
+function matchHereString(cmd, i, noHs) {
+  HERESTRING_RE.lastIndex = i;
+  const m = HERESTRING_RE.exec(cmd);
+  const q = m && m[1];
+  if (!m || noHs[q]) return null;
+  const from = i + m[0].length;
+  const k = cmd.indexOf(`\n${q}@`, from - 1);
+  if (k < 0) { noHs[q] = true; return null; }
+  return { q, k, body: cmd.slice(from, Math.max(from, k)) };
+}
+
+/**
+ * The heredoc(s) pending at a `\n`: each is fed to a shell (`feeds`), holds
+ * unquoted `$(…)` payloads of its own (`bodySubs`), or — with no terminator
+ * line found — marks its enclosing substitution as unstrippable text
+ * (`ranges[h.sub][2] = true`, H-X4b) and stops the rest of this batch.
+ * @returns {{p:number, feeds:object[], bodySubs:string[]}} `p`: index just
+ *   past the last closed heredoc's terminator line (or `i+1`, none closed).
+ */
+function closePendingHeredocs(cmd, i, pending, idx, ranges) {
+  let p = i + 1;
+  const feeds = [];
+  const bodySubs = [];
+  for (const h of pending) {
+    const hit = findLine(idx, h.word, h.dash, p);
+    if (!hit) {
+      if (h.sub >= 0) ranges[h.sub][2] = true;
+      break;
+    }
+    const body = cmd.slice(p, hit[0]);
+    if (h.feed) feeds.push({ body, lang: h.feed });
+    else if (!h.quoted) bodySubs.push(...scanShell(body, 'sh', true).subs);
+    p = hit[1];
+  }
+  return { p, feeds, bodySubs };
+}
+
+/**
+ * A backtick (`any`) or backslash/backtick escape at `i`: a line
+ * continuation (bash `\⏎` vanishes, PowerShell `` `⏎ `` is a space) is cut;
+ * a plain escaped char (outside a heredoc body) is just skipped. Either way
+ * returns how far `i` must move so the caller's `for` loop lands on the
+ * next unconsumed char (its own `i++` included) — `null` when `ch` is
+ * neither case (the caller keeps scanning this char itself).
+ */
+function matchEscape(cmd, i, ch, esc, lang, ps, hd, cut) {
+  const nl = cmd[i + 1] === '\n' ? 1 : (cmd[i + 1] === '\r' && cmd[i + 2] === '\n' ? 2 : 0);
+  if (ch === '`' && nl && lang === 'any' && !hd) { cut(i, i + 1 + nl, ' '); return nl + 1; }
+  if (ch === esc) {
+    if (nl && !hd) { cut(i, i + 1 + nl, ps ? ' ' : ''); return nl + 1; }
+    return 2;
+  }
+  return null;
+}
+
+/** `{text, subs, feeds}` assembled from the scan's cut parts, substitution ranges and heredoc bodies. */
+function assembleScan(parts, ranges, bodySubs, feeds) {
+  const text = parts.join('');
+  const subs = [];
+  for (const [a, b, skip] of ranges) {
+    const s = text.slice(a, b < 0 ? text.length : b);
+    if (!skip && s.trim()) subs.push(s);
+  }
+  return { text, subs: subs.concat(bodySubs.filter(s => s.trim())), feeds };
+}
+
 function scanShell(cmd, lang, hd = false) {
   const ps = lang === 'ps';
   const sh = !ps;
@@ -232,13 +326,9 @@ function scanShell(cmd, lang, hd = false) {
     const ch = cmd[i];
     if (ch === '\n') lineStart = i + 1;
     const top = stack.length ? stack[stack.length - 1] : (hd ? 'hd' : 'top');
-    const nl = cmd[i + 1] === '\n' ? 1 : (cmd[i + 1] === '\r' && cmd[i + 2] === '\n' ? 2 : 0);
-    // Line continuations: bash `\⏎` vanishes, PowerShell `` `⏎ `` is a space.
-    if (ch === '`' && nl && lang === 'any' && !hd) { cut(i, i + 1 + nl, ' '); i += nl; continue; }
-    if (ch === esc) {
-      if (nl && !hd) { cut(i, i + 1 + nl, ps ? ' ' : ''); i += nl; continue; }
-      i++;
-      continue;
+    if (ch === '`' || ch === esc) {
+      const advance = matchEscape(cmd, i, ch, esc, lang, ps, hd, cut);
+      if (advance !== null) { i += advance - 1; continue; }
     }
     if (ch === '$' && cmd[i + 1] === '(') { openSub(i + 2); i++; continue; }
     if (ch === '`' && sh) {
@@ -259,69 +349,37 @@ function scanShell(cmd, lang, hd = false) {
       continue;
     }
     if (sh && ch === '<' && cmd[i + 1] === '<') {
-      if (cmd[i + 2] === '<') { i += 2; continue; } // `<<<` here-string: a word, no body
-      HEREDOC_RE.lastIndex = i;
-      const m = HEREDOC_RE.exec(cmd);
-      if (!m) { i++; continue; }
-      const word = m[2] ?? m[3] ?? m[5];
-      if (word) {
-        const prefix = cmd.slice(Math.max(lineStart, i - 200), i);
-        const feed = FEED_SH_RE.test(prefix) ? 'sh' : FEED_PS_RE.test(prefix) ? 'ps' : null;
-        pending.push({ word, dash: !!m[1], quoted: m[2] !== undefined || m[3] !== undefined || !!m[4], feed, sub: subDepth ? ranges.length - 1 : -1 });
-      }
-      i += m[0].length - 1;
+      const r = matchHeredocOpen(cmd, i, lineStart);
+      if (r.entry) pending.push({ ...r.entry, sub: subDepth ? ranges.length - 1 : -1 });
+      i += r.advance;
       continue;
     }
     if (!sh || lang === 'any') {
       if (ch === '@' && (cmd[i + 1] === "'" || cmd[i + 1] === '"')) {
-        HERESTRING_RE.lastIndex = i;
-        const m = HERESTRING_RE.exec(cmd);
-        const q = m && m[1];
-        if (m && !noHs[q]) {
-          const from = i + m[0].length;
-          const k = cmd.indexOf(`\n${q}@`, from - 1);
-          if (k < 0) noHs[q] = true;
-          else {
-            const body = cmd.slice(from, Math.max(from, k));
-            cut(i, k + 3, q + q);
-            if (q === '"') bodySubs.push(...scanShell(body, 'ps', true).subs);
-            i = k + 2;
-            continue;
-          }
+        const hs = matchHereString(cmd, i, noHs);
+        if (hs) {
+          cut(i, hs.k + 3, hs.q + hs.q);
+          if (hs.q === '"') bodySubs.push(...scanShell(hs.body, 'ps', true).subs);
+          i = hs.k + 2;
+          continue;
         }
       }
     }
     if (ch === '\n' && pending.length) {
-      let p = i + 1;
       idx = idx || lineIndex(cmd);
-      for (const h of pending) {
-        const hit = findLine(idx, h.word, h.dash, p);
-        if (!hit) {
-          // No terminator: not stripped. A substitution holding it is text (H-X4b).
-          if (h.sub >= 0) ranges[h.sub][2] = true;
-          break;
-        }
-        const body = cmd.slice(p, hit[0]);
-        if (h.feed) feeds.push({ body, lang: h.feed });
-        else if (!h.quoted) bodySubs.push(...scanShell(body, 'sh', true).subs);
-        p = hit[1];
-      }
+      const closed = closePendingHeredocs(cmd, i, pending, idx, ranges);
+      feeds.push(...closed.feeds);
+      bodySubs.push(...closed.bodySubs);
       pending = [];
-      if (p > i + 1) {
-        cut(i + 1, Math.min(p, cmd.length));
-        i = p - 1;
-        lineStart = p;
+      if (closed.p > i + 1) {
+        cut(i + 1, Math.min(closed.p, cmd.length));
+        i = closed.p - 1;
+        lineStart = closed.p;
       }
     }
   }
   cut(cmd.length, cmd.length);
-  const text = parts.join('');
-  const subs = [];
-  for (const [a, b, skip] of ranges) {
-    const s = text.slice(a, b < 0 ? text.length : b);
-    if (!skip && s.trim()) subs.push(s);
-  }
-  return { text, subs: subs.concat(bodySubs.filter(s => s.trim())), feeds };
+  return assembleScan(parts, ranges, bodySubs, feeds);
 }
 
 /** Executable name of a token: basename, lower-cased, `.exe` dropped (`"C:\…\git.exe"` → `git`). */
@@ -414,89 +472,131 @@ function skipPrefix(seg) {
   return s;
 }
 
+/** Token index after skipping `t[i]`'s own flags (and `argFlag`'s value, if any). */
+function skipFlags(t, i, argFlag) {
+  while (i < t.length && /^-/.test(t[i].value)) {
+    const f = t[i++].value;
+    if (f === '--') break;
+    if (argFlag && argFlag.test(f) && i < t.length) i++;
+  }
+  return i;
+}
+
+/** The raw text after token `j` (or the segment's end), trimmed. */
+function restFrom(s, t, j) {
+  return s.slice(j < t.length ? t[j].end - t[j].raw.length : s.length).trim();
+}
+
+/**
+ * A wrapper prefix (`sudo`, `env`, `xargs`, …) at `t[i]`: its own flags
+ * skipped, so the caller resumes at the wrapped command. `null` when `name`
+ * is no wrapper; otherwise `{i}` (resume index) or `{result}` (the wrapper
+ * decided the whole call — `command -v` is a lookup, `env -S` a payload).
+ */
+function stepWrapper(name, t, i) {
+  if (!Object.prototype.hasOwnProperty.call(WRAPPERS, name)) return null;
+  i++;
+  // `command -v git` only looks the name up.
+  if (name === 'command' && i < t.length && /^-[vV]$/.test(t[i].value)) return { result: null };
+  // H-X4b: `env -S "git commit …"` splits its string into the command.
+  if (name === 'env') {
+    // Only env's own options (before the command) count — `git commit -S` signs.
+    for (let j = i; j < t.length && /^-/.test(t[j].value) && t[j].value !== '--'; j++) {
+      const v = t[j].value;
+      if (v === '-S' || v === '--split-string') return { result: j + 1 < t.length ? { payload: t.slice(j + 1).map(x => x.value).join(' ') } : null };
+      if (v.startsWith('--split-string=')) return { result: { payload: [v.slice(15), ...t.slice(j + 1).map(x => x.value)].join(' ') } };
+      if (/^-[uC]$/.test(v)) j++;
+    }
+  }
+  i = skipFlags(t, i, WRAPPERS[name]);
+  if (name === 'timeout' && i < t.length && /^\d/.test(t[i].value)) i++;
+  return { i };
+}
+
+/** `sh -c` / `bash -c` / … payload from token `i` (the shell name), or null (a script file). */
+function shellPayload(t, i) {
+  for (let j = i + 1; j < t.length; j++) {
+    const f = t[j].value;
+    if (!/^-/.test(f) || f === '--') return null; // a script file
+    if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(f)) return j + 1 < t.length ? { payload: t[j + 1].value, lang: 'sh' } : null;
+    if (f === '-o' || f === '+o') j++;
+  }
+  return null;
+}
+
+/** `cmd /c` / `cmd /k` payload from token `i` (the `cmd` name), or null. */
+function cmdPayload(t, i, s, ps) {
+  for (let j = i + 1; j < t.length; j++) {
+    if (/^\/[ck]$/i.test(t[j].value)) {
+      const rest = restFrom(s, t, j + 1);
+      const rt = tokensOf(rest, ps);
+      return { payload: rt.length === 1 ? rt[0].value : rest };
+    }
+  }
+  return null;
+}
+
+/** `pwsh -Command` / `-EncodedCommand` payload from token `i` (the pwsh name), or null. */
+function pwshPayload(t, i, s, ps) {
+  for (let j = i + 1; j < t.length; j++) {
+    const f = t[j].value;
+    if (PWSH_COMMAND_RE.test(f) || !/^[-/]/.test(f)) {
+      const from = PWSH_COMMAND_RE.test(f) ? j + 1 : j;
+      const rest = restFrom(s, t, from);
+      const rt = tokensOf(rest, ps);
+      return { payload: rt.length === 1 ? rt[0].value : rest, lang: 'ps' };
+    }
+    if (PWSH_ENCODED_RE.test(f)) {
+      try { return j + 1 < t.length ? { payload: Buffer.from(t[j + 1].value, 'base64').toString('utf16le'), lang: 'ps' } : null; } catch { return null; }
+    }
+    if (/^[-/]f(?:ile)?$/i.test(f)) return null;
+    if (PWSH_ARG_FLAG_RE.test(f)) j++;
+  }
+  return null;
+}
+
+/**
+ * A known executable's own payload/interpretation from token `i` (a shell,
+ * `cmd`, PowerShell, `eval`, `iex`, `ForEach-Object { … }` or
+ * `Start-Process`). `{matched: false}` when `name` is none of those — the
+ * caller falls back to treating `name` as the command itself.
+ */
+function commandOfKnownExe(name, t, i, s, ps) {
+  if (SHELLS.has(name)) return { matched: true, result: shellPayload(t, i) };
+  if (name === 'cmd') return { matched: true, result: cmdPayload(t, i, s, ps) };
+  if (PWSH.has(name)) return { matched: true, result: pwshPayload(t, i, s, ps) };
+  if (name === 'eval') return { matched: true, result: { payload: t.slice(i + 1).map(x => x.value).join(' ') } };
+  // RT3-R3: `iex "…"` / `Invoke-Expression [-Command] "…"` run their string like eval.
+  if (name === 'iex' || name === 'invoke-expression') {
+    return { matched: true, result: { payload: t.slice(i + 1).filter(x => !/^-c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?$/i.test(x.value)).map(x => x.value).join(' '), lang: 'ps' } };
+  }
+  // RT3-R3: `… | ForEach-Object { git commit … }` — the block's first command.
+  if ((name === 'foreach-object' || name === '%') && /^\s*\{/.test(s.slice(t[i].end))) {
+    return { matched: true, result: { payload: s.slice(t[i].end).replace(/^\s*\{/, ''), lang: 'ps' } };
+  }
+  if (START_PROCESS.has(name)) {
+    const payload = startProcessPayload(t.slice(i + 1));
+    return { matched: true, result: payload ? { payload } : null };
+  }
+  return { matched: false };
+}
+
 function commandAt(seg, lang) {
   const ps = lang === 'ps';
   const s = skipPrefix(seg);
   const t = tokensOf(s, ps);
   let i = 0;
-  const skipFlags = (argFlag) => {
-    while (i < t.length && /^-/.test(t[i].value)) {
-      const f = t[i++].value;
-      if (f === '--') break;
-      if (argFlag && argFlag.test(f) && i < t.length) i++;
-    }
-  };
-  const restFrom = (j) => s.slice(j < t.length ? t[j].end - t[j].raw.length : s.length).trim();
   for (let guard = 0; guard < 16 && i < t.length; guard++) {
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i].raw)) { i++; continue; }
     const name = exeName(t[i].value);
-    if (Object.prototype.hasOwnProperty.call(WRAPPERS, name)) {
-      i++;
-      // `command -v git` only looks the name up.
-      if (name === 'command' && i < t.length && /^-[vV]$/.test(t[i].value)) return null;
-      // H-X4b: `env -S "git commit …"` splits its string into the command.
-      if (name === 'env') {
-        // Only env's own options (before the command) count — `git commit -S` signs.
-        for (let j = i; j < t.length && /^-/.test(t[j].value) && t[j].value !== '--'; j++) {
-          const v = t[j].value;
-          if (v === '-S' || v === '--split-string') return j + 1 < t.length ? { payload: t.slice(j + 1).map(x => x.value).join(' ') } : null;
-          if (v.startsWith('--split-string=')) return { payload: [v.slice(15), ...t.slice(j + 1).map(x => x.value)].join(' ') };
-          if (/^-[uC]$/.test(v)) j++;
-        }
-      }
-      skipFlags(WRAPPERS[name]);
-      if (name === 'timeout' && i < t.length && /^\d/.test(t[i].value)) i++;
+    const wrapped = stepWrapper(name, t, i);
+    if (wrapped) {
+      if (Object.prototype.hasOwnProperty.call(wrapped, 'result')) return wrapped.result;
+      i = wrapped.i;
       continue;
     }
-    if (SHELLS.has(name)) {
-      for (let j = i + 1; j < t.length; j++) {
-        const f = t[j].value;
-        if (!/^-/.test(f) || f === '--') return null; // a script file
-        if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(f)) return j + 1 < t.length ? { payload: t[j + 1].value, lang: 'sh' } : null;
-        if (f === '-o' || f === '+o') j++;
-      }
-      return null;
-    }
-    if (name === 'cmd') {
-      for (let j = i + 1; j < t.length; j++) {
-        if (/^\/[ck]$/i.test(t[j].value)) {
-          const rest = restFrom(j + 1);
-          const rt = tokensOf(rest, ps);
-          return { payload: rt.length === 1 ? rt[0].value : rest };
-        }
-      }
-      return null;
-    }
-    if (PWSH.has(name)) {
-      for (let j = i + 1; j < t.length; j++) {
-        const f = t[j].value;
-        if (PWSH_COMMAND_RE.test(f) || !/^[-/]/.test(f)) {
-          const from = PWSH_COMMAND_RE.test(f) ? j + 1 : j;
-          const rest = restFrom(from);
-          const rt = tokensOf(rest, ps);
-          return { payload: rt.length === 1 ? rt[0].value : rest, lang: 'ps' };
-        }
-        if (PWSH_ENCODED_RE.test(f)) {
-          try { return j + 1 < t.length ? { payload: Buffer.from(t[j + 1].value, 'base64').toString('utf16le'), lang: 'ps' } : null; } catch { return null; }
-        }
-        if (/^[-/]f(?:ile)?$/i.test(f)) return null;
-        if (PWSH_ARG_FLAG_RE.test(f)) j++;
-      }
-      return null;
-    }
-    if (name === 'eval') return { payload: t.slice(i + 1).map(x => x.value).join(' ') };
-    // RT3-R3: `iex "…"` / `Invoke-Expression [-Command] "…"` run their string like eval.
-    if (name === 'iex' || name === 'invoke-expression') {
-      return { payload: t.slice(i + 1).filter(x => !/^-c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?$/i.test(x.value)).map(x => x.value).join(' '), lang: 'ps' };
-    }
-    // RT3-R3: `… | ForEach-Object { git commit … }` — the block's first command.
-    if ((name === 'foreach-object' || name === '%') && /^\s*\{/.test(s.slice(t[i].end))) {
-      return { payload: s.slice(t[i].end).replace(/^\s*\{/, ''), lang: 'ps' };
-    }
-    if (START_PROCESS.has(name)) {
-      const payload = startProcessPayload(t.slice(i + 1));
-      return payload ? { payload } : null;
-    }
+    const known = commandOfKnownExe(name, t, i, s, ps);
+    if (known.matched) return known.result;
     return { exe: name, rest: s.slice(t[i].end) };
   }
   return null;
@@ -547,12 +647,13 @@ function langOf(opts) {
   return tool === 'PowerShell' ? 'ps' : tool === 'Bash' ? 'sh' : 'any';
 }
 
-function commandFacts(cmd, opts = {}, depth = 0) {
-  const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false, pushHead: false };
-  if (typeof cmd !== 'string' || !cmd.trim()) return out;
-  const lang = langOf(opts);
-  const ps = lang === 'ps';
-  // RT3-R5: heredoc / here-string bodies out, line continuations joined, then the 256 KB cap (R9).
+/**
+ * RT3-R5: heredoc / here-string bodies out, line continuations joined, then
+ * the 256 KB cap (R9) — plus every `$(…)` / backtick / heredoc-feed payload
+ * merged into `out` first, so the segment loop only ever sees the top level.
+ * @returns {string} the text to split into segments
+ */
+function mergeSubCommands(out, cmd, lang, depth) {
   const scan = scanShell(cmd, lang);
   const text = scan.text.length > MAX_PARSE ? scan.text.slice(0, MAX_PARSE) : scan.text;
   if (depth < PAYLOAD_DEPTH) {
@@ -563,95 +664,135 @@ function commandFacts(cmd, opts = {}, depth = 0) {
     }
     for (const f of scan.feeds) mergeFacts(out, commandFacts(f.body.slice(0, MAX_PARSE), { lang: f.lang }, depth + 1));
   }
+  return text;
+}
+
+/**
+ * AUD-008: the --render-card FLAG must be a real, unquoted token on the
+ * quote-stripped segment (so `grep "index.js --render-card x" file` — both
+ * inside one quoted string — never matches). The renderer's own path may
+ * legitimately be quoted (Windows paths with spaces), so `index.js` and the
+ * payload path are read from the RAW segment.
+ */
+function matchRenderCard(out, seg, rawSeg) {
+  if (out.renderCard) return;
+  if (!RENDER_CARD_FLAG_RE.test(seg) || !/index\.js/i.test(rawSeg)) return;
+  const rc = rawSeg.match(RENDER_CARD_RE);
+  if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
+}
+
+/** `gh pr merge`, `gh api` (REST merge / GraphQL mergePullRequest) and `gh issue develop -c` facts. */
+function applyGhFacts(out, at, ps) {
+  const r = stripQuotes(at.rest, ps);
+  if (GH_MERGE_RE.test(r)) out.release = true;
+  if (/^\s+api\b/.test(r)) {
+    const u = at.rest.replace(/["']/g, '');
+    if ((GH_API_PUT_RE.test(u) && GH_API_MERGE_PATH_RE.test(u)) || /\bmergePullRequest\b/.test(u)) out.release = true;
+  }
+  // RT3-R10: `gh issue develop N -c` checks a new branch out.
+  if (/^\s+issue\s+develop\b/.test(r) && /(^|\s)(?:-c|--checkout)(\s|$)/.test(r)) {
+    out.branch = true;
+    const n = at.rest.match(/\s(?:-n|--name)(?:\s+|=)(\S+)/);
+    if (n && !out.branchName) out.branchName = unquote(n[1], ps).replace(/[)}]+$/, '');
+  }
+}
+
+/** `git commit` / `git push` facts (a dry run counts as neither). */
+function applyCommitPush(out, sub, rest) {
+  const dry = /(^|\s)--dry-run\b/.test(rest);
+  if (sub === 'commit' && !dry) out.commit = true;
+  if (sub === 'push' && !dry) {
+    // A push straight onto main / master (`HEAD:main`, `:main`, `origin main`, `+main`) is a ship.
+    if (PUSH_MAIN_RE.test(rest)) out.release = true;
+    else {
+      // RT3-R4: the current branch (`git push`, `git push [-u] origin [HEAD]`).
+      const pos = positionals(rest);
+      if (pos.length <= 1 || (pos.length === 2 && /^\+?HEAD$/.test(pos[1]))) out.pushHead = true;
+    }
+  }
+}
+
+/**
+ * A branch creation/switch at THIS git subcommand: `checkout -b`, `switch
+ * -c`, `worktree add` (sets `out.worktree`) and a `branch X` remembered
+ * earlier in the command, switched to later (RT3-R10). `{hit, name}`.
+ */
+function gitBranchTarget(out, sub, rest, raw, created) {
+  let name = null;
+  let hit = false;
+  if (sub === 'checkout' && /(^|\s)(-[a-zA-Z]*[bB]|--orphan)(\s|$)/.test(rest)) {
+    hit = true;
+    const n = raw.match(/\s(?:-[a-zA-Z]*[bB]|--orphan)\s+(\S+)/);
+    name = n ? n[1] : null;
+  } else if (sub === 'switch' && /(^|\s)(-[a-zA-Z]*[cC]|--create|--force-create)(\s|=|$)/.test(rest)) {
+    hit = true;
+    const n = raw.match(/\s(?:-[a-zA-Z]*[cC]|--create|--force-create)[\s=]+(\S+)/);
+    name = n ? n[1] : null;
+  } else if (sub === 'worktree' && /^\s+add\b/.test(rest)) {
+    hit = true;
+    out.worktree = true;
+    const b = raw.match(/\s-[bB]\s+(\S+)/);
+    if (b) name = b[1];
+    else {
+      const pos = raw.replace(/^.*?\badd\b/s, '').trim().split(/\s+/).filter(t => t && !t.startsWith('-'));
+      name = pos[1] || (pos[0] ? path.basename(pos[0]) : null);
+    }
+  } else if (sub === 'branch') {
+    // RT3-R10: remembered — creation happens when the same command switches to it.
+    const words = rest.trim().split(/\s+/).filter(Boolean);
+    if (!words.some(w => BRANCH_NO_CREATE_RE.test(w))) {
+      const pos = positionals(rawRest(raw));
+      if (pos[0]) created.add(pos[0]);
+    }
+  } else if ((sub === 'switch' || sub === 'checkout') && created.size) {
+    const pos = positionals(rawRest(raw));
+    if (pos[0] && created.has(pos[0])) { hit = true; name = pos[0]; }
+  }
+  return { hit, name };
+}
+
+/** `git` facts of one command-position hit: commit/push, then branch/checkout/switch/worktree. */
+function applyGitFacts(out, at, ps, created) {
+  const m = `git${stripQuotes(at.rest, ps)}`.match(GIT_RE);
+  if (!m) return;
+  // H-X4b: `(cd x && git commit)` / `{ git commit;}` — the closing bracket is no part of the subcommand.
+  const sub = m[1].replace(/[)}]+$/, '');
+  const rest = m[2] || '';
+  applyCommitPush(out, sub, rest);
+  const raw = `git${at.rest}`;
+  const { hit, name } = gitBranchTarget(out, sub, rest, raw, created);
+  if (hit) {
+    out.branch = true;
+    if (/(^|\s)--detach\b/.test(rest)) out.detach = true;
+    if (name && !out.branchName) out.branchName = name.replace(/[)}]+$/, '').replace(/^["']|["']$/g, '');
+  }
+}
+
+/** Facts of one raw segment: render-card flag, then what runs at command position. */
+function applySegmentFacts(out, rawSeg, lang, ps, depth, created) {
+  const seg = stripQuotes(rawSeg, ps);
+  matchRenderCard(out, seg, rawSeg);
+  const at = commandAt(rawSeg, lang);
+  if (!at) return;
+  if (at.payload !== undefined) {
+    if (depth < PAYLOAD_DEPTH) mergeFacts(out, commandFacts(at.payload, { lang: at.lang || lang }, depth + 1));
+    return;
+  }
+  if (at.exe === 'gh') { applyGhFacts(out, at, ps); return; }
+  if (at.exe !== 'git') return;
+  applyGitFacts(out, at, ps, created);
+}
+
+function commandFacts(cmd, opts = {}, depth = 0) {
+  const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false, pushHead: false };
+  if (typeof cmd !== 'string' || !cmd.trim()) return out;
+  const lang = langOf(opts);
+  const ps = lang === 'ps';
+  const text = mergeSubCommands(out, cmd, lang, depth);
   const created = new Set(); // RT3-R10: `git branch X` earlier in this command
   // H-B16 / RT2-R1: one quote-aware split, so the raw segment (branch
   // names, card payload paths) always belongs to the stripped one.
-  for (const rawSeg of splitSegments(text, ps)) {
-    const seg = stripQuotes(rawSeg, ps);
-    // AUD-008: the --render-card FLAG must be a real, unquoted token on the
-    // quote-stripped segment (so `grep "index.js --render-card x" file` —
-    // both inside one quoted string — never matches). The renderer's own
-    // path may legitimately be quoted (Windows paths with spaces), so
-    // `index.js` and the payload path are read from the RAW segment.
-    if (!out.renderCard && RENDER_CARD_FLAG_RE.test(seg) && /index\.js/i.test(rawSeg)) {
-      const rc = rawSeg.match(RENDER_CARD_RE);
-      if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
-    }
-    const at = commandAt(rawSeg, lang);
-    if (!at) continue;
-    if (at.payload !== undefined) {
-      if (depth < PAYLOAD_DEPTH) mergeFacts(out, commandFacts(at.payload, { lang: at.lang || lang }, depth + 1));
-      continue;
-    }
-    if (at.exe === 'gh') {
-      const r = stripQuotes(at.rest, ps);
-      if (GH_MERGE_RE.test(r)) out.release = true;
-      if (/^\s+api\b/.test(r)) {
-        const u = at.rest.replace(/["']/g, '');
-        if ((GH_API_PUT_RE.test(u) && GH_API_MERGE_PATH_RE.test(u)) || /\bmergePullRequest\b/.test(u)) out.release = true;
-      }
-      // RT3-R10: `gh issue develop N -c` checks a new branch out.
-      if (/^\s+issue\s+develop\b/.test(r) && /(^|\s)(?:-c|--checkout)(\s|$)/.test(r)) {
-        out.branch = true;
-        const n = at.rest.match(/\s(?:-n|--name)(?:\s+|=)(\S+)/);
-        if (n && !out.branchName) out.branchName = unquote(n[1], ps).replace(/[)}]+$/, '');
-      }
-      continue;
-    }
-    if (at.exe !== 'git') continue;
-    const m = `git${stripQuotes(at.rest, ps)}`.match(GIT_RE);
-    if (!m) continue;
-    // H-X4b: `(cd x && git commit)` / `{ git commit;}` — the closing bracket is no part of the subcommand.
-    const sub = m[1].replace(/[)}]+$/, '');
-    const rest = m[2] || '';
-    const dry = /(^|\s)--dry-run\b/.test(rest);
-    if (sub === 'commit' && !dry) out.commit = true;
-    if (sub === 'push' && !dry) {
-      // A push straight onto main / master (`HEAD:main`, `:main`, `origin main`, `+main`) is a ship.
-      if (PUSH_MAIN_RE.test(rest)) out.release = true;
-      else {
-        // RT3-R4: the current branch (`git push`, `git push [-u] origin [HEAD]`).
-        const pos = positionals(rest);
-        if (pos.length <= 1 || (pos.length === 2 && /^\+?HEAD$/.test(pos[1]))) out.pushHead = true;
-      }
-    }
-    let name = null;
-    let hit = false;
-    const raw = `git${at.rest}`;
-    if (sub === 'checkout' && /(^|\s)(-[a-zA-Z]*[bB]|--orphan)(\s|$)/.test(rest)) {
-      hit = true;
-      const n = raw.match(/\s(?:-[a-zA-Z]*[bB]|--orphan)\s+(\S+)/);
-      name = n ? n[1] : null;
-    } else if (sub === 'switch' && /(^|\s)(-[a-zA-Z]*[cC]|--create|--force-create)(\s|=|$)/.test(rest)) {
-      hit = true;
-      const n = raw.match(/\s(?:-[a-zA-Z]*[cC]|--create|--force-create)[\s=]+(\S+)/);
-      name = n ? n[1] : null;
-    } else if (sub === 'worktree' && /^\s+add\b/.test(rest)) {
-      hit = true;
-      out.worktree = true;
-      const b = raw.match(/\s-[bB]\s+(\S+)/);
-      if (b) name = b[1];
-      else {
-        const pos = raw.replace(/^.*?\badd\b/s, '').trim().split(/\s+/).filter(t => t && !t.startsWith('-'));
-        name = pos[1] || (pos[0] ? path.basename(pos[0]) : null);
-      }
-    } else if (sub === 'branch') {
-      // RT3-R10: remembered — creation happens when the same command switches to it.
-      const words = rest.trim().split(/\s+/).filter(Boolean);
-      if (!words.some(w => BRANCH_NO_CREATE_RE.test(w))) {
-        const pos = positionals(rawRest(raw));
-        if (pos[0]) created.add(pos[0]);
-      }
-    } else if ((sub === 'switch' || sub === 'checkout') && created.size) {
-      const pos = positionals(rawRest(raw));
-      if (pos[0] && created.has(pos[0])) { hit = true; name = pos[0]; }
-    }
-    if (hit) {
-      out.branch = true;
-      if (/(^|\s)--detach\b/.test(rest)) out.detach = true;
-      if (name && !out.branchName) out.branchName = name.replace(/[)}]+$/, '').replace(/^["']|["']$/g, '');
-    }
-  }
+  for (const rawSeg of splitSegments(text, ps)) applySegmentFacts(out, rawSeg, lang, ps, depth, created);
   return out;
 }
 
@@ -695,17 +836,32 @@ function gitRun(root, args, timeout) {
   });
 }
 
-/** Trimmed git stdout, or null on an error AND on empty output. */
-function gitOut(root, args) {
-  try { return gitRun(root, args, 3000).trim() || null; } catch { return null; }
+/**
+ * AUD-031: the timeout for one call — a caller's shared `budget` (from
+ * git-timeout's gitBudget) bounds a whole CHAIN of calls together; without
+ * one, GIT_TIMEOUT_MS is each call's own ceiling.
+ */
+function callTimeout(budget) {
+  return budget ? budget.timeout() : GIT_TIMEOUT_MS;
+}
+
+/**
+ * Trimmed git stdout, or null on an error AND on empty output.
+ * @param {object} [opts] `{budget}` — an optional git-timeout gitBudget() to
+ *   bound a chain of calls instead of each re-arming its own timeout.
+ */
+function gitOut(root, args, { budget } = {}) {
+  try { return gitRun(root, args, callTimeout(budget)).trim() || null; } catch { return null; }
 }
 
 /**
  * H-A6: git stdout as non-empty lines. THROWS on a git failure, so a caller
  * can tell "unknown" from "no lines" (pre's qa count).
+ * @param {object} [opts] `{timeout, budget}` — an explicit `timeout` wins;
+ *   otherwise a shared `budget` bounds the chain, else GIT_TIMEOUT_MS.
  */
-function gitLines(root, args, { timeout = 3000 } = {}) {
-  return gitRun(root, args, timeout).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+function gitLines(root, args, { timeout, budget } = {}) {
+  return gitRun(root, args, timeout || callTimeout(budget)).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
 /**
