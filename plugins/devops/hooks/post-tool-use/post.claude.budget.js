@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.claude.budget
- * @version 0.2.0
+ * @version 0.2.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit
@@ -33,6 +33,8 @@ const crypto = require('crypto');
 const path = require('path');
 const { evaluate, editDelta, buildSummary, buildInstruction } = require('../lib/claude-file-budget');
 const { runOnce } = require('../lib/run-once');
+const { findRepoRoot } = require('../lib/project-root');
+const { isPluginSourceRepo } = require('../lib/plugin-scope');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -78,9 +80,17 @@ process.stdin.on('end', () => {
   const cooldownMs = hook.session_id ? 0 : 2 * 60 * 60 * 1000;
   if (!runOnce(dedupeKey, contextKey, { cooldownMs })) process.exit(0);
 
+  // In the plugin source the report names the checkout's own scripts, not the
+  // installed plugin's (claude-file-budget.js, buildInstruction).
+  const repoRoot = findRepoRoot(path.dirname(path.resolve(file)));
+  const sourceRoot = isPluginSourceRepo(repoRoot) ? repoRoot : null;
+
   process.stderr.write(buildSummary(file, result) + '\n');
   process.stdout.write(JSON.stringify({
-    hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: buildInstruction(file, result) },
+    hookSpecificOutput: {
+      hookEventName: 'PostToolUse',
+      additionalContext: buildInstruction(file, result, { sourceRoot }),
+    },
   }));
   process.exit(0);
 });
