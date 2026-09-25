@@ -444,7 +444,8 @@ canonical source — **never hand-edit the text between markers:**
   No-ops outside the plugin source repo. Run standalone, or with `--check`
   (exit 1 if any marker is stale — used as a regression test + ship gate).
 - **When it runs:** `ship_build` regenerates automatically (alongside
-  `gen-dk-index` / `gen-project-map`); `ship_preflight` warns on stale markers
+  `gen-dk-index` / `gen-project-map`) with the repo's own copy of the
+  generator — never the older one bundled with a session's MCP server; `ship_preflight` warns on stale markers
   **and** on any skill/agent missing its curated README table row;
   `ss.git.check` nudges (once per 8h) when README is older than the roster.
 - **What stays manual:** curated prose — token math, and the per-skill /

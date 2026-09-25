@@ -19,7 +19,7 @@ How to audit or initialize a project's repository structure: .gitignore, LICENSE
 | Former step | Now |
 |---|---|
 | Plugin runtime files in `.gitignore` (the marked block) | `ss.project.setup` writes `hooks/lib/runtime-ignores.js` into the clone's `.git/info/exclude` at every session start — no repo diff, every worktree covered. A marked `# >>> devops-plugin runtime state` block left in `.gitignore` by an earlier setup is harmless; remove it only when the user asks. |
-| Project map | `ship_build` regenerates `.claude/project-map.md` on every ship. |
+| Project map | `ship_build` regenerates `.claude/project-map.md` on every ship; `pre.tokens.guard` regenerates it again right before injecting it into a session. |
 | CLAUDE.md budget | `post.claude.budget` measures every Claude context file at write time. |
 | README | `pre.readme.standards` + `readme-standards.md`. |
 
