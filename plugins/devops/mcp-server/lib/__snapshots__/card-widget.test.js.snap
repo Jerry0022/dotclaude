@@ -1,0 +1,103 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`cardWidgetHtml > full rich card renders byte-identical (AUD-030 refactor guard) 1`] = `
+"<h2 class="sr-only" style="position:absolute;left:-9999px">Completion-Card-Inhalt: was passiert ist, Belege, Budget und die Entscheidung mit ihren Aktionen.</h2>
+<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}</style>
+<div class="card-surface" style="position:relative;background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">
+<div class="card-panel" style="display:flex;flex-direction:column;gap:6px;padding:0 0 2px">
+  <h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">Ship erfolgreich</h3>
+  <div class="card-result" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)"><span style="color:#aab4e6;font-weight:500;flex:none;width:8px">›</span><span><b style="color:#e0a0a0;font-weight:500">Deviation:</b> nichts</span></div>
+  <div class="card-result" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)"><span style="color:#aab4e6;font-weight:500;flex:none;width:8px">›</span><span>Zwei Dateien geändert</span></div>
+  <div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px;font-size:14px"><span class="card-post" style="color:#8fae8f">✓ 3/3 Anforderungen</span> <span class="card-post" style="color:#d9c58a" data-tip="Tooltip-Text">◐ 1 offen</span></div>
+  <div class="card-pipeline" style="font-size:13px;color:#7d84a8;padding:4px 0">✓ commit → ✓ push → <a href="https://github.com/example/repo/pull/42" class="card-pr-link" style="color:inherit;text-decoration:none">#42</a> PR → ○ merge · feat/x · Build abc123</div>
+  <div class="card-run-contract" style="font-size:13px;color:#7d84a8;padding:4px 0">🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓</div>
+  <div class="card-ladder" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:13px;padding:0 0 4px"><span><span style="color:#7d84a8">alpha</span> <span style="color:#aab4e6;font-weight:500">v0.200.0</span></span><span aria-hidden="true" style="color:#7d84a8">›</span><span><span style="color:#7d84a8">beta</span> <span style="color:var(--text-secondary)">v0.199.0</span> <span style="font-size:11px;color:#d9c58a">−1 · 2 d</span></span><span aria-hidden="true" style="color:#7d84a8">›</span><span><span style="color:#7d84a8">stable</span> <span style="color:#7d84a8">übersprungen</span></span></div>
+  <div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px"><span class="card-budget" data-tip="t" data-tip-tier="label" style="display:inline-flex;align-items:center;gap:8px"><span style="font-size:13px;color:var(--text-secondary);min-width:20px">5h</span><span style="position:relative;display:inline-block;width:220px;height:12px;background:#2b2d3a;border-radius:5px"><span class="card-sheen" style="position:absolute;left:0;top:0;bottom:0;width:40%;background:#4a5384;border-radius:5px;overflow:hidden"></span><span style="position:absolute;right:6px;top:-1px;font-size:11px;color:#7d84a8;white-space:nowrap">3 h</span><span style="position:absolute;left:40%;top:-6px;bottom:-6px;width:3px;border-radius:2px;background:#ffffff;z-index:2"></span></span></span><span style="font-size:11px;color:#7d84a8">Kontext: gesund</span></div>
+  </div>
+<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 14px;margin-top:10px">
+  <h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">📦 Shippen?</h3>
+  <div class="card-context" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary);font-size:13px;margin:0 0 4px"><span style="color:#aab4e6;font-weight:500;flex:none;width:8px">›</span><span>Läuft auf <span class="card-open"><span role="button" tabindex="0" class="card-link" data-prompt="Im Standardbrowser öffnen: http://127.0.0.1:5173/app" data-sent="Im Eingabefeld, Enter öffnet die Seite" data-tip="Öffnet die Seite im Standardbrowser: Der Klick legt den Befehl ins Eingabefeld, Enter öffnet sie ohne Turn." style="color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer">http://127.0.0.1:5173/app<span aria-hidden="true" style="user-select:none"> ↗</span></span><span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span></span>.</span></div>
+  <div class="card-points" style="margin:2px 0 8px"><div class="card-point" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)"><span style="color:#aab4e6;font-weight:500;flex:none;width:8px">›</span><span>Noch offen: Doku</span></div><div class="card-point" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)"><span style="color:#aab4e6;font-weight:500;flex:none;width:8px">›</span><span>Nach dem Deploy testen</span></div></div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0"><span role="button" tabindex="0" id="card-act-0" data-prompt="ship" data-tip="Startet die Ship-Pipeline mit dem aktuellen Stand." style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box;border-color:var(--border-accent);color:var(--text-accent)"><i class="ti ti-rocket" aria-hidden="true" style="font-size:16px"></i>Ship ↗</span>
+  <span role="button" tabindex="0" id="card-act-1" data-prompt="Ich möchte noch etwas ändern, bevor wir shippen — frag mich, was." data-tip="Hält den Ship an und fragt zuerst, was noch anders sein soll." style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box"><i class="ti ti-edit" aria-hidden="true" style="font-size:16px"></i>Ändern ↗</span><span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span></div>
+  </div>
+</div>
+<script>
+(function () {
+  var T = {"sent":"Im Eingabefeld, Enter sendet","failed":"Nicht übernommen, Eingabefeld leeren und erneut klicken"}, SPAN = 5000, GAP = 300, WAIT = 1000;
+  var nextId = 700000000 + Math.floor(Math.random() * 100000000);
+  function ok(d) { return 'result' in d && !d.error && !(d.result && d.result.isError); }
+  function deliver(text, done) {
+    var ids = {}, cur = -1, settled = false, spent = 0, timer = null;
+    function finish(success) { if (settled) return; settled = true; clearTimeout(timer); window.removeEventListener('message', onReply); done(success); }
+    function again(waited) { if (settled) return; clearTimeout(timer); spent += waited + GAP; if (spent > SPAN) { finish(false); return; } timer = setTimeout(post, GAP); }
+    function onReply(e) { var d = e.data; if (!d || typeof d !== 'object' || d.method || !ids[d.id]) return; if (ok(d)) { finish(true); } else if (d.id === cur) { again(0); } }
+    function post() {
+      if (settled) return;
+      cur = nextId++; ids[cur] = true;
+      try { window.parent.postMessage({ jsonrpc: '2.0', id: cur, method: 'ui/message', params: { role: 'user', content: [{ type: 'text', text: text }] } }, '*'); } catch (x) { again(0); return; }
+      timer = setTimeout(function () { again(WAIT); }, WAIT);
+    }
+    window.addEventListener('message', onReply);
+    post();
+  }
+  function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }
+  function go(b) {
+    if (b.getAttribute('data-busy')) return;
+    b.setAttribute('data-busy', '1'); b.style.opacity = '0.6';
+    deliver(b.getAttribute('data-prompt'), function (success) {
+      b.removeAttribute('data-busy'); b.style.opacity = '';
+      mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');
+    });
+  }
+  document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {
+    b.addEventListener('click', function () { go(b); });
+    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });
+  });
+  var TIP = { info: 1500, label: 500 }, SKIP = 300;
+  var surface = document.querySelector('.card-surface'), tip = document.createElement('div');
+  var owner = null, openT = 0, closeT = 0, lastClose = 0, viaKey = false;
+  tip.className = 'card-tip'; tip.id = 'card-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
+  if (surface) surface.appendChild(tip);
+  function place(el) {
+    var s = surface.getBoundingClientRect(), r = el.getBoundingClientRect();
+    var top = r.top - s.top - tip.offsetHeight - 6;
+    if (top < 0) top = r.bottom - s.top + 6;
+    var left = Math.max(0, Math.min(r.left - s.left + r.width / 2 - tip.offsetWidth / 2, s.width - tip.offsetWidth));
+    tip.style.top = Math.round(top) + 'px'; tip.style.left = Math.round(left) + 'px';
+  }
+  function show(el) {
+    if (!surface || !el.getAttribute('data-tip')) return;
+    owner = el; tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(el);
+    el.setAttribute('aria-describedby', 'card-tip');
+  }
+  function hide() {
+    clearTimeout(openT); clearTimeout(closeT);
+    if (!owner) return;
+    owner.removeAttribute('aria-describedby'); owner = null; tip.hidden = true; lastClose = Date.now();
+  }
+  function schedule(el, now) {
+    clearTimeout(openT); clearTimeout(closeT);
+    if (owner === el) return;
+    if (owner) hide();
+    var wait = now || Date.now() - lastClose < SKIP ? 0 : TIP[el.getAttribute('data-tip-tier') === 'label' ? 'label' : 'info'];
+    openT = setTimeout(function () { show(el); }, wait);
+  }
+  function trig(n) { return n && n.closest ? n.closest('[data-tip]') : null; }
+  document.addEventListener('pointerover', function (e) {
+    if (tip.contains(e.target)) { clearTimeout(closeT); return; }
+    var el = trig(e.target); if (el) schedule(el, false);
+  });
+  document.addEventListener('pointerout', function (e) {
+    var to = e.relatedTarget;
+    if (to && (tip.contains(to) || (owner && owner.contains(to)))) return;
+    if (!trig(e.target) && !tip.contains(e.target)) return;
+    clearTimeout(openT); if (owner) closeT = setTimeout(hide, 120);
+  });
+  document.addEventListener('focusin', function (e) { var el = trig(e.target); if (el && viaKey) schedule(el, true); });
+  document.addEventListener('focusout', function () { hide(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); else viaKey = true; }, true);
+  document.addEventListener('pointerdown', function (e) { viaKey = false; if (!tip.contains(e.target)) hide(); }, true);
+})();
+</script>"
+`;

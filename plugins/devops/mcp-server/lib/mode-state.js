@@ -1,4 +1,7 @@
 /**
+ * @module mode-state
+ * @version 1.0.0
+ *
  * Mode state the card reads off the project — not off the caller.
  *
  * Two devops modes turn a session into a waiting room: an open /auto-concept page
