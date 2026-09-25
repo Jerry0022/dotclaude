@@ -217,6 +217,12 @@ code-change card without `validation` is blocked once and re-requested. For a
 pure refactor/chore, one item stating the intent and how behaviour was kept
 equivalent suffices.
 
+**Scope.** Subagent tool calls neither owe nor satisfy either gate, and an edit
+outside the session's own work tree (a sibling checkout, an isolated agent's
+nested worktree) owes nothing. A merge, pull, cherry-pick, rebase, am or revert
+into the session's checkout owes the gates for each code file it brought in,
+exactly like an edit of that file.
+
 **Carve-outs** (never trigger either gate): docs/markdown/config edits,
 `*.test`/`*.spec` files, and concept pages under `docs/concepts/*.html`.
 
