@@ -10,6 +10,9 @@
  *
  *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS   constants
  *   commandFacts(cmd)          → {commit, branch, branchName, renderCard, worktree, detach, release}
+ *     (the executable at command position: quoted paths, wrapper prefixes,
+ *     sh -c / cmd /c / pwsh -Command / eval payloads — H-X4)
+ *   contractRoots(hook, projectRoot) → {root, inputRoot, roots[]} (H-B1)
  *   toolFilePath(tool, input)  → string | null
  *   isGatedPath(root, cwd, p)  → boolean (inside the work tree, not exempt)
  *   closesOf(body)             → ["473", …] from "Closes #473" / "Fixes #…"
@@ -36,20 +39,135 @@ function stripQuotes(cmd) {
   return String(cmd || '').replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'[^']*'/g, "''");
 }
 
-/** Leading `(`, `{`, `&` (PowerShell call operator), `VAR=value ` and `sudo ` removed from one segment. */
-function bareSegment(seg) {
-  let s = seg.trim().replace(/^[({&\s]+/, '');
-  for (;;) {
-    const next = s.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S*\s+/, '').replace(/^sudo\s+/, '');
-    if (next === s) return s;
-    s = next;
+const QUOTED_RE = /"(?:[^"\\]|\\.)*"|'[^']*'/g;
+
+/**
+ * H-X4 / H-B16: the command split into segments at `&&`, `||`, `;`, `|`, a
+ * lone `&` (not `2>&1` / `&>`) and newlines OUTSIDE quoted strings, so the
+ * raw segment and its quote-stripped form always line up. An unmatched
+ * quote is a literal character (same rule as stripQuotes).
+ */
+function splitSegments(cmd) {
+  const mask = cmd.replace(QUOTED_RE, m => '_'.repeat(m.length));
+  const segs = [];
+  const re = /&&|\|\||[;|\n]|&(?!>)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(mask))) {
+    if (m[0] === '&' && /[<>]$/.test(mask.slice(0, m.index))) continue;
+    segs.push(cmd.slice(last, m.index));
+    last = m.index + m[0].length;
   }
+  segs.push(cmd.slice(last));
+  return segs;
 }
 
-// `git`, `git.exe`, `/usr/bin/git`, then git's global flags before the subcommand.
-const GIT_RE = /^(?:\S*[\\/])?git(?:\.exe)?(?:\s+(?:-[cC]\s+\S+|--no-pager|--paginate|-p|-P|--bare|--no-replace-objects|--literal-pathspecs|--(?:git-dir|work-tree|namespace|exec-path|config-env)(?:=\S+|\s+\S+)))*\s+(\S+)(.*)$/s;
-const GH_MERGE_RE = /^(?:\S*[\\/])?gh(?:\.exe)?\s+pr\s+merge\b/;
+const TOKEN_RE = /(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']|["'])+/g;
+
+function unquote(tok) {
+  return tok.replace(QUOTED_RE, q => (q[0] === "'" ? q.slice(1, -1) : q.slice(1, -1).replace(/\\(["\\$`])/g, '$1')));
+}
+
+function tokensOf(s) {
+  return [...s.matchAll(TOKEN_RE)].map(m => ({ raw: m[0], value: unquote(m[0]), end: m.index + m[0].length }));
+}
+
+/** Executable name of a token: basename, lower-cased, `.exe` dropped (`"C:\…\git.exe"` → `git`). */
+function exeName(value) {
+  return String(value).split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
+}
+
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+const PWSH = new Set(['pwsh', 'powershell']);
+const PWSH_COMMAND_RE = /^[-/]c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?$/i;
+const PWSH_ENCODED_RE = /^[-/](?:e|ec|enc|encodedcommand)$/i;
+const PWSH_ARG_FLAG_RE = /^[-/](?:ex|ep|executionpolicy|wd|workingdirectory|configurationname|of|outputformat|if|inputformat|w|windowstyle|v|version|psconsolefile|custompipename|settingsfile)$/i;
+// Wrapper prefix → its flags that take a separate argument.
+const WRAPPERS = {
+  sudo: /^-[ugCDpRrTUh]$/, doas: /^-[uC]$/, env: /^-[uCS]$/, command: null, exec: /^-a$/,
+  time: /^-[fo]$/, nice: /^-n$/, nohup: null, timeout: /^-[sk]$/, builtin: null,
+};
+
+/**
+ * What runs at COMMAND POSITION of one raw segment (H-X4): leading `(`, `{`,
+ * `!`, `&` (PowerShell call operator), `VAR=value` and the wrapper prefixes
+ * (`sudo`, `env`, `command`, `exec`, `time`, `nice`, `nohup`, `timeout`)
+ * skipped, a quoted executable unquoted. A shell payload (`sh -c`, `bash
+ * -c`, `cmd /c`, `pwsh -Command` / `-EncodedCommand`, `eval`) comes back as
+ * `{payload}` for the caller to parse again.
+ * @returns {{exe:string, rest:string}|{payload:string}|null}
+ */
+function commandAt(seg) {
+  const s = seg.replace(/^[\s({!&]+/, '');
+  const t = tokensOf(s);
+  let i = 0;
+  const skipFlags = (argFlag) => {
+    while (i < t.length && /^-/.test(t[i].value)) {
+      const f = t[i++].value;
+      if (f === '--') break;
+      if (argFlag && argFlag.test(f) && i < t.length) i++;
+    }
+  };
+  const restFrom = (j) => s.slice(j < t.length ? t[j].end - t[j].raw.length : s.length).trim();
+  for (let guard = 0; guard < 16 && i < t.length; guard++) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i].raw)) { i++; continue; }
+    const name = exeName(t[i].value);
+    if (Object.prototype.hasOwnProperty.call(WRAPPERS, name)) {
+      i++;
+      // `command -v git` only looks the name up.
+      if (name === 'command' && i < t.length && /^-[vV]$/.test(t[i].value)) return null;
+      skipFlags(WRAPPERS[name]);
+      if (name === 'timeout' && i < t.length && /^\d/.test(t[i].value)) i++;
+      continue;
+    }
+    if (SHELLS.has(name)) {
+      for (let j = i + 1; j < t.length; j++) {
+        const f = t[j].value;
+        if (!/^-/.test(f) || f === '--') return null; // a script file
+        if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(f)) return j + 1 < t.length ? { payload: t[j + 1].value } : null;
+        if (f === '-o' || f === '+o') j++;
+      }
+      return null;
+    }
+    if (name === 'cmd') {
+      for (let j = i + 1; j < t.length; j++) {
+        if (/^\/[ck]$/i.test(t[j].value)) {
+          const rest = restFrom(j + 1);
+          const rt = tokensOf(rest);
+          return { payload: rt.length === 1 ? rt[0].value : rest };
+        }
+      }
+      return null;
+    }
+    if (PWSH.has(name)) {
+      for (let j = i + 1; j < t.length; j++) {
+        const f = t[j].value;
+        if (PWSH_COMMAND_RE.test(f) || !/^[-/]/.test(f)) {
+          const from = PWSH_COMMAND_RE.test(f) ? j + 1 : j;
+          const rest = restFrom(from);
+          const rt = tokensOf(rest);
+          return { payload: rt.length === 1 ? rt[0].value : rest };
+        }
+        if (PWSH_ENCODED_RE.test(f)) {
+          try { return j + 1 < t.length ? { payload: Buffer.from(t[j + 1].value, 'base64').toString('utf16le') } : null; } catch { return null; }
+        }
+        if (/^[-/]f(?:ile)?$/i.test(f)) return null;
+        if (PWSH_ARG_FLAG_RE.test(f)) j++;
+      }
+      return null;
+    }
+    if (name === 'eval') return { payload: t.slice(i + 1).map(x => x.value).join(' ') };
+    return { exe: name, rest: s.slice(t[i].end) };
+  }
+  return null;
+}
+
+// `git` (already reduced from `git.exe`, `/usr/bin/git`, a quoted path), then
+// git's global flags before the subcommand.
+const GIT_RE = /^git(?:\s+(?:-[cC]\s+\S+|--no-pager|--paginate|-p|-P|--bare|--no-replace-objects|--literal-pathspecs|--(?:git-dir|work-tree|namespace|exec-path|config-env)(?:=\S+|\s+\S+)))*\s+(\S+)(.*)$/s;
+const GH_MERGE_RE = /^\s+pr\s+merge\b/;
 const PUSH_MAIN_RE = /(^|\s)(?:[^\s:]*:)?(?:refs\/heads\/)?(main|master)(\s|$)/;
+const PAYLOAD_DEPTH = 4;
 
 /**
  * Facts of a Bash / PowerShell command line.
@@ -59,37 +177,35 @@ const PUSH_MAIN_RE = /(^|\s)(?:[^\s:]*:)?(?:refs\/heads\/)?(main|master)(\s|$)/;
 const RENDER_CARD_FLAG_RE = /(^|\s)--render-card\b/;
 const RENDER_CARD_RE = /index\.js["']?\s+--render-card\s+(?:"([^"]+)"|'([^']+)'|(\S+))/;
 
-function commandFacts(cmd) {
+function commandFacts(cmd, depth = 0) {
   const out = { commit: false, branch: false, branchName: null, renderCard: null, worktree: false, detach: false, release: false };
   if (typeof cmd !== 'string' || !cmd.trim()) return out;
-  const segs = stripQuotes(cmd).split(/&&|\|\||[;|\n]/);
-  const rawSegs = cmd.split(/&&|\|\||[;|\n]/);
-  segs.forEach((seg, i) => {
-    const bare = bareSegment(seg);
-    if (GH_MERGE_RE.test(bare)) out.release = true;
+  // H-B16 / RT2-R1: one quote-aware split, so the raw segment (branch
+  // names, card payload paths) always belongs to the stripped one.
+  for (const rawSeg of splitSegments(cmd)) {
+    const seg = stripQuotes(rawSeg);
     // AUD-008: the --render-card FLAG must be a real, unquoted token on the
     // quote-stripped segment (so `grep "index.js --render-card x" file` —
     // both inside one quoted string — never matches). The renderer's own
     // path may legitimately be quoted (Windows paths with spaces), so
-    // `index.js` is looked up on the RAW segment instead, and the payload
-    // path is also read from the RAW segment (as :76 does for branch names).
-    // RT2-R1: a delimiter (`;`, `|`, `&&`, newline) INSIDE a quoted string
-    // earlier in the command makes the raw split (which ignores quoting)
-    // produce more segments than the quote-stripped split, so index `i`
-    // no longer lines up — falling back to the quote-STRIPPED segment
-    // (which has quoted paths emptied to `""`) silently dropped the path
-    // and left renderCard null (final-card gate skipped). Fall back to the
-    // whole raw command instead: the regex below still finds the one
-    // legitimate renderer call in it.
-    if (!out.renderCard && RENDER_CARD_FLAG_RE.test(bare)) {
-      const rawSeg = rawSegs.length === segs.length ? rawSegs[i] : cmd;
-      if (/index\.js/i.test(rawSeg)) {
-        const rc = rawSeg.match(RENDER_CARD_RE);
-        if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
-      }
+    // `index.js` and the payload path are read from the RAW segment.
+    if (!out.renderCard && RENDER_CARD_FLAG_RE.test(seg) && /index\.js/i.test(rawSeg)) {
+      const rc = rawSeg.match(RENDER_CARD_RE);
+      if (rc) out.renderCard = rc[1] || rc[2] || rc[3];
     }
-    const m = bare.match(GIT_RE);
-    if (!m) return;
+    const at = commandAt(rawSeg);
+    if (!at) continue;
+    if (at.payload !== undefined) {
+      if (depth < PAYLOAD_DEPTH) mergeFacts(out, commandFacts(at.payload, depth + 1));
+      continue;
+    }
+    if (at.exe === 'gh') {
+      if (GH_MERGE_RE.test(stripQuotes(at.rest))) out.release = true;
+      continue;
+    }
+    if (at.exe !== 'git') continue;
+    const m = `git${stripQuotes(at.rest)}`.match(GIT_RE);
+    if (!m) continue;
     const sub = m[1];
     const rest = m[2] || '';
     if (sub === 'commit' && !/(^|\s)--dry-run\b/.test(rest)) out.commit = true;
@@ -97,7 +213,7 @@ function commandFacts(cmd) {
     if (sub === 'push' && PUSH_MAIN_RE.test(rest) && !/(^|\s)--dry-run\b/.test(rest)) out.release = true;
     let name = null;
     let hit = false;
-    const raw = rawSegs.length === segs.length ? bareSegment(rawSegs[i]) : bareSegment(seg);
+    const raw = `git${at.rest}`;
     if (sub === 'checkout' && /(^|\s)(-[a-zA-Z]*[bB]|--orphan)(\s|$)/.test(rest)) {
       hit = true;
       const n = raw.match(/\s(?:-[a-zA-Z]*[bB]|--orphan)\s+(\S+)/);
@@ -121,8 +237,29 @@ function commandFacts(cmd) {
       if (/(^|\s)--detach\b/.test(rest)) out.detach = true;
       if (name && !out.branchName) out.branchName = name.replace(/^["']|["']$/g, '');
     }
-  });
+  }
   return out;
+}
+
+function mergeFacts(out, f) {
+  for (const k of ['commit', 'branch', 'worktree', 'detach', 'release']) if (f[k]) out[k] = true;
+  if (!out.branchName && f.branchName) out.branchName = f.branchName;
+  if (!out.renderCard && f.renderCard) out.renderCard = f.renderCard;
+}
+
+/**
+ * H-B1: the work-tree roots a call's contract may live in, in lookup order —
+ * the session root, then (MCP tools only: ship_release and the card act on
+ * it) `tool_input.cwd`'s root. `projectRoot` is passed in so this module
+ * stays dependency-free. Pre (gates) and post (recording) both use it.
+ * @returns {{root:string, inputRoot:string|null, roots:string[]}}
+ */
+function contractRoots(hook, projectRoot) {
+  const root = projectRoot(hook.cwd || process.cwd());
+  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
+  const inputRoot = typeof input.cwd === 'string' && input.cwd.trim() && String(hook.tool_name || '').startsWith('mcp__')
+    ? projectRoot(input.cwd) : null;
+  return { root, inputRoot, roots: inputRoot && inputRoot !== root ? [root, inputRoot] : [root] };
 }
 
 function gitOut(root, args) {
@@ -288,4 +425,5 @@ module.exports = {
   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, FINAL_VARIANTS,
   commandFacts, toolFilePath, isGatedPath, closesOf, cardFacts, readCardPayload,
   releaseResult, routerFromTranscript, stripQuotes, gitOut, baseBranch, isItemBranch, readTail,
+  splitSegments, commandAt, contractRoots,
 };

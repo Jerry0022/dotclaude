@@ -359,6 +359,75 @@ describe("release / card gates use tool_input.cwd", () => {
       expect(r.stderr).toContain("do-ship");
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
   });
+
+  test("H-B1: card gate and card recording both use tool_input.cwd's contract, and the final card closes it", () => {
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "rc-redteam-other-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: other });
+      RC.arm(other, { mode: "prompt", ship: "manual", passes: ["harden"], sessionId: "s1" });
+      RC.record(other, { k: "skill", name: "auto-agents" });
+      RC.record(other, { k: "edit" });
+      const blocked = pre(CARD, { variant: "ready", cwd: other });
+      expect(blocked.code).toBe(2);
+      expect(blocked.stderr).toContain("auto-harden");
+      RC.record(other, { k: "skill", name: "auto-harden" });
+      expect(pre(CARD, { variant: "ready", cwd: other }).code).toBe(0);
+      post(CARD, { variant: "ready", cwd: other });
+      expect(RC.events(other).filter(e => e.k === "card")).toHaveLength(1);
+      expect(RC.readContract(other, { sessionId: "s1" })).toBeNull();
+      expect(RC.readContractForCard(other).closeReason).toContain("final card");
+      expect(fs.existsSync(RC.eventsPath(dir))).toBe(false);
+    } finally { fs.rmSync(other, { recursive: true, force: true }); }
+  });
+
+  test("H-B1: a non-MCP tool never looks at tool_input.cwd (same root choice in pre and post)", () => {
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "rc-redteam-other-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: other });
+      RC.arm(other, { mode: "prompt", sessionId: "s1" });
+      expect(pre("Bash", { command: "git commit -m x", cwd: other }).code).toBe(0);
+      post("Bash", { command: "git commit -m x", cwd: other });
+      expect(RC.events(other)).toEqual([]);
+    } finally { fs.rmSync(other, { recursive: true, force: true }); }
+  });
+});
+
+describe("harden pass: hook-level (H-*)", () => {
+  test("H-X4: a quoted Windows git path is refused at the commit gate", () => {
+    RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual", passes: [], sessionId: "s1" });
+    for (const command of [
+      '& "C:\\Program Files\\Git\\cmd\\git.exe" commit -m x',
+      "& 'C:\\Program Files\\Git\\cmd\\git.exe' commit",
+      '"/c/Program Files/Git/bin/git" commit -m x',
+      'bash -c "git commit -m x"',
+    ]) {
+      const r = pre("PowerShell", { command });
+      expect(r.code, command).toBe(2);
+      expect(r.stderr.split("\n")[0]).toContain("BLOCKED at commit");
+    }
+    expect(pre("PowerShell", { command: 'echo "git commit"' }).code).toBe(0);
+  });
+
+  test("H-B17: a project-root load error never crashes the pre / post hooks", () => {
+    RC.arm(dir, { mode: "prompt", sessionId: "s1" });
+    const stub = path.join(dir, ".claude", "stub-project-root-throw.js");
+    fs.writeFileSync(stub, [
+      "const Module = require('module');",
+      "const orig = Module.prototype.require;",
+      "Module.prototype.require = function (id) {",
+      "  if (id === '../lib/project-root') throw new Error('H-B17 stub: project-root failed to load');",
+      "  return orig.apply(this, arguments);",
+      "};",
+    ].join("\n"));
+    for (const [file, ev] of [[PRE, "PreToolUse"], [POST, "PostToolUse"]]) {
+      const res = spawnSync(process.execPath, ["--require", stub, file], {
+        input: JSON.stringify({ cwd: dir, session_id: "s1", hook_event_name: ev, tool_name: "Edit", tool_input: { file_path: f("src/a.js") }, tool_response: {} }),
+        cwd: dir, encoding: "utf8", env: ENV,
+      });
+      expect(res.status, file).toBe(0);
+      expect(res.stderr, file).toBe("");
+    }
+  });
 });
 
 describe("park", () => {

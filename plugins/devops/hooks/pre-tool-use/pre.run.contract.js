@@ -28,7 +28,6 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { projectRoot } = require('../lib/project-root');
 
 const LIB = path.resolve(__dirname, '..', 'lib', 'run-contract.js');
 
@@ -43,7 +42,7 @@ const BATCH_BLOCK = [
 
 function gitNames(root, args) {
   const { execFileSync } = require('child_process');
-  const out = execFileSync('git', ['diff', '--name-only', ...args], {
+  const out = execFileSync('git', args[0] === 'ls-files' ? args : ['diff', '--name-only', ...args], {
     cwd: root, timeout: 5000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
   });
   return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
@@ -85,7 +84,11 @@ function codeFilesChanged(root, gate, base) {
     let names;
     try { names = gitNames(root, [`origin/${base}...HEAD`]); } catch { names = gitNames(root, [`${base}...HEAD`]); }
     const set = new Set(names);
-    if (gate !== 'release') for (const n of gitNames(root, ['HEAD'])) set.add(n);
+    if (gate !== 'release') {
+      for (const n of gitNames(root, ['HEAD'])) set.add(n);
+      // H-B4: new code files never `git add`ed count too.
+      for (const n of gitNames(root, ['ls-files', '--others', '--exclude-standard'])) set.add(n);
+    }
     const { isCodeChange } = require('../lib/browsertest-guard');
     return [...set].filter(f => isCodeChange(f)).length;
   } catch { return null; }
@@ -157,22 +160,22 @@ function armFromPending(hook, root, RC, C, sessionId) {
 
 function main(hook) {
   const cwd = hook.cwd || process.cwd();
-  const root = projectRoot(cwd);
-  // ship_release / the card act on tool_input.cwd — its root is tried second.
-  const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
-  const inputRoot = typeof input.cwd === 'string' && input.cwd.trim() && String(hook.tool_name || '').startsWith('mcp__')
-    ? projectRoot(input.cwd) : null;
-  const roots = inputRoot && inputRoot !== root ? [root, inputRoot] : [root];
+  // H-B17: required here, inside the stdin handler's try/catch — a load
+  // error never crashes the hook.
+  const { projectRoot } = require('../lib/project-root');
+  const C = require('../lib/run-contract-calls');
+  // H-B1: ship_release / the card act on tool_input.cwd — its root is tried
+  // second; post records into the same root.
+  const { root, inputRoot, roots } = C.contractRoots(hook, projectRoot);
   const hasState = (r) => ['run-contract.json', 'run-contract.pending', 'batch-handoff.json']
     .some(n => fs.existsSync(path.join(r, '.claude', n)));
   if (!roots.some(hasState)) return 0;
 
-  const C = require('../lib/run-contract-calls');
   const call = classify(hook, root, cwd, C);
   if (!call) return 0;
 
+  // The kill switch is checked before main() runs (H-F20).
   const RC = require('../lib/run-contract');
-  if (RC.disabled()) return 0;
 
   const sessionId = hook.session_id || null;
   if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
@@ -196,12 +199,24 @@ function main(hook) {
   const evs = RC.events(croot);
   const seg = RC.currentSegment(contract, evs);
   const gitRoot = inputRoot || root;
+  // H-F20: one base and one count per release / non-release case per call,
+  // not per gate (one compound shell line can hit branch, card and release).
+  let base;
+  const counts = new Map();
+  const countFor = (gate) => {
+    const key = gate === 'release' ? 'release' : 'other';
+    if (!counts.has(key)) {
+      if (base === undefined) base = resolveBase(gitRoot, call.base, C);
+      counts.set(key, codeFilesChanged(gitRoot, gate, base));
+    }
+    return counts.get(key);
+  };
 
   for (const gate of call.gates) {
     if (gate === 'release' && call.shellRelease && contract.ship !== 'auto') continue;
     const ctx = { closes: call.closes || [] };
     if ((gate === 'release' || gate === 'card' || gate === 'branch') && RC.segmentHasWork(seg)) {
-      const n = codeFilesChanged(gitRoot, gate, resolveBase(gitRoot, call.base, C));
+      const n = countFor(gate);
       ctx.codeFilesChanged = n;
       // Recorded before deciding, so the card knows qa's input (`QA ?` when unknown).
       if (RC.record(croot, { k: 'measure', codeFiles: n }, { sessionId })) evs.push({ k: 'measure', codeFiles: n });
@@ -240,4 +255,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { safeBase, SAFE_BASE_RE };
+module.exports = { safeBase, SAFE_BASE_RE, resolveBase, codeFilesChanged };

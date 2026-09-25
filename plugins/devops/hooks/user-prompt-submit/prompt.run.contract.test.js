@@ -30,6 +30,39 @@ function run(prompt, env = {}) {
   return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
 }
 
+describe("H-C13: doRunSlashArgs / commandsIn (RT2-R2 anchoring)", () => {
+  const { doRunSlashArgs, commandsIn } = require("./prompt.run.contract.js");
+  const TAG = (name, args = "") => `<command-message>x</command-message>\n<command-name>/${name}</command-name>\n<command-args>${args}</command-args>`;
+
+  test("H-C13: a leading typed command", () => {
+    expect(doRunSlashArgs("/devops:do-run audit")).toBe("audit");
+    expect(doRunSlashArgs("  /do-run")).toBe("");
+    expect(commandsIn("/devops:auto-harden --x")).toEqual([{ name: "auto-harden", args: "--x" }]);
+  });
+
+  test("H-C13: a leading <command-name> tag", () => {
+    expect(doRunSlashArgs(TAG("devops:do-run", "backlog"))).toBe("backlog");
+    expect(commandsIn(TAG("devops:do-ship", "--dry"))).toEqual([{ name: "do-ship", args: "--dry" }]);
+  });
+
+  test("H-C13: a mid-prompt tag counts as nothing", () => {
+    const text = `see this excerpt:\n${TAG("devops:do-run", "audit")}`;
+    expect(doRunSlashArgs(text)).toBeNull();
+    expect(commandsIn(text)).toEqual([]);
+  });
+
+  test("H-C13: a foreign plugin prefix is not ours", () => {
+    expect(commandsIn(TAG("other:do-ship"))).toEqual([]);
+    expect(doRunSlashArgs(TAG("other:do-run"))).toBeNull();
+    expect(doRunSlashArgs("/other:do-run")).toBeNull();
+  });
+
+  test("H-C13: a sentence mentioning the command is none", () => {
+    expect(doRunSlashArgs("please run /devops:do-run later")).toBeNull();
+    expect(commandsIn("please run /devops:auto-harden later")).toEqual([]);
+  });
+});
+
 describe("prompt.run.contract", () => {
   test("RUN_BACKLOG_AUTOSTART arms a machine contract, silently", () => {
     const r = run("RUN_BACKLOG_AUTOSTART: ship=auto passes=harden strict=off queue=473,474 phase=presence");
