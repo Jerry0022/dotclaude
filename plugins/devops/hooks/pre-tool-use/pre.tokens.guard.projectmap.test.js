@@ -22,7 +22,7 @@ const dirs = [];
 
 afterAll(() => {
   for (const d of [HOME_DIR, path.dirname(METRICS_FILE), ...dirs]) {
-    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best-effort temp cleanup */ }
   }
 });
 
@@ -55,7 +55,7 @@ function run(dir, sid, toolName, toolInput) {
     env: { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR, DOTCLAUDE_GRAPHIFY_METRICS: METRICS_FILE },
   });
   let context = "";
-  try { context = JSON.parse(res.stdout).hookSpecificOutput.additionalContext; } catch {}
+  try { context = JSON.parse(res.stdout).hookSpecificOutput.additionalContext; } catch { /* no JSON = nothing injected */ }
   return { status: res.status, stderr: res.stderr || "", context };
 }
 
