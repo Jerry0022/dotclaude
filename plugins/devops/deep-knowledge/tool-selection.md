@@ -36,13 +36,15 @@ Rules for any JS that shells out to git:
 
 ## Project Map as Search Index
 
-Before running a full-repo Grep or Glob (no `path` parameter), **always** read
+Before running a full-repo Grep or Glob (no `path` parameter, or a `path` that is
+the project root itself), **always** read
 `.claude/project-map.md` first. The project map is a lightweight index of the
 codebase structure — it tells you which directories and files exist and what they
 contain.
 
 > **Note:** The `pre.tokens.guard` hook also injects the project map automatically
-> on the *first* broad Grep/Glob of a session (no `path`), so you usually receive
+> — freshly regenerated — on the *first* broad Grep/Glob of a session (no `path`
+> or the project root), so you usually receive
 > the structure without an explicit read. Use it to scope every following search.
 
 Use it to derive the correct `path` parameter:

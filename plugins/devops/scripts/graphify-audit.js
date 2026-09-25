@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script graphify-audit
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description Measures whether the graphify enforcement chain (nudge → gate →
  *   `graphify query`) actually pays for itself, from two sources that need no
@@ -26,7 +26,8 @@
  *   from the telemetry stream (sid 'nosid' excluded — that is a hook run with
  *   no session context, not a real session): queries/queryChars,
  *   searches/searchChars, gate fired/bypassed/noanswer/relented, and token
- *   guard blocks/releases. It ends with a NET estimate line (Requirement 9):
+ *   guard blocks/releases, and project-map injections (`map`). It ends with a
+ *   NET estimate line (Requirement 9):
  *   `gate_fired`/`gate_bypassed` events carry a short `keyHash` that DIRECTLY
  *   links a bypass back to the block it bypassed; a bypassed gate counts as a
  *   NET LOSS (the block's `answerChars` were paid AND the raw search still
@@ -220,7 +221,7 @@ function aggregateMetricsBySession(events) {
         sid: e.sid, project: e.project || '', lastTs: e.ts || '',
         queries: 0, queryChars: 0, searches: 0, searchChars: 0,
         gatesFired: 0, gatesBypassed: 0, gatesNoAnswer: 0, gatesRelented: 0,
-        guardBlocks: 0, guardReleases: 0,
+        guardBlocks: 0, guardReleases: 0, mapInjections: 0,
       };
       sessions.set(e.sid, s);
     }
@@ -235,6 +236,7 @@ function aggregateMetricsBySession(events) {
       case 'gate_relented': s.gatesRelented++; break;
       case 'guard_blocked': s.guardBlocks++; break;
       case 'guard_released': s.guardReleases++; break;
+      case 'map_injected': s.mapInjections++; break;
       default: break;
     }
   }
@@ -422,14 +424,14 @@ function main(argv) {
     console.log(
       pad('sid', 12) + pad('project', 34) + num('query', 6) + num('qChr', 7)
       + num('srch', 5) + num('sChr', 7) + num('fired', 6) + num('byps', 5)
-      + num('noans', 6) + num('relnt', 6) + num('gblk', 5) + num('grls', 5)
+      + num('noans', 6) + num('relnt', 6) + num('gblk', 5) + num('grls', 5) + num('map', 4)
     );
     for (const s of sessionRows) {
       console.log(
         pad(s.sid.slice(0, 10), 12) + pad(shortProject(s.project).slice(0, 32), 34)
         + num(s.queries, 6) + num(fmt(s.queryChars), 7) + num(s.searches, 5) + num(fmt(s.searchChars), 7)
         + num(s.gatesFired, 6) + num(s.gatesBypassed, 5) + num(s.gatesNoAnswer, 6) + num(s.gatesRelented, 6)
-        + num(s.guardBlocks, 5) + num(s.guardReleases, 5)
+        + num(s.guardBlocks, 5) + num(s.guardReleases, 5) + num(s.mapInjections, 4)
       );
     }
     const est = estimateSavings(events);
