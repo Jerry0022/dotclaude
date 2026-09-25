@@ -69,7 +69,11 @@ const edit = { k: "edit" };
 const commit = { k: "commit" };
 const rel = (closes = []) => ({ k: "release", ok: true, merged: true, closes });
 const qaAgent = { k: "agent", type: "devops:qa" };
-const triaged = { k: "agent", type: "Explore" };
+// AUD-020: only an agent event whose description says "triage" (or names a
+// queued item) satisfies triage — `exploreAgent` below is the regression
+// case, an unrelated agent call that must NOT satisfy it.
+const triaged = { k: "agent", type: "Explore", description: "Triage backlog Step 2" };
+const exploreAgent = { k: "agent", type: "Explore", description: "look for existing patterns" };
 const C = (over = {}) => ({ v: 1, id: "rc-x", mode: "prompt", flow: "interactive", ship: "manual", strict: false,
   passes: ["harden", "polish"], presence: true, items: [], alsoAudit: false, ...over });
 const obs = (list) => list.map(o => (o.item ? `${o.ob}#${o.item}` : o.ob));
@@ -400,7 +404,7 @@ describe("openObligations", () => {
   });
 
   test("audited backlog session at its first ship_release", () => {
-    const evs = [{ k: "agent", type: "Explore" }, sk("auto-agents"), edit, commit];
+    const evs = [triaged, sk("auto-agents"), edit, commit];
     const open = R.openObligations(auto, evs, "release", { closes: ["473"], codeFilesChanged: 0 });
     expect(obs(open)).toEqual(["harden", "polish", "do-ship", "refine#473"]);
   });
@@ -448,7 +452,7 @@ describe("openObligations", () => {
 
   test("refine per Closes #N: auto-issue anywhere naming the item, or a per-item skip", () => {
     const c = C({ mode: "backlog", passes: [] });
-    const evs = [{ k: "agent", type: "Explore" }, sk("devops:setup-issue", "refine #473"), sk("auto-agents"), edit];
+    const evs = [triaged, sk("devops:setup-issue", "refine #473"), sk("auto-agents"), edit];
     expect(R.openObligations(c, evs, "release", { closes: ["473"] })).toEqual([]);
     expect(obs(R.openObligations(c, evs, "release", { closes: ["4730", "477"] }))).toEqual(["refine#4730", "refine#477"]);
     expect(R.openObligations(c, [sk("auto-issue", "issue 477 schärfen"), ...evs], "release", { closes: ["477"] })).toEqual([]);
@@ -459,7 +463,10 @@ describe("openObligations", () => {
   test("triage before the first auto-agents of a backlog contract", () => {
     const c = C({ mode: "backlog" });
     expect(obs(R.openObligations(c, [], "auto-agents"))).toEqual(["triage"]);
-    expect(R.openObligations(c, [{ k: "agent", type: "Explore" }], "auto-agents")).toEqual([]);
+    expect(R.openObligations(c, [triaged], "auto-agents")).toEqual([]);
+    // AUD-020: an unrelated Agent call (e.g. an Explore search with no
+    // "triage" description and no queued item name) does NOT satisfy triage.
+    expect(obs(R.openObligations(c, [exploreAgent], "auto-agents"))).toEqual(["triage"]);
     expect(R.openObligations(c, [{ k: "skip", ob: "triage", reason: "1 issue" }], "auto-agents")).toEqual([]);
     expect(R.openObligations(c, [sk("auto-agents"), edit, rel()], "auto-agents")).toEqual([]);
     expect(R.openObligations(C({ mode: "backlog", presence: false }), [], "auto-agents")).toEqual([]);
@@ -474,9 +481,12 @@ describe("openObligations", () => {
     const evs = [sk("auto-agents"), edit];
     expect(obs(R.openObligations(c, evs, "release"))).toEqual(["do-ship", "triage"]);
     expect(obs(R.openObligations(c, evs, "card"))).toEqual(["do-ship", "triage"]);
-    // A pre-triage `agent` event anywhere in the contract satisfies it.
-    const ok = [{ k: "agent", type: "Explore" }, ...evs];
+    // A pre-triage `agent` event (description matching "triage") anywhere in
+    // the contract satisfies it; an unrelated one (AUD-020) does not.
+    const ok = [triaged, ...evs];
     expect(R.openObligations(c, ok, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
+    const notTriage = [exploreAgent, ...evs];
+    expect(R.openObligations(c, notTriage, "release")).toContainEqual(expect.objectContaining({ ob: "triage" }));
     // A triage skip satisfies it too, and presence:false / non-backlog never gates it.
     const skipped = [{ k: "skip", ob: "triage", reason: "1 issue" }, ...evs];
     expect(R.openObligations(c, skipped, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
@@ -565,7 +575,7 @@ describe("summaryForCard", () => {
   test("backlog aggregates over segments with work, plus triage and refine", () => {
     const c = C({ mode: "backlog", flow: "autonomous", ship: "auto", items: ["1", "2"] });
     const item = (n, harden) => [sk("auto-agents"), edit, ...(harden ? [sk("auto-harden")] : []), sk("auto-polish"), sk("do-ship"), rel([n])];
-    const evs = [{ k: "agent", type: "Explore" }, sk("auto-issue", "#1"), ...item("1", true), ...item("2", false)];
+    const evs = [triaged, sk("auto-issue", "#1"), ...item("1", true), ...item("2", false)];
     expect(R.summaryForCard(c, evs, "de")).toBe("🧾 Run · Backlog · Autonom · Ship auto — Triage ✓ · Refine 1/2 ✗ · auto-agents 2/2 · Harden 1/2 ✗ · Polish 2/2 · do-ship 2/2");
   });
 

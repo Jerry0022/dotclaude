@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -31,7 +31,10 @@
  *   closesOf(body)             → ["473", …] from "Closes #473" / "Fixes #…"
  *   cardFacts(input)           → {variant, final}
  *   readCardPayload(file, cwd) → object | null
+ *   MCP_MERGE_RE                a GitHub MCP `*__merge_pull_request` tool name (AUD-025, shared pre/post)
  *   releaseResult(response)    → {ok, merged} | null
+ *   mergeResult(response)      → {ok} | null (AUD-025: a GitHub MCP merge result, GitHub's own `{merged}` shape)
+ *   responseText(response)     → string (a tool_response's text content, flattened)
  *   routerFromTranscript(transcriptPath, sinceIso, RC) → {questions, answers, followUps[], earlier[]} | null
  *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
  *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
@@ -49,6 +52,9 @@ const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 const RENDER_CARD = 'mcp__plugin_devops_dotclaude-completion__render_completion_card';
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
+// AUD-025: named once, shared by pre.run.contract's release gate and
+// post.run.contract's release handler — was a local copy in the pre hook only.
+const MCP_MERGE_RE = /^mcp__.*__merge_pull_request$/;
 
 // H-A5: the machine-prompt openers, named once. Arming reads the two
 // AUTOSTART forms; "did this turn open with a machine prompt" (R1) also
@@ -1000,6 +1006,28 @@ function releaseResult(response) {
   return { ok: obj.success === true, merged: obj.merged === true };
 }
 
+/**
+ * AUD-025: `{ok}` of a GitHub MCP `merge_pull_request` result — mirrors
+ * releaseResult() for the shell/MCP ship_release shape, but a merge tool's
+ * result carries GitHub's own `{merged, message, sha}` shape (no `success`
+ * field). `null` when unreadable (post.run.contract then records `ok:false`,
+ * like an unreadable ship_release result never counts as a release the
+ * contract can trust).
+ */
+function mergeResult(response) {
+  let obj = null;
+  if (response && typeof response === 'object' && !Array.isArray(response)) obj = response;
+  if (!obj) {
+    const text = responseText(response).trim();
+    try { obj = JSON.parse(text); } catch {
+      const m = text.match(/\{[\s\S]*\}/);
+      if (m) { try { obj = JSON.parse(m[0]); } catch { obj = null; } }
+    }
+  }
+  if (!obj || typeof obj !== 'object') return null;
+  return { ok: obj.merged === true };
+}
+
 const TAIL_BYTES = 2 * 1024 * 1024;
 
 function readTail(file) {
@@ -1100,10 +1128,10 @@ function routerFromTranscript(transcriptPath, sinceIso, RC) {
 }
 
 module.exports = {
-  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS,
+  SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS, MCP_MERGE_RE,
   MACHINE_ARM_RE, MACHINE_TURN_RE, BACKLOG_AUTOSTART_RE,
   commandFacts, splitSegments, commandAt, shellCallFacts, contractRoots,
   toolInput, toolFilePath, isGatedPath, isGatedEdit, closesOf, cardFacts, readCardPayload,
-  releaseResult, routerFromTranscript, baseBranch, isItemBranch, gitOut, gitLines, readTail,
+  releaseResult, mergeResult, responseText, routerFromTranscript, baseBranch, isItemBranch, gitOut, gitLines, readTail,
   scanShell, substitutions, linesBackward, MAX_PARSE,
 };

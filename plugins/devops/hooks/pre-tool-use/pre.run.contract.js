@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -23,7 +23,9 @@
  *   Fast path: none of run-contract.json / run-contract.pending /
  *   batch-handoff.json in the work-tree root → exit 0 before loading the lib.
  *   qa counts changed code files from git only at release / card / branch
- *   gates (5 s timeout); any git failure means unknown and never blocks.
+ *   gates, via lib/run-contract-qa.js (shared with the CLI, AUD-010); any git
+ *   failure or an expired gitBudget means unknown and never blocks (AUD-019:
+ *   one 15 s budget bounds the whole call's git chain, not just one call).
  *   An internal error never blocks. Kill switch: DOTCLAUDE_RUN_CONTRACT=off.
  */
 
@@ -43,70 +45,33 @@ function batchBlock(RC) {
   ].join('\n');
 }
 
-const GIT_TIMEOUT = { timeout: 5000 };
-const MCP_MERGE_RE = /^mcp__.*__merge_pull_request$/;
+// AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
+// named once in lib/git-timeout.js — this hook no longer keeps its own
+// GIT_TIMEOUT constant.
+const { gitBudget } = require('../lib/git-timeout');
+// AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
+// so run-contract-cli.js's `status` / `done` measure it exactly like this
+// gate does, instead of evaluating obligations against an empty ctx.
+const { safeBase, resolveBase, codeFilesChanged } = require('../lib/run-contract-qa');
+
+// AUD-019: one deadline for a whole gated call's git chain (base resolution,
+// up to two diff attempts, ls-files, the release count and the pushHead
+// branch check) — comfortably under the 60 s worst case the audit measured
+// when each call re-armed its own 3-5 s timeout independently.
+const TOTAL_GIT_BUDGET_MS = 15000;
 
 /**
  * RT3-R4: is the work tree's current branch main / master? Asked only for a
  * `pushHead` call under ship: auto; a git failure or timeout means no (the
  * gate never blocks on unknown).
+ * @param {object} [budget] shares the call's gitBudget() (AUD-019)
  */
-function onMainBranch(root, C) {
+function onMainBranch(root, C, budget) {
   try {
-    const b = C.gitLines(root, ['rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 3000 })[0];
+    const opts = budget ? { budget } : { timeout: 3000 };
+    const b = C.gitLines(root, ['rev-parse', '--abbrev-ref', 'HEAD'], opts)[0];
     return b === 'main' || b === 'master';
   } catch { return false; }
-}
-
-// RT2-R7: widened to Unicode letters/digits (`größe`, non-ASCII branch
-// names are legal in git) plus `._/+@-` (`release/1.2`, `feat/a+b`,
-// `user@x`). Still rejects a leading `-` (flag injection), `..` anywhere
-// (path-traversal-ish ref, also invalid in a git refname) and anything
-// with whitespace / control characters (excluded by the character class).
-const SAFE_BASE_RE = /^[\p{L}\p{N}._/+@-]+$/u;
-function safeBase(explicit) {
-  const b = typeof explicit === 'string' ? explicit.trim() : '';
-  if (!b || b.startsWith('-') || b.includes('..') || !SAFE_BASE_RE.test(b)) return '';
-  return b;
-}
-
-/**
- * The qa diff base (R9): an explicit base, else origin/HEAD's branch, else
- * `main`, then `master` when that exists locally or on origin. An unsafe
- * explicit base (leading `-`, shell metacharacters) is never trusted — the
- * base is auto-detected instead (AUD-007).
- */
-function resolveBase(root, explicit, C) {
-  const safe = safeBase(explicit);
-  if (safe) return safe;
-  const sym = C.gitOut(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
-  if (sym) return sym.replace(/^origin\//, '');
-  for (const b of ['main', 'master']) {
-    if (C.gitOut(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`])
-      || C.gitOut(root, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${b}`])) return b;
-  }
-  return 'main';
-}
-
-/** Changed code files for the qa rule, or null (unknown). */
-function codeFilesChanged(root, gate, base, gitLines = require('../lib/run-contract-calls').gitLines) {
-  try {
-    // H-A6: gitLines throws on a git failure → the catch below = unknown.
-    const diff = (range) => gitLines(root, ['diff', '--name-only', range], GIT_TIMEOUT);
-    let names;
-    try { names = diff(`origin/${base}...HEAD`); } catch { names = diff(`${base}...HEAD`); }
-    const set = new Set(names);
-    if (gate !== 'release') {
-      for (const n of diff('HEAD')) set.add(n);
-      // H-B4: new code files never `git add`ed count too. RT3-R6: a failing
-      // or slow ls-files keeps the diff count instead of making it unknown.
-      try {
-        for (const n of gitLines(root, ['ls-files', '--others', '--exclude-standard'], GIT_TIMEOUT)) set.add(n);
-      } catch { /* untracked files unknown: the diff count stands */ }
-    }
-    const { isCodeChange } = require('../lib/browsertest-guard');
-    return [...set].filter(f => isCodeChange(f)).length;
-  } catch { return null; }
 }
 
 /** The gates this call hits: {gates:[], batch:boolean, closes, base}. */
@@ -129,7 +94,7 @@ function classify(hook, root, cwd, C) {
     return null;
   }
   // RT3-R4: a GitHub MCP merge is a release, gated like a shell one (ship: auto only).
-  if (MCP_MERGE_RE.test(tool)) return { gates: ['release'], batch: false, shellRelease: true };
+  if (C.MCP_MERGE_RE.test(tool)) return { gates: ['release'], batch: false, shellRelease: true };
   if (tool === 'Skill') {
     const RC = require('../lib/run-contract');
     return RC.skillName(input.skill || input.name) === 'auto-agents' ? { gates: ['auto-agents'], batch: false } : null;
@@ -215,7 +180,11 @@ function main(hook) {
     if (contract) { croot = r; break; }
   }
   if (!contract) return 0;
-  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C)) {
+  // AUD-019: one deadline for every git call this gated call makes (base
+  // resolution, diffs, ls-files, the pushHead branch check) — an expired
+  // budget reads as unknown (never a block), it just stops asking git.
+  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
+  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget)) {
     call.gates.push('release');
   }
   if (!call.gates.length) return 0;
@@ -229,8 +198,8 @@ function main(hook) {
   const countFor = (gate) => {
     const key = gate === 'release' ? 'release' : 'other';
     if (!counts.has(key)) {
-      if (base === undefined) base = resolveBase(gitRoot, call.base, C);
-      counts.set(key, codeFilesChanged(gitRoot, gate, base));
+      if (base === undefined) base = resolveBase(gitRoot, call.base, C, budget);
+      counts.set(key, budget.expired() ? null : codeFilesChanged(gitRoot, gate, base, C.gitLines, budget));
     }
     return counts.get(key);
   };
