@@ -318,10 +318,31 @@ describe("state", () => {
     expect(evs.map(e => e.k)).toEqual(["measure", "block"]);
   });
 
-  test("corrupt header → no contract", () => {
+  test("AUD-022: corrupt header → no contract, quarantined, one-shot notice", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
     fs.writeFileSync(R.contractPath(cwd), "{nope");
     expect(R.readContract(cwd)).toBeNull();
+    // Quarantined, not deleted: the header file is gone, its content lives on.
+    expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
+    const corruptFile = `${R.contractPath(cwd)}.corrupt`;
+    expect(fs.existsSync(corruptFile)).toBe(true);
+    expect(fs.readFileSync(corruptFile, "utf8")).toBe("{nope");
+    // Surfaced once, through the same channel expiryNotice() already uses.
+    const notice = R.expiryNotice(cwd, { sessionId: "s1" });
+    expect(notice).toMatch(/quarantined/);
+    expect(R.expiryNotice(cwd, { sessionId: "s1" })).toBeNull();
+  });
+
+  test("AUD-022: a second corruption replaces the earlier quarantine, not accumulates", () => {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(R.contractPath(cwd), "{first");
+    expect(R.readContract(cwd)).toBeNull();
+    R.expiryNotice(cwd, { sessionId: "s1" }); // consume the first notice
+    fs.writeFileSync(R.contractPath(cwd), "{second");
+    expect(R.readContract(cwd)).toBeNull();
+    const corruptFile = `${R.contractPath(cwd)}.corrupt`;
+    expect(fs.readFileSync(corruptFile, "utf8")).toBe("{second");
+    expect(R.expiryNotice(cwd, { sessionId: "s1" })).toMatch(/quarantined/);
   });
 
   test("kill switch", () => {

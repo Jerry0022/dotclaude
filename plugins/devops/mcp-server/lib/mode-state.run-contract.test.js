@@ -54,6 +54,28 @@ describe("readRunContractLine", () => {
     RC.close(cwd, "done");
     expect(readRunContractLine(cwd)).toMatch(/^🧾 Run · Prompt/);
   });
+
+  // AUD-011: a card rendered without a session_id must not show another
+  // session's contract just because the asking session id is missing.
+  describe("AUD-011: session ownership", () => {
+    test("null session id + a header that stores one → null", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", null)).toBeNull();
+    });
+
+    test("a foreign session id → null", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", "someone-else")).toBeNull();
+    });
+
+    test("the owning session id → renders the card", () => {
+      RC.arm(cwd, { mode: "prompt", sessionId: "owner-session" });
+      RC.record(cwd, { k: "edit" });
+      expect(readRunContractLine(cwd, "de", "owner-session")).toMatch(/^🧾 Run · Prompt/);
+    });
+  });
 });
 
 describe("hookRequire", () => {
