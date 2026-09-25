@@ -478,6 +478,14 @@ describe("CLI: payload wait", () => {
     expect(r.stdout).toBe("");
   });
 
+  // #529: 0 is the one value allowed below WAIT_MIN_MS — the "drain" call
+  // SKILL.md 5c runs after a CDP timeout to reclaim a stranded event.
+  test("0 (drain) is accepted despite being below the minimum bound", () => {
+    const r = run(["payload", "wait", "0"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(0))");
+  });
+
   test("above maximum bound rejected", () => {
     const r = run(["payload", "wait", "35001"]);
     expect(r.code).toBe(1);
@@ -715,6 +723,44 @@ describe("gitStatusOf", () => {
     const untracked = path.join(dir, "untracked.env");
     fs.writeFileSync(untracked, "A=1\n");
     expect(gitStatusOf(untracked, dir)).toBe("untracked");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLI: guide active / clear (#526)
+// ---------------------------------------------------------------------------
+
+describe("CLI: guide active / clear", () => {
+  test("guide active writes a fresh marker under .claude/", () => {
+    const dir = makeTmpDir();
+    const r = run(["guide", "active"], { cwd: dir });
+    expect(r.code).toBe(0);
+    const file = path.join(dir, ".claude", "auto-guide-active.json");
+    expect(r.stdout.trim()).toBe(`guide-active ${file}`);
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect(typeof data.ts).toBe("number");
+  });
+
+  test("guide clear removes the marker", () => {
+    const dir = makeTmpDir();
+    run(["guide", "active"], { cwd: dir });
+    const file = path.join(dir, ".claude", "auto-guide-active.json");
+    expect(fs.existsSync(file)).toBe(true);
+    const r = run(["guide", "clear"], { cwd: dir });
+    expect(r.code).toBe(0);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("guide clear on a never-created marker does not error", () => {
+    const dir = makeTmpDir();
+    const r = run(["guide", "clear"], { cwd: dir });
+    expect(r.code).toBe(0);
+  });
+
+  test("unknown guide subcommand prints usage on stderr, exit 2", () => {
+    const r = run(["guide", "frobnicate"]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("usage:");
   });
 });
 
