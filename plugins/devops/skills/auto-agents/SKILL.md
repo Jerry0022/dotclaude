@@ -120,11 +120,16 @@ Hard stop ("nur", "schnell", "keine Agents") → Inline; hard go ("mit
 Agents", "full") → as designed. Both come from the user's words, never from
 the caller.
 
-**A caller may skip this skill for Inline.** When the caller's own
-classification already lands on Inline (one domain, ≤ ~5 files — a typo, a
-one-file fix, a copy change), it applies the change itself: the Inline tier
-has no table, no agent and no result contract, so loading this skill would
-only add a round of reading. Everything above Inline goes through here.
+**A caller may skip this skill for Inline — except inside a do-run run.**
+When the caller's own classification already lands on Inline (one domain,
+≤ ~5 files — a typo, a one-file fix, a copy change), it applies the change
+itself: the Inline tier has no table, no agent and no result contract, so
+loading this skill would only add a round of reading. **Not when the caller
+is a do-run run** (`--from=do-run`): the run contract's `auto-agents`
+obligation requires this skill for every `prompt` / `backlog` run, Inline
+included, so the tier decision — and that it was made — is always visible
+(`deep-knowledge/run-contract.md`). Everything above Inline goes through
+here regardless of caller.
 
 ### 2.2 Agent selection
 
@@ -260,7 +265,9 @@ Store the result as `$EXEC_MODE` (`background` or `interactive`).
 
 Every agent display is **one card from one template**
 (`hooks/lib/agent-card.js`) — one agent, three or ten look alike, only the
-rows grow. **Not for Inline**: nothing is spawned. Two kinds:
+rows grow. **Not for Inline**: nothing is spawned. Inline still prints one
+line, so the tier decision itself stays visible even without a card:
+`▶ Inline · <reason: domains, ~files>`. Two kinds:
 
 | Card | Who renders it | When |
 |---|---|---|

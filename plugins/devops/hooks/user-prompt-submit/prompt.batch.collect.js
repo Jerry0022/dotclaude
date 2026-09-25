@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.7.0
+ * @version 0.7.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -274,6 +274,8 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     '   Vorher: archiveNotes(cwd) aus hooks/lib/batch-state.js (archivieren, nie',
     '   löschen) und den archivierten Pfad in die Übergabe schreiben. Die Übergabe',
     '   trägt den Abschnitt "Bündel:" (do-batch 4.9).',
+    '   Die Übergabe an do-run (--from=do-batch) bzw. auto-concept (--from=do-batch) wird',
+    '   per Hook erzwungen: Edits und Commits werden abgelehnt, bis einer der beiden aufgerufen ist.',
     '',
     'Umsetzung ist breit gemeint — Code, Concepting, UI-Concepting, oder auch nur',
     'ein erster Schritt.',
@@ -573,8 +575,11 @@ function syncMain(cwd) {
 /**
  * Fire the merge: sync main, inject every note, then end collection.
  * @param {{cwd:string,text:string,marker:string,modeActive:boolean,sessionId?:string}} ctx
+ * @param {{buildMergeContext?:Function, write?:Function}} [deps] test seam
  */
-function fireMerge({ cwd, text, marker, modeActive, sessionId }) {
+function fireMerge({ cwd, text, marker, modeActive, sessionId }, deps = {}) {
+  const build = deps.buildMergeContext || buildMergeContext;
+  const write = deps.write || ((s) => process.stdout.write(s));
   const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd), Date.now());
   if (notes.length === 0) {
     // Nothing parsed. Never a silent exit — see buildEmptyQueueNotice.
@@ -590,9 +595,12 @@ function fireMerge({ cwd, text, marker, modeActive, sessionId }) {
   // Before the notes are even shown: bring main in. The plan is checked against
   // the code as it is now, not as it was when the first note was written.
   const sync = syncMain(cwd);
-  process.stdout.write(
-    `${buildMergeContext(notes, rest, B.notesPath(cwd), { stale: !modeActive, sync })}\n`,
-  );
+  write(`${build(notes, rest, B.notesPath(cwd), { stale: !modeActive, sync })}\n`);
+  // The hand-off is enforced, not hoped for: pre.run.contract refuses edits and
+  // commits until do-run / auto-concept is invoked (run-contract spec E).
+  // H-B15: written only AFTER the context went out — a merge context that
+  // failed to build must not leave the model gated by a plan it never saw.
+  try { require('../lib/run-contract').markBatchHandoff(cwd, { sessionId }); } catch { /* advisory */ }
   // Firing the merge ENDS collection. What follows is the conversation about
   // the implementation — approvals, answers to Claude's questions, course
   // corrections — and collecting those is actively wrong: they are blocked,
@@ -630,7 +638,7 @@ process.stdin.on('end', () => {
   if (verdict === 'execute') {
     // Reached with the mode off as well: an expired or note-capped mode must not
     // strand the notes it collected.
-    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id }); } catch { /* non-fatal — the turn still runs */ }
+    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id || null }); } catch { /* non-fatal — the turn still runs */ }
     process.exit(0);
   }
 
@@ -714,6 +722,7 @@ module.exports = {
   buildAck,
   buildRearmAck,
   buildMergeContext,
+  fireMerge,
   renderSyncLines,
   buildActivationGuard,
   buildAttachmentGuard,

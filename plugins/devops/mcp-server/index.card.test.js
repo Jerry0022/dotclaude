@@ -1,4 +1,8 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as RC from "../hooks/lib/run-contract.js";
 
 // index.js boots an MCP server over stdio at import time and pulls in the
 // @modelcontextprotocol SDK + zod (neither is a devDependency of this repo).
@@ -272,6 +276,60 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
   test("analysis pipeline says no changes to the repo", async () => {
     const text = await cardText({ variant: "analysis", summary: "Nur gelesen", lang: "de", session_id: "test-anatomy-9" });
     expect(text).toContain("➖ keine Änderungen im Repo");
+  });
+
+  test("no run-contract on the project → no line, byte-identical to a card without cwd", async () => {
+    const withoutCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0a", buildId: "abc1234" });
+    const dir = mkdtempSync(join(tmpdir(), "rc-card-none-"));
+    try {
+      const withCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0b", buildId: "abc1234", cwd: dir });
+      expect(withCwd).toBe(withoutCwd);
+      expect(withCwd).not.toContain("🧾 Run");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an active run-contract shows its line under the pipeline line, on ready, analysis, ship-blocked and pending cards", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rc-card-active-"));
+    try {
+      RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual" });
+      RC.record(dir, { k: "edit" });
+
+      const ready = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-1a", buildId: "abc1234", cwd: dir });
+      expect(ready).toContain("🧾 Run · Prompt");
+      expect(ready.indexOf("Build abc1234")).toBeLessThan(ready.indexOf("🧾 Run"));
+
+      const analysis = await cardText({ variant: "analysis", summary: "x", lang: "de", session_id: "test-rc-1b", buildId: "abc1234", cwd: dir });
+      expect(analysis).toContain("🧾 Run · Prompt");
+
+      const shipBlocked = await cardText({
+        variant: "ship-blocked", summary: "x", lang: "de", session_id: "test-rc-1c", buildId: "abc1234", cwd: dir,
+        cta: { blockedReason: "Tests rot" },
+      });
+      expect(shipBlocked).toContain("🧾 Run · Prompt");
+
+      const pending = await cardText({
+        variant: "ready", summary: "x", lang: "de", session_id: "test-rc-1d", buildId: "abc1234", cwd: dir,
+        pending: [{ name: "devops:qa", doing: "prüft" }],
+      });
+      expect(pending).toContain("🧾 Run · Prompt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a corrupt run-contract.json on the project never throws and shows no line", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rc-card-corrupt-"));
+    try {
+      const { mkdirSync, writeFileSync } = await import("node:fs");
+      mkdirSync(join(dir, ".claude"), { recursive: true });
+      writeFileSync(join(dir, ".claude", "run-contract.json"), "{not json", "utf8");
+      const text = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-2", buildId: "abc1234", cwd: dir });
+      expect(text).not.toContain("🧾 Run");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("decision heading ends with ? except state headings, which end with .", async () => {

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.205.0] — 2026-09-25
+
+### Added
+- **What the user chooses in `/do-run` is enforced, not hoped for (run contract).** An audit of one day's sessions found chosen Harden and Polish passes that never ran, `ship_*` tools called around `devops:do-ship`, and `auto-agents`, `devops:qa` and backlog triage and refine skipped. Every one of those obligations lived only in skill prose. Now `post.run.contract` records the router's answers (mode, flow, ship, scope, passes) in `.claude/run-contract.json` plus an append-only event log, and `pre.run.contract` refuses the call that would walk past an open obligation, naming the exact `Skill(...)` call that satisfies it: an edit or commit before the `auto-agents` classification, a backlog item branch before the previous item's passes, `ship_release` or a merge to main (`gh pr merge`, `gh api …/merge`, a push onto main, the GitHub MCP merge) before every obligation is met, and the final completion card before the chosen passes ran.
+- **The card shows the run.** One `🧾 Run` line lists each obligation as done, open or skipped with its reason. An open or doubtful step is drawn in body-text colour, not as a watermark.
+- **Deviations are explicit.** `node {PLUGIN_ROOT}/hooks/lib/run-contract.js status | skip | park | abort | done | batch-clear`: every verb but `status` needs a reason. `DOTCLAUDE_RUN_CONTRACT=off` is the emergency kill switch.
+- **A do-batch fire hands off to do-run or auto-concept.** While a fired batch waits (`.claude/batch-handoff.json`, 6 h), edits and commits are refused until `do-run` or `auto-concept` takes the plan. Reading and planning stay allowed.
+- **An "Other" answer without text gets one follow-up question** (`post.ask.answers`) instead of being read as "nothing chosen".
+
+### Changed
+- **Commands are read at command position, quote-aware.** Wrappers (`sudo`, `env`, `timeout`, …), shell and `eval` payloads, `-EncodedCommand`, `$(…)` substitutions and heredocs fed to a shell are unwrapped; text inside quotes and data heredocs never trips a gate. In the PowerShell tool a backtick is an escape.
+- **Contracts are session-bound and expire.** A contract gates only the session that armed it, so a `.claude/` copied into a new Desktop worktree never gates a foreign session. It expires after 12 h idle (interactive) or 30 h (autonomous, backlog); only real work counts as activity, not refused calls or cards.
+- **Inside a do-run run, Inline work goes through `auto-agents` too**, and an Inline verdict prints one `▶ Inline · <reason>` line, so the tier decision stays visible. The backlog mode pins its `Issues` / `Milestones` question headers, and `do-run`, its autonomous and backlog modes and `do-batch` document the contract.
+
 ## [0.204.2] — 2026-09-25
 
 ### Fixed

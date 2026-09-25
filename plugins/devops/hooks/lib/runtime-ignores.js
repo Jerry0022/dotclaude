@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module runtime-ignores
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The one list of PROJECT-rooted `.claude/` paths git must never
  *   see: Claude Code's own session state, everything this plugin writes into a
@@ -49,6 +49,11 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/batch-watchdog.lock',
   '.claude/batch.md',
   '.claude/strict-mode.json',
+  '.claude/run-contract.json',
+  '.claude/run-contract.events.jsonl',
+  '.claude/run-contract.prev.json',
+  '.claude/run-contract.pending',
+  '.claude/batch-handoff.json',
   '.claude/.ship-in-progress',
   '.claude/.ship-lockout',
   '.claude/.ship-queue',
@@ -57,6 +62,9 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/handoffs/',
   '.claude/devops-livebrief/',
   '.claude/scheduled_tasks.lock',
+  // AUD-013: writeJsonAtomic's temp files (`.claude/<name>.<pid>.<rand>.tmp`)
+  // — a hook killed between write and rename leaves one behind.
+  '.claude/*.tmp',
 ]);
 
 const BLOCK_START = '# >>> devops-plugin runtime state';

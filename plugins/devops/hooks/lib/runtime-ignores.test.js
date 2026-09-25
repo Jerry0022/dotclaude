@@ -55,4 +55,9 @@ describe("runtime-ignores — the one list of project-rooted runtime paths", () 
     const block = renderBlock();
     expect(block.indexOf(".claude/worktrees/")).toBeLessThan(block.indexOf(".claude/batch.md"));
   });
+
+  test("AUD-013: writeJsonAtomic's temp files are covered", () => {
+    expect(PLUGIN_STATE).toContain(".claude/*.tmp");
+    expect(allEntries()).toContain(".claude/*.tmp");
+  });
 });

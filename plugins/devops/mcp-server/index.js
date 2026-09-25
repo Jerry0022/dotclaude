@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.10.0
+ * @version 0.11.1
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -49,7 +49,7 @@ import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js"
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { batchGuide, conceptUrl, readBatch, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
+import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, writeCardWidgetFile } from "./lib/card-widget.js";
 import {
   assessFreshness,
@@ -858,6 +858,17 @@ function renderPipelineLine(input, lang, buildId) {
   return line;
 }
 
+/**
+ * The do-run run-contract line — what the user chose in the do-run router
+ * and what actually ran (spec `2026-09-24-run-contract-design.md` § J).
+ * Pure read via `mode-state.js#readRunContractLine`, every failure already
+ * swallowed there; null on every card without an active or just-closed
+ * contract — the line is then simply absent, byte-identical to before.
+ */
+function renderRunContractLine(input, lang) {
+  return readRunContractLine(input.cwd, lang, input.session_id);
+}
+
 // ---------------------------------------------------------------------------
 // Channel ladder (ring model) — alpha › beta › stable with the version each
 // channel serves. Channels on the same version merge into one group; the
@@ -1451,6 +1462,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine),
     pipeline: renderPipelineLine(input, lang, buildId),
     pipelinePr: state.pr || null,
+    runContract: renderRunContractLine(input, lang),
     ladder: buildChannelLadder(input),
     heading: decision.heading,
     context: decision.context,
@@ -1467,10 +1479,10 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
 /**
  * Render the completion card markdown — "one page, three lines, one
  * decision" (§ 2 of the design doc). Two blocks: block 1 (title, result
- * lines, evidence row, budget line, pipeline line) and block 2 (decision
- * heading, optional context line, points, no buttons — the terminal never
- * renders buttons; the Desktop widget draws them separately, see
- * `lib/card-widget.js`).
+ * lines, evidence row, pipeline line, run-contract line, channel ladder,
+ * budget line) and block 2 (decision heading, optional context line, points,
+ * no buttons — the terminal never renders buttons; the Desktop widget draws
+ * them separately, see `lib/card-widget.js`).
  */
 function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { titleOnly = false } = {}) {
   const variant = input.variant || 'fallback';
@@ -1501,6 +1513,8 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     // belongs to the evidence; the budget is the card's footer.
     const pipelineLine = renderPipelineLine(input, lang, buildId);
     if (pipelineLine) parts.push(pipelineLine);
+    const runContractLine = renderRunContractLine(input, lang);
+    if (runContractLine) parts.push(runContractLine);
     const ladderLine = renderChannelLadderMd(buildChannelLadder(input), lang);
     if (ladderLine) parts.push(ladderLine);
     const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));

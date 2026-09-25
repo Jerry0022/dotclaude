@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+/**
+ * @hook post.ask.answers
+ * @version 0.2.0
+ * @event PostToolUse
+ * @plugin devops
+ * @matcher AskUserQuestion
+ * @description Answer-check (run-contract spec F): an AskUserQuestion answer
+ *   token that equals the Other placeholder (run-contract.js
+ *   `OTHER_PLACEHOLDERS`: `Something else`, `Other`, `Etwas anderes`,
+ *   `Sonstiges`, `andere`, case-insensitive) and is not an option label
+ *   of that question means the user picked Other WITHOUT typing. Injects
+ *   `[answer-check]` context so the model asks what, instead of silently
+ *   ignoring the answer. Works for every AskUserQuestion, contract or not.
+ */
+
+require('../lib/plugin-guard');
+
+// AUD-015d: the ONE placeholder list lives in run-contract.js — never a
+// second copy here that can drift from it. RT2-R8: this require moved to
+// module top level for AUD-015d and now sits OUTSIDE the stdin handler's
+// try/catch — a load error in run-contract.js (or anything it pulls in)
+// would throw while THIS module loads and crash the hook on every single
+// AskUserQuestion, instead of the `never surfaces as a hook failure`
+// promise the try/catch makes. Wrapped with a hardcoded fallback so a
+// broken lib never takes the hook down; kept in sync with run-contract.js
+// by the AUD-015d comment there.
+let OTHER_PLACEHOLDERS;
+try {
+  ({ OTHER_PLACEHOLDERS } = require('../lib/run-contract'));
+} catch {
+  OTHER_PLACEHOLDERS = ['something else', 'other', 'etwas anderes', 'sonstiges', 'andere'];
+}
+const PLACEHOLDERS = new Set(OTHER_PLACEHOLDERS.map(s => s.toLowerCase()));
+
+function clean(s) {
+  return String(s == null ? '' : s).replace(/\s*\((?:recommended|empfohlen)\)\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function labelsOf(q) {
+  return Array.isArray(q && q.options)
+    ? q.options.map(o => clean(typeof o === 'string' ? o : o && o.label)).filter(Boolean).map(s => s.toLowerCase())
+    : [];
+}
+
+function tokensOf(value, labels) {
+  const list = Array.isArray(value) ? value : value == null ? [] : [value];
+  const out = [];
+  for (const v of list) {
+    const s = clean(v);
+    if (!s) continue;
+    if (labels.includes(s.toLowerCase()) || !s.includes(',')) out.push(s);
+    else for (const part of s.split(',')) { const c = clean(part); if (c) out.push(c); }
+  }
+  return out;
+}
+
+/**
+ * The `[answer-check]` notes for one AskUserQuestion result.
+ * @param {object[]} questions
+ * @param {object} answers keyed by question text (or header)
+ * @returns {string[]}
+ */
+function answerChecks(questions, answers) {
+  const notes = [];
+  if (!answers || typeof answers !== 'object') return notes;
+  const qs = Array.isArray(questions) && questions.length
+    ? questions
+    : Object.keys(answers).map(k => ({ question: k }));
+  for (const q of qs) {
+    const text = q && typeof q.question === 'string' ? q.question : '';
+    let value;
+    if (text && Object.prototype.hasOwnProperty.call(answers, text)) value = answers[text];
+    else if (q && q.header && Object.prototype.hasOwnProperty.call(answers, q.header)) value = answers[q.header];
+    else continue;
+    const labels = labelsOf(q);
+    const hit = tokensOf(value, labels).find(t => PLACEHOLDERS.has(t.toLowerCase()) && !labels.includes(t.toLowerCase()));
+    if (!hit) continue;
+    notes.push([
+      `[answer-check] "${text || q.header}" was answered with "${hit}" and no text.`,
+      'The user wants something the options did not offer. Ask what, in ONE',
+      "AskUserQuestion, before acting on this question's answer.",
+    ].join('\n'));
+  }
+  return notes;
+}
+
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', d => { inputData += d; });
+  process.stdin.on('end', () => {
+    try {
+      const { parseHookInput } = require('../lib/hook-input');
+      const hook = parseHookInput(inputData);
+      if (!hook || hook.tool_name !== 'AskUserQuestion') process.exit(0);
+      const { extractAnswers } = require('../lib/run-contract');
+      const { questions, answers } = extractAnswers(hook.tool_response, hook.tool_input);
+      const notes = answerChecks(questions, answers);
+      if (notes.length) {
+        process.stdout.write(`${JSON.stringify({
+          hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: notes.join('\n\n') },
+        })}\n`);
+      }
+    } catch { /* never surfaces as a hook failure */ }
+    process.exit(0);
+  });
+}
+
+module.exports = { answerChecks, PLACEHOLDERS };

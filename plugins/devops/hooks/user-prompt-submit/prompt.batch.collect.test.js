@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildAck, buildRearmAck, buildMergeContext, renderSyncLines, buildActivationGuard,
+  buildAck, buildRearmAck, buildMergeContext, fireMerge, renderSyncLines, buildActivationGuard,
   buildAttachmentGuard, buildEmptyQueueNotice, syncMain, INLINE_LIMIT, GIT_SYNC_SCRIPT,
 } from "./prompt.batch.collect.js";
 import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
@@ -145,6 +145,23 @@ describe("mode on — firing the merge", () => {
     expect(r.stdout).toContain("Fehlertext falsch");
     expect(r.stdout).toContain("leg los");
     expect(r.stdout).toContain("Widersprüche");
+  });
+
+  test("a fire writes the enforced hand-off marker and says so in the context", () => {
+    // run-contract spec E: pre.run.contract refuses edits and commits until
+    // do-run / auto-concept is invoked.
+    appendNote(cwd, "Button verrutscht");
+    const r = runHook({ prompt: ">> leg los", session_id: "sess-1" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("per Hook erzwungen: Edits und Commits werden abgelehnt");
+    const marker = JSON.parse(fs.readFileSync(path.join(cwd, ".claude", "batch-handoff.json"), "utf8"));
+    expect(marker.sessionId).toBe("sess-1");
+    expect(Number.isFinite(Date.parse(marker.firedAt))).toBe(true);
+  });
+
+  test("an early marker on an empty queue writes no hand-off marker", () => {
+    runHook({ prompt: ">> leg los" });
+    expect(fs.existsSync(path.join(cwd, ".claude", "batch-handoff.json"))).toBe(false);
   });
 
   test("the marked prompt itself is not stored as a note", () => {
@@ -777,5 +794,37 @@ describe("`/do-batch <text>` with a pasted image keeps the image (#490)", () => 
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("als Notiz #1 gespeichert");
     expect(readNotes(cwd)[0].text).toMatch(/^\[Anhang-Datei\] /);
+  });
+});
+
+describe("H-B15: the hand-off marker follows the merge context", () => {
+  const handoff = () => path.join(cwd, ".claude", "batch-handoff.json");
+  let saved;
+  beforeEach(() => {
+    activate(cwd, { marker: ">>" });
+    appendNote(cwd, "Button verrutscht");
+    saved = process.env.DEVOPS_BATCH_NO_SYNC;
+    process.env.DEVOPS_BATCH_NO_SYNC = "1";
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.DEVOPS_BATCH_NO_SYNC; else process.env.DEVOPS_BATCH_NO_SYNC = saved;
+  });
+
+  test("H-B15: a merge context that throws leaves no hand-off marker", () => {
+    const ctx = { cwd, text: ">> leg los", marker: ">>", modeActive: true, sessionId: "s1" };
+    const boom = () => { throw new Error("build failed"); };
+    expect(() => fireMerge(ctx, { buildMergeContext: boom, write: () => {} })).toThrow("build failed");
+    expect(fs.existsSync(handoff())).toBe(false);
+  });
+
+  test("H-B15: the marker is written only after the context was written", () => {
+    const ctx = { cwd, text: ">> leg los", marker: ">>", modeActive: true, sessionId: "s1" };
+    const seen = [];
+    fireMerge(ctx, { write: (s) => seen.push({ s, marker: fs.existsSync(handoff()) }) });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].s).toContain("Button verrutscht");
+    expect(seen[0].marker).toBe(false);
+    expect(JSON.parse(fs.readFileSync(handoff(), "utf8")).sessionId).toBe("s1");
+    expect(isModeActive(cwd)).toBe(false);
   });
 });

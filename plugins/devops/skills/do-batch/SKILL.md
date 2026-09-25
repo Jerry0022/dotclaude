@@ -1,6 +1,6 @@
 ---
 name: do-batch
-version: 0.7.0
+version: 0.8.0
 description: >-
   Collect mode — a UserPromptSubmit hook parks each prompt in
   `.claude/batch.md` instead of executing it (no model turn), until an
@@ -456,6 +456,17 @@ answers to your own questions.
 **4.9 Hand off — the last action of the turn.** Invoke the Skill chosen in
 4.6 with `--from=do-batch` followed by the hand-off body:
 
+**Hook-enforced, not just written down.** When the merge fires,
+`prompt.batch.collect.js` writes `.claude/batch-handoff.json`
+(`{ firedAt, sessionId }`, runtime-ignored). While it exists and is younger
+than 6 h, a PreToolUse hook refuses Edit / Write / NotebookEdit on gated
+paths and `git commit` with the same message this step's decision rule
+already gives: a ready plan goes to `Skill("devops:do-run", "--from=do-batch
+…")`, a plan with open decisions to `Skill("devops:auto-concept",
+"--from=do-batch …")` — never implemented directly here. Reading, exploring
+and planning stay allowed; the marker is cleared by the PostToolUse `do-run`
+or `auto-concept` call itself, so a normal hand-off never sees the gate.
+
 ```
 --from=do-batch
 Notizen: <archived path from 4.7>
@@ -555,6 +566,9 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
 - **do-batch never implements.** The merged plan goes to exactly one skill —
   do-run (`--from=do-batch`, ready plan) or auto-concept (`--from=do-batch`,
   open decisions) — per the Step 4.6 decision rule.
+- **The hand-off is enforced, not just written down.** `.claude/batch-handoff.json`
+  blocks edits and commits until do-run or auto-concept is invoked
+  (`--from=do-batch`); see `deep-knowledge/run-contract.md`.
 - **Never delete notes.** Archive them.
 - **Activation ends with the mode ON.** The invocation is the request; never
   ask the user to send `/do-batch on` afterwards. A re-activation while

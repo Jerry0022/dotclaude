@@ -40,6 +40,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [project-setup.md](project-setup.md) | Project Setup — Repo Hygiene | How to audit or initialize a project's repository structure: .gitignore, LICE... |
 | [readme-standards.md](readme-standards.md) | README Standards | How to create, rewrite or substantially update a README.md: a polished, moder... |
 | [responsive-testing.md](responsive-testing.md) | Responsive Testing — Multi-Viewport Verification | Multi-device web apps require verification at phone, tablet, and desktop |
+| [run-contract.md](run-contract.md) | Run Contract — what the user chose in do-run is enforced, not hoped for | A hook records the answers to `do-run`'s questions and refuses the tool call ... |
 | [skill-extension-guide.md](skill-extension-guide.md) | Skill Extension Guide — For Plugin Integrators | How to customize devops skills and agents for your project. |
 | [strict.md](strict.md) | Strict Mode — Literal Scope, Discretionary Parameters | The deliverable is exactly what the prompt names, nothing wider; attributes t... |
 | [test-autonomy.md](test-autonomy.md) | Test Autonomy — Cross-Cutting Rules for Test Tool Selection | Cross-cutting rule for every skill, hook, and agent that performs or triggers |

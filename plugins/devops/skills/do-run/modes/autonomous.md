@@ -575,8 +575,11 @@ Only for status COMPLETED in `implement` mode, and only when the router set
 auto-harden / auto-polish with `--invoked-by=autonomous`, then, for
 `$SHIP=auto`, do-ship under the `do-run` lockout. Still no questions (the
 Lockout holds). A blocked pass or ship is logged and reported, the run
-continues to Step 7. INTERRUPTED / BLOCKED runs and `analyze` mode skip this
-step.
+continues to Step 7. Every chosen pass is gated by the run contract
+(`deep-knowledge/run-contract.md`) exactly as it is for any other do-run
+run — running it here, in order, satisfies the gate; there is no separate
+autonomous-mode exemption. INTERRUPTED / BLOCKED runs and `analyze` mode
+skip this step and instead close the contract in Step 7/8 below.
 
 ## Step 7 — Report & Completion
 
@@ -584,6 +587,14 @@ Generate an **interactive HTML report** and open it in Edge. No more markdown fi
 that nobody reads.
 
 ### 7a — Gather Completion Data
+
+**INTERRUPTED or BLOCKED status → close the run contract as aborted BEFORE
+the card**, so the card gate does not park on a run that is not coming back
+this session:
+
+```bash
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
+```
 
 Call `render_completion_card` (variant per status: "ship-successful" for COMPLETED,
 "ship-blocked" for BLOCKED, "ready" for INTERRUPTED,
@@ -665,3 +676,12 @@ Harmless no-op if nothing was scheduled. Then proceed by `$WATCHDOG_ACTION`:
 
 **Never ask about shutdown inline.** The decision was made in Step 2 (or Step 0.5
 on resume).
+
+**Close the run contract, if still open.** COMPLETED already closed it (7a's
+abort branch does not apply); a run that reaches here without having called
+`abort` or `done` yet closes it now, after the card, so a leftover contract
+never gates the next unrelated session:
+
+```bash
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done
+```
