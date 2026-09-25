@@ -97,6 +97,10 @@ REDTEAM_REVIEW:
   top 10 by severity.
 - No fixes in code. Shape-of-mitigation only.
 - Do not block on low-severity risks alone — they are logged, not gates.
+- A re-review of a reworked diff is the **last** round (at most 2 per
+  diff, `agent-orchestration.md` § Inter-Wave Verification Gate): give
+  `verdict: rework` only for a **high** risk; mediums and lows stay in
+  `risks` and the orchestrator carries them as open points.
 - If the change falls under the skip list in `pre-mortem.md`, respond with
   `verdict: proceed`, zero risks, and a one-line note explaining why the
   review was unnecessary.

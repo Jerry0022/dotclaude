@@ -160,7 +160,7 @@ describe("base call: Q3 default = last choice, without reordering", () => {
     expect(umfang).toMatch(/hooks\/lib\/strict-state\.js/);
     // One CLI call that arms AND prints the contract only on success — no
     // `node -e` with process.env.CLAUDE_PLUGIN_ROOT (red-team R6).
-    expect(umfang).toContain('node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline');
+    expect(umfang).toContain('node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" inline');
     expect(umfang).not.toMatch(/node -e/);
     expect(umfang).toMatch(/non-zero exit means strict is NOT on/);
     expect(umfang).toContain("deep-knowledge/strict.md");

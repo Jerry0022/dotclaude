@@ -1360,7 +1360,7 @@ never re-run a completed step. The checkpoint records what the previous run
    Skill `auto-agents` with `--from=auto-concept --mode=background` and the
    brief: the concept file path, the submitted round, and the decisions the
    work must honour — not a paraphrase. `auto-agents` applies the delegation
-   tiers, shows its start table, splits the approved work by domain
+   tiers, shows its agent cards, splits the approved work by domain
    (`devops:core`, `devops:frontend`, `devops:designer`, `devops:ai`,
    `devops:windows`), runs independent parts in parallel and lets
    `devops:qa` verify; `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md`

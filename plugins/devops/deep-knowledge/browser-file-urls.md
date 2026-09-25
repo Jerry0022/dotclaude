@@ -76,7 +76,7 @@ start msedge "file:///$(cygpath -m "$ABS_PATH")"
 
 # Track the open so /do-ship Step 5c can re-open from main repo after
 # ship_cleanup nukes the worktree.
-node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
   "$(cygpath -w "$ABS_PATH")" \
   --context=<short-tag>
 ```

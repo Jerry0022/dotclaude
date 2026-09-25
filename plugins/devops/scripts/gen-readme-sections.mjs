@@ -40,6 +40,7 @@ const EVENTS = [
   { name: "SessionStart", key: "ss", header: "SessionStart — runs once when a session begins" },
   { name: "UserPromptSubmit", key: "prompt", header: "UserPromptSubmit — runs when the user sends a message" },
   { name: "PreToolUse", key: "pre", header: "PreToolUse — runs before each tool call" },
+  { name: "SubagentStart", key: "sub", header: "SubagentStart — runs when a subagent is spawned" },
   { name: "PostToolUse", key: "post", header: "PostToolUse — runs after each tool call" },
   { name: "Stop", key: "stop", header: "Stop — runs when Claude finishes responding" },
 ];

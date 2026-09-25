@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.203.0] — 2026-09-25
+
+### Added
+- **One agent card for every spawn — 1, 3 or 10 agents look alike.** `pre.agent.announce` now hands Claude a card instead of a bare `→ Agent …` line: a header with count and mode, one row per agent (role icon · agent · task · model · effort), and the note "Modelle: jeweils neueste Version der Familie" once under the header instead of "(newest)" in every row. Agents launched in one message share one card: the hook reads the message's earlier Agent calls from the transcript, so the batch's last card lists them all and parallel launches are never summarised in prose. A `[W<n>]` description prefix names the wave; a card spanning several waves gets one section per wave. A closing Σ line groups the agents by model · effort, only when a combination occurs twice. Effort shows as filled dots, one per level: low ● · medium ●● · high ●●● · xhigh ●●●● · max ●●●●● · ultracode ●●●●●●. auto-agents renders its plan through the same template (`scripts/agent-card.js`); its separate plan and start tables are gone.
+- **Filesystem-root crawls are blocked (`pre.crawl.guard`).** Orphaned `find /` processes had crawled the Git root and every mounted drive for hours. The guard denies Bash and PowerShell walks of a drive or filesystem root and deep home crawls (find, `ls -R`, `grep -r`, rg, fd, du, tree, `gci -Recurse`, robocopy), following `cd`/`Set-Location`, variables, `cygpath` and heredocs fed to a shell, while quoted text and data heredocs pass. The deny names the real plugin root. `DEVOPS_ALLOW_ROOT_CRAWL=1` overrides.
+- **Subagents get the plugin root.** The crawls came from devops subagents told to read `{PLUGIN_ROOT}/deep-knowledge/…` with nothing resolving the placeholder. A new SubagentStart hook (`sub.plugin.root`) and the SessionStart index now state `{PLUGIN_ROOT} = <absolute path>`; `post.design.remind` and `pre.ship.guard` print absolute paths.
+
+### Changed
+- **Red-team rounds are capped at two per diff.** Round 1 reviews, a fix wave folds the findings in, round 2 re-reviews; what round 2 still finds is fixed only when it is high and small, the rest becomes open points. The redteam agent returns `rework` in a re-review only for a high risk.
+- **Explore agents pass `model: "sonnet"`** instead of inheriting an Opus or Fable session; implementing work goes to a devops domain agent rather than `general-purpose`.
+- **`$CLAUDE_PLUGIN_ROOT` paths in skills, agents and deep-knowledge are `{PLUGIN_ROOT}`** — the variable is empty in the Bash and PowerShell tools.
+
+### Fixed
+- **The card CLI tests no longer collide with parallel runs in other sessions**: their session ids carry a per-run tag, so a concurrent run cannot sweep the widget file mid-test.
+
 ## [0.202.0] — 2026-09-25
 
 ### Added

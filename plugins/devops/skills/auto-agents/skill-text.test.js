@@ -4,9 +4,10 @@
  * The plan is prose, so the only cheap guard for what it must show the user
  * before anything is spawned is asserting the wording:
  *
- *   1. The model column renders `model · effort`. Effort is fixed by the
- *      agent's frontmatter — the Agent tool has no effort parameter — so the
- *      plan is the one place the user sees the effective value up front.
+ *   1. The agents are the Step 5 plan card (scripts/agent-card.js), the same
+ *      template every spawn card uses — never a hand-drawn table in its own
+ *      shape. Effort is fixed by the agent's frontmatter (the Agent tool has
+ *      no effort parameter), so the card shows the effective value up front.
  *   2. The complexity tier and its per-agent tool-call ceiling are a slot in
  *      the template, not a prose reminder: the budget every agent prompt will
  *      carry (§ Agent Prompt Template item 6) is visible before confirmation.
@@ -19,6 +20,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = join(here, "..", "..");
@@ -45,30 +47,14 @@ const template = (() => {
   return m[1];
 })();
 
-describe("auto-agents plan template — model · effort column", () => {
-  it("labels the column Model · Effort in both locales", () => {
-    const row = step3.split("\n").find((l) => l.includes("`plan.model`"));
-    expect(row, "label table lacks the plan.model row").toBeTruthy();
-    expect(cells(row)).toEqual(["`plan.model`", "Model · Effort", "Modell · Effort"]);
-  });
-
-  it("renders every example agent as model · effort", () => {
-    const rows = template.split("\n").filter((l) => /^\| \d+ \|/.test(l));
-    expect(rows.length).toBeGreaterThanOrEqual(3);
-    for (const row of rows) {
-      // `inherit` is the feature agent: model and effort come from the parent.
-      expect(cells(row)[2], `row lacks effort: ${row}`).toMatch(
-        /^(?:(?:sonnet|opus|haiku|fable) · (?:low|medium|high)(?:, )?)+$|^inherit$/,
-      );
-    }
-  });
-
-  it("shows a model override with the effort repeated on both sides", () => {
-    expect(step3).toMatch(/sonnet · medium → opus · medium/);
+describe("auto-agents plan template — agents come from the plan card", () => {
+  it("embeds the Step 5 plan card instead of a hand-drawn agents table", () => {
+    expect(template).toContain("<plan card — Step 5, rendered by scripts/agent-card.js>");
+    expect(template).not.toMatch(/^\| Wave \|/m);
   });
 
   it("states that effort cannot be overridden at invocation", () => {
-    expect(step3).toMatch(/no effort\s+parameter/i);
+    expect(step3).toMatch(/no effort parameter/i);
   });
 });
 
@@ -185,40 +171,29 @@ describe("auto-agents arguments — the mode comes from the caller", () => {
   });
 });
 
-describe("auto-agents start table", () => {
-  const step5 = section(skill, "## Step 5 — Start Table", "## Step 6 — Execution");
-  const block = (() => {
-    const m = step5.match(/```\n([\s\S]*?)```/);
-    expect(m, "Step 5 has no fenced table shape").toBeTruthy();
-    return m[1];
-  })();
+describe("auto-agents agent cards", () => {
+  const step5 = section(skill, "## Step 5 — Agent Cards", "## Step 6 — Execution");
 
-  it("has exactly the columns wave · task · model · effort, in that order", () => {
-    const header = block.split("\n").find((l) => l.startsWith("| {start."));
-    expect(cells(header)).toEqual(["{start.wave}", "{start.task}", "{start.model}", "{start.effort}"]);
-    const rows = block.split("\n").filter((l) => /^\| \d+ \|/.test(l));
-    expect(rows.length).toBeGreaterThanOrEqual(2);
-    for (const row of rows) expect(cells(row)).toHaveLength(4);
+  it("has one template for both cards, rendered by script and hook — never by hand", () => {
+    expect(step5).toContain("`hooks/lib/agent-card.js`");
+    expect(step5).toMatch(/\*\*Plan card\*\* 🗺️ \| `node \{PLUGIN_ROOT\}\/scripts\/agent-card\.js`/);
+    expect(step5).toMatch(/\*\*Spawn card\*\* 🤖 \| `pre\.agent\.announce`/);
+    expect(step5).toMatch(/Neither is typed by\s+hand/);
   });
 
-  it("labels the columns in both locales", () => {
-    const label = (key) => cells(step5.split("\n").find((l) => l.startsWith(`| \`${key}\``)));
-    expect(label("start.wave")).toEqual(["`start.wave`", "Wave", "Wave"]);
-    expect(label("start.task")).toEqual(["`start.task`", "Task", "Aufgabe"]);
-    expect(label("start.model")).toEqual(["`start.model`", "Model", "Modell"]);
-    expect(label("start.effort")).toEqual(["`start.effort`", "Effort", "Effort"]);
+  it("shows only the last spawn card of a message, never a prose summary", () => {
+    expect(step5).toMatch(/show \*\*only the last one\*\* of the message, verbatim/);
+    expect(step5).toMatch(/A prose summary .* never replaces it/);
   });
 
-  it("is card-style but carries no CTA and no completion-card marker", () => {
-    expect(block.startsWith("---\n")).toBe(true);
-    expect(block.trimEnd().endsWith("---")).toBe(true);
-    expect(block).not.toContain("✨");
-    expect(block).not.toMatch(/^## /m); // no decision heading
-    expect(step5).toMatch(/\*\*has no CTA\*\*/);
+  it("names waves via a [W<n>] description prefix", () => {
+    expect(step5).toMatch(/start with `\[W<n>\]`/);
   });
 
-  it("is not shown for the inline tier", () => {
+  it("is not shown for the inline tier and carries no CTA or completion-card marker", () => {
     expect(step5).toMatch(/\*\*Not for Inline\*\*/);
+    expect(step5).toMatch(/Cards have \*\*no CTA\*\*/);
+    expect(step5).toMatch(/never carry the `✨✨✨` completion-card marker/);
   });
 
   it("resolves the model at runtime — never a hard-coded id or version", () => {
@@ -232,7 +207,27 @@ describe("auto-agents start table", () => {
 
   it("gives effort per task, never with an arrow", () => {
     expect(step5).toMatch(/\*\*Effort — per task\.\*\*/);
-    const rows = block.split("\n").filter((l) => /^\| \d+ \|/.test(l));
-    for (const row of rows) expect(cells(row)[3]).not.toContain("→");
+    expect(step5).toMatch(/Never an arrow/);
+  });
+});
+
+describe("the plan card script renders through the same template", () => {
+  const { planCard } = createRequire(import.meta.url)("../../scripts/agent-card.js");
+
+  it("resolves frontmatter and overrides, sorts waves, fills in the session", () => {
+    const card = planCard({
+      lang: "de", tier: "volle Zeremonie", session: "fable · high",
+      agents: [
+        { type: "devops:qa", wave: 2, task: "Tests" },
+        { type: "devops:core", wave: 1, task: "API", model: "opus" },
+        { type: "devops:core", wave: 1, task: "DB" },
+        { type: "devops:feature", wave: 1, task: "Glue" },
+      ],
+    });
+    expect(card).toContain("### 🗺️ **Agent-Plan** · 4 Agents · 2 Waves · volle Zeremonie");
+    expect(card.indexOf("#### Wave 1")).toBeLessThan(card.indexOf("#### Wave 2"));
+    expect(card).toContain("| 🔧 | **core** | API | sonnet → opus | ●● medium |");
+    expect(card).toContain("| 🧩 | **feature** | Glue | fable (Session) | ●●● high |");
+    expect(card).toContain("**Σ Verteilung:** **2×** sonnet ●● medium");
   });
 });

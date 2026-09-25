@@ -74,6 +74,17 @@ describe("ss.knowledge.index — always-on policy injection", () => {
     expect(ctx).not.toContain("always-on");
   });
 
+  test("the literal {PLUGIN_ROOT} line is injected with the given root (forward slashes)", () => {
+    const ctx = buildContext(PLUGIN_ROOT);
+    const root = PLUGIN_ROOT.replace(/\\/g, "/");
+    expect(ctx).toContain(`[devops] {PLUGIN_ROOT} = ${root} `);
+    expect(ctx).toContain(`${root}/deep-knowledge/pre-mortem.md`);
+    expect(ctx).toContain("$CLAUDE_PLUGIN_ROOT is NOT set in the Bash tool");
+    expect(ctx).toContain("Never search the filesystem");
+    // Before the index body; the budget line must stay last.
+    expect(ctx.indexOf("{PLUGIN_ROOT} =")).toBeLessThan(ctx.indexOf("| File | Topic |"));
+  });
+
   test("no INDEX.md → nothing to inject", () => {
     const root = tmpPlugin({ "agent-proactivity.md": "policy" });
     expect(buildContext(root)).toBeNull();

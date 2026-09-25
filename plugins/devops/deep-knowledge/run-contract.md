@@ -51,12 +51,12 @@ A contract exists only after do-run's router answered, or a machine prompt armed
 ## CLI: status, skip, park, abort, done, batch-clear
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" status
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" skip <ob> [--item <N>] --reason "<why>"
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<why>"
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" done [--reason "<why>"]
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" status
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" skip <ob> [--item <N>] --reason "<why>"
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<why>"
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done [--reason "<why>"]
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
 ```
 
 `<ob>` is one of `auto-agents | harden | polish | qa | do-ship | refine | triage`. Every call but `status` refuses without a reason where one is listed — a deviation is explicit, never silent. `skip` shows as `⚠ <reason>`. `park` records a blocked / `⏸ Rückfrage` backlog item once and ends its segment. `abort` closes a run that is over with open steps (card: ✗ + reason), before its card. `done` is only for a run where every chosen step ran (`prompt` / `audit` close at the final card anyway; `backlog` once every queued item shipped, was skipped or parked); with open obligations it refuses unless `--reason` is given and then closes as aborted.

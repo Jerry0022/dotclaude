@@ -288,7 +288,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
 hangs the night on a modal no one can answer:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" arm backlog-runner
+node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" arm backlog-runner
 ```
 
 `/do-ship` reads this in its Pre-Step A and turns each interactive gate
@@ -351,7 +351,7 @@ for each issue in queue:
   • blocked (tests red / preflight blocks / ambiguity found) → clean rollback or
     a park-branch; emit a non-blocking "⏸ Rückfrage" status message into the
     chat thread (see Step 5); record it ONCE with
-    `node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"`
+    `node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"`
     (satisfies every open obligation of this item and ends its segment — no
     per-obligation skips); continue with the next issue
 ```
@@ -407,14 +407,14 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
 5. **Optional shutdown** — per the autonomous mode Step 8 decision matrix
    (`skills/do-run/modes/autonomous/deep-knowledge/shutdown-watchdog.md`): cancel the
    fail-safe timer FIRST, clear the autonomous lockout
-   (`node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-lockout.js" clear`), then act by
+   (`node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" clear`), then act by
    shutdown choice. **Never** auto-shutdown while the aggregate run status is
    BLOCKED. Write `BACKLOG-DONE.flag` for every terminal status so the watchdog
    stands down.
 6. **Close the run contract** — the queue is done (every item shipped, parked
    or skipped), not just this issue's segment:
    ```bash
-   node "$CLAUDE_PLUGIN_ROOT/hooks/lib/run-contract.js" done
+   node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done
    ```
 
 ## Artifacts

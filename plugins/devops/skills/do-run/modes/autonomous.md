@@ -89,7 +89,7 @@ but are NOT covered by the current `~/.claude/settings.json` allow-list. Closes
 the gap that causes mid-run prompts after the user has gone AFK.
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
+node "{PLUGIN_ROOT}/scripts/permission-audit.js" --days=7 --quiet
 ```
 
 Parse the JSON `suggestions` array:
@@ -110,7 +110,7 @@ Parse the JSON `suggestions` array:
   tamper-protected; the script writes directly via Node `fs.writeFileSync`):
   
   ```bash
-  node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
+  node "{PLUGIN_ROOT}/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
   ```
   
   The script re-validates each `--apply` rule against its own freshly-computed
@@ -370,7 +370,7 @@ defaulting to a flat 5h. It then fires at `remaining window + 15-min buffer` pas
 reset boundary, and falls back to a flat 5h only when usage data stays missing/stale:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-resume-schedule.js"
+node "{PLUGIN_ROOT}/scripts/autonomous-resume-schedule.js"
 ```
 
 The helper self-refreshes — do **not** refresh usage separately first.
@@ -435,7 +435,7 @@ if this session later wedges (token exhaustion, Anthropic API hang, stuck subage
 and never reaches Step 8 — the exact "tokens ran out, PC stayed on all night" case.
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" arm
+node "{PLUGIN_ROOT}/scripts/autonomous-shutdown-timer.js" arm
 ```
 
 The script first **freshens usage** (best-effort headless `--no-login` scrape, only
@@ -573,7 +573,7 @@ the card**, so the card gate does not park on a run that is not coming back
 this session:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 ```
 
 Call `render_completion_card` (variant per status: "ship-successful" for COMPLETED,
@@ -610,7 +610,7 @@ start msedge "file:///$(cygpath -m "$(pwd)")/AUTONOMOUS-REPORT.html"
 # path after worktree cleanup (issue #160). cygpath -w yields a Windows-style
 # absolute path that session-open-tracker.js can compare against the
 # worktree root later.
-node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
   "$(cygpath -w "$(pwd)/AUTONOMOUS-REPORT.html")" \
   --context=autonomous-report
 ```
@@ -633,7 +633,7 @@ would still power off, or the long fail-safe window would override the graceful 
 shutdown:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" cancel
+node "{PLUGIN_ROOT}/scripts/autonomous-shutdown-timer.js" cancel
 ```
 
 Harmless no-op if nothing was scheduled. Then proceed by `$WATCHDOG_ACTION`:
@@ -663,5 +663,5 @@ abort branch does not apply); a run that reaches here without having called
 never gates the next unrelated session:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/hooks/lib/run-contract.js" done
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done
 ```
