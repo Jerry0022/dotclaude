@@ -302,6 +302,139 @@ describe('scanOpenTasks — a SendMessage re-opens only an in-process agent', ()
   });
 });
 
+/**
+ * A task ended with TaskStop gets no task-notification — the TaskStop result is
+ * the only record. Found in a real ship session: a throwaway static server was
+ * stopped with TaskStop, nothing listened on its port afterwards, and ten
+ * minutes later the Stop guard still blocked the card as "STILL RUNNING".
+ */
+describe('scanOpenTasks — a TaskStop result ends the task', () => {
+  /** The result TaskStop returns — plain-string content, as in real transcripts. */
+  function stopped(taskId, command = 'npx http-server dist -p 4288') {
+    return JSON.stringify({
+      message: `Successfully stopped task: ${taskId} (${command})`,
+      task_id: taskId,
+      task_type: 'local_bash',
+      command,
+    });
+  }
+
+  /** A TaskStop call plus the result the harness wrote for it. */
+  function taskStop(toolUseId, taskId, result = stopped(taskId)) {
+    return [
+      toolUse(toolUseId, 'TaskStop', { task_id: taskId }),
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [{ tool_use_id: toolUseId, type: 'tool_result', content: result }] },
+      }),
+    ];
+  }
+
+  /** A backgrounded Bash launch with its task id swapped in. */
+  function serve(toolUseId, taskId, description) {
+    return [
+      toolUse(toolUseId, 'Bash', { command: 'npx http-server dist -p 4288', description, run_in_background: true }),
+      toolResult(toolUseId, BASH_BG_TEXT.replaceAll('b68oycrr6', taskId)),
+    ];
+  }
+
+  const SERVER = serve('toolu_l', 'b0fag5evq', "Serve this branch's build on port 4288");
+
+  test('a launch followed by a TaskStop result closes the task', () => {
+    expect(scanOpenTasks(SERVER.join('\n')))
+      .toEqual([{ id: 'b0fag5evq', kind: 'task', name: "Serve this branch's build on port 4288" }]);
+    expect(scanOpenTasks([...SERVER, ...taskStop('toolu_x', 'b0fag5evq')].join('\n'))).toEqual([]);
+  });
+
+  test('closes only the task it names', () => {
+    const open = scanOpenTasks([
+      ...AGENT_START,
+      ...SERVER,
+      ...taskStop('toolu_x', 'b0fag5evq'),
+    ].join('\n'));
+    expect(open).toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' }]);
+  });
+
+  test('a TaskStop result quoted inside another tool\'s output does not close the task', () => {
+    const report = stopped('b0fag5evq');
+    const quotes = [
+      ['Grep', 'transcript.jsonl:594:' + report],
+      ['Read', '594\t' + report],
+      ['Bash', report],
+      ['Bash', 'Shell cwd was reset\n' + report],
+      ['PowerShell', report],
+    ];
+    for (const [tool, text] of quotes) {
+      const open = scanOpenTasks([
+        ...SERVER,
+        toolUse('toolu_q', tool, { pattern: 'Successfully stopped task' }),
+        toolResult('toolu_q', text),
+      ].join('\n'));
+      expect(open.map(o => o.id)).toEqual(['b0fag5evq']);
+    }
+  });
+
+  test('an assistant message quoting a TaskStop result does not close the task', () => {
+    const quoted = JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: stopped('b0fag5evq') }] },
+    });
+    expect(scanOpenTasks([...SERVER, quoted].join('\n')).map(o => o.id)).toEqual(['b0fag5evq']);
+  });
+
+  test('a task stopped, then relaunched under a new id, stays open only for the new id', () => {
+    const lines = [
+      ...SERVER,
+      ...taskStop('toolu_x', 'b0fag5evq'),
+      ...serve('toolu_r', 'b7k2m9qzt', "Serve this branch's build on port 4288"),
+    ];
+    expect(scanOpenTasks(lines.join('\n')))
+      .toEqual([{ id: 'b7k2m9qzt', kind: 'task', name: "Serve this branch's build on port 4288" }]);
+    // The new run ends the ordinary way — its notification closes it.
+    expect(scanOpenTasks([...lines, notification('b7k2m9qzt')].join('\n'))).toEqual([]);
+  });
+
+  test('a failed TaskStop stops nothing', () => {
+    for (const error of [
+      '<tool_use_error>No task found with ID: b0fag5evq</tool_use_error>',
+      '<tool_use_error>Task b0fag5evq is not running (status: completed)</tool_use_error>',
+    ]) {
+      const open = scanOpenTasks([
+        ...SERVER,
+        toolUse('toolu_x', 'TaskStop', { task_id: 'b0fag5evq' }),
+        toolError('toolu_x', error),
+      ].join('\n'));
+      expect(open.map(o => o.id)).toEqual(['b0fag5evq']);
+    }
+  });
+
+  test('without task_id the id comes from the report sentence', () => {
+    const noField = JSON.stringify({ message: "Successfully stopped task: b0fag5evq (npx http-server dist -p 4288)" });
+    for (const result of [noField, 'Successfully stopped task: b0fag5evq (npx http-server dist -p 4288)']) {
+      expect(scanOpenTasks([...SERVER, ...taskStop('toolu_x', 'b0fag5evq', result)].join('\n'))).toEqual([]);
+    }
+  });
+
+  test('a TaskStop result that is not the success report closes nothing', () => {
+    const notASuccess = JSON.stringify({ message: 'Stopping task b0fag5evq failed', task_id: 'b0fag5evq' });
+    const open = scanOpenTasks([...SERVER, ...taskStop('toolu_x', 'b0fag5evq', notASuccess)].join('\n'));
+    expect(open.map(o => o.id)).toEqual(['b0fag5evq']);
+  });
+
+  test('a stopped agent is closed too, and a later resume re-opens it', () => {
+    const agentStopped = JSON.stringify({
+      message: 'Successfully stopped task: a75d674f7108dd6c8 (Review the diff)',
+      task_id: 'a75d674f7108dd6c8',
+      task_type: 'local_agent',
+      command: 'Review the diff',
+    });
+    const lines = [...AGENT_START, ...taskStop('toolu_x', 'a75d674f7108dd6c8', agentStopped)];
+    expect(scanOpenTasks(lines.join('\n'))).toEqual([]);
+    expect(scanOpenTasks([...lines, ...send('toolu_s', 'a75d674f7108dd6c8', SEND_RESUMED)].join('\n')))
+      .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' }]);
+  });
+});
+
 describe('openTaskNames', () => {
   test('returns names only — never the internal id', () => {
     const names = openTaskNames(scanOpenTasks(AGENT_START.join('\n')));

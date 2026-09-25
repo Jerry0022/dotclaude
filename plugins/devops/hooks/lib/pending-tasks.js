@@ -1,6 +1,6 @@
 /**
  * @module pending-tasks
- * @version 0.4.0
+ * @version 0.5.0
  * @description Detects background work that is STILL RUNNING when a turn ends —
  *   subagents launched with run_in_background, backgrounded Bash tasks, and
  *   whole Workflow runs (which fan out to agents of their own).
@@ -29,6 +29,9 @@
  *                         it set running (resumedAgentId / pin.id) — see
  *                         messagedAgentId() for why the address alone is not
  *     end    · all      — a <task-notification> block naming <task-id><id></task-id>
+ *     end    · all      — a TaskStop tool_result "Successfully stopped task: <id>",
+ *                         the only end a stopped task ever gets — see
+ *                         stoppedTaskId()
  *
  *   Scanned chronologically as a state machine, so a resume after a completion
  *   re-opens the task and the final set reflects the true end-of-turn state.
@@ -45,6 +48,10 @@
  *       announce its own task and print somebody else's),
  *     - a completion counts only when the notification is a real transcript
  *       entry rather than the payload of a tool_result (notificationText()).
+ *   A quoted stop does the opposite harm — it hides work that is still running —
+ *   so a stop obeys the same two rules: it counts only from TaskStop's own
+ *   result (STOP_TOOLS), and only when that result IS the success report
+ *   (stoppedTaskId()).
  *
  *   SECURITY: agent ids are harness-internal and must never reach the user.
  *   openTaskNames() is the only export intended for user-visible text; the ids
@@ -69,14 +76,17 @@ const WORKFLOW_BG_RE = /Workflow launched in background\. Task ID:\s*([A-Za-z0-9
 const WORKFLOW_SUMMARY_RE = /^Summary:\s*(.+)$/m;
 /** A task-notification means that task STOPPED (it fires when the agent stops). */
 const TASK_NOTIFICATION_RE = /<task-id>\s*([A-Za-z0-9_-]+)\s*<\/task-id>/g;
+/** The sentence a successful TaskStop report opens with, then the id it stopped. */
+const TASK_STOP_MARKER = 'Successfully stopped task:';
+const TASK_STOP_ID_RE = /Successfully stopped task:\s*([A-Za-z0-9_-]+)/;
 /**
  * The key a SendMessage result names a resumed agent under. The fast path looks
  * for it too: an agent launched in the FOREGROUND leaves no launch marker, yet
  * a later send resumes it in the background.
  */
 const AGENT_RESUME_MARKER = 'resumedAgentId';
-/** A whole agent id — the alphabet AGENT_ID_RE captures. */
-const AGENT_ID_ONLY_RE = /^[A-Za-z0-9_-]+$/;
+/** A whole agent or task id — the alphabet every id capture above uses. */
+const ID_ONLY_RE = /^[A-Za-z0-9_-]+$/;
 /** " [3fa9c1]" — the ref ListAgents appends to a name only to disambiguate it. */
 const ADDRESS_REF_RE = /\s*\[[^\]]*\]\s*$/;
 
@@ -102,6 +112,15 @@ const LAUNCH_TOOLS = {
 function canLaunch(launcher, kind) {
   return !launcher || (LAUNCH_TOOLS[kind] || new Set()).has(launcher.name);
 }
+
+/**
+ * The tools whose result can report a task stopped — TaskStop alone. Unlike a
+ * launch, a report whose tool_use sits before the tail slice is NOT trusted:
+ * the task it stopped was launched earlier still, so it is not open here, and
+ * nothing is lost by ignoring it — whereas trusting it lets quoted text hide
+ * work that is still running.
+ */
+const STOP_TOOLS = new Set(['TaskStop']);
 
 /**
  * The second half of "quoted text is not an event", and the only guard that
@@ -250,6 +269,38 @@ function notificationText(line) {
 }
 
 /**
+ * The task a TaskStop result reports stopped, or '' when it stopped none.
+ *
+ * A stopped task gets no <task-notification>: of the 178 backgrounded Bash
+ * tasks stopped in the local transcripts, 173 were followed by nothing at all,
+ * so a task the scanner had opened stayed open for the rest of its session and
+ * every later card was blocked. This result is the only record of the stop.
+ * Shapes, from all 196 TaskStop calls there:
+ *   stopped   {"message":"Successfully stopped task: <id> (<command>)","task_id":"<id>","task_type":"local_bash","command":"…"}
+ *   unknown   <tool_use_error>No task found with ID: <id></tool_use_error>
+ *   finished  <tool_use_error>Task <id> is not running (status: completed)</tool_use_error>
+ * An error (is_error) stopped nothing, and every one named a task that was
+ * already closed or never launched in that transcript — only the success
+ * report ends a task. `task_type` is local_agent for an agent; its
+ * notification follows anyway, so closing it here only comes first.
+ *
+ * The id comes from `task_id`, else from the sentence — which must OPEN the
+ * report (announces()), as a launch announcement must open its result.
+ *
+ * @param {string} text — the TaskStop tool_result
+ */
+function stoppedTaskId(text) {
+  let r = null;
+  try { r = JSON.parse(text); } catch { /* plain text: the whole result is the report */ }
+  const isObject = r !== null && typeof r === 'object';
+  const report = isObject ? String(r.message || '') : text;
+  if (!announces(report, TASK_STOP_MARKER)) return '';
+  const m = report.match(TASK_STOP_ID_RE);
+  const id = String((isObject && r.task_id) || (m && m[1]) || '');
+  return ID_ONLY_RE.test(id) ? id : '';
+}
+
+/**
  * The in-process agent a SendMessage set running, or '' when it set none.
  *
  * The address cannot tell: `to` may name a subagent (by agentId or by name),
@@ -282,7 +333,7 @@ function messagedAgentId(text, input, launched) {
   if (r && typeof r === 'object') {
     if (r.success === false) return '';
     const pinned = String(r[AGENT_RESUME_MARKER] || (r.pin && r.pin.id) || '');
-    if (pinned) return AGENT_ID_ONLY_RE.test(pinned) ? pinned : '';
+    if (pinned) return ID_ONLY_RE.test(pinned) ? pinned : '';
     if (r.msg_id) return '';
   } else if (text.includes('<tool_use_error>')) {
     return '';
@@ -322,7 +373,7 @@ function scanOpenTasks(transcriptContent) {
   const launched = new Map();
   /** toolu_* of a SendMessage → the line it was issued on. */
   const sentAt = new Map();
-  /** id → the line of its latest notification. */
+  /** id → the line of its latest end: a notification or a TaskStop report. */
   const closedAt = new Map();
 
   for (const [seq, raw] of transcriptContent.split('\n').entries()) {
@@ -368,6 +419,17 @@ function scanOpenTasks(transcriptContent) {
       if (!text) continue;
       const launcher = launchers.get(block.tool_use_id);
       const input = launcher && launcher.input;
+
+      // A task ended with TaskStop is over, though no notification will ever
+      // say so. Only TaskStop's own success report counts — see stoppedTaskId().
+      if (launcher && STOP_TOOLS.has(launcher.name)) {
+        const id = block.is_error ? '' : stoppedTaskId(text);
+        if (id) {
+          open.delete(id);
+          closedAt.set(id, seq);
+        }
+        continue;
+      }
 
       // A SendMessage that set an in-process agent running re-opens it: the
       // harness notifies again when it stops, so a prior completion must not
