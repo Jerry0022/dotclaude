@@ -1,4 +1,6 @@
 import { describe, test, expect } from "vitest";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   BUDGETS,
   classify,
@@ -9,6 +11,8 @@ import {
   buildSummary,
   buildInstruction,
 } from "./claude-file-budget.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const lines = n => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n") + "\n";
 
@@ -214,6 +218,34 @@ describe("messages", () => {
     expect(i).toContain(file);
     expect(i).toContain("deep-knowledge");
     expect(i).toContain("content-conventions.md");
+  });
+
+  // `{PLUGIN_ROOT}` is the installed plugin cache, replaced on every plugin
+  // update: a project agent's docs moved there vanish, and the plugin's own
+  // land in the cache instead of the repo.
+  test("agent remedy targets the agent's sibling deep-knowledge/, never {PLUGIN_ROOT}", () => {
+    expect(BUDGETS.agent.remedy).not.toContain("{PLUGIN_ROOT}");
+    const agent = "/repo/.claude/agents/reviewer.md";
+    const i = buildInstruction(agent, evaluate({ file: agent, content: lines(180), delta: 12 }));
+    expect(i).toContain("beside this agent's own `agents/` directory");
+    expect(i).toContain("`plugins/devops/deep-knowledge/` in the plugin source");
+    expect(i).toContain("`<project>/.claude/deep-knowledge/` in a project");
+    expect(i).not.toContain("{PLUGIN_ROOT}");
+  });
+
+  // A hook message names a plugin file by its absolute path (CONVENTIONS.md):
+  // a model that cannot resolve a plugin path searches the disk for it.
+  test("the conventions pointer is an absolute path, never a placeholder", () => {
+    const root = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", ".."))
+      .replace(/\\/g, "/")
+      .replace(/\/+$/, "");
+    const rows = buildInstruction(file, result).split("\n");
+    const pointer = rows[rows.indexOf("Budgets, extraction categories, and the fix procedure:") + 1].trim();
+    expect(pointer).toBe(`${root}/deep-knowledge/content-conventions.md`);
+    expect(path.isAbsolute(pointer)).toBe(true);
+    expect(rows.join("\n")).not.toContain("{PLUGIN_ROOT}");
+    // Only a default: a given path is used as-is, so the function stays pure.
+    expect(buildInstruction(file, result, "/x/content-conventions.md")).toContain("\n  /x/content-conventions.md\n");
   });
 
   test("critical instruction states the ceiling", () => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.claude.budget
- * @version 0.1.0
+ * @version 0.1.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit
