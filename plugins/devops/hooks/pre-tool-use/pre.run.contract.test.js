@@ -13,7 +13,7 @@ const RC = require("../lib/run-contract.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.run.contract.js");
-const { safeBase } = require("./pre.run.contract.js");
+const { safeBase } = require("../lib/run-contract-qa.js");
 const SHIP = "mcp__plugin_devops_dotclaude-ship__ship_release";
 const CARD = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
 const ENV = { ...process.env };
@@ -380,7 +380,7 @@ describe("AUD-007: an unsafe qa diff base is never trusted", () => {
 });
 
 describe("harden pass (H-*)", () => {
-  const P = require("./pre.run.contract.js");
+  const P = require("../lib/run-contract-qa.js");
   const C = require("../lib/run-contract-calls.js");
   const ROUTER = (over = {}) => [
     { header: "Was?", question: "Was soll dieser Run tun?", options: [{ label: "Prompt umsetzen" }, { label: "Backlog" }] },
@@ -521,7 +521,7 @@ describe("harden pass (H-*)", () => {
 });
 
 describe("RT3: red-team pass 3 (pre)", () => {
-  const P = require("./pre.run.contract.js");
+  const P = require("../lib/run-contract-qa.js");
   const withWork = (over = {}) => { armPrompt({ ship: "auto", passes: [], ...over }); ev({ k: "skill", name: "auto-agents" }); ev({ k: "edit" }); };
   const MERGE = "mcp__plugin_github_github__merge_pull_request";
 
@@ -586,6 +586,26 @@ describe("RT3: red-team pass 3 (pre)", () => {
     expect(P.codeFilesChanged(dir, "card", "main", failDiff)).toBeNull();
     const ok = (root, args) => (args[0] === "ls-files" ? ["c.js"] : []);
     expect(P.codeFilesChanged(dir, "card", "main", ok)).toBe(1);
+  });
+});
+
+describe("H1: heavy libs load lazily, inside main()'s own try (H-B17)", () => {
+  test("requiring pre.run.contract.js at module scope never pulls in run-contract-qa.js / git-timeout.js", () => {
+    const script = `
+      const p = require(${JSON.stringify(HOOK)});
+      const keys = Object.keys(require.cache);
+      process.stdout.write(JSON.stringify({
+        hasQa: keys.some(k => k.endsWith("run-contract-qa.js")),
+        hasGitTimeout: keys.some(k => k.endsWith("git-timeout.js")),
+        hasArmFromPending: typeof p.armFromPending === "function",
+      }));
+    `;
+    const r = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.hasQa).toBe(false);
+    expect(out.hasGitTimeout).toBe(false);
+    expect(out.hasArmFromPending).toBe(true);
   });
 });
 

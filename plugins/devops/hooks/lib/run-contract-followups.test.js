@@ -18,6 +18,7 @@ const require = createRequire(import.meta.url);
 const RC = require("./run-contract.js");
 const { cli } = require("./run-contract-cli.js");
 const P = require("../pre-tool-use/pre.run.contract.js");
+const Q = require("./run-contract-qa.js");
 const C = require("./run-contract-calls.js");
 const postMod = require("../post-tool-use/post.run.contract.js");
 const OB = require("./run-contract-obligations.js");
@@ -192,8 +193,8 @@ describe("AUD-023: the release gate's git cost on a real multi-file diff", () =>
     const gitLinesCalls = [];
     const gitLinesSpy = (...args) => { gitLinesCalls.push(args); return C.gitLines(...args); };
 
-    const base = P.resolveBase(dir, undefined, C);
-    const n = P.codeFilesChanged(dir, "release", base, gitLinesSpy);
+    const base = Q.resolveBase(dir, undefined, C);
+    const n = Q.codeFilesChanged(dir, "release", base, gitLinesSpy);
     // Read the count before mockRestore() — it also mockClear()s the history.
     const totalGitSpawns = gitOutSpy.mock.calls.length + gitLinesCalls.length;
     gitOutSpy.mockRestore();

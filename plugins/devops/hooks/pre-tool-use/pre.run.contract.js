@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.1
+ * @version 0.4.2
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -44,15 +44,6 @@ function batchBlock(RC) {
     'Kill switch (every run-contract gate): DOTCLAUDE_RUN_CONTRACT=off',
   ].join('\n');
 }
-
-// AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
-// named once in lib/git-timeout.js — this hook no longer keeps its own
-// GIT_TIMEOUT constant.
-const { gitBudget, TOTAL_GIT_BUDGET_MS } = require('../lib/git-timeout');
-// AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
-// so run-contract-cli.js's `status` / `done` measure it exactly like this
-// gate does, instead of evaluating obligations against an empty ctx.
-const { safeBase, resolveBase, codeFilesChanged } = require('../lib/run-contract-qa');
 
 // AUD-019: one deadline for a whole gated call's git chain (base resolution,
 // up to two diff attempts, ls-files, the release count and the pushHead
@@ -162,6 +153,16 @@ function main(hook) {
   // error never crashes the hook.
   const { projectRoot } = require('../lib/project-root');
   const C = require('../lib/run-contract-calls');
+  // AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
+  // named once in lib/git-timeout.js — this hook no longer keeps its own
+  // GIT_TIMEOUT constant. H-B17: required here (inside main's own try), not
+  // at module scope — a half-written lib during a plugin update must not
+  // break every matched PreToolUse call.
+  const { gitBudget, TOTAL_GIT_BUDGET_MS } = require('../lib/git-timeout');
+  // AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
+  // so run-contract-cli.js's `status` / `done` measure it exactly like this
+  // gate does, instead of evaluating obligations against an empty ctx.
+  const { resolveBase, codeFilesChanged } = require('../lib/run-contract-qa');
   // H-B1: ship_release / the card act on tool_input.cwd — its root is tried
   // second; post records into the same root.
   const { root, inputRoot, roots } = C.contractRoots(hook, projectRoot);
@@ -287,4 +288,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { safeBase, resolveBase, codeFilesChanged, armFromPending };
+module.exports = { armFromPending };
