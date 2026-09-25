@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.0
+ * @version 0.5.1
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -902,19 +902,42 @@ function originOwnerRepo(root, budget) {
 }
 
 /**
+ * R2 (red-team round 2 Q9): does ANY configured remote (not just `origin`)
+ * point at `owner/repo`? A fork workflow's `origin` is the fork; the real
+ * release merges into the upstream repo, commonly configured as `upstream`
+ * — but this checks every remote `git remote` lists, not just those two
+ * names, so any other convention (`up`, a second push remote, …) matches too.
+ * @param {object} [budget] an optional git-timeout gitBudget()
+ */
+function anyRemoteMatches(root, owner, repo, budget) {
+  let names;
+  try { names = gitLines(root, ['remote'], { budget }); } catch { return false; }
+  for (const name of names) {
+    const url = gitOut(root, ['remote', 'get-url', name], { budget });
+    if (!url) continue;
+    const m = url.trim().match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
+    if (m && m[1].toLowerCase() === owner.toLowerCase() && m[2].toLowerCase() === repo.toLowerCase()) return true;
+  }
+  return false;
+}
+
+/**
  * R15: does a GitHub MCP merge's `owner`/`repo` tool_input match this
  * checkout's `origin`? An unrelated repo's merge must not count as this
  * run's release. An UNKNOWN origin (git failure/timeout, no github.com
  * remote) still matches — recorded, as before this fix — rather than
  * silently dropping every merge on a checkout run-contract-calls can't read
- * `origin` from.
+ * `origin` from. R2 (Q9): when `origin` is readable but differs, any other
+ * configured remote (a fork's `upstream`, …) also counts as a match before
+ * this drops the merge — origin being the fork must not hide the real release.
  * @param {object} [budget] an optional git-timeout gitBudget()
  */
 function originMatches(root, owner, repo, budget) {
   if (typeof owner !== 'string' || !owner || typeof repo !== 'string' || !repo) return true;
   const o = originOwnerRepo(root, budget);
   if (!o) return true;
-  return o.owner.toLowerCase() === owner.toLowerCase() && o.repo.toLowerCase() === repo.toLowerCase();
+  if (o.owner.toLowerCase() === owner.toLowerCase() && o.repo.toLowerCase() === repo.toLowerCase()) return true;
+  return anyRemoteMatches(root, owner, repo, budget);
 }
 
 /**
@@ -1102,12 +1125,16 @@ const MAX_BACK_BYTES = 32 * 1024 * 1024;
  * TAIL_BYTES chunks (at most MAX_BACK_BYTES). A line split by a chunk
  * boundary is carried over and yielded whole; the partial first line at the
  * cap is dropped. The caller stops the read by leaving the loop.
- * @param {object} [opts] `{chunk, max, budget}` — R12: an optional
+ * @param {object} [opts] `{chunk, max, budget, stats}` — R12: an optional
  *   git-timeout gitBudget() checked before each chunk read; an expired
  *   budget stops the walk early (a partial answer, or none, beats an
- *   invocation that outruns its own deadline).
+ *   invocation that outruns its own deadline). R2 (red-team round 2 Q5):
+ *   `stats`, when passed, gets `stoppedOnBudget = true` set on it when the
+ *   walk stopped because the budget expired (not because it reached the
+ *   file start / MAX_BACK_BYTES cap) — the caller needs to tell "genuinely
+ *   nothing more to read" from "gave up early, this is incomplete".
  */
-function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget } = {}) {
+function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget, stats } = {}) {
   let fd;
   try { fd = fs.openSync(file, 'r'); } catch { return; }
   try {
@@ -1116,7 +1143,10 @@ function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget
     let end = size;
     let carry = Buffer.alloc(0);
     while (end > floor) {
-      if (budget && budget.expired()) break;
+      if (budget && budget.expired()) {
+        if (stats) stats.stoppedOnBudget = true;
+        break;
+      }
       const start = Math.max(floor, end - chunk);
       const buf = Buffer.alloc(end - start);
       fs.readSync(fd, buf, 0, buf.length, start);
@@ -1149,14 +1179,19 @@ function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget
  *   with the invocation's git chain — the walk stops (yielding whatever it
  *   found so far) once it expires, instead of running past the hook's own
  *   deadline on a large transcript.
+ * @param {object} [info] R2 (red-team round 2 Q5): when passed, gets
+ *   `stoppedOnBudget = true` set on it whenever the underlying
+ *   `linesBackward` walk was cut short by the budget — the caller must not
+ *   treat the result (found or not) as the complete transcript in that case.
  * @returns {{questions, answers, followUps:object[], earlier:{questions, answers}[]}|null}
  */
-function routerFromTranscript(transcriptPath, sinceIso, RC, budget) {
+function routerFromTranscript(transcriptPath, sinceIso, RC, budget, info) {
   if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
   const since = sinceIso ? Date.parse(sinceIso) - 5000 : NaN;
   const seen = []; // newest first: {questions, answers} router calls and {followUp}
+  const stats = { stoppedOnBudget: false };
   // QA-T1: backwards in 2 MB chunks until a line older than sinceIso or a full router call (≤ 32 MB).
-  for (const line of linesBackward(transcriptPath, { budget })) {
+  for (const line of linesBackward(transcriptPath, { budget, stats })) {
     if (!line.includes('toolUseResult')) continue;
     let obj;
     try { obj = JSON.parse(line); } catch { continue; }
@@ -1172,6 +1207,7 @@ function routerFromTranscript(transcriptPath, sinceIso, RC, budget) {
     const f = RC.parseFollowUp(questions, answers);
     if (f) seen.push({ followUp: f });
   }
+  if (info) info.stoppedOnBudget = stats.stoppedOnBudget;
   let oldest = -1;
   seen.forEach((e, i) => { if (!e.followUp) oldest = i; });
   if (oldest < 0) return null;
