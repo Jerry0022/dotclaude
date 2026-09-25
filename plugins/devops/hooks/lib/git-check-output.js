@@ -29,10 +29,9 @@ function issueLine(issue) {
   if (!issue || typeof issue !== 'object') return null;
   switch (issue.type) {
     case 'uncommitted':
-      // Without an origin there is nothing to push, PR or merge, so the CTA
-      // does not promise any of it (#500). On a feature branch, not main:
-      // pre.main.guard blocks commits on main, remote or not.
-      if (issue.noRemote) return `- ${issue.label} → commit them locally on a feature branch (no remote, nothing to push)`;
+      // Without an origin /do-ship commits and merges LOCALLY — no push, no
+      // PR (#500). The CTA must not promise either.
+      if (issue.noRemote) return `- ${issue.label} → run \`/do-ship\` to commit and merge locally (no remote, nothing to push)`;
       return `- ${issue.label} → run \`/do-ship\` to commit, push & create PR`;
     case 'unpushed':
       return `- ${issue.label} → run \`/do-ship\` to commit, push & create PR`;
@@ -92,10 +91,11 @@ function askLines(workspace, hasChanges, noRemote = false) {
   const out = [];
   out.push('Call AskUserQuestion as the FIRST action of this turn. Ask the user (in their language). Suggested options:');
   if (hasChanges && noRemote) {
-    // No remote: no ship-first option (#500) — and no commit-first either,
-    // since pre.main.guard blocks commits on main. The changes travel along.
+    // No remote: /do-ship commits and merges locally (its sentinel lets it
+    // past pre.main.guard), so ship-first stays — without a push (#500).
     out.push('  - Worktree + Feature-Branch anlegen');
-    out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop) (recommended)');
+    out.push('  - Erst aktuelle Changes lokal shippen (commit + lokaler Merge), dann Worktree anlegen (recommended)');
+    out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
   } else if (hasChanges) {
     out.push('  - Worktree + Feature-Branch anlegen');
     out.push('  - Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen (recommended)');
@@ -112,7 +112,9 @@ function askLines(workspace, hasChanges, noRemote = false) {
   out.push('Resolution per option:');
   out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
   if (hasChanges) {
-    if (!noRemote) out.push('  - Ship-first: invoke /do-ship, then create worktree');
+    out.push(noRemote
+      ? '  - Ship-first: invoke /do-ship (no remote: commits and merges locally), then create worktree'
+      : '  - Ship-first: invoke /do-ship, then create worktree');
     out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
   }
   if (workspace.type === 'on-main-no-worktree') {

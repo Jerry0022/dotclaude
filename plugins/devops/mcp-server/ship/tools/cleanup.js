@@ -132,27 +132,32 @@ export async function handler(params) {
   // we are already on ${base} — otherwise a ship that ends on main leaves local
   // main stale ("ship succeeded but main not updated locally").
   // See skills/do-ship/deep-knowledge/cleanup.md §2.
-  try {
-    gitStrict(`pull --ff-only origin ${base}`, { ...opts, timeout: NETWORK_TIMEOUT });
-    cleaned.push(`sync:${base}`);
-  } catch (e) {
-    warnings.push(
-      `Could not fast-forward local '${base}' to origin/${base}: ${e.message}. ` +
-        `Local '${base}' may be stale — run: git pull --ff-only origin ${base}`
-    );
-  }
-  // Hard post-condition: local base must equal origin/base after a ship.
-  const localBase = git(`rev-parse ${base}`, opts);
-  const remoteBase = git(`rev-parse origin/${base}`, opts);
-  if (localBase && remoteBase && localBase !== remoteBase) {
-    warnings.push(
-      `Local '${base}' (${localBase.slice(0, 7)}) != origin/${base} (${remoteBase.slice(0, 7)}) ` +
-        `after ship — main not fully landed locally.`
-    );
+  // No remote: ship_release merged into the local base itself, so there is no
+  // origin to sync from, compare against or delete a branch on.
+  const noRemote = repoMode === "git-no-remote";
+  if (!noRemote) {
+    try {
+      gitStrict(`pull --ff-only origin ${base}`, { ...opts, timeout: NETWORK_TIMEOUT });
+      cleaned.push(`sync:${base}`);
+    } catch (e) {
+      warnings.push(
+        `Could not fast-forward local '${base}' to origin/${base}: ${e.message}. ` +
+          `Local '${base}' may be stale — run: git pull --ff-only origin ${base}`
+      );
+    }
+    // Hard post-condition: local base must equal origin/base after a ship.
+    const localBase = git(`rev-parse ${base}`, opts);
+    const remoteBase = git(`rev-parse origin/${base}`, opts);
+    if (localBase && remoteBase && localBase !== remoteBase) {
+      warnings.push(
+        `Local '${base}' (${localBase.slice(0, 7)}) != origin/${base} (${remoteBase.slice(0, 7)}) ` +
+          `after ship — main not fully landed locally.`
+      );
+    }
   }
 
   // Verify remote branch is gone (merge step should have deleted it)
-  const remoteBranch = git(`ls-remote --heads origin ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
+  const remoteBranch = noRemote ? null : git(`ls-remote --heads origin ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
   if (remoteBranch) {
     try {
       gitStrict(`push origin --delete ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
@@ -174,8 +179,10 @@ export async function handler(params) {
   git("worktree prune", opts);
   cleaned.push("worktree-prune");
 
-  git("remote prune origin", opts);
-  cleaned.push("remote-prune");
+  if (!noRemote) {
+    git("remote prune origin", opts);
+    cleaned.push("remote-prune");
+  }
 
   // For intermediate merges: note that the base (feature branch) stays alive
   if (intermediate) {

@@ -852,3 +852,28 @@ describe("assignImagesToNotes — the nearest note wins, never the first match (
     expect(byNote.get(0)[0].gapMs).toBe(10_000);
   });
 });
+
+describe("pruneAssets — image copies of long-finished collections go (#490)", () => {
+  test("old copies are removed on archive, fresh ones and the manifest's claims stay", async () => {
+    const { assetsDir, pruneAssets, archiveNotes, ASSET_MAX_AGE_DAYS } = await import("./batch-state.js");
+    const dir = assetsDir(cwd);
+    fs.mkdirSync(dir, { recursive: true });
+    const oldCopy = path.join(dir, "old-1.png");
+    const freshCopy = path.join(dir, "fresh-1.png");
+    fs.writeFileSync(oldCopy, "x");
+    fs.writeFileSync(freshCopy, "y");
+    const past = new Date(Date.now() - (ASSET_MAX_AGE_DAYS + 1) * 86_400_000);
+    fs.utimesSync(oldCopy, past, past);
+    fs.writeFileSync(path.join(dir, "captured.json"), JSON.stringify({ "/tmp/a/1.png": oldCopy, "/tmp/a/2.png": freshCopy }));
+
+    appendNote(cwd, "eine Notiz");
+    archiveNotes(cwd);
+
+    expect(fs.existsSync(oldCopy)).toBe(false);
+    expect(fs.existsSync(freshCopy)).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, "captured.json"), "utf8"));
+    expect(manifest["/tmp/a/1.png"]).toBe("pruned"); // still taken — never claimed again
+    expect(manifest["/tmp/a/2.png"]).toBe(freshCopy);
+    expect(pruneAssets(cwd)).toEqual([]);
+  });
+});

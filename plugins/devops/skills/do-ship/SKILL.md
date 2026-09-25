@@ -339,7 +339,7 @@ project marched into rebase/push/PR and reported a merge that never happened.
 | `mode` | What it means | How the pipeline changes |
 |---|---|---|
 | `git` | Repo with an origin | Full pipeline, nothing changes. |
-| `git-no-remote` | Local repo, no origin | Everything up to and including the **commit** runs. `ship_release` commits and then stops; push, PR, merge, tag and release are skipped and reported as skipped. |
+| `git-no-remote` | Local repo, no origin | The pipeline runs as usual, but everything that needs GitHub happens **locally**: `ship_release` commits, merges the branch into its local base (main, or the parent of a sub-branch; squash/merge/rebase as passed) and creates the `alpha/v…` tag locally. Only push and PR are skipped. A base that moved ahead returns `rebaseRequired` → `git rebase <base>` (local, no fetch) and retry. The card is `ship-successful` with `state: { mode: "git-no-remote", merged, pushed: false, delivered: "local-merge" }`. Skip Step 4b (no CI) and Step 5d (no remote to promote on). |
 | `file-only` | Not a git repo at all | Everything that is not a git action still runs — see below. |
 
 **`file-only` is NOT "skip the ship".** A ship is worth running in a repo-less
@@ -622,18 +622,21 @@ irreversible step, so once it landed the result ALWAYS carries `merged` +
   `success: true` (tag trouble never fails a landed merge), but the card must
   show the ring gap.
 
-**Two other return shapes exist and must not be mistaken for the one above.**
-Both set `success: true` — success means "the tool did what it could", NOT
-"the work reached main":
+**Two other return shapes exist and must not be mistaken for the one above:**
 
 - `{ success: true, skipped: true, reason: "file-only-mode", delivered: "none" }`
   — not a git repo. Nothing was committed, and there was nothing to commit to.
-- `{ success: true, skipped: true, reason: "no-remote", delivered: "local-commit-only", commit, pushed: false, merged: null }`
-  — local repo without an origin. The commit **did** happen; push/PR/merge did not.
+  `success` means "the tool did what it could", NOT "the work reached main".
+- `{ success: true, reason: "no-remote", delivered: "local-merge", merged: "<base>", mergeSha, pushed: false, tag, tagLocal: true, localMerge: { via } }`
+  — local repo without an origin. Commit, merge into the local base and tag
+  all happened locally; only push and PR did not. On `success: false` with
+  `rebaseRequired` (or `delivered: "local-commit-only"`), the commit is on
+  the branch but not merged — rebase onto the local base and retry, or report
+  the `error` (a dirty checkout of the base is never overwritten).
 
-In both, `merged` is absent or `null`. **Never read `success: true` alone as a
-merge.** Always check `merged` before reporting one, and check `skipped` before
-continuing to any step that assumes a remote.
+**Never read `success: true` alone as a merge.** Always check `merged` before
+reporting one, and check `skipped` / `pushed` before continuing to any step
+that assumes a remote.
 
 **A third shape is a transient failure, not a mode:**
 `{ success: false, reason: "git-probe-timeout", delivered: "none", error }` —
@@ -718,10 +721,9 @@ See `{PLUGIN_ROOT}/deep-knowledge/skill-extension-guide.md -> Delivery targets` 
 
 **Skip this step for intermediate merges** — only relevant when shipping to main.
 
-**Also skip it whenever `merged` is absent or null** — that is the `file-only`
-and `git-no-remote` case, where no merge happened and there is no GitHub
-Actions run to wait for. Gate on `merged`, never on `success` alone: both
-skipped shapes return `success: true`.
+**Also skip it whenever `merged` is absent or null, or `pushed` is false** —
+the `file-only` and `git-no-remote` cases: nothing reached GitHub, so there
+is no Actions run to wait for (a local merge sets `merged` but not `pushed`).
 
 After `ship_release` returns `success: true` **and** `merged: "main"`, spawn the post-merge
 watcher in the background. It waits for the GitHub Actions run triggered by the merge
