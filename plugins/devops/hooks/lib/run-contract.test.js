@@ -681,9 +681,12 @@ describe("CLI", () => {
       // R13: `done` must not exit 0 while reporting closed:false — a caller
       // reading only the exit code would otherwise believe the run ended.
       expect(doneOk.code).toBe(0);
+      // R2 (red-team round 2 Q10): a defensive cleanup `done` with no active
+      // contract at all has nothing to refuse — exit 0, not 1. Exit 1 stays
+      // reserved for a contract that EXISTS and stays open (refused).
       const doneNothing = run("done");
-      expect(doneNothing.out).toMatchObject({ ok: true, closed: false });
-      expect(doneNothing.code).not.toBe(0);
+      expect(doneNothing.out).toEqual({ ok: true, closed: false, reason: "no active contract" });
+      expect(doneNothing.code).toBe(0);
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
     expect(run().code).toBe(1);
     expect(run("arm", "--mode", "x").code).toBe(1);
