@@ -1,6 +1,6 @@
 /**
  * @module pending-tasks
- * @version 0.3.0
+ * @version 0.4.0
  * @description Detects background work that is STILL RUNNING when a turn ends —
  *   subagents launched with run_in_background, backgrounded Bash tasks, and
  *   whole Workflow runs (which fan out to agents of their own).
@@ -25,7 +25,9 @@
  *                         carrying "agentId: <id>"
  *     start  · task     — tool_result "Command running in background with ID: <id>"
  *     start  · workflow — tool_result "Workflow launched in background. Task ID: <id>"
- *     resume · agent    — a SendMessage tool_use addressed `to: <id>`
+ *     resume · agent    — a SendMessage tool_result naming the in-process agent
+ *                         it set running (resumedAgentId / pin.id) — see
+ *                         messagedAgentId() for why the address alone is not
  *     end    · all      — a <task-notification> block naming <task-id><id></task-id>
  *
  *   Scanned chronologically as a state machine, so a resume after a completion
@@ -67,6 +69,16 @@ const WORKFLOW_BG_RE = /Workflow launched in background\. Task ID:\s*([A-Za-z0-9
 const WORKFLOW_SUMMARY_RE = /^Summary:\s*(.+)$/m;
 /** A task-notification means that task STOPPED (it fires when the agent stops). */
 const TASK_NOTIFICATION_RE = /<task-id>\s*([A-Za-z0-9_-]+)\s*<\/task-id>/g;
+/**
+ * The key a SendMessage result names a resumed agent under. The fast path looks
+ * for it too: an agent launched in the FOREGROUND leaves no launch marker, yet
+ * a later send resumes it in the background.
+ */
+const AGENT_RESUME_MARKER = 'resumedAgentId';
+/** A whole agent id — the alphabet AGENT_ID_RE captures. */
+const AGENT_ID_ONLY_RE = /^[A-Za-z0-9_-]+$/;
+/** " [3fa9c1]" — the ref ListAgents appends to a name only to disambiguate it. */
+const ADDRESS_REF_RE = /\s*\[[^\]]*\]\s*$/;
 
 /**
  * Which tool can announce which kind of launch. Bound PER MARKER, not as one
@@ -238,6 +250,48 @@ function notificationText(line) {
 }
 
 /**
+ * The in-process agent a SendMessage set running, or '' when it set none.
+ *
+ * The address cannot tell: `to` may name a subagent (by agentId or by name),
+ * "main", or a peer Claude SESSION found through ListAgents — and a peer never
+ * writes a <task-notification> into this transcript, so opening it left a
+ * phantom "agent" that blocked every later Stop. The result can tell. Verified
+ * against every SendMessage result in the local transcripts (135 sends, 50
+ * sessions):
+ *   resumed  {"success":true,"message":"Resuming agent …","resumedAgentId":"<id>","pin":{"id":"<id>",…}}
+ *   running  {"success":true,"message":"Message queued for delivery to <id> …","pin":{"id":"<id>",…}}
+ *   peer     {"success":true,"message":"… (another Claude session …) queued there …","msg_id":"…"}
+ *   failed   <tool_use_error>Error: No such tool available: SendMessage …</tool_use_error>
+ * A notification for exactly the pinned id followed every resumed or running
+ * send whose session outlived the agent — also for agents launched in the
+ * foreground, which this transcript never saw start. A peer send never got
+ * one, and a failed send starts nothing. The pin holds the agentId even when
+ * `to` was a name, so the open set is keyed by what the notification closes.
+ *
+ * A result in none of these shapes (a future harness format) falls back to the
+ * address, but only to an agent this transcript launched: by its agentId or by
+ * the `name` it was launched under.
+ *
+ * @param {string} text — the SendMessage tool_result
+ * @param {object} input — the SendMessage tool_use input ({ to, message, … })
+ * @param {Map<string, string>} launched — agentId or launch name → agentId
+ */
+function messagedAgentId(text, input, launched) {
+  let r = null;
+  try { r = JSON.parse(text); } catch { /* not JSON: an error, or a shape we do not know */ }
+  if (r && typeof r === 'object') {
+    if (r.success === false) return '';
+    const pinned = String(r[AGENT_RESUME_MARKER] || (r.pin && r.pin.id) || '');
+    if (pinned) return AGENT_ID_ONLY_RE.test(pinned) ? pinned : '';
+    if (r.msg_id) return '';
+  } else if (text.includes('<tool_use_error>')) {
+    return '';
+  }
+  const to = String((input && input.to) || '').trim();
+  return launched.get(to) || launched.get(to.replace(ADDRESS_REF_RE, '')) || '';
+}
+
+/**
  * Walk a JSONL transcript and return the background work still open at its end.
  *
  * @param {string} transcriptContent — raw JSONL (a tail slice is fine)
@@ -246,11 +300,13 @@ function notificationText(line) {
 function scanOpenTasks(transcriptContent) {
   if (!transcriptContent) return [];
 
-  // Fast path for the overwhelming majority of turns: no launch marker anywhere
-  // in the slice means nothing can be open, so skip the per-line JSON parsing.
+  // Fast path for the overwhelming majority of turns: no launch or resume marker
+  // anywhere in the slice means nothing can be open, so skip the per-line JSON
+  // parsing.
   if (!transcriptContent.includes(AGENT_LAUNCH_MARKER) &&
       !transcriptContent.includes(BASH_LAUNCH_MARKER) &&
-      !transcriptContent.includes(WORKFLOW_LAUNCH_MARKER)) {
+      !transcriptContent.includes(WORKFLOW_LAUNCH_MARKER) &&
+      !transcriptContent.includes(AGENT_RESUME_MARKER)) {
     return [];
   }
 
@@ -261,6 +317,9 @@ function scanOpenTasks(transcriptContent) {
   /** id → name, kept across completions so a resume can recover the label
    *  instead of falling back to the id (which must never reach the user). */
   const known = new Map();
+  /** agentId, and the `name` an agent was launched under → agentId: the
+   *  addresses a SendMessage can reach an agent THIS transcript launched by. */
+  const launched = new Map();
 
   for (const raw of transcriptContent.split('\n')) {
     const line = raw.trim();
@@ -293,14 +352,6 @@ function scanOpenTasks(transcriptContent) {
 
       if (block.type === 'tool_use') {
         if (block.id) launchers.set(block.id, block);
-        // A SendMessage to a known agent re-opens it: the harness notifies again
-        // when it stops, so a prior completion must not stick.
-        const to = block.input && block.input.to;
-        if (block.name === 'SendMessage' && to && !open.has(String(to))) {
-          const id = String(to);
-          // Never label with the id — recover the launch name, else stay generic.
-          open.set(id, { kind: 'agent', name: known.get(id) || 'agent' });
-        }
         continue;
       }
 
@@ -310,11 +361,26 @@ function scanOpenTasks(transcriptContent) {
       const launcher = launchers.get(block.tool_use_id);
       const input = launcher && launcher.input;
 
+      // A SendMessage that set an in-process agent running re-opens it: the
+      // harness notifies again when it stops, so a prior completion must not
+      // stick. The result decides, never the address — see messagedAgentId().
+      if (launcher && launcher.name === 'SendMessage') {
+        const id = block.is_error ? '' : messagedAgentId(text, input, launched);
+        // Never label with the id — recover the launch name, else stay generic.
+        if (id && !open.has(id)) open.set(id, { kind: 'agent', name: known.get(id) || 'agent' });
+        continue;
+      }
+
       if (announces(text, AGENT_LAUNCH_MARKER) && canLaunch(launcher, 'agent')) {
         const m = text.match(AGENT_ID_RE);
         if (m) {
           const name = labelFor(input, 'agent');
           known.set(m[1], name);
+          launched.set(m[1], m[1]);
+          // Latest wins, as it does for the harness when a name is reused.
+          if (input && typeof input.name === 'string' && input.name.trim()) {
+            launched.set(input.name.trim(), m[1]);
+          }
           open.set(m[1], { kind: 'agent', name });
         }
         continue;

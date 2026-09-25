@@ -17,6 +17,17 @@ const BASH_BG_TEXT =
   'Command running in background with ID: b68oycrr6. Output is being written to: ' +
   'C:\\Temp\\tasks\\b68oycrr6.output. You will be notified when it completes.';
 
+/** SendMessage results as the harness writes them (ids swapped for the fixture's). */
+const SEND_RESUMED =
+  '{"success":true,"message":"Resuming agent a75d674","resumedAgentId":"a75d674f7108dd6c8",' +
+  '"pin":{"id":"a75d674f7108dd6c8","name":"a75d674f7108dd6c8","ref":"b0ba1e"}}';
+const SEND_QUEUED =
+  '{"success":true,"message":"Message queued for delivery to a75d674f7108dd6c8 at its next tool round.",' +
+  '"pin":{"id":"a75d674f7108dd6c8","name":"a75d674f7108dd6c8","ref":"b595fe"}}';
+const SEND_FAILED =
+  '<tool_use_error>Error: No such tool available: SendMessage. SendMessage is disabled for this ' +
+  'session, in subagents as well as here.</tool_use_error>';
+
 /** One assistant line carrying a tool_use block. */
 function toolUse(id, name, input) {
   return JSON.stringify({
@@ -34,6 +45,25 @@ function toolResult(toolUseId, text) {
       content: [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text }] }],
     },
   });
+}
+
+/** A failed tool call's result: plain string content, flagged is_error. */
+function toolError(toolUseId, text) {
+  return JSON.stringify({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', content: text, is_error: true, tool_use_id: toolUseId }],
+    },
+  });
+}
+
+/** A SendMessage call plus the result the harness wrote for it. */
+function send(toolUseId, to, text) {
+  return [
+    toolUse(toolUseId, 'SendMessage', { to, summary: 'Continue the review', message: 'keep going' }),
+    toolResult(toolUseId, text),
+  ];
 }
 
 /** The queue-operation entry the harness writes when a task stops. */
@@ -95,7 +125,7 @@ describe('scanOpenTasks', () => {
     const lines = [
       ...AGENT_START,
       notification('a75d674f7108dd6c8'),
-      toolUse('toolu_3', 'SendMessage', { to: 'a75d674f7108dd6c8', message: 'keep going' }),
+      ...send('toolu_3', 'a75d674f7108dd6c8', SEND_RESUMED),
     ];
     // Re-opened, and still labelled by its type — never by the internal id.
     expect(scanOpenTasks(lines.join('\n')))
@@ -106,7 +136,7 @@ describe('scanOpenTasks', () => {
     const lines = [
       ...AGENT_START,
       notification('a75d674f7108dd6c8'),
-      toolUse('toolu_3', 'SendMessage', { to: 'a75d674f7108dd6c8' }),
+      ...send('toolu_3', 'a75d674f7108dd6c8', SEND_RESUMED),
       notification('a75d674f7108dd6c8'),
     ];
     expect(scanOpenTasks(lines.join('\n'))).toEqual([]);
@@ -140,6 +170,124 @@ describe('scanOpenTasks', () => {
     // Tail slice starts after the tool_use — the result is still counted.
     const open = scanOpenTasks(toolResult('toolu_gone', AGENT_LAUNCH_TEXT));
     expect(open).toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'agent' }]);
+  });
+});
+
+/**
+ * A SendMessage re-opens only the in-process agent its result says it set
+ * running. Found in a real session: one send to a peer Claude SESSION (picked
+ * from ListAgents) opened an "agent" no notification could ever close, and
+ * every later Stop was blocked demanding a `pending` field.
+ */
+describe('scanOpenTasks — a SendMessage re-opens only an in-process agent', () => {
+  const PEER = '⏳ Refactor the settings page';
+  const PEER_PIPE = String.raw`uds:\\.\pipe\LOCAL\cc-msg-5e1f0c2a9b8d7e6f5a4b3c2d1e0f9a8b`;
+
+  /** What a send to a peer session returns: delivered there, no agent pinned. */
+  function peerSent(to) {
+    return JSON.stringify({
+      success: true,
+      message: `“Share the migration plan” → ${to} (another Claude session on this machine; it is ` +
+        'also connected via Remote Control; queued there — a [Cross-session delivery notice] follows ' +
+        'if that session holds it (different permission mode: its user must approve first) or refuses it)',
+      msg_id: 'b69c9d8c-e501-42fc-82d3-c9bb86f8a83b',
+    });
+  }
+
+  /** A finished backgrounded Bash task — its launch marker defeats the fast path. */
+  const BASH_DONE = [
+    toolUse('toolu_b', 'Bash', { command: 'npm test', description: 'Run the suite', run_in_background: true }),
+    toolResult('toolu_b', BASH_BG_TEXT),
+    notification('b68oycrr6'),
+  ];
+  const AGENT_DONE = [...AGENT_START, notification('a75d674f7108dd6c8')];
+  const NAMED_DONE = [
+    toolUse('toolu_n', 'Agent', { subagent_type: 'devops:qa', name: 'checker', run_in_background: true }),
+    toolResult('toolu_n', AGENT_LAUNCH_TEXT),
+    notification('a75d674f7108dd6c8'),
+  ];
+  /** A result shape this module does not know — only the address is left. */
+  const UNKNOWN_REPLY = 'Delivered.';
+
+  test('a send to a peer session opens nothing', () => {
+    for (const to of [PEER, PEER_PIPE]) {
+      expect(scanOpenTasks([...BASH_DONE, ...send('toolu_s', to, peerSent(to))].join('\n'))).toEqual([]);
+    }
+  });
+
+  test('beside a peer send, a resumed agent is the only thing open until it notifies', () => {
+    const lines = [
+      ...BASH_DONE,
+      ...AGENT_DONE,
+      ...send('toolu_p', PEER, peerSent(PEER)),
+      ...send('toolu_s', 'a75d674f7108dd6c8', SEND_RESUMED),
+    ];
+    expect(scanOpenTasks(lines.join('\n')))
+      .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' }]);
+    expect(scanOpenTasks([...lines, notification('a75d674f7108dd6c8')].join('\n'))).toEqual([]);
+  });
+
+  test('a message queued for a still-running agent keeps it open until it notifies', () => {
+    const lines = [...AGENT_START, ...send('toolu_s', 'a75d674f7108dd6c8', SEND_QUEUED)];
+    expect(scanOpenTasks(lines.join('\n')).map(o => o.id)).toEqual(['a75d674f7108dd6c8']);
+    expect(scanOpenTasks([...lines, notification('a75d674f7108dd6c8')].join('\n'))).toEqual([]);
+  });
+
+  test('a failed send re-opens nothing', () => {
+    const open = scanOpenTasks([
+      ...AGENT_DONE,
+      toolUse('toolu_s', 'SendMessage', { to: 'a75d674f7108dd6c8', message: 'keep going' }),
+      toolError('toolu_s', SEND_FAILED),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('an agent addressed by name re-opens under its agentId, so its notification closes it', () => {
+    const byName = SEND_RESUMED.replace('"name":"a75d674f7108dd6c8"', '"name":"checker"');
+    const lines = [...NAMED_DONE, ...send('toolu_s', 'checker', byName)];
+    expect(scanOpenTasks(lines.join('\n')))
+      .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:qa' }]);
+    expect(scanOpenTasks([...lines, notification('a75d674f7108dd6c8')].join('\n'))).toEqual([]);
+  });
+
+  test('an agent launched in the foreground is tracked once a send resumes it', () => {
+    // A foreground run writes no launch marker — the resume marker alone must
+    // get past the fast path, and the id comes from the result, not `known`.
+    const foreground =
+      'The suite passes; no state is persisted outside the repo.\n' +
+      "agentId: a75d674f7108dd6c8 (use SendMessage with to: 'a75d674f7108dd6c8', summary: " +
+      "'<5-10 word recap>' to continue this agent)\n<usage>subagent_tokens: 61279</usage>";
+    const open = scanOpenTasks([
+      toolUse('toolu_f', 'Agent', { subagent_type: 'devops:qa', description: 'Check the suite' }),
+      toolResult('toolu_f', foreground),
+      ...send('toolu_s', 'a75d674f7108dd6c8', SEND_RESUMED),
+    ].join('\n'));
+    expect(open).toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'agent' }]);
+  });
+
+  test('an unknown result shape falls back to the address — an agent this transcript launched only', () => {
+    expect(scanOpenTasks([...AGENT_DONE, ...send('toolu_s', 'a75d674f7108dd6c8', UNKNOWN_REPLY)].join('\n')))
+      .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' }]);
+    for (const to of ['main', PEER, 'a0000000000000000']) {
+      expect(scanOpenTasks([...AGENT_DONE, ...send('toolu_s', to, UNKNOWN_REPLY)].join('\n'))).toEqual([]);
+    }
+  });
+
+  test('the fallback maps a launch name to its agentId, with or without a ListAgents ref', () => {
+    for (const to of ['checker', 'checker [3fa9c1]']) {
+      expect(scanOpenTasks([...NAMED_DONE, ...send('toolu_s', to, UNKNOWN_REPLY)].join('\n')))
+        .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:qa' }]);
+    }
+  });
+
+  test('a quoted send result is not a resume', () => {
+    for (const tool of ['Grep', 'Read', 'Bash']) {
+      const open = scanOpenTasks([
+        toolUse('toolu_q', tool, { pattern: 'resumedAgentId' }),
+        toolResult('toolu_q', SEND_RESUMED),
+      ].join('\n'));
+      expect(open).toEqual([]);
+    }
   });
 });
 
