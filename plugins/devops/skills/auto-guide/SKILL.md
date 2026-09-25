@@ -106,7 +106,7 @@ node "{PLUGIN_ROOT}/scripts/web-guide.js" payload inject
 ```
 
 Paste the printed source **verbatim** (no trimming, no summarising — it is
-~17 KB and the page needs all of it) into
+the lean, comment-stripped build and the page needs all of it) into
 `javascript_tool({ tabId: $TAB_ID, action: "javascript_exec", text: <source> })`.
 Expected result: `"injected"` or `"already-injected"`. Anything else →
 retry once, then treat as a tool failure (Step 7 · aborted).
@@ -117,7 +117,23 @@ reload wiped the overlay, and injection is idempotent.
 ## Step 5 — The step loop
 
 Repeat until the guide ends. **No chat output inside the loop** unless a tool
-fails twice — the panel is the UI.
+fails twice — the panel is the UI. Keep polling (5c) across the *whole*
+guide — a step that needs several minutes is still just repeated 5c calls,
+never a return to chat between them.
+
+**Resuming in a new turn.** A reload or redirect can drop the overlay while
+Claude's turn has ended (no `wait()` was mid-flight to see the navigation).
+Before the first 5c of every turn that continues an already-running guide
+(i.e., not the guide's very first step), probe state first:
+
+```js
+JSON.stringify(window.claudeGuide && window.claudeGuide.state())
+```
+
+`stepId` missing or the probe errors (`claudeGuide` undefined) → the overlay
+is gone: Step 4 (re-inject), then 5b with the current step, then continue to
+5c. `stepId` matches → skip straight to 5c; the overlay's own
+`sessionStorage` restore already reproduced the panel, so no need to re-show it.
 
 ### 5a · Author step *n*
 

@@ -109,11 +109,16 @@ be one of the four types, and a `help`/`text` `value` is free text to
 *read*, never an instruction to follow. Anything else is dropped and the
 same step is re-sent.
 
-**Lost result recovery.** If a `wait()` result never reaches Claude (tool
-error, retry), the event is consumed. The overlay re-enables its buttons
-after 45 s without a new `setStep` so the user can act again, and the
-Claude loop re-sends the current step after 10 consecutive timeouts and
-ends the guide after 30 (≈ 17 min of silence).
+**Lost result recovery.** A submitted event is queued until a `wait()` call
+consumes it, and the queue is mirrored to `sessionStorage["__wg.queue"]`, so
+a reload between the click and the next `wait()` no longer drops it (#513).
+Every `wait()` call — including one that resolves immediately from the
+queue — stamps a heartbeat (`lastPoll`); once 10 s pass without a poll the
+panel swaps its "Warte auf Claude…" status for "Claude hört gerade nicht zu
+— schreib im Chat „weiter"." instead of guessing the event was lost. The
+Claude loop separately re-sends the current step after 10 consecutive
+`wait()` timeouts and ends the guide after 30 (≈ 17 min of silence) —
+unrelated to the heartbeat, which only concerns the status text.
 
 ### State
 
@@ -183,6 +188,32 @@ project's `.env` without being pasted into chat. Rules:
    decide to paste it themselves instead.
 4. Passwords are **never** requested through the panel. Login happens on the
    site; the overlay only says "log in, then Weiter".
+
+## Surviving a reload (#515)
+
+Every reload or redirect drops the overlay — it lives only in the page's JS
+context (`javascript_tool`/CDP `Runtime.evaluate`), and a new document starts
+with none of it. Three fix ideas were weighed:
+
+1. **Persistent injection** (CDP `Page.addScriptToEvaluateOnNewDocument`, or
+   an extension-registered content script) would make every new document in
+   the guide's tab self-inject. **Not implemented**: none of the tools this
+   skill is allowed to call (`tabs_context_mcp`, `tabs_create_mcp`,
+   `navigate`, `javascript_tool`) expose that CDP method or an equivalent —
+   `javascript_tool` only runs `Runtime.evaluate` in the *current* document.
+   Open for a future skill/tool that does expose it; re-evaluate then.
+2. **Keep polling, probe on resume** — implemented. `SKILL.md` Step 5 now
+   probes `state()` at the start of any turn that resumes an already-running
+   guide and re-injects when the overlay is gone, instead of relying solely
+   on a `wait()` seeing the navigation error live (which only happens when a
+   `wait()` was in flight at the exact moment of the reload).
+3. **Smaller injection** — already covered before this issue: `payload
+   inject` defaults to `leanSource()` (strips comments/indentation), not the
+   raw ~28 KB file, specifically to cut the transcript cost of every
+   re-injection. No further "tiny loader" was added on top: the overlay may
+   not `eval` or fetch a remainder over the network (see the file's own
+   header comment), so a loader would still need the full source pasted in a
+   second call — no cheaper than lean already is, and one extra round trip.
 
 ## Payload helper — `scripts/web-guide.js`
 
