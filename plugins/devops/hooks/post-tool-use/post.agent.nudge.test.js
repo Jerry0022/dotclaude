@@ -12,7 +12,7 @@ const { run } = require("./post.agent.nudge.js");
 
 const dirs = [];
 afterAll(() => {
-  for (const d of dirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
+  for (const d of dirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort: temp dir cleanup */ } }
 });
 
 function project() {
