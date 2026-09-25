@@ -397,7 +397,9 @@ Loop until the gate says `finish`, `pause` or `stop`:
    agent once (`SendMessage`). Then targeted tests for the changed modules,
    merge the sub-branch into the integration branch, `git push -u origin
    <integration branch>` (non-force; no PR), `B state land <id>
-   --sha=<merge sha>`. The integration branch is never `main`, `master` or
+   --sha=<merge sha>`. The push is skipped — the merge stays local, `state
+   land` gets `--pushed=false` — when the repo has no remote or the
+   integration branch is the session's own `main`: that push is the ship's. The integration branch is never `main`, `master` or
    the default branch while the session works on a feature branch — `init`
    and `state integration` refuse them unless the session itself is on that
    branch; otherwise `main` is reached only by shipping, which is the

@@ -508,12 +508,12 @@ function updateInFlight(state, id, patch, nowMs, eventType) {
   return s;
 }
 
-function landTask(state, id, { sha }, nowMs) {
+function landTask(state, id, { sha, pushed = true }, nowMs) {
   const s = clone(state);
   const i = findIndex(s.inFlight, id);
   if (i === -1) throw new Error(`task ${id} is not in flight`);
   const [task] = s.inFlight.splice(i, 1);
-  s.done.push({ ...task, sha: sha || null, pushed: true, landedAt: iso(nowMs) });
+  s.done.push({ ...task, sha: sha || null, pushed: pushed !== false, landedAt: iso(nowMs) });
   pushEvent(s, nowMs, 'land', { id, sha: sha || null });
   return s;
 }
@@ -1274,7 +1274,7 @@ function cli(argv) {
           s = updateInFlight(s, id, { checkpoints: ((cur && cur.checkpoints) || 0) + 1, lastCheckpointAt: iso(now), ...(opts.sha ? { lastCheckpointSha: opts.sha } : {}) }, now, 'checkpoint');
           break;
         }
-        case 'land': s = landTask(s, id, { sha: opts.sha }, now); break;
+        case 'land': s = landTask(s, id, { sha: opts.sha, pushed: opts.pushed !== 'false' }, now); break;
         case 'requeue': s = requeueTask(s, id, { branch: opts.branch, note: opts.note, salvage: opts.salvage }, now); break;
         case 'fail': s = failTask(s, id, { reason: opts.reason }, now); break;
         case 'drain': s = clone(s); enterDrain(s, opts.reason || 'manual', now); break;

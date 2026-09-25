@@ -105,6 +105,20 @@ describe("calibrationFor — defaults scale by plan, measurements replace them (
   });
 });
 
+describe("landTask — a merge that stays local says so", () => {
+  test("pushed defaults to true; --pushed=false (session on main, no remote) is recorded", () => {
+    const u = usage();
+    const q = [task("p0", "M", "P0"), task("p1", "M", "P1")];
+    const plan = bp.derivePlan({ usage: u, queue: q });
+    let s = stateFor(plan, q, u);
+    s = bp.claimTask(s, "p0", NOW);
+    s = bp.claimTask(s, "p1", NOW);
+    s = bp.landTask(s, "p0", { sha: "a1" }, NOW + 1);
+    s = bp.landTask(s, "p1", { sha: "b2", pushed: false }, NOW + 2);
+    expect(s.done.map((t) => [t.id, t.pushed])).toEqual([["p0", true], ["p1", false]]);
+  });
+});
+
 describe("derivePlan — depth first, breadth to fill, a gate that can say no", () => {
   test("typical case: one lane at max, a real uplift, leftover reported honestly", () => {
     const p = bp.derivePlan({ usage: usage({ weeklyUsed: 85, weeklyResetMin: 30 * 60 }), queue: [task("p0", "M", "P0")] });

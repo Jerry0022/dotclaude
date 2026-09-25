@@ -139,7 +139,8 @@ its own targeted tests green, meaningful without a later item. Per task:
 4. Targeted tests for the changed modules only.
 5. Merge the sub-branch into `burn/<slug>`; `git push -u origin burn/<slug>`
    (non-force, no PR, no ship — `autonomous-execution.md` § Safety
-   Guardrails). `init` and `state integration` refuse `main`, `master` and
+   Guardrails). No remote, or the integration branch is the session's own
+   `main` → the merge stays local and `state land` gets `--pushed=false`. `init` and `state integration` refuse `main`, `master` and
    the remote's default branch as the integration branch, and a salvage never
    commits onto them — unless the session itself works on that branch (no
    feature branch, by necessity). From a feature branch, `main` is reached

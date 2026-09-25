@@ -273,6 +273,8 @@ router's tick was the burn confirmation, and autonomous Step 4 asks
 - **Every task lands on its own** — checkpoint commits while working, then
   commit → targeted tests → merge → push, per task.
 - **Push the integration branch, never main** — non-force, no PR, no ship.
+  A session working on `main` itself merges there but does not push, and a
+  repo without a remote merges locally (`state land --pushed=false`).
   This is the one push exception in `autonomous-execution.md` § Safety
   Guardrails; the router's single ship after the run (Q2 "Ship automatisch")
   is not part of the conveyor.
