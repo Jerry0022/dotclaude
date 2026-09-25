@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.205.4] — 2026-09-25
+
+### Fixed
+- **A task stopped with TaskStop no longer blocks every later card.** The Stop guard counted a background task as running until a `<task-notification>` named it, but a task ended with TaskStop never gets one: TaskStop's own result is the only record. The task stayed open for the rest of the session, and Gate 5 blocked each completion card with "Background work is STILL RUNNING" although the process was gone. `scanOpenTasks` now ends a task on TaskStop's success report. Only TaskStop's own result counts, and only when it is that report: the same text quoted by Grep, Read or Bash closes nothing, and neither does a failed stop ("No task found", "not running"). A task stopped and started again under a new id stays open only under the new id.
+
 ## [0.205.3] — 2026-09-25
 
 ### Fixed
