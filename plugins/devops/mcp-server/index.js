@@ -39,7 +39,7 @@
 // CLI — then runs on a bare node with no third-party module in the graph, which
 // is exactly what the CLI fallback exists for: the session where the MCP server
 // itself never came up.
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -360,6 +360,61 @@ function withDetectedRepoMode(params) {
   if (state.delivered === 'local-commit-only' || (names && !names.includes('origin'))) {
     params.state = { ...state, mode: 'git-no-remote' };
   }
+}
+
+/**
+ * Without a remote there is nobody to ask "ship?": a finished turn ships
+ * itself — /do-ship commits, merges into the local base and tags (#500
+ * follow-up). So a plain `ready` card in a repo with NO remote at all and
+ * unshipped work is not drawn; the caller gets the instruction to run the
+ * local ship, whose own card replaces this one.
+ *
+ * Deliberately narrow — anything else gets the normal card:
+ *   - only the plain `ready` key: red tests, unverified work, open background
+ *     work, a concept page or an armed batch never merge into main unasked;
+ *   - only when `git remote` is empty (a repo with just `upstream` is not
+ *     local-only — it may be pushed by hand);
+ *   - only tracked changes or unshipped commits count (a stray untracked file
+ *     must not trigger a ship that commits it);
+ *   - never during a ship (sentinel) or for a ship's own outcome card;
+ *   - at most once per unchanged state and session: when the ship could not
+ *     run (preflight blocked, no skill available), the next render draws the
+ *     card instead of asking again — no loop, and the Stop gate gets its card.
+ *
+ * @returns {string|null} the instruction, or null to render the card as usual
+ */
+function localShipInstruction(params) {
+  if (params.variant !== 'ready') return null;
+  const state = params.state || {};
+  if (state.mode !== 'git-no-remote' || state.delivered) return null;
+  const cwd = params.cwd || process.cwd();
+  try {
+    const names = remoteNames(cwd);
+    if (!names || names.length > 0) return null;
+    if (hasPending(params.pending) || hasConcept(params.concept) || readBatch(cwd)) return null;
+    if (resolveCardKey({ ...params, vv: readVVState(params.session_id) }) !== 'ready') return null;
+    const { isActive } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-sentinel.js'));
+    if (isActive(cwd)) return null;
+    const { hasUnshippedWork, defaultBranchRef } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-unshipped.js'));
+    const git = (dir, args) => execFileSync('git', args, { ...GIT_PROBE_OPTS, cwd: dir });
+    // No base branch yet (a repo without a first commit): nothing to land on.
+    if (!defaultBranchRef(cwd, git)) return null;
+    const tracked = git(cwd, ['status', '--porcelain', '--untracked-files=no']).trim();
+    if (!tracked && !hasUnshippedWork(cwd)) return null;
+    // Once per state: HEAD + the tracked changes.
+    const signature = git(cwd, ['rev-parse', 'HEAD']).trim() + '\n' + tracked;
+    const flag = join(tmpdir(), `dotclaude-devops-local-ship-${params.session_id || 'unknown'}`);
+    let previous = null;
+    try { previous = readFileSync(flag, 'utf8'); } catch { /* first time */ }
+    if (previous === signature) return null;
+    writeFileSync(flag, signature, 'utf8');
+  } catch {
+    return null; // any doubt → the normal card
+  }
+  const en = params.lang === 'en';
+  return en
+    ? '[LOCAL SHIP — DO NOT OUTPUT THIS BLOCK]\nThis repo has no remote, so a finished turn is shipped locally without asking: nothing was rendered. Do it now, without asking the user:\n1. Uncommitted changes, or HEAD on main/master: commit the turn\'s work on a feature branch first (`git switch -c <feat/topic>` is allowed on main; stage only the files of this work, never secrets).\n2. Run the devops:do-ship skill (cwd as above). Without a remote it merges the branch into its local base and tags it; its completion card ends the turn instead of this one.\nIf the ship cannot run, render this card again — it is then drawn normally.'
+    : '[LOCAL SHIP — DIESEN BLOCK NICHT AUSGEBEN]\nDieses Repo hat kein Remote: eine fertige Arbeit wird ohne Rückfrage lokal geshippt, deshalb wurde keine Card gezeichnet. Jetzt, ohne den Nutzer zu fragen:\n1. Uncommittete Änderungen oder HEAD auf main/master: die Arbeit dieses Turns zuerst auf einem Feature-Branch committen (`git switch -c <feat/topic>` ist auf main erlaubt; nur die Dateien dieser Arbeit stagen, nie Secrets).\n2. Den Skill devops:do-ship starten (cwd wie oben). Ohne Remote merged er den Branch lokal in seine Basis und taggt; seine Completion-Card beendet den Turn statt dieser.\nKann der Ship nicht laufen, diese Card erneut rendern — dann wird sie normal gezeichnet.';
 }
 
 function getRepoUrl(cwd) {
@@ -773,7 +828,10 @@ function renderPipelineLine(input, lang, buildId) {
   // nowhere to go, so they are not drawn as pending steps (#500).
   const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
   if (state.mode === 'git-no-remote') {
-    let local = (commitDone ? '✓' : '○') + ' commit · ' + (lang === 'en' ? 'local only, no remote' : 'nur lokal, kein Remote');
+    const localWord = lang === 'en' ? 'local only, no remote' : 'nur lokal, kein Remote';
+    let local = state.merged
+      ? '✓ commit → ✓ merge ' + state.merged + ' · ' + localWord
+      : (commitDone ? '✓' : '○') + ' commit · ' + localWord;
     if (state.branch) local += ' · ' + state.branch;
     // A local ship still bumps and commits the version.
     if (version) local += ' · v' + String(version).replace(/^v/, '');
@@ -1822,6 +1880,12 @@ function runRenderCardCli(source) {
   if (unknown.length) {
     process.stderr.write(`[dotclaude-completion] ignored unknown top-level key(s): ${unknown.join(', ')} — not part of the card schema\n`);
   }
+  withDetectedRepoMode(params);
+  const localShip = localShipInstruction(params);
+  if (localShip) {
+    process.stderr.write(localShip + '\n');
+    process.exit(0);
+  }
   const cardMarkdown = buildCompletionCard(params);
   // The rename and CTA-widget instructions ride on stderr so stdout stays the verbatim card.
   const titleNote = sessionTitleNote(params);
@@ -2138,6 +2202,9 @@ server.registerTool(
     }),
   },
   async (params) => {
+    withDetectedRepoMode(params);
+    const localShip = localShipInstruction(params);
+    if (localShip) return { content: [{ type: 'text', text: localShip }] };
     const cardMarkdown = buildCompletionCard(params);
     const titleNote = sessionTitleNote(params);
     const actionsNote = ctaActionsNote(params);

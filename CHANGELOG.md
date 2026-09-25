@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.202.0] — 2026-09-25
+
+### Added
+- **Without a remote, a ship lands locally.** In a repo with no `origin`, `ship_release` still commits, and now also merges the branch into its local base and creates the `alpha/v…` tag locally. The base is main (or master), or the parent branch of a sub-branch, and squash, merge or rebase work as before. Only push and PR are skipped. Main does not need to be checked out: if it is checked out elsewhere, for example in the main checkout, that checkout is fast-forwarded; if it has uncommitted changes, or an untracked file the branch would add, nothing is overwritten and the ship stops with a clear reason. If main has moved ahead in the meantime, the ship asks for a local `git rebase <base>`. Afterwards the branch points at the landed commit, so the next ship from the same worktree needs no rebase. `ship_cleanup` skips every step that needs an origin.
+- **A finished turn in a repo without any remote ships itself, with no button and no question.** Where a `ready` card would ask "ship?", the card tool instead tells Claude to commit the work on a feature branch and run `/do-ship`, and that ship's card ends the turn. This happens only for a plain `ready` card: never with red tests, unverified work, background work still running, an open concept page or an armed batch. It needs a repo with no remote at all and changes to tracked files or unshipped commits; a stray untracked file does not trigger it. It fires at most once per state, so if the ship cannot run, the card is drawn as usual. A local merge counts as a finished ship: the card shows `✓ commit → ✓ merge main · nur lokal, kein Remote`.
+
+### Changed
+- **The default branch without `origin/HEAD` is read from the local branches** (main, then master). A master-based repo without a remote gets a final ship with a tag, instead of a merge into a missing `main`.
+- **SessionStart points local-only repos to `/do-ship` again**, now worded as "commit and merge locally".
+
+### Fixed
+- **do-batch cleans up old image copies.** When a merge archives its notes, `.claude/batch-assets/` copies older than 30 days are removed. A copy's age counts from the time it was captured, not from the original image, so a live note never loses its image.
+- **An image pasted with `/do-batch <text>` stays with that note** while collection is running. An image sent with a bare `/do-batch` becomes a note of its own.
+
 ## [0.201.4] — 2026-09-25
 
 ### Fixed

@@ -82,10 +82,21 @@ describe("hasUnshippedWork", () => {
     expect(hasUnshippedWork(path.join(root, "does-not-exist"))).toBe(true);
   });
 
-  test("no origin → true", () => {
+  test("no origin → compared against the local default branch (ships merge locally)", () => {
     const lone = path.join(root, "lone");
     fs.mkdirSync(lone);
-    git(lone, "init", "-q");
+    git(lone, "init", "-q", "-b", "main");
+    commit(lone, "a.txt", "x", "init");
+    expect(hasUnshippedWork(lone)).toBe(false);
+    git(lone, "switch", "-q", "-c", "feat/x");
+    commit(lone, "b.txt", "y", "feat");
+    expect(hasUnshippedWork(lone)).toBe(true);
+  });
+
+  test("no origin and no default branch → true (fail-safe)", () => {
+    const lone = path.join(root, "lone2");
+    fs.mkdirSync(lone);
+    git(lone, "init", "-q", "-b", "trunk");
     commit(lone, "a.txt", "x", "init");
     expect(hasUnshippedWork(lone)).toBe(true);
   });

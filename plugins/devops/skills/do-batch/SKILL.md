@@ -254,7 +254,8 @@ the image to `<tmp>/claude/<project-slug>/<session_id>/images/`; the hook
 copies every image whose mtime matches the prompt (±3 s) to
 `.claude/batch-assets/<note-timestamp>-<n>.<ext>` and appends
 `[Anhang-Datei] <copy>` to the note. The panel says "📎 Das Bild ist mit der
-Notiz gespeichert". Nothing for you to do; the copies are never moved, so
+Notiz gespeichert". The same holds for `/do-batch <text>` while collecting;
+an image with a bare `/do-batch` still becomes a note of its own. Nothing for you to do; the copies are never moved, so
 archived notes keep valid paths.
 
 ## Step 3 — Status
@@ -429,7 +430,8 @@ the scope with the user.
 recoverable; a merge must never be the only record of what the user actually
 wrote. The archived path travels with the hand-off (4.9). Image copies in
 `.claude/batch-assets/` stay where they are — their names carry the note's
-timestamp, so the archived notes still point at them.
+timestamp, so the archived notes still point at them. `archiveNotes` removes
+copies older than 30 days, so only long-finished collections lose their images.
 
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/do-batch go` path
