@@ -61,11 +61,13 @@
  *   an unreadable/unrenamable stale lock (Windows) no longer spins at
  *   100% CPU forever; it gives up at `lockWaitMs` like any other contention.
  * RT2-Q7a (update() vs a lock it lost): `update()` can lose its header lock
- *   to the 1 s stale-lock takeover while still mid read-modify-write; it now
- *   re-reads the header immediately before the atomic write, still under
- *   whatever lock it holds, and refuses to overwrite a header that carries
- *   `closedAt` by then — unless the patch itself explicitly re-arms
- *   (`{ closedAt: null }`).
+ *   to the 1 s stale-lock takeover while still mid read-modify-write; a
+ *   close() landing AFTER `update()`'s own "fresh" read but BEFORE its write
+ *   used to be silently dropped. `update()` now re-reads the header once
+ *   more, immediately before the atomic write and still under whatever lock
+ *   it holds, and refuses ONLY the write that would drop a closedAt the
+ *   fresh read never saw (a close landing before the fresh read already
+ *   survives — `next` merges fresh's closedAt through untouched).
  * RT2-Q7b (quarantine rename-back): `renameSync` REPLACES an existing
  *   target on both Windows and POSIX, so putting a false-positive
  *   quarantine copy back could clobber a header a concurrent `arm()` wrote
@@ -746,11 +748,6 @@ function update(cwd, patch = {}, opts = {}) {
   try {
     const h = readContract(cwd, { now, sessionId: opts.sessionId });
     if (!h) return null;
-    // Q7a: a patch is allowed to explicitly re-arm (clear closedAt) — the
-    // one case allowed to write over a concurrent close below. `rest` always
-    // strips closedAt/closeReason/aborted, so this is read from the ORIGINAL
-    // patch before stripping.
-    const reArm = !!(patch && Object.prototype.hasOwnProperty.call(patch, 'closedAt') && patch.closedAt === null);
     const rest = { ...(patch || {}) };
     delete rest.id; delete rest.armedAt; delete rest.v;
     delete rest.closedAt; delete rest.closeReason; delete rest.aborted;
@@ -760,18 +757,18 @@ function update(cwd, patch = {}, opts = {}) {
     // re-read catches) its fields survive the merge below untouched.
     const fresh = readRawContract(cwd);
     if (!fresh || fresh.id !== h.id) return null;
-    const next = sanitize({
-      ...fresh,
-      ...rest,
-      ...(reArm ? { closedAt: null, closeReason: null, aborted: false } : {}),
-    });
+    const next = sanitize({ ...fresh, ...rest });
     // Q7a: a slow update() can lose its lock to the 1s stale takeover
-    // (LOCK_STALE_MS) and land here after a concurrent close() already wrote
-    // closedAt under a fresh lock in between our reads above and this write.
-    // Re-read one more time, immediately before the atomic write (still
-    // under whatever lock THIS call holds), and refuse to clobber that close
-    // — unless this patch explicitly re-arms.
-    if (!reArm) {
+    // (LOCK_STALE_MS) and keep running after a concurrent close() acquires a
+    // fresh lock and writes closedAt. When `fresh` (above) already saw that
+    // closedAt, `next` already carries it through the merge (the comment
+    // above) — the write below is a harmless no-op re-write, and this must
+    // still return the merged header, not null. The real gap is a close()
+    // landing AFTER `fresh` was read but BEFORE this write: re-read once
+    // more, immediately before the atomic write (still under whatever lock
+    // this call holds), and refuse ONLY the write that would silently drop
+    // a closedAt `fresh` never saw.
+    if (!fresh.closedAt) {
       const justBeforeWrite = readRawContract(cwd);
       if (justBeforeWrite && justBeforeWrite.id === h.id && justBeforeWrite.closedAt) return null;
     }

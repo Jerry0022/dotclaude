@@ -399,14 +399,17 @@ describe("RT2-Q7a: update() vs a lock it lost to the stale-lock takeover", () =>
     expect(raw.mode).toBe("prompt"); // update()'s patch never landed
   });
 
-  test("an explicit re-arm patch ({ closedAt: null }) is still allowed to write", () => {
+  test("a patch carrying closedAt: null can never resurrect an already-closed contract", () => {
     store.arm(cwd, { mode: "prompt" }, { now: T0 });
     store.close(cwd, "done", { now: T0 });
-    // update() itself refuses a closed header (readContract filters it out) —
-    // this only asserts the reArm escape hatch does not throw / misbehave
-    // when a caller passes it against a still-open contract.
-    const patched = store.update(cwd, { mode: "audit", closedAt: null }, { now: T0 - 1 });
-    expect(patched === null || patched.mode === "audit").toBe(true);
+    // `closedAt` is always stripped from the patch (readContract() also
+    // already refuses a closed header) — a patch can never re-open a closed
+    // contract, no matter what value it sends for closedAt.
+    const patched = store.update(cwd, { mode: "audit", closedAt: null }, { now: T0 + 1000 });
+    expect(patched).toBeNull();
+    const raw = store.readRawContract(cwd);
+    expect(raw.closedAt).not.toBeNull();
+    expect(raw.mode).toBe("prompt");
   });
 });
 
