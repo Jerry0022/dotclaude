@@ -181,6 +181,14 @@ describe("extractAnswers", () => {
     expect(r).toMatchObject({ mode: "backlog", flow: "autonomous", ship: "auto", passes: ["harden", "polish"] });
     expect(R.extractAnswers([{ type: "text", text }], {}).answers["Bist du dabei, und wer shippt am Ende?"]).toBe("Weg · Ship automatisch");
   });
+
+  test("C5: the {content:[…]} MCP envelope and the {result:\"…\"} shape both feed textOf's \"Q\"=\"A\" parsing", () => {
+    const text = '"Umfang?"="Strikt"';
+    const envelope = { content: [{ type: "text", text }] };
+    expect(R.extractAnswers(envelope, {}).answers).toEqual({ "Umfang?": "Strikt" });
+    const resultShape = { result: text };
+    expect(R.extractAnswers(resultShape, {}).answers).toEqual({ "Umfang?": "Strikt" });
+  });
 });
 
 describe("parseMachinePrompt", () => {

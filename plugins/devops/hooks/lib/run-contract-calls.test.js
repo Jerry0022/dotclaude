@@ -277,6 +277,22 @@ test("R2: mergeResult reads a real MCP envelope {content:[{type:'text',text:'{me
   expect(C.mergeResult("nope")).toBeNull();
 });
 
+describe("C6: baseBranch(after) when @{-1} never resolves (a fresh repo's very first checkout)", () => {
+  test("a repo with no prior HEAD move (`switch -c feat/x-sub` right after init) → null; isItemBranch still true", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-basebranch-fresh-"));
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    execFileSync("git", ["switch", "-q", "-c", "feat/x-sub"], { cwd: dir });
+    const b = C.baseBranch(dir, "feat/x-sub", true);
+    expect(b).toBeNull();
+    // isItemBranch(facts, hook, current): `current` (null here) can't rule
+    // out a "<current>-sub" / "<current>/sub" suffix — it stays a boundary.
+    expect(C.isItemBranch({ branch: true, branchName: "feat/x-sub" }, {}, b)).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("R11: baseBranch / shellCallFacts share one budget across their 2 git calls in the post path", () => {
   test("baseBranch(after) threads a shared budget into both gitOut calls, not GIT_TIMEOUT_MS each", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-basebranch-"));
