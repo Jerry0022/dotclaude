@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.204.1] — 2026-09-25
+
+### Fixed
+- **A message to another Claude session no longer counts as a running agent.** The Stop guard treated every `SendMessage` recipient as a resumed background agent. A message to a peer session picked from `ListAgents`, or a send that failed, never produces a completion notice, so the entry never closed: every later turn was blocked once with "Background work is STILL RUNNING … - agent" and asked for a card with an invented `pending` field. Now the send's own result decides. Only an in-process agent the harness reports as resumed or still running is re-opened, under its agentId even when it was addressed by name, so its next notice closes it again. A peer delivery or an error opens nothing, and an unfamiliar result format falls back to the address only for an agent this session launched.
+- **An agent launched in the foreground and later continued with `SendMessage` counts as running until it reports back.** Before, the guard missed it in sessions without any background launch.
+
 ## [0.204.0] — 2026-09-25
 
 ### Added
