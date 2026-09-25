@@ -318,6 +318,17 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(html).not.toContain("#7d84a8");
   });
 
+  test("polish: the ✗ / ⚠ / ? marks carry their state through host colour tokens, ✓ stays plain", () => {
+    const html = runContractLineHtml("🧾 Run · Audit · Autonom · Ship auto — Harden ✓ · Polish ⚠ (keine UI) · QA ? · do-ship ✗");
+    expect(html).toContain('<span style="color:var(--text-danger, #e0a0a0)">✗</span>');
+    expect(html).toContain('<span style="color:var(--text-danger, #e0a0a0)">⚠</span>');
+    expect(html).toContain('QA <span style="color:var(--text-warning, #d9c58a)">?</span>');
+    expect(html).toContain("Harden ✓ · ");
+    expect(html).not.toMatch(/<span[^>]*>✓<\/span>/);
+    // Only a standalone "?" token is a state mark — never one inside a word.
+    expect(runContractLineHtml("🧾 Run · a?b ✓")).not.toContain("text-warning");
+  });
+
   test("H-D16: runContractLineHtml escapes < and &", () => {
     const html = runContractLineHtml("a < b & c");
     expect(html).toContain("a &lt; b &amp; c");

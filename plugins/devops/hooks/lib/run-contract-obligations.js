@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.3.1
+ * @version 0.3.2
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -322,7 +322,8 @@ function renderStates(label, states, skipReason, aggregate) {
   if (aggregate && n > 1) {
     if (open) return `${label} ${done}/${n} ✗`;
     if (skipped) return `${label} ${done}/${n} ⚠${why}`;
-    return `${label} ${done}/${n}`;
+    // Polish: every item done carries the same ✓ a single done step does.
+    return `${label} ${done}/${n} ✓`;
   }
   if (open) return `${label} ✗`;
   if (skipped) return `${label} ⚠${why}`;

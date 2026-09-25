@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.7.3
+ * @version 0.8.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -440,6 +440,11 @@ function channelLadderHtml(ladder, lang) {
  * RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
  * neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss" as
  * an open step, so it gets the same readable colour.
+ * Polish: the state marks themselves carry the state, as the evidence row's
+ * glyphs do (glyphColor) — ✗ / ⚠ in the danger colour, a doubtful ` ?` in
+ * the warning colour — through the host's own tokens (the literal palette is
+ * only the fallback: it is tuned for the dark theme), so both themes keep
+ * their contrast. ✓ stays plain.
  *
  * @param {string} [text] the run-contract line, e.g. from `model.runContract`
  * @returns {string} the `<div class="card-run-contract">…</div>` fragment, or
@@ -449,7 +454,10 @@ export function runContractLineHtml(text) {
   if (!text) return "";
   const hasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(text);
   const color = hasOpenStep ? "var(--text-secondary)" : COLOR.watermark;
-  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:4px 0">${escapeHtml(text)}</div>`;
+  const marked = escapeHtml(text)
+    .replace(/[✗⚠]/g, (g) => `<span style="color:var(--text-danger, ${COLOR.red})">${g}</span>`)
+    .replace(/(\s)\?(?=\s|$)/g, `$1<span style="color:var(--text-warning, ${COLOR.yellow})">?</span>`);
+  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:4px 0">${marked}</div>`;
 }
 
 // › lines (result lines, context, points): the glyph visible — lilac,

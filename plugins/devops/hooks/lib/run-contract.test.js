@@ -636,7 +636,7 @@ describe("summaryForCard", () => {
     const c = C({ mode: "backlog", flow: "autonomous", ship: "auto", items: ["1", "2"] });
     const item = (n, harden) => [sk("auto-agents"), edit, ...(harden ? [sk("auto-harden")] : []), sk("auto-polish"), sk("do-ship"), rel([n])];
     const evs = [triaged, sk("auto-issue", "#1"), ...item("1", true), ...item("2", false)];
-    expect(R.summaryForCard(c, evs, "de")).toBe("🧾 Run · Backlog · Autonom · Ship auto — Triage ✓ · Refine 1/2 ✗ · auto-agents 2/2 · Harden 1/2 ✗ · Polish 2/2 · do-ship 2/2");
+    expect(R.summaryForCard(c, evs, "de")).toBe("🧾 Run · Backlog · Autonom · Ship auto — Triage ✓ · Refine 1/2 ✗ · auto-agents 2/2 ✓ · Harden 1/2 ✗ · Polish 2/2 ✓ · do-ship 2/2 ✓");
   });
 
   test("aborted contracts say so", () => {

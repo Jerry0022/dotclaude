@@ -529,8 +529,12 @@ closed / aborted in the last 15 minutes (so the closing card still carries it):
 🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · Polish ⚠ (keine UI) · QA ✓ · do-ship ✓
 ```
 
-Backlog aggregates over segments with work (`Harden 6/6`). ✓ done · ⚠ skipped
-(reason) · ✗ open. Localized de/en like the rest of the card.
+Backlog aggregates over segments with work (`Harden 6/6 ✓`, `Harden 4/6 ✗`).
+✓ done · ⚠ skipped (reason) · ✗ open · `?` not measurable. The widget
+colours the marks themselves — ✗ / ⚠ in the host's danger colour, `?` in its
+warning colour, ✓ plain — and the whole line takes the body-text colour
+instead of the dim watermark as soon as one mark is not ✓ (AUD-021, RT2-R5).
+Localized de/en like the rest of the card.
 
 ### K. The 6-file nudge (AUD-024) — `hooks/post-tool-use/post.agent.nudge.js`
 
