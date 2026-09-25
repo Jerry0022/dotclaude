@@ -1315,7 +1315,7 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
 .feedback-section label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; }
 .feedback-section label strong { color: var(--accent-color); }
 .feedback-section textarea {
-  width: 100%; padding: 0.65rem 0.7rem;
+  box-sizing: border-box; width: 100%; padding: 0.65rem 0.7rem;
   border: 1px solid var(--border-color); border-radius: 10px;
   background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
   /* 80px, not 90px: with the reorder the compact dock's normal load is
@@ -2042,6 +2042,7 @@ the override slot.
   letter-spacing: 0.01em;
 }
 .decision-comment-row textarea {
+  box-sizing: border-box;
   width: 100%;
   min-height: 48px;
   padding: 0.5rem 0.65rem;
@@ -3749,10 +3750,16 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
 .anno-bubble[data-open="true"] .anno-bubble-question { white-space: normal; }
 .anno-chevron { transition: transform 0.15s; color: var(--text-secondary); }
 .anno-bubble[data-open="true"] .anno-chevron { transform: rotate(90deg); }
-.anno-bubble-body { display: none; flex-direction: column; gap: 0.5rem; padding: 0 0.75rem 0.75rem; }
+.anno-bubble-body { display: none; flex-direction: column; gap: 0.5rem; padding: 0 0.75rem 0.75rem; min-width: 0; }
 .anno-bubble[data-open="true"] .anno-bubble-body { display: flex; }
+/* border-box is load-bearing: with the default content-box, `width: 100%`
+   plus padding and border makes the answer field ~20px wider than the
+   bubble body, so an expanded bubble shows it sticking out past its right
+   edge. `max-width` also caps a user drag-resize (resize: vertical only,
+   but some engines still honour a horizontal grip). */
 .anno-answer {
-  width: 100%; min-height: 64px; resize: vertical;
+  display: block; box-sizing: border-box;
+  width: 100%; max-width: 100%; min-height: 64px; resize: vertical;
   padding: 0.5rem 0.6rem; border-radius: 8px;
   border: 1px solid var(--border-color, #30363d);
   background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
