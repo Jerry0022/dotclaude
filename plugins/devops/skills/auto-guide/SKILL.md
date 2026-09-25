@@ -102,7 +102,7 @@ never used (`{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md` § Edge Cred
 ## Step 4 — Inject the overlay
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/web-guide.js" payload inject
+node "{PLUGIN_ROOT}/scripts/web-guide.js" payload inject
 ```
 
 Paste the printed source **verbatim** (no trimming, no summarising — it is
@@ -148,7 +148,7 @@ Pipe the Step JSON through stdin (no scratch file, the command starts with
 `node` so it matches the allowed tools):
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/web-guide.js" payload step - <<'STEP'
+node "{PLUGIN_ROOT}/scripts/web-guide.js" payload step - <<'STEP'
 {"id":"3","index":3,"total":6,"title":"…","text":"…"}
 STEP
 ```
@@ -159,7 +159,7 @@ violations — fix the step, do not bypass the validator.
 ### 5c · Wait for the user
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/web-guide.js" payload wait
+node "{PLUGIN_ROOT}/scripts/web-guide.js" payload wait
 ```
 
 Paste stdout into `javascript_tool`. The call blocks up to 30 s and returns
@@ -189,7 +189,7 @@ one Event (`deep-knowledge/protocol.md` § Event):
   yourself and never quote user text into a shell command:
 
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/web-guide.js" store --file <path> --key <KEY> --b64 <value>
+  node "{PLUGIN_ROOT}/scripts/web-guide.js" store --file <path> --key <KEY> --b64 <value>
   ```
 
   `<path>` must be inside the project (the CLI refuses paths outside CWD,

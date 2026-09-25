@@ -16,17 +16,18 @@ first tool call; pick the tier by signal, not by habit.
 
 **Execution path.** Implementing skills (do-run, auto-concept implement,
 auto-fix, auto-harden, auto-polish) execute through the auto-agents skill:
-it applies this table and shows a start table; Inline needs no skill load.
+it applies this table and shows agent cards; Inline needs no skill load.
 Prompts without a skill apply the table directly.
 
 Every spawn is announced to the user — also under the Quiet output style.
-`pre.agent.announce` resolves the effective model and effort and hands you
-the line to show verbatim:
-`→ Agent devops:research · opus · high · background — <what>` /
-`→ Agent devops:research · opus → sonnet · high · background — <what>` (spare).
+`pre.agent.announce` resolves model and effort and hands you an agent card
+(same template for 1 or 10 agents) to show verbatim; spawns in one message
+→ show only the last card, it lists them all — never a prose summary.
 Models are family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`) —
 the harness resolves each to the newest model of that family, so never pin a
 version (`claude-opus-5-5`) in frontmatter, an override or a prompt.
+`Explore` and `general-purpose` inherit the session model: `Explore` only
+locates — pass `model: "sonnet"`; implementing goes to a devops domain agent.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
@@ -49,7 +50,8 @@ version (`claude-opus-5-5`) in frontmatter, an override or a prompt.
 - **Escalation** — same area iterated 2+ times without converging → one tier
   up (`qa` recurring bug, `designer` UI polish, `core` repeated refactor).
 - Never spawn for an explanation or a single-fact lookup; never silently.
-- `redteam` only after the inline pre-mortem hits a higher-stakes trigger.
+- `redteam` only after the inline pre-mortem hits a higher-stakes trigger;
+  max 2 rounds per diff, round-2 leftovers become open points.
 
 ## Budget (the `[budget] … → class` line; plan × window × week)
 

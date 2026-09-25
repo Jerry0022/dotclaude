@@ -238,7 +238,7 @@ To opt into the automatic re-open behaviour, call the session-open
 tracker right after every `start msedge "file://…"` your extension issues:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
   "<absolute native path of the file>" \
   --context=<short-tag>
 ```
@@ -253,7 +253,7 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" track \
 after `ship_cleanup` removes the worktree:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/session-open-tracker.js" reopen-main \
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" reopen-main \
   --worktree="$WORKTREE_PATH"
 ```
 

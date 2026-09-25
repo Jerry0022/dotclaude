@@ -93,6 +93,16 @@ describe("post.design.remind (hook)", () => {
     expect(res.stdout).toContain("R5 scrollbars");
   });
 
+  test("the reminder names ui-defaults.md by its absolute plugin path, never a bare relative one", () => {
+    // A bare `deep-knowledge/ui-defaults.md` does not exist in a consumer
+    // project; the model then searched the filesystem root for it (2026-09-24).
+    const dir = project();
+    const res = runHook(dir, { filePath: path.join(dir, "src", "App.tsx"), sessionId: nextSid() });
+    const root = (process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..")).replace(/\\/g, "/");
+    expect(res.stdout).toContain(`Read ${root}/deep-knowledge/ui-defaults.md for the full rules`);
+    expect(res.stdout).not.toMatch(/[\s(]deep-knowledge\/ui-defaults\.md/);
+  });
+
   test("tooltip.delay override changes the R1 tiers; project beats user-global", () => {
     const dir = project();
     writeOverride(dir, "- tooltip.delay: info 1200, label 400   # ms");

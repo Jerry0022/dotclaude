@@ -44,9 +44,9 @@ Two things about how the graders are written:
   zero role agents, the answer is researched inline.
 - `agent-announce-quiet` scaffolds the Quiet output style into the
   workspace and spawns `devops:research` on a hard go. Expected: the
-  `→ Agent devops:research · opus · high · …` line from
-  `pre.agent.announce` appears in the assistant text despite Quiet's
-  "never narrate" rule.
+  agent card from `pre.agent.announce` (row
+  `| 🔎 | **research** | … | opus | ●●● high |`) appears in the assistant
+  text despite Quiet's "never narrate" rule.
 - Role-agent graders exclude spawns whose input mentions the completion
   card: without Bash the Stop hook's offline card render is delegated to
   whichever agent has a shell — `devops:core` was observed doing it.

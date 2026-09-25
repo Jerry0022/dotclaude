@@ -25,10 +25,10 @@ Projekt" / "Alle Projekte") — never pick silently.
 ## Commands
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/devops-config.js" list                      # effective values + where each comes from
-node "$CLAUDE_PLUGIN_ROOT/scripts/devops-config.js" set cleanup.nudgeThreshold 80 --project
-node "$CLAUDE_PLUGIN_ROOT/scripts/devops-config.js" set cleanup.autoClean false --global
-node "$CLAUDE_PLUGIN_ROOT/scripts/devops-config.js" unset cleanup.nudgeThreshold --project   # back to global/default
+node "{PLUGIN_ROOT}/scripts/devops-config.js" list                      # effective values + where each comes from
+node "{PLUGIN_ROOT}/scripts/devops-config.js" set cleanup.nudgeThreshold 80 --project
+node "{PLUGIN_ROOT}/scripts/devops-config.js" set cleanup.autoClean false --global
+node "{PLUGIN_ROOT}/scripts/devops-config.js" unset cleanup.nudgeThreshold --project   # back to global/default
 ```
 
 Run them from the project's directory (or pass `--cwd <dir>`). The script

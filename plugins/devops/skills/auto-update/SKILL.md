@@ -34,7 +34,7 @@ update mechanism. This skill only adds reporting.
 ## Constants
 
 ```
-PLUGIN_ROOT = ${CLAUDE_PLUGIN_ROOT} (from hook environment)
+PLUGIN_ROOT = {PLUGIN_ROOT} (literal path from the session context; $CLAUDE_PLUGIN_ROOT is empty in the Bash tool)
 MARKETPLACE_DIR = ~/.claude/plugins/marketplaces/dotclaude
 PLUGIN_SUBDIR = plugins/devops
 HOOK_SCRIPT = ${PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js

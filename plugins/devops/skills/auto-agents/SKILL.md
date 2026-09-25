@@ -1,12 +1,12 @@
 ---
 name: auto-agents
-version: 0.11.0
+version: 0.12.0
 description: >-
   The single execution path for everything that implements — do-run,
   auto-concept (implement), auto-fix, auto-harden, auto-polish — and for a
   yes to Claude's full-ceremony offer. Applies the always-on delegation
   policy tiers (inline · 1 agent · parallel · full ceremony), reads plan and
-  usage via get_usage, shows a start table (wave · task · model · effort) and
+  usage via get_usage, shows one agent card (waves · task · model · effort) and
   runs the waves; full ceremony keeps plan → confirm → waves → gates →
   synthesis. Invokes no skill: shipping or a concept page is handed back to
   the caller. Triggers on: "run agents", "use agents", "orchestrate",
@@ -106,7 +106,7 @@ table the policy hook applies to prompts that use no skill:
 
 | Tier | Signal (short form — the policy doc is authoritative) | Here |
 |---|---|---|
-| **Inline** | 1 domain, quick fix, ≤ ~5 files | The session does the work itself. No agent, no start table. |
+| **Inline** | 1 domain, quick fix, ≤ ~5 files | The session does the work itself. No agent, no agent card. |
 | **1 agent** | a conclusion whose path would flood the conversation (research, sweep, full test run, redteam, po) | One background agent; the session keeps working. |
 | **Parallel** | two analysis lenses; or implementing agents in parallel | Spawn in one message, ~5–15 tool calls each. Parallel **implementers** need a yes: the caller's invocation is that yes for `do-run`, `auto-concept` (implement click) and `--autonomous` passes; for `auto-fix` and a direct call, offer it in one sentence first. |
 | **Full ceremony** | 3+ domains, a feature end-to-end, high-risk change | Steps 3–6 in full. |
@@ -134,7 +134,7 @@ allow-list. Prevents permission prompts from interrupting wave execution —
 especially painful with parallel agents.
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --days=7 --quiet
+node "{PLUGIN_ROOT}/scripts/permission-audit.js" --days=7 --quiet
 ```
 
 Parse the JSON `suggestions` array:
@@ -155,7 +155,7 @@ Parse the JSON `suggestions` array:
   tamper-protected; the script writes directly via Node `fs.writeFileSync`):
 
   ```bash
-  node "$CLAUDE_PLUGIN_ROOT/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
+  node "{PLUGIN_ROOT}/scripts/permission-audit.js" --apply="<rule1>,<rule2>" --quiet
   ```
 
   The script re-validates each `--apply` rule against its own freshly-computed
@@ -174,8 +174,6 @@ active `[ui-locale: ...]` (defaults to `en`):
 | Key             | en                            | de                             |
 |-----------------|-------------------------------|--------------------------------|
 | `plan.heading`  | Orchestration plan            | Orchestrierungsplan            |
-| `plan.model`    | Model · Effort                | Modell · Effort                |
-| `plan.task_col` | Task                          | Aufgabe                        |
 | `plan.budget`   | Complexity · tool-call budget | Komplexität · Tool-Call-Budget |
 | `plan.deps`     | Dependencies                  | Abhängigkeiten                 |
 | `plan.estimate` | Estimated agents              | Geschätzte Agents              |
@@ -185,14 +183,7 @@ Template (`{key}` → resolved per locale):
 ```
 ## {plan.heading}: <task summary>
 
-### Agents (N selected)
-
-| Wave | Agent(s) | {plan.model} | {plan.task_col} |
-|------|----------|--------------|-----------------|
-| 0 | research | opus · high | <what they investigate> |
-| 1 | core | sonnet · medium | <what contracts/APIs they define> |
-| 2 | frontend, windows | sonnet · medium | <what they build, in parallel> |
-| 3 | qa | sonnet · medium | <what they verify> |
+<plan card — Step 5, rendered by scripts/agent-card.js>
 
 **{plan.budget}:** Complex → ~15–30 tool calls per agent   [de: Complex → ~15–30 Tool-Calls pro Agent]
 
@@ -203,18 +194,11 @@ Template (`{key}` → resolved per locale):
 ### {plan.estimate}: N
 ```
 
-**`{plan.model}` column** — the effective model **and** reasoning effort each
-agent runs on, rendered `model · effort` (e.g. `opus · high`). Take both from
-`deep-knowledge/agent-orchestration.md` § Model & Effort Defaults (`opus · high`
-for po/research/redteam, `sonnet · medium` for the code agents, designer and qa,
-`sonnet · low` for gamer, `inherit` for feature — model and effort both come from
-the parent session). If a wave has multiple agents on different values, list
-them aligned to the `Agent(s)` order (e.g. `opus · high, sonnet · medium`);
-collapse to a single value when they match. If you override the model at
-invocation (§ Model override rules), show it as `default → override` with the
-effort repeated on both sides (e.g. `sonnet · medium → opus · medium`) so the
-change is visible. Effort never carries an arrow: the Agent tool has no effort
-parameter, so the frontmatter value is always the effective one.
+**The agents** are the Step 5 plan card, not a hand-drawn table: waves as
+sections, model and effort resolved by the script (Model & Effort Defaults
+in `deep-knowledge/agent-orchestration.md`), a model override shown as
+`default → override` — the Agent tool has no effort parameter, so effort
+never carries an arrow.
 
 **`{plan.budget}` line** — the complexity tier of the task (same doc,
 § Complexity Tiers) and the per-agent tool-call ceiling it implies: Medium →
@@ -228,7 +212,9 @@ prompts will carry, so it is visible before anything is spawned.
 on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`.
 Every other caller's own gate was the confirmation — do-run's questions
 answered with "Autonom", the concept's implement click, an `--autonomous` pass —
-and the user may be away, so show the plan and continue. Accept:
+and the user may be away, so show the plan and continue; the plan card is
+then the one agent overview of the run — Step 5 does not show it twice.
+Accept:
 - en: "yes" / "go" / "do it" → proceed as planned
 - de: "ja" / "go" / "mach" → proceed as planned
 - Modifications → adjust plan
@@ -265,73 +251,61 @@ options:
 
 Store the result as `$EXEC_MODE` (`background` or `interactive`).
 
-## Step 5 — Start Table
+## Step 5 — Agent Cards
 
-Shown **once, when execution starts** — after the confirmation where Step 3
-asks for one, otherwise right after Step 2 — for the **1 agent**,
-**parallel** and **full ceremony** tiers. **Not for Inline**: nothing is
-spawned, the model is the session's own, and a one-row table would only
-repeat what the user already sees; the tier is named in the result instead.
-Shown again only when the run changes shape (a wave added or dropped, a
-scope-cut, a sub-split) — the full table, not a diff.
+Every agent display is **one card from one template**
+(`hooks/lib/agent-card.js`) — one agent, three or ten look alike, only the
+rows grow. **Not for Inline**: nothing is spawned. Two kinds:
 
-It is card-style but **has no CTA**: no decision heading, no question, no
-buttons, no "say go". Nothing waits on it — execution continues in the same
-turn. It never carries the `✨✨✨` completion-card marker (that marker is
-reserved for the completion card and the stop guard counts it).
-
-Exact shape (labels per `[ui-locale]`, defaults to `en`):
-
-```
----
-### **▶ {start.heading}** · {tier label}
-| {start.wave} | {start.task} | {start.model} | {start.effort} |
-|---|---|---|---|
-| 1 | devops:core — <what it builds> | sonnet (newest) | medium |
-| 1 | devops:frontend — <what it builds> | sonnet (newest) | medium |
-| 2 | devops:qa — <what it verifies> | sonnet (newest) | medium |
-| 2 | devops:feature — <what it builds> | <session model> | <session effort> |
----
-```
-
-| Key | en | de |
+| Card | Who renders it | When |
 |---|---|---|
-| `start.heading` | Execution start | Ausführung startet |
-| `start.wave` | Wave | Wave |
-| `start.task` | Task | Aufgabe |
-| `start.model` | Model | Modell |
-| `start.effort` | Effort | Effort |
-| tier label | `1 agent · background` / `parallel · N agents` / `full ceremony · N waves` | `1 Agent · Hintergrund` / `parallel · N Agents` / `volle Zeremonie · N Waves` |
+| **Plan card** 🗺️ | `node {PLUGIN_ROOT}/scripts/agent-card.js` (JSON on stdin, see the script header) | Full ceremony: in the Step 3 plan, or — where Step 3 asks no confirmation — once when execution starts. Again only when the run changes shape (a wave added or dropped, a scope-cut, a sub-split) — the full card, not a diff. |
+| **Spawn card** 🤖 | `pre.agent.announce`, for every launch | Every tier that spawns. Agents launched in one message each hand you a card that grows by one row — show **only the last one** of the message, verbatim; it lists them all. A prose summary ("vier Agenten setzen … um") never replaces it. |
 
-One row per task, not per wave; waves repeat. The task cell starts with the
-agent type. Four columns, exactly these, in this order.
+Relay both verbatim, also under the Quiet output style. Neither is typed by
+hand — the plan card comes from the script, the spawn card from the hook,
+so model and effort are resolved the same way in both.
+
+What the template does (so you know what you relay):
+
+- **Header** — `🗺️ Agent-Plan · N Agents · M Waves · <tier>` or
+  `🤖 N Agents gestartet · <mode>`; localised by `[ui-locale]` (`lang` in the
+  script input, the session locale in the hook).
+- **Newest note once** — `*Modelle: jeweils neueste Version der Familie*`
+  under the header, never repeated per row; dropped when every agent inherits.
+- **Waves** — sections (`#### Wave 1 · 2 Agents`) ordered numerically when a
+  card spans more than one wave; a spawn batch within one wave names it in
+  the header. Spawn descriptions therefore start with `[W<n>]`
+  (`[W1] API contracts`) — the card strips the prefix from the task cell.
+- **Rows** — role icon · agent · task · model · effort (`●● medium`).
+- **Σ tally** — the last line groups agents by model · effort
+  (`**3×** sonnet ●● medium  ·  **1×** opus ●●● high`), only when at
+  least one combination occurs twice.
+
+Cards have **no CTA**: no decision heading, no question, no buttons, no "say
+go". Nothing waits on them — execution continues in the same turn. They
+never carry the `✨✨✨` completion-card marker (reserved for the completion
+card; the stop guard counts it).
 
 **Model — resolved at runtime, never hard-coded.** A model id or version
-number never appears in this skill, a frontmatter, an override or a prompt;
-it is resolved when the table is drawn:
+number never appears in this skill, a frontmatter, an override or a prompt:
 
 1. **The chosen family.** The agent's frontmatter `model`, or the override
    you pass at spawn. It must be a value of the Agent tool's `model`
    parameter enum as the tool schema lists it in this session — read the
    enum, do not assume it (today: `sonnet`, `opus`, `haiku`, `fable`). The
    harness resolves each alias to the **newest release** of that family at
-   spawn.
-2. **The cell.** `inherit` → the session's own model, name and version as
-   the system prompt states it (`<family> <version>`, lower case, the way
-   `pre.agent.announce` prints an inherited model) — that is what the agent
-   runs on. A family alias → `<family> (newest)`: the release is picked by
-   the harness at spawn, and writing a version here would be a guess that
-   ages. An override → `<default> → <override> (newest)`, e.g.
-   `sonnet → opus (newest)`.
+   spawn — which is why the card says so once and the cells stay bare.
+2. **The cell.** `inherit` → the session's own model with its version (the
+   script takes it as `"session": "<model> · <effort>"`; the hook reads it
+   from the transcript) — that is what the agent runs on. A family alias →
+   the bare `<family>`. An override → `<default> → <override>`, e.g.
+   `sonnet → opus`.
 
 **Effort — per task.** The agent's frontmatter `effort` (the Agent tool has
 no effort parameter, so that value is the effective one); `inherit` → the
 session's effort. Never an arrow: a budget override lowers the tool-call
 ceiling, not the effort.
-
-After the table, relay the `→ Agent … · model · effort` line
-`pre.agent.announce` hands you for each launch, verbatim — the table says
-what will run, the announce line says what just started.
 
 ## Step 6 — Execution
 
@@ -410,10 +384,11 @@ calls this skill again with the answer.
   issues are returned to the caller (Step 7).
 - **Never skip the plan step in full ceremony** — the plan is always shown;
   confirmation is asked where Step 3 says so.
-- **Start table for every tier except Inline**, exactly the four columns of
-  Step 5, no CTA, no hard-coded model version.
-- **Never run agents silently** — relay the `→ Agent … · model · effort` line
-  `pre.agent.announce` hands you for each launch, verbatim
+- **Agent cards, never hand-drawn tables** — the plan card from the script,
+  the spawn card from `pre.agent.announce` (the last one of each message),
+  both verbatim; no CTA, no hard-coded model version.
+- **Never run agents silently** — a launch without its spawn card shown is a
+  silent launch, also under the Quiet output style
 - **Respect wave dependencies** — Core before Frontend, QA after all code changes
 - **Never ship automatically** — agents commit and push only; `ship: auto`
   is an instruction to the caller, not an action here.

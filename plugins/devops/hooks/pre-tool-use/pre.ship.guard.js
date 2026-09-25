@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.guard
- * @version 0.4.1
+ * @version 0.4.2
  * @event PreToolUse
  * @plugin devops
  * @description Block manual PR creation/merging via Bash.
@@ -28,6 +28,7 @@ require('../lib/plugin-guard');
 
 const { isManualShipCommand } = require('../lib/ship-guard-match');
 const { isServerAlive } = require('../lib/mcp-status');
+const { deepKnowledgePath } = require('../lib/plugin-root');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -93,7 +94,7 @@ process.stdin.on('end', () => {
     );
   }
 
-  lines.push('See {PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md for details.');
+  lines.push(`See ${deepKnowledgePath('mcp-deferred-tools.md')} for details.`);
 
   process.stderr.write(lines.join('\n') + '\n');
   process.exit(2);

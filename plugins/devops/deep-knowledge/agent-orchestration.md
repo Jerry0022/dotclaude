@@ -40,14 +40,14 @@ Each agent defines `model` and optionally `effort` in its frontmatter.
 The orchestrator can override `model` at invocation time but **not** `effort` —
 the Agent tool has no effort parameter, so the frontmatter value is always the
 effective one.
-This table is the **source of truth for the `Model · Effort` column** the plan
-tables show — the auto-agents Step 3 plan renders each agent as `model · effort` (e.g.
-`opus · high`), and its Step 5 start table splits the same values into a Model
-column (the family resolved per run to its newest release, never a pinned id)
-and an Effort column; the `/do-run burn` plan lists `default → override` per role — keep
-it in sync with the agent frontmatter. When you override a model at invocation,
-show it as `default → override` with the effort repeated on both sides
-(`sonnet · medium → opus · medium`); the effort never carries an arrow.
+This table is the **source of truth for the `Model · Effort` column** of
+every agent card (auto-agents Step 5: `scripts/agent-card.js` for the plan,
+`pre.agent.announce` for each spawn) — both resolve `model · effort` from
+the frontmatter, a Model cell (the family resolved per run to its newest
+release, never a pinned id) and an Effort cell; the `/do-run burn` plan lists
+`default → override` per role — keep it in sync with the agent frontmatter.
+A model override at invocation shows as `default → override` (`sonnet → opus`);
+the effort never carries an arrow.
 One standing override comes from the delegation policy's budget class
 ([agent-proactivity.md](agent-proactivity.md) § Budget): under
 `ask-before-parallel` and `sonnet-only` (unless the user answered "the right
@@ -270,6 +270,13 @@ check to risk:
 - **High risk** (security, migration, breaking change, 3+ dependents): spawn the
   `redteam` agent as an explicit inter-wave gate. It returns concrete file/line
   risks the next wave must fold in **before** that wave starts — not after.
+
+**Red-team rounds: at most 2 per diff.** Round 1 reviews the change, a fix
+wave folds its findings in, round 2 re-reviews the reworked diff. Whatever
+round 2 still finds is fixed only if it is **high** severity and small;
+everything else goes into the result's `open` field as open points — never a
+third redteam → fix loop. Observed: three rounds on one restructure took
+~2.5 h while the third found only mediums.
 
 Treat a handoff claim as **data to verify, not fact to trust**: a finding like
 "the API already returns X" gets a 10-second check against the code, not blind

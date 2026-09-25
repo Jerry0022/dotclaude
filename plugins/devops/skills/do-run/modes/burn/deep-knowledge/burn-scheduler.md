@@ -121,7 +121,7 @@ Log every adjustment as one line in `AUTONOMOUS-LOG.md`.
 - Re-read usage before each new task spawn. A snapshot 60 s old or newer counts
   as fresh; otherwise refresh:
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
+  node "{PLUGIN_ROOT}/scripts/refresh-usage-headless.js" --quiet --summary
   ```
   Re-check **per task**, never per tool call — the headless scrape costs seconds.
 - `remainingPct <= RESERVE` → **drain phase**: spawn nothing new, let in-flight

@@ -58,7 +58,7 @@ load), the tool is absent and ToolSearch cannot load it either. The card is stil
 required. Render it offline through the same renderer:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/mcp-server/index.js" --render-card <payload.json>
+node "{PLUGIN_ROOT}/mcp-server/index.js" --render-card <payload.json>
 ```
 
 Same field names as the tool (including `session_id`), card markdown on stdout,

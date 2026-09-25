@@ -61,7 +61,7 @@ enforced in `autonomous-watchdog.js` and unit-tested:
 Arm it exactly like the others, with the prompt as the 4th argument:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8 resume "$RESUME_PROMPT"
+node "{PLUGIN_ROOT}/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8 resume "$RESUME_PROMPT"
 ```
 
 **Known limitation (documented, not a bug).** The relaunched headless session
@@ -82,7 +82,7 @@ It is the last line of defense against:
 ```bash
 FLAG_PATH="$PWD/AUTONOMOUS-DONE.flag"
 # action = "shutdown" if Step 2 Q3 was "Ja, herunterfahren", else "notify"
-WATCHDOG_OUT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8 "$ACTION")
+WATCHDOG_OUT=$(node "{PLUGIN_ROOT}/scripts/autonomous-watchdog.js" register "$FLAG_PATH" 8 "$ACTION")
 echo "$WATCHDOG_OUT"  # → {"ok":true,"taskName":"ClaudeAutonomousWatchdog-...","action":"...",...}
 ```
 
@@ -122,7 +122,7 @@ session later wedges and never reaches Step 8.
 ### Arming
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" arm
+node "{PLUGIN_ROOT}/scripts/autonomous-shutdown-timer.js" arm
 ```
 
 Parse the JSON:
@@ -171,7 +171,7 @@ re-arm is idempotent.
 Because the timer is unconditional, **Step 8 cancels it before deciding anything**:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" cancel
+node "{PLUGIN_ROOT}/scripts/autonomous-shutdown-timer.js" cancel
 ```
 
 `cancel` runs `shutdown /a`; a "nothing scheduled" result (error 1116) is treated as
@@ -197,7 +197,7 @@ including BLOCKED. Reaching Step 8 proves the session is alive, so the Step 5.0
 fail-safe must hand control back to the deliberate decision here:
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-shutdown-timer.js" cancel
+node "{PLUGIN_ROOT}/scripts/autonomous-shutdown-timer.js" cancel
 ```
 
 Skipping this for BLOCKED would force the very power-off that BLOCKED forbids;
@@ -307,7 +307,7 @@ used directly; multiple parallel sessions → the one whose flag directory
 contains the cwd):
 
 ```bash
-node "$CLAUDE_PLUGIN_ROOT/scripts/autonomous-watchdog.js" flag
+node "{PLUGIN_ROOT}/scripts/autonomous-watchdog.js" flag
 ```
 
 If it fails with "Multiple watchdog sentinels exist … none matches the current

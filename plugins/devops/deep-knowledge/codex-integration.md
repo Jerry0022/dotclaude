@@ -24,9 +24,9 @@ Bash tool — NOT via `Agent(subagent_type: "codex:codex-rescue")` and NOT via
 raw `node codex-companion.mjs` calls.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" "<prompt text>"
+bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<prompt text>"
 # or with a custom ceiling / model:
-CODEX_SAFE_TIMEOUT=180 bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" \
+CODEX_SAFE_TIMEOUT=180 bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" \
   --model gpt-5.3-codex "<prompt text>"
 ```
 
@@ -56,8 +56,8 @@ Codex usable again before the stored reset (plan bought, limit raised) — the
 user says so, e.g. "codex limit zurücksetzen", "ich hab jetzt ein Abo":
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit    # forget it once
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/codex-safe.sh" --limit-status   # show it
+bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit    # forget it once
+bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" --limit-status   # show it
 ```
 
 **Hard constraints:**

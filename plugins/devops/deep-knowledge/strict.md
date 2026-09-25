@@ -42,7 +42,7 @@ or quotes never count.
 
 **A bare "strict" or "strikt"** in a prompt is a signal, not a switch. When the
 user plainly asks for literal scope for this task, arm an inline mode yourself
-(`node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline`, then print the
+(`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" inline`, then print the
 contract with `… contract`) and work under it. Do NOT for: ordinary requests
 without a literal-scope signal, the auto-harden / auto-polish scope fences
 (they stay as they are), or TypeScript / linter `strict` options.
@@ -181,11 +181,11 @@ Then render the completion card as usual (the card is output, not diff).
 All four go through the state CLI; never edit the mode file by hand:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" on
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" off
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" status
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" inline
-node "${CLAUDE_PLUGIN_ROOT}/hooks/lib/strict-state.js" contract
+node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" on
+node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" off
+node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status
+node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" inline
+node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" contract
 ```
 
 - **on** — arms strict for this worktree on the current branch, no expiry.
