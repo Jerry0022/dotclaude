@@ -1,7 +1,7 @@
 # run-burn — Depth vs. Breadth, Reserve, Durability
 
 **Date:** 2026-09-06
-**Status:** Approved
+**Status:** Approved — execution superseded by `2026-09-25-burn-wiring-design.md` (the rules below moved into `scripts/burn-plan.js`; the depth-before-breadth philosophy stands)
 **Skill version:** `run-burn` 0.3.0 → 0.4.0
 
 ## Problem

@@ -109,7 +109,7 @@ question the plugin asks:
 | 1 | Was? | Prompt umsetzen · Audit · Backlog | Backlog only when open issues exist; skipped when started from do-batch. Audit → follow-up "Audit umsetzen / Audit als Concept". |
 | 2 | Ablauf? | Interaktiv · Ship manuell · Interaktiv · Ship automatisch · Autonom · Ship manuell · Autonom · Ship automatisch | Presence and ship combined because the tool allows only four questions. Presence first, then manual before automatic. "Autonom" → follow-up: desktop, shutdown, auto-resume (hard gate unchanged). |
 | 3 | Umfang? | Mit Umfeld · Nur das | Default = the user's last choice in this chat, else "Mit Umfeld". "Nur das" = strict. |
-| 4 | Durchgänge? (multi-select) | Harden danach · Polish danach · Rethink vorher · Budget verbrennen | Harden + Polish recommended. Rethink recommended only when the prompt reads stuck. "Budget verbrennen" last, never pre-selected, shown only when weekly usage > 80 %. The tool cannot pre-tick options, so the question text names the set an empty answer runs ("Leer lassen = Harden + Polish"). |
+| 4 | Durchgänge? (multi-select) | Harden danach · Polish danach · Rethink vorher · Budget verbrennen | Harden + Polish recommended. Rethink recommended only when the prompt reads stuck. "Budget verbrennen" last, never pre-selected, shown only when `burn-plan.js offer` finds budget that would expire unused (was: weekly usage > 80 %; changed 2026-09-25, see 2026-09-25-burn-wiring-design.md). The tool cannot pre-tick options, so the question text names the set an empty answer runs ("Leer lassen = Harden + Polish"). |
 
 Questions of the folded skills: run-agents "mode", run-burn "confirm",
 run-backlog "budget mode" and "ship mandate", run-autonomous "analyse vs

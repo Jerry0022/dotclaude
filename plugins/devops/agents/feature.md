@@ -21,7 +21,7 @@ Implement a feature in an isolated worktree branch.
 - Create a feature branch and worktree
 - Implement the requested feature
 - Delegate to domain-specific agents (designer, frontend, core, ai, windows) when needed
-- Commit logical units of work
+- Commit logical units of work, with checkpoint commits in between
 - Push and report when done
 
 ## Branch Setup (mandatory first step)
@@ -145,7 +145,7 @@ Agent({ subagent_type: "research", model: "sonnet", prompt: "..." })
 - Keep **project docs** current: when the feature adds capability, alters a flow, or changes architecture, update the affected `docs/`, README prose, or architecture docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
 - When implementing mechanical code directly (not via sub-agent): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always work in a worktree (isolation: worktree)
-- Commit logical units, not mega-commits
+- Commit logical units, not mega-commits — and checkpoint in between: `wip(<scope>): <what>` after every green sub-step, at the latest every ~10 file-changing tool calls, only on your feature branch or a sub-branch — never above the session's branch: while the session works on a feature branch, never on main, master or the default branch (`{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md` § Checkpoint commits). Pass the same rule to every agent you delegate to.
 - Push before reporting completion
 - Follow `{PLUGIN_ROOT}/deep-knowledge/commit-conventions.md`
 - Hand off to QA agent after completion
