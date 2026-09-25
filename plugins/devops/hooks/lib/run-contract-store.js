@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.3.1
+ * @version 0.3.2
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -74,6 +74,16 @@
  *   at the live path in the meantime. `quarantineCorrupt()` now checks the
  *   live path is still empty right before the rename-back and keeps the
  *   quarantined copy instead of overwriting an occupied one.
+ * H3/H4/H5/H6 (harden pass): `acquireLock()` unlinks the zero-byte lock file
+ *   it just created if `writeSync` throws after `openSync('wx')` succeeded
+ *   (H3), and only accepts a finite, non-negative `lockStaleMs`/`lockWaitMs`
+ *   override — NaN/Infinity fall back to the defaults instead of spinning or
+ *   never giving up (H4). `takeoverStaleLock()` retries the rename-back once
+ *   after `LOCK_RETRY_MS` before giving up, and never unlinks a refreshed
+ *   lock it could not put back (H5). `compactEvents()` sorts `kept` by each
+ *   event's original read order, not `Date.parse(ev.t)` — a same-millisecond
+ *   tie or a missing `t` can no longer drift an event across a segment
+ *   boundary on re-read (H6).
  * RT2-Q4 (worktree root, display-only guard): the header now carries `root`
  *   — the work-tree root `arm()` ran in — so `mode-state.js`'s lenient
  *   sessionId path (a run-contract.json Desktop copied into a fresh
@@ -306,7 +316,15 @@ function takeoverStaleLock(file, observedContent) {
   let content = null;
   try { content = fs.readFileSync(junk, 'utf8'); } catch { /* best effort */ }
   if (content !== null && content !== observedContent) {
-    try { fs.renameSync(junk, file); return false; } catch { /* fall through: drop our copy */ }
+    // H5: the lock was refreshed between the stat and this rename — put it
+    // back. A first rename-back failure (Windows EPERM/EBUSY on the target)
+    // gets one retry after a short pause; if it still fails, do NOT unlink
+    // the moved copy (that would drop the other holder's live token) — keep
+    // it quarantined under its junk name and report "not taken over" so the
+    // caller retries through the normal deadline/sleep instead.
+    try { fs.renameSync(junk, file); return false; } catch { /* retry below */ }
+    sleepSync(LOCK_RETRY_MS);
+    try { fs.renameSync(junk, file); return false; } catch { return false; }
   }
   unlinkQuiet(junk);
   return true;
@@ -315,8 +333,12 @@ function takeoverStaleLock(file, observedContent) {
 /** @returns {string|null} the lock token to pass to releaseLock(), or null (gave up) */
 function acquireLock(cwd, opts = {}) {
   const file = lockPath(cwd);
-  const staleMs = typeof opts.lockStaleMs === 'number' ? opts.lockStaleMs : LOCK_STALE_MS;
-  const maxWaitMs = typeof opts.lockWaitMs === 'number' ? opts.lockWaitMs : LOCK_MAX_WAIT_MS;
+  // H4: `typeof x === 'number'` accepts NaN/Infinity — a NaN deadline is
+  // never reached (the for(;;) never gives up) and a NaN staleMs never
+  // takes a lock over. Only a finite, non-negative override replaces the
+  // default.
+  const staleMs = Number.isFinite(opts.lockStaleMs) && opts.lockStaleMs >= 0 ? opts.lockStaleMs : LOCK_STALE_MS;
+  const maxWaitMs = Number.isFinite(opts.lockWaitMs) && opts.lockWaitMs >= 0 ? opts.lockWaitMs : LOCK_MAX_WAIT_MS;
   const deadline = Date.now() + maxWaitMs;
   const token = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   for (;;) {
@@ -327,7 +349,14 @@ function acquireLock(cwd, opts = {}) {
       fs.closeSync(fd);
       return token;
     } catch (e) {
-      if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* already closed */ } }
+      if (fd !== undefined) {
+        try { fs.closeSync(fd); } catch { /* already closed */ }
+        // H3: openSync('wx') already succeeded — this zero-byte lock file is
+        // ours — but writeSync threw (ENOSPC / EPERM mid-write). Remove it:
+        // left behind, every other waiter rides out the full stale window,
+        // and our own next retry would hit EEXIST on our own orphan.
+        unlinkQuiet(file);
+      }
       if (!e || !LOCK_RETRIABLE.has(e.code)) return null; // unexpected fs error: don't block
       if (e.code === 'EEXIST') {
         let st, content;
@@ -547,6 +576,12 @@ function compactEvents(cwd, header) {
     try { beforeStat = fs.statSync(file); } catch { beforeStat = null; }
     const all = readEventLines(cwd);
     const own = all.filter(ev => !ev.c || ev.c === header.id);
+    // H6: index each event by identity before it is sliced into segments —
+    // sorting `kept` by `Date.parse(ev.t)` let a same-millisecond tie (a
+    // segment's last `measure` vs its closing `release`/`park`) or an event
+    // without a parseable `t` drift across a segment boundary on re-read.
+    // Original read order is always the true order (events are appended).
+    const ownIndex = new Map(own.map((ev, i) => [ev, i]));
     // Lazy require: breaks the store ↔ obligations circular dependency.
     const { segments } = require('./run-contract-obligations');
     const kept = [];
@@ -560,7 +595,7 @@ function compactEvents(cwd, header) {
       }
       if (lastMeasure) kept.push(lastMeasure);
     }
-    kept.sort((a, b) => (Date.parse(a.t) || 0) - (Date.parse(b.t) || 0));
+    kept.sort((a, b) => ownIndex.get(a) - ownIndex.get(b));
     const body = kept.map(ev => JSON.stringify(ev)).join('\n') + (kept.length ? '\n' : '');
     const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     try {
