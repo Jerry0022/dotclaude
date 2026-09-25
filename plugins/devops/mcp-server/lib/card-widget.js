@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.7.2
+ * @version 0.7.3
  */
 
 import { writeFileSync } from "node:fs";
@@ -470,7 +470,7 @@ function resultLinesHtml(resultLines, lang) {
 
 /** The evidence row (tooltip posts), or '' with nothing to show. */
 function evidenceHtml(evidence) {
-  return (evidence || []).length
+  return Array.isArray(evidence) && evidence.length
     ? `<div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px;font-size:14px">${evidence.map(evidencePostHtml).join(" ")}</div>`
     : "";
 }
@@ -478,7 +478,7 @@ function evidenceHtml(evidence) {
 /** The budget-bar row plus the optional context-health watermark, or '' when omitted. */
 function budgetRowHtml(budget) {
   return budget && !budget.omitted
-    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(budget.bars || []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
+    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(Array.isArray(budget.bars) ? budget.bars : []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
     : "";
 }
 
@@ -532,7 +532,7 @@ function contextHtml(context, lang) {
 // Points: › lines too (no numbers in the widget — the terminal markdown
 // keeps "1." for the same points), so both blocks speak the same language.
 function pointsHtml(points, lang) {
-  return (points || []).length
+  return Array.isArray(points) && points.length
     ? `<div class="card-points" style="margin:2px 0 8px">${points.map((p) => glyphLineHtml("card-point", linkifyHtml(p, lang))).join("")}</div>`
     : "";
 }
@@ -550,7 +550,7 @@ function buttonsRowHtml(model, lang) {
       // cannot lose them to whitespace tidying.
       return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
         `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
-        `${escapeHtml(a.label)} ↗</span>`;
+        `${escapeHtml(a.label)}<span aria-hidden="true"> ↗</span></span>`;
     }).join("\n  ") +
     // Delivery status: one quiet line right of the buttons, filled by the
     // script after a click (green = in the composer, red = refused).
@@ -597,7 +597,7 @@ export function cardWidgetHtml(model, repoUrl) {
 
   return [
     `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}</style>`,
+    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}.card-pr-link:hover,.card-pr-link:focus-visible{text-decoration:underline;text-underline-offset:2px}[role="button"]:hover{background:rgba(55,138,221,0.06)}[role="button"]:active{background:rgba(55,138,221,0.10)}[role="button"]:focus-visible{outline:2px solid var(--border-accent,var(--border-strong));outline-offset:2px}[role="button"][data-busy]{opacity:.6;cursor:progress}</style>`,
     // ONE surface around everything: a faint blue wash (6 % of the accent
     // blue), the same hue as the decision box one step lighter, so the card is
     // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface
@@ -691,9 +691,9 @@ export function cardWidgetScript(lang = "de") {
     `  function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }`,
     `  function go(b) {`,
     `    if (b.getAttribute('data-busy')) return;`,
-    `    b.setAttribute('data-busy', '1'); b.style.opacity = '0.6';`,
+    `    b.setAttribute('data-busy', '1'); b.setAttribute('aria-busy', 'true');`,
     `    deliver(b.getAttribute('data-prompt'), function (success) {`,
-    `      b.removeAttribute('data-busy'); b.style.opacity = '';`,
+    `      b.removeAttribute('data-busy'); b.removeAttribute('aria-busy');`,
     `      mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');`,
     `    });`,
     `  }`,

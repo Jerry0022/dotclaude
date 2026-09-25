@@ -459,6 +459,14 @@ describe("cardWidgetHtml", () => {
     expect(html).toContain("62% verbraucht");
   });
 
+  test("a truthy non-array evidence/points/budget.bars value renders without throwing", () => {
+    expect(() => cardWidgetHtml(baseModel({
+      evidence: "not-an-array",
+      points: "not-an-array",
+      budget: { omitted: false, warn: false, contextHealth: "", bars: "not-an-array" },
+    }), "")).not.toThrow();
+  });
+
   test("tooltips are app-styled data-tip, never the native title (ui-defaults.md R0/R1)", () => {
     const html = cardWidgetHtml(baseModel({
       evidence: [{ glyph: "✓", text: "ok", dim: false, tooltip: "npm test · 41s" }],
