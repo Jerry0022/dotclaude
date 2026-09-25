@@ -156,6 +156,10 @@ function makeSandbox({ setTimeoutFn, clearTimeoutFn } = {}) {
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     console,
+    // Pass the outer realm's Date through so fake timers (which patch it) can
+    // also advance the vm sandbox's Date.now() — a vm.createContext otherwise
+    // gets its own, unrelated Date built-in.
+    Date,
   };
   vm.createContext(sandbox);
   return sandbox;
@@ -181,8 +185,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.4.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.4.0["']/);
+  test("defines VERSION 1.5.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.5.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -213,7 +217,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.4.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.5.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -230,7 +234,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.4.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.5.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -428,7 +432,11 @@ describe("web-guide-overlay — execution", () => {
   });
 
   // Fix 4: stale "Warte auf Claude…" recovery.
-  test("recovers with a re-enabled UI after 45s of silence", async () => {
+  // #513: heartbeat replaces the old 45s "Keine Antwort" guess. The event is
+  // queued (and now sessionStorage-backed), so the UI stays disabled — no
+  // false invitation to resubmit — but the label distinguishes "Claude simply
+  // isn't polling right now" from a lost event.
+  test("shows the heartbeat message after 10s without a poll, without re-enabling buttons", async () => {
     vi.useFakeTimers();
     try {
       const sb = makeSandbox({
@@ -441,13 +449,63 @@ describe("web-guide-overlay — execution", () => {
       const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
       primary.click();
       expect(primary.disabled).toBe(true);
-      await vi.advanceTimersByTimeAsync(45000);
-      expect(primary.disabled).toBe(false);
-      const label = findAll(host, (e) => e._text === "Keine Antwort — bitte noch einmal senden.")[0];
+      await vi.advanceTimersByTimeAsync(13000); // past a 2s heartbeat tick beyond the 10s stale mark
+      expect(primary.disabled).toBe(true);
+      const label = findAll(host, (e) => e._text === "Claude hört gerade nicht zu — schreib im Chat „weiter“.")[0];
       expect(label).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // #513: every wait() call is a poll — it resets the heartbeat's staleness
+  // clock even when it immediately resolves from the persisted queue.
+  test("wait() resets the heartbeat clock (a poll is a poll, even a queued one)", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+      primary.click();
+      await sb.window.claudeGuide.wait(1000); // resolves immediately from the queue, still a poll
+      await vi.advanceTimersByTimeAsync(2000);
+      const label = findAll(host, (e) => e._text === "Warte auf Claude…")[0];
+      expect(label).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #513: a queued event is persisted so a reload doesn't drop it.
+  test("persists a queued event in sessionStorage and restores it on re-injection", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+    primary.click();
+    expect(sandbox.window.claudeGuide.state().queued).toBe(1);
+    expect(sandbox.sessionStorage._data["__wg.queue"]).toBeTruthy();
+
+    // Simulate a reload: a fresh JS context reading the SAME sessionStorage
+    // (destroy() is never called on reload — the old context is just gone).
+    const sb2 = makeSandbox();
+    sb2.sessionStorage._data["__wg.queue"] = sandbox.sessionStorage._data["__wg.queue"];
+    sb2.sessionStorage._data.__wg = sandbox.sessionStorage._data.__wg;
+    run(sb2);
+    expect(sb2.window.claudeGuide.state().queued).toBe(1);
+  });
+
+  // #513: the FAB carries a visible glyph, not just the step badge.
+  test("the FAB has an icon glyph, not an empty circle", () => {
+    run(sandbox);
+    const host = getHost(sandbox);
+    const icon = findAll(host, (e) => e._html && e._html.indexOf("<svg") !== -1)[0];
+    expect(icon).toBeTruthy();
   });
 
   // Fix 5: pendingWaiter per call — timeout for A must not clear B's resolver.

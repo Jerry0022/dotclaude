@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.4.0
+ * @version 1.5.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.4.0";
+  var VERSION = "1.5.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -26,13 +26,16 @@
 
   var STORAGE_KEY = "__wg";
   var POS_STORAGE_KEY = "__wg.pos";
+  var QUEUE_STORAGE_KEY = "__wg.queue";
   var STEP_TTL_MS = 30 * 60 * 1000;
+  var HEARTBEAT_STALE_MS = 10000;
+  var HEARTBEAT_TICK_MS = 2000;
   var INPUT_TYPES = ["text", "secret", "choice", "confirm"];
 
   var currentStep = null, collapsed = true, pos = { right: 24, bottom: 24 };
   var eventQueue = [], pendingWaiter = null, helpOpen = false, abortConfirm = false;
-  var abortResetTimer = null, noResponseTimer = null, activeBtns = [];
-  var statusEl = null, spinnerEl = null, waitLabelEl = null;
+  var abortResetTimer = null, heartbeatTimer = null, activeBtns = [];
+  var statusEl = null, spinnerEl = null, waitLabelEl = null, lastPoll = Date.now();
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
@@ -95,6 +98,23 @@
     } catch {}
   }
 
+  // #513: a queued event (help/next/abort waiting for Claude's next wait())
+  // survives a reload instead of being dropped from an in-memory array.
+  function loadQueue() {
+    try {
+      var q = JSON.parse(sessionStorage.getItem(QUEUE_STORAGE_KEY) || "[]");
+      if (Array.isArray(q)) {
+        eventQueue = q.filter((e) => e && typeof e === "object" && typeof e.type === "string" && typeof e.stepId === "string");
+      }
+    } catch {}
+  }
+
+  function saveQueue() {
+    try {
+      sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(eventQueue));
+    } catch {}
+  }
+
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, function (ch) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
@@ -124,6 +144,7 @@
     ".fab{position:fixed;width:56px;height:56px;border-radius:50%;background:#6d28d9;color:#fff;",
     "  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.35);",
     "  cursor:grab;touch-action:none;border:none;font-weight:700}",
+    ".fab-icon{display:flex;align-items:center;justify-content:center;pointer-events:none}",
     ".badge{position:absolute;top:-4px;right:-4px;background:#fff;color:#6d28d9;border-radius:10px;font-size:10px;font-weight:700;padding:2px 5px;box-shadow:0 1px 3px rgba(0,0,0,.35)}",
     ".panel{position:fixed;width:340px;max-width:calc(100vw - 16px);max-height:70vh;overflow:auto;background:#fff;",
     "  border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.4);display:flex;flex-direction:column}",
@@ -165,6 +186,12 @@
   fabButton.type = "button";
   fabButton.setAttribute("aria-label", "Claude Guide");
   fabButton.setAttribute("aria-expanded", "false");
+  // #513: a compass glyph so the FAB reads as "the guide", not an empty dot.
+  var fabIcon = mk("span", "fab-icon");
+  fabIcon.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.8" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9"/><polygon points="14.5,9.5 12,12 9.5,14.5 12,12"/></svg>';
+  fabButton.appendChild(fabIcon);
   var badge = mk("span", "badge");
   fabButton.appendChild(badge);
   shadow.appendChild(fabButton);
@@ -291,21 +318,28 @@
 
   window.addEventListener("resize", applyPosition);
 
-  function clearNoResponseTimer() {
-    clearTimeout(noResponseTimer);
-    noResponseTimer = null;
+  function clearHeartbeat() {
+    clearTimeout(heartbeatTimer);
+    heartbeatTimer = null;
   }
 
-  function armNoResponseTimer() {
-    clearNoResponseTimer();
-    noResponseTimer = setTimeout(function () {
-      noResponseTimer = null;
-      activeBtns.forEach(function (btn) {
-        btn.disabled = false;
-      });
-      if (spinnerEl) spinnerEl.style.display = "none";
-      if (waitLabelEl) waitLabelEl.textContent = "Keine Antwort — bitte noch einmal senden.";
-    }, 45000);
+  // #513: distinguishes "Claude isn't polling right now" (turn ended, nothing
+  // lost — the event is queued and, since it's now sessionStorage-backed,
+  // survives a reload too) from an actually lost event. Ticks every
+  // HEARTBEAT_TICK_MS and reflects lastPoll's age; the typed help text is
+  // never touched, so it stays exactly as the user left it.
+  function tickHeartbeat() {
+    if (waitLabelEl) {
+      waitLabelEl.textContent = Date.now() - lastPoll > HEARTBEAT_STALE_MS
+        ? "Claude hört gerade nicht zu — schreib im Chat „weiter“."
+        : "Warte auf Claude…";
+    }
+    heartbeatTimer = setTimeout(tickHeartbeat, HEARTBEAT_TICK_MS);
+  }
+
+  function armHeartbeat() {
+    clearHeartbeat();
+    tickHeartbeat();
   }
 
   function deliverEvent(event) {
@@ -315,9 +349,10 @@
       resolve(event);
     } else {
       eventQueue.push(event);
+      saveQueue();
     }
     disableActiveButtons();
-    armNoResponseTimer();
+    armHeartbeat();
   }
 
   function makeEmitter(stepId) {
@@ -382,6 +417,7 @@
     abortConfirm = false;
     clearTimeout(abortResetTimer);
     abortResetTimer = null;
+    clearHeartbeat();
     applyPosition();
 
     if (!currentStep) {
@@ -609,7 +645,8 @@
       helpOpen = false;
       abortConfirm = false;
       eventQueue = [];
-      clearNoResponseTimer();
+      saveQueue();
+      clearHeartbeat();
       // Only steal focus for a genuinely new step, and only when the user
       // isn't already typing into a page field (#507).
       render(isNewStep && focusIsFreeForOverlay());
@@ -617,9 +654,12 @@
       return "ok";
     },
     wait: function (ms) {
+      lastPoll = Date.now(); // #513: heartbeat — every wait() records a poll.
       return new Promise(function (resolve) {
         if (eventQueue.length) {
-          resolve(eventQueue.shift());
+          var queued = eventQueue.shift();
+          saveQueue();
+          resolve(queued);
           return;
         }
         var timer = null;
@@ -668,10 +708,13 @@
       KEY_TYPES.forEach(function (type) {
         window.removeEventListener(type, onWinKeyCap, true);
       });
-      clearNoResponseTimer();
+      clearHeartbeat();
       clearTimeout(abortResetTimer);
       try {
         sessionStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      try {
+        sessionStorage.removeItem(QUEUE_STORAGE_KEY);
       } catch {}
       try {
         localStorage.removeItem(POS_STORAGE_KEY);
@@ -683,6 +726,7 @@
 
   try {
     loadState();
+    loadQueue();
     applyPosition();
     render();
   } catch {
