@@ -320,8 +320,12 @@ function scanOpenTasks(transcriptContent) {
   /** agentId, and the `name` an agent was launched under → agentId: the
    *  addresses a SendMessage can reach an agent THIS transcript launched by. */
   const launched = new Map();
+  /** toolu_* of a SendMessage → the line it was issued on. */
+  const sentAt = new Map();
+  /** id → the line of its latest notification. */
+  const closedAt = new Map();
 
-  for (const raw of transcriptContent.split('\n')) {
+  for (const [seq, raw] of transcriptContent.split('\n').entries()) {
     const line = raw.trim();
     if (!line) continue;
 
@@ -334,7 +338,10 @@ function scanOpenTasks(transcriptContent) {
       if (notif) {
         TASK_NOTIFICATION_RE.lastIndex = 0;
         let m;
-        while ((m = TASK_NOTIFICATION_RE.exec(notif)) !== null) open.delete(m[1]);
+        while ((m = TASK_NOTIFICATION_RE.exec(notif)) !== null) {
+          open.delete(m[1]);
+          closedAt.set(m[1], seq);
+        }
         // A real notification carries nothing else we care about.
         continue;
       }
@@ -352,6 +359,7 @@ function scanOpenTasks(transcriptContent) {
 
       if (block.type === 'tool_use') {
         if (block.id) launchers.set(block.id, block);
+        if (block.id && block.name === 'SendMessage') sentAt.set(block.id, seq);
         continue;
       }
 
@@ -366,8 +374,14 @@ function scanOpenTasks(transcriptContent) {
       // stick. The result decides, never the address — see messagedAgentId().
       if (launcher && launcher.name === 'SendMessage') {
         const id = block.is_error ? '' : messagedAgentId(text, input, launched);
+        // A notification can land between a call and its result (about 1 % of
+        // all results locally: whatever arrives while the call runs). One for
+        // this agent after the send means the run the send started has stopped.
+        const stoppedSinceSend = closedAt.has(id) && closedAt.get(id) > sentAt.get(block.tool_use_id);
         // Never label with the id — recover the launch name, else stay generic.
-        if (id && !open.has(id)) open.set(id, { kind: 'agent', name: known.get(id) || 'agent' });
+        if (id && !stoppedSinceSend && !open.has(id)) {
+          open.set(id, { kind: 'agent', name: known.get(id) || 'agent' });
+        }
         continue;
       }
 

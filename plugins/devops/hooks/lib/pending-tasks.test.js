@@ -233,6 +233,17 @@ describe('scanOpenTasks — a SendMessage re-opens only an in-process agent', ()
     expect(scanOpenTasks([...lines, notification('a75d674f7108dd6c8')].join('\n'))).toEqual([]);
   });
 
+  test('a resumed agent that stops before the send result is written stays closed', () => {
+    // Whatever arrives while a call runs lands before that call's result.
+    const open = scanOpenTasks([
+      ...AGENT_DONE,
+      toolUse('toolu_s', 'SendMessage', { to: 'a75d674f7108dd6c8', message: 'keep going' }),
+      notification('a75d674f7108dd6c8'),
+      toolResult('toolu_s', SEND_RESUMED),
+    ].join('\n'));
+    expect(open).toEqual([]);
+  });
+
   test('a failed send re-opens nothing', () => {
     const open = scanOpenTasks([
       ...AGENT_DONE,
