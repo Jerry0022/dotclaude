@@ -131,7 +131,14 @@ function armFromPending(hook, root, RC, C, sessionId) {
   const found = C.routerFromTranscript(hook.transcript_path, marker.at, RC);
   let fields = null;
   let source = 'router';
-  if (found) fields = RC.parseRouterAnswers(found.questions, found.answers, { doRunArgs: marker.args });
+  if (found) {
+    // H-C2c: a partial re-ask merges over the full answers before it — only
+    // the fields it answered replace them (R7, like mergeRouterAnswers).
+    for (const call of [...(found.earlier || []), found]) {
+      const f = RC.parseRouterAnswers(call.questions, call.answers, { doRunArgs: marker.args });
+      if (f) fields = fields ? { ...fields, ...RC.answeredFields(f) } : f;
+    }
+  }
   if (!fields) {
     source = 'fallback';
     // The click-through defaults: parse an empty Q4 whose options carry the

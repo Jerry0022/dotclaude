@@ -478,11 +478,16 @@ function markPendingArm(cwd, opts = {}) {
 
 function freshMarker(file, field, maxMs, opts = {}) {
   if (disabled()) return null;
-  const m = readJson(file);
-  if (!m) {
-    // H-B14: a marker that exists but does not parse is removed — left in
+  let raw;
+  // H-B14b: a READ error (none, or a transient Windows EBUSY / EPERM —
+  // AUD-009) keeps the file: a valid pending-arm marker must survive it.
+  try { raw = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  let m = null;
+  try { m = JSON.parse(raw); } catch { /* corrupt */ }
+  if (!m || typeof m !== 'object' || Array.isArray(m)) {
+    // H-B14: a marker that was read but does not parse is removed — left in
     // place it defeats pre's existsSync fast path forever.
-    if (fs.existsSync(file)) unlinkQuiet(file);
+    unlinkQuiet(file);
     return null;
   }
   const t = Date.parse(m[field]);

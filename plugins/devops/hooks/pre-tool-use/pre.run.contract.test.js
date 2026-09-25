@@ -435,20 +435,37 @@ describe("harden pass (H-*)", () => {
     expect(RC.readContract(dir)).toMatchObject({ source: "router", mode: "backlog", items: ["473"] });
   });
 
-  test("H-C2c: the newest router-shaped line being a partial re-ask wins over the earlier full router (current behaviour)", () => {
+  test("H-C2c: a partial re-ask as the newest router line merges over the earlier full router answers", () => {
     const now = Date.now();
     const partialQ = ROUTER({ only: ["Umfang?"] }).concat([{ header: "Durchgänge?", question: "Welche Durchgänge?", options: [] }]);
     const t = transcript(
-      line(now - 2000, ROUTER(), ROUTER_A()),
-      line(now - 1000, partialQ, { "Wie weit darf die Änderung greifen?": "Strikt", "Welche Durchgänge?": "keine" }),
+      line(now - 4000, [{ header: "Issues", question: "Welche Issues?" }], { "Welche Issues?": "#1 before the run" }),
+      line(now - 3000, ROUTER(), ROUTER_A("Backlog")),
+      line(now - 2000, [{ header: "Issues", question: "Welche Issues?" }], { "Welche Issues?": "#473" }),
+      line(now - 1000, partialQ, { "Wie weit darf die Änderung greifen?": "Strikt", "Welche Durchgänge?": "Harden danach" }),
     );
     const found = C.routerFromTranscript(t, new Date(now - 10_000).toISOString(), RC);
     expect(found.questions.map(q => q.header)).toEqual(["Umfang?", "Durchgänge?"]);
+    expect(found.earlier).toHaveLength(1);
+    expect(found.followUps).toHaveLength(1);
     RC.markPendingArm(dir, { args: "" });
     run("Edit", { file_path: f("src/a.js") }, { transcript_path: t });
-    // Pinned: the earlier full answers (autonomous · ship auto) are lost —
-    // only the partial re-ask is parsed, the rest falls back to defaults.
-    expect(RC.readContract(dir)).toMatchObject({ source: "router", strict: true, flow: "interactive", ship: "manual" });
+    // The full answers (backlog · autonomous · ship auto) survive; the re-ask
+    // replaces only what it answered (strict, passes); the follow-up after
+    // the full router applies, the one before it does not.
+    expect(RC.readContract(dir)).toMatchObject({
+      source: "router", mode: "backlog", flow: "autonomous", ship: "auto", strict: true, passes: ["harden"], items: ["473"],
+    });
+  });
+
+  test("H-C2c: a partial router line with no full one before it still arms from the partial alone", () => {
+    const now = Date.now();
+    const t = transcript(line(now - 1000, ROUTER({ only: ["Umfang?", "Durchgänge?"] }),
+      { "Wie weit darf die Änderung greifen?": "Strikt", "Welche Durchgänge?": "keine" }));
+    expect(C.routerFromTranscript(t, new Date(now - 10_000).toISOString(), RC).earlier).toEqual([]);
+    RC.markPendingArm(dir, { args: "" });
+    run("Edit", { file_path: f("src/a.js") }, { transcript_path: t });
+    expect(RC.readContract(dir)).toMatchObject({ source: "router", strict: true, flow: "interactive", passes: [] });
   });
 
   test("H-C3: resolveBase — explicit safe base, origin/HEAD, then main / master", () => {
