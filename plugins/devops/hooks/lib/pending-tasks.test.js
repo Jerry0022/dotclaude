@@ -4,7 +4,10 @@
  * call, and the task-notification that reports either one stopping.
  */
 import { describe, test, expect } from 'vitest';
-import { scanOpenTasks, openTaskNames, labelFor, isConceptInfra } from './pending-tasks.js';
+import {
+  scanOpenTasks, openTaskNames, labelFor, isConceptInfra, responseTaskId,
+  AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER,
+} from './pending-tasks.js';
 
 const AGENT_LAUNCH_TEXT =
   'Async agent launched successfully. (This tool result is internal metadata — never quote or ' +
@@ -16,6 +19,14 @@ const AGENT_LAUNCH_TEXT =
 const BASH_BG_TEXT =
   'Command running in background with ID: b68oycrr6. Output is being written to: ' +
   'C:\\Temp\\tasks\\b68oycrr6.output. You will be notified when it completes.';
+
+/** What a FOREGROUND call gets when the harness moves it to the background at its timeout. */
+const AUTO_BG_TEXT =
+  'Command did not complete within its 120s timeout and was moved to the background (ID: bad36w5pu). ' +
+  'Output is being written to: C:\\Temp\\claude\\s\\tasks\\bad36w5pu.output. You will be notified when ' +
+  'it completes. To check interim output, use Read on that file path.\n' +
+  'Session cwd remains C:\\repo; directory changes made by the backgrounded command do not apply to ' +
+  'subsequent commands.';
 
 /** SendMessage results as the harness writes them (ids swapped for the fixture's). */
 const SEND_RESUMED =
@@ -432,6 +443,155 @@ describe('scanOpenTasks — a TaskStop result ends the task', () => {
     expect(scanOpenTasks(lines.join('\n'))).toEqual([]);
     expect(scanOpenTasks([...lines, ...send('toolu_s', 'a75d674f7108dd6c8', SEND_RESUMED)].join('\n')))
       .toEqual([{ id: 'a75d674f7108dd6c8', kind: 'agent', name: 'devops:frontend' }]);
+  });
+});
+
+/**
+ * A FOREGROUND Bash/PowerShell call that outlives its timeout is moved to the
+ * background by the harness and from then on runs like any background task —
+ * but its only launch record is the timeout sentence. Found in the local
+ * transcripts: 40 of the 64 successful TaskStop calls whose id no launch marker
+ * named had stopped such a command, so Gate 5 never saw it running and a card
+ * could read "all done" while it still was.
+ */
+describe('scanOpenTasks — a command moved to the background at its timeout', () => {
+  /** A foreground call (no run_in_background) plus the result it got at its timeout. */
+  function moved(toolUseId, tool = 'Bash', text = AUTO_BG_TEXT, input = {}) {
+    return [
+      toolUse(toolUseId, tool, { command: 'npm run build', description: 'Build the bundle', ...input }),
+      toolResult(toolUseId, text),
+    ];
+  }
+
+  /** TaskStop's success report — plain-string content, as in real transcripts. */
+  function taskStop(toolUseId, taskId) {
+    const result = JSON.stringify({
+      message: `Successfully stopped task: ${taskId} (npm run build)`,
+      task_id: taskId,
+      task_type: 'local_bash',
+      command: 'npm run build',
+    });
+    return [
+      toolUse(toolUseId, 'TaskStop', { task_id: taskId }),
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [{ tool_use_id: toolUseId, type: 'tool_result', content: result }] },
+      }),
+    ];
+  }
+
+  const MOVED = moved('toolu_m');
+
+  test('the timeout result opens the task, labelled by its description', () => {
+    expect(scanOpenTasks(MOVED.join('\n')))
+      .toEqual([{ id: 'bad36w5pu', kind: 'task', name: 'Build the bundle' }]);
+  });
+
+  test('its marker alone gets past the fast path', () => {
+    const slice = MOVED.join('\n');
+    for (const other of [AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER, 'resumedAgentId']) {
+      expect(slice).not.toContain(other);
+    }
+    expect(scanOpenTasks(slice).map(o => o.id)).toEqual(['bad36w5pu']);
+  });
+
+  test('any timeout, from PowerShell as from Bash', () => {
+    for (const [tool, timeout] of [['Bash', '60s'], ['Bash', '600s'], ['PowerShell', '300s']]) {
+      const text = AUTO_BG_TEXT.replace('120s', timeout);
+      expect(scanOpenTasks(moved('toolu_m', tool, text).join('\n')).map(o => o.id)).toEqual(['bad36w5pu']);
+    }
+  });
+
+  test('its task-notification closes it', () => {
+    expect(scanOpenTasks([...MOVED, notification('bad36w5pu')].join('\n'))).toEqual([]);
+  });
+
+  test('a TaskStop result closes it', () => {
+    expect(scanOpenTasks([...MOVED, ...taskStop('toolu_x', 'bad36w5pu')].join('\n'))).toEqual([]);
+  });
+
+  test('a Bash stdout that quotes the sentence mid-output opens nothing', () => {
+    // A grep over transcripts prints the sentence behind a path and line number.
+    const quoted = 'C:\\Users\\x\\.claude\\projects\\p\\s.jsonl:143:' + AUTO_BG_TEXT +
+      '\nShell cwd was reset to C:\\repo';
+    for (const tool of ['Bash', 'PowerShell']) {
+      expect(scanOpenTasks(moved('toolu_q', tool, quoted).join('\n'))).toEqual([]);
+    }
+  });
+
+  test('the sentence from a tool that cannot launch a task opens nothing', () => {
+    for (const tool of ['Read', 'Grep', 'Edit']) {
+      expect(scanOpenTasks(moved('toolu_q', tool).join('\n'))).toEqual([]);
+    }
+  });
+
+  test('a timeout sentence that was not a move to the background opens nothing', () => {
+    const killed = 'Command did not complete within its 120s timeout and was killed.';
+    expect(scanOpenTasks(moved('toolu_k', 'Bash', killed).join('\n'))).toEqual([]);
+  });
+
+  test('concept bridge plumbing moved at its timeout is still not work', () => {
+    const open = scanOpenTasks(moved('toolu_s', 'Bash', AUTO_BG_TEXT, {
+      command: 'python "$PLUGIN_ROOT/scripts/concept-server.py" 8840 "C:/repo"',
+      description: 'Start the concept bridge server on port 8840',
+    }).join('\n'));
+    expect(open).toEqual([]);
+  });
+
+  test('a task whose end was written before its launch result stays closed', () => {
+    // A command that finishes as it is moved gets its notification enqueued
+    // between the call and the result — 27 of the 859 moved commands locally.
+    // The same can happen to a task launched with run_in_background.
+    const launches = [
+      ['bad36w5pu', AUTO_BG_TEXT],
+      ['b68oycrr6', BASH_BG_TEXT],
+    ];
+    for (const [id, text] of launches) {
+      const open = scanOpenTasks([
+        toolUse('toolu_r', 'Bash', { command: 'npm run build', description: 'Build the bundle' }),
+        notification(id),
+        toolResult('toolu_r', text),
+      ].join('\n'));
+      expect(open).toEqual([]);
+    }
+  });
+
+  test('a later task under a new id is tracked on its own', () => {
+    const lines = [
+      ...MOVED,
+      notification('bad36w5pu'),
+      ...moved('toolu_n', 'Bash', AUTO_BG_TEXT.replaceAll('bad36w5pu', 'b0next12a')),
+    ];
+    expect(scanOpenTasks(lines.join('\n')))
+      .toEqual([{ id: 'b0next12a', kind: 'task', name: 'Build the bundle' }]);
+  });
+});
+
+/** What PostToolUse sees of a Bash/PowerShell call: the structured result, not the text. */
+describe('responseTaskId', () => {
+  test('reads backgroundTaskId from the structured result of either shape', () => {
+    const movedResult = {
+      stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false,
+      backgroundTaskId: 'bad36w5pu', timedOutAfterMs: 120000,
+      backgroundCwdHint: 'Session cwd remains C:\\repo; directory changes made by the backgrounded ' +
+        'command do not apply to subsequent commands.',
+    };
+    expect(responseTaskId(movedResult)).toBe('bad36w5pu');
+    expect(responseTaskId({ stdout: '', stderr: '', interrupted: false, isImage: false, backgroundTaskId: 'b68oycrr6' }))
+      .toBe('b68oycrr6');
+  });
+
+  test('a foreground result names no task, even one that prints the sentence', () => {
+    expect(responseTaskId({ stdout: AUTO_BG_TEXT, stderr: '', interrupted: false, isImage: false })).toBe('');
+    expect(responseTaskId({ stdout: 'ok', stderr: '', interrupted: false, isImage: false })).toBe('');
+    expect(responseTaskId({ backgroundTaskId: 'not an id' })).toBe('');
+    expect(responseTaskId(undefined)).toBe('');
+  });
+
+  test('a plain-string response is read like a transcript result', () => {
+    expect(responseTaskId(AUTO_BG_TEXT)).toBe('bad36w5pu');
+    expect(responseTaskId(BASH_BG_TEXT)).toBe('b68oycrr6');
+    expect(responseTaskId('s.jsonl:143:' + AUTO_BG_TEXT)).toBe('');
   });
 });
 

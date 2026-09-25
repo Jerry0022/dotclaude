@@ -165,6 +165,59 @@ describe("validateStep — input rules", () => {
   });
 });
 
+// #514: location / copy / checklist
+describe("validateStep — location rules", () => {
+  test("accepts a short location string", () => {
+    expect(validateStep({ ...validStep(), location: "Account API tokens → Create Token" })).toEqual([]);
+  });
+
+  test("rejects an empty or over-long location", () => {
+    expect(validateStep({ ...validStep(), location: "" }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), location: "x".repeat(81) }).length).toBeGreaterThan(0);
+  });
+
+  test("rejects HTML in location", () => {
+    expect(validateStep({ ...validStep(), location: "<b>x</b>" }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("validateStep — copy[] rules", () => {
+  test("accepts a copy chip with and without a label", () => {
+    expect(validateStep({ ...validStep(), copy: [{ value: "web-guide-test" }] })).toEqual([]);
+    expect(validateStep({ ...validStep(), copy: [{ label: "Token name", value: "web-guide-test" }] })).toEqual([]);
+  });
+
+  test("rejects an empty or non-array copy", () => {
+    expect(validateStep({ ...validStep(), copy: [] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), copy: "x" }).length).toBeGreaterThan(0);
+  });
+
+  test("rejects a copy item without a value, an unknown key, or an over-long field", () => {
+    expect(validateStep({ ...validStep(), copy: [{}] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), copy: [{ value: "x", extra: 1 }] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), copy: [{ value: "x".repeat(201) }] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), copy: [{ value: "x", label: "y".repeat(41) }] }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("validateStep — checklist[] rules", () => {
+  test("accepts a checklist with 2-4 items", () => {
+    expect(validateStep({ ...validStep(), checklist: ["a", "b"] })).toEqual([]);
+    expect(validateStep({ ...validStep(), checklist: ["a", "b", "c", "d"] })).toEqual([]);
+  });
+
+  test("rejects a checklist outside 2-4 items", () => {
+    expect(validateStep({ ...validStep(), checklist: ["only one"] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), checklist: ["a", "b", "c", "d", "e"] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), checklist: [] }).length).toBeGreaterThan(0);
+  });
+
+  test("rejects a non-string item and HTML in an item", () => {
+    expect(validateStep({ ...validStep(), checklist: ["a", 2] }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), checklist: ["a", "<b>x</b>"] }).length).toBeGreaterThan(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // upsertEnv
 // ---------------------------------------------------------------------------

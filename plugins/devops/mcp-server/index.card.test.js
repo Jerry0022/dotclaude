@@ -179,6 +179,33 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(test).toMatch(/^## 🧪 Test first\?$/m);
   });
 
+  test("an open point about another worktree's branch is dropped — that session ships it itself", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const { execFileSync } = await import("node:child_process");
+    const root = fs.mkdtempSync(join(os.tmpdir(), "card-foreign-"));
+    const git = (cwd, ...args) => execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const wt = join(root, ".claude", "worktrees", "parallel-ship-93ae10");
+    try {
+      git(root, "init", "-q", "-b", "main");
+      git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init");
+      git(root, "worktree", "add", "-q", "-b", "claude/parallel-ship-93ae10", wt);
+      const text = await cardText({
+        variant: "ship-successful", summary: "Ship ok", lang: "de", session_id: "test-foreign-open", cwd: root,
+        state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+        open: [
+          { text: "Branch claude/parallel-ship-93ae10 ist noch nicht geshippt — shippen?", reply: "Ja, shippen." },
+          "Alte Config löschen?",
+        ],
+      });
+      expect(text).not.toContain("parallel-ship-93ae10");
+      expect(text).toContain("Alte Config löschen?");
+    } finally {
+      try { git(root, "worktree", "remove", "--force", wt); } catch { /* best effort */ }
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("no remote is detected from cwd when the caller passes no state.mode (#500)", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
@@ -795,6 +822,38 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
 // An armed /do-batch collection: the card is the whole confirmation of the
 // activating turn, so it carries the how-to itself — what happens to the next
 // prompt, how to fire, how to stop — instead of a separate text block before it.
+describe("render_completion_card — web hand-off in the card payload (#506)", () => {
+  test("a userFinalTest item naming the service + credential noun + creation verb records a pending hint", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-final-test",
+      userFinalTest: ["Cloudflare-Account mit R2 anlegen (Karte), Budget-Alert 1 $, Bucket, API-Token erstellen"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-final-test")).toBe("Cloudflare");
+  });
+
+  test("an open item with the same signal records a pending hint too", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-open",
+      open: ["Noch einen Supabase-Bucket für Assets anlegen"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-open")).toBe("Supabase");
+  });
+
+  test("no hand-off signal → nothing recorded", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-none",
+      userFinalTest: ["npm test grün"], open: ["Noch mit dem Team klären, ob wir migrieren"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-none")).toBeNull();
+  });
+});
+
 describe("render_completion_card — armed batch carries the how-to", () => {
   test("heading, context line and three guide points (de + en)", async () => {
     const { mkdtempSync, rmSync } = await import("node:fs");

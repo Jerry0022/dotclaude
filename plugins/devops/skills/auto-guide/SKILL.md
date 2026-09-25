@@ -1,16 +1,19 @@
 ---
 name: auto-guide
-version: 0.1.0
+version: 0.2.0
 description: >-
   Live tutorial in the user's own Edge tab for what Claude Code cannot do on a
   website itself (log in, generate an API key, create an OAuth app, accept
-  terms, change an account setting): a step panel overlay guides one step at a
-  time and takes values back. Triggers on: "guide me through", "führe mich
-  durch", "web guide", "zeig mir auf der Website", "ich muss das auf der
-  Website machen", "walk me through the site", "API key anlegen", "help me set
-  up on <site>". Do NOT trigger for testing the project's own app (use the
-  browser tools directly), for scraping/reading a page, or for local-app
-  tutorials.
+  terms, change an account setting, connect a marketplace integration, set up
+  a cron-job.org job): a step panel overlay guides one step at a time and
+  takes values back. Triggers on: "guide me through", "führe mich durch", "web
+  guide", "zeig mir auf der Website", "ich muss das auf der Website machen",
+  "walk me through the site", "API key anlegen", "help me set up on <site>" —
+  AND proactively whenever Claude's own next step would otherwise be a text
+  step list or click-through for one of these actions (#519): start this
+  skill instead of writing the steps in chat, or offer it as the first
+  option. Do NOT trigger for testing the project's own app (use the browser
+  tools directly), for scraping/reading a page, or for local-app tutorials.
 layer: 2
 invokes: []
 user-invocable: false
@@ -106,7 +109,7 @@ node "{PLUGIN_ROOT}/scripts/web-guide.js" payload inject
 ```
 
 Paste the printed source **verbatim** (no trimming, no summarising — it is
-~17 KB and the page needs all of it) into
+the lean, comment-stripped build and the page needs all of it) into
 `javascript_tool({ tabId: $TAB_ID, action: "javascript_exec", text: <source> })`.
 Expected result: `"injected"` or `"already-injected"`. Anything else →
 retry once, then treat as a tool failure (Step 7 · aborted).
@@ -117,7 +120,23 @@ reload wiped the overlay, and injection is idempotent.
 ## Step 5 — The step loop
 
 Repeat until the guide ends. **No chat output inside the loop** unless a tool
-fails twice — the panel is the UI.
+fails twice — the panel is the UI. Keep polling (5c) across the *whole*
+guide — a step that needs several minutes is still just repeated 5c calls,
+never a return to chat between them.
+
+**Resuming in a new turn.** A reload or redirect can drop the overlay while
+Claude's turn has ended (no `wait()` was mid-flight to see the navigation).
+Before the first 5c of every turn that continues an already-running guide
+(i.e., not the guide's very first step), probe state first:
+
+```js
+JSON.stringify(window.claudeGuide && window.claudeGuide.state())
+```
+
+`stepId` missing or the probe errors (`claudeGuide` undefined) → the overlay
+is gone: Step 4 (re-inject), then 5b with the current step, then continue to
+5c. `stepId` matches → skip straight to 5c; the overlay's own
+`sessionStorage` restore already reproduced the panel, so no need to re-show it.
 
 ### 5a · Author step *n*
 
@@ -182,7 +201,16 @@ one Event (`deep-knowledge/protocol.md` § Event):
   `javascript_tool` query (`!!document.querySelector(...)`, text match on
   `document.body.innerText`). If the
   signal is missing, author a short corrective step (still `index` *n*, new
-  `id`) instead of pretending progress.
+  `id`) instead of pretending progress — but check first whether the user is
+  still typing: a sync probe
+  `JSON.stringify({activeTag: document.activeElement && document.activeElement.tagName,
+  editable: !!(document.activeElement && (document.activeElement.isContentEditable ||
+  /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)))})`
+  answering `editable: true` means a multi-field form (payment, billing,
+  token settings) is mid-fill. Run 5c again instead of re-sending; a
+  same-`id` re-send never steals focus or re-opens a collapsed panel (the
+  overlay enforces this itself, #507/#516), but re-sending anyway is still
+  wasted motion while the user is mid-keystroke.
 - **Collect** `event.value` under `event.name` in `$RESULTS`.
 - **Secret** inputs arrive base64-encoded (`"encoding":"base64"`). Store
   immediately, pass the base64 string through untouched, never decode it

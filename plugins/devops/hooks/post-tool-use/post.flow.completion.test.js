@@ -170,6 +170,68 @@ describe("post.flow.completion — pending reminder", () => {
     cleanup(dir);
   });
 
+  // What PostToolUse really receives for a shell call is the structured result,
+  // and it never carries the sentence the model reads — only backgroundTaskId
+  // (plus timedOutAfterMs when the harness moved a foreground call at its timeout).
+  const MOVED_RESPONSE = {
+    stdout: "", stderr: "", interrupted: false, isImage: false, noOutputExpected: false,
+    backgroundTaskId: "bad36w5pu", timedOutAfterMs: 120000,
+  };
+  const MOVED_TEXT =
+    "Command did not complete within its 120s timeout and was moved to the background (ID: bad36w5pu). " +
+    "Output is being written to: x. You will be notified when it completes.";
+
+  test("fires on a foreground Bash call moved to the background at its timeout", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-moved", "Bash", {
+      tool_input: { command: "npm run build", description: "Build the bundle" },
+      tool_response: MOVED_RESPONSE,
+    });
+    expect(out).toContain("[pending]");
+    expect(out).toContain("Build the bundle");
+    expect(out).toContain('kind: "task"');
+    expect(out).not.toContain("bad36w5pu");
+    cleanup(dir);
+  });
+
+  test("reads the structured result of a run_in_background launch too, and PowerShell's", () => {
+    const dir = project();
+    for (const [tool, response] of [
+      ["Bash", { stdout: "", stderr: "", interrupted: false, isImage: false, backgroundTaskId: "b68oycrr6" }],
+      ["PowerShell", MOVED_RESPONSE],
+    ]) {
+      const out = runHook(dir, `s-pending-structured-${tool}`, tool, {
+        tool_input: { command: "npm test", description: "Run the suite" },
+        tool_response: response,
+      });
+      expect(out).toContain("[pending]");
+      expect(out).toContain("Run the suite");
+    }
+    cleanup(dir);
+  });
+
+  test("the timeout sentence as a plain-string response fires too", () => {
+    const dir = project();
+    const out = runHook(dir, "s-pending-moved-text", "Bash", {
+      tool_input: { command: "npm run build", description: "Build the bundle" },
+      tool_response: MOVED_TEXT,
+    });
+    expect(out).toContain("[pending]");
+    cleanup(dir);
+  });
+
+  test("stays quiet when a command merely prints the sentence, or another tool returns it", () => {
+    const dir = project();
+    const printed = runHook(dir, "s-pending-printed", "Bash", {
+      tool_input: { command: "grep -rh moved ~/.claude/projects", description: "Sample results" },
+      tool_response: { stdout: "s.jsonl:143:" + MOVED_TEXT, stderr: "", interrupted: false, isImage: false },
+    });
+    expect(printed).not.toContain("[pending]");
+    const read = runHook(dir, "s-pending-read", "Read", { tool_response: MOVED_TEXT });
+    expect(read).not.toContain("[pending]");
+    cleanup(dir);
+  });
+
   test("stays quiet for an ordinary tool call", () => {
     const dir = project();
     const out = runHook(dir, "s-pending-none", "Read", { tool_response: "file contents" });

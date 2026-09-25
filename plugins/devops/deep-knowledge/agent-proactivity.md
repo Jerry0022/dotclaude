@@ -25,7 +25,7 @@ Every spawn is announced to the user — also under the Quiet output style.
 → show only the last card, it lists them all — never a prose summary.
 Models are family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`) —
 the harness resolves each to the newest model of that family, so never pin a
-version (`claude-opus-5-5`) in frontmatter, an override or a prompt.
+version (`claude-opus-5-5`) anywhere.
 `Explore` and `general-purpose` inherit the session model: `Explore` only
 locates — pass `model: "sonnet"`; implementing goes to a devops domain agent.
 
@@ -37,9 +37,8 @@ locates — pass `model: "sonnet"`; implementing goes to a devops domain agent.
   on purpose). Hooks drop the budget suffix on `AUTONOMOUS_*` prompts.
 - **Hard stop** — the user *narrows the request* with "just", "quick",
   "inline", "no agents" (de: "nur X", "schnell", "keine Agents") → Inline
-  regardless of tier. A filler use ("kannst du einfach mal prüfen, ob …")
-  is not a stop — the request itself is still a sweep. A high-risk change
-  still gets its inline pre-mortem (`pre-mortem.md`).
+  regardless of tier; a high-risk change still gets its inline pre-mortem
+  (`pre-mortem.md`).
 - **Hard go** — the user says "agents", "mit Agents", "full", "komplett
   durchziehen" → spawn as designed, no budget question.
 - **Switch** — the `[delegation] mode` line (`.claude/delegation.json`
@@ -95,3 +94,9 @@ tool-call ceiling in the agent prompt. Class names say what they do.
 
 Details: `agent-orchestration.md` (roster, waves, QA, budget item in the
 spawn template), `agent-collaboration.md` (handoffs), auto-agents skill.
+
+## Proactive `auto-guide` for web hand-offs
+
+Next step = "user, go to `<site>` and do X" (marketplace, API key, OAuth,
+account, terms, cron-job.org) → start `auto-guide` first, never a step
+list (#519).
