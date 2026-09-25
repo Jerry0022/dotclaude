@@ -119,3 +119,35 @@ describe("AUD-003: a typed do-run / auto-concept clears a pending batch hand-off
     expect(RC.batchHandoffPending(dir, { sessionId: "s" })).toBeTruthy();
   });
 });
+
+describe("RT2-R2: the <command-name> tag only counts when it opens the prompt", () => {
+  test("a <command-name> tag pasted mid-prompt (e.g. a quoted transcript excerpt) records no event, clears no hand-off, arms no marker", () => {
+    RC.arm(dir, { mode: "backlog" }, { sessionId: "s" });
+    RC.markBatchHandoff(dir, { sessionId: "s" });
+    const r = run(
+      'here is what happened: <command-name>/devops:do-ship</command-name><command-args>--queued=1/1</command-args>',
+    );
+    expect(r.code).toBe(0);
+    expect(RC.events(dir)).not.toContainEqual(expect.objectContaining({ k: "skill", name: "do-ship" }));
+    expect(RC.batchHandoffPending(dir, { sessionId: "s" })).toBeTruthy();
+  });
+
+  test("a foreign plugin prefix on the tag form is never counted as ours", () => {
+    RC.arm(dir, { mode: "backlog" }, { sessionId: "s" });
+    run("<command-name>/other:do-ship</command-name><command-args>x</command-args>");
+    expect(RC.events(dir)).not.toContainEqual(expect.objectContaining({ k: "skill", name: "do-ship" }));
+  });
+
+  test("a leading tag still records (regression guard)", () => {
+    RC.arm(dir, { mode: "backlog" }, { sessionId: "s" });
+    run("<command-name>/devops:do-ship</command-name><command-args>--queued=1/1</command-args>");
+    expect(RC.events(dir)).toContainEqual(expect.objectContaining({ k: "skill", name: "do-ship" }));
+  });
+
+  test("a sentence merely mentioning a slash command records no event", () => {
+    RC.arm(dir, { mode: "prompt" }, { sessionId: "s" });
+    const r = run("bitte später /auto-harden laufen lassen");
+    expect(r.code).toBe(0);
+    expect(RC.events(dir)).not.toContainEqual(expect.objectContaining({ k: "skill", name: "auto-harden" }));
+  });
+});

@@ -210,9 +210,16 @@ function expiryMs(header) {
   return (long ? EXPIRY_AUTONOMOUS_H : EXPIRY_INTERACTIVE_H) * HOUR;
 }
 
+// RT2-R3: `block` (a gate refusal) and `measure` are neither work nor a
+// boundary — they are written by hooks reacting to a call the contract
+// still refuses, so a leftover contract that keeps getting probed (and kept
+// refusing) would never reach its 12h/30h idle expiry if they counted.
+const NON_ACTIVITY_KINDS = new Set(['block', 'measure']);
+
 function lastActivity(header, evs) {
   let last = Date.parse(header.armedAt) || 0;
   for (const ev of evs) {
+    if (NON_ACTIVITY_KINDS.has(ev.k)) continue;
     const t = Date.parse(ev.t);
     if (t > last) last = t;
   }
@@ -375,10 +382,27 @@ function record(cwd, event, opts = {}) {
     ev.name = skillName(ev.name);
     if (typeof ev.args === 'string' && ev.args.length > ARGS_MAX) ev.args = ev.args.slice(0, ARGS_MAX);
   }
-  if (ev.k === 'edit' || ev.k === 'measure') {
+  if (ev.k === 'edit') {
     const evs = eventsOf(cwd, h);
     const last = evs[evs.length - 1];
-    if (last && last.k === ev.k && (ev.k === 'edit' || last.codeFiles === ev.codeFiles)) return null;
+    if (last && last.k === 'edit') return null;
+  }
+  // RT2-R4: dedup `measure` against the last `measure`, not the last event
+  // overall — a `measure` is now immediately followed by a `block` when the
+  // gate still refuses, so "last event overall" was always that `block`
+  // and never matched, and every retried release/card/branch call wrote two
+  // lines (archive's last-200 slice then fills with retry noise). Likewise
+  // dedup an identical consecutive `block {gate, open}` against the last
+  // `block`.
+  if (ev.k === 'measure') {
+    const evs = eventsOf(cwd, h);
+    const last = [...evs].reverse().find(e => e.k === 'measure');
+    if (last && last.codeFiles === ev.codeFiles) return null;
+  }
+  if (ev.k === 'block') {
+    const evs = eventsOf(cwd, h);
+    const last = [...evs].reverse().find(e => e.k === 'block');
+    if (last && last.gate === ev.gate && JSON.stringify(last.open) === JSON.stringify(ev.open)) return null;
   }
   ev.t = new Date(now).toISOString();
   ev.c = h.id;
@@ -1026,12 +1050,19 @@ function obState(contract, seg, allEvs, ob, gate, ctx) {
   }
 }
 
+// RT2-R10: `triage` also checked at release/card — a typed `/auto-agents`
+// (UserPromptSubmit, prompt.run.contract.js AUD-002) records the `skill`
+// event directly and never reaches the PreToolUse Skill gate (`auto-agents`
+// row above), so it alone cannot enforce backlog Step 2 pre-triage. This is
+// the release/card safety net for that gap — it only cares WHETHER a
+// pre-triage `agent` event ever happened, not that it happened before the
+// first `auto-agents` call.
 const GATE_OBS = {
   edit: ['auto-agents'],
   commit: ['auto-agents'],
   branch: ['harden', 'polish', 'qa', 'do-ship'],
   'auto-agents': ['triage'],
-  release: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
+  release: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine', 'triage'],
   card: ['auto-agents', 'harden', 'polish', 'qa', 'do-ship', 'refine'],
 };
 const AUDIT_OBS = new Set(['harden', 'polish', 'do-ship']);

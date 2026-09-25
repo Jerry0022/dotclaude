@@ -17,8 +17,20 @@
 require('../lib/plugin-guard');
 
 // AUD-015d: the ONE placeholder list lives in run-contract.js — never a
-// second copy here that can drift from it.
-const { OTHER_PLACEHOLDERS } = require('../lib/run-contract');
+// second copy here that can drift from it. RT2-R8: this require moved to
+// module top level for AUD-015d and now sits OUTSIDE the stdin handler's
+// try/catch — a load error in run-contract.js (or anything it pulls in)
+// would throw while THIS module loads and crash the hook on every single
+// AskUserQuestion, instead of the `never surfaces as a hook failure`
+// promise the try/catch makes. Wrapped with a hardcoded fallback so a
+// broken lib never takes the hook down; kept in sync with run-contract.js
+// by the AUD-015d comment there.
+let OTHER_PLACEHOLDERS;
+try {
+  ({ OTHER_PLACEHOLDERS } = require('../lib/run-contract'));
+} catch {
+  OTHER_PLACEHOLDERS = ['something else', 'other', 'etwas anderes', 'sonstiges', 'andere'];
+}
 const PLACEHOLDERS = new Set(OTHER_PLACEHOLDERS.map(s => s.toLowerCase()));
 
 function clean(s) {

@@ -295,6 +295,28 @@ describe("state", () => {
     expect(R.readContract(cwd, { now: T0 + 29 * H })).not.toBeNull();
   });
 
+  test("RT2-R3: block/measure events after the last work still expire at 12 h", () => {
+    R.arm(cwd, { flow: "interactive" }, { now: T0 });
+    R.record(cwd, sk("auto-agents"), { now: T0 + 5 * H });
+    // Only block/measure events from here on — none of these should reset the idle clock.
+    R.record(cwd, { k: "measure", codeFiles: 1 }, { now: T0 + 10 * H });
+    R.record(cwd, { k: "block", gate: "release", open: ["x"] }, { now: T0 + 11 * H });
+    R.record(cwd, { k: "block", gate: "release", open: ["y"] }, { now: T0 + 16.5 * H });
+    expect(R.readContract(cwd, { now: T0 + 16.9 * H })).not.toBeNull(); // 11.9h since the skill event
+    expect(R.readContract(cwd, { now: T0 + 17.1 * H })).toBeNull(); // 12.1h since the skill event
+  });
+
+  test("RT2-R4: retried refusals dedup to at most two lines", () => {
+    R.arm(cwd, { flow: "interactive" }, { now: T0 });
+    for (let i = 0; i < 20; i++) {
+      R.record(cwd, { k: "measure", codeFiles: 3 }, { now: T0 + i * 1000 });
+      R.record(cwd, { k: "block", gate: "release", open: ["a"] }, { now: T0 + i * 1000 + 500 });
+    }
+    const evs = R.events(cwd);
+    expect(evs).toHaveLength(2);
+    expect(evs.map(e => e.k)).toEqual(["measure", "block"]);
+  });
+
   test("corrupt header → no contract", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
     fs.writeFileSync(R.contractPath(cwd), "{nope");
@@ -377,7 +399,7 @@ describe("openObligations", () => {
   });
 
   test("audited backlog session at its first ship_release", () => {
-    const evs = [sk("auto-agents"), edit, commit];
+    const evs = [{ k: "agent", type: "Explore" }, sk("auto-agents"), edit, commit];
     const open = R.openObligations(auto, evs, "release", { closes: ["473"], codeFilesChanged: 0 });
     expect(obs(open)).toEqual(["harden", "polish", "do-ship", "refine#473"]);
   });
@@ -424,7 +446,7 @@ describe("openObligations", () => {
 
   test("refine per Closes #N: auto-issue anywhere naming the item, or a per-item skip", () => {
     const c = C({ mode: "backlog", passes: [] });
-    const evs = [sk("devops:setup-issue", "refine #473"), sk("auto-agents"), edit];
+    const evs = [{ k: "agent", type: "Explore" }, sk("devops:setup-issue", "refine #473"), sk("auto-agents"), edit];
     expect(R.openObligations(c, evs, "release", { closes: ["473"] })).toEqual([]);
     expect(obs(R.openObligations(c, evs, "release", { closes: ["4730", "477"] }))).toEqual(["refine#4730", "refine#477"]);
     expect(R.openObligations(c, [sk("auto-issue", "issue 477 schärfen"), ...evs], "release", { closes: ["477"] })).toEqual([]);
@@ -440,6 +462,24 @@ describe("openObligations", () => {
     expect(R.openObligations(c, [sk("auto-agents"), edit, rel()], "auto-agents")).toEqual([]);
     expect(R.openObligations(C({ mode: "backlog", presence: false }), [], "auto-agents")).toEqual([]);
     expect(R.openObligations(C(), [], "auto-agents")).toEqual([]);
+  });
+
+  test("RT2-R10: triage also gates release/card — a typed /auto-agents skips the PreToolUse skill gate but not this", () => {
+    const c = C({ mode: "backlog", ship: "auto", passes: [] });
+    // The `skill` event here is what prompt.run.contract.js AUD-002 writes for
+    // a TYPED `/auto-agents` — it never reaches the PreToolUse "auto-agents"
+    // gate (section G), so triage must still be caught somewhere before ship.
+    const evs = [sk("auto-agents"), edit];
+    expect(obs(R.openObligations(c, evs, "release"))).toEqual(["do-ship", "triage"]);
+    // A pre-triage `agent` event anywhere in the contract satisfies it.
+    const ok = [{ k: "agent", type: "Explore" }, ...evs];
+    expect(R.openObligations(c, ok, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
+    // A triage skip satisfies it too, and presence:false / non-backlog never gates it.
+    const skipped = [{ k: "skip", ob: "triage", reason: "1 issue" }, ...evs];
+    expect(R.openObligations(c, skipped, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
+    expect(R.openObligations(C({ mode: "backlog", presence: false, ship: "auto", passes: [] }), evs, "release"))
+      .not.toContainEqual(expect.objectContaining({ ob: "triage" }));
+    expect(R.openObligations(C({ ship: "auto", passes: [] }), evs, "release")).not.toContainEqual(expect.objectContaining({ ob: "triage" }));
   });
 
   test("branch gate: backlog only, needs edit work, checks the segment being left", () => {
@@ -552,7 +592,8 @@ describe("CLI", () => {
     expect(a.out.contract).toMatchObject({ source: "cli", mode: "backlog", ship: "auto" });
     const s = run("status");
     expect(s.out.active).toBe(true);
-    expect(s.out.open).toEqual([]);
+    // RT2-R10: a fresh backlog contract has not run pre-triage yet.
+    expect(s.out.open.map((o) => o.ob)).toEqual(["triage"]);
     expect(run("skip", "polish").code).toBe(1);
     expect(run("skip", "nope", "--reason", "x").code).toBe(1);
     expect(run("skip", "refine", "--reason", "x").code).toBe(1);

@@ -73,8 +73,16 @@ function commandFacts(cmd) {
     // path may legitimately be quoted (Windows paths with spaces), so
     // `index.js` is looked up on the RAW segment instead, and the payload
     // path is also read from the RAW segment (as :76 does for branch names).
+    // RT2-R1: a delimiter (`;`, `|`, `&&`, newline) INSIDE a quoted string
+    // earlier in the command makes the raw split (which ignores quoting)
+    // produce more segments than the quote-stripped split, so index `i`
+    // no longer lines up — falling back to the quote-STRIPPED segment
+    // (which has quoted paths emptied to `""`) silently dropped the path
+    // and left renderCard null (final-card gate skipped). Fall back to the
+    // whole raw command instead: the regex below still finds the one
+    // legitimate renderer call in it.
     if (!out.renderCard && RENDER_CARD_FLAG_RE.test(bare)) {
-      const rawSeg = rawSegs.length === segs.length ? rawSegs[i] : seg;
+      const rawSeg = rawSegs.length === segs.length ? rawSegs[i] : cmd;
       if (/index\.js/i.test(rawSeg)) {
         const rc = rawSeg.match(RENDER_CARD_RE);
         if (rc) out.renderCard = rc[1] || rc[2] || rc[3];

@@ -260,6 +260,20 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(block).not.toContain("#7d84a8");
   });
 
+  test("RT2-R5: run-contract line switches to body text colour when it carries a doubtful step (` ?`)", () => {
+    const html = cardWidgetHtml(baseModel({ runContract: "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · QA ?" }), "");
+    const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];
+    expect(block).toContain("var(--text-secondary)");
+    expect(block).not.toContain("#7d84a8");
+  });
+
+  test("RT2-R5: a doubtful passes count (`Durchgänge ?`) also switches colour", () => {
+    const html = cardWidgetHtml(baseModel({ runContract: "🧾 Run · Backlog · Autonom · Ship auto — Durchgänge ?" }), "");
+    const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];
+    expect(block).toContain("var(--text-secondary)");
+    expect(block).not.toContain("#7d84a8");
+  });
+
   test("the widget HTML puts the versioned prompt on the promote button", () => {
     const html = cardWidgetHtml({ lang: "de", heading: "x", buttonsKey: "released-beta", promoteVersion: "0.193.0" }, "");
     expect(html).toContain('data-prompt="promote stable 0.193.0"');

@@ -96,7 +96,7 @@ Events (`k` = kind, `t` = iso time):
 
 | k | fields | written by |
 |---|---|---|
-| `skill` | `name` (normalized, current name via `skill-names`), `args` (≤ 400 chars) | PostToolUse Skill |
+| `skill` | `name` (normalized, current name via `skill-names`), `args` (≤ 400 chars) | PostToolUse Skill, and UserPromptSubmit for a prompt that starts with a typed devops slash command (section G) |
 | `agent` | `type` (`subagent_type`, default `general-purpose`) | PostToolUse Agent |
 | `edit` | — (only when the previous event is not `edit`) | PostToolUse Edit/Write/NotebookEdit on a gated path |
 | `commit` | — | PostToolUse Bash/PowerShell `git commit` (exit 0) |
@@ -105,8 +105,8 @@ Events (`k` = kind, `t` = iso time):
 | `card` | `variant` | PostToolUse `render_completion_card` |
 | `skip` | `ob`, `reason`, `item?` | CLI `skip` |
 | `park` | `item`, `reason` (ends the segment) | CLI `park` |
-| `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate |
-| `block` | `gate`, `open` (obligation names refused) | PreToolUse, right before `return 2` — never counts as work or a segment boundary |
+| `measure` | `codeFiles` (number or null) | PreToolUse release / card / branch gate — never counts as work, a segment boundary or idle-expiry activity (RT2-R3) |
+| `block` | `gate`, `open` (obligation names refused) | PreToolUse, right before `return 2` — never counts as work, a segment boundary or idle-expiry activity (RT2-R3) |
 
 API (CommonJS, pure where possible, every fs error swallowed → "no contract"):
 `readContract(cwd)`, `arm(cwd, header)`, `update(cwd, patch)`,
