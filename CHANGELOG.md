@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.206.2] — 2026-09-25
+
+### Changed
+- **Claude offers the web guide on its own when a setup step needs the user on a website (#519).** Until now `auto-guide` started only on phrases like "führe mich durch", so a hand-off such as "Vercel Marketplace → Storage → Create Database → Neon → Connect" ended as a text checklist in chat. The always-on proactivity rule and the `auto-guide` description now name the trigger: when Claude's own next step would send the user to a site to create an account, a key, an OAuth app or an integration, or to accept terms, it starts the guide or offers it first. The hand-off detector also recognises Neon (in a database context) and cron-job.org, and a numbered list that only says "erstellen".
+
 ## [0.206.1] — 2026-09-25
 
 ### Fixed
