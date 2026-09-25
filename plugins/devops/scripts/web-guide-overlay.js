@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.2.0
+ * @version 1.6.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.2.0";
+  var VERSION = "1.6.0";
 
   if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
   if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
@@ -26,16 +26,33 @@
 
   var STORAGE_KEY = "__wg";
   var POS_STORAGE_KEY = "__wg.pos";
+  var QUEUE_STORAGE_KEY = "__wg.queue";
   var STEP_TTL_MS = 30 * 60 * 1000;
+  var HEARTBEAT_STALE_MS = 10000;
+  var HEARTBEAT_TICK_MS = 2000;
   var INPUT_TYPES = ["text", "secret", "choice", "confirm"];
 
   var currentStep = null, collapsed = true, pos = { right: 24, bottom: 24 };
   var eventQueue = [], pendingWaiter = null, helpOpen = false, abortConfirm = false;
-  var abortResetTimer = null, noResponseTimer = null, activeBtns = [];
-  var statusEl = null, spinnerEl = null, waitLabelEl = null;
+  var abortResetTimer = null, heartbeatTimer = null, activeBtns = [];
+  var statusEl = null, spinnerEl = null, waitLabelEl = null, lastPoll = Date.now();
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
+  }
+
+  // #514: copy[] chips and checklist[] sub-actions, validated the same
+  // defensive way as everything else restored from page-writable storage.
+  function isValidCopy(copy) {
+    return Array.isArray(copy) && copy.length > 0 && copy.every(function (c) {
+      return c && typeof c === "object" && typeof c.value === "string" && c.value.length > 0
+        && (c.label === undefined || typeof c.label === "string");
+    });
+  }
+
+  function isValidChecklist(list) {
+    return Array.isArray(list) && list.length >= 2 && list.length <= 4
+      && list.every((item) => typeof item === "string" && item.length > 0);
   }
 
   function sanitizeStep(step) {
@@ -45,8 +62,14 @@
     if (!Number.isInteger(step.total) || step.total < 1) return null;
     if (typeof step.title !== "string" || typeof step.text !== "string") return null;
     if (step.done !== undefined && typeof step.done !== "boolean") return null;
+    if (step.location !== undefined && typeof step.location !== "string") return null;
+    if (step.copy !== undefined && !isValidCopy(step.copy)) return null;
+    if (step.checklist !== undefined && !isValidChecklist(step.checklist)) return null;
     var out = { id: step.id, index: step.index, total: step.total, title: step.title, text: step.text };
     if (step.done !== undefined) out.done = step.done;
+    if (step.location !== undefined) out.location = step.location;
+    if (step.copy !== undefined) out.copy = step.copy.map((c) => ({ label: c.label, value: c.value }));
+    if (step.checklist !== undefined) out.checklist = step.checklist.slice();
     var input = step.input;
     if (input === undefined) return out;
     if (!input || typeof input !== "object") return null;
@@ -95,6 +118,23 @@
     } catch {}
   }
 
+  // #513: a queued event (help/next/abort waiting for Claude's next wait())
+  // survives a reload instead of being dropped from an in-memory array.
+  function loadQueue() {
+    try {
+      var q = JSON.parse(sessionStorage.getItem(QUEUE_STORAGE_KEY) || "[]");
+      if (Array.isArray(q)) {
+        eventQueue = q.filter((e) => e && typeof e === "object" && typeof e.type === "string" && typeof e.stepId === "string");
+      }
+    } catch {}
+  }
+
+  function saveQueue() {
+    try {
+      sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(eventQueue));
+    } catch {}
+  }
+
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, function (ch) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
@@ -124,6 +164,7 @@
     ".fab{position:fixed;width:56px;height:56px;border-radius:50%;background:#6d28d9;color:#fff;",
     "  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.35);",
     "  cursor:grab;touch-action:none;border:none;font-weight:700}",
+    ".fab-icon{display:flex;align-items:center;justify-content:center;pointer-events:none}",
     ".badge{position:absolute;top:-4px;right:-4px;background:#fff;color:#6d28d9;border-radius:10px;font-size:10px;font-weight:700;padding:2px 5px;box-shadow:0 1px 3px rgba(0,0,0,.35)}",
     ".panel{position:fixed;width:340px;max-width:calc(100vw - 16px);max-height:70vh;overflow:auto;background:#fff;",
     "  border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.4);display:flex;flex-direction:column}",
@@ -132,6 +173,14 @@
     ".body{padding:12px}",
     ".t{font-weight:700;margin:0 0 6px}",
     ".x{line-height:1.4;margin:0 0 10px}",
+    // #514: location breadcrumb, copy chips, local checklist.
+    ".loc{background:#f3e8ff;color:#5b21b6;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;margin:0 0 10px}",
+    ".copylist{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}",
+    ".chip{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f5f5f7;border-radius:8px;padding:6px 8px}",
+    ".chip code{font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-wrap:anywhere}",
+    ".chipbtn{background:#eee;color:#333;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;flex:none}",
+    ".checklist{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}",
+    ".checklist label{display:flex;gap:6px;align-items:flex-start;font-size:13px}",
     ".foot{padding:10px 12px;border-top:1px solid #eee;display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
     "button.btn{font:inherit;border:none;border-radius:8px;padding:8px 12px;cursor:pointer}",
     ".primary{background:#6d28d9;color:#fff}",
@@ -157,6 +206,11 @@
     "  .foot{border-top-color:#333}",
     "  .secondary{background:#333;color:#eee}",
     "  input.f,textarea.f{background:#2a2a31;color:#eee;border-color:#444}",
+    // #514 blocks: their light backgrounds would carry the panel's light
+    // dark-mode text, which left a copy chip's value near-invisible.
+    "  .loc{background:#2e1065;color:#e9d5ff}",
+    "  .chip{background:#2a2a31}",
+    "  .chipbtn{background:#3a3a44;color:#eee}",
     "}",
   ].join("\n");
   shadow.appendChild(styleEl);
@@ -165,6 +219,12 @@
   fabButton.type = "button";
   fabButton.setAttribute("aria-label", "Claude Guide");
   fabButton.setAttribute("aria-expanded", "false");
+  // #513: a compass glyph so the FAB reads as "the guide", not an empty dot.
+  var fabIcon = mk("span", "fab-icon");
+  fabIcon.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.8" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9"/><polygon points="14.5,9.5 12,12 9.5,14.5 12,12"/></svg>';
+  fabButton.appendChild(fabIcon);
   var badge = mk("span", "badge");
   fabButton.appendChild(badge);
   shadow.appendChild(fabButton);
@@ -238,11 +298,27 @@
     panel.style.bottom = pos.bottom + 68 + "px";
   }
 
+  var INTERACTIVE_TAGS = ["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A"];
+
+  function startsOnInteractive(el, e) {
+    var path = typeof e.composedPath === "function" ? e.composedPath() : null;
+    if (!path) return !!(e.target && INTERACTIVE_TAGS.indexOf(e.target.tagName) !== -1);
+    for (var i = 0; i < path.length; i++) {
+      if (path[i] === el) return false;
+      if (path[i] && INTERACTIVE_TAGS.indexOf(path[i].tagName) !== -1) return true;
+    }
+    return false;
+  }
+
   function makeDraggable(el, onClick) {
     var dragging = false, dragged = false;
     var startX, startY, startRight, startBottom;
 
     el.addEventListener("pointerdown", function (e) {
+      // Don't drag/capture when the pointerdown starts on an interactive
+      // child (the collapse button etc.) — capture on `el` would route the
+      // matching click to `el`, never to the child (#516).
+      if (startsOnInteractive(el, e)) return;
       dragging = true;
       dragged = false;
       startX = e.clientX;
@@ -275,21 +351,28 @@
 
   window.addEventListener("resize", applyPosition);
 
-  function clearNoResponseTimer() {
-    clearTimeout(noResponseTimer);
-    noResponseTimer = null;
+  function clearHeartbeat() {
+    clearTimeout(heartbeatTimer);
+    heartbeatTimer = null;
   }
 
-  function armNoResponseTimer() {
-    clearNoResponseTimer();
-    noResponseTimer = setTimeout(function () {
-      noResponseTimer = null;
-      activeBtns.forEach(function (btn) {
-        btn.disabled = false;
-      });
-      if (spinnerEl) spinnerEl.style.display = "none";
-      if (waitLabelEl) waitLabelEl.textContent = "Keine Antwort — bitte noch einmal senden.";
-    }, 45000);
+  // #513: distinguishes "Claude isn't polling right now" (turn ended, nothing
+  // lost — the event is queued and, since it's now sessionStorage-backed,
+  // survives a reload too) from an actually lost event. Ticks every
+  // HEARTBEAT_TICK_MS and reflects lastPoll's age; the typed help text is
+  // never touched, so it stays exactly as the user left it.
+  function tickHeartbeat() {
+    if (waitLabelEl) {
+      waitLabelEl.textContent = Date.now() - lastPoll > HEARTBEAT_STALE_MS
+        ? "Claude hört gerade nicht zu — schreib im Chat „weiter“."
+        : "Warte auf Claude…";
+    }
+    heartbeatTimer = setTimeout(tickHeartbeat, HEARTBEAT_TICK_MS);
+  }
+
+  function armHeartbeat() {
+    clearHeartbeat();
+    tickHeartbeat();
   }
 
   function deliverEvent(event) {
@@ -299,9 +382,10 @@
       resolve(event);
     } else {
       eventQueue.push(event);
+      saveQueue();
     }
     disableActiveButtons();
-    armNoResponseTimer();
+    armHeartbeat();
   }
 
   function makeEmitter(stepId) {
@@ -366,6 +450,7 @@
     abortConfirm = false;
     clearTimeout(abortResetTimer);
     abortResetTimer = null;
+    clearHeartbeat();
     applyPosition();
 
     if (!currentStep) {
@@ -402,6 +487,13 @@
     var body = mk("div", "body");
     panel.appendChild(body);
 
+    // #514: the navigation target gets its own prominent block, not inline
+    // bold text buried in the step body.
+    if (currentStep.location) {
+      var locEl = mk("div", "loc", "📍 " + currentStep.location);
+      body.appendChild(locEl);
+    }
+
     var focusTarget = null;
 
     if (currentStep.done) {
@@ -432,6 +524,47 @@
       var textEl = mk("p", "x");
       textEl.innerHTML = formatText(currentStep.text || "");
       body.appendChild(textEl);
+
+      // #514: copyable values as chips with a clipboard button — the user
+      // still pastes them in themselves, the guide never fills the page.
+      if (currentStep.copy && currentStep.copy.length) {
+        var copyWrap = mk("div", "copylist");
+        currentStep.copy.forEach(function (c) {
+          var chip = mk("div", "chip");
+          chip.appendChild(mk("code", null, c.value));
+          var copyLabel = c.label ? "Kopieren: " + c.label : "Kopieren";
+          var copyBtn = makeButton(copyLabel, "chipbtn", function () {
+            try {
+              navigator.clipboard.writeText(c.value);
+            } catch {}
+            copyBtn.textContent = "Kopiert!";
+            setTimeout(function () {
+              copyBtn.textContent = copyLabel;
+            }, 1500);
+          });
+          chip.appendChild(copyBtn);
+          copyWrap.appendChild(chip);
+        });
+        body.appendChild(copyWrap);
+      }
+
+      // #514: 2-4 locally tickable sub-actions — one panel step can still
+      // cover a whole screen without the total step count exploding. Purely
+      // local UI state, never emitted: it does not change verification.
+      if (currentStep.checklist && currentStep.checklist.length) {
+        var checklistEl = mk("ul", "checklist");
+        currentStep.checklist.forEach(function (item) {
+          var li = mk("li");
+          var itemLabel = document.createElement("label");
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          itemLabel.appendChild(cb);
+          itemLabel.appendChild(mk("span", null, item));
+          li.appendChild(itemLabel);
+          checklistEl.appendChild(li);
+        });
+        body.appendChild(checklistEl);
+      }
 
       var input = currentStep.input;
       var readValue = function () {
@@ -556,6 +689,15 @@
 
   var KEY_TYPES = ["keydown", "keypress", "keyup"];
 
+  // #507: focus may move into the overlay only when it isn't already busy on
+  // a page field. A closed shadow root reports its host as activeElement
+  // while focus sits inside it, so "focus is on body/host" covers both the
+  // untouched-page case and "the user was already inside the panel".
+  function focusIsFreeForOverlay() {
+    var ae = document.activeElement;
+    return !ae || ae === document.body || ae === host;
+  }
+
   function onHostKey(e) {
     if (e.type === "keydown" && e.key === "Escape" && !collapsed) {
       collapsed = true;
@@ -576,20 +718,29 @@
   var api = {
     version: VERSION,
     setStep: function (step) {
+      // A re-send/re-inject of the SAME step id must not force the panel
+      // open again or steal focus — only a genuinely new step does (#516/#507).
+      var isNewStep = !currentStep || !step || currentStep.id !== step.id;
       currentStep = step;
-      collapsed = false;
+      if (isNewStep) collapsed = false;
       helpOpen = false;
       abortConfirm = false;
       eventQueue = [];
-      clearNoResponseTimer();
-      render(true);
+      saveQueue();
+      clearHeartbeat();
+      // Only steal focus for a genuinely new step, and only when the user
+      // isn't already typing into a page field (#507).
+      render(isNewStep && focusIsFreeForOverlay());
       saveState();
       return "ok";
     },
     wait: function (ms) {
+      lastPoll = Date.now(); // #513: heartbeat — every wait() records a poll.
       return new Promise(function (resolve) {
         if (eventQueue.length) {
-          resolve(eventQueue.shift());
+          var queued = eventQueue.shift();
+          saveQueue();
+          resolve(queued);
           return;
         }
         var timer = null;
@@ -638,10 +789,13 @@
       KEY_TYPES.forEach(function (type) {
         window.removeEventListener(type, onWinKeyCap, true);
       });
-      clearNoResponseTimer();
+      clearHeartbeat();
       clearTimeout(abortResetTimer);
       try {
         sessionStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      try {
+        sessionStorage.removeItem(QUEUE_STORAGE_KEY);
       } catch {}
       try {
         localStorage.removeItem(POS_STORAGE_KEY);
@@ -653,6 +807,7 @@
 
   try {
     loadState();
+    loadQueue();
     applyPosition();
     render();
   } catch {

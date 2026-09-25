@@ -132,9 +132,12 @@ function payloadInject(args) {
 // ---------------------------------------------------------------------------
 
 const INPUT_TYPES = ['text', 'secret', 'choice', 'confirm'];
-const STEP_KEYS = new Set(['id', 'index', 'total', 'title', 'text', 'input', 'done']);
+const STEP_KEYS = new Set(['id', 'index', 'total', 'title', 'text', 'input', 'done', 'location', 'copy', 'checklist']);
 const INPUT_KEYS = new Set(['type', 'name', 'label', 'placeholder', 'options', 'required']);
 const NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
+const COPY_KEYS = new Set(['label', 'value']);
+const CHECKLIST_MIN = 2;
+const CHECKLIST_MAX = 4;
 
 function isPlainObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -186,6 +189,73 @@ function validateStep(step) {
     errors.push('done must be a boolean');
   }
 
+  if (step.location !== undefined) {
+    if (typeof step.location !== 'string' || step.location.length === 0 || step.location.length > 80) {
+      errors.push('location must be a string of 1-80 chars');
+    } else if (step.location.includes('<') || step.location.includes('>')) {
+      errors.push('location must not contain < or > (no HTML allowed)');
+    }
+  }
+
+  if (step.copy !== undefined) {
+    errors.push(...validateCopy(step.copy));
+  }
+
+  if (step.checklist !== undefined) {
+    errors.push(...validateChecklist(step.checklist));
+  }
+
+  return errors;
+}
+
+/**
+ * Validate Step.copy[] — clipboard chips (protocol.md § Step, #514).
+ * @param {*} copy
+ * @returns {string[]}
+ */
+function validateCopy(copy) {
+  if (!Array.isArray(copy) || copy.length === 0) {
+    return ['copy must be a non-empty array'];
+  }
+  const errors = [];
+  copy.forEach((item, i) => {
+    if (!isPlainObject(item)) {
+      errors.push(`copy[${i}] must be an object`);
+      return;
+    }
+    for (const key of Object.keys(item)) {
+      if (!COPY_KEYS.has(key)) errors.push(`copy[${i}]: unknown key: ${key}`);
+    }
+    if (typeof item.value !== 'string' || item.value.length === 0 || item.value.length > 200) {
+      errors.push(`copy[${i}].value must be a non-empty string of at most 200 chars`);
+    }
+    if (item.label !== undefined && (typeof item.label !== 'string' || item.label.length === 0 || item.label.length > 40)) {
+      errors.push(`copy[${i}].label must be a string of 1-40 chars`);
+    }
+  });
+  return errors;
+}
+
+/**
+ * Validate Step.checklist[] — 2-4 locally tickable sub-actions (#514).
+ * @param {*} checklist
+ * @returns {string[]}
+ */
+function validateChecklist(checklist) {
+  if (!Array.isArray(checklist)) {
+    return ['checklist must be an array'];
+  }
+  if (checklist.length < CHECKLIST_MIN || checklist.length > CHECKLIST_MAX) {
+    return [`checklist must have ${CHECKLIST_MIN}-${CHECKLIST_MAX} items`];
+  }
+  const errors = [];
+  checklist.forEach((item, i) => {
+    if (typeof item !== 'string' || item.length === 0 || item.length > 140) {
+      errors.push(`checklist[${i}] must be a string of 1-140 chars`);
+    } else if (item.includes('<') || item.includes('>')) {
+      errors.push(`checklist[${i}] must not contain < or > (no HTML allowed)`);
+    }
+  });
   return errors;
 }
 
@@ -494,6 +564,8 @@ function main(argv) {
 module.exports = {
   validateStep,
   validateInput,
+  validateCopy,
+  validateChecklist,
   upsertEnv,
   quoteValue,
   overlayPath,
