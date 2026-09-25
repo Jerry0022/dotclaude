@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_PATH = path.join(__dirname, "web-guide-overlay.js");
 const SRC = fs.readFileSync(SRC_PATH, "utf8");
-const MAX_BYTES = 24 * 1024;
+// Raw-source budget. This is an anti-bloat guard, not a hard technical limit:
+// `web-guide.js payload inject` strips comments/whitespace (leanSource())
+// before the source ever reaches a transcript, so growth here doesn't scale
+// injection cost 1:1. Raised from 24 KB for #513/#514's new fields (location,
+// copy[], checklist[], heartbeat, sessionStorage-persisted queue, FAB icon).
+const MAX_BYTES = 34 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -59,7 +64,10 @@ function makeElement(tag) {
       if (i >= 0) arr.splice(i, 1);
     },
     click() { (listeners.click || []).forEach((fn) => fn({ type: "click" })); },
-    focus() {},
+    dispatch(type, evt) { (listeners[type] || []).forEach((fn) => fn(evt || { type })); },
+    focus() { this._focusCalled = true; },
+    _pointerCaptures: [],
+    setPointerCapture(id) { this._pointerCaptures.push(id); },
     // `opts.mode === "closed"` must NOT publish `shadowRoot` (real DOM behavior).
     // `_shadow` is an internal test-only handle so findAll() can still walk in.
     attachShadow(opts) {
@@ -148,6 +156,11 @@ function makeSandbox({ setTimeoutFn, clearTimeoutFn } = {}) {
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     console,
+    navigator: { clipboard: { writeText: () => {} } },
+    // Pass the outer realm's Date through so fake timers (which patch it) can
+    // also advance the vm sandbox's Date.now() — a vm.createContext otherwise
+    // gets its own, unrelated Date built-in.
+    Date,
   };
   vm.createContext(sandbox);
   return sandbox;
@@ -173,8 +186,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.2.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.2.0["']/);
+  test("defines VERSION 1.6.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.6.0["']/);
     expect(SRC).toMatch(/window.claudeGuide\s*=/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -205,7 +218,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.2.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.6.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -222,7 +235,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.2.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.6.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -420,7 +433,11 @@ describe("web-guide-overlay — execution", () => {
   });
 
   // Fix 4: stale "Warte auf Claude…" recovery.
-  test("recovers with a re-enabled UI after 45s of silence", async () => {
+  // #513: heartbeat replaces the old 45s "Keine Antwort" guess. The event is
+  // queued (and now sessionStorage-backed), so the UI stays disabled — no
+  // false invitation to resubmit — but the label distinguishes "Claude simply
+  // isn't polling right now" from a lost event.
+  test("shows the heartbeat message after 10s without a poll, without re-enabling buttons", async () => {
     vi.useFakeTimers();
     try {
       const sb = makeSandbox({
@@ -433,13 +450,63 @@ describe("web-guide-overlay — execution", () => {
       const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
       primary.click();
       expect(primary.disabled).toBe(true);
-      await vi.advanceTimersByTimeAsync(45000);
-      expect(primary.disabled).toBe(false);
-      const label = findAll(host, (e) => e._text === "Keine Antwort — bitte noch einmal senden.")[0];
+      await vi.advanceTimersByTimeAsync(13000); // past a 2s heartbeat tick beyond the 10s stale mark
+      expect(primary.disabled).toBe(true);
+      const label = findAll(host, (e) => e._text === "Claude hört gerade nicht zu — schreib im Chat „weiter“.")[0];
       expect(label).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // #513: every wait() call is a poll — it resets the heartbeat's staleness
+  // clock even when it immediately resolves from the persisted queue.
+  test("wait() resets the heartbeat clock (a poll is a poll, even a queued one)", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+      primary.click();
+      await sb.window.claudeGuide.wait(1000); // resolves immediately from the queue, still a poll
+      await vi.advanceTimersByTimeAsync(2000);
+      const label = findAll(host, (e) => e._text === "Warte auf Claude…")[0];
+      expect(label).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #513: a queued event is persisted so a reload doesn't drop it.
+  test("persists a queued event in sessionStorage and restores it on re-injection", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
+    primary.click();
+    expect(sandbox.window.claudeGuide.state().queued).toBe(1);
+    expect(sandbox.sessionStorage._data["__wg.queue"]).toBeTruthy();
+
+    // Simulate a reload: a fresh JS context reading the SAME sessionStorage
+    // (destroy() is never called on reload — the old context is just gone).
+    const sb2 = makeSandbox();
+    sb2.sessionStorage._data["__wg.queue"] = sandbox.sessionStorage._data["__wg.queue"];
+    sb2.sessionStorage._data.__wg = sandbox.sessionStorage._data.__wg;
+    run(sb2);
+    expect(sb2.window.claudeGuide.state().queued).toBe(1);
+  });
+
+  // #513: the FAB carries a visible glyph, not just the step badge.
+  test("the FAB has an icon glyph, not an empty circle", () => {
+    run(sandbox);
+    const host = getHost(sandbox);
+    const icon = findAll(host, (e) => e._html && e._html.indexOf("<svg") !== -1)[0];
+    expect(icon).toBeTruthy();
   });
 
   // Fix 5: pendingWaiter per call — timeout for A must not clear B's resolver.
@@ -487,6 +554,157 @@ describe("web-guide-overlay — execution", () => {
 
     const state = sandbox.window.claudeGuide.state();
     expect(state.queued).toBe(0);
+  });
+
+  // #514: location block, copy chips, checklist.
+  test("renders a location block, copy chips with a working clipboard button, and a checklist", () => {
+    sandbox.navigator.clipboard.writeText = vi.fn();
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go",
+      location: "Account API tokens → Create Token",
+      copy: [{ label: "Token name", value: "web-guide-test" }],
+      checklist: ["Scope contents:read gesetzt", "Ablaufdatum gewählt"],
+    });
+    const host = getHost(sandbox);
+
+    const loc = findAll(host, (e) => e._text && e._text.indexOf("Account API tokens") !== -1)[0];
+    expect(loc).toBeTruthy();
+
+    const chipCode = findAll(host, (e) => e.tagName === "CODE" && e._text === "web-guide-test")[0];
+    expect(chipCode).toBeTruthy();
+    const copyBtn = findAll(host, (e) => e.tagName === "BUTTON" && e._text.indexOf("Kopieren") !== -1)[0];
+    copyBtn.click();
+    expect(sandbox.navigator.clipboard.writeText).toHaveBeenCalledWith("web-guide-test");
+    expect(copyBtn.textContent).toBe("Kopiert!");
+
+    const checklistItems = findAll(host, (e) => e.tagName === "LI");
+    expect(checklistItems.length).toBe(2);
+    const checkboxes = findAll(host, (e) => e.type === "checkbox");
+    expect(checkboxes.length).toBe(2);
+  });
+
+  // #514: a step without the optional fields renders exactly as before.
+  test("location/copy/checklist are optional — a plain step renders unchanged", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    expect(findAll(host, (e) => e.className === "loc").length).toBe(0);
+    expect(findAll(host, (e) => e.className === "copylist").length).toBe(0);
+    expect(findAll(host, (e) => e.className === "checklist").length).toBe(0);
+  });
+
+  // #514: a malformed checklist (outside 2-4 items) is rejected by sanitizeStep
+  // when restored from storage — same defensive posture as every other field.
+  test("a checklist outside 2-4 items is discarded on restore", () => {
+    sandbox.sessionStorage.setItem(
+      "__wg",
+      JSON.stringify({
+        step: { id: "1", index: 1, total: 1, title: "T", text: "go", checklist: ["only one"] },
+        collapsed: false,
+        ts: Date.now(),
+      })
+    );
+    run(sandbox);
+    expect(sandbox.window.claudeGuide.state().stepId).toBe(null);
+  });
+
+  // #516: a pointerdown that starts on the collapse button must not arm the
+  // header's drag/pointer-capture — capturing on the header would route the
+  // matching click away from the button in a real browser.
+  test("pointerdown on the collapse button skips setPointerCapture on the draggable header", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
+    const head = collapseBtn.parentNode;
+
+    head.dispatch("pointerdown", {
+      type: "pointerdown", pointerId: 1, clientX: 0, clientY: 0,
+      target: collapseBtn, composedPath: () => [collapseBtn, head],
+    });
+    expect(head._pointerCaptures).toEqual([]);
+    head.dispatch("pointerup", { type: "pointerup", pointerId: 1, target: collapseBtn, composedPath: () => [collapseBtn, head] });
+
+    // Real pointerdown/pointerup + click on the button itself (not a synthetic
+    // el.click() bypassing pointer events) must still collapse the panel.
+    collapseBtn.dispatch("pointerdown", { type: "pointerdown", pointerId: 2, target: collapseBtn, composedPath: () => [collapseBtn] });
+    collapseBtn.dispatch("pointerup", { type: "pointerup", pointerId: 2, target: collapseBtn, composedPath: () => [collapseBtn] });
+    collapseBtn.dispatch("click", { type: "click", target: collapseBtn });
+
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+
+    // Dragging the header itself (pointerdown target = head) still arms capture.
+    head.dispatch("pointerdown", { type: "pointerdown", pointerId: 3, clientX: 0, clientY: 0, target: head, composedPath: () => [head] });
+    expect(head._pointerCaptures).toEqual([3]);
+  });
+
+  // #507: a corrective/re-sent step must not pull focus out of a page field
+  // the user is actively typing into.
+  test("setStep does not steal focus when a page field outside the overlay is focused", () => {
+    run(sandbox);
+    const pageInput = sandbox.document.createElement("input");
+    sandbox.document.activeElement = pageInput;
+
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go",
+      input: { type: "text", name: "n" },
+    });
+
+    const host = getHost(sandbox);
+    const overlayInput = findAll(host, (e) => e.tagName === "INPUT")[0];
+    expect(overlayInput._focusCalled).toBeFalsy();
+    expect(pageInput._focusCalled).toBeFalsy(); // untouched, still holds focus
+
+    // Once nothing on the page holds focus (activeElement is body/null), a
+    // NEW step may focus the panel again.
+    sandbox.document.activeElement = null;
+    sandbox.window.claudeGuide.setStep({
+      id: "2", index: 2, total: 1, title: "T2", text: "go",
+      input: { type: "text", name: "n" },
+    });
+    const overlayInput2 = findAll(getHost(sandbox), (e) => e.tagName === "INPUT")[0];
+    expect(overlayInput2._focusCalled).toBe(true);
+  });
+
+  // #507: re-sending the same step id must neither re-expand a collapsed
+  // panel nor steal focus, even when the page has no active element.
+  test("a same-id re-send does not steal focus even when the page is idle", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go",
+      input: { type: "text", name: "n" },
+    });
+    const firstInput = findAll(getHost(sandbox), (e) => e.tagName === "INPUT")[0];
+    expect(firstInput._focusCalled).toBe(true);
+
+    sandbox.window.claudeGuide.setStep({
+      id: "1", index: 1, total: 1, title: "T", text: "go, edited",
+      input: { type: "text", name: "n" },
+    });
+    const secondInput = findAll(getHost(sandbox), (e) => e.tagName === "INPUT")[0];
+    expect(secondInput._focusCalled).toBeFalsy();
+  });
+
+  // #516: re-sending / re-injecting the same step id must not force the
+  // panel open again once the user collapsed it.
+  test("setStep keeps the user's collapsed state when the step id is unchanged", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 2, title: "T1", text: "go" });
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(false);
+
+    const host = getHost(sandbox);
+    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
+    collapseBtn.click();
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+
+    // Same id re-sent (re-send / re-inject) — stays collapsed.
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 2, title: "T1", text: "go, edited" });
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+
+    // A genuinely new step opens the panel again.
+    sandbox.window.claudeGuide.setStep({ id: "2", index: 2, total: 2, title: "T2", text: "go" });
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(false);
   });
 
   // Fix 7: capture-phase key isolation.
@@ -546,5 +764,14 @@ describe("web-guide-overlay — app-styled FAB tooltip (ui-defaults.md R0/R1)", 
     expect(SRC, "WebKit fallback").toMatch(/\.panel::-webkit-scrollbar-thumb\{background:#ccc/);
     expect(SRC, "dark scheme").toMatch(/\.panel\{background:#1e1e24;scrollbar-color:#444 transparent\}/);
     expect(SRC, "native parts follow the scheme").toMatch(/:host\{[^}]*color-scheme:light dark/);
+  });
+
+  // #514: the dark panel's light text must not land on the chips' light
+  // backgrounds — a copy chip's value was near-invisible in a real browser.
+  test("the location block and copy chips have dark-scheme backgrounds", () => {
+    const dark = SRC.slice(SRC.indexOf("@media(prefers-color-scheme:dark)"));
+    expect(dark).toMatch(/\.loc\{background:#2e1065/);
+    expect(dark).toMatch(/\.chip\{background:#2a2a31/);
+    expect(dark).toMatch(/\.chipbtn\{background:#3a3a44/);
   });
 });

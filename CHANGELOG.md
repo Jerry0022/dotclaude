@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.206.0] — 2026-09-25
+
+### Added
+- **Guide steps can carry a location, copyable values and a checklist (#514).** A step's `location` renders as a breadcrumb block at the top ("📍 Account → API Tokens → Create Token"). `copy[]` values render as chips with a clipboard button, so the user pastes names and URLs instead of retyping them. `checklist[]` holds 2–4 sub-actions the user ticks off locally, so one panel step can cover one screen. The authoring rules now state that the user always presses Enter, Submit and Create — the guide never does.
+
+### Fixed
+- **The guide panel's collapse button works (#516).** The header's drag handler captured the pointer even when the press started on the button, so the browser routed the click to the header and nothing happened. Presses on buttons, inputs and links now skip the drag. Re-sending or re-injecting the same step keeps the panel collapsed; only a new step opens it.
+- **A step update no longer pulls the cursor out of the page (#507).** Every `setStep` focused the panel, so a corrective step sent while the user filled a payment form moved their keystrokes into the guide and the page felt frozen. The panel now takes focus only when nothing on the page holds it; a same-step re-send never does. The skill waits while the user is typing instead of re-sending.
+- **The help box says when Claude isn't listening, and keeps the question (#513).** Instead of a misleading "Keine Antwort" after 45 s, the panel shows "Claude hört gerade nicht zu — schreib im Chat „weiter“" once no poll arrived for 10 s. Queued answers and help questions survive a reload in `sessionStorage`. The FAB shows a compass icon instead of an empty circle.
+- **The guide comes back after a reload (#515).** Each resumed turn starts with a `state()` probe and re-injects the overlay when a reload or redirect removed it; the step restores from `sessionStorage`.
+- **Copy chips and the location block stay readable in dark mode.**
+
+## [0.205.7] — 2026-09-25
+
+### Fixed
+- **A web hand-off in prose or on the card now offers the web guide (#506).** The hand-off detector only knew numbered click lists and arrow paths, and it stripped the completion card before scanning. A sentence like "leg einen Cloudflare-Account mit R2 an … und einen API-Token" or a card item asking the user to create an account went unnoticed, and nobody offered `auto-guide`. The detector now also matches one sentence that names a service, an account or credential (Account, API token, bucket, secret, OAuth app, webhook) and a creation verb, and skips sentences that report Claude's own work ("ich habe … angelegt"). The completion card scans its own `userFinalTest` and `open` items the same way and, on a hit, adds a **Web-Guide starten** button that asks for a guided run through that service.
+
+## [0.205.6] — 2026-09-25
+
+### Fixed
+- **A finished ship no longer tells you to ship the branch you are shipping in parallel.** When several sessions worked or shipped side by side, the first ship's card listed the other session's branch as an open point ("not shipped yet — ship it?"). The card's `open` example itself was a foreign branch ("feat/x liegt 70 PRs hinter main"), which taught that report. The card server now drops every open point that names a branch or folder checked out in another worktree (`lib/foreign-branches.js`); that session ships its own branch, and leftovers stay with `ship_hygiene` and the cleanup page. The do-ship skill and the card schema use an example about the shipped work itself and state the rule.
+
 ## [0.205.5] — 2026-09-25
 
 ### Fixed

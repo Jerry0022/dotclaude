@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   detectWebHandoff,
+  detectCardHandoff,
+  hasHandoffSentence,
   matchService,
   hasNumberedUiSteps,
   hasArrowChain,
@@ -50,6 +52,81 @@ describe("detectWebHandoff — must trigger (real session examples)", () => {
   test("English numbered steps", () => {
     const text = "Set up Stripe:\n1. Open the Stripe dashboard\n2. Click Developers\n3. Copy the secret key";
     expect(detectWebHandoff(text)).toEqual({ service: "Stripe" });
+  });
+});
+
+describe("detectWebHandoff — prose shape (#506, exact session wording)", () => {
+  const PROSE =
+    "Dein Teil fürs Aktivieren von R2 ist, einen Cloudflare-Account mit R2 anzulegen (braucht eine Karte). " +
+    "Dazu einen Budget-Alert bei 1 $, einen Bucket `sc-companion-assets` in der EU-Region, nicht öffentlich, " +
+    "und einen API-Token, der nur auf diesen Bucket zugreifen darf. " +
+    "Die Schritte 1–3 dazu stehen in cloudflare/assets-worker/README.md.";
+
+  test("one prose sentence naming service + credential noun + creation verb", () => {
+    expect(detectWebHandoff(PROSE)).toEqual({ service: "Cloudflare" });
+  });
+
+  test("hasHandoffSentence isolates the qualifying sentence", () => {
+    expect(hasHandoffSentence(PROSE)).toEqual({ service: "Cloudflare" });
+  });
+
+  test("English prose shape", () => {
+    const text = "Your part is to create a Stripe account and generate an API key for the webhook.";
+    expect(detectWebHandoff(text)).toEqual({ service: "Stripe" });
+  });
+
+  test("credential noun without a creation verb does not trigger", () => {
+    expect(detectWebHandoff("Der Cloudflare-Account ist schon da, der Bucket auch.")).toBeNull();
+  });
+
+  test("creation verb without a credential noun does not trigger", () => {
+    expect(detectWebHandoff("Bei Cloudflare musst du noch etwas einrichten, dazu später mehr.")).toBeNull();
+  });
+
+  test("self-performed (Claude did it) is excluded — German", () => {
+    expect(detectWebHandoff("Ich habe den Cloudflare-Account mit R2 bereits angelegt.")).toBeNull();
+  });
+
+  test("self-performed (Claude did it) is excluded — English", () => {
+    expect(detectWebHandoff("I already created the Cloudflare account and generated the API key.")).toBeNull();
+  });
+});
+
+describe("detectCardHandoff — card payload (#506)", () => {
+  test("userFinalTest item with the exact session wording", () => {
+    const card = {
+      userFinalTest: ["Cloudflare-Account mit R2 anlegen (Karte), Budget-Alert 1 $, Bucket, API-Token erstellen"],
+    };
+    expect(detectCardHandoff(card)).toEqual({ service: "Cloudflare" });
+  });
+
+  test("open item with the exact session wording (no service named) does not trigger alone", () => {
+    const card = { open: ["Account steht → Secrets, Worker-Deploy, Umschalten + Kopie der 340 MB übernehme ich"] };
+    expect(detectCardHandoff(card)).toBeNull();
+  });
+
+  test("a hit in open is found even when userFinalTest is clean", () => {
+    const card = {
+      userFinalTest: ["npm test grün"],
+      open: ["Noch einen Supabase-Bucket für Assets anlegen"],
+    };
+    expect(detectCardHandoff(card)).toEqual({ service: "Supabase" });
+  });
+
+  test("{text, reply} and {action} object shapes are read", () => {
+    expect(detectCardHandoff({ open: [{ text: "Vercel-API-Token erstellen", reply: "ja" }] }))
+      .toEqual({ service: "Vercel" });
+    expect(detectCardHandoff({ userFinalTest: [{ action: "Supabase-Secret anlegen" }] }))
+      .toEqual({ service: "Supabase" });
+  });
+
+  test("self-performed wording in a card item is excluded", () => {
+    expect(detectCardHandoff({ open: ["Ich habe den Supabase-Bucket bereits angelegt."] })).toBeNull();
+  });
+
+  test("empty / missing fields", () => {
+    expect(detectCardHandoff({})).toBeNull();
+    expect(detectCardHandoff({ userFinalTest: [], open: [] })).toBeNull();
   });
 });
 

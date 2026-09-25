@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.guide.handoff
- * @version 0.3.0
+ * @version 0.4.0
  * @event Stop
  * @plugin devops
  * @description Offer the auto-guide skill when Claude's own answer hands the user a manual click-through on an external website.
@@ -16,7 +16,9 @@
  *   Code writes each content block as its own entry, so the last entry may
  *   hold only the card — names an external service/URL (loopback and
  *   github.com report links excluded) AND carries a numbered list with a UI
- *   verb, or ≥2 `→` arrows plus a named service.
+ *   verb, ≥2 `→` arrows plus a named service, or one prose sentence naming
+ *   the service plus a credential noun plus a creation verb
+ *   (guide-handoff.hasHandoffSentence).
  *
  *   Two outcomes, once per session PER DISTINCT SERVICE:
  *     - the last message contains the completion card (✨✨✨ marker) →

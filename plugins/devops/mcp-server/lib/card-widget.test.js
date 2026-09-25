@@ -52,6 +52,27 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     }
   });
 
+  test("guideHandoff (#506) appends the web-guide button, even for a null buttonsKey", () => {
+    const buttons = buttonsFor(null, "de", { guideHandoff: { service: "Cloudflare" } });
+    expect(buttons).toEqual([
+      expect.objectContaining({ label: "Web-Guide starten", prompt: "Führ mich per Web-Guide durch Cloudflare" }),
+    ]);
+  });
+
+  test("guideHandoff rides alongside a card's own buttons, after them", () => {
+    const de = buttonsFor("ready", "de", { guideHandoff: { service: "Supabase" } });
+    expect(de.map((a) => a.label)).toEqual(["Ship", "Ändern", "Web-Guide starten"]);
+    expect(de[2].prompt).toBe("Führ mich per Web-Guide durch Supabase");
+
+    const en = buttonsFor("ready", "en", { guideHandoff: { service: "Supabase" } });
+    expect(en.at(-1)).toMatchObject({ label: "Start web guide", prompt: "Guide me through Supabase with the web guide" });
+  });
+
+  test("no guideHandoff, no extra button", () => {
+    expect(buttonsFor("ready", "de", { guideHandoff: null }).some((a) => a.label === "Web-Guide starten")).toBe(false);
+    expect(buttonsFor("ready", "de", {}).some((a) => a.label === "Web-Guide starten")).toBe(false);
+  });
+
   test("noShip drops every ship button — a repo without a remote cannot ship (#500)", () => {
     const ready = buttonsFor("ready", "de", { noShip: true });
     expect(ready.map((a) => a.label)).toEqual(["Ändern"]);
