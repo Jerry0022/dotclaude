@@ -1,6 +1,6 @@
 /**
  * @module mode-state
- * @version 1.2.0
+ * @version 1.2.1
  *
  * Mode state the card reads off the project — not off the caller.
  *
@@ -117,7 +117,7 @@ export function releasedPrefix(channel) {
  *  prefix per channel. Longest first so "🚀 Shipping – " never loses to a
  *  shorter sibling. */
 const STRIPPABLE = Object.freeze(
-  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix)].sort((a, b) => b.length - a.length),
+  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix)].filter(Boolean).sort((a, b) => b.length - a.length),
 );
 
 /** `title` without any leading devops prefix (repeated prefixes included, so
