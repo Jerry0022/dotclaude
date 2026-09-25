@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module git-timeout
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description The one git subprocess timeout, named once (AUD-031). Before
  *   this module the same idea lived in three places with two values —
@@ -23,6 +23,15 @@
 
 /** The single git subprocess timeout (ms) — see the module header. */
 const GIT_TIMEOUT_MS = 5000;
+
+/**
+ * R13: the one shared ceiling for a whole gated call's git chain. Before this
+ * export, pre.run.contract.js kept its own 15000 while the CLI's measureQa()
+ * fell back to gitBudget()'s GIT_TIMEOUT_MS (5000) default — `done` could see
+ * `qa: null` (an expired 5 s budget) where the live gate, given 15 s, would
+ * still have measured it. Both now share this one number.
+ */
+const TOTAL_GIT_BUDGET_MS = 15000;
 
 /**
  * A shared deadline for a chain of git calls that should not, together,
@@ -47,4 +56,4 @@ function gitBudget(totalMs = GIT_TIMEOUT_MS) {
   };
 }
 
-module.exports = { GIT_TIMEOUT_MS, gitBudget };
+module.exports = { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, gitBudget };

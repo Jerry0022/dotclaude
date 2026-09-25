@@ -504,6 +504,27 @@ describe("openObligations", () => {
     expect(R.openObligations(C(), [], "auto-agents")).toEqual([]);
   });
 
+  test("R10: a description-less agent event (pre-AUD-020) is grandfathered as satisfying triage", () => {
+    const c = C({ mode: "backlog" });
+    // No `description` key at all — an event recorded before AUD-020 added
+    // it. Must still count, else a backlog run already in flight across the
+    // plugin update re-opens triage and blocks.
+    const legacyAgent = { k: "agent", type: "Explore" };
+    expect(R.openObligations(c, [legacyAgent], "auto-agents")).toEqual([]);
+    // A NEW event with an explicit empty description does NOT get the
+    // grandfather pass — it must say "triage".
+    const newNoDesc = { k: "agent", type: "Explore", description: "" };
+    expect(obs(R.openObligations(c, [newNoDesc], "auto-agents"))).toEqual(["triage"]);
+  });
+
+  test("R10: an item mention with no \"triage\" word no longer satisfies it (issueNamed alternative dropped)", () => {
+    const c = C({ mode: "backlog", items: ["12"] });
+    const lookAt = { k: "agent", type: "Explore", description: "look at #12 for context" };
+    expect(obs(R.openObligations(c, [lookAt], "auto-agents"))).toEqual(["triage"]);
+    const named = { k: "agent", type: "Explore", description: "Triage #12 — fix the thing" };
+    expect(R.openObligations(c, [named], "auto-agents")).toEqual([]);
+  });
+
   test("RT2-R10: triage also gates release/card — a typed /auto-agents skips the PreToolUse skill gate but not this", () => {
     const c = C({ mode: "backlog", ship: "auto", passes: [] });
     // The `skill` event here is what prompt.run.contract.js AUD-002 writes for
@@ -655,8 +676,14 @@ describe("CLI", () => {
     try {
       expect(run("arm", "--cwd", other, "--passes", "none").out.contract.passes).toEqual([]);
       expect(fs.existsSync(path.join(other, ".claude", "run-contract.json"))).toBe(true);
-      expect(run("done", "--cwd", other).out).toMatchObject({ ok: true, closed: true });
-      expect(run("done").out).toMatchObject({ ok: true, closed: false });
+      const doneOk = run("done", "--cwd", other);
+      expect(doneOk.out).toMatchObject({ ok: true, closed: true });
+      // R13: `done` must not exit 0 while reporting closed:false — a caller
+      // reading only the exit code would otherwise believe the run ended.
+      expect(doneOk.code).toBe(0);
+      const doneNothing = run("done");
+      expect(doneNothing.out).toMatchObject({ ok: true, closed: false });
+      expect(doneNothing.code).not.toBe(0);
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
     expect(run().code).toBe(1);
     expect(run("arm", "--mode", "x").code).toBe(1);

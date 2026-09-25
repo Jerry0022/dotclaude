@@ -39,7 +39,7 @@ function run(tool_name, tool_input, extra = {}, env = {}) {
     input: JSON.stringify({ cwd: dir, hook_event_name: "PreToolUse", tool_name, tool_input, ...extra }),
     cwd: dir, encoding: "utf8", env: { ...ENV, ...env },
   });
-  return { code: res.status, stderr: res.stderr || "" };
+  return { code: res.status, stderr: res.stderr || "", stdout: res.stdout || "" };
 }
 const f = (rel) => path.join(dir, rel);
 const armPrompt = (over = {}) => RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual", passes: ["harden", "polish"], ...over });
@@ -586,5 +586,22 @@ describe("RT3: red-team pass 3 (pre)", () => {
     expect(P.codeFilesChanged(dir, "card", "main", failDiff)).toBeNull();
     const ok = (root, args) => (args[0] === "ls-files" ? ["c.js"] : []);
     expect(P.codeFilesChanged(dir, "card", "main", ok)).toBe(1);
+  });
+});
+
+describe("R5: the corrupt-quarantine notice is delivered even when run-contract.json is gone", () => {
+  test("the marker alone (no run-contract.json / pending / batch-handoff) still reaches the notice, once", () => {
+    // Simulates the state right after a quarantine: only the marker is left
+    // on disk. Before the fix, hasState() only checked run-contract.json /
+    // .pending / batch-handoff.json, so this call returned 0 before ever
+    // reading the marker.
+    fs.writeFileSync(f(".claude/run-contract.json.corrupt.pending"), "", "utf8");
+    const r1 = run("Edit", { file_path: f("src/a.js") }, { session_id: "s" });
+    expect(r1.code).toBe(0);
+    expect(r1.stdout).toContain("quarantined");
+    expect(r1.stdout).toContain("run-contract.json.corrupt");
+    // One-shot: the marker is consumed, a second call gets nothing.
+    const r2 = run("Edit", { file_path: f("src/b.js") }, { session_id: "s" });
+    expect(r2.stdout).toBe("");
   });
 });

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -46,7 +46,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { GIT_TIMEOUT_MS } = require('./git-timeout');
+const { GIT_TIMEOUT_MS, gitBudget } = require('./git-timeout');
+
+// R11: post.run.contract's hook timeout is 10 s (hooks.json); baseBranch can
+// make 2 unbudgeted GIT_TIMEOUT_MS (5 s) calls, 10 s worst case, killing the
+// hook and losing the item `branch` event. The post path (shellCallFacts /
+// baseBranch with `after: true`) shares one ~6 s budget across both calls
+// instead of letting each re-arm its own 5 s ceiling.
+const POST_BASE_BRANCH_BUDGET_MS = 6000;
 
 const SHIP_RELEASE = 'mcp__plugin_devops_dotclaude-ship__ship_release';
 const RENDER_CARD = 'mcp__plugin_devops_dotclaude-completion__render_completion_card';
@@ -874,10 +881,40 @@ function gitLines(root, args, { timeout, budget } = {}) {
  * The branch a new branch is created FROM. PreToolUse: HEAD. PostToolUse
  * (`after`): HEAD already is the new branch → the previous one (`@{-1}`).
  */
-function baseBranch(root, newName, after) {
-  const head = gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  if (after && head && newName && head === newName) return gitOut(root, ['rev-parse', '--abbrev-ref', '@{-1}']);
+function baseBranch(root, newName, after, budget) {
+  const head = gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD'], { budget });
+  if (after && head && newName && head === newName) return gitOut(root, ['rev-parse', '--abbrev-ref', '@{-1}'], { budget });
   return head;
+}
+
+/**
+ * R15: `owner/repo` this checkout's `origin` remote points at, or null when
+ * unreadable (no remote, git failure/timeout). Accepts the two common GitHub
+ * remote shapes: `https://github.com/owner/repo(.git)` and
+ * `git@github.com:owner/repo(.git)`.
+ * @param {object} [budget] an optional git-timeout gitBudget()
+ */
+function originOwnerRepo(root, budget) {
+  const url = gitOut(root, ['remote', 'get-url', 'origin'], { budget });
+  if (!url) return null;
+  const m = url.trim().match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
+  return m ? { owner: m[1], repo: m[2] } : null;
+}
+
+/**
+ * R15: does a GitHub MCP merge's `owner`/`repo` tool_input match this
+ * checkout's `origin`? An unrelated repo's merge must not count as this
+ * run's release. An UNKNOWN origin (git failure/timeout, no github.com
+ * remote) still matches — recorded, as before this fix — rather than
+ * silently dropping every merge on a checkout run-contract-calls can't read
+ * `origin` from.
+ * @param {object} [budget] an optional git-timeout gitBudget()
+ */
+function originMatches(root, owner, repo, budget) {
+  if (typeof owner !== 'string' || !owner || typeof repo !== 'string' || !repo) return true;
+  const o = originOwnerRepo(root, budget);
+  if (!o) return true;
+  return o.owner.toLowerCase() === owner.toLowerCase() && o.repo.toLowerCase() === repo.toLowerCase();
 }
 
 /**
@@ -911,12 +948,15 @@ function shellCallFacts(hook, root, cwd, { after = false } = {}) {
   let itemBranch = false;
   if (f.branch) {
     const plain = !(hook.agent_id || f.worktree || f.detach);
-    itemBranch = isItemBranch(f, hook, plain ? baseBranch(root, f.branchName, after) : null);
+    // R11: only the post path (`after`) needs a shared budget — pre's single
+    // HEAD read never chains a second call.
+    const budget = after ? gitBudget(POST_BASE_BRANCH_BUDGET_MS) : undefined;
+    itemBranch = isItemBranch(f, hook, plain ? baseBranch(root, f.branchName, after, budget) : null);
   }
   let card = null;
   if (f.renderCard) {
     const payload = readCardPayload(f.renderCard, cwd);
-    card = payload ? { readable: true, ...cardFacts(payload) } : { readable: false, variant: null, final: true };
+    card = payload ? { readable: true, ...cardFacts(payload) } : { readable: false, variant: null, final: true, pending: false, concept: false };
   }
   return { commit: f.commit, itemBranch, branchName: f.branchName, card, release: f.release, pushHead: f.pushHead };
 }
@@ -966,12 +1006,18 @@ function nonEmpty(v) {
   return String(v).trim().length > 0;
 }
 
-/** Card variant and whether it is a final card the gate checks (spec D). */
+/**
+ * Card variant and whether it is a final card the gate checks (spec D).
+ * `pending`/`concept` (R1) are exposed too so an `analysis` card's own
+ * hand-off state can gate whether it closes an AUDIT run.
+ */
 function cardFacts(input) {
   const i = input && typeof input === 'object' ? input : {};
   const variant = typeof i.variant === 'string' ? i.variant.trim() : '';
-  const final = FINAL_VARIANTS.has(variant) && !nonEmpty(i.pending) && !nonEmpty(i.concept);
-  return { variant, final };
+  const pending = nonEmpty(i.pending);
+  const concept = nonEmpty(i.concept);
+  const final = FINAL_VARIANTS.has(variant) && !pending && !concept;
+  return { variant, final, pending, concept };
 }
 
 function readCardPayload(file, cwd) {
@@ -1016,7 +1062,12 @@ function releaseResult(response) {
  */
 function mergeResult(response) {
   let obj = null;
-  if (response && typeof response === 'object' && !Array.isArray(response)) obj = response;
+  // R2: a real MCP response is the envelope `{content:[{type:'text',text:'{"merged":true,…}'}]}`
+  // (post.flow.completion.js documents the shape) — only trust `response`
+  // itself as the result object when it directly carries a boolean `merged`;
+  // otherwise fall through and parse the envelope's text content, mirroring
+  // releaseResult()'s `success` check.
+  if (response && typeof response === 'object' && !Array.isArray(response) && typeof response.merged === 'boolean') obj = response;
   if (!obj) {
     const text = responseText(response).trim();
     try { obj = JSON.parse(text); } catch {
@@ -1051,8 +1102,12 @@ const MAX_BACK_BYTES = 32 * 1024 * 1024;
  * TAIL_BYTES chunks (at most MAX_BACK_BYTES). A line split by a chunk
  * boundary is carried over and yielded whole; the partial first line at the
  * cap is dropped. The caller stops the read by leaving the loop.
+ * @param {object} [opts] `{chunk, max, budget}` — R12: an optional
+ *   git-timeout gitBudget() checked before each chunk read; an expired
+ *   budget stops the walk early (a partial answer, or none, beats an
+ *   invocation that outruns its own deadline).
  */
-function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES } = {}) {
+function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget } = {}) {
   let fd;
   try { fd = fs.openSync(file, 'r'); } catch { return; }
   try {
@@ -1061,6 +1116,7 @@ function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES } = {})
     let end = size;
     let carry = Buffer.alloc(0);
     while (end > floor) {
+      if (budget && budget.expired()) break;
       const start = Math.max(floor, end - chunk);
       const buf = Buffer.alloc(end - start);
       fs.readSync(fd, buf, 0, buf.length, start);
@@ -1089,14 +1145,18 @@ function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES } = {})
  * @param {string} transcriptPath
  * @param {string|null} sinceIso
  * @param {object} RC the run-contract lib (extractAnswers, isRouterCall, isPartialRouterCall, parseFollowUp)
+ * @param {object} [budget] R12: an optional git-timeout gitBudget() shared
+ *   with the invocation's git chain — the walk stops (yielding whatever it
+ *   found so far) once it expires, instead of running past the hook's own
+ *   deadline on a large transcript.
  * @returns {{questions, answers, followUps:object[], earlier:{questions, answers}[]}|null}
  */
-function routerFromTranscript(transcriptPath, sinceIso, RC) {
+function routerFromTranscript(transcriptPath, sinceIso, RC, budget) {
   if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
   const since = sinceIso ? Date.parse(sinceIso) - 5000 : NaN;
   const seen = []; // newest first: {questions, answers} router calls and {followUp}
   // QA-T1: backwards in 2 MB chunks until a line older than sinceIso or a full router call (≤ 32 MB).
-  for (const line of linesBackward(transcriptPath)) {
+  for (const line of linesBackward(transcriptPath, { budget })) {
     if (!line.includes('toolUseResult')) continue;
     let obj;
     try { obj = JSON.parse(line); } catch { continue; }
@@ -1132,6 +1192,6 @@ module.exports = {
   MACHINE_ARM_RE, MACHINE_TURN_RE, BACKLOG_AUTOSTART_RE,
   commandFacts, splitSegments, commandAt, shellCallFacts, contractRoots,
   toolInput, toolFilePath, isGatedPath, isGatedEdit, closesOf, cardFacts, readCardPayload,
-  releaseResult, mergeResult, responseText, routerFromTranscript, baseBranch, isItemBranch, gitOut, gitLines, readTail,
+  releaseResult, mergeResult, responseText, routerFromTranscript, baseBranch, isItemBranch, originOwnerRepo, originMatches, gitOut, gitLines, readTail,
   scanShell, substitutions, linesBackward, MAX_PARSE,
 };

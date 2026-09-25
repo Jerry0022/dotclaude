@@ -1,10 +1,17 @@
 import { describe, test, expect } from "vitest";
-import { GIT_TIMEOUT_MS, gitBudget } from "./git-timeout.js";
+import { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, gitBudget } from "./git-timeout.js";
 
 describe("GIT_TIMEOUT_MS", () => {
   test("is a single positive number, the one per-call timeout", () => {
     expect(typeof GIT_TIMEOUT_MS).toBe("number");
     expect(GIT_TIMEOUT_MS).toBeGreaterThan(0);
+  });
+});
+
+describe("R13: TOTAL_GIT_BUDGET_MS", () => {
+  test("is exported, above GIT_TIMEOUT_MS — the one whole-invocation ceiling pre and the CLI now share", () => {
+    expect(typeof TOTAL_GIT_BUDGET_MS).toBe("number");
+    expect(TOTAL_GIT_BUDGET_MS).toBeGreaterThan(GIT_TIMEOUT_MS);
   });
 });
 
