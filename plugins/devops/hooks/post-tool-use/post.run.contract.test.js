@@ -131,7 +131,7 @@ describe("backlog closing", () => {
     const ok = [{ type: "text", text: '{"success":true,"merged":true}' }];
     run(SHIP, { body: "Closes #1" }, ok);
     expect(RC.readContract(dir)).not.toBeNull();
-    RC.record(dir, { k: "skip", ob: "refine", item: "2", reason: "duplicate" });
+    RC.record(dir, { k: "park", item: "2", reason: "duplicate" });
     run(SHIP, { body: "Closes #3" }, ok);
     expect(RC.readContract(dir)).toBeNull();
   });
@@ -183,11 +183,11 @@ describe("harden pass (H-*)", () => {
     expect(closed).toHaveLength(1);
   });
 
-  test("H-B3: an unreadable --render-card payload is recorded as a final card and closes the prompt run", () => {
+  test("H-B3 / RT3-R2: an unreadable --render-card payload is recorded but does not close a run without work", () => {
     RC.arm(dir, { mode: "prompt" });
     run("Bash", { command: "cd sub && node x/mcp-server/index.js --render-card card.json" });
-    expect(RC.readContract(dir)).toBeNull();
-    expect(RC.readContractForCard(dir).closeReason).toContain("final card");
+    expect(RC.readContract(dir)).not.toBeNull();
+    expect(RC.events(dir)).toEqual([expect.objectContaining({ k: "card", variant: null })]);
   });
 
   test("H-B13: Flow + Scope without a do-run marker arms nothing", () => {
@@ -249,6 +249,121 @@ describe("harden pass (H-*)", () => {
     expect(RC.readContractForCard(dir).closeReason).toContain("every queued item");
   });
 });
+
+describe("red-team pass 3 (RT3-*)", () => {
+  const ok = [{ type: "text", text: '{"success":true,"merged":true}' }];
+  const LIB = 'node "x/hooks/lib/run-contract.js"';
+  const PASSES_Q = [{ header: "Durchgänge?", question: "Welche Durchgänge?", options: [{ label: "Harden danach" }, { label: "Polish danach" }] }];
+  const ctxOf = (r) => (r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "");
+
+  test("RT3-R1: skip refine --item 12 and --item 13 before building leave the backlog open", () => {
+    RC.arm(dir, { mode: "backlog", items: ["12", "13"], sessionId: "s" });
+    RC.record(dir, { k: "skip", ob: "refine", item: "12", reason: "clear" });
+    run("Bash", { command: `${LIB} skip refine --item 12 --reason "clear"` });
+    RC.record(dir, { k: "skip", ob: "refine", item: "13", reason: "clear" });
+    run("Bash", { command: `${LIB} skip refine --item 13 --reason "clear"` });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("RT3-R1: skip qa --item 13 does not finish item 13", () => {
+    RC.arm(dir, { mode: "backlog", items: ["12", "13"], sessionId: "s" });
+    run(SHIP, { body: "Closes #12" }, ok);
+    RC.record(dir, { k: "skip", ob: "qa", item: "13", reason: "docs only" });
+    run("Bash", { command: `${LIB} skip qa --item 13 --reason "docs only"` });
+    expect(RC.readContract(dir)).not.toBeNull();
+    expect(P_backlogFinished({ mode: "backlog", items: ["13"] }, [{ k: "skip", ob: "refine", item: "13" }])).toBe(false);
+  });
+
+  test("RT3-R1: a release closing #12 plus park 13 closes the backlog", () => {
+    RC.arm(dir, { mode: "backlog", items: ["12", "13"], sessionId: "s" });
+    run(SHIP, { body: "Closes #12" }, ok);
+    expect(RC.readContract(dir)).not.toBeNull();
+    RC.record(dir, { k: "park", item: "13", reason: "blocked" });
+    run("Bash", { command: `${LIB} park 13 --reason "blocked"` });
+    expect(RC.readContract(dir)).toBeNull();
+  });
+
+  test("RT3-R2: an interim card via $p or stdin before any work keeps the run open", () => {
+    RC.arm(dir, { mode: "prompt", sessionId: "s" });
+    run("PowerShell", { command: "node x/mcp-server/index.js --render-card $p" });
+    run("Bash", { command: "echo '{}' | node x/mcp-server/index.js --render-card -" });
+    expect(RC.readContract(dir)).not.toBeNull();
+    expect(kinds()).toEqual(["card", "card"]);
+  });
+
+  test("RT3-R2: a readable non-final payload deleted in the same command keeps an audit run open", () => {
+    RC.arm(dir, { mode: "audit", sessionId: "s" });
+    run("PowerShell", { command: "node x/mcp-server/index.js --render-card .claude/card.json; Remove-Item .claude/card.json" });
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
+
+  test("RT3-R2: an unreadable card closes only with work done and nothing open at the card gate", () => {
+    const work = () => {
+      RC.record(dir, { k: "skill", name: "auto-agents", args: "" });
+      RC.record(dir, { k: "edit" });
+    };
+    RC.arm(dir, { mode: "prompt", passes: ["harden"], ship: "manual", sessionId: "s" });
+    work();
+    run("Bash", { command: "node x/mcp-server/index.js --render-card -" });
+    expect(RC.readContract(dir)).not.toBeNull();
+    RC.arm(dir, { mode: "prompt", passes: [], ship: "manual", sessionId: "s" });
+    work();
+    expect(RC.openObligations(RC.readContract(dir), RC.events(dir), "card")).toEqual([]);
+    run("Bash", { command: "node x/mcp-server/index.js --render-card -" });
+    expect(RC.readContract(dir)).toBeNull();
+    expect(RC.readContractForCard(dir).closeReason).toContain("final card");
+  });
+
+  test("RT3-R8: a Passes-only re-ask 40 min after arming merges into the active contract", () => {
+    const a = RC.arm(dir, { mode: "prompt", passes: [], sessionId: "s" }, { now: Date.now() - 40 * 60_000 });
+    const r = run("AskUserQuestion", { questions: PASSES_Q }, { answers: { "Welche Durchgänge?": "Harden danach" } });
+    expect(r.stdout).toBe("");
+    expect(RC.readContract(dir)).toMatchObject({ id: a.id, passes: ["harden"] });
+  });
+
+  test("RT3-R8: a partial call after a do-run arms a new contract even over an active one", () => {
+    const a = RC.arm(dir, { mode: "prompt", passes: [], sessionId: "s" });
+    RC.markPendingArm(dir, { sessionId: "s", args: "" });
+    run("AskUserQuestion", { questions: PASSES_Q }, { answers: { "Welche Durchgänge?": "Harden danach" } });
+    const h = RC.readContract(dir);
+    expect(h.id).not.toBe(a.id);
+    expect(h).toMatchObject({ source: "router", passes: ["harden"] });
+    expect(RC.pendingArm(dir)).toBeNull();
+  });
+
+  test("RT3-R8: a partial call with no marker and no active contract is not recorded and says so", () => {
+    const r = run("AskUserQuestion", { questions: PASSES_Q }, { answers: { "Welche Durchgänge?": "Harden danach" } });
+    expect(RC.readRawContract(dir)).toBeNull();
+    const ctx = ctxOf(r);
+    expect(ctx).toContain("NOT recorded");
+    expect(ctx).toContain("run-contract.js\" arm --mode");
+  });
+
+  test("RT3-X1: an interrupted or non-zero-exit git commit / branch is not recorded", () => {
+    RC.arm(dir, { mode: "prompt", sessionId: "s" });
+    run("Bash", { command: 'git commit -m "x"' }, { stdout: "", stderr: "", interrupted: true });
+    run("Bash", { command: 'git commit -m "x"' }, { exit_code: 1, stdout: "nothing to commit" });
+    run("PowerShell", { command: "git switch -c feat/x" }, { exitCode: 128 });
+    expect(kinds()).toEqual([]);
+    run("Bash", { command: 'git commit -m "x"' }, { stdout: "[main abc] x", stderr: "", interrupted: false });
+    expect(kinds()).toEqual(["commit"]);
+  });
+
+  test("RT3-X2: this session's contract expired without work is announced once", () => {
+    RC.arm(dir, { mode: "prompt", flow: "interactive", sessionId: "s" }, { now: Date.now() - 13 * 3600_000 });
+    const first = ctxOf(run("Write", { file_path: path.join(dir, ".claude/x.md") }));
+    expect(first).toContain("expired after 12 h");
+    expect(first).toContain("arm --mode");
+    expect(run("Write", { file_path: path.join(dir, ".claude/x.md") }).stdout).toBe("");
+  });
+
+  test("RT3-X2: another session's expired contract is not announced", () => {
+    RC.arm(dir, { mode: "prompt", sessionId: "other" }, { now: Date.now() - 13 * 3600_000 });
+    expect(run("Write", { file_path: path.join(dir, ".claude/x.md") }).stdout).toBe("");
+  });
+});
+
+const P_backlogFinished = (h, evs) => require("./post.run.contract.js").backlogFinished(h, evs);
 
 test("no contract: Edit/Bash are a no-op and write nothing", () => {
   run("Edit", { file_path: path.join(dir, "a.js") });

@@ -40,6 +40,20 @@ describe("do-run SKILL.md — run contract", () => {
   });
 });
 
+describe("RT3-R7: pinned follow-up headers", () => {
+  it("SKILL.md F3 / F4 pin Milestones / Issues and their numbered continuations", () => {
+    expect(doRunSkill).toMatch(/F3  header: "Milestones"/);
+    expect(doRunSkill).toMatch(/F4  header: "Issues"/);
+    expect(doRunSkill).toMatch(/"Issues 2", "Issues 3"/);
+    expect(doRunSkill).toMatch(/"Milestones 2", "Milestones 3"/);
+  });
+
+  it("backlog.md Step 1.2 names the exact headers of a split selection", () => {
+    expect(backlog).toMatch(/header `Milestones`,\s+then\s+`Milestones 2`,\s+`Milestones 3`/);
+    expect(backlog).toMatch(/header `Issues`,\s+then\s+`Issues 2`,\s+`Issues 3`/);
+  });
+});
+
 describe("do-run backlog mode — ships only via devops:do-ship", () => {
   it("names Skill(\"devops:do-ship\", ...) and forbids direct ship_* calls", () => {
     expect(backlog).toMatch(/Skill\("devops:do-ship",\s*"--queued=<n>\/<N>\s*--keep"\)/);

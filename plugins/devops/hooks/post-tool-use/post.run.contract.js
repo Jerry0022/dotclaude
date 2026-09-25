@@ -14,11 +14,18 @@
  *     `auto-concept` clear the do-batch hand-off marker.
  *   - Agent → `agent`; Edit/Write/NotebookEdit on a gated path → `edit`;
  *     Bash/PowerShell `git commit` → `commit`, branch creation → `branch`
- *     (PostToolUse only fires for successful calls).
+ *     (PostToolUse only fires for successful calls; an interrupted call or a
+ *     non-zero exit code in tool_response records neither).
  *   - ship_release → `release` {ok, merged, closes}; a backlog contract closes
- *     once every item shipped or was skipped.
+ *     once every item shipped or was parked (an obligation skip never
+ *     finishes an item).
  *   - completion card (MCP or offline renderer) → `card`; a final card closes
- *     a prompt / audit contract (its PreToolUse gate already passed).
+ *     a prompt / audit contract (its PreToolUse gate already passed). An
+ *     offline card post cannot read closes only with work done and nothing
+ *     open at the card gate.
+ *   - A partial router call arms after a do-run, else merges into this
+ *     session's active contract, else says it was not recorded. This
+ *     session's contract expired unclosed → one notice.
  *   A contract armed from `fallback` or `machine` is announced once via
  *   additionalContext. Never fails the tool call; kill switch
  *   DOTCLAUDE_RUN_CONTRACT=off.
@@ -44,7 +51,9 @@ function backlogFinished(h, evs) {
   const closed = new Set();
   for (const ev of evs) {
     if (ev.k === 'release' && ev.ok === true && Array.isArray(ev.closes)) ev.closes.forEach(n => closed.add(String(n)));
-    if ((ev.k === 'skip' || ev.k === 'park') && ev.item) closed.add(String(ev.item));
+    // RT3-R1: only `park N` finishes an item — an obligation skip
+    // (`skip refine --item N`) satisfies that obligation, never the item.
+    if (ev.k === 'park' && ev.item) closed.add(String(ev.item));
   }
   return h.items.every(n => closed.has(String(n)));
 }
@@ -58,14 +67,23 @@ function machineTurn(hook, C) {
   } catch { return false; }
 }
 
-function recordCard(root, variant, final, RC, s) {
+function recordCard(root, variant, final, RC, s, { unreadable = false } = {}) {
   RC.record(root, { k: 'card', variant: variant || null }, s);
   // H-B8: the close follows from the card being final and the contract's
   // mode — not from the append succeeding (a card that was shown but whose
   // event could not be written still ends a prompt / audit run).
   if (!final) return;
   const h = RC.readContract(root, s);
-  if (h && (h.mode === 'prompt' || h.mode === 'audit')) RC.close(root, 'done: final card', s);
+  if (!h || (h.mode !== 'prompt' && h.mode !== 'audit')) return;
+  // RT3-R2: an offline card whose payload post cannot read (`-`, `$p`, a file
+  // deleted in the same command) may be an interim card pre let through —
+  // it closes only where a final card could have passed: the contract did
+  // work and nothing is open at the card gate.
+  if (unreadable) {
+    const evs = RC.events(root);
+    if (!RC.segmentHasWork(evs) || RC.openObligations(h, evs, 'card').length) return;
+  }
+  RC.close(root, 'done: final card', s);
 }
 
 /** H-B1: the first of `roots` holding this session's contract (claimed on the way), else the session root. */
@@ -98,12 +116,20 @@ function onAsk({ hook, input, root, sessionId, s, RC }) {
   // marker) — a model-written Flow + Scope / Passes question elsewhere never
   // arms. A FULL router call (Ablauf + Umfang + Durchgänge) is do-run's own
   // signature and arms with or without the marker.
+  // RT3-R8: for a partial call (1) a fresh do-run marker → a new run → arm;
+  // (2) else this session's active contract (any age) → merge; (3) else the
+  // answer is dropped — said so, with the re-arm line.
+  if (!fields) return null;
   const partial = RC.isPartialRouterCall(questions);
-  if (fields && !RC.mergeRouterAnswers(root, questions, fields, s) && (!partial || marker)) {
-    // A failed write must not delete the marker (AUD-001): keep it so the
-    // next gated call's pre-hook fallback arm can retry.
+  if (partial && !marker && !RC.mergeRouterAnswers(root, questions, fields, s)) {
+    return `[run-contract] These do-run answers were NOT recorded: no do-run just ran and this session has no active run contract. To gate this run, arm it: ${RC.rearmHint()}`;
+  }
+  // A failed write must not delete the marker (AUD-001): keep it so the
+  // next gated call's pre-hook fallback arm can retry.
+  if (!partial || marker) {
     if (RC.arm(root, { ...fields, source: 'router', sessionId })) RC.clearPendingArm(root);
   }
+  return null;
 }
 
 /** `skill` event; do-run writes the arm marker; do-run / auto-concept take over a batch hand-off. */
@@ -118,9 +144,14 @@ function onSkill({ hook, input, root, sessionId, s, RC, C }) {
 /** `commit`, item `branch` and an offline `--render-card` card (H-A2: the facts pre gated on). */
 function onShell({ hook, cwd, root, s, RC, C }) {
   const f = C.shellCallFacts(hook, root, cwd, { after: true });
-  if (f.commit) RC.record(root, { k: 'commit' }, s);
-  if (f.itemBranch) RC.record(root, { k: 'branch', name: f.branchName }, s);
-  if (f.card) recordCard(root, f.card.variant, f.card.final, RC, s);
+  // RT3-X1: a non-zero exit fires PostToolUseFailure, not this hook; an
+  // interrupt or a (legacy) non-zero exit code in tool_response still skips.
+  const { normalizeToolResponse } = require('../lib/browsertest-guard');
+  const r = normalizeToolResponse(hook.tool_response);
+  const failed = r.interrupted || (r.exitCode !== null && r.exitCode !== 0);
+  if (f.commit && !failed) RC.record(root, { k: 'commit' }, s);
+  if (f.itemBranch && !failed) RC.record(root, { k: 'branch', name: f.branchName }, s);
+  if (f.card) recordCard(root, f.card.variant, f.card.final, RC, s, { unreadable: f.card.readable === false });
 }
 
 /** `release` in the contract's root (ship_release acts on tool_input.cwd); a finished backlog closes. */
@@ -171,20 +202,23 @@ function main(hook) {
   const sessionId = hook.session_id || null;
   const s = { sessionId };
   RC.claim(root, sessionId);
-  handler({ hook, input: C.toolInput(hook), cwd, root, roots, sessionId, s, RC, C });
+  // RT3-X2: read before the handler — its first write archives the expired header.
+  const expired = RC.expiryNotice(root, s);
+  const note = handler({ hook, input: C.toolInput(hook), cwd, root, roots, sessionId, s, RC, C });
+  const ctxOut = (text) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text } });
+  if (typeof note === 'string' && note) return ctxOut(note);
 
   let h = RC.readContract(root, s);
-  // H-C5: an item parked / skipped (run-contract CLI, a Bash call) AFTER the
-  // last release also finishes the backlog — not only a ship_release.
+  // H-C5: an item parked AFTER the last release also finishes the backlog —
+  // not only a ship_release.
   if (h && tool !== C.SHIP_RELEASE && backlogFinished(h, RC.events(root))) {
     RC.close(root, 'done: every queued item shipped', s);
     h = RC.readContract(root, s);
   }
   if (h && (h.source === 'fallback' || h.source === 'machine') && !h.announced) {
-    if (RC.update(root, { announced: true }, s)) {
-      return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: announcement(h, RC) } });
-    }
+    if (RC.update(root, { announced: true }, s)) return ctxOut(announcement(h, RC));
   }
+  if (expired && !h) return ctxOut(expired);
   return null;
 }
 

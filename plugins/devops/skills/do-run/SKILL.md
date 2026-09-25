@@ -223,6 +223,10 @@ F3  header: "Milestones"    multiSelect: true
 F4  header: "Issues"        multiSelect: true
     options = loose trusted issues without milestone (modes/backlog.md Step 1.2)
 
+    >4 options → split into further questions of the same call, headers exactly
+    "Milestones 2", "Milestones 3" … / "Issues 2", "Issues 3" … (the run contract
+    reads only these headers).
+
 F5  header: "Desktop"       multiSelect: false
     1. "Desktop frei lassen (Recommended)" — Kein Maus/Tastatur-Takeover; Browser-Tests laufen trotzdem.
     2. "Desktop übernehmen"                — Computer-Use für native Apps.

@@ -30,6 +30,7 @@
  *   readContract(cwd, {now})                      → header | null (active only)
  *   readContractForCard(cwd, {now})               → header | null (active, or closed ≤ 15 min ago)
  *   readRawContract(cwd)                          → header | null (as on disk, no checks)
+ *   expiryNotice(cwd, {sessionId, now})           → string | null (once: this session's contract expired unclosed)
  *   claim(cwd, sessionId, {now})                  → header | null (adopts a session-less fresh contract)
  *   arm(cwd, header, {now})                       → header | null (archives an existing one)
  *   update(cwd, patch, {now})                     → header | null
@@ -311,6 +312,21 @@ function archive(cwd, header, now) {
   } catch { /* best effort */ }
   unlinkQuiet(contractPath(cwd));
   unlinkQuiet(eventsPath(cwd));
+}
+
+/**
+ * RT3-X2: a one-time notice that this session's contract expired unclosed
+ * (a Q&A-only run: cards are no activity). Marks the header so it shows once;
+ * the next write archives it anyway. → string | null
+ */
+function expiryNotice(cwd, opts = {}) {
+  if (disabled() || !opts.sessionId) return null;
+  const now = nowOf(opts);
+  const h = readRawContract(cwd);
+  if (!h || h.closedAt || h.expiryAnnounced || h.sessionId !== opts.sessionId) return null;
+  if (!isExpired(h, eventsOf(cwd, h), now)) return null;
+  if (!writeJsonRetry(contractPath(cwd), { ...h, expiryAnnounced: true })) return null;
+  return `[run-contract] The run contract expired after ${expiryMs(h) / HOUR} h without work — its gates are off. Still in a do-run? Re-arm: ${rearmHint()}`;
 }
 
 /** Archive an expired header sitting on disk (the "next write" of spec A). */
@@ -819,30 +835,32 @@ function isPartialRouterCall(questions) {
 }
 
 /**
- * A partial router call of this session within 30 min of arming MERGES into
- * the active contract (R7). Returns the updated header, or null (→ arm).
+ * A partial router call MERGES into this session's active contract (R7),
+ * whatever its age (RT3-R8: a re-ask 40 min in must not be dropped). The
+ * caller arms instead when a fresh do-run marker exists. Returns the updated
+ * header, or null (no active contract of this session).
  */
 function mergeRouterAnswers(cwd, questions, fields, opts = {}) {
   if (!fields || !isPartialRouterCall(questions)) return null;
   const now = nowOf(opts);
   const h = readContract(cwd, { now, sessionId: opts.sessionId });
   if (!h) return null;
-  const armed = Date.parse(h.armedAt);
-  if (!Number.isFinite(armed) || now - armed > MERGE_WINDOW_MS) return null;
   return update(cwd, answeredFields(fields), { now, sessionId: opts.sessionId });
 }
 
-// H-B7: exactly the Issues headers do-run emits — F4 "Issues" (SKILL.md) and
-// the numbered continuation ("Issues 2") of backlog.md Step 1.2 — never any
-// header that merely starts with "Issues".
-const ISSUES_HEADER_RE = /^issues(?: \d+)?$/;
+// H-B7 / RT3-R7: exactly the headers do-run emits — F4 "Issues" / F3
+// "Milestones" (SKILL.md) and their numbered continuations of backlog.md
+// Step 1.2 ("Issues 2", "Issues (2)", "Issues 2/3") — never a header that
+// merely starts with the word ("Issues found", "Open issues list").
+const ISSUES_HEADER_RE = /^issues(?: (?:\d+(?:\/\d+)?|\(\d+(?:\/\d+)?\)))?$/;
+const MILESTONES_HEADER_RE = /^milestones(?: (?:\d+(?:\/\d+)?|\(\d+(?:\/\d+)?\)))?$/;
 
 /** Mode a follow-up header implies (Q1 was preset away): backlog | audit | null. */
 function followUpModeHint(questions) {
   let hint = null;
   for (const q of Array.isArray(questions) ? questions : []) {
     const h = canonHeader(headerOf(q));
-    if (h === 'milestones' || ISSUES_HEADER_RE.test(h)) return 'backlog';
+    if (MILESTONES_HEADER_RE.test(h) || ISSUES_HEADER_RE.test(h)) return 'backlog';
     if (h === 'ergebnis' || h === 'audit-umfang') hint = hint || 'audit';
   }
   return hint;
@@ -892,12 +910,12 @@ function parseFollowUp(questions, answers) {
       const s = tokens.join(' ').toLowerCase();
       if (/concept/.test(s)) { patch.auditResult = 'concept'; patch.passes = []; }
       else if (/umsetzen|implement/.test(s)) patch.auditResult = 'implement';
-    } else if (/^milestones$/i.test(h)) {
+    } else if (MILESTONES_HEADER_RE.test(h)) {
       hit = true;
       // H-B7: only a real selection patches — an empty / "Other" answer
       // must not overwrite a recorded list with [].
       const picked = tokens.filter(t => !PLACEHOLDER_RE.test(t.trim()));
-      if (picked.length) patch.milestones = picked;
+      if (picked.length) patch.milestones = [...new Set([...(patch.milestones || []), ...picked])];
     } else if (ISSUES_HEADER_RE.test(h)) {
       hit = true;
       const nums = [];
@@ -1459,7 +1477,7 @@ module.exports = {
   OTHER_PLACEHOLDERS, LIB_PATH, rearmHint,
   disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath,
   claim, applyFollowUp, answeredFields, isPartialRouterCall, mergeRouterAnswers, hasHeader, followUpModeHint, machinePatch,
-  readContract, readContractForCard, readRawContract, arm, update, record, close, events,
+  readContract, readContractForCard, readRawContract, expiryNotice, arm, update, record, close, events,
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   extractAnswers, isRouterCall, parseRouterAnswers, parseFollowUp, parseMachinePrompt,
   skillName, segments, currentSegment, segmentHasWork, openObligations,
