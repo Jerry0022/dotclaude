@@ -209,15 +209,111 @@ describe("watchPRChecks", () => {
       err.stderr = Buffer.from("no checks reported on the 'feat/x' branch");
       throw err;
     });
-    const result = watchPRChecks(42);
+    // noChecksGraceMs: 0 — skip the #508 grace window so this stays an
+    // immediate-verdict test; the grace window itself is covered below.
+    const result = watchPRChecks(42, undefined, { noChecksGraceMs: 0 });
     expect(result.status).toBe("no-checks");
     expect(result.checks).toEqual([]);
+    expect(result.noChecksReason).toBeUndefined();
   });
 
   test("returns no-checks when initial probe returns empty array", () => {
     execFileSync.mockReturnValueOnce("[]");
-    const result = watchPRChecks(42);
+    const result = watchPRChecks(42, undefined, { noChecksGraceMs: 0 });
     expect(result.status).toBe("no-checks");
+  });
+
+  // #508 — ship_release pushes its own release commit right before this gate,
+  // so external status providers (Vercel etc.) routinely register seconds
+  // AFTER the initial probe. A single probe cannot tell that apart from "no
+  // CI configured at all"; the grace window rides it out before deciding.
+  describe("no-checks grace window (#508)", () => {
+    test("first probe reports no checks, a later probe lists checks -> resolves via watch, never no-checks", () => {
+      const checksJson = JSON.stringify([{ bucket: "pass", state: "SUCCESS", name: "build", workflow: "CI" }]);
+      let plainProbeCalls = 0;
+      execFileSync.mockImplementation((bin, args) => {
+        if (bin === "gh" && args[0] === "pr" && args[1] === "view") {
+          // hadRecentChecks: no readable PR commit history -> assume no signal.
+          throw new Error("not found");
+        }
+        if (bin === "gh" && args[0] === "pr" && args[1] === "checks" && args.includes("--watch")) {
+          return ""; // watch exits cleanly
+        }
+        if (bin === "gh" && args[0] === "pr" && args[1] === "checks") {
+          plainProbeCalls++;
+          if (plainProbeCalls === 1) {
+            const err = new Error("no checks");
+            err.stderr = Buffer.from("no checks reported on the 'feat/x' branch");
+            throw err;
+          }
+          return checksJson;
+        }
+        throw new Error(`unexpected exec: ${bin} ${args.join(" ")}`);
+      });
+
+      const result = watchPRChecks(42, undefined, {
+        noChecksGraceMs: 50,
+        noChecksGraceIntervalMs: 10,
+        sleep: () => {},
+      });
+
+      expect(result.status).not.toBe("no-checks");
+      expect(["passed", "failed"]).toContain(result.status);
+      expect(plainProbeCalls).toBeGreaterThanOrEqual(2);
+    });
+
+    test("concludes no-checks with a noChecksReason after the grace window elapses with nothing appearing", () => {
+      execFileSync.mockImplementation((bin, args) => {
+        if (bin === "gh" && args[0] === "pr" && args[1] === "view") {
+          throw new Error("not found"); // no history signal
+        }
+        const err = new Error("no checks");
+        err.stderr = Buffer.from("no checks reported on the 'feat/x' branch");
+        throw err;
+      });
+      let elapsed = 0;
+      const result = watchPRChecks(42, undefined, {
+        noChecksGraceMs: 30,
+        noChecksGraceIntervalMs: 10,
+        sleep: (ms) => { elapsed += ms; },
+        now: () => elapsed,
+      });
+      expect(result.status).toBe("no-checks");
+      expect(result.checks).toEqual([]);
+      expect(result.noChecksReason).toMatch(/No CI checks reported within/);
+    });
+
+    test("waits up to the full checks timeout when an earlier commit on the PR carried checks", () => {
+      const priorChecksCount = 2;
+      let plainProbeCalls = 0;
+      execFileSync.mockImplementation((bin, args) => {
+        if (bin === "gh" && args[0] === "pr" && args[1] === "view") {
+          return JSON.stringify({ commits: [{ oid: "aaa" }, { oid: "bbb" }] });
+        }
+        if (bin === "gh" && args[0] === "api" && args[1].includes("/check-runs")) {
+          return String(priorChecksCount);
+        }
+        if (bin === "gh" && args[0] === "pr" && args[1] === "checks") {
+          plainProbeCalls++;
+          const err = new Error("no checks");
+          err.stderr = Buffer.from("no checks reported on the 'feat/x' branch");
+          throw err;
+        }
+        throw new Error(`unexpected exec: ${bin} ${args.join(" ")}`);
+      });
+      let elapsed = 0;
+      const result = watchPRChecks(42, undefined, {
+        timeoutSec: 1, // full-timeout budget still bounded — kept tiny for the test
+        noChecksGraceMs: 10,
+        noChecksGraceIntervalMs: 10,
+        sleep: (ms) => { elapsed += ms; },
+        now: () => elapsed,
+      });
+      expect(result.status).toBe("no-checks");
+      expect(result.noChecksReason).toMatch(/earlier commits with CI checks/);
+      // Waited close to the full timeoutSec budget (1000ms), not just the 10ms grace window.
+      expect(elapsed).toBeGreaterThan(500);
+    });
   });
 
   test("returns passed when watch exits cleanly and all checks are pass", () => {

@@ -285,6 +285,23 @@ describe("ship_release — #207 parallel-change data-loss guards", () => {
     expect(fetchBaseCalls().length).toBe(1);
   });
 
+  // #508 — watchPRChecks only reaches "no-checks" after riding out its grace
+  // window; when it does, the reason must reach the release result instead of
+  // a silent no-checks (release.js just relays the field watchPRChecks sets).
+  test("surfaces noChecksReason from watchPRChecks instead of a silent no-checks", async () => {
+    ghLib.watchPRChecks.mockReturnValue({
+      status: "no-checks",
+      checks: [],
+      noChecksReason: "No CI checks reported within 90s of the push — proceeding as no-checks.",
+    });
+
+    const res = await handler(params());
+
+    expect(res.success).toBe(true);
+    expect(res.checks.status).toBe("no-checks");
+    expect(res.checks.noChecksReason).toMatch(/No CI checks reported within/);
+  });
+
   test("probe-error on checks is fail-closed (treated as block-worthy)", async () => {
     ghLib.watchPRChecks.mockReturnValue({ status: "probe-error", error: "gh auth failed" });
 
