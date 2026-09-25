@@ -287,4 +287,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { safeBase, resolveBase, codeFilesChanged };
+module.exports = { safeBase, resolveBase, codeFilesChanged, armFromPending };
