@@ -15,7 +15,9 @@
  *
  * That fallback reads the newest matching file from ANY session, so it is
  * scoped to advisory state only. **Enforcement flags — anything a gate blocks
- * on — must pass `{ exact: true }`** (issue #290).
+ * on — must pass `{ exact: true }`** (issue #290). So must every value that
+ * drives an external write — issue status and comments, a ship: a foreign
+ * value aims that write at another session's work (2026-09-26).
  *
  * Usage:
  *   const { sessionFile, readSessionFile } = require('../lib/session-id');

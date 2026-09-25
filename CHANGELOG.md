@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.210.1] — 2026-09-26
+
+### Fixed
+- **The issue-status check names only this session's own issues.** The completion hook read the tracked-issues list with a fallback that, when a session had no list of its own, took the newest list of any session from the last two hours — and told Claude to set those issues Done or Todo on the project board and comment on them. A fresh session with no issue work was handed four issues another session was working on. The list is now read for this session only.
+- **"ja" after a card ships only when this session made edits.** An affirmation counts as a ship once the session has edited something; the edit counter had the same fallback, so another session's edits could turn a plain "ja" into a push and merge in a session that changed nothing. The counter is now read for this session only.
+
 ## [0.210.0] — 2026-09-26
 
 ### Changed

@@ -454,6 +454,26 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     cleanup(dir);
   });
 
+  // The list drives GitHub writes (board status, issue comments). The glob
+  // fallback handed a fresh session the newest list of ANY session: on
+  // 2026-09-26 a Q&A session with no issue work was told to move #530, #409,
+  // #431 and #469 to Todo and comment on them.
+  test("another session's tracked issues never reach this session's contract", () => {
+    const dir = project();
+    const sid = "s-issues-own";
+    fs.writeFileSync(flag(dir, "tracked-issues", "s-issues-foreign"), "[530]");
+    const fresh = runHook(dir, sid, "Read");
+    expect(fresh).toContain("COMPLETION CARD");
+    expect(fresh).not.toContain("[issue-status]");
+    // Its own list still arrives, and only that one.
+    fs.rmSync(flag(dir, "work-happened", sid));
+    fs.writeFileSync(flag(dir, "tracked-issues", sid), "[42]");
+    const own = runHook(dir, sid, "Read");
+    expect(own).toContain("[issue-status] Tracked issues this session: #42");
+    expect(own).not.toContain("#530");
+    cleanup(dir);
+  });
+
   test("a running /auto-guide loop gets a waiver instead of the contract (#526)", () => {
     const dir = project();
     const marker = path.join(dir, ".claude", "auto-guide-active.json");

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.28.0
+ * @version 0.28.1
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -796,12 +796,18 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
  * --- 3. Issue status check — with the card contract, once per turn ---
  * Appends the issue-status instruction to `lines` in place, only on the call
  * that carries the card contract.
+ *
+ * Exact read: the list drives GitHub writes (board status, issue comments),
+ * so only THIS session's list may reach the contract. The glob fallback
+ * handed a fresh session the newest list of any session (2026-09-26: a Q&A
+ * session with no issue work was told to move four foreign issues to Todo
+ * and comment on them).
  */
 function appendIssueStatusInstruction(hook, lines, cardContract) {
   let trackedIssues = [];
   if (cardContract) {
     try {
-      const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id);
+      const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id, { exact: true });
       if (result) {
         trackedIssues = JSON.parse(result.content);
       }
