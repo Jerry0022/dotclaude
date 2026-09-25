@@ -285,7 +285,15 @@ export function syncLocalBranch(branch, opts = {}) {
  */
 export function detectDefaultBranch(opts) {
   const ref = git("symbolic-ref --short refs/remotes/origin/HEAD", opts);
-  if (!ref) return null;
+  if (!ref) {
+    // No origin/HEAD — typical for a repo without a remote, where many
+    // `git init`s still default to master. The local branch that exists is
+    // the base a local ship merges into; "main" stays the caller's fallback.
+    for (const name of ["main", "master"]) {
+      if (git(`rev-parse --verify --quiet refs/heads/${name}`, opts)) return name;
+    }
+    return null;
+  }
   // `symbolic-ref --short` returns e.g. "origin/main" — strip the remote prefix.
   return ref.startsWith("origin/") ? ref.slice("origin/".length) : ref;
 }

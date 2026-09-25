@@ -761,3 +761,38 @@ describe("merge fallback marks an uncertain image match (#490)", () => {
     expect(r.stdout).toContain("prüfen");
   });
 });
+
+describe("`/do-batch <text>` with a pasted image keeps the image (#490)", () => {
+  const SID = "0f1e2d3c-aaaa-bbbb-cccc-490490490492";
+  const expanded = (args) => `<command-name>/do-batch</command-name><command-args>${args}</command-args>`;
+  let tmpRoot;
+
+  beforeEach(() => {
+    activate(cwd, { marker: ">>" });
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-img-tmp-"));
+    const imagesDir = path.join(tmpRoot, "claude", "C--some-project", SID, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+    fs.writeFileSync(path.join(imagesDir, "1.png"), "png-bytes");
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
+
+  const env = () => ({ TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot });
+
+  test("the residue note carries the image", () => {
+    const r = runHook({ prompt: expanded("so soll der Header aussehen"), session_id: SID }, env());
+    expect(r.code).toBe(2);
+    const [note] = readNotes(cwd);
+    expect(note.text).toContain("so soll der Header aussehen");
+    expect(note.text).toContain("[Anhang-Datei] ");
+  });
+
+  test("an image with a bare `/do-batch` still becomes a note", () => {
+    const r = runHook({ prompt: expanded(""), session_id: SID }, env());
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("als Notiz #1 gespeichert");
+    expect(readNotes(cwd)[0].text).toMatch(/^\[Anhang-Datei\] /);
+  });
+});

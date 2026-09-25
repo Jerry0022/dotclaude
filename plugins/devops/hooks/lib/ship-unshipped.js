@@ -42,7 +42,9 @@ function defaultBranchRef(cwd, git) {
     const ref = git(cwd, ['rev-parse', '--abbrev-ref', 'origin/HEAD']).trim();
     if (ref && ref !== 'origin/HEAD') return ref;
   } catch { /* origin/HEAD not set — try the usual names */ }
-  for (const name of ['origin/main', 'origin/master']) {
+  // Local branches last: a repo without an origin lands its ships on the
+  // local default branch (ship_release's local merge), so that is the base.
+  for (const name of ['origin/main', 'origin/master', 'main', 'master']) {
     try { git(cwd, ['rev-parse', '--verify', '--quiet', name]); return name; } catch { /* next */ }
   }
   return null;

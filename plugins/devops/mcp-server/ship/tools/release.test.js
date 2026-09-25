@@ -41,6 +41,7 @@ vi.mock("../lib/git.js", () => ({
   fileOverlap: vi.fn(() => ({ mergeBase: "base", branchFiles: [], baseFiles: [], overlap: [] })),
   syncLocalBranch: vi.fn(() => ({ updated: true, method: "fetch-refspec" })),
   treeOf: vi.fn((ref) => (ref === "HEAD" ? "T1" : "T1")),
+  detectDefaultBranch: vi.fn(() => "main"),
 }));
 
 vi.mock("../lib/github.js", () => ({
@@ -59,7 +60,19 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
   scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false })),
 }));
 
+// The local merge has its own real-git suite (lib/local-merge.test.js); here
+// only the handler's use of it matters.
+vi.mock("../lib/local-merge.js", async (importOriginal) => {
+  const real = await importOriginal();
+  return {
+    ...real,
+    localMerge: vi.fn(() => ({ mergeSha: "deadbeef99", strategy: "squash", via: "ref" })),
+    localTag: vi.fn(() => ({ created: true })),
+  };
+});
+
 import { handler, PR_TITLE_MAX } from "./release.js";
+import * as localMergeLib from "../lib/local-merge.js";
 import { readVersion } from "../lib/version.js";
 import { execFileSync } from "node:child_process";
 import { detectRepoMode } from "../lib/repo-mode.js";
@@ -819,7 +832,42 @@ describe("ship_release — over-long PR title is clamped, never fatal", () => {
 });
 
 describe("repo modes without a usable origin", () => {
-  test("git-no-remote: COMMITS the pending work, then stops before push/PR/merge", async () => {
+  test("git-no-remote: commits, merges locally into base and tags locally — no push, no PR", async () => {
+    detectRepoMode.mockReturnValue("git-no-remote");
+    gitLib.dirtyState.mockReturnValue({ dirty: true, modified: ["package.json"], untracked: [], lines: [] });
+
+    const result = await handler(params({ commitMessage: "chore(release): v1.0.0" }));
+
+    expect(result.commit).toBe("abc1234");
+    expect(localMergeLib.localMerge).toHaveBeenCalledWith(expect.objectContaining({
+      branch: "feature-x", base: "main", strategy: "squash", cwd: "/repo",
+    }));
+    expect(result.success).toBe(true);
+    expect(result.merged).toBe("main");
+    expect(result.mergeSha).toBe("deadbeef");
+    expect(result.delivered).toBe("local-merge");
+    expect(result.pushed).toBe(false);
+    expect(result.tag).toBe("alpha/v1.0.0");
+    expect(result.tagLocal).toBe(true);
+    expect(localMergeLib.localTag).toHaveBeenCalledWith(expect.objectContaining({ tag: "alpha/v1.0.0", sha: "deadbeef" }));
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("git-no-remote: a base that moved ahead asks for a rebase and reports no merge", async () => {
+    detectRepoMode.mockReturnValue("git-no-remote");
+    localMergeLib.localMerge.mockImplementationOnce(() => {
+      throw new localMergeLib.LocalMergeError("rebase-required", "'main' has commits that 'feature-x' does not contain. Rebase first: git rebase main");
+    });
+    const result = await handler(params({ commitMessage: "chore(release): v1.0.0" }));
+    expect(result.success).toBe(false);
+    expect(result.rebaseRequired).toBe(true);
+    expect(result.merged).toBeNull();
+    expect(result.delivered).toBe("local-commit-only");
+    expect(result.error).toMatch(/git rebase main/);
+  });
+
+  test("git-no-remote: COMMITS the pending work before landing it", async () => {
     // Regression: this used to return before the commit block while still
     // reporting success + delivered:"local-commit-only", so the version bump
     // and CHANGELOG edits were abandoned in the working tree while the
@@ -841,11 +889,8 @@ describe("repo modes without a usable origin", () => {
 
     // ...and the report is honest about what did NOT happen.
     expect(result.success).toBe(true);
-    expect(result.skipped).toBe(true);
     expect(result.reason).toBe("no-remote");
-    expect(result.delivered).toBe("local-commit-only");
     expect(result.pushed).toBe(false);
-    expect(result.merged).toBeNull();
 
     // Nothing that needs an origin was attempted.
     expect(gitLib.gitArgs).not.toHaveBeenCalledWith(

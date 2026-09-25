@@ -663,8 +663,13 @@ process.stdin.on('end', () => {
         process.exit(2);
       }
       const residue = inv?.residue || '';
-      const count = residue ? B.appendNote(cwd, residue) : B.countNotes(cwd);
-      process.stderr.write(`${buildRearmAck(count, marker, Boolean(residue), bounds)}\n`);
+      // An image pasted with `/do-batch <text>` belongs to that note too (#490);
+      // an image alone still makes a note, so it is not lost with the prompt.
+      const now = Date.now();
+      const copies = captureNoteImages(cwd, hook.session_id, now);
+      const noteText = [residue, copies.length ? B.attachmentFileLines(copies) : ''].filter(Boolean).join('\n');
+      const count = noteText ? B.appendNote(cwd, noteText, now) : B.countNotes(cwd);
+      process.stderr.write(`${buildRearmAck(count, marker, Boolean(noteText), bounds)}\n`);
       process.exit(2);
     } catch (err) {
       // Could not store — let the skill handle it, as before this branch existed.
