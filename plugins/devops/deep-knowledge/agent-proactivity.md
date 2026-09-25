@@ -95,6 +95,23 @@ tool-call ceiling in the agent prompt. Class names say what they do.
 Details: `agent-orchestration.md` (roster, waves, QA, budget item in the
 spawn template), `agent-collaboration.md` (handoffs), auto-agents skill.
 
+## Enforcement outside a run — the 6-file nudge
+
+This table is advisory outside an active run contract (`run-contract.md`) —
+nothing refuses a call on it. The one exception: `post.agent.nudge.js`
+(PostToolUse, `Write|Edit|NotebookEdit`) counts the DISTINCT files the
+current turn has changed (from the transcript, scoped to the turn, filtered
+to the session's own work tree) and, at the call where that count first
+reaches exactly 6, adds one `additionalContext` note to MENTION the
+`auto-agents` skill in one sentence — an offer, per the Full-ceremony rule
+above, never an auto-start and never a block. It stays silent: for a
+subagent's own edits; outside the session's own work tree; while a run
+contract is active for this session (the run's own gates apply instead); on
+a machine, scheduled or silent turn; once any devops skill already ran this
+turn (Skill tool or a typed slash command); once it already fired this turn;
+and when the delegation kill switch (`mode: off`) is set. Every failure path
+is silent — it never blocks a tool call.
+
 ## Proactive `auto-guide` for web hand-offs
 
 Next step = "user, go to `<site>` and do X" (marketplace, API key, OAuth,

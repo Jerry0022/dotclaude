@@ -45,6 +45,17 @@ checks it, and two escape hatches make skipping look legitimate — the router's
 
 ### A. `hooks/lib/run-contract.js` — state, parsing, obligations, CLI
 
+`run-contract.js` (AUD-016) is a thin facade re-exporting every name below
+unchanged; the implementation lives in siblings: `run-contract-store.js`
+(state — header/events/markers I/O, lock, quarantine, compaction),
+`run-contract-answers.js` (router / follow-up / machine-prompt parsing, B/G),
+`run-contract-obligations.js` (segments, obligations, gate evaluation,
+messages, C/D) and `run-contract-cli.js` (the CLI below). Shared helpers:
+`run-contract-qa.js` (the qa measurement `status`/`done` and the gate both
+call) and `lib/git-timeout.js` (`GIT_TIMEOUT_MS` = 5000, the one per-call git
+subprocess timeout, and `gitBudget(totalMs)` / `TOTAL_GIT_BUDGET_MS` = 15000,
+a shared deadline for a gate's whole chain of git calls — AUD-019/AUD-031).
+
 State lives in the **work-tree root** (`project-root.js`), next to
 `strict-mode.json`:
 
@@ -105,6 +116,35 @@ parse, is no object or lacks a valid timestamp is deleted on read, so it
 cannot defeat the fast path forever (H-B14); a READ error (EBUSY / EPERM)
 keeps the file and only reads as "no marker" this once (H-B14b).
 
+**Corrupt header (AUD-022).** A header that fails to PARSE (not a read
+error — an EBUSY/EPERM keeps the file untouched, RT1-R3) is re-read once and,
+if still unreadable, quarantined: renamed to
+`run-contract.json.corrupt-<ts>-<pid>-<rand>` (a unique name per quarantine,
+RT1-R4 — never a fixed `.corrupt` a second quarantining process could unlink
+from under the first), never deleted; only the newest 3 copies are kept. If a
+fresh header (a race with `arm()`) shows up before the rename lands, the
+rename is skipped and the fresh header wins. One `run-contract.json.corrupt.pending`
+marker records that a quarantine happened; both the fast (existence-check)
+and the normal path see it, and it is delivered once via `additionalContext`
+with the `arm` re-arm line, then deleted (R5).
+
+**Locking (AUD-017).** `update()` and `close()` serialise their
+read-modify-write under `run-contract.json.lock` (`fs 'wx'`, a pid+nonce
+token; `releaseLock()` only unlinks a lock that still holds that token). A
+lock older than 1 s is stale and taken over (renamed out of the way, not
+unlinked-then-recreated, RT1-R7) rather than blocking indefinitely; on
+Windows a delete-pending lock (EPERM/EBUSY) is retried (R6). `close()` still
+writes even when it could not acquire the lock — a close must never be
+silently dropped just because the lock was busy.
+
+**Events compaction.** `record()` compacts `run-contract.events.jsonl` once
+it has grown more than 500 lines (`EVENTS_COMPACT_LINES`) past the line count
+as of the last compaction — dropping foreign/previous-contract lines and,
+within each already-closed segment, the `block`/`measure`/`card` lines
+obligations never read. Compaction runs under the header lock and re-checks
+the file size right before the rename so a lock-free append that raced in is
+never silently lost (skipped, retried next time, RT1-R8).
+
 Events (`k` = kind, `t` = iso time):
 
 | k | fields | written by |
@@ -115,6 +155,7 @@ Events (`k` = kind, `t` = iso time):
 | `commit` | — | PostToolUse Bash/PowerShell `git commit` (exit 0: a non-zero exit fires PostToolUseFailure, which records nothing; an interrupted call or a non-zero exit code in `tool_response` records nothing either — RT3-X1) |
 | `branch` | `name` | PostToolUse Bash/PowerShell `git checkout -b` / `git switch -c`, `git branch X` followed by `git switch X` / `git checkout X` in the same command, `gh issue develop N -c` (exit 0, same failure rule as `commit`) — an ITEM boundary only (R6): not from a subagent, not `git worktree add`, not `--detach`, not a `<current>-*` / `<current>/*` sub-branch. `git worktree add` never writes a `branch` event; a lone `git branch <name>` is no branch creation (work starts only on a branch the command switches to) |
 | `release` | `ok`, `merged`, `closes: ["473"]` (from `Closes #N` in `tool_input.body`) | PostToolUse `ship_release` |
+| `release` | `ok` (GitHub's own `{merged}` shape — the tool's own `{content:[{text}]}` MCP envelope is parsed too, R2), `merged` (same as `ok`), `closes` (from `Closes #N` in `commit_title`/`commit_message`, else the tool's response text) | PostToolUse GitHub MCP `*__merge_pull_request` (AUD-025) — only when `tool_input.owner`/`repo` match this checkout's `origin` (a budgeted git call, R15; an unknown origin still records, unchanged from before the check existed) |
 | `card` | `variant` | PostToolUse `render_completion_card`, and Bash/PowerShell running the offline `--render-card` renderer (an unreadable payload is recorded with variant `null`; whether it closes is H) — never idle-expiry activity (H-B10) |
 | `skip` | `ob`, `reason`, `item?` | CLI `skip` — satisfies that obligation only, never finishes a backlog item (RT3-R1) |
 | `park` | `item`, `reason` (ends the segment) | CLI `park` |
@@ -164,6 +205,12 @@ worktrees). A machine prompt over an active same-session contract refreshes
 ship / passes / strict / items / presence only — never the mode, except
 `RUN_BACKLOG_AUTOSTART` (→ backlog) and `mode=analyze` over audit (passes
 cleared). A pending marker never replaces an active same-session contract.
+
+**Card session ownership (R9).** The completion card's run line is shown
+under a session id of `"self"` (the ccd_session convention), a Claude
+Desktop `local_…` id, or none — those count as "the calling session itself",
+not as a stored/foreign id. Any other explicit id must match the contract's
+own `sessionId` (`mode-state.js#isSelfSessionId`).
 
 ### B. Parsing the router answers
 
@@ -244,7 +291,15 @@ boundary. Boundary: a `release` with `ok: true`, and in backlog mode also a
 | `qa` | segment has work, and changed **code** files (git, `browsertest-guard.isCodeChange`) ≥ 1 in backlog or > 5 in prompt mode | `agent` of type `devops:qa` |
 | `do-ship` | `ship: auto`, segment has work | release gate: a `skill` `do-ship` in the segment · card/branch gate: a `release` ok, or a `card` `ship-blocked` / `aborted` in the segment |
 | `refine` | backlog, `presence`, release closes `#N` | a `skill` `auto-issue` anywhere in the contract whose args name `#N` (or `issue` … `N`) |
-| `triage` | backlog, `presence`: at the first `auto-agents` of the contract, at every release, and at the final card once the contract has work (an `edit`, `commit` or `auto-agents` anywhere — H-B2) | ≥ 1 `agent` event since arm |
+| `triage` | backlog, `presence`: at the first `auto-agents` of the contract, at every release, and at the final card once the contract has work (an `edit`, `commit` or `auto-agents` anywhere — H-B2) | ≥ 1 `agent` event since arm whose `description` (set by the pre-triage step, backlog.md Step 2.1, format `Triage #<N> — <title>`) contains "triage" (case-insensitive) — RT3-R10 |
+
+RT3-R10: only an `agent` event whose recorded `description` names the
+pre-triage step counts (before, ANY agent event — even an unrelated Explore
+search — satisfied `triage`). An event recorded before this change with no
+`description` field at all is grandfathered as satisfying it, so a backlog
+run already in flight across a plugin update does not silently fail its
+triage obligation retroactively; a description-carrying event (even an empty
+string) is held to the new rule.
 
 Every obligation is also satisfied by a matching `skip` event (for `refine`,
 one per item). Satisfying an obligation is not finishing an item: a skip —
@@ -321,8 +376,17 @@ Exempt paths (never gated): outside the work tree (scratchpad, temp, home),
 `.claude/**`, `.git/**`, `BACKLOG-*`, `AUTONOMOUS-*`, `BURN-*`,
 `docs/concepts/**`.
 
-Git reads (diff for `qa`) only at the release / card / branch gates, 5 s
-timeout; any git failure means "unknown" and never blocks.
+Git reads (diff for `qa`) only at the release / card / branch gates,
+`GIT_TIMEOUT_MS` = 5000 per call; any git failure means "unknown" and never
+blocks. The release gate's whole git chain (incl. the transcript walk for the
+arm fallback) shares one `gitBudget(TOTAL_GIT_BUDGET_MS)` = 15000 ceiling
+(AUD-019/AUD-031) — an expired budget also reads as "unknown" (`QA ?`), never
+a block. Post's `baseBranch()` lookup (2 calls) shares its own
+`POST_BASE_BRANCH_BUDGET_MS` = 6000 budget (R11), inside the hook's own
+`hooks.json` timeout (pre 20 s; post, prompt and the answer-check hook
+10 s each). AUD-023: a release-gate evaluation makes 3 git calls; measured
+403 ms median on a 301-file diff idle, 588 ms median under load (a synthetic
+CPU load), pinned by a deterministic budget test.
 
 Block message (stderr, exit 2) — English, stable prefix, one screen:
 
@@ -415,6 +479,18 @@ the batch marker (E), and closes:
   closing `#N` or a `park N` — checked after `ship_release` and after every
   other recorded call, so the park that finishes the queue closes it too
   (H-C5). An obligation `skip` never finishes an item (RT3-R1).
+- `audit`, `analysis` card (AUD-012, RT3-R1 guard): an `analysis` card is
+  deliberately NOT a `FINAL_VARIANTS` member — the PreToolUse gate never
+  refuses it — but a run ending on one must still close an AUDIT run, or it
+  never closes. It is never gated. Closing is conditional, not automatic on
+  any analysis card: it closes only when the card carries no non-empty
+  `pending` and no `concept` (either one means the run hands off, not ends)
+  AND the contract's mode is `audit` AND (the current segment has no work yet
+  OR `openObligations(contract, events, 'card')` is empty) — an analysis card
+  mid-run (an auto-harden "nothing fixed" card, a concept hand-off) must not
+  close past a non-empty `pending`, an open `concept`, or open
+  harden/polish/do-ship obligations. `prompt` / `backlog` runs are
+  unaffected: an analysis card there is recorded but closes nothing.
 
 Post also answers a partial router call it could not record (B, case 3)
 and announces this session's expired contract once (A) via `additionalContext`.
@@ -437,7 +513,9 @@ and announces this session's expired contract once (A) via `additionalContext`.
 - `skills/do-batch/SKILL.md` — the hand-off is hook-enforced (E).
 - `deep-knowledge/run-contract.md` — the mechanism for readers; regenerate
   the deep-knowledge index (`scripts/gen-dk-index.mjs`).
-- `hooks/hooks.json` — register the four hooks (matchers per D, F, G, H).
+- `deep-knowledge/agent-proactivity.md` — the 6-file nudge (K), the one
+  enforcement mechanism that reaches outside an active run.
+- `hooks/hooks.json` — register the hooks (matchers per D, F, G, H, K).
 
 ### J. Completion card
 
@@ -452,13 +530,37 @@ closed / aborted in the last 15 minutes (so the closing card still carries it):
 Backlog aggregates over segments with work (`Harden 6/6`). ✓ done · ⚠ skipped
 (reason) · ✗ open. Localized de/en like the rest of the card.
 
+### K. The 6-file nudge (AUD-024) — `hooks/post-tool-use/post.agent.nudge.js`
+
+Outside an active run contract, the delegation policy
+(`deep-knowledge/agent-proactivity.md`) is prompt-level advice only — nothing
+enforces it. This PostToolUse hook (matcher `Write|Edit|NotebookEdit`) counts
+the DISTINCT files the current turn has changed, from the transcript, scoped
+to the turn by the same turn-boundary walk `skill-invocations.js` and
+`card-guard.js` use, and filtered to the session's own work tree. At the call
+where that running count first reaches exactly 6 (`NUDGE_AT`), it emits ONE
+`additionalContext` note telling the model to MENTION the `auto-agents` skill
+in one sentence — an offer, never an auto-start, never a block (agent-
+proactivity.md's Full-ceremony rule). It stays silent: before and after that
+one call; for a subagent's own edits (`hook.agent_id` set); outside the
+session's own work tree; while a run contract is active for this session
+(the run's own gates apply instead); on a non-user-typed turn (machine,
+scheduled, silent); once ANY devops skill already ran this turn (Skill tool
+or a typed slash command); once the nudge already fired this turn (a
+once-per-turn marker keyed by the turn's opening prompt text — the
+transcript is only read as a 1 MB tail, so on a very long turn the running
+count can slide back to exactly 6 a second time without the marker); and
+when the delegation kill switch (`lib/delegation.js`) is off. Every failure
+path exits 0 silently.
+
 ## Limits
 
 A contract exists only after the do-run router answered (B) or a machine
 prompt armed one (G). Work that meets every criterion do-run itself would
 apply — a code change, a ship — but that never went through do-run or a
 machine-prompt run is not gated at all: outside a run, the delegation policy
-(`hooks/lib/delegation.js`) stays an advisory kill switch and
+(`hooks/lib/delegation.js`) stays an advisory kill switch — the 6-file nudge
+(K) offers the skill once but never blocks — and
 `prompt.skill.enforce.js` only suggests a skill, it does not refuse the call.
 The one place outside an active run where a mechanism still forces a skill is
 the do-batch hand-off gate (E) — its `.claude/batch-handoff.json` blocks Edit
