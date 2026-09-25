@@ -209,17 +209,40 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
       g("add", "a.txt");
       g("commit", "-q", "-m", "init");
+      // An untracked file alone never triggers a ship that would commit it.
+      fs.writeFileSync(path.join(repo, "stray.log"), "x\n");
+      const stray = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8e2", cwd: repo });
+      expect(stray).not.toContain("LOCAL SHIP");
+
       fs.writeFileSync(path.join(repo, "a.txt"), "two\n"); // the turn's change
       const res = await render({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8f", cwd: repo });
       const text = res.content.map(c => c.text).join("\n");
       expect(text).toContain("LOCAL SHIP");
       expect(text).toContain("devops:do-ship");
+      expect(text).toContain("git switch -c");
       expect(text).not.toContain("✨✨✨");
+
+      // Same state again (the ship could not run): the card is drawn — no loop.
+      const again = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8f", cwd: repo });
+      expect(again).not.toContain("LOCAL SHIP");
+
+      // Red evidence never ships unasked.
+      const red = await cardText({
+        variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8f3", cwd: repo,
+        tests: [{ method: "npm test", result: "2 rot" }],
+      });
+      expect(red).not.toContain("LOCAL SHIP");
 
       // Once it is committed and on main, there is nothing left to ship: the card renders.
       g("commit", "-q", "-am", "feat: two");
       const after = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8g", cwd: repo });
       expect(after).not.toContain("LOCAL SHIP");
+
+      // A remote other than origin: not local-only, no auto-ship.
+      fs.writeFileSync(path.join(repo, "a.txt"), "three\n");
+      g("remote", "add", "upstream", "https://example.invalid/x.git");
+      const withUpstream = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "test-anatomy-8g2", cwd: repo });
+      expect(withUpstream).not.toContain("LOCAL SHIP");
     } finally {
       fs.rmSync(repo, { recursive: true, force: true });
     }

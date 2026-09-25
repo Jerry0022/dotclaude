@@ -15,15 +15,18 @@
  */
 
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import { worktreePathForBranch } from "./git.js";
 
 const TIMEOUT = 15_000;
+/** The fast-forward rewrites a whole checkout and may run hooks. */
+const MERGE_TIMEOUT = 120_000;
 
-function run(args, cwd, input) {
+function run(args, cwd, input, timeout = TIMEOUT) {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
-    timeout: TIMEOUT,
+    timeout,
     stdio: ["pipe", "pipe", "pipe"],
     ...(input !== undefined && { input }),
   }).trim();
@@ -83,8 +86,12 @@ export function localMerge({ branch, base, strategy = "squash", message, cwd }) 
 
   // `base` checked out somewhere (typically the main checkout): move it there
   // with a fast-forward, so that working tree follows. A dirty checkout is left
-  // alone — the ff would refuse anyway, and nothing may be overwritten.
-  const wt = worktreePathForBranch(base, { cwd });
+  // alone — the ff would refuse anyway, and nothing may be overwritten. A
+  // registered worktree whose folder is gone (prunable) has no working tree to
+  // follow; it takes the ref path.
+  const wtRaw = worktreePathForBranch(base, { cwd });
+  const wt = wtRaw && fs.existsSync(wtRaw) ? wtRaw : null;
+  let landed;
   if (wt) {
     const dirty = tryRun(["status", "--porcelain", "--untracked-files=no"], wt);
     if (dirty === null || dirty !== "") {
@@ -93,12 +100,39 @@ export function localMerge({ branch, base, strategy = "squash", message, cwd }) 
         `'${base}' is checked out in ${wt} with uncommitted changes — commit or stash them there, then retry.`,
       );
     }
-    run(["merge", "--ff-only", target], wt);
-    return { mergeSha: target, strategy, via: "worktree", path: wt };
+    try {
+      run(["merge", "--ff-only", target], wt, undefined, MERGE_TIMEOUT);
+    } catch (e) {
+      // The ref may have moved before git failed (timeout, a post-merge hook):
+      // the landing is whatever the ref says, never what the exit code says.
+      if (tryRun(["rev-parse", `refs/heads/${base}`], cwd) !== target) {
+        throw new LocalMergeError(
+          "base-blocked",
+          `Could not fast-forward '${base}' in ${wt}: ${firstLine(e)} — ` +
+            `usually an untracked file there that the branch adds. Move it aside, then retry.`,
+        );
+      }
+    }
+    landed = { mergeSha: target, strategy, via: "worktree", path: wt };
+  } else {
+    // Not checked out anywhere: move the ref, guarded by its old value.
+    run(["update-ref", `refs/heads/${base}`, target, baseSha], cwd);
+    landed = { mergeSha: target, strategy, via: "ref" };
   }
-  // Not checked out anywhere: move the ref, guarded by its old value.
-  run(["update-ref", `refs/heads/${base}`, target, baseSha], cwd);
-  return { mergeSha: target, strategy, via: "ref" };
+
+  // The branch keeps living in its worktree (Desktop keep-mode). Point it at
+  // what landed — the trees are identical, so nothing on disk changes — or the
+  // next ship from it finds the squash as foreign commits and must rebase.
+  // A ref move, not a reset: target's tree IS HEAD's tree, so index and working
+  // tree already match it, and the old-value guard refuses if HEAD moved.
+  if (target !== headSha) {
+    if (tryRun(["update-ref", `refs/heads/${branch}`, target, headSha], cwd) !== null) landed.branchSynced = true;
+  }
+  return landed;
+}
+
+function firstLine(e) {
+  return String((e && (e.stderr || e.message)) || e).split(/\r?\n/).find(Boolean) || "unknown error";
 }
 
 /**

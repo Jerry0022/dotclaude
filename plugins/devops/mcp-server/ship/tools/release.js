@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, NETWORK_TIMEOUT } from "../lib/git.js";
+import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
@@ -78,7 +78,10 @@ export async function handler(params) {
   const noRemote = repoMode === "git-no-remote"
 
   const branch = currentBranch(opts);
-  const intermediate = base !== "main";
+  // Against the repo's real default branch, not the literal "main": a
+  // master-based repo (common without a remote) is a final ship, not an
+  // intermediate one that silently skips its tag.
+  const intermediate = base !== (detectDefaultBranch(opts) || "main");
   // Ring-tag resolution (#372). Three caller shapes, three meanings:
   //   omitted  → default to v<version> from the version file — by the time this
   //              runs ship_version_bump has written the new version, so the tag
@@ -190,7 +193,12 @@ export async function handler(params) {
         result.merged = base;
         result.mergeSha = landed.mergeSha.slice(0, 8);
         result.mergeStrategy = landed.noop ? "none" : landed.strategy;
-        result.localMerge = { via: landed.via, ...(landed.path && { path: landed.path }), ...(landed.noop && { noop: true }) };
+        result.localMerge = {
+          via: landed.via,
+          ...(landed.path && { path: landed.path }),
+          ...(landed.noop && { noop: true }),
+          ...(landed.branchSynced && { branchSynced: true }),
+        };
         result.delivered = "local-merge";
         result.warnings = [
           branch === base

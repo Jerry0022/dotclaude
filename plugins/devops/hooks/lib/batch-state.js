@@ -459,6 +459,9 @@ function claimImages(cwd, images, at) {
       dest = path.join(assetsDir(cwd), `${stamp}-${n}${path.extname(img.file).toLowerCase()}`);
     } while (fs.existsSync(dest));
     fs.copyFileSync(img.file, dest);
+    // The copy's age is the capture time: Windows keeps the source mtime on a
+    // copy, and pruneAssets must not take an image a live note points at.
+    try { const t = new Date(); fs.utimesSync(dest, t, t); } catch { /* best effort */ }
     captured[img.file] = dest;
     return dest;
   });

@@ -41,6 +41,7 @@ vi.mock("../lib/git.js", () => ({
   fileOverlap: vi.fn(() => ({ mergeBase: "base", branchFiles: [], baseFiles: [], overlap: [] })),
   syncLocalBranch: vi.fn(() => ({ updated: true, method: "fetch-refspec" })),
   treeOf: vi.fn((ref) => (ref === "HEAD" ? "T1" : "T1")),
+  detectDefaultBranch: vi.fn(() => "main"),
 }));
 
 vi.mock("../lib/github.js", () => ({

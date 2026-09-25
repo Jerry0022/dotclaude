@@ -88,6 +88,36 @@ describe("localMerge — landing a branch on its local base without a remote", (
     }
   });
 
+  test("an untracked file in the base checkout that the branch adds blocks cleanly, with a code", () => {
+    const wt = fs.mkdtempSync(path.join(os.tmpdir(), "local-merge-wt-"));
+    fs.rmSync(wt, { recursive: true, force: true });
+    git(["worktree", "add", "-q", "-b", "feat/u", wt]);
+    commitFile("clash.txt", "from branch\n", "feat: clash", wt);
+    fs.writeFileSync(path.join(root, "clash.txt"), "untracked in main\n");
+    const before = git(["rev-parse", "main"]);
+    try {
+      let err;
+      try { localMerge({ branch: "feat/u", base: "main", message: "m", cwd: wt }); } catch (e) { err = e; }
+      expect(err).toBeInstanceOf(LocalMergeError);
+      expect(err.code).toBe("base-blocked");
+      expect(git(["rev-parse", "main"])).toBe(before);
+      expect(fs.readFileSync(path.join(root, "clash.txt"), "utf8")).toBe("untracked in main\n");
+    } finally {
+      git(["worktree", "remove", "--force", wt]);
+    }
+  });
+
+  test("after a squash the branch points at what landed, so the next ship needs no rebase", () => {
+    git(["switch", "-q", "-c", "feat/k"]);
+    commitFile("k.txt", "k\n", "feat: k");
+    const res = localMerge({ branch: "feat/k", base: "main", strategy: "squash", message: "feat: k", cwd: root });
+    expect(res.branchSynced).toBe(true);
+    expect(git(["rev-parse", "HEAD"])).toBe(res.mergeSha);
+    commitFile("k2.txt", "k2\n", "feat: k2");
+    const next = localMerge({ branch: "feat/k", base: "main", strategy: "squash", message: "feat: k2", cwd: root });
+    expect(git(["rev-parse", "main"])).toBe(next.mergeSha);
+  });
+
   test("a sub-branch lands on its parent feature branch the same way", () => {
     git(["switch", "-q", "-c", "feat/p"]);
     commitFile("h.txt", "p\n", "feat: parent");
@@ -111,5 +141,21 @@ describe("localTag", () => {
     expect(localTag({ tag: "alpha/v1.0.0", sha, version: "1.0.0", cwd: root })).toEqual({ created: true });
     expect(git(["rev-parse", "alpha/v1.0.0^{commit}"])).toBe(sha);
     expect(localTag({ tag: "alpha/v1.0.0", sha, version: "1.0.0", cwd: root }).created).toBe(false);
+  });
+});
+
+describe("detectDefaultBranch without a remote", () => {
+  test("a master-only repo lands on master, not a missing main", async () => {
+    const { detectDefaultBranch } = await import("./git.js");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "local-merge-master-"));
+    try {
+      git(["init", "-q", "-b", "master"], repo);
+      git(["config", "user.email", "t@example.com"], repo);
+      git(["config", "user.name", "t"], repo);
+      commitFile("a.txt", "x\n", "init", repo);
+      expect(detectDefaultBranch({ cwd: repo })).toBe("master");
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
