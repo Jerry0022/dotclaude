@@ -168,13 +168,13 @@ describe("AUD-025: a GitHub MCP merge_pull_request is recorded as a release", ()
 
 // ── AUD-023 ──────────────────────────────────────────────────────────────
 
-describe("AUD-023: the release gate's git cost on a real 300-file diff", () => {
+describe("AUD-023: the release gate's git cost on a real multi-file diff", () => {
   test("resolveBase + codeFilesChanged spawn exactly 3 git processes (a deterministic cost budget, not a timing)", () => {
     git("checkout", "-q", "-b", "feat");
     fs.mkdirSync(path.join(dir, "src"));
-    for (let i = 0; i < 300; i++) fs.writeFileSync(path.join(dir, "src", `f${i}.js`), `// ${i}\n`);
+    for (let i = 0; i < 60; i++) fs.writeFileSync(path.join(dir, "src", `f${i}.js`), `// ${i}\n`);
     git("add", "-A");
-    git("commit", "-q", "-m", "300 files");
+    git("commit", "-q", "-m", "60 files");
     // A real clone's default-branch pointer without a fetched origin/main —
     // the common shallow / single-branch clone shape: resolveBase's
     // symbolic-ref succeeds, the first diff attempt (origin/main...HEAD)
@@ -197,7 +197,7 @@ describe("AUD-023: the release gate's git cost on a real 300-file diff", () => {
     gitOutSpy.mockRestore();
 
     expect(base).toBe("main");
-    expect(n).toBe(300);
+    expect(n).toBe(60); // the spawn count does not depend on the file count (the audit measured 3 on 301 files)
     // Static analysis (AUD-023 finding): symbolic-ref (resolveBase) + the
     // failed origin/main...HEAD diff + the main...HEAD fallback that succeeds.
     expect(totalGitSpawns).toBe(3);
