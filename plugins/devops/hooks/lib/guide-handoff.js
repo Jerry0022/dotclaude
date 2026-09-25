@@ -1,6 +1,6 @@
 /**
  * @module guide-handoff
- * @version 0.3.0
+ * @version 0.4.0
  * @description Detection + pending-hint state for stop.guide.handoff —
  *   decides whether the turn's own final answer hands the user a manual,
  *   click-through job on an external website/dashboard instead of invoking
@@ -20,17 +20,27 @@
  *         (the user's own dev server) and every github.com link except
  *         `/settings` pages — PR, issue, commit, blob and the repo's own
  *         links are report links, not a click-through.
- *     (b) user-directed steps, in one of two shapes:
+ *     (b) user-directed steps, in one of three shapes:
  *         - a numbered list whose items contain a UI verb (de+en: öffnen,
  *           klicken, wählen, anlegen, einloggen, open, click, paste, …), or
  *         - at least two `→` arrows AND a NAMED service (a bare URL is not
- *           enough for the arrow shape).
+ *           enough for the arrow shape), or
+ *         - one PROSE sentence naming the service that also contains an
+ *           account/credential noun (Account/Konto, API-Token/Key, Bucket,
+ *           Secret, OAuth-App, Webhook) AND a user-directed creation verb
+ *           (anlegen, erstellen, einrichten, create, set up, generate) —
+ *           `hasHandoffSentence`. A sentence where Claude reports having done
+ *           it itself ("ich habe … angelegt", "I created …") is excluded.
  *     Prose that merely mentions a service plus a verb does not count.
  *
- *   The completion card is out of scope: only the text BEFORE the first
- *   ✨✨✨ marker of each entry (card-guard.CARD_MARKER — the terminal title, or
- *   the stand-in card-guard.deliveredCardText builds for a Desktop card
- *   widget) is scanned.
+ *   The completion card's rendered chrome is out of scope: only the text
+ *   BEFORE the first ✨✨✨ marker of each entry (card-guard.CARD_MARKER — the
+ *   terminal title, or the stand-in card-guard.deliveredCardText builds for a
+ *   Desktop card widget) is scanned here. The card's `userFinalTest`/`open`
+ *   PAYLOAD (the structured fields passed to `render_completion_card`, not
+ *   this rendered text) is scanned separately by `detectCardHandoff`, called
+ *   from the MCP completion server so a hit there renders a live "Web-Guide
+ *   starten" button instead of only a pending hint.
  *
  *   Pending hint: when the hand-off sits in a turn that already ends with
  *   the card, stop.guide.handoff must not block (that would force a second
@@ -76,6 +86,23 @@ const KNOWN_DOMAIN_RE =
 const STEP_LINE_RE = /^[\s*_>-]*\d+[.)]\s+\S/;
 const ARROW_RE = /→/g;
 
+/** Account/credential nouns (de+en) — signal (b) of the prose shape. */
+const CREDENTIAL_NOUN_RE_SRC = [
+  String.raw`accounts?`, String.raw`konten?`, String.raw`konto`,
+  String.raw`api[-\s]?tokens?`, String.raw`api[-\s]?keys?`,
+  String.raw`buckets?`, String.raw`secrets?`, String.raw`oauth[-\s]?apps?`,
+  String.raw`webhooks?`,
+];
+
+/** User-directed creation verbs (de+en, incl. zu-infinitives) — signal (c). */
+const CREATION_VERB_RE_SRC = [
+  String.raw`anlegen`, String.raw`anzulegen`, String.raw`erstellen`,
+  String.raw`einrichten`, String.raw`einzurichten`,
+  String.raw`create`, String.raw`creating`,
+  String.raw`set\s+up`, String.raw`setting\s+up`,
+  String.raw`generate`, String.raw`generating`,
+];
+
 /** Unicode-aware whole-word alternative (JS `\b` is ASCII-only, so
  *  `\böffnen` never matched after a space). */
 function wordAlt(src) {
@@ -105,6 +132,50 @@ const IMPERATIVE_RE = new RegExp(
   ].map(wordAlt).join('|'),
   'iu'
 );
+
+const CREDENTIAL_NOUN_RE = new RegExp(CREDENTIAL_NOUN_RE_SRC.map(wordAlt).join('|'), 'iu');
+const CREATION_VERB_RE = new RegExp(CREATION_VERB_RE_SRC.map(wordAlt).join('|'), 'iu');
+
+/**
+ * "Ich habe … angelegt" / "I created …" — Claude reporting it did the step
+ * itself, not handing it to the user. Excluded from the prose shape so a
+ * self-performed setup never reads as a hand-off (the participle forms here
+ * — angelegt, erstellt, eingerichtet, created, generated — never collide
+ * with the infinitives/imperatives in CREATION_VERB_RE_SRC above; "set up"
+ * is spelled the same in both tenses, so it only counts here behind "I").
+ */
+const SELF_PERFORMED_RE = new RegExp(
+  '(?:' + wordAlt('ich') + String.raw`[^.!?\n]{0,60}?` +
+    wordAlt(['angelegt', 'erstellt', 'eingerichtet'].join('|')) + ')' +
+  '|(?:' + wordAlt('i') + String.raw`[^.!?\n]{0,60}?` +
+    wordAlt(['created', 'generated', String.raw`set\s+up`, 'configured'].join('|')) + ')',
+  'iu'
+);
+
+/** Split into rough sentences on sentence-ending punctuation or newlines. */
+function splitSentences(text) {
+  return String(text).split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * The prose hand-off shape: one sentence naming a service AND carrying an
+ * account/credential noun AND a user-directed creation verb, none of it a
+ * self-performed report.
+ * @param {string} text
+ * @returns {{service:string}|null}
+ */
+function hasHandoffSentence(text) {
+  if (typeof text !== 'string' || !text) return null;
+  for (const sentence of splitSentences(text)) {
+    if (SELF_PERFORMED_RE.test(sentence)) continue;
+    const service = matchService(sentence);
+    if (!service || !service.named) continue;
+    if (!CREDENTIAL_NOUN_RE.test(sentence)) continue;
+    if (!CREATION_VERB_RE.test(sentence)) continue;
+    return { service: service.name };
+  }
+  return null;
+}
 
 /** Everything before the first completion-card marker. */
 function stripCompletionCard(text) {
@@ -170,9 +241,36 @@ function detectWebHandoff(lastAssistantText) {
   const body = stripCompletionCard(lastAssistantText);
   if (!body) return null;
   const service = matchService(body);
-  if (!service) return null;
-  if (hasNumberedUiSteps(body) || (service.named && hasArrowChain(body))) {
+  if (service && (hasNumberedUiSteps(body) || (service.named && hasArrowChain(body)))) {
     return { service: service.name };
+  }
+  return hasHandoffSentence(body);
+}
+
+/** A card `open`/`userFinalTest` item as plain text, whatever shape it was passed in. */
+function itemText(item) {
+  if (typeof item === 'string') return item;
+  if (item && typeof item === 'object') return String(item.text || item.action || '');
+  return '';
+}
+
+/**
+ * Scan the completion card's PAYLOAD (`userFinalTest` and `open`, as passed
+ * to `render_completion_card` — not the rendered markdown/widget chrome) for
+ * the same prose-hand-off signal as `detectWebHandoff`. Called from the MCP
+ * completion server at render time, so a hit renders a live "Web-Guide
+ * starten" button instead of only recording a pending hint (#506).
+ * @param {{userFinalTest?: unknown[], open?: unknown[]}} card
+ * @returns {{service:string}|null}
+ */
+function detectCardHandoff(card) {
+  const items = [
+    ...(Array.isArray(card && card.userFinalTest) ? card.userFinalTest : []),
+    ...(Array.isArray(card && card.open) ? card.open : []),
+  ];
+  for (const item of items) {
+    const hit = hasHandoffSentence(itemText(item));
+    if (hit) return hit;
   }
   return null;
 }
@@ -199,6 +297,8 @@ module.exports = {
   KNOWN_DOMAIN_RE,
   STEP_LINE_RE,
   IMPERATIVE_RE,
+  CREDENTIAL_NOUN_RE,
+  CREATION_VERB_RE,
   PENDING_PREFIX,
   stripCompletionCard,
   containsCompletionCard,
@@ -206,7 +306,9 @@ module.exports = {
   matchService,
   hasNumberedUiSteps,
   hasArrowChain,
+  hasHandoffSentence,
   detectWebHandoff,
+  detectCardHandoff,
   webGuideInvokedThisTurn,
   writePendingHandoff,
   consumePendingHandoff,

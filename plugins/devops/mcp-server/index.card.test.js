@@ -822,6 +822,38 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
 // An armed /do-batch collection: the card is the whole confirmation of the
 // activating turn, so it carries the how-to itself — what happens to the next
 // prompt, how to fire, how to stop — instead of a separate text block before it.
+describe("render_completion_card — web hand-off in the card payload (#506)", () => {
+  test("a userFinalTest item naming the service + credential noun + creation verb records a pending hint", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-final-test",
+      userFinalTest: ["Cloudflare-Account mit R2 anlegen (Karte), Budget-Alert 1 $, Bucket, API-Token erstellen"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-final-test")).toBe("Cloudflare");
+  });
+
+  test("an open item with the same signal records a pending hint too", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-open",
+      open: ["Noch einen Supabase-Bucket für Assets anlegen"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-open")).toBe("Supabase");
+  });
+
+  test("no hand-off signal → nothing recorded", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-none",
+      userFinalTest: ["npm test grün"], open: ["Noch mit dem Team klären, ob wir migrieren"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-none")).toBeNull();
+  });
+});
+
 describe("render_completion_card — armed batch carries the how-to", () => {
   test("heading, context line and three guide points (de + en)", async () => {
     const { mkdtempSync, rmSync } = await import("node:fs");

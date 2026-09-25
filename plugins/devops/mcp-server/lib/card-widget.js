@@ -165,6 +165,26 @@ export const CONCLUDE = {
 };
 
 /**
+ * The guide-offer button (#506): index.js#buildDecisionBlock scans the
+ * card's `userFinalTest`/`open` payload for a manual web hand-off
+ * (guide-handoff.detectCardHandoff) and, on a hit, names the service here.
+ * The button's prompt is self-sufficient like every other one (§ above):
+ * it names the service so `auto-guide` starts on the right one. Rendered
+ * on EVERY card that carries a hand-off, independent of `buttonsKey` — a
+ * `ready-files` or `test-minimal` card with nothing else to click can still
+ * offer the guide.
+ */
+export const GUIDE_HANDOFF_BUTTON = {
+  de: { label: "Web-Guide starten", icon: "compass", tooltip: "Führt dich live im Browser durch die Einrichtung.", prompt: (service) => `Führ mich per Web-Guide durch ${service}` },
+  en: { label: "Start web guide", icon: "compass", tooltip: "Guides you live in the browser through the setup.", prompt: (service) => `Guide me through ${service} with the web guide` },
+};
+
+function guideHandoffButton(service, lang) {
+  const g = GUIDE_HANDOFF_BUTTON[lang] || GUIDE_HANDOFF_BUTTON.de;
+  return { label: g.label, icon: g.icon, prompt: g.prompt(service), tooltip: g.tooltip };
+}
+
+/**
  * The prepared answer to a card's open points, in their order. One answer is
  * the prompt itself; two or more become a bulleted list under the intro line.
  * A prompt the host would refuse (leading "/") gets the intro line in front.
@@ -199,30 +219,33 @@ export function conclusionPrompt(replies, lang = "de") {
  *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
- * @param {{ version?: string|null, replies?: string[], noShip?: boolean }} [opts] the version the card is about, the prepared answers to its open points, and whether a no-remote ready/test card drops its ship buttons (#500)
+ * @param {{ version?: string|null, replies?: string[], noShip?: boolean, guideHandoff?: {service:string}|null }} [opts] the version the card is about, the prepared answers to its open points, whether a no-remote ready/test card drops its ship buttons (#500), and a detected manual web hand-off (#506)
  * @returns {Array<{ label: string, icon: string, prompt: string, primary?: boolean, tooltip: string }>}
  */
 export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
-  if (!buttonsKey) return [];
   const table = BUTTONS[lang] || BUTTONS.de;
-  const list = table[buttonsKey] || BUTTONS.de[buttonsKey];
-  if (!Array.isArray(list)) return [];
+  const list = buttonsKey ? (table[buttonsKey] || BUTTONS.de[buttonsKey]) : null;
   const version = String((opts && opts.version) || "").trim().replace(/^v/, "");
   const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version) ? version : "";
   const conclusion = conclusionPrompt(opts && opts.replies, lang);
   const conclude = CONCLUDE[lang] || CONCLUDE.de;
   const concludeButton = { label: conclude.label, icon: conclude.icon, prompt: conclusion, tooltip: conclude.tooltip };
-  const buttons = list
-    .filter((a) => !isPromotePrompt(a.prompt) || semver)
-    .filter((a) => !(opts && opts.noShip && isShipPrompt(a.prompt)))
-    .map(({ conclude: isConclude, ...a }) => {
-      if (isPromotePrompt(a.prompt)) return { ...a, prompt: `${a.prompt} ${semver}` };
-      if (isConclude && conclusion) return { ...a, ...concludeButton };
-      return a;
-    });
-  if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
-  // Dropping the Ship button must not leave a row without its accented verb.
-  if (opts && opts.noShip && buttons.length && !buttons.some((a) => a.primary)) buttons[0] = { ...buttons[0], primary: true };
+  let buttons = [];
+  if (Array.isArray(list)) {
+    buttons = list
+      .filter((a) => !isPromotePrompt(a.prompt) || semver)
+      .filter((a) => !(opts && opts.noShip && isShipPrompt(a.prompt)))
+      .map(({ conclude: isConclude, ...a }) => {
+        if (isPromotePrompt(a.prompt)) return { ...a, prompt: `${a.prompt} ${semver}` };
+        if (isConclude && conclusion) return { ...a, ...concludeButton };
+        return a;
+      });
+    if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
+    // Dropping the Ship button must not leave a row without its accented verb.
+    if (opts && opts.noShip && buttons.length && !buttons.some((a) => a.primary)) buttons[0] = { ...buttons[0], primary: true };
+  }
+  const handoff = opts && opts.guideHandoff;
+  if (handoff && handoff.service) buttons.push(guideHandoffButton(handoff.service, lang));
   return buttons;
 }
 
@@ -510,7 +533,7 @@ export function cardWidgetHtml(model, repoUrl) {
     ? `<div class="card-points" style="margin:2px 0 8px">${model.points.map((p) => glyphLine("card-point", linkifyHtml(p, lang))).join("")}</div>`
     : "";
 
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip });
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff });
   const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
   const buttonsHtml = buttons.length
     ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
