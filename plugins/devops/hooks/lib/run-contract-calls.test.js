@@ -230,6 +230,16 @@ describe("isGatedPath", () => {
   ])("%s → %s", (p, want) => {
     expect(C.isGatedPath(root, root, p)).toBe(want);
   });
+
+  test("H2: an in-tree path whose first segment merely starts with `..` is still gated", () => {
+    expect(C.isGatedPath(root, root, "..env")).toBe(true);
+    expect(C.isGatedPath(root, root, "..cache/x.js")).toBe(true);
+  });
+
+  test("H2: a real path above the work tree is never gated", () => {
+    expect(C.isGatedPath(root, root, "../x")).toBe(false);
+    expect(C.isGatedPath(root, root, "..")).toBe(false);
+  });
 });
 
 test("closesOf", () => {
@@ -246,6 +256,20 @@ test("cardFacts", () => {
   expect(C.cardFacts({ variant: "ready", pending: "x" }).final).toBe(false);
   expect(C.cardFacts({ variant: "ready", concept: { url: "u" } }).final).toBe(false);
   expect(C.cardFacts({ variant: "ship-blocked" }).final).toBe(false);
+});
+
+test("C8: readCardPayload — a BOM-prefixed payload is readable; non-object JSON → null", () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), "rc-cardpayload-"));
+  const bomFile = path.join(d, "bom.json");
+  fs.writeFileSync(bomFile, `﻿${JSON.stringify({ variant: "ready" })}`, "utf8");
+  expect(C.readCardPayload(bomFile, d)).toEqual({ variant: "ready" });
+  const arrFile = path.join(d, "arr.json");
+  fs.writeFileSync(arrFile, "[1,2,3]", "utf8");
+  expect(C.readCardPayload(arrFile, d)).toBeNull();
+  const strFile = path.join(d, "str.json");
+  fs.writeFileSync(strFile, '"just a string"', "utf8");
+  expect(C.readCardPayload(strFile, d)).toBeNull();
+  fs.rmSync(d, { recursive: true, force: true });
 });
 
 test("releaseResult", () => {
@@ -265,6 +289,22 @@ test("R2: mergeResult reads a real MCP envelope {content:[{type:'text',text:'{me
   // A bare object that DOES carry its own boolean `merged` is still trusted directly.
   expect(C.mergeResult({ merged: true })).toEqual({ ok: true });
   expect(C.mergeResult("nope")).toBeNull();
+});
+
+describe("C6: baseBranch(after) when @{-1} never resolves (a fresh repo's very first checkout)", () => {
+  test("a repo with no prior HEAD move (`switch -c feat/x-sub` right after init) → null; isItemBranch still true", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-basebranch-fresh-"));
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    execFileSync("git", ["switch", "-q", "-c", "feat/x-sub"], { cwd: dir });
+    const b = C.baseBranch(dir, "feat/x-sub", true);
+    expect(b).toBeNull();
+    // isItemBranch(facts, hook, current): `current` (null here) can't rule
+    // out a "<current>-sub" / "<current>/sub" suffix — it stays a boundary.
+    expect(C.isItemBranch({ branch: true, branchName: "feat/x-sub" }, {}, b)).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe("R11: baseBranch / shellCallFacts share one budget across their 2 git calls in the post path", () => {
@@ -626,6 +666,25 @@ describe("QA-T1: routerFromTranscript reads back past the 2 MB tail", () => {
     // A live budget still reads normally.
     const live = { expired: () => false };
     expect([...C.linesBackward(t, { chunk: 5, budget: live })].filter(Boolean).length).toBeGreaterThan(0);
+  });
+
+  test("H7: a budget expiring after the first chunk yields no fragment (carry is only real at the file start)", () => {
+    const t = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rc-t1-")), "l.txt");
+    fs.writeFileSync(t, "a\nb\nc\nd\ne\n");
+    let calls = 0;
+    // Live for the first chunk read, expired from the second call onward —
+    // the walk reads one chunk (yielding its one whole line, "e"), carries
+    // the partial "d" over, then stops on the budget before reaching the
+    // real file start — "d" must never be yielded (it is a fragment cut at
+    // this chunk boundary, not confirmed to be a whole line).
+    const budget = { expired: () => (calls++ > 0) };
+    expect([...C.linesBackward(t, { chunk: 4, budget })]).toEqual(["e"]);
+  });
+
+  test("H7: a trailing newline yields no empty line; empty segments (blank lines) are skipped", () => {
+    const t = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rc-t1-")), "l.txt");
+    fs.writeFileSync(t, "a\nb\n\nc\n");
+    expect([...C.linesBackward(t, { chunk: 3 })]).toEqual(["c", "b", "a"]);
   });
 
   test("R12: routerFromTranscript honours an expired budget — the walk yields nothing rather than outrunning the deadline", () => {

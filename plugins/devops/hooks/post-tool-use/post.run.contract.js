@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.4.1
+ * @version 0.4.2
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
@@ -220,8 +220,8 @@ function onMcpMerge({ input, roots, sessionId, s, RC, C, hook }) {
   // check existed). `closes` itself is still parsed only from commit_title /
   // commit_message / the response text — a body that never writes "Closes
   // #N" is silently attributed to nothing; that limit is unchanged.
-  const { gitBudget } = require('../lib/git-timeout');
-  if (!C.originMatches(r, input.owner, input.repo, gitBudget(3000))) return;
+  const { gitBudget, SMALL_GIT_BUDGET_MS } = require('../lib/git-timeout');
+  if (!C.originMatches(r, input.owner, input.repo, gitBudget(SMALL_GIT_BUDGET_MS))) return;
   const res = C.mergeResult(hook.tool_response) || { ok: false };
   // Closes #N can be in the caller's commit title/message or the tool's own
   // response text (GitHub echoes the merge commit's message back).

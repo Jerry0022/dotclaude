@@ -13,7 +13,7 @@ const RC = require("../lib/run-contract.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.run.contract.js");
-const { safeBase } = require("./pre.run.contract.js");
+const { safeBase } = require("../lib/run-contract-qa.js");
 const SHIP = "mcp__plugin_devops_dotclaude-ship__ship_release";
 const CARD = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
 const ENV = { ...process.env };
@@ -380,7 +380,7 @@ describe("AUD-007: an unsafe qa diff base is never trusted", () => {
 });
 
 describe("harden pass (H-*)", () => {
-  const P = require("./pre.run.contract.js");
+  const P = require("../lib/run-contract-qa.js");
   const C = require("../lib/run-contract-calls.js");
   const ROUTER = (over = {}) => [
     { header: "Was?", question: "Was soll dieser Run tun?", options: [{ label: "Prompt umsetzen" }, { label: "Backlog" }] },
@@ -521,7 +521,7 @@ describe("harden pass (H-*)", () => {
 });
 
 describe("RT3: red-team pass 3 (pre)", () => {
-  const P = require("./pre.run.contract.js");
+  const P = require("../lib/run-contract-qa.js");
   const withWork = (over = {}) => { armPrompt({ ship: "auto", passes: [], ...over }); ev({ k: "skill", name: "auto-agents" }); ev({ k: "edit" }); };
   const MERGE = "mcp__plugin_github_github__merge_pull_request";
 
@@ -589,6 +589,26 @@ describe("RT3: red-team pass 3 (pre)", () => {
   });
 });
 
+describe("H1: heavy libs load lazily, inside main()'s own try (H-B17)", () => {
+  test("requiring pre.run.contract.js at module scope never pulls in run-contract-qa.js / git-timeout.js", () => {
+    const script = `
+      const p = require(${JSON.stringify(HOOK)});
+      const keys = Object.keys(require.cache);
+      process.stdout.write(JSON.stringify({
+        hasQa: keys.some(k => k.endsWith("run-contract-qa.js")),
+        hasGitTimeout: keys.some(k => k.endsWith("git-timeout.js")),
+        hasArmFromPending: typeof p.armFromPending === "function",
+      }));
+    `;
+    const r = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.hasQa).toBe(false);
+    expect(out.hasGitTimeout).toBe(false);
+    expect(out.hasArmFromPending).toBe(true);
+  });
+});
+
 describe("R5: the corrupt-quarantine notice is delivered even when run-contract.json is gone", () => {
   test("the marker alone (no run-contract.json / pending / batch-handoff) still reaches the notice, once", () => {
     // Simulates the state right after a quarantine: only the marker is left
@@ -601,6 +621,23 @@ describe("R5: the corrupt-quarantine notice is delivered even when run-contract.
     expect(r1.stdout).toContain("quarantined");
     expect(r1.stdout).toContain("run-contract.json.corrupt");
     // One-shot: the marker is consumed, a second call gets nothing.
+    const r2 = run("Edit", { file_path: f("src/b.js") }, { session_id: "s" });
+    expect(r2.stdout).toBe("");
+  });
+
+  test("H9: the SAME call whose own readContract() quarantines a corrupt header returns the notice, not the next one", () => {
+    armPrompt({ passes: [] });
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    // Hand-corrupt the live header — a gated call's own RC.readContract()
+    // below discovers this and quarantines it (AUD-022) during this same
+    // invocation, not before.
+    fs.writeFileSync(f(".claude/run-contract.json"), "{not json", "utf8");
+    const r1 = run("Edit", { file_path: f("src/a.js") }, { session_id: "s" });
+    expect(r1.code).toBe(0); // no contract left to gate against
+    expect(r1.stdout).toContain("quarantined");
+    expect(r1.stdout).toContain("run-contract.json.corrupt");
+    // One-shot: the very next call gets nothing more.
     const r2 = run("Edit", { file_path: f("src/b.js") }, { session_id: "s" });
     expect(r2.stdout).toBe("");
   });

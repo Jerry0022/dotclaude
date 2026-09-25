@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.1
+ * @version 0.4.3
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -45,15 +45,6 @@ function batchBlock(RC) {
   ].join('\n');
 }
 
-// AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
-// named once in lib/git-timeout.js — this hook no longer keeps its own
-// GIT_TIMEOUT constant.
-const { gitBudget, TOTAL_GIT_BUDGET_MS } = require('../lib/git-timeout');
-// AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
-// so run-contract-cli.js's `status` / `done` measure it exactly like this
-// gate does, instead of evaluating obligations against an empty ctx.
-const { safeBase, resolveBase, codeFilesChanged } = require('../lib/run-contract-qa');
-
 // AUD-019: one deadline for a whole gated call's git chain (base resolution,
 // up to two diff attempts, ls-files, the release count and the pushHead
 // branch check) — comfortably under the 60 s worst case the audit measured
@@ -66,10 +57,14 @@ const { safeBase, resolveBase, codeFilesChanged } = require('../lib/run-contract
  * `pushHead` call under ship: auto; a git failure or timeout means no (the
  * gate never blocks on unknown).
  * @param {object} [budget] shares the call's gitBudget() (AUD-019)
+ * @param {number} [fallbackTimeoutMs] used only when no shared budget is
+ *   given — H8: the caller passes git-timeout's SMALL_GIT_BUDGET_MS (it is
+ *   required lazily inside main(), H-B17, so this module-scope function
+ *   cannot reach for the constant itself).
  */
-function onMainBranch(root, C, budget) {
+function onMainBranch(root, C, budget, fallbackTimeoutMs) {
   try {
-    const opts = budget ? { budget } : { timeout: 3000 };
+    const opts = budget ? { budget } : { timeout: fallbackTimeoutMs };
     const b = C.gitLines(root, ['rev-parse', '--abbrev-ref', 'HEAD'], opts)[0];
     return b === 'main' || b === 'master';
   } catch { return false; }
@@ -162,6 +157,16 @@ function main(hook) {
   // error never crashes the hook.
   const { projectRoot } = require('../lib/project-root');
   const C = require('../lib/run-contract-calls');
+  // AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
+  // named once in lib/git-timeout.js — this hook no longer keeps its own
+  // GIT_TIMEOUT constant. H-B17: required here (inside main's own try), not
+  // at module scope — a half-written lib during a plugin update must not
+  // break every matched PreToolUse call.
+  const { gitBudget, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS } = require('../lib/git-timeout');
+  // AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
+  // so run-contract-cli.js's `status` / `done` measure it exactly like this
+  // gate does, instead of evaluating obligations against an empty ctx.
+  const { resolveBase, codeFilesChanged } = require('../lib/run-contract-qa');
   // H-B1: ship_release / the card act on tool_input.cwd — its root is tried
   // second; post records into the same root.
   const { root, inputRoot, roots } = C.contractRoots(hook, projectRoot);
@@ -177,20 +182,29 @@ function main(hook) {
   const RC = require('../lib/run-contract');
   // R5: deliver the corrupt/expiry one-shot notice here too, independent of
   // whether this call hits a gate — PreToolUse never blocks on it (H-F20).
-  // R2 (red-team round 2 Q6): the notice is consumed (one-shot) right here,
-  // but must NOT go to stdout yet — Claude Code ignores stdout on an exit-2
-  // hook result, so writing it immediately loses the notice on every gate
-  // this same call goes on to hit. `ok()` emits it on the exit-0 paths below;
-  // the exit-2 paths append it to the stderr block instead.
-  const notice = RC.expiryNotice(root, { sessionId: hook.session_id || null });
+  // R2 (red-team round 2 Q6): the notice is consumed (one-shot), but must NOT
+  // go to stdout yet — Claude Code ignores stdout on an exit-2 hook result,
+  // so writing it immediately loses the notice on every gate this same call
+  // goes on to hit. `ok()` emits it on the exit-0 paths below; the exit-2
+  // paths append it to the stderr block instead.
+  // H9: expiryNotice() is read lazily, AT EMIT TIME (inside ok()/blocked()),
+  // not once up front — a call whose own RC.readContract() below discovers a
+  // corrupt run-contract.json quarantines it AND writes the one-shot marker
+  // DURING this same call; reading the notice before that point (the old
+  // behaviour) always missed it, so it only ever surfaced on the NEXT gated
+  // call. Every return path in this function goes through ok()/blocked(),
+  // so the notice is still delivered exactly once, whichever path returns.
+  const notice = () => RC.expiryNotice(root, { sessionId: hook.session_id || null });
   const ok = () => {
-    if (notice) {
-      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notice } })}\n`);
+    const n = notice();
+    if (n) {
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: n } })}\n`);
     }
     return 0;
   };
   const blocked = (msg) => {
-    process.stderr.write(`${msg}${notice ? `\n\n${notice}` : ''}\n`);
+    const n = notice();
+    process.stderr.write(`${msg}${n ? `\n\n${n}` : ''}\n`);
     return 2;
   };
 
@@ -225,7 +239,7 @@ function main(hook) {
   // AUD-019: the same deadline also bounds every git call this gated call
   // makes (base resolution, diffs, ls-files, the pushHead branch check) — an
   // expired budget reads as unknown (never a block), it just stops asking git.
-  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget)) {
+  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget, SMALL_GIT_BUDGET_MS)) {
     call.gates.push('release');
   }
   if (!call.gates.length) return ok();
@@ -287,4 +301,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { safeBase, resolveBase, codeFilesChanged, armFromPending };
+module.exports = { armFromPending };

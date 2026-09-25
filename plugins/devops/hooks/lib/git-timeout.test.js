@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, gitBudget } from "./git-timeout.js";
+import { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS, gitBudget } from "./git-timeout.js";
 
 describe("GIT_TIMEOUT_MS", () => {
   test("is a single positive number, the one per-call timeout", () => {
@@ -12,6 +12,14 @@ describe("R13: TOTAL_GIT_BUDGET_MS", () => {
   test("is exported, above GIT_TIMEOUT_MS — the one whole-invocation ceiling pre and the CLI now share", () => {
     expect(typeof TOTAL_GIT_BUDGET_MS).toBe("number");
     expect(TOTAL_GIT_BUDGET_MS).toBeGreaterThan(GIT_TIMEOUT_MS);
+  });
+});
+
+describe("H8: SMALL_GIT_BUDGET_MS", () => {
+  test("is the named 3 s budget pre.run.contract's onMainBranch fallback and post.run.contract's onMcpMerge use", () => {
+    expect(typeof SMALL_GIT_BUDGET_MS).toBe("number");
+    expect(SMALL_GIT_BUDGET_MS).toBe(3000);
+    expect(SMALL_GIT_BUDGET_MS).toBeLessThan(TOTAL_GIT_BUDGET_MS);
   });
 });
 
