@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.211.5] — 2026-09-26
+
+### Changed
+- **`/do-run`'s SKILL.md is back under its 250-line budget (464 → 247 lines).** The procedure moved word for word into two docs beside the skill, each named at the Step that needs it: `deep-knowledge/questions.md` holds the rules for every question, the conditions computed before the call, how the answers are read, the resume options and the follow-up questions F1–F8; `deep-knowledge/execution.md` holds how Strikt is armed, the run-contract gates and CLI, the auto-agents hand-off, the Autonom ship lockout and the mode-file index. The decisions — which branch, which target, which question — stay in SKILL.md, and no rule changed its wording or behavior. A new test fails when a Step points at a section that does not exist, or when a section of the two docs is reachable from no Step.
+
 ## [0.211.4] — 2026-09-26
 
 ### Fixed
