@@ -182,7 +182,7 @@ On success the server stamps `_processed_at` with the current UTC time.
 The visible panel reset already happened via `location.reload()` (triggered
 by `/reload` in the previous step). The browser's `pollProcessedState` only
 flips the panel locally as a safety-net — when a reload counter advance
-has been observed OR a long stale timeout elapses. See `templates.md`
+has been observed OR a long stale timeout elapses. See `templates-submit.md`
 § Panel State Reset for the client contract.
 
 ### Legacy Fallback: JS Eval (for page updates)
@@ -302,7 +302,7 @@ On each poll cycle:
 A page reload (F5) is **not a problem** with the HTTP bridge:
 - The bridge server keeps running independently of the page
 - The keepalive pulser keeps posting → page reconnects automatically after reload
-- `localStorage` preserves user selections (see `templates.md` § State Persistence)
+- `localStorage` preserves user selections (see `templates-persistence.md` § State Persistence)
 - The `concept-submitted` class resets (correct — user can re-submit)
 - Decisions in the bridge server persist across reloads
 
@@ -355,7 +355,7 @@ The JSON from `#concept-decisions` follows this schema:
 }
 ```
 
-`comments` has this ONE shape whatever the template (templates.md
+`comments` has this ONE shape whatever the template (templates-submit.md
 § collectDecisions (dispatcher), #399): `general` is always present — read it
 first, it is the note the user left on the round as a whole — and `items`
 lists every itemised field that carries text or an attachment. A design round

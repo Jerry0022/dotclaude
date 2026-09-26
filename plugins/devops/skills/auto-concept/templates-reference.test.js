@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // The concept skill's templates reference is not documentation — Claude copies
 // its fenced code blocks verbatim into every generated concept page. A defect
@@ -21,9 +22,7 @@ import { fileURLToPath } from "node:url";
 // These tests pin all three classes.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REFERENCE = path.join(__dirname, "deep-knowledge", "templates.md");
-
-const md = fs.readFileSync(REFERENCE, "utf8");
+const md = readTemplates();
 
 function blocks(lang) {
   const out = [];

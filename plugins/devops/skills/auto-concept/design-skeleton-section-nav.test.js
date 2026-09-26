@@ -1,7 +1,5 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // A design concept's final report is always a `free` round (SKILL.md § Template
 // continuity), and a free round renders its TOC into #section-nav. The design
@@ -10,8 +8,7 @@ import { fileURLToPath } from "node:url";
 // not miss. The CSS toggle between the two navs already existed; the element
 // did not.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+const md = readTemplates();
 
 function blocks(lang) {
   const re = new RegExp("```(?:" + lang + ")\\n([\\s\\S]*?)```", "g");

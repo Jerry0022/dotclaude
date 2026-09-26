@@ -1,8 +1,6 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // #367 (two rounds) — a live generated page: the caret (▾ #submit-menu-btn)
 // toggled its menu open (aria-expanded flipped, #submit-menu lost [hidden])
@@ -32,9 +30,7 @@ import { JSDOM } from "jsdom";
 // is `position: absolute` (not `fixed`), and the JS computes coordinates
 // relative to the panel (not the viewport) from both rects in one frame.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 
 function scanBlocks(src) {
   const lines = src.split("\n");

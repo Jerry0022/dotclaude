@@ -236,7 +236,7 @@ No rule repeats it.
   the ship card's `tests` line names it ("UI rules: R2 disabled by project
   override") so a silent opt-out cannot hide.
 - **The plugin's own surfaces too.** Concept pages (`auto-concept`
-  templates.md § App Tooltips and § Layout CSS → Scrollbars), the
+  templates-utilities.md § App Tooltips and § Layout CSS → Scrollbars), the
   completion-card widget and the `/auto-guide` overlay follow every rule
   here. The reminder hook covers generated concept pages like any page, and
   the plugin-source repo opts the templates that generate them in through its

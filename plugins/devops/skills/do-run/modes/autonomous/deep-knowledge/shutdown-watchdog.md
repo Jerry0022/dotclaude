@@ -318,13 +318,13 @@ watchdog.
 
 `flag` also removes this run's scheduled task, its helper script and its
 sentinel (`unregistered` in the JSON) — with the flag written the task has
-nothing left to do. No separate `unregister` call is needed; use it only to
-drop a watchdog without writing the flag (e.g. the user resumes by hand).
-Tasks clean up after themselves too (#544): each registration's trigger ends
-30 min after its fire time and Task Scheduler then deletes it
-(`DeleteExpiredTaskAfter`), and every `register` — once its own task is
-armed, under an 8 s budget — sweeps `ClaudeAutonomousWatchdog-*` tasks and
-helper scripts older than 26 h that earlier plugin versions left behind
-(`swept` in its JSON). A live
-registration is at most 24 h old, so a sibling session's watchdog is never
-touched.
+nothing left to do. The removal only ever follows a written flag: when 8c
+writes no flag, the task stays armed as the fallback. No separate
+`unregister` call is needed; use it only to drop a watchdog without writing
+the flag (e.g. the user resumes by hand).
+
+Task Scheduler does NOT remove a one-shot task after it fired: leaving it armed
+but flag-satisfied left one dead `ClaudeAutonomousWatchdog-*` entry per run
+(#544). A watchdog that does fire deletes its own task on every exit path, and
+`ss.watchdog.reap` sweeps leftovers at session start (at most once a day: our
+exact name, not running, no future run).

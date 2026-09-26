@@ -1,8 +1,6 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // AUD-018 — the DESIGN template's screen-nav built its rows with innerHTML
 // from `dataset.navLabel`. `dataset` hands back the DECODED attribute, so a
@@ -11,10 +9,9 @@ import { JSDOM } from "jsdom";
 // buildDesignUI() now builds label + note marker as DOM nodes (navRowLabel /
 // navRowMarker), exactly like buildSectionNav().
 //
-// Runs buildDesignUI() verbatim out of templates.md on jsdom.
+// Runs buildDesignUI() verbatim out of the templates reference on jsdom.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+const md = readTemplates();
 
 /** Brace-balanced slice from `marker` (the helpers sit indented in the layout IIFE). */
 function slice(marker) {

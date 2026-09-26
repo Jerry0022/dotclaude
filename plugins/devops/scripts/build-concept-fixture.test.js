@@ -4,7 +4,7 @@ import { build, parseArgs } from "./build-concept-fixture.js";
 import { findMappingIssues, findStructural, evaluate, findStaleEngine } from "../hooks/lib/concept-gate.js";
 
 // The fixture builder's `--mapping` flag (Task 8): both modes gain an
-// information mapping (templates.md § Information Mapping (engine)) that the
+// information mapping (templates-mapping.md § Information Mapping (engine)) that the
 // deterministic gate accepts — a live one in the live round and a frozen one
 // with a complete `submitted` in the round before it — so the engine can be
 // looked at in a real browser. Without the flag the output is what it was.

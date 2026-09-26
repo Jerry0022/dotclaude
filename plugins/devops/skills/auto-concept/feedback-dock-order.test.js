@@ -1,7 +1,5 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // Feedback dock reorder: specific -> general, top to bottom. Today's shape
 // is screen -> design -> view -> general (design/screen and view are
@@ -17,9 +15,7 @@ import { fileURLToPath } from "node:url";
 // and trimmed section/textarea spacing (§ Layout CSS `.feedback-dock`,
 // `.feedback-section`, `.feedback-section textarea`).
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 
 function fencedBlock(src, startMarker, lang) {
   const lines = src.split("\n");

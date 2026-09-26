@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // The "Kompass" tree: the section TOC is built fresh for the LIVE round only,
 // inside the panel's scroll box. The bar (`nav.iteration-tabs`) stays exactly
@@ -18,7 +19,7 @@ import { JSDOM } from "jsdom";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const iterRules = fs.readFileSync(path.join(DK, "iteration-rules.md"), "utf8");
 const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");

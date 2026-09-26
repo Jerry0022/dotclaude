@@ -367,7 +367,7 @@ JSON spec inside `section[data-mapping]` (free round) or a
 `data-view-kind="mapping"` view (design round) and the shared engine renders
 the schematic view, the matrix, tabs per context, the palette, proposal
 markers, reset, ad-hoc items and slot notes, persists the state and ships a
-typed `mappings[]` payload. Reference: `templates.md` § Information Mapping
-(engine) (spec, DOM contract, freezing), `templates.md` § Views (optional) →
+typed `mappings[]` payload. Reference: `templates-mapping.md` § Information Mapping
+(engine) (spec, DOM contract, freezing), `templates-design.md` § Views (optional) →
 View kind `mapping` and § Mapping block (optional) for the markup, SKILL.md
 § 1c for the authoring rules, `validation-gate.md` § Mappings for the gate.

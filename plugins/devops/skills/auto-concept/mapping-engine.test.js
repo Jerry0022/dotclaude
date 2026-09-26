@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { ENGINE, VEHICLE_SPEC, TRAINS_SPEC, page, cells, box } from "./mapping-harness.js";
 
-// The information-mapping engine (templates.md § Information Mapping (engine))
+// The information-mapping engine (templates-mapping.md § Information Mapping (engine))
 // is copied verbatim into every generated concept page. These tests run the
 // fenced block on jsdom against small specs and pin the DOM contract (§ 5),
 // the state encoding (§ 4), the single write path `setCell()` and the § 9

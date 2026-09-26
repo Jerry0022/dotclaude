@@ -167,7 +167,7 @@ What differs:
   hand-written HTML rewrite; a marker that silently failed to land re-arms a
   check the user has already answered, and nothing else in the pipeline would
   notice.
-- The section opens with the `.reality-banner` explainer (`templates.md`
+- The section opens with the `.reality-banner` explainer (`templates-rounds.md`
   § Reality-check section explainer): headline, what landed, the commit
   evidence, and the reassurance that the implement order still stands.
 - Both submit buttons behave exactly as everywhere else. **No third button.**

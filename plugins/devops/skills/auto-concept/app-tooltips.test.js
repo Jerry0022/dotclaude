@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
-// App tooltips (ui-defaults.md R0/R1, templates.md § App Tooltips): every
+// App tooltips (ui-defaults.md R0/R1, templates-utilities.md § App Tooltips): every
 // hover hint is `data-tip`, rendered in the page's own tokens with two delay
 // tiers — Info 1500 ms by default, Label 500 ms only for an icon-only control,
 // cut-off text or a disabled control — and a native `title` never survives,
@@ -12,7 +13,7 @@ import { JSDOM } from "jsdom";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const section = md.slice(md.indexOf("## App Tooltips"), md.indexOf("## Theme Toggle"));
 const js = /```javascript\n([\s\S]*?)```/.exec(section)[1];

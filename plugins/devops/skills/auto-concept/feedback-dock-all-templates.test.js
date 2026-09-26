@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "../../scripts/build-concept-fixture.js";
 import { evaluate } from "../../hooks/lib/concept-gate.js";
+import { readTemplates } from "./templates-source.js";
 
 // #399 — the 💬 feedback dock is page chrome in EVERY template. It used to
 // exist only in the design skeleton and be wired only inside the design
@@ -259,7 +260,7 @@ describe("design page — no regression, and the dock survives a document round 
 
   test("the gate keeps P14b: restoreState() right after buildDesignUI(), before primeDock()", () => {
     expect(gate).toMatch(/\| P14b \|/);
-    const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+    const md = readTemplates();
     const from = md.indexOf("function wireDesignLayout()");
     const load = md.indexOf("document.addEventListener('DOMContentLoaded', () => {\n    buildDesignUI();", from);
     expect(load).toBeGreaterThan(from);

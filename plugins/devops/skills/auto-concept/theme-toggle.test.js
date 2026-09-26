@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { build } from "../../scripts/build-concept-fixture.js";
+import { readTemplates } from "./templates-source.js";
 
 // The theme toggle moved out of the content column into the ☰ panel.
 //
@@ -21,7 +22,7 @@ import { build } from "../../scripts/build-concept-fixture.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 

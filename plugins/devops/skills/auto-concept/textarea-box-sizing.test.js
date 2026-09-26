@@ -1,7 +1,5 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // An expanded annotation bubble showed its answer field sticking out past the
 // bubble's right edge. The page has no global `box-sizing` reset, so every
@@ -9,8 +7,7 @@ import { fileURLToPath } from "node:url";
 // container (content-box). Every full-width textarea rule in the template
 // must therefore opt into `box-sizing: border-box` itself.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+const md = readTemplates();
 
 function ruleBody(selector) {
   const start = md.indexOf(`\n${selector} {`);

@@ -624,7 +624,7 @@ const CARD_FIELD_REFERENCE =
  * mcp-server/lib/card-input.js; card-input.test.js pins the two equal.
  */
 const CARD_VARIANT_REFERENCE =
-  'Variants: ship-successful|ready|released|ship-blocked|test|test-minimal|analysis|aborted|fallback|ready-files · ' +
+  'Variants: ship-successful|ready|released|ship-blocked|test|test-minimal|analysis|aborted|fallback|ready-files|paused · ' +
   'a shipped PR is "ship-successful" (never "ship") and requires ' +
   'state: { pushed: true, merged: "main", pr: { number, title }, commit }, cta: { vOld, vNew, bump }, ' +
   'delivery: { pr, ship: { version, base } }.';
@@ -683,6 +683,7 @@ function buildBlockReason(pluginRoot, opts = {}) {
     '  user started app, no edits yet → test-minimal',
     '  code/doc changes (≥1 edit), no app → ready',
     '  zero file changes (analysis/explain/audit) → analysis',
+    '  the user pauses the work to continue later → paused',
     '  unsure → fallback',
     '',
     'PENDING (orthogonal to the variant): if background subagents, workflows or',

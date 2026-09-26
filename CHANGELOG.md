@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.213.3] — 2026-09-26
+
+### Changed
+- **The concept templates reference is split into 16 topic parts.** `auto-concept/deep-knowledge/templates.md` had grown to about 15,000 lines against the 600-line deep-knowledge budget, so every lookup loaded far more than it needed. It is now an index with a reading-order table. The content lives in `templates-common.md`, `templates-panel.md`, `templates-decision.md`, the four `templates-design*.md` parts, `templates-section-nav.md`, `templates-submit.md` and the others. Each part opens with a numbered header and continues the text of the part before it. A new loader, `templates-source.js`, follows the index order, strips the headers and returns the joined text byte for byte as before. The concept tests, the concept gate's drift checks and `build-concept-fixture.js` all read through it. `templates-source.test.js` fails when a part is missing from the index or out of order. Section references in the skill, its deep-knowledge, the concept gate hints and code comments now name the part that holds the section. Generated concept pages do not change: fixtures built before and after differ only in their timestamp.
+
+## [0.213.2] — 2026-09-26
+
+### Fixed
+- **The completion server counts as alive again.** The hooks tell a live devops MCP server from a dead one by the PID file each server writes after connecting. The completion server's register call was removed in #93 (April) as an "unused import", so every hook has read it as dead ever since. The card contract then told Claude to render the card offline first on every turn, although the tool answered. The server registers its heartbeat again right after connecting. It does so through a dynamic import, so the `--render-card` CLI, which exits earlier, never writes one. A test pins the register call after `server.connect` for all three servers.
+
+## [0.213.1] — 2026-09-26
+
+### Fixed
+- **Autonomous runs no longer leave dead watchdog tasks behind.** Task Scheduler does not remove a one-shot task after it fired, and the finalizers deliberately never unregistered it, so every autonomous or backlog run left a `ClaudeAutonomousWatchdog-*` entry — 11 on one machine (#544). The recovery script now deletes its own task on every exit path, in shutdown mode before `shutdown.exe`. The finalizers (autonomous Step 8c, backlog Step 5) unregister the task right after writing the done flag, and only then, because without a flag the task has to stay armed as the fallback. A new `autonomous-watchdog.js reap` lists (dry run) or deletes expired tasks: our exact name, root folder, not running, no future run, plus their leftover helper script and sentinel. The new `ss.watchdog.reap` runs it detached at session start on Windows, at most once a day.
+
+## [0.213.0] — 2026-09-26
+
+### Added
+- **A paused card for work you pause to continue later.** Pausing ("machen wir später weiter", "pause for now") used to end on the fallback card, "🔧 Erledigt — noch etwas?", and a "🔧 Done –" session title, so the sidebar reported unfinished work as finished (#548). `render_completion_card` now takes `variant: "paused"`. The decision box reads "⏸️ Pausiert — weiter, wann du willst" / "⏸️ Paused — pick it up whenever you like", followed by "Schreib hier, um weiterzumachen." / "Write here to continue.", and has no buttons. The result lines say what was stopped and what was kept. The session title becomes `⏸️ Paused – …`, and the next work prompt turns it into `⏳ …` without stacking. The Stop guard's variant list and the card contract name the new variant. The run contract treats it as non-final: it is never refused for passes still to come and never closes the run. Pausing an open concept page (stopping its bridge and watchers, a hint-only resume) follows in #555.
+
 ## [0.212.5] — 2026-09-26
 
 ### Fixed

@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // The device-view switcher lets a design concept render its mockup inside
 // tablet/phone frames — portrait and landscape side by side — instead of only
@@ -28,7 +29,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
 
