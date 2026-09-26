@@ -6599,6 +6599,11 @@ to hunt for their own position on every scroll.
 /* "Weitere Varianten · N · k verworfen" — one collapsed row for every
    variant that is not the selected one. */
 .nav-group.nav-other-variants > .section-nav-item { margin-left: 0.5rem; opacity: 0.85; }
+/* The overflow cut and the final-report window hide top-level entries with
+   `hidden`. `.section-nav-item { display: flex }` outranks the browser's own
+   [hidden] rule, so a flat TOC kept every "hidden" entry on screen next to
+   its "+N weitere" toggle — this rule makes `hidden` mean hidden again. */
+#section-nav > [hidden] { display: none; }
 /* "+N weitere" — only rendered when the TOC overflows the scroll box. */
 .nav-more-toggle {
   display: block;

@@ -140,6 +140,11 @@ describe("Kompass tree — source contracts", () => {
     const fn = fnSource("applyNavOverflow");
     expect(fn).toContain("scrollBox.scrollHeight <= scrollBox.clientHeight");
     expect(fnSource("makeNavMoreToggle")).toContain("{{nav.more_entries}}");
+    // Both cuts hide with `hidden`; `.section-nav-item { display: flex }`
+    // outranks the browser's [hidden] rule, so without this line a flat TOC
+    // kept every "hidden" entry on screen next to its toggle (seen in Edge
+    // at 1024x768 while verifying #541 — jsdom computes no layout).
+    expect(md).toContain("#section-nav > [hidden] { display: none; }");
     // The final report defers to the 3-entry window BEFORE the overflow
     // measurement — it must never fall through to the tail cut there.
     const branch = fn.indexOf("document.body.classList.contains('viewing-final')");
