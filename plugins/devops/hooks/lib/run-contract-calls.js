@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.2
+ * @version 0.5.3
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -1018,11 +1018,12 @@ function isGatedEdit(tool, input, root, cwd) {
   return EDIT_TOOLS.has(tool) && isGatedPath(root, cwd, toolFilePath(tool, input));
 }
 
-/** Issue numbers a PR body closes. */
+/** Issue numbers a PR body closes. `#N` must end its token, as in
+ *  issue-refs.js: "Fixes #8fae8f contrast" closes no issue #8. */
 function closesOf(body) {
   const out = [];
   if (typeof body !== 'string') return out;
-  for (const m of body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)/gi)) out.push(m[1]);
+  for (const m of body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#([1-9]\d*)(?![\p{L}\p{N}_])/giu)) out.push(m[1]);
   return [...new Set(out)];
 }
 

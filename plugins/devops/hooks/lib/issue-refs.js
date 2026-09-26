@@ -1,6 +1,6 @@
 /**
  * @module issue-refs
- * @version 0.1.0
+ * @version 0.1.1
  * @description Which issue numbers in a prompt ask for work — for
  *   prompt.issue.detect. Every `#N` used to count as "the user referenced
  *   issue #N": the numbers were tracked, set In Progress, and every card of
@@ -14,7 +14,11 @@
  *        open runs to the end), brackets, and whole lines of pasted output
  *        (blockquote, `[tag] …`, timestamp, log level, Claude Code hook
  *        output). A number there is no reference.
- *     2. `#N` and `Issue N` in the rest. A pull request ("PR #471",
+ *     2. `#N` and `Issue N` in the rest — `#N` only as a token of its own,
+ *        so a hex colour is no issue: glued to a letter or digit
+ *        (`#7d84a8`), to a CSS property (`color:#123456`) or with a leading
+ *        zero (`#000080`). A prompt about card colours once put issues #7
+ *        and #8 on the track above (2026-09-26). A pull request ("PR #471",
  *        "merge #490"), a milestone ("Meilenstein #14") or an item of another
  *        list ("Punkt #2", "retry #3") is no issue. Numbers joined only by `,`
  *        `/` `&` `and` `und` … form one list, and a list of 3+ is an
@@ -52,9 +56,10 @@ const LOG_LINE_RES = [
 /** Innermost first; the caller repeats for nesting. */
 const BRACKET_RES = [/\([^()\n]*\)/g, /\[[^[\]\n]*\]/g];
 
-/** `#12` (not `page#12`, `owner/repo#12`, `&#12;`) or `Issue 12` / `Issue #12`. */
+/** `#12` (not `page#12`, `owner/repo#12`, `&#12;`, `color:#123456`, `#7d84a8`,
+ *  `#000080`) or `Issue 12` / `Issue #12`. Issue numbers never start with 0. */
 const REF_RE =
-  /(?<![\p{L}\p{N}_/&#])#(\d{1,7})(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?:issues?|tickets?)[ \t]*#?(\d{1,7})(?![\p{L}\p{N}_])/giu;
+  /(?<![\p{L}\p{N}_/&#:])#([1-9]\d{0,6})(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?:issues?|tickets?)[ \t]*#?([1-9]\d{0,6})(?![\p{L}\p{N}_])/giu;
 
 /** What may sit between two numbers of one list. */
 const LIST_SEP_RE = /^[\s,/&+]*(?:(?:and|und|or|oder|sowie|bzw\.?)[\s,]*)?$/i;
@@ -153,8 +158,7 @@ function maskNonProse(text) {
 function numberRuns(prose) {
   const runs = [];
   for (const m of prose.matchAll(REF_RE)) {
-    const n = String(Number(m[1] || m[2]));
-    if (n === '0') continue;
+    const n = m[1] || m[2];
     const start = m.index;
     const end = start + m[0].length;
     const last = runs[runs.length - 1];

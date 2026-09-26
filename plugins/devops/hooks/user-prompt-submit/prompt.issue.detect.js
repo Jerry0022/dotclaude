@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.5.0
+ * @version 0.5.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect issue references in user messages. Only a request to
@@ -11,7 +11,8 @@
  *   prompt ("#12", "Issue #12: …"). A number only mentioned in prose, a
  *   branch named in the message and the current branch (feat/42-*) are asked
  *   about first. Numbers in quotes, code, brackets, pasted log lines or a
- *   list of 3+ are no reference at all (lib/issue-refs.js) — a task-chip
+ *   list of 3+ are no reference at all, nor is a hex colour (`#7d84a8`,
+ *   `color:#123456`, `#000080`) (lib/issue-refs.js) — a task-chip
  *   prompt that quoted "[issue-status] Tracked issues this session: #530, …"
  *   as an example put four unrelated issues on the In Progress → Done/Todo +
  *   comment track (2026-09-26).

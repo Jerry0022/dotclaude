@@ -244,6 +244,8 @@ describe("isGatedPath", () => {
 
 test("closesOf", () => {
   expect(C.closesOf("Closes #473\nCloses #474\nfixes #5, Resolves: #6, see #7")).toEqual(["473", "474", "5", "6"]);
+  // A hex colour after a closing keyword closes no issue.
+  expect(C.closesOf("Fixes #8fae8f contrast, closes #12, resolves #007700")).toEqual(["12"]);
   expect(C.closesOf(undefined)).toEqual([]);
 });
 
