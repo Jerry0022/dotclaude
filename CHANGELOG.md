@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.211.1] — 2026-09-26
+
+### Fixed
+- **An issue number is tracked only when the prompt asks for work on it.** `prompt.issue.detect` read every `#N` as "the user referenced issue #N": the issue went In Progress, and every card of the session told Claude to set it Done or Todo and comment on it. A task-chip prompt that quoted "[issue-status] Tracked issues this session: #530, #409, #431, #469" as an example put four unrelated issues on that track. Now a work verb before the number ("fix #12", "arbeite an #12", "mach Issue #12 fertig", "closes #12"), a German infinitive after it ("#12 bitte umsetzen") or the number opening the prompt tracks it; one or two numbers only mentioned are asked about first ("Arbeitest du an Issue #12?"), like a branch name. Numbers in quotes, code, brackets, pasted log or hook lines and lists or ranges of three or more are no reference, and neither are pull requests, milestones or list items ("PR #471", "merge #490", "Meilenstein #14", "Punkt #2"). Replayed over the 31 real prompts with issue numbers in the local transcripts: none is tracked any more (before: all 31), four draw a question.
+
 ## [0.211.0] — 2026-09-26
 
 ### Fixed
