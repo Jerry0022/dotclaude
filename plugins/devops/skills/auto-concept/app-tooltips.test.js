@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { readTemplates } from "./templates-source.js";
 
-// App tooltips (ui-defaults.md R0/R1, templates.md § App Tooltips): every
+// App tooltips (ui-defaults.md R0/R1, templates-utilities.md § App Tooltips): every
 // hover hint is `data-tip`, rendered in the page's own tokens with two delay
 // tiers — Info 1500 ms by default, Label 500 ms only for an icon-only control,
 // cut-off text or a disabled control — and a native `title` never survives,

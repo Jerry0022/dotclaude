@@ -266,7 +266,7 @@ describe("buildBlockReason", () => {
   });
 });
 
-// Information mapping construct (templates.md § Information Mapping (engine)
+// Information mapping construct (templates-mapping.md § Information Mapping (engine)
 // → Spec; design spec § 11 rules M1–M4 + M9). The gate mirrors the engine's
 // normalizeSpec() and complete() checks so page and hook agree.
 describe("findMappingIssues", () => {

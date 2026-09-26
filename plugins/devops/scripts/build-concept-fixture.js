@@ -18,7 +18,7 @@
  *     node build-concept-fixture.js --out <file.html> [--rounds 8] [--entries 14]
  *                                   [--mode decision|design] [--locale en|de] [--mapping] [--designs 1]
  *
- *   `--mapping` adds an information mapping (templates.md § Information
+ *   `--mapping` adds an information mapping (templates-mapping.md § Information
  *   Mapping (engine)) so the schematic / matrix engine can be looked at too:
  *   in design mode the live round gains a `data-view-kind="mapping"` view
  *   (vehicle fields → list card, phone + desktop) under its design; in
@@ -166,7 +166,7 @@ const TRAINS_SPEC = {
 };
 
 /**
- * The `submitted` object of a frozen round (templates.md § Information
+ * The `submitted` object of a frozen round (templates-mapping.md § Information
  * Mapping (engine) → Freezing): the proposal pairs grouped by matrix key
  * (`{src}` or `{src}@{ctx}`), an `order` entry for every ordered target key,
  * no ad-hoc items, no slot notes. `edits` are extra `[item, target, ctx?]`

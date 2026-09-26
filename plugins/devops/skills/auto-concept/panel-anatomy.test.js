@@ -431,7 +431,7 @@ describe("panel anatomy — CSS", () => {
     // There used to be two of these: a docked sidebar for decision/free and a
     // design-scoped overlay. A concept that mixed templates therefore moved
     // its panel — and with it the surface the user writes feedback on —
-    // between rounds. The panel is page chrome now (templates.md § Panel
+    // between rounds. The panel is page chrome now (templates-panel.md § Panel
     // Chrome (all templates)), so exactly one unscoped rule may define it.
     const rule = rulesFor(/^\.concept-decision-panel$/).find((r) => /height:\s*100vh/.test(r.body));
     expect(rule, "unscoped .concept-decision-panel").toBeTruthy();

@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { readTemplates } from "./templates-source.js";
 
 // Shared jsdom harness for the information-mapping engine
-// (templates.md § Information Mapping (engine)). Not a test file on purpose:
+// (templates-mapping.md § Information Mapping (engine)). Not a test file on purpose:
 // vitest collects `plugins/**/*.test.js`, so importing this module from
 // several suites does not re-register anyone's tests.
 
