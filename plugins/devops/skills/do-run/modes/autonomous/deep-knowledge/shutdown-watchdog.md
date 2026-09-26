@@ -316,7 +316,16 @@ directory unambiguously", do NOT guess — pass this run's flag path explicitly
 flag into a sibling session's project would silently mute that session's
 watchdog.
 
-We deliberately do NOT call `unregister` on the scheduled task — leaving it armed
-but flag-satisfied is simpler and self-cleans (the task fires once, sees the flag,
-exits, and removes its helper script). If you ever need to clean it up earlier
-(e.g. user manually resumes), use the `unregister` subcommand.
+Right after the flag, remove the task — same resolution rules, from the project
+root:
+
+```bash
+node "{PLUGIN_ROOT}/scripts/autonomous-watchdog.js" unregister
+```
+
+Task Scheduler does NOT remove a one-shot task after it fired: leaving it armed
+but flag-satisfied left one dead `ClaudeAutonomousWatchdog-*` entry per run
+(#544). Unregister only together with the flag — when 8c writes no flag, the
+task must stay armed as the fallback. A watchdog that does fire deletes its own
+task on every exit path, and `ss.watchdog.reap` sweeps leftovers at session start
+(at most once a day: our exact name, not running, no future run).

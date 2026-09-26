@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.213.1] — 2026-09-26
+
+### Fixed
+- **Autonomous runs no longer leave dead watchdog tasks behind.** Task Scheduler does not remove a one-shot task after it fired, and the finalizers deliberately never unregistered it, so every autonomous or backlog run left a `ClaudeAutonomousWatchdog-*` entry — 11 on one machine (#544). The recovery script now deletes its own task on every exit path, in shutdown mode before `shutdown.exe`. The finalizers (autonomous Step 8c, backlog Step 5) unregister the task right after writing the done flag, and only then, because without a flag the task has to stay armed as the fallback. A new `autonomous-watchdog.js reap` lists (dry run) or deletes expired tasks: our exact name, root folder, not running, no future run, plus their leftover helper script and sentinel. The new `ss.watchdog.reap` runs it detached at session start on Windows, at most once a day.
+
 ## [0.213.0] — 2026-09-26
 
 ### Added

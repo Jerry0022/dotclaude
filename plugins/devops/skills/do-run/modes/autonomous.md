@@ -661,15 +661,17 @@ Harmless no-op if nothing was scheduled. Then proceed by `$WATCHDOG_ACTION`:
 - **notify mode** (shutdown=no): the PC stays on. No fail-safe was armed; skip
   8.0/8a/8b; run only **8c** —
   write `AUTONOMOUS-DONE.flag` for every terminal status (COMPLETED / INTERRUPTED
-  / BLOCKED). Reaching Step 8 proves the run is not wedged, so the health-watchdog
-  finds the flag and stands down (no `AUTONOMOUS-STALLED.txt`).
+  / BLOCKED), then `autonomous-watchdog.js unregister`. Reaching Step 8 proves the
+  run is not wedged, so the health-watchdog is no longer needed (no
+  `AUTONOMOUS-STALLED.txt`, no dead task left in Task Scheduler).
 - **shutdown mode** (shutdown=yes), status COMPLETED or INTERRUPTED:
   1. **8a** — wait (max 30 min) for other active Claude sessions to go idle (any
      project/worktree; exclude our own tree). Never cut off another session.
   2. **8b** — `shutdown.exe /s /t 60` via absolute-path PowerShell; capture
      `$SHUTDOWN_EXIT`.
-  3. **8c** — write the flag per the decision matrix: flag on 8b-success or
-     BLOCKED; **NO** flag if 8b failed, so the watchdog fires as the fallback.
+  3. **8c** — write the flag per the decision matrix: flag + `unregister` on
+     8b-success or BLOCKED; **NO** flag and no unregister if 8b failed, so the
+     watchdog fires as the fallback.
 - **BLOCKED** in shutdown mode: skip 8b, jump to 8c (never auto-shutdown a
   blocked run — data integrity may be at risk). INTERRUPTED is safe to shut down
   — progress is saved in `AUTONOMOUS-RESUME.json`.

@@ -3,6 +3,10 @@ import path from "node:path";
 import {
   buildRegisterPsCommand,
   buildRecoveryScript,
+  buildReapQueryPs,
+  classifyWatchdogTasks,
+  scriptPathFromArgs,
+  reapDue,
   pickSentinel,
 } from "./autonomous-watchdog.js";
 
@@ -220,5 +224,84 @@ describe("pickSentinel — parallel-session resolution (2026-07-05 incident)", (
     const broken = { file: "/tmp/claude-autonomous-watchdog-x.json", data: { taskName: "ClaudeAutonomousWatchdog-9" } };
     const r = pickSentinel([broken, B], hllOverlay);
     expect(r.match).toBe(B);
+  });
+});
+
+// #544: Task Scheduler never removes a one-shot task after it fired — every
+// run left a dead ClaudeAutonomousWatchdog-* entry (11 on one machine).
+describe("the watchdog task removes itself", () => {
+  const base = {
+    hours: 8,
+    flagPath: "C:\\proj\\AUTONOMOUS-DONE.flag",
+    stalledPath: "C:\\proj\\AUTONOMOUS-STALLED.txt",
+    taskName: "ClaudeAutonomousWatchdog-1700000000000",
+    recoveryFlagPath: "C:\\proj\\AUTONOMOUS-RECOVERY.flag",
+    workingDir: "C:\\proj",
+    resumePrompt: "RUN_BACKLOG_AUTOSTART: resume",
+  };
+
+  for (const action of ["shutdown", "notify", "resume"]) {
+    test(`${action}: the script deletes its own task on every exit path`, () => {
+      const s = buildRecoveryScript({ ...base, action });
+      expect(s).toContain("$taskName = 'ClaudeAutonomousWatchdog-1700000000000'");
+      expect(s).toContain('schtasks.exe" /Delete /TN $taskName /F');
+      // After the flag branch too — a flag-satisfied run was the common leak.
+      const tail = s.slice(s.indexOf("# Remove this run's task"));
+      expect(tail).toContain("Remove-WatchdogTask");
+    });
+  }
+
+  test("shutdown mode removes the task BEFORE powering off", () => {
+    const s = buildRecoveryScript({ ...base, action: "shutdown" });
+    const branch = s.slice(s.indexOf("forcing shutdown\""));
+    expect(branch.indexOf("Remove-WatchdogTask")).toBeGreaterThan(-1);
+    expect(branch.indexOf("Remove-WatchdogTask")).toBeLessThan(branch.indexOf("shutdown.exe"));
+  });
+});
+
+describe("reap — the sweep of expired watchdog tasks (#544)", () => {
+  const NOW = Date.parse("2026-09-26T14:00:00Z");
+  const task = (o) => ({ path: "\\", state: "Ready", next: null, args: "", ...o });
+
+  test("removes our expired tasks, keeps running, armed and foreign ones", () => {
+    const { remove, keep } = classifyWatchdogTasks([
+      task({ name: "ClaudeAutonomousWatchdog-1" }),
+      task({ name: "ClaudeAutonomousWatchdog-2", next: "2026-09-26T13:00:00Z" }),
+      task({ name: "ClaudeAutonomousWatchdog-3", state: "Running" }),
+      task({ name: "ClaudeAutonomousWatchdog-4", next: "2026-09-26T21:00:00Z" }),
+      task({ name: "ClaudeAutonomousWatchdog-5", path: "\\Other\\" }),
+      task({ name: "ClaudeAutonomousWatchdog-6", state: "Disabled" }),
+      task({ name: "ClaudeAutonomousWatchdog-x7" }),
+      task({ name: "SomeoneElsesTask" }),
+    ], NOW);
+    expect(remove.map((r) => r.name)).toEqual(["ClaudeAutonomousWatchdog-1", "ClaudeAutonomousWatchdog-2", "ClaudeAutonomousWatchdog-6"]);
+    expect(keep).toEqual([
+      { name: "ClaudeAutonomousWatchdog-3", reason: "running" },
+      { name: "ClaudeAutonomousWatchdog-4", reason: "armed for a future run" },
+      { name: "ClaudeAutonomousWatchdog-5", reason: "not in the root folder" },
+    ]);
+  });
+
+  test("reads the helper script from the task's action", () => {
+    const args = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\\Temp\\claude-autonomous-watchdog-1.ps1"';
+    expect(scriptPathFromArgs(args)).toBe("C:\\Temp\\claude-autonomous-watchdog-1.ps1");
+    expect(scriptPathFromArgs("")).toBeNull();
+    const { remove } = classifyWatchdogTasks([task({ name: "ClaudeAutonomousWatchdog-1", args })], NOW);
+    expect(remove[0].script).toBe("C:\\Temp\\claude-autonomous-watchdog-1.ps1");
+  });
+
+  test("the query lists only our root-folder tasks, dates culture-free", () => {
+    const ps = buildReapQueryPs();
+    expect(ps).toContain("-TaskPath '\\'");
+    expect(ps).toContain("-like 'ClaudeAutonomousWatchdog-*'");
+    expect(ps).toContain("ToUniversalTime().ToString('o')");
+    expect(ps).toContain("ConvertTo-Json -InputObject $out");
+  });
+
+  test("the session-start sweep runs at most once per cooldown window", () => {
+    expect(reapDue(null, NOW, 24)).toBe(true);
+    expect(reapDue({ at: "garbage" }, NOW, 24)).toBe(true);
+    expect(reapDue({ at: "2026-09-26T02:00:00Z" }, NOW, 24)).toBe(false);
+    expect(reapDue({ at: "2026-09-25T13:59:00Z" }, NOW, 24)).toBe(true);
   });
 });
