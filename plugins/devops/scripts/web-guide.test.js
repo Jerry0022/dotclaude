@@ -463,13 +463,13 @@ describe("CLI: payload wait", () => {
   test("default 30000ms", () => {
     const r = run(["payload", "wait"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(30000) : { type: \"reinject-needed\" })");
+    expect(r.stdout).toBe("(window.claudeGuide ? window.claudeGuide.stringify(await window.claudeGuide.wait(30000)) : JSON.stringify({ type: \"reinject-needed\" }))");
   });
 
   test("custom ms within bounds", () => {
     const r = run(["payload", "wait", "5000"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(5000) : { type: \"reinject-needed\" })");
+    expect(r.stdout).toBe("(window.claudeGuide ? window.claudeGuide.stringify(await window.claudeGuide.wait(5000)) : JSON.stringify({ type: \"reinject-needed\" }))");
   });
 
   test("below minimum bound rejected", () => {
@@ -483,7 +483,7 @@ describe("CLI: payload wait", () => {
   test("0 (drain) is accepted despite being below the minimum bound", () => {
     const r = run(["payload", "wait", "0"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(0) : { type: \"reinject-needed\" })");
+    expect(r.stdout).toBe("(window.claudeGuide ? window.claudeGuide.stringify(await window.claudeGuide.wait(0)) : JSON.stringify({ type: \"reinject-needed\" }))");
   });
 
   test("above maximum bound rejected", () => {
@@ -813,6 +813,27 @@ describe("CLI: channel token and missing channel", () => {
     expect(vm.runInContext(step, ctx)).toBe("reinject-needed");
     const out = await vm.runInContext(`(async () => ${wait})()`, ctx);
     expect(JSON.parse(out)).toEqual({ type: "reinject-needed" });
+  });
+
+  // Finding 6: `payload step`/`payload wait` must themselves refresh the
+  // marker (same token, newer ts) — not just `guide active`. A guide running
+  // longer than the marker TTL inside one turn would otherwise drop its
+  // token on the very next step/wait call.
+  test("payload step and payload wait each refresh the marker's ts while keeping the same token", () => {
+    const dir = makeTmpDir();
+    const markerPath = path.join(dir, ".claude", "auto-guide-active.json");
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const before = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+
+    run(["payload", "step", "-"], { cwd: dir, input: JSON.stringify(validStep()) });
+    const afterStep = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    expect(afterStep.token).toBe(before.token);
+    expect(afterStep.ts).toBeGreaterThanOrEqual(before.ts);
+
+    run(["payload", "wait", "0"], { cwd: dir });
+    const afterWait = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    expect(afterWait.token).toBe(before.token);
+    expect(afterWait.ts).toBeGreaterThanOrEqual(afterStep.ts);
   });
 
   test("guide clear reports a failed unlink instead of success", () => {

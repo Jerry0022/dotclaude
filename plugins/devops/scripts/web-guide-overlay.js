@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.10.0
+ * @version 1.11.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -15,7 +15,19 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.10.0";
+  // Finding 7 (AUD-C007 hardening): grab the built-ins we rely on for event
+  // serialization/construction BEFORE any other code runs, so a page that
+  // patches `JSON.stringify`, `Object.create`, or `Object.defineProperty`
+  // (e.g. to read the token or every event payload) only ever sees whatever
+  // it patched *before* this injection executed — never anything built by
+  // this script afterwards. This cannot help against tampering that already
+  // happened before injection; nothing running inside the page can prevent
+  // that, only Claude choosing to trust a freshly-loaded document can.
+  var nativeStringify = JSON.stringify;
+  var nativeObjectCreate = Object.create;
+  var nativeDefineProperty = Object.defineProperty;
+
+  var VERSION = "1.11.0";
   // AUD-C007: per-guide channel token, substituted by `web-guide.js payload
   // inject` (32 hex chars). setStep()/wait() must pass it and every event
   // echoes it, so a page script can neither push steps nor steal events.
@@ -34,6 +46,15 @@
     if (priorApi && priorApi.version === VERSION) return "already-injected";
     if (!prior.configurable) return priorApi && typeof priorApi.version === "string" ? "reload-needed" : "blocked";
     try {
+      // This branch only runs when `prior.configurable` is true — our own
+      // installs always define the global as non-configurable (below), so a
+      // configurable `claudeGuide` here is either a pre-hardening legacy
+      // build (harmless to call without a token — its destroy() predates
+      // the token param and ignores extra args) or a page-owned spoof
+      // (already untrustworthy code we're calling either way). Never pass
+      // our TOKEN into it: an attacker-controlled destroy() could keep
+      // whatever we hand it, and there is no legitimate case here that
+      // needs the token to authorize the call.
       if (priorApi && typeof priorApi.destroy === "function") priorApi.destroy();
     } catch {}
   }
@@ -168,12 +189,22 @@
     } catch {}
   }
 
+  // Finding 7: build the stamped copy with Object.create(null) + an own,
+  // non-inherited defineProperty on every key instead of plain assignment
+  // (`out[k] = ...` / `out.token = ...`). Plain assignment on an ordinary
+  // `{}` runs through any setter a page defined on Object.prototype for that
+  // key name — that would let a page intercept the token (and every other
+  // field) the instant it is stamped, before this function ever returns.
   // AUD-C007: the token is added on delivery only — never persisted.
+  function setOwn(obj, key, value) {
+    nativeDefineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true });
+  }
+
   function stamp(event) {
-    if (!TOKEN_REQUIRED || !event || typeof event !== "object") return event;
-    var out = {};
-    for (var k in event) out[k] = event[k];
-    out.token = TOKEN;
+    if (!event || typeof event !== "object") return event;
+    var out = nativeObjectCreate(null);
+    for (var k in event) setOwn(out, k, event[k]);
+    if (TOKEN_REQUIRED) setOwn(out, "token", TOKEN);
     return out;
   }
 
@@ -494,7 +525,9 @@
       var queued = eventQueue.shift();
       saveQueue();
       lastDeliveredId = queued.id;
-      waiterFn(stamp(queued));
+      // Finding 7: hand the raw event to the waiter — it stamps+stringifies
+      // itself (via the natives captured at injection) right before resolving.
+      waiterFn(queued);
     }
     secretLost = false;
     disableActiveButtons();
@@ -505,8 +538,13 @@
     return function (type, name, value, extra) {
       if (!currentStep || currentStep.id !== stepId) return;
       var evt = { type: type, stepId: stepId, name: name, value: value, url: window.location.href, ts: Date.now() };
+      // Finding 7: `extra` adds keys (e.g. "encoding") not already present as
+      // own properties on the `evt` literal — plain `evt[key] = ...` for a
+      // NOT-YET-own key walks the prototype chain and would invoke a setter a
+      // page defined on Object.prototype for that name. setOwn always defines
+      // an own data property instead, so no inherited setter ever runs.
       if (extra) {
-        for (var key in extra) evt[key] = extra[key];
+        for (var key in extra) setOwn(evt, key, extra[key]);
       }
       deliverEvent(evt);
     };
@@ -927,7 +965,7 @@
 
   function sameStepContent(a, b) {
     var sa = sanitizeStep(a), sb = sanitizeStep(b);
-    return !!sa && !!sb && JSON.stringify(sa) === JSON.stringify(sb);
+    return !!sa && !!sb && nativeStringify(sa) === nativeStringify(sb);
   }
 
   var api = {
@@ -975,36 +1013,39 @@
       if (pendingWaiter) {
         var stale = pendingWaiter;
         pendingWaiter = null;
-        stale(stamp({ type: "superseded" }));
+        stale({ type: "superseded" });
       }
       return new Promise(function (resolve) {
+        function finish(rawEvent) {
+          resolve(stamp(rawEvent));
+        }
         if (eventQueue.length) {
           var queued = eventQueue.shift();
           saveQueue();
           lastDeliveredId = queued.id;
-          resolve(stamp(queued));
+          finish(queued);
           return;
         }
         // #529: ms=0 is the "drain" call — it must resolve right away even in
         // a hidden tab (the whole point is a cheap, immediate check), never
         // wait for a visibilitychange that may not come for minutes.
         if (ms === 0) {
-          resolve(stamp({ type: "timeout" }));
+          finish({ type: "timeout" });
           return;
         }
         var timer = null;
         var onVisible = null;
-        var waiter = function (event) {
+        var waiter = function (rawEvent) {
           clearTimeout(timer);
           if (onVisible) document.removeEventListener("visibilitychange", onVisible);
           lastPoll = Date.now();
-          resolve(event);
+          finish(rawEvent);
         };
         var armTimer = function () {
           timer = setTimeout(function () {
             if (pendingWaiter === waiter) pendingWaiter = null;
             lastPoll = Date.now();
-            resolve(stamp({ type: "timeout" }));
+            finish({ type: "timeout" });
           }, ms);
         };
         // A hidden tab throttles timers to one wake-up per minute, which
@@ -1026,6 +1067,15 @@
         pendingWaiterArmedAt = Date.now();
       });
     },
+    // Finding 7: lets a caller (the `payload wait`/`payload step` eval
+    // snippets) serialize a `wait()`/`state()` result with the NATIVE
+    // JSON.stringify captured at injection time, instead of calling the
+    // page's global `JSON.stringify` themselves — a page that patches the
+    // global after injection (to read the token or any event field out of
+    // the serialization) never sees this call at all.
+    stringify: function (value) {
+      return nativeStringify(value);
+    },
     state: function () {
       return {
         version: VERSION,
@@ -1044,7 +1094,13 @@
     },
     // The global cannot be deleted any more (AUD-C007): destroy() unmounts
     // and clears storage; a later setStep() mounts the same overlay again.
-    destroy: function () {
+    // Finding 7: destroy() now requires the token too (a page could
+    // otherwise wipe queued answers/state with no credential at all); the
+    // token-less call stays valid only where the whole channel already runs
+    // without a token (TOKEN_REQUIRED false — raw/dev source, no active
+    // guide marker at inject time).
+    destroy: function (token) {
+      if (!authorized(token)) return "bad-token";
       if (host.parentNode) host.parentNode.removeChild(host);
       window.removeEventListener("resize", onResize);
       KEY_TYPES.forEach(function (type) {
@@ -1064,6 +1120,7 @@
       try {
         localStorage.removeItem(POS_STORAGE_KEY);
       } catch {}
+      return "ok";
     },
   };
 

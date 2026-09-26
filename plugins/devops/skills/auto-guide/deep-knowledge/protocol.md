@@ -52,20 +52,46 @@ returns:
 
 **Channel token.** `web-guide.js guide active` stores a random 32-hex token
 in the guide-active marker; `payload inject` bakes it into the overlay,
-`payload step`/`payload wait` pass it as the last argument. `setStep` and
-`wait` refuse a call without it (`"bad-token"` / `{"type":"bad-token"}`), so
-a page script can neither push a step nor supersede Claude's `wait()` to
-read the user's event. Every event Claude receives echoes it as `token`. The
-token is never written to storage. Without a marker the payloads carry no
-token and the overlay runs unauthenticated (a warning is printed).
+`payload step`/`payload wait`/`payload destroy` pass it as the last argument.
+Every `payload` call also touches the marker (Finding 6, #526+): the TTL is
+extended and the token is kept — not rotated — so a guide running longer than
+the marker's TTL inside a single turn never drops its channel mid-loop;
+`guide active` itself keeps an existing live token rather than minting a new
+one. `setStep`, `wait`, and `destroy` all refuse a call without a matching
+token (`"bad-token"` / `{"type":"bad-token"}`), so a page script can neither
+push a step, supersede Claude's `wait()` to read the user's event, nor wipe
+queued answers via `destroy()`. Every event Claude receives echoes the token
+as `token`. The token is never written to storage. Without a marker the
+payloads carry no token and the overlay runs unauthenticated (a warning is
+printed).
+
+**What the token does and does not protect (Finding 7).** The token stops a
+page script from *colliding with or later tampering with* Claude's channel:
+pushing its own steps, stealing `wait()`'s resolution, or destroying the
+overlay without credentials. It cannot protect anything a page did *before*
+injection (a script that ran earlier in the page's lifecycle, before
+`payload inject` executed) or built-ins the page had already patched by that
+point (`JSON.stringify`, `Object.prototype` setters, etc.) — nothing running
+inside the page can retroactively undo code that already ran. To narrow that
+window: the overlay captures the native `JSON.stringify` / `Object.create` /
+`Object.defineProperty` it needs for event construction and serialization at
+the very top of the injected IIFE, before any other statement executes; every
+outgoing event is built with `Object.create(null)` + `Object.defineProperty`
+rather than plain property assignment (which would run through any setter a
+page defined on `Object.prototype` for a field name like `token`); and the
+`payload wait`/`payload step` eval snippets serialize a result through the
+exposed `claudeGuide.stringify()` — a thin wrapper around that captured
+native — instead of calling the page's own (possibly since-patched) global
+`JSON.stringify` themselves.
 
 ```ts
 interface WG {
-  version: string;                              // overlay build version, e.g. "1.10.0"
+  version: string;                              // overlay build version, e.g. "1.11.0"
   setStep(step: Step, token: string): "ok" | "bad-token";
   wait(ms: number, token: string): Promise<Event>; // next event, or {type:"timeout"}
+  stringify(value: unknown): string;             // Finding 7: native-captured JSON.stringify
   state(): State;                               // diagnostics / re-injection decisions
-  destroy(): void;                              // unmount + clear storage; a later setStep mounts again
+  destroy(token: string): "ok" | "bad-token";    // unmount + clear storage; a later setStep mounts again
 }
 ```
 
@@ -335,6 +361,7 @@ recovery) — the "Claude is paused, type in chat" message #526 asks for.
 |---------|--------|
 | `payload inject [--raw]` | The overlay source (lean by default) with the guide's token baked in, ending with `"injected"` / `"already-injected"` / `"blocked"` / `"reload-needed"` — paste into `javascript_tool.text`. |
 | `payload step <step.json>` | `window.claudeGuide.setStep(<json>, "<token>")`, guarded to `"reinject-needed"` when the global is missing, with the JSON validated against the schema above (exit 1 + reason on violation). |
-| `payload wait [ms]` | `JSON.stringify(await window.claudeGuide.wait(<ms>, "<token>"))`, guarded to `{"type":"reinject-needed"}` (default 30000; the CLI accepts up to 35000 as headroom, the loop uses 30000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
+| `payload wait [ms]` | `window.claudeGuide.stringify(await window.claudeGuide.wait(<ms>, "<token>"))` (Finding 7: serialized with the overlay's native-captured stringify, never the page's own `JSON.stringify`), guarded to `JSON.stringify({"type":"reinject-needed"})` (default 30000; the CLI accepts up to 35000 as headroom, the loop uses 30000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
+| `payload destroy` | `window.claudeGuide.destroy("<token>")`, guarded to `"reinject-needed"` when the global is missing (Finding 7: `destroy()` now requires the channel token). |
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |
 | `guide active` / `guide clear` | Writes (with the channel token, kept while the marker is fresh) / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). A failed removal exits 1 with `guide-clear-failed`, never `guide-cleared`. |

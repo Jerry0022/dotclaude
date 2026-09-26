@@ -20,6 +20,9 @@
  *     default (see leanSource below); --raw prints it byte-for-byte
  *   payload step <step.json>|-        → prints window.claudeGuide.setStep(<json>)
  *   payload wait [ms]                 → prints the wait() eval snippet
+ *   payload destroy                   → prints the tokened destroy() eval
+ *     snippet (Finding 7: destroy() now requires the channel token, same as
+ *     step/wait)
  *   store --file <path> --key <KEY> [--b64 <value>]
  *                                      → upserts KEY=<value> into a dotenv
  *     file; value is base64-decoded from --b64 or read from stdin.
@@ -32,7 +35,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { markGuideActive, clearGuideActive, readGuideToken } = require('./guide-active-state');
+const { markGuideActive, clearGuideActive, touchGuideToken } = require('./guide-active-state');
 
 // All file operations here are synchronous and local (no network, no child
 // processes), so no explicit timeout wrapper is needed per CONVENTIONS.md
@@ -49,6 +52,8 @@ const USAGE = `usage:
   node web-guide.js payload wait [ms]                  (0 drains a stranded
                                                         event without a real
                                                         wait, see #529)
+  node web-guide.js payload destroy                    (tokened destroy(),
+                                                        Finding 7)
   node web-guide.js store --file <path> --key <KEY> [--b64 <value>]
                                                         (value read from
                                                         stdin if --b64 is
@@ -138,8 +143,11 @@ function withToken(src, token) {
   return src.replace(TOKEN_LINE, `var TOKEN = "${token}";`);
 }
 
+// Finding 6: touch (not just read) the marker on every payload call so a
+// guide running longer than the marker TTL inside one turn keeps its token
+// instead of falling back to "reinject-needed" and losing what the user typed.
 function tokenArg() {
-  const token = readGuideToken(process.cwd());
+  const token = touchGuideToken(process.cwd());
   return token ? `, "${token}"` : '';
 }
 
@@ -154,7 +162,7 @@ function payloadInject(args) {
     return;
   }
   const raw = Array.isArray(args) && args.includes('--raw');
-  const token = readGuideToken(process.cwd());
+  const token = touchGuideToken(process.cwd());
   if (!token) {
     process.stderr.write('warning: no active guide marker (run `guide active` first) - injecting without a channel token\n');
   }
@@ -394,8 +402,25 @@ function payloadWait(msArg) {
     process.exitCode = 1;
     return;
   }
+  // Finding 7: serialize with the overlay's OWN native-captured stringify
+  // (window.claudeGuide.stringify) instead of the page's global
+  // JSON.stringify — a page that patches the global after injection to read
+  // the token/event out of the serialization never sees this call.
   process.stdout.write(
-    `JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(${ms}${tokenArg()}) : { type: "reinject-needed" })`
+    `(window.claudeGuide ? window.claudeGuide.stringify(await window.claudeGuide.wait(${ms}${tokenArg()})) : JSON.stringify({ type: "reinject-needed" }))`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// payload destroy
+// ---------------------------------------------------------------------------
+
+// Finding 7: destroy() now requires the channel token, same as step/wait —
+// a page script (which never has the token) can no longer wipe the overlay's
+// queued answers/state out from under Claude by calling destroy() itself.
+function payloadDestroy() {
+  process.stdout.write(
+    `(window.claudeGuide ? window.claudeGuide.destroy(${tokenArg().replace(/^, /, '')}) : "reinject-needed")`
   );
 }
 
@@ -593,6 +618,7 @@ function main(argv) {
     if (sub === 'inject') return payloadInject(rest);
     if (sub === 'step') return payloadStep(rest[0]);
     if (sub === 'wait') return payloadWait(rest[0]);
+    if (sub === 'destroy') return payloadDestroy();
     process.stderr.write(`${USAGE}\n`);
     process.exitCode = 2;
     return;
@@ -639,6 +665,7 @@ module.exports = {
   leanSource,
   gitStatusOf,
   withToken,
+  payloadDestroy,
 };
 
 if (require.main === module) {

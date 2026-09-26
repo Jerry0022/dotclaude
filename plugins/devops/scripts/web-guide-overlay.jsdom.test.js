@@ -86,7 +86,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
     expect(d.configurable).toBe(false);
     expect(Object.isFrozen(a.api())).toBe(true);
     a.w.eval('window.claudeGuide = { version: "x" }; try { window.claudeGuide.wait = function () {}; } catch (e) {}');
-    expect(a.api().version).toBe("1.10.0");
+    expect(a.api().version).toBe("1.11.0");
     expect(a.api().wait.length).toBe(2);
   });
 
@@ -107,7 +107,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   });
 
   test("a page-predefined same-version global yields already-injected (hostile on a fresh document)", () => {
-    const a = page({ pageScript: 'window.claudeGuide = { version: "1.10.0" };' });
+    const a = page({ pageScript: 'window.claudeGuide = { version: "1.11.0" };' });
     expect(a.result).toBe("already-injected");
     expect(a.w.document.querySelector("[id^=wg-host-]")).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   test("a page-defined configurable global of another version is replaced", () => {
     const a = page({ pageScript: 'window.claudeGuide = { version: "0.0.1", destroy: function () {} };' });
     expect(a.result).toBe("injected");
-    expect(a.api().version).toBe("1.10.0");
+    expect(a.api().version).toBe("1.11.0");
   });
 
   test("the token never reaches page-readable storage", () => {
@@ -128,11 +128,76 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   test("destroy() unmounts; a later setStep mounts again", () => {
     const a = page();
     a.api().setStep(STEP, TOKEN);
-    a.api().destroy();
+    a.api().destroy(TOKEN);
     expect(a.w.document.querySelector("[id^=wg-host-]")).toBeNull();
     expect(a.api().state().destroyed).toBe(true);
     a.api().setStep(STEP, TOKEN);
     expect(a.w.document.querySelector("[id^=wg-host-]")).not.toBeNull();
+  });
+
+  // Finding 7: destroy() requires the channel token, same as setStep/wait —
+  // a page script (which never has the token) can no longer wipe the
+  // overlay's queued answers/state out from under Claude.
+  test("destroy() without the token is refused; the overlay stays mounted", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    expect(a.api().destroy()).toBe("bad-token");
+    expect(a.w.document.querySelector("[id^=wg-host-]")).not.toBeNull();
+    expect(a.api().state().destroyed).toBe(false);
+    expect(a.api().destroy(TOKEN)).toBe("ok");
+    expect(a.api().state().destroyed).toBe(true);
+  });
+
+  // Finding 7: a page cannot intercept the token via a setter it defines on
+  // Object.prototype for the field name "token" — outgoing events are built
+  // with Object.create(null) + Object.defineProperty, which never invokes an
+  // inherited setter.
+  test("a page setter on Object.prototype for 'token' never sees it", async () => {
+    const a = page();
+    let seen = null;
+    a.w.Object.defineProperty(a.w.Object.prototype, "token", {
+      configurable: true,
+      set(v) { seen = v; },
+      get() { return undefined; },
+    });
+    try {
+      a.api().setStep(STEP, TOKEN);
+      btn(a, "Weiter").click();
+      const ev = await a.api().wait(1000, TOKEN);
+      expect(ev.token).toBe(TOKEN);
+      expect(seen).toBeNull();
+    } finally {
+      delete a.w.Object.prototype.token;
+    }
+  });
+
+  // Finding 7: `payload wait`'s eval snippet serializes through
+  // claudeGuide.stringify() — the native JSON.stringify captured at
+  // injection time — so a page that patches the GLOBAL JSON.stringify after
+  // injection never sees the token (or any other event field) go through it.
+  test("a patched JSON.stringify after injection never sees the token", async () => {
+    const a = page();
+    // The overlay itself still calls the (now patched) global JSON.stringify
+    // for unrelated internal bookkeeping (saveState/saveQueue) — that is not
+    // what Finding 7 protects. What must never happen is the TOKEN reaching
+    // that patched function through the channel's own serialization path.
+    let sawToken = false;
+    const realStringify = a.w.JSON.stringify;
+    a.w.JSON.stringify = function (...args) {
+      const out = realStringify.apply(a.w.JSON, args);
+      if (typeof out === "string" && out.includes(TOKEN)) sawToken = true;
+      return out;
+    };
+    try {
+      a.api().setStep(STEP, TOKEN);
+      btn(a, "Weiter").click();
+      const ev = await a.api().wait(1000, TOKEN);
+      const serialized = a.api().stringify(ev); // channel's own serialization: native, never the patched global
+      expect(serialized).toContain(TOKEN);
+      expect(sawToken).toBe(false); // the patched global never saw the token
+    } finally {
+      a.w.JSON.stringify = realStringify;
+    }
   });
 });
 

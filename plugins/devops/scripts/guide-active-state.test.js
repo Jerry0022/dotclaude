@@ -7,6 +7,7 @@ import {
   markGuideActive,
   clearGuideActive,
   readGuideToken,
+  touchGuideToken,
   isGuideActive,
 } from "./guide-active-state.js";
 
@@ -103,5 +104,69 @@ describe("guide-active-state", () => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ foo: "bar" }));
     expect(isGuideActive(dir)).toBe(false);
+  });
+
+  // Finding 6: a guide running longer than one marker TTL inside a single
+  // turn must not drop its channel token — `payload step`/`payload wait`
+  // touch (refresh) the marker on every call via touchGuideToken(), keeping
+  // the SAME token, not minting a new one.
+  describe("touchGuideToken (Finding 6)", () => {
+    test("a marker older than the TTL, but refreshed by step/wait before it expires, keeps its token", () => {
+      const dir = makeTmpDir();
+      const now = Date.now();
+      markGuideActive(dir, now);
+      const token = readGuideToken(dir, now);
+      expect(token).toMatch(/^[0-9a-f]{32}$/);
+
+      // Simulate a long-running guide: touch (refresh) the marker repeatedly,
+      // each time just under the TTL boundary from the last write — the
+      // marker would otherwise expire (and the token drop) between turns.
+      let t = now;
+      for (let i = 0; i < 3; i++) {
+        t += GUIDE_ACTIVE_TTL_MS - 1000;
+        expect(touchGuideToken(dir, t)).toBe(token);
+      }
+      // Well past the marker's original write, but each touch kept it alive.
+      expect(t).toBeGreaterThan(now + GUIDE_ACTIVE_TTL_MS);
+      expect(readGuideToken(dir, t)).toBe(token);
+    });
+
+    test("touchGuideToken returns null and touches nothing when there is no live token", () => {
+      const dir = makeTmpDir();
+      expect(touchGuideToken(dir)).toBeNull();
+      expect(fs.existsSync(guideActiveFilePath(dir))).toBe(false);
+
+      const now = Date.now();
+      markGuideActive(dir, now - GUIDE_ACTIVE_TTL_MS - 1); // already expired
+      expect(touchGuideToken(dir, now)).toBeNull();
+    });
+
+    test("a stray touchGuideToken call never mints a new token, only extends the existing one", () => {
+      const dir = makeTmpDir();
+      const now = Date.now();
+      markGuideActive(dir, now);
+      const token = readGuideToken(dir, now);
+      touchGuideToken(dir, now + 1000);
+      touchGuideToken(dir, now + 2000);
+      expect(readGuideToken(dir, now + 2000)).toBe(token);
+    });
+  });
+
+  // Finding 6: `guide active` (markGuideActive) run twice in a row — e.g. a
+  // resumed turn re-arming the marker — keeps the same token rather than
+  // rotating it, so an in-flight step/wait call's already-baked token stays
+  // valid.
+  test("guide active (markGuideActive) called twice keeps the token", () => {
+    const dir = makeTmpDir();
+    const now = Date.now();
+    markGuideActive(dir, now);
+    const token = readGuideToken(dir, now);
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+
+    markGuideActive(dir, now + 500);
+    expect(readGuideToken(dir, now + 500)).toBe(token);
+
+    markGuideActive(dir, now + 1000);
+    expect(readGuideToken(dir, now + 1000)).toBe(token);
   });
 });

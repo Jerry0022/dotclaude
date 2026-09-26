@@ -288,7 +288,10 @@ with `done: true` — what was created, where each value went — and wait for
 
 ## Step 6 — Wrap up
 
-1. If the tab is still alive: `javascript_tool` → `window.claudeGuide.destroy()`.
+1. If the tab is still alive: run
+   `node "{PLUGIN_ROOT}/scripts/web-guide.js" payload destroy` and paste stdout
+   into `javascript_tool` (Finding 7: `destroy()` requires the channel token,
+   same as `setStep`/`wait`, so a page script cannot wipe the overlay itself).
    Leave the tab open — closing it is the user's call.
 2. `node "{PLUGIN_ROOT}/scripts/web-guide.js" guide clear` (#526): clears the
    guide-active marker so `stop.flow.guard` goes back to its normal card

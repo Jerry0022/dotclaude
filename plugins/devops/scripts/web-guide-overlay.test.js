@@ -17,7 +17,10 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // Raised from 37 KB for the audit fixes (AUD-C007 frozen global + channel
 // token, AUD-C008 same-step re-send, AUD-C036 panel keys, AUD-C037 secret-free
 // queue, AUD-C063/C064 clipboard + labels).
-const MAX_BYTES = 46 * 1024;
+// Raised from 46 KB for Finding 7 (native-captured JSON.stringify/Object.create/
+// defineProperty, Object.create(null)-built events, tokened destroy(), exposed
+// stringify()).
+const MAX_BYTES = 48.5 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -197,8 +200,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.10.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.10.0["']/);
+  test("defines VERSION 1.11.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.11.0["']/);
     expect(SRC).toMatch(/defineProperty\(window, "claudeGuide"/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -229,7 +232,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.10.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.11.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -246,7 +249,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.10.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.11.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 

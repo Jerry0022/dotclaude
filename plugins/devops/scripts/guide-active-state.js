@@ -1,6 +1,6 @@
 /**
  * @module guide-active-state
- * @version 0.1.0
+ * @version 0.2.0
  * @description Small on-disk marker recording "an /auto-guide run is
  *   currently active", shared between `web-guide.js` (writer, called from
  *   SKILL.md Step 3 / Step 6 / Step 7) and `stop.flow.guard` (reader, #526):
@@ -86,6 +86,27 @@ function readGuideToken(cwd, now = Date.now()) {
 }
 
 /**
+ * Finding 6: `payload step`/`payload wait`/`payload inject` call this on
+ * every invocation so a guide running longer than GUIDE_ACTIVE_TTL_MS inside
+ * a single turn never drops its token mid-loop — the marker is only ever
+ * refreshed once per turn otherwise (at `guide active`), and the TTL is
+ * measured from the LAST write. Refreshing here extends the window with the
+ * SAME token (markGuideActive keeps a still-live token; it only mints a new
+ * one when the marker was missing or already expired). Returns null (and
+ * touches nothing) when there is no live token to extend, so a stale/missing
+ * marker is never resurrected by a stray step/wait call.
+ * @param {string} cwd
+ * @param {number} [now]
+ * @returns {string|null}
+ */
+function touchGuideToken(cwd, now = Date.now()) {
+  const token = readGuideToken(cwd, now);
+  if (!token) return null;
+  markGuideActive(cwd, now);
+  return token;
+}
+
+/**
  * @param {string} cwd
  * @param {number} [now]
  * @returns {boolean} true when the marker exists and is younger than the TTL
@@ -108,5 +129,6 @@ module.exports = {
   markGuideActive,
   clearGuideActive,
   readGuideToken,
+  touchGuideToken,
   isGuideActive,
 };
