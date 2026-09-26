@@ -187,6 +187,15 @@ describe("R3: a colour word nearby does not swallow a real issue number", () => 
     expect(issueRefs(prompt).track).toEqual(track);
   });
 
+  test("a hyphenated word before a colon is prose, not a CSS property (harden)", () => {
+    for (const [text, n] of [["Follow-up: #540", "540"], ["Re-test: #1234", "1234"], ["Sub-task: #512 please", "512"]]) {
+      expect(hashRefs(text).map((r) => r.n), text).toEqual([n]);
+    }
+    for (const text of ["border-top-color: #333", "box-shadow: #333", "text-decoration-color: #999", "--accent: #333"]) {
+      expect(hashRefs(text), text).toEqual([]);
+    }
+  });
+
   test("#412 after a colon that opens prose is no colour", () => {
     expect(hashRefs("Hintergrund: siehe #412").map(r => r.n)).toEqual(["412"]);
     expect(hashRefs("background: #412 image missing").map(r => r.n)).toEqual([]);

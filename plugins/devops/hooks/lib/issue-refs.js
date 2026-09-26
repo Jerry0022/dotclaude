@@ -1,6 +1,6 @@
 /**
  * @module issue-refs
- * @version 0.1.3
+ * @version 0.1.4
  * @description Which issue numbers in a prompt ask for work — for
  *   prompt.issue.detect. Every `#N` used to count as "the user referenced
  *   issue #N": the numbers were tracked, set In Progress, and every card of
@@ -88,8 +88,11 @@ const HASH_RE = /(?<![\p{L}\p{N}_/&#:])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
 const COLOUR_LENGTHS = new Set([3, 4, 6, 8]);
 /** Colour words, German compounds included (Rahmenfarbe, Textfarbe, Hintergrundbild). */
 const COLOUR_WORD_RE = /(?<![\p{L}\p{N}_])(?:\p{L}*(?:farbe|farben|color|colors|colour|colours|hintergrund)\p{L}*|background|backgrounds|bg|border|borders|fill|stroke|solid|rgba?|hex|hsla?|shade|tint|palette|accent|akzent|farbton|outline)(?![\p{L}\p{N}_])/iu;
-/** `border-top-color: #333`, `--accent: #333` — a CSS property before the value. */
-const CSS_PROP_BEFORE_RE = /(?<![\p{L}\p{N}_-])-*[\p{L}][\p{L}\p{N}]*(?:-[\p{L}\p{N}]+)+\s*:\s*$|(?<![\p{L}\p{N}_-])--[\p{L}\p{N}-]+\s*:\s*$/u;
+/** `border-top-color: #333`, `box-shadow: #333`, `--accent: #333` — a
+ *  colour-bearing CSS property (or a custom property) before the value. Any
+ *  other hyphenated word before a colon is prose: "Follow-up: #540",
+ *  "Re-test: #1234". */
+const CSS_PROP_BEFORE_RE = /(?<![\p{L}\p{N}_-])-*(?:[\p{L}\p{N}]+-)*(?:color|colour|background|border|fill|stroke|outline|shadow|accent|caret|decoration|rule)(?:-[\p{L}\p{N}]+)*\s*:\s*$|(?<![\p{L}\p{N}_-])--[\p{L}\p{N}-]+\s*:\s*$/iu;
 /** A colour word right before the value: only `:` `=`, whitespace and at most
  *  one preposition between ("color: #123456", "set the border to #333"). */
 const COLOUR_BEFORE_RE = new RegExp(
