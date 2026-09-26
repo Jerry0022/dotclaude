@@ -882,10 +882,13 @@ function editMilestoneLines(hook, isCodeEdit, editCount) {
  * can still take a cited number for one. Without the "worked on it?" step
  * every tracked number was owed a board move and a comment, whatever the
  * session did.
+ *
+ * No session id, no list (#540): the exact read would still hit the one
+ * `…-unknown` file every id-less session shares.
  */
 function appendIssueStatusInstruction(hook, lines, cardContract) {
   let trackedIssues = [];
-  if (cardContract) {
+  if (cardContract && hook.session_id) {
     try {
       const result = readSessionFile('dotclaude-devops-tracked-issues', hook.session_id, { exact: true });
       if (result) {

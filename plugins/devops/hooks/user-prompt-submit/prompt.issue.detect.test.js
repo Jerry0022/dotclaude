@@ -132,4 +132,14 @@ describe("prompt.issue.detect — the list is keyed by the harness session id", 
     expect(tracked("detect-mine")).toEqual(["12"]);
     expect(tracked("detect-other")).toEqual(["12", "7"]);
   });
+
+  // #540: every id-less session would share the one `…-unknown` file, and the
+  // list drives GitHub writes in the completion flow.
+  test("without a session id nothing is tracked and the shared list stays untouched", () => {
+    fs.writeFileSync(path.join(tmp, "dotclaude-devops-tracked-issues-unknown"), JSON.stringify(["530"]));
+    const r = run("fix #12", undefined);
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("User asked to work on issue");
+    expect(tracked("unknown")).toEqual(["530"]);
+  });
 });
