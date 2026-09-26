@@ -358,6 +358,102 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  // AUD-C002: "Ship manuell" in the run contract is the user's explicit no —
+  // the local-ship order merged into main behind it.
+  test("no remote + run contract ship manual: the normal card, never the local-ship order", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const makeRepo = () => {
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), "card-local-ship-rc-"));
+      const g = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+      g("init", "-q", "-b", "main");
+      g("config", "user.email", "t@example.com");
+      g("config", "user.name", "t");
+      fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+      g("add", "a.txt");
+      g("commit", "-q", "-m", "init");
+      fs.writeFileSync(path.join(repo, "a.txt"), "two\n");
+      return repo;
+    };
+    const arm = (repo, ship, sessionId) => RC.arm(repo, {
+      source: "cli", mode: "prompt", modeFrom: "cli", flow: "interactive", ship,
+      passes: [], strict: false, items: [], sessionId,
+    });
+    const stamp = `${process.pid}-${Date.now()}`;
+    const manual = makeRepo();
+    const auto = makeRepo();
+    try {
+      const sid = `test-localship-manual-${stamp}`;
+      expect(arm(manual, "manual", sid)).toBeTruthy();
+      const text = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: sid, cwd: manual });
+      expect(text).not.toContain("LOCAL SHIP");
+      // The model's self marker reads the same contract (lenient, like the run line).
+      const self = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "self", cwd: manual });
+      expect(self).not.toContain("LOCAL SHIP");
+
+      const sidAuto = `test-localship-auto-${stamp}`;
+      expect(arm(auto, "auto", sidAuto)).toBeTruthy();
+      const res = await render({ variant: "ready", summary: "Lokal", lang: "de", session_id: sidAuto, cwd: auto });
+      expect(res.content.map(c => c.text).join("\n")).toContain("LOCAL SHIP");
+    } finally {
+      for (const id of [`test-localship-manual-${stamp}`, "self", `test-localship-auto-${stamp}`]) {
+        try { fs.rmSync(path.join(os.tmpdir(), `dotclaude-devops-local-ship-${id}`), { force: true }); } catch {}
+      }
+      fs.rmSync(manual, { recursive: true, force: true });
+      fs.rmSync(auto, { recursive: true, force: true });
+    }
+  });
+
+  // AUD-066: writeSessionFile renames `<file>.<pid>.<rand>.tmp` into place; the
+  // glob fallbacks read such in-flight/orphaned writes as the session value.
+  test("session-file glob fallback skips .tmp writes and keeps the rest", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const mod = await import("./index.js");
+    const dir = mkdtempSync(join(tmpdir(), "card-glob-"));
+    const saved = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR };
+    try {
+      const prefix = "dotclaude-devops-auditflag";
+      const tmpWrite = path.join(dir, `${prefix}-sess.1234.abcd.tmp`);
+      fs.writeFileSync(tmpWrite, "half-written");
+      expect(mod.sessionFileCandidates(dir, `${prefix}-`)).toEqual([]);
+      process.env.TEMP = dir; process.env.TMP = dir; process.env.TMPDIR = dir;
+      expect(mod.readSessionFlagRaw(prefix, "other-session")).toBeNull();
+      fs.writeFileSync(path.join(dir, `${prefix}-sess`), "real");
+      const later = new Date(Date.now() + 5000);
+      fs.utimesSync(tmpWrite, later, later); // the .tmp is the newest entry
+      expect(mod.sessionFileCandidates(dir, `${prefix}-`).map(f => path.basename(f.full))).toEqual([`${prefix}-sess`]);
+      expect(mod.readSessionFlagRaw(prefix, "other-session")).toBe("real");
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // AUD-C015: promote.js needs origin — a remote-less ship must not offer
+  // "Promote beta/stable" buttons (or a "promote to beta?" heading).
+  test("no remote: ship-successful falls back to the plain button set, no promote", async () => {
+    const mod = await import("./index.js");
+    const { buttonsFor } = await import("./lib/card-widget.js");
+    const input = { variant: "ship-successful", summary: "Lokal" };
+    const state = { mode: "git-no-remote", merged: "main", delivered: "local-merge" };
+    for (const current of ["alpha", "beta"]) {
+      const delivery = { ship: { version: "1.2.3", base: "main" }, promote: { current, channels: { [current]: "1.2.3" } } };
+      const d = mod.buildDecisionBlock(input, "de", "ship-successful", delivery, state);
+      expect(d.buttonsKey).toBe("ship-successful-plain");
+      expect(d.heading).not.toMatch(/promot/i);
+      const labels = buttonsFor(d.buttonsKey, "de", { version: d.version, replies: d.replies }).map(b => b.label);
+      expect(labels.join(" ")).not.toMatch(/Promote/);
+    }
+    // With a remote the ladder keeps its promote offer.
+    const withRemote = mod.buildDecisionBlock(input, "de", "ship-successful",
+      { ship: { version: "1.2.3", base: "main" }, promote: { current: "alpha", channels: { alpha: "1.2.3" } } },
+      { mode: "git", merged: "main", pushed: true });
+    expect(withRemote.buttonsKey).toBe("ship-successful");
+  });
+
   test("a local merge counts as the ship: ship-successful stays, the track shows the merge", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8h",

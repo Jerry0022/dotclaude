@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseWorktreeList, foreignTokens, dropForeignOpenItems, foreignTokensFor } from "./foreign-branches.js";
+import { parseWorktreeList, foreignTokens, dropForeignOpenItems, foreignTokensFor, containsWord } from "./foreign-branches.js";
 
 const PORCELAIN = [
   "worktree C:/repo",
@@ -93,5 +93,53 @@ describe("foreignTokensFor (real git)", () => {
   test("no repo → nothing to drop", () => {
     expect(foreignTokensFor(root)).toEqual([]);
     expect(foreignTokensFor("")).toEqual([]);
+  });
+});
+
+// AUD-C016 / AUD-031: the tail of another branch ("generator-refactor") and
+// short slash-less names ("beta", "docs") dropped unrelated points of THIS work.
+describe("foreign matching — full names on word boundaries only", () => {
+  const porcelain = [
+    "worktree C:/repo", "branch refs/heads/main", "",
+    "worktree C:/repo/.claude/worktrees/own-session-1", "branch refs/heads/claude/own-session-1", "",
+    "worktree C:/repo/.claude/worktrees/x9", "branch refs/heads/feat/card-generator", "",
+    "worktree C:/other/beta", "branch refs/heads/beta", "",
+    "worktree C:/other/docs", "branch refs/heads/docs", "",
+    "worktree C:/other/release-train", "branch refs/heads/release-train", "",
+  ].join("\n");
+  const tokens = foreignTokens(parseWorktreeList(porcelain), "C:/repo/.claude/worktrees/own-session-1");
+
+  test("no tail tokens, no short slash-less names; long slash-less names stay", () => {
+    expect(tokens).toContain("feat/card-generator");
+    expect(tokens).not.toContain("card-generator");
+    expect(tokens).not.toContain("beta");
+    expect(tokens).not.toContain("docs");
+    expect(tokens).toContain("release-train");
+  });
+
+  test("unrelated points that merely contain a tail or short name are kept", () => {
+    const open = [
+      "Der card-generator schreibt noch alte Zähler — anpassen?",
+      "Beta-Tester informieren?",
+      "Docs für die neue Option ergänzen?",
+      "feat/card-generator-v2 ist ein anderer Branch",
+    ];
+    expect(dropForeignOpenItems(open, tokens)).toEqual({ open, dropped: 0 });
+  });
+
+  test("the full name still drops — with backticks, origin/ prefix or a closing period", () => {
+    const open = [
+      "Branch `feat/card-generator` noch nicht geshippt?",
+      "origin/feat/card-generator ist hinterher",
+      "Ship release-train.",
+    ];
+    expect(dropForeignOpenItems(open, tokens).dropped).toBe(3);
+  });
+
+  test("containsWord respects name boundaries", () => {
+    expect(containsWord("see claude/foo now", "claude/foo")).toBe(true);
+    expect(containsWord("see claude/foo-v2 now", "claude/foo")).toBe(false);
+    expect(containsWord("see claude/foo.bar", "claude/foo")).toBe(false);
+    expect(containsWord("xclaude/foo", "claude/foo")).toBe(false);
   });
 });

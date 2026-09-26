@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.12.3
+ * @version 0.13.0
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -47,6 +47,7 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { register as registerHeartbeat } from "./lib/heartbeat.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
@@ -437,6 +438,15 @@ function localShipInstruction(params) {
     if (resolveCardKey({ ...params, vv: readVVState(params.session_id) }) !== 'ready') return null;
     const { isActive } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-sentinel.js'));
     if (isActive(cwd)) return null;
+    // AUD-C002: a run contract with "Ship manuell" is the user's explicit
+    // answer to "ship?" — never merge into the local base behind it. A
+    // self-marker id ("self", "local_…", none) reads leniently, the same way
+    // mode-state.js#readRunContractLine does; a real id reads strictly.
+    const sid = params.session_id;
+    const selfMarker = !sid || sid === 'self' || String(sid).startsWith('local_');
+    const { readContractForCard } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'run-contract.js'));
+    const contract = readContractForCard(cwd, selfMarker ? {} : { sessionId: sid });
+    if (contract && !contract.closedAt && contract.ship !== 'auto') return null;
     const { hasUnshippedWork, defaultBranchRef } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-unshipped.js'));
     const git = (dir, args) => execFileSync('git', args, { ...GIT_PROBE_OPTS, cwd: dir });
     // No base branch yet (a repo without a first commit): nothing to land on.
@@ -1309,7 +1319,9 @@ function decisionContext(input, key, delivery, state, lang) {
   const strictlyUnmet = validation.filter(v => v.status === 'unmet').length;
   return {
     version: String(version || '').replace(/^v/, ''),
-    ring: !!delivery.promote,
+    // AUD-C015: a ship without a remote has no channel tags to move —
+    // promote.js needs origin — so no ring heading and no Promote buttons.
+    ring: !!delivery.promote && state.mode !== 'git-no-remote',
     base: (delivery.ship && delivery.ship.base) || state.merged || 'main',
     reservation: headingReservation(input.open, lang),
     n: redCount || unmetCount || 1,
@@ -1466,8 +1478,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
   // The ladder already sits above alpha: beta offers only stable, stable nothing.
   const landed = delivery.promote && delivery.promote.current;
-  if (key === 'ship-successful' && landed === 'beta') buttonsKey = 'released-beta';
+  if (key === 'ship-successful' && ctx.ring && landed === 'beta') buttonsKey = 'released-beta';
   if (key === 'ship-successful' && landed === 'stable') buttonsKey = null;
+  // AUD-C015: without a remote nothing can be promoted — the plain set.
+  if (key === 'ship-successful' && state.mode === 'git-no-remote') buttonsKey = 'ship-successful-plain';
   // Nothing to promote, but open points: Nachbessern alone.
   if (key === 'ship-successful' && !buttonsKey && replies.length) buttonsKey = 'ship-successful-plain';
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
@@ -1481,6 +1495,23 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   };
 }
 
+/**
+ * Glob-fallback candidates `<tmp>/<prefix>*`, newest first. AUD-066: skips
+ * the `<file>.<pid>.<rand>.tmp` files writeSessionFile renames into place (an
+ * in-flight or orphaned write is no session value) and stats each entry in
+ * its own try — one file vanishing between readdir and stat used to throw
+ * the whole fallback away.
+ */
+function sessionFileCandidates(tmp, prefix) {
+  const out = [];
+  for (const f of readdirSync(tmp)) {
+    if (!f.startsWith(prefix) || f.endsWith('.tmp')) continue;
+    const full = join(tmp, f);
+    try { out.push({ full, mtime: statSync(full).mtimeMs }); } catch { /* vanished */ }
+  }
+  return out.sort((a, b) => b.mtime - a.mtime);
+}
+
 function readToolCallCount(sessionId) {
   const key = sessionId || 'unknown';
   const filePath = join(tmpdir(), `dotclaude-devops-toolcalls-${key}`);
@@ -1491,10 +1522,7 @@ function readToolCallCount(sessionId) {
     try {
       const prefix = 'dotclaude-devops-toolcalls-';
       const tmp = tmpdir();
-      const files = readdirSync(tmp)
-        .filter(f => f.startsWith(prefix))
-        .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
-        .sort((a, b) => b.mtime - a.mtime);
+      const files = sessionFileCandidates(tmp, prefix);
       if (files.length > 0) return parseInt(readFileSync(files[0].full, 'utf8'), 10) || 0;
     } catch {}
     return 0;
@@ -1519,11 +1547,8 @@ function readSessionFlagRaw(prefix, sessionId, opts) {
     const p = `${prefix}-`;
     const tmp = tmpdir();
     const now = Date.now();
-    const files = readdirSync(tmp)
-      .filter(f => f.startsWith(p))
-      .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
-      .filter(f => (now - f.mtime) < FLAG_MAX_AGE_MS)
-      .sort((a, b) => b.mtime - a.mtime);
+    const files = sessionFileCandidates(tmp, p)
+      .filter(f => (now - f.mtime) < FLAG_MAX_AGE_MS);
     if (files.length > 0) return readFileSync(files[0].full, 'utf8');
   } catch { /* ignore */ }
   return null;
@@ -2416,7 +2441,7 @@ export {
   insideWorkTree, withDetectedRepoMode,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
-  resolveCardKey, buildDecisionBlock, buildCardModel,
+  resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
 };
 
 // ---------------------------------------------------------------------------
@@ -2433,4 +2458,10 @@ try {
   process.exit(1);
 }
 bootMs = Math.round(process.uptime() * 1000);
+// AUD-C011: the heartbeat the hooks read (card-guard, stop.flow.guard,
+// post.flow.completion) — lost in #93, so every hook called this live server
+// "dead" and steered the model to the offline renderer. Same call as the ship
+// and issues servers. Not under vitest: the card tests import this module,
+// and a worker must not register itself (or its SIGINT exit) as the server.
+if (!process.env.VITEST) registerHeartbeat(SERVER_NAME);
 console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);

@@ -762,6 +762,20 @@ describe("post.flow.completion — card flags follow the real session id", () =>
     cleanup(dir);
   });
 
+  // AUD-065: the MCP writes under safeSessionId (card-widget.js) — "self.x"
+  // is stored as "unknown"; the hook looked it up under the raw name.
+  test("an id the MCP sanitised to 'unknown' is adopted from 'unknown'", () => {
+    for (const given of ["self.x", "../evil", "a b"]) {
+      const dir = project();
+      const sid = "real-uuid-san";
+      fs.writeFileSync(flag(dir, "card-rendered", "unknown"), "t");
+      runHook(dir, sid, RENDER, { tool_input: { variant: "ready", session_id: given } });
+      expect(fs.existsSync(flag(dir, "card-rendered", sid))).toBe(true);
+      expect(fs.existsSync(flag(dir, "card-rendered", "unknown"))).toBe(false);
+      cleanup(dir);
+    }
+  });
+
   test("other tools never touch foreign card flags", () => {
     const dir = project();
     fs.writeFileSync(flag(dir, "card-rendered", "self"), "t");
@@ -1214,4 +1228,29 @@ describe("post.flow.completion — a broken lib never errors the hook (AUD-028)"
     expect(res.stdout).toBe("");
     cleanup(dir); cleanup(root);
   }, 30_000);
+});
+
+// AUD-068: a lib that fails to load keeps the hook a silent no-op for the
+// model, but leaves one stderr line naming the module.
+describe("post.flow.completion — lib load failure leaves a trace", () => {
+  test("a broken lib → exit 0, empty stdout, stderr names the module", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pfc-load-"));
+    try {
+      const src = path.join(__dirname, "..");
+      fs.cpSync(src, path.join(root, "hooks"), { recursive: true, filter: (f) => !f.endsWith(".test.js") });
+      fs.cpSync(path.join(src, "..", "scripts"), path.join(root, "scripts"), { recursive: true, filter: (f) => !f.endsWith(".test.js") });
+      fs.writeFileSync(path.join(root, "hooks", "lib", "light-bgrun.js"), "module.exports = {{ half-written");
+      const res = spawnSync(process.execPath, [path.join(root, "hooks", "post-tool-use", "post.flow.completion.js")], {
+        cwd: root,
+        input: JSON.stringify({ tool_name: "Read", tool_input: { file_path: "x" }, session_id: "s-load", cwd: root }),
+        encoding: "utf8",
+      });
+      expect(res.status).toBe(0);
+      expect(res.stdout).toBe("");
+      expect(res.stderr).toContain("[post.flow.completion] lib load failed (../lib/light-bgrun)");
+      expect(res.stderr.split("lib load failed").length - 1).toBe(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }, 60000);
 });

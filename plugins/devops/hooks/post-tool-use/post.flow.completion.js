@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.29.3
+ * @version 0.29.4
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -95,22 +95,24 @@ let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, 
   classifyProfile, carveOutsFromProfile, domPathsFromProfile, resolveVerificationKind,
   isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome;
 let loadError = false;
+let loadingModule = '';
+const guardedRequire = (m) => { loadingModule = m; return require(m); };
 try {
-  ({ sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id'));
-  ({ projectRoot, inOwnWorkTree } = require('../lib/project-root'));
-  ({ gitRun } = require('../lib/git-timeout'));
-  ({ isMcpServerAlive } = require('../lib/mcp-heartbeat'));
-  ({ NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard'));
-  ({ getLocale, t } = require('../lib/locale'));
-  ({ responseLaunch, responseTaskId, labelFor, isConceptInfra } = require('../lib/pending-tasks'));
-  ({ BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = require('../lib/light-bgrun'));
-  ({ SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = require('../lib/task-chips'));
+  ({ sessionFile, readSessionFile, writeSessionFile } = guardedRequire('../lib/session-id'));
+  ({ projectRoot, inOwnWorkTree } = guardedRequire('../lib/project-root'));
+  ({ gitRun } = guardedRequire('../lib/git-timeout'));
+  ({ isMcpServerAlive } = guardedRequire('../lib/mcp-heartbeat'));
+  ({ NO_OUTPUT_NUDGE_REPLY } = guardedRequire('../lib/card-guard'));
+  ({ getLocale, t } = guardedRequire('../lib/locale'));
+  ({ responseLaunch, responseTaskId, labelFor, isConceptInfra } = guardedRequire('../lib/pending-tasks'));
+  ({ BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = guardedRequire('../lib/light-bgrun'));
+  ({ SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = guardedRequire('../lib/task-chips'));
   ({
     decideCardTurnEnd,
     blockedLines: cardTurnBlockedLines,
     STOP_REASON: CARD_STOP_REASON,
-  } = require('../lib/card-turn-end'));
-  ({ isGuideActive } = require('../../scripts/guide-active-state'));
+  } = guardedRequire('../lib/card-turn-end'));
+  ({ isGuideActive } = guardedRequire('../../scripts/guide-active-state'));
   ({
     classifyProfile,
     carveOutsFromProfile,
@@ -120,9 +122,15 @@ try {
     isBrowserTool,
     isTestRunnerTool,
     testRunOutcome,
-  } = require('../lib/browsertest-guard'));
-} catch {
+  } = guardedRequire('../lib/browsertest-guard'));
+} catch (err) {
   loadError = true;
+  // AUD-068: still a no-op, but one stderr line names the failed module, so a
+  // persistent load error (half-copied cache, bad merge) leaves a trace.
+  try {
+    const first = String((err && err.message) || err || 'unknown error').split('\n')[0];
+    process.stderr.write(`[post.flow.completion] lib load failed (${loadingModule || '?'}), hook inactive: ${first}\n`);
+  } catch { /* stderr closed */ }
 }
 
 // Offline card renderer — the same module that backs the MCP tool, invoked as a
@@ -254,6 +262,17 @@ const CARD_FLAG_PREFIXES = [
 ];
 
 /**
+ * The session key the completion MCP writes card flags under. Twin of
+ * mcp-server/lib/card-widget.js#safeSessionId (ESM, not requirable from a
+ * hook) — keep both rules identical.
+ * @param {unknown} id
+ * @returns {string}
+ */
+function safeCardSessionId(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : 'unknown';
+}
+
+/**
  * Move the card flags the MCP just wrote under the model-supplied key onto
  * this session's real id. The MCP only knows what the model passes — and the
  * model passes `"self"` (the ccd_session convention), the Desktop
@@ -268,8 +287,11 @@ function adoptCardFlags(hook) {
   const realId = hook.session_id;
   if (!realId) return 0;
   const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
-  const given = typeof input.session_id === 'string' && input.session_id ? input.session_id : 'unknown';
-  if (given === realId || /[\\/]|\.\./.test(given)) return 0;
+  // AUD-065: the MCP wrote the flags under the SANITISED id — mirror it, or
+  // "self.x" was looked up under its raw name while the flag sat under
+  // "-unknown". The rule also keeps path characters out of the source path.
+  const given = safeCardSessionId(input.session_id);
+  if (given === realId) return 0;
   let moved = 0;
   for (const prefix of CARD_FLAG_PREFIXES) {
     const from = sessionFile(prefix, given);
