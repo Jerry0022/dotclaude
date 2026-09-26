@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildMergeContext, buildRearmAck, renderSyncLines, leftoverMerge,
-  SYNC_TIMEOUT_MS, SYNC_WRITE_TIMEOUT_MS, SYNC_READ_TIMEOUT_MS, INLINE_LIMIT,
+  SYNC_TIMEOUT_MS, SYNC_WRITE_TIMEOUT_MS, SYNC_READ_TIMEOUT_MS, SYNC_FETCH_TIMEOUT_MS, INLINE_LIMIT,
 } from "./prompt.batch.collect.js";
 import { activate, appendNote, readNotes, isModeActive, readActivity } from "../lib/batch-state.js";
 
@@ -174,8 +174,14 @@ describe("AUD-C003 / C004 — the waited sync", () => {
     }
   });
 
-  test("git-sync's own write and read budgets end well inside the hook's wait", () => {
-    expect(SYNC_WRITE_TIMEOUT_MS + SYNC_READ_TIMEOUT_MS).toBeLessThan(SYNC_TIMEOUT_MS);
+  test("git-sync's own write, read and fetch budgets end well inside the hook's wait", () => {
+    // Worst case: 2 fetches (parent-chain fetch of origin/main at the full
+    // SYNC_FETCH_TIMEOUT_MS, plus the best-effort `fetch main:main` capped at
+    // 5 s in git-sync.js regardless of this env var) + one local-read probe +
+    // the merge write — see the arithmetic comment on SYNC_WRITE_TIMEOUT_MS.
+    const worstCase = SYNC_FETCH_TIMEOUT_MS + 5000 + SYNC_READ_TIMEOUT_MS + SYNC_WRITE_TIMEOUT_MS;
+    expect(worstCase).toBeLessThan(SYNC_TIMEOUT_MS);
+    expect(SYNC_TIMEOUT_MS - worstCase).toBeGreaterThanOrEqual(2000); // real margin, not a hairline fit
     expect(SYNC_WRITE_TIMEOUT_MS).toBeLessThanOrEqual(SYNC_TIMEOUT_MS / 2);
   });
 

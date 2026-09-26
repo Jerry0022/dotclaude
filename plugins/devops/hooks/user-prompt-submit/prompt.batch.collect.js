@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.8.0
+ * @version 0.9.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -84,9 +84,28 @@ const SYNC_TIMEOUT_MS = 45_000;
  * 45 s kill above would then land mid-checkout and leave half the incoming
  * tree plus index.lock behind. With these, git-sync's own kill-and-restore
  * fires first and puts the worktree back.
+ *
+ * Arithmetic against SYNC_TIMEOUT_MS (AUD-C060) — every number below is a
+ * worst-case CEILING, not a typical duration, and the run is sequential (one
+ * git-sync process, one git child at a time), so the sums are additive:
+ *   - up to 2 fetches (network, credential manager): the parent-chain fetch
+ *     of origin/main (git-sync.js FETCH_TIMEOUT_MS) plus its best-effort
+ *     `fetch main:main` (capped at 5 s there regardless of this env var,
+ *     because that call is pure convenience — never load-bearing).
+ *       2 * SYNC_FETCH_TIMEOUT_MS(12s) - 12s(cap, not 2*12) = 12s + 5s = 17s
+ *   - local reads (rev-parse/rev-list/diff probes, no network — one round
+ *     trip through the read budget covers the realistic worst case of a
+ *     single slow probe on a loaded disk): SYNC_READ_TIMEOUT_MS = 5s
+ *   - the merge write itself: SYNC_WRITE_TIMEOUT_MS = 20s
+ *   17s + 5s + 20s = 42s, leaving 3s of margin under the 45s outer kill for
+ *   node/git process spawn overhead. A parent segment that does not already
+ *   have a local branch or remote-tracking ref (the common `claude/<slug>`
+ *   layout's `claude` segment) is skipped WITHOUT a fetch (git-sync.js), so
+ *   it never adds a third fetch to this sum.
  */
 const SYNC_WRITE_TIMEOUT_MS = 20_000;
-const SYNC_READ_TIMEOUT_MS = 8_000;
+const SYNC_READ_TIMEOUT_MS = 5_000;
+const SYNC_FETCH_TIMEOUT_MS = 12_000;
 
 /**
  * Inline the full note text up to this size.
@@ -612,6 +631,7 @@ function syncMain(cwd) {
   delete env.DEVOPS_GIT_SYNC_RESULT_FILE;
   env.DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS = String(SYNC_WRITE_TIMEOUT_MS);
   env.DEVOPS_GIT_SYNC_TIMEOUT_MS = String(SYNC_READ_TIMEOUT_MS);
+  env.DEVOPS_GIT_SYNC_FETCH_TIMEOUT_MS = String(SYNC_FETCH_TIMEOUT_MS);
   try {
     // --explain: a skipped sync must say so, or it reads as "up to date".
     const out = execFileSync(process.execPath, [script, '--explain'], {
@@ -855,6 +875,7 @@ module.exports = {
   SYNC_TIMEOUT_MS,
   SYNC_WRITE_TIMEOUT_MS,
   SYNC_READ_TIMEOUT_MS,
+  SYNC_FETCH_TIMEOUT_MS,
   INLINE_LIMIT,
   GIT_SYNC_SCRIPT,
 };

@@ -97,12 +97,12 @@ export async function runSync(cwd, resultFile, envOverride = {}) {
 }
 
 /** Run git-sync.js the way the do-batch merge does: waited on, --explain, stdout. */
-export async function runSyncExplain(cwd) {
+export async function runSyncExplain(cwd, envOverride = {}) {
   const { stdout } = await run(process.execPath, [SCRIPT, "--explain"], {
     cwd,
     encoding: "utf8",
     windowsHide: true,
-    env: GIT_ENV,
+    env: { ...GIT_ENV, ...envOverride },
   });
   return stdout;
 }

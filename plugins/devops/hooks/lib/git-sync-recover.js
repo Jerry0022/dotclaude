@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module git-sync-recover
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Undo what a failed background merge already wrote, for
  *   scripts/git-sync.js.
@@ -62,14 +62,17 @@ function writeTimeoutMs(env, readTimeoutMs) {
  * stdout (untrimmed — `-z` output must stay intact), stderr, and whether the
  * timeout killed the child. argv form + windowsHide, never a shell string
  * (git-sync runs detached and console-less; see git-sync.js git()).
- * @param {{cwd:string, timeoutMs:number}} opts
+ * @param {{cwd:string, timeoutMs:number, env?:object}} opts `env` defaults to
+ *   `process.env` — pass one with `LC_ALL`/`LANGUAGE` pinned to `C` so a
+ *   localized git never mismatches an English-text error match (AUD-C059).
  * @returns {(args:string[], o?:{input?:string}) => {ok:boolean, out:string, err:string, timedOut:boolean}}
  */
-function gitRunner({ cwd, timeoutMs }) {
+function gitRunner({ cwd, timeoutMs, env }) {
   return (args, o = {}) => {
     try {
       const out = execFileSync('git', args, {
         cwd,
+        env: env || process.env,
         encoding: 'utf8',
         timeout: timeoutMs,
         input: o.input,

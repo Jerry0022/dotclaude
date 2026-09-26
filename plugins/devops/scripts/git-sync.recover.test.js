@@ -279,3 +279,33 @@ describe("firstErrorLine", () => {
     expect(R.firstErrorLine(`error: ${"x".repeat(400)}`)).toHaveLength(160);
   });
 });
+
+describe("gitRunner — env forwarding (AUD-C059)", () => {
+  test("passes a custom env through to the child, not just process.env", () => {
+    // Two independent repos. Pointing GIT_DIR at the SECOND repo while running
+    // in the FIRST repo's directory only succeeds if the runner's env option
+    // actually reached execFileSync — proof positive, not an assertion on a
+    // call spy. This is the same plumbing git-sync.js relies on to pin
+    // LC_ALL=C/LANGUAGE=C on every call (isMissingUpstream and firstErrorLine
+    // match git's English wording).
+    const a = makeRepo({ "a.txt": "a" }, { "a.txt": "a2" });
+    const b = makeRepo({ "b.txt": "b" }, { "b.txt": "b2" });
+    const runWithEnv = R.gitRunner({
+      cwd: a.dir,
+      timeoutMs: 60_000,
+      env: { ...GIT_ENV, GIT_DIR: b.gitDir, LC_ALL: "C", LANGUAGE: "C" },
+    });
+    const res = runWithEnv(["rev-parse", "HEAD"]);
+    expect(res.ok).toBe(true);
+    expect(res.out.trim()).toBe(b.preHead);
+    expect(res.out.trim()).not.toBe(a.preHead);
+  });
+
+  test("omitting env falls back to process.env, unchanged behaviour", () => {
+    const a = makeRepo({ "a.txt": "a" }, { "a.txt": "a2" });
+    const run = R.gitRunner({ cwd: a.dir, timeoutMs: 60_000 });
+    const res = run(["rev-parse", "HEAD"]);
+    expect(res.ok).toBe(true);
+    expect(res.out.trim()).toBe(a.preHead);
+  });
+});
