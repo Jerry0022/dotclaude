@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.212.0] — 2026-09-26
+
+### Fixed
+- **The background git sync never leaves a merge half-applied.** On a loaded machine the sync's 15 s budget killed a fast-forward of main while it was writing the working tree: HEAD and index stayed on the old commit, part of the incoming files were already on disk, one was deleted on its way to a rewrite, and a stale `index.lock` failed every later git write in that worktree — reported only as "merge refused, no conflicted files". The merge and the sync's other writing calls now get their own ceiling (`DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS`, default 5 min; reads keep 15 s). A merge that still dies mid-checkout — by that timeout, or by its own error on a file it cannot write (a smudge filter, a locked file) — is put back: a file that is exactly what the merge wrote, or that it deleted, returns to HEAD (`.gitattributes` first), the lock is removed only when the killed merge wrote it, and a file matching neither side is left alone and named for manual repair. The ✗ line says what happened (`merge timed out after …` / `merge failed (<git's reason>) mid-checkout — worktree restored to <sha>`), and the next sync retries.
+- **`run-contract.js arm` no longer replaces a live run by accident.** A subagent smoke-testing the CLI without `--cwd` re-armed its parent session's contract: the old contract and the event that satisfied the chosen Harden pass went to the archive, and the release gate would have blocked. `arm` now refuses (exit 1) while the work tree holds an active contract of any session and names that contract's mode, flow and start time with the two ways out — `status`, or the same `arm` with `--replace`, which archives it and arms fresh as before. An empty, closed or expired state arms without the flag, and a contract Desktop copied in from another checkout does not count. The re-arm lines the hooks print carry `--replace`; the "answers NOT recorded" note keeps the plain `arm` line, since the session has no live contract to replace there.
+
 ## [0.211.5] — 2026-09-26
 
 ### Changed
