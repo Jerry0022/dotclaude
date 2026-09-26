@@ -150,20 +150,29 @@ describe("a sent round survives a reload", () => {
 
 // AUD-020 (b): the retry now runs on every connected heartbeat, also while the
 // submitted panel is up — so it has to be idempotent.
-function retryPage({ submitInFlight = false } = {}) {
+function retryPage({
+  submitInFlight = false,
+  pending = { submitted: true, action: "iterate", iteration: "3" },
+  decisions = {},
+  timeoutMs = null,
+} = {}) {
   const dom = new JSDOM("<body></body>", { runScripts: "outside-only", url: "https://concept.test/" });
   const { window } = dom;
   window.__posts = [];
   window.__release = [];
-  window.localStorage.setItem("concept-test-pending", JSON.stringify({ submitted: true, action: "iterate", iteration: "3" }));
+  window.__decisions = decisions;
+  window.localStorage.setItem("concept-test-pending", JSON.stringify(pending));
+  const deadline = md.match(/const PENDING_RETRY_TIMEOUT_MS = \d+;/)[0];
   window.eval(
     [
       "window.STORAGE_KEY = 'concept-test';",
       `var _submitInFlight = ${submitInFlight};`,
-      // Every POST hangs until the test releases it — a slow bridge outliving
-      // the 5 s heartbeat is exactly when a second beat would re-POST.
-      "window.fetch = (url, opts) => { if (!opts || opts.method !== 'POST') return Promise.resolve({ ok: true, json: async () => ({}) }); window.__posts.push(opts.body); return new Promise(r => window.__release.push(() => r({ ok: true, json: async () => ({ durable: true }) }))); };",
+      // Every POST hangs until the test releases it (or the attempt's deadline
+      // aborts it) — a slow bridge outliving the 5 s heartbeat is exactly when
+      // a second beat would re-POST.
+      "window.fetch = (url, opts) => { if (!opts || opts.method !== 'POST') return Promise.resolve({ ok: true, json: async () => window.__decisions }); window.__posts.push(opts.body); return new Promise((r, j) => { window.__release.push(() => r({ ok: true, json: async () => ({ durable: true }) })); if (opts.signal) opts.signal.addEventListener('abort', () => j(new Error('aborted'))); }); };",
       md.match(/let _pendingRetryInFlight = false;/)[0],
+      timeoutMs == null ? deadline : deadline.replace(/\d+/, String(timeoutMs)),
       fnSource("retryPendingSubmission"),
       fnSource("_deliverPending"),
     ].join(";\n")
@@ -188,6 +197,43 @@ describe("the offline queue is retried idempotently", () => {
     const w = retryPage({ submitInFlight: true });
     await w.retryPendingSubmission();
     expect(w.__posts.length).toBe(0);
+  });
+
+  test("a round the bridge already holds is dropped, not POSTed a second time", async () => {
+    const sent = { submitted: true, action: "iterate", iteration: "3", submission_id: "sub-a" };
+    const w = retryPage({ pending: sent, decisions: { ...sent, _version: 7 } });
+    await w.retryPendingSubmission();
+    expect(w.__posts.length).toBe(0);
+    expect(w.localStorage.getItem("concept-test-pending")).toBeNull();
+  });
+
+  test("a different submission on the bridge does not swallow the queued one", async () => {
+    const w = retryPage({
+      pending: { submitted: true, action: "iterate", iteration: "3", submission_id: "sub-b" },
+      decisions: { submitted: true, action: "iterate", iteration: "3", submission_id: "sub-a" },
+    });
+    const run = w.retryPendingSubmission();
+    await new Promise(r => setTimeout(r, 0));
+    expect(w.__posts.length).toBe(1);
+    w.__release.forEach(f => f());
+    await run;
+    expect(w.localStorage.getItem("concept-test-pending")).toBeNull();
+  });
+
+  test("a bridge that never answers releases the retry at the deadline", async () => {
+    const w = retryPage({ timeoutMs: 20 });
+    await w.retryPendingSubmission();
+    expect(w.__posts.length).toBe(1);
+    expect(w.localStorage.getItem("concept-test-pending"), "kept — nothing confirmed it").not.toBeNull();
+    await w.retryPendingSubmission();
+    expect(w.__posts.length, "the next heartbeat is not locked out").toBe(2);
+  });
+
+  test("every submitted round carries a submission_id", () => {
+    const fn = fnSource("submitWithAction");
+    const id = fn.indexOf("data.submission_id = newSubmissionId();");
+    expect(id).toBeGreaterThan(-1);
+    expect(id, "attached before the POST body is built").toBeLessThan(fn.indexOf("body: JSON.stringify(data)"));
   });
 
   test("the connected heartbeat retries ahead of the submitted-panel return", () => {

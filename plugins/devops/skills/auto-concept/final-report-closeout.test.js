@@ -176,7 +176,7 @@ describe("final-report close-out sheet", () => {
     // Re-POSTing it means a second `gh issue create` run and a second release.
     expect(jsSource).toContain("submission_id: newSubmissionId()");
     const retry = jsSource.slice(jsSource.indexOf("async function retryPendingSubmission"));
-    expect(retry.slice(0, 1500)).toContain("seen.submission_id === id");
+    expect(retry.slice(0, 3200)).toContain("seen.submission_id === id");
   });
 
   test("a finalize participates in the submit-state machine", () => {

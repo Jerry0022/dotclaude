@@ -12009,6 +12009,9 @@ async function submitWithAction(action) {
     showSubmitWarning('{{panel.submit_collect_failed}}: ' + ((e && e.message) || e));
     return;
   }
+  // The offline queue's replay guard (§ Offline Submit Queue): a round the
+  // bridge stored before its answer was lost must not be POSTed a second time.
+  if (typeof newSubmissionId === 'function') data.submission_id = newSubmissionId();
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   // design template only: the feedback dock is a single overlay shared by
@@ -13186,32 +13189,44 @@ async function retryPendingSubmission() {
   // Images that never made it up get another attempt on the same trigger.
   if (typeof restoreAttachments === 'function') restoreAttachments();
 }
+// A bridge that accepts the connection and never answers must not hold the
+// retry forever: _pendingRetryInFlight is released only when this settles, so
+// every later heartbeat would skip the queued payload until a reload. One
+// deadline covers the whole attempt, body reads included.
+const PENDING_RETRY_TIMEOUT_MS = 15000;
 async function _deliverPending(pendingKey, pending) {
-  // Did this exact payload already land? `fetch` can throw after the bridge
-  // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
-  // that is already being processed. Re-POSTing a finalize that way runs its
-  // side effects — issue creation, a real release, file deletion — a second
-  // time. Payloads without a submission_id (iterate/implement, legacy pages)
-  // keep the old unconditional-retry behaviour.
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), PENDING_RETRY_TIMEOUT_MS) : null;
+  const signal = ctl ? ctl.signal : undefined;
   try {
-    const id = JSON.parse(pending).submission_id;
-    if (id) {
-      const cur = await fetch('/decisions', { cache: 'no-store' });
-      const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
-      if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
-    }
-  } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
-  try {
+    // Did this exact payload already land? `fetch` can throw after the bridge
+    // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
+    // that is already being processed. Re-POSTing a finalize that way runs its
+    // side effects — issue creation, a real release, file deletion — a second
+    // time, and an iterate/implement round twice. Every payload carries a
+    // submission_id (submitWithAction, submitFinalize); only a payload from a
+    // page generated before that keeps the old unconditional retry.
+    try {
+      const id = JSON.parse(pending).submission_id;
+      if (id) {
+        const cur = await fetch('/decisions', { cache: 'no-store', signal });
+        const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
+        if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
+      }
+    } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
     const res = await fetch('/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: pending
+      body: pending,
+      signal
     });
     const body = res.ok ? await res.json().catch(() => ({})) : {};
     // Drop the local copy ONLY once the bridge confirms it reached disk.
-    // `res.ok` alone is not that confirmation — see submitWithAction.
-    if (res.ok && body.durable !== false) localStorage.removeItem(pendingKey);
-  } catch (e) { /* still offline */ }
+    // `res.ok` alone is not that confirmation — see submitWithAction — and
+    // neither is a body the deadline cut off.
+    if (res.ok && body.durable !== false && !(signal && signal.aborted)) localStorage.removeItem(pendingKey);
+  } catch (e) { /* still offline, or the deadline hit */ }
+  finally { if (timer) clearTimeout(timer); }
 }
 ```
 
@@ -14986,8 +15001,9 @@ mismatch guard people reach for here only exists on `POST /reset` and
 version and flips `/pending` to true. So a finalize whose response was lost
 in transit after the bridge had already fsynced it sits in BOTH places, and
 the offline queue would happily deliver it again: duplicate `gh issue create`,
-a second real release, `discard` applied twice. That is why every finalize
-carries a `submission_id` and `retryPendingSubmission()` compares it against
+a second real release, `discard` applied twice. That is why every payload —
+finalize, iterate, implement — carries a `submission_id` and
+`retryPendingSubmission()` compares it against
 what `/decisions` already holds before re-POSTing (see § Offline Submit
 Queue). Do not drop that field, and do not "simplify" the retry.
 
