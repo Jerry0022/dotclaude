@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.212.5] — 2026-09-26
+
+### Fixed
+- **A session without an id no longer inherits other sessions' tracked issues.** The tracked-issues list drives GitHub writes in the completion flow (board status, issue comments). #539 made its read exact and #549 asks "worked on it?" first, but a session whose hooks receive no `session_id` still shared one list, because `sessionFile()` falls back to the same `…-unknown` file for every such session (#540). `prompt.issue.detect` now neither reads nor writes the list without an id, and the completion flow reads none, so no `[issue-status]` block reaches such a session. The `unknown` fallback stays in place for the advisory flags that rely on it.
+
+## [0.212.4] — 2026-09-26
+
+### Fixed
+- **The concept TOC keeps the entry you are reading.** When the reading line moved into a TOC group taller than the panel, `applyNavOverflow()` hid every top-level entry, the open group included, and the panel showed nothing but "+5 weitere" (#541). The entry or group holding the active entry is now the floor of the cut, or the first one when none is active; the panel scrolls the rest.
+- **Hidden TOC entries leave the screen.** The overflow cut and the final-report window hide entries with `hidden`, but `.section-nav-item { display: flex }` outranked the browser's own `[hidden]` rule. A flat TOC therefore showed every "hidden" entry next to its "+N weitere" toggle. `#section-nav > [hidden] { display: none; }` makes `hidden` mean hidden again (found in Edge at 1024×768 while verifying #541).
+
+## [0.212.3] — 2026-09-26
+
+### Fixed
+- **The open-in-browser ack says what happened, in plain words.** Clicking a card's open button shows the Desktop app's red "Ein Hook hat deine Eingabe blockiert" panel. Under it, the ack said the prompt "kostet so keinen Turn" / "costs no turn" — jargon the owner had to decode (#542). It now reads `✓ Seite im Standardbrowser geöffnet: <url>`, followed by: the red "blocked" notice is intended, the plugin opened the page itself without sending the input to Claude, and so it costs no tokens (de + en). The doc comments that repeated the old wording say the same.
+
 ## [0.212.2] — 2026-09-26
 
 ### Fixed

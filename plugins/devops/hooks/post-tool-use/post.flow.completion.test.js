@@ -474,6 +474,17 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     cleanup(dir);
   });
 
+  // #540: without a session id the exact read would still hit the one
+  // `…-unknown` file every id-less session shares.
+  test("a session without an id never gets the shared list", () => {
+    const dir = project();
+    fs.writeFileSync(flag(dir, "tracked-issues", "unknown"), "[530]");
+    const out = runHook(dir, undefined, "Read");
+    expect(out).toContain("COMPLETION CARD");
+    expect(out).not.toContain("[issue-status]");
+    cleanup(dir);
+  });
+
   // Its own list is no work order either: prompt.issue.detect tracks every #N
   // a prompt names, including one it only cites. Without a way out, each of
   // them was owed a board move and a comment — the same foreign-issue writes.

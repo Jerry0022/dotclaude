@@ -24,12 +24,6 @@ describe("prompt.flow.open-url", () => {
     expect(urls).toEqual([URL_]);
     expect(res.exitCode).toBe(2);
     expect(res.stderr.split("\n")[0]).toBe(`[open-url] ✓ Seite im Standardbrowser geöffnet: ${URL_}`);
-    // #542: the second line says in plain words why the red panel is fine —
-    // the input never reached Claude, so it cost no tokens (no "Turn" jargon).
-    expect(res.stderr).toContain("Die rote Meldung „blockiert“ ist gewollt");
-    expect(res.stderr).toContain("ohne deine Eingabe an Claude zu schicken");
-    expect(res.stderr).toContain("spart Tokens");
-    expect(res.stderr).not.toMatch(/\bTurn\b/);
   });
 
   test("answers in the prompt's language", async () => {
@@ -38,8 +32,23 @@ describe("prompt.flow.open-url", () => {
     expect(res.exitCode).toBe(2);
     expect(res.stderr).toBe(renderAck(URL_, "en"));
     expect(res.stderr).toContain("Opened in your default browser");
-    expect(res.stderr).toContain("without sending your input to Claude, so it costs no tokens");
-    expect(res.stderr).not.toMatch(/\bturn\b/);
+  });
+
+  // #542: "kostet keinen Turn" was jargon — the owner had to guess that the
+  // point is opening the page without spending tokens. The ack now says that
+  // the red "blocked" headline is intended and the input never reached Claude.
+  test("says in plain words that the block is intended and spends no tokens", () => {
+    const de = renderAck(URL_, "de").split("\n")[1];
+    expect(de).toContain("„blockiert“ ist gewollt");
+    expect(de).toContain("ohne deine Eingabe an Claude zu schicken");
+    expect(de).toContain("spart Tokens");
+    const en = renderAck(URL_, "en").split("\n")[1];
+    expect(en).toContain('"blocked" notice is intended');
+    expect(en).toContain("without sending your input to Claude");
+    expect(en).toContain("costs no tokens");
+    for (const text of [renderAck(URL_, "de"), renderAck(URL_, "en")]) {
+      expect(text).not.toMatch(/keinen Turn|no turn/);
+    }
   });
 
   test("reads whichever prompt field the payload carries", async () => {

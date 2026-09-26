@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.open-url
- * @version 0.1.1
+ * @version 0.1.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Opens a local page in the default browser when the prompt is
  *   the card widget's open prompt ("Im Standardbrowser öffnen: <url>" /
  *   "Open in default browser: <url>"), then blocks the prompt (exit 2 — the
  *   harness erases it), so reopening a concept page or dev server never
- *   reaches Claude and costs no tokens.
+ *   reaches Claude and spends no tokens.
  *
  *   Why: the Desktop Code tab drops every http link a widget tries to open,
  *   localhost included, so the card turns such a link into a button that
@@ -28,11 +28,10 @@ const { parseHookInput } = require('../lib/hook-input');
 const { parseOpenUrlPrompt, openInDefaultBrowser } = require('../lib/open-url');
 
 /**
- * Text for the harness's red "a hook blocked your input" panel. The first
- * line carries the all-clear; the second says, in plain words, why the red
- * headline is expected: the plugin opened the page itself and never sent the
- * input to Claude, so the click cost no tokens (#542 — "costs no turn" was
- * jargon nobody could decode in that panel).
+ * Text for the harness's "a hook blocked your input" panel. The first line
+ * carries the all-clear — the block IS the mechanism, nothing failed. The
+ * second says so in plain words (#542): the red "blocked" headline is
+ * intended, and the input never reached Claude, so it cost no tokens.
  * @param {string} url
  * @param {'de'|'en'} lang
  */
