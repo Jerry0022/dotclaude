@@ -9,9 +9,11 @@
  *   #409, #431, #469" as an example put four unrelated issues on that track.
  *
  *   Deterministic — a few patterns, no parser:
- *     1. Non-prose is masked: code fences and spans, quotes, brackets, and
- *        whole lines of pasted output (blockquote, `[tag] …`, timestamp, log
- *        level, Claude Code hook output). A number there is no reference.
+ *     1. Non-prose is masked: code and quotes (the skill router's
+ *        stripCodeAndQuotes, which prompt.skill.enforce uses too; a fence left
+ *        open runs to the end), brackets, and whole lines of pasted output
+ *        (blockquote, `[tag] …`, timestamp, log level, Claude Code hook
+ *        output). A number there is no reference.
  *     2. `#N` and `Issue N` in the rest. A pull request ("PR #471",
  *        "merge #490"), a milestone ("Meilenstein #14") or an item of another
  *        list ("Punkt #2", "retry #3") is no issue. Numbers joined only by `,`
@@ -28,11 +30,13 @@
 
 'use strict';
 
+const { stripCodeAndQuotes } = require('./skill-trigger-router');
+
 /** Stands in for a masked span: no whitespace, no word, no list separator —
  *  it breaks a verb window and a list alike. */
 const MASK = ' … ';
 
-/** An open fence runs to the end of the prompt. */
+/** Closed fences, and an open one up to the end of the prompt. */
 const FENCE_RE = /(`{3,}|~{3,})[\s\S]*?(?:\1|$)/g;
 
 /** Whole lines of pasted output, not the user's sentence. */
@@ -43,23 +47,6 @@ const LOG_LINE_RES = [
   /^\s*\[?\d{2}:\d{2}:\d{2}\b/,                         // 06:41:44 …
   /^\s*(?:error|warn(?:ing)?|info|debug|trace|fatal)\s*[:\]]/i,
   /^\s*[\w:.-]+ hook (?:success|error|feedback|blocking error|additional context)\b/i,
-];
-
-/** Same-line spans. German quotes before English ones: „…“ closes with the
- *  mark English opens with. The ASCII single quote only pairs when it is no
- *  apostrophe (don't, it's). */
-const SPAN_RES = [
-  /`[^`\n]+`/g,
-  /„[^„“”\n]*[“”]/g,
-  /‚[^‚‘’\n]*[‘’]/g,
-  /“[^“”\n]*”/g,
-  /‘[^‘’\n]*’/g,
-  /«[^«»\n]*»/g,
-  /»[^«»\n]*«/g,
-  /‹[^‹›\n]*›/g,
-  /›[^‹›\n]*‹/g,
-  /"[^"\n]*"/g,
-  /(?<![\p{L}\p{N}])'(?=\S)[^'\n]*?(?<=\S)'(?![\p{L}\p{N}])/gu,
 ];
 
 /** Innermost first; the caller repeats for nesting. */
@@ -153,7 +140,7 @@ const MAX_ASK = 2;
 function maskNonProse(text) {
   let s = String(text).replace(FENCE_RE, MASK);
   s = s.split('\n').map(line => (LOG_LINE_RES.some(rx => rx.test(line)) ? MASK : line)).join('\n');
-  for (const rx of SPAN_RES) s = s.replace(rx, MASK);
+  s = stripCodeAndQuotes(s);
   for (let i = 0; i < 3; i++) {
     const before = s;
     for (const rx of BRACKET_RES) s = s.replace(rx, MASK);
