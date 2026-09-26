@@ -85,7 +85,9 @@ between posts, no `·` separators:
 - **Deviation-only posts** exist only when they have a finding, and go in
   front: `🧹 3 Warnungen` (lint), `🏗 tsc 1 Fehler` (build), `👁 Review
   übersprungen — Limit` (second opinion), `⚠ ungeprüft — kein Test lief`
-  (the V&V stamp, replaces the old block under the title). A green lint /
+  (the V&V stamp, replaces the old block under the title) — or
+  `◐ Test läuft noch im Hintergrund` when the owed check is a background run
+  whose result is still out (`light-bgrun`). A green lint /
   build / review is never shown — what is not there was fine.
 - Glyphs are **monochrome text**, never emoji: `✓` met · `✗` failed · `◐`
   partial · `○` open · `●` done · `⏭` skipped. Emoji only for the three
@@ -238,6 +240,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | concept override | by phase: `🧭 Concept wartet auf deine Entscheidungen` · `🧭 Concept in Iteration — ich melde mich` · `🧭 Concept in Implementierung — ich melde mich`; running work as its own sentence (`… in Implementierung. 2 Agenten arbeiten — …`) | the running items | — | context line = the page URL (quiet link); "wartet" during an implementation run is a regression |
 | batch override | `📥 Batch sammelt — {n} Einträge` | how to collect · fire (`<marker> <text>` / `/do-batch go`) · stop (`/do-batch off`, auto-end bounds) | — | context line = what happens to the next prompt; the card is the whole activation confirmation, no text block beside it |
 | V&V unverified | `⚠ Ungeprüft shippen?` | "npm test lief nicht — …" | Tests laufen lassen · Trotzdem shippen | `⚠ ungeprüft` first evidence post |
+| V&V running | `⏳ Test läuft noch — Ergebnis abwarten?` | "Ein Testlauf läuft noch im Hintergrund — …" | Jetzt shippen | `◐ Test läuft noch im Hintergrund` first evidence post; waiting needs no button — the run's notification brings the result; the pending override still wins when `pending` names the run |
 
 English strings mirror these one to one (`Ship anyway despite 2 red tests?`,
 `Released v0.179.0 alpha — promote to beta?`, `Promoted v0.179.0 BETA — to

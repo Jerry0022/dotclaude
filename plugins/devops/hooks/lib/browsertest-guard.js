@@ -1,6 +1,6 @@
 /**
  * @module browsertest-guard
- * @version 0.6.0
+ * @version 0.7.0
  * @description Pure decision logic for the Light-verification enforcement gate
  *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
  *   rules can be unit-tested without mocking stdin or temp files.
@@ -20,7 +20,10 @@
  *
  *   Hardening (V&V concept):
  *     ② green-not-just-ran — a test run only verifies when it passed; the
- *        outcome is read best-effort from the PostToolUse tool_response.
+ *        outcome is read best-effort from the PostToolUse tool_response. A run
+ *        the harness put in the background has no outcome at launch: it
+ *        settles from its task-notification (settleBackgroundRuns), and while
+ *        it is still running the gate neither blocks nor verifies.
  *     ③ order — a new qualifying edit invalidates a prior verification (the
  *        verified flag is cleared by post.flow.completion on the next edit), so
  *        verification must come AFTER the last code change.
@@ -30,7 +33,7 @@
  *        (never wedges) and records a visible skip.
  *
  *   Inputs: flag state (light-pending / light-verified / red / kind) +
- *           stop_hook_active + silent + blockCount + skipJustified.
+ *           stop_hook_active + silent + blockCount + skipJustified + inFlight.
  *   Output: { action, reason?, resetFlags, incrementBlock?, markSkipped? }.
  */
 
@@ -39,6 +42,7 @@
 // ---------------------------------------------------------------------------
 
 const os = require('os');
+const { responseTaskId } = require('./pending-tasks');
 
 // Markup / style / framework-component files are ALWAYS browser-renderable.
 const ALWAYS_WEB_RE = /\.(html?|css|scss|sass|less|vue|svelte|astro|tsx|jsx)$/i;
@@ -334,15 +338,43 @@ function isLightVerification(profileClass, toolName, command) {
 // Run outcome — best-effort pass/fail of a test run (Kern ②)
 // ---------------------------------------------------------------------------
 
-// Strong, unambiguous failure signals in test-runner output. Conservative on
-// purpose: anything not matching stays a pass, so a green run we cannot parse is
-// never falsely blocked. Only obvious red runs are caught.
-const FAIL_TEXT_RE =
-  /\b\d+\s+fail(?:ed|ing|ures?)\b|\bFAIL\b|✗|✖|\bfailures=[1-9]\b|\bAssertionError\b|\bFAILURES!\b|\bFAILED\s*\(/i;
-// Counter-signal: "0 failed" / "0 failures" / "failures=0" must NOT count.
-// Node's spec reporter puts the count AFTER the word ("ℹ fail 0"), which the
-// generic \bFAIL\b signal would otherwise flag — so both orders are excused.
-const ZERO_FAIL_RE = /\b0\s+fail(?:ed|ures?)\b|\bfailures=0\b|\bfail(?:ed|ures?)?\s+0\b/i;
+// The Bash tool_response carries no exit code, so a run's outcome is usually
+// read from its text alone. Conservative on purpose: anything not matching
+// stays a pass, so a green run we cannot parse is never falsely blocked. Only
+// obvious red runs are caught.
+//
+// Runners colour that text even when it is captured (vitest does under a
+// colour TERM). The escape codes would push a ✓ or a FAIL off the line start
+// the patterns below anchor to, and glue a count to the code before it
+// (`[31m1 failed` has no word boundary) — so they are stripped first.
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
+// A passing test's own line: vitest/jest/mocha/node:test print ✓ ✔ √ in front
+// of it, TAP prints `ok N`. The title after it is free text — "must not fail"
+// names what the test guards, it is no verdict — so these lines are dropped
+// before any signal is read.
+const PASSING_TEST_LINE_RE = /^\s*(?:[✓✔√]|ok\s+\d+\b)/;
+// A runner's own failure count, red whatever else the output says. Only a
+// non-zero count matches, so "0 failed" or "ℹ fail 0" needs no excuse:
+//   vitest `Tests  1 failed | 56 passed`   jest `Tests: 1 failed, 56 passed`
+//   pytest `1 failed, 3 passed`   mocha `1 failing`   rspec `5 examples, 1 failure`
+//   cargo `test result: FAILED. 3 passed; 1 failed`
+//   node:test puts the count after the word: spec `ℹ fail 1`, TAP `# fail 1`
+//   unittest `failures=1` — but not `expected failures=1`: those passed
+const FAIL_COUNT_RE =
+  /\b[1-9]\d*\s+(?:failed|failing|failures?)\b|^\s*[ℹ#]\s+fail(?:ed)?\s+[1-9]|(?<!expected )\bfailures=[1-9]/im;
+// A runner's own red marker at the start of a line: vitest/jest `FAIL  x.test.js`,
+// go `FAIL pkg` / `--- FAIL: TestX`, unittest `FAIL: test_x` / `FAILED (failures=1)`,
+// pytest `FAILED t.py::t`, phpunit `FAILURES!`. Case-sensitive: runners print
+// the capitals, the lowercase word is prose.
+const FAIL_MARKER_RE = /^\s*(?:(?:---\s+)?FAIL(?:ED)?\b|FAILURES!)/m;
+// A runner summary with passed counts. With one present and no failure count
+// or marker, the summary decides: the run passed.
+const PASS_SUMMARY_RE = /\b\d+\s+(?:passed|passing)\b|^\s*[ℹ#]\s+pass\s+\d+|\bOK \(\d+ tests?\b/m;
+// Loose failure signals, read only when no summary decides — a test title or a
+// log line may contain them too: a ✗/✖ result glyph, an AssertionError, a
+// capital FAIL inside a line.
+const LOOSE_FAIL_RE = /✗|✖|\bAssertionError\b|\bFAIL\b/;
 
 // Did a test runner actually RUN? A command string that matches TEST_RUNNER_RE
 // only says the runner was named; a chain like `python patch.py && npm test`
@@ -365,7 +397,7 @@ const RUNNER_OUTPUT_RE =
  */
 function hasRunnerOutput(text) {
   if (!text) return false;
-  return RUNNER_OUTPUT_RE.test(String(text));
+  return RUNNER_OUTPUT_RE.test(String(text).replace(ANSI_RE, ''));
 }
 
 /**
@@ -402,27 +434,130 @@ function normalizeToolResponse(toolResponse) {
 }
 
 /**
+ * Outcome read from a run's text alone. A runner's own failure count or red
+ * marker is 'fail'. Otherwise a summary with passed counts decides: the run is
+ * green even when a passing test's title or a log line says "fail". Only
+ * without such a summary do the loose signals (✗, AssertionError, …) decide.
+ * @param {string} text — normalized tool_response text
+ * @returns {'pass'|'fail'}
+ */
+function outcomeFromText(text) {
+  if (!text) return 'pass';
+  const body = String(text)
+    .replace(ANSI_RE, '')
+    .split(/\r\n|\r|\n/)
+    .filter(line => !PASSING_TEST_LINE_RE.test(line))
+    .join('\n');
+  if (FAIL_COUNT_RE.test(body) || FAIL_MARKER_RE.test(body)) return 'fail';
+  if (PASS_SUMMARY_RE.test(body)) return 'pass';
+  return LOOSE_FAIL_RE.test(body) ? 'fail' : 'pass';
+}
+
+/**
  * Best-effort outcome of a test run from its PostToolUse response.
  * 'fail' only on strong signals (numeric non-zero exit WITH a runner summary
  * in the output, interrupted, or an unambiguous failure summary). A zero exit
  * code is authoritative. A non-zero exit whose output carries no runner
  * summary is 'unknown' (#409): the command named a runner but died before it
  * — `python patch.py && npm test` failing in patch.py — and neither verifies
- * nor reddens the session. Everything else → 'pass', so a green run we cannot
- * parse is never falsely blocked.
+ * nor reddens the session. Without an exit code (the Bash tool reports none)
+ * the text decides — see outcomeFromText. Everything else → 'pass', so a
+ * green run we cannot parse is never falsely blocked.
+ *
+ * A run the harness put in the background — launched with run_in_background,
+ * or moved there when it outlived its timeout (#530) — is 'unknown' too: its
+ * response is the launch report, not the run, and an empty report used to
+ * read as a pass. Its outcome comes later, from its task-notification
+ * (backgroundRunOutcome).
  * @param {*} toolResponse
  * @returns {'pass'|'fail'|'unknown'}
  */
 function testRunOutcome(toolResponse) {
+  if (responseTaskId(toolResponse)) return 'unknown';
   const { text, exitCode, interrupted } = normalizeToolResponse(toolResponse);
   if (typeof exitCode === 'number') {
     if (exitCode === 0) return 'pass';
-    if (hasRunnerOutput(text) || (text && FAIL_TEXT_RE.test(text) && !ZERO_FAIL_RE.test(text))) return 'fail';
+    if (hasRunnerOutput(text) || outcomeFromText(text) === 'fail') return 'fail';
     return 'unknown';
   }
   if (interrupted) return 'fail';
-  if (text && FAIL_TEXT_RE.test(text) && !ZERO_FAIL_RE.test(text)) return 'fail';
-  return 'pass';
+  return outcomeFromText(text);
+}
+
+// ---------------------------------------------------------------------------
+// Background runs — the outcome of a test run the harness backgrounded
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a recorded background run counts as still running. A watch-mode
+ * runner never ends and a run stopped with TaskStop gets no notification, so
+ * the grace in which the gate does not block has to end on its own.
+ */
+const BG_RUN_MAX_MS = 30 * 60 * 1000;
+
+/**
+ * Recorded background runs (flag light-bgrun): `<taskId> <launchedAtMs>` per
+ * line. A malformed line is dropped.
+ * @param {string} content
+ * @returns {Array<{ id: string, at: number }>}
+ */
+function parseBackgroundRuns(content) {
+  const runs = [];
+  for (const line of String(content || '').split(/\r?\n/)) {
+    const m = line.trim().match(/^([A-Za-z0-9_-]+)\s+(\d+)$/);
+    if (m) runs.push({ id: m[1], at: Number(m[2]) });
+  }
+  return runs;
+}
+
+/** @param {Array<{ id: string, at: number }>} runs */
+function formatBackgroundRuns(runs) {
+  return runs.map(r => `${r.id} ${r.at}`).join('\n');
+}
+
+// How a background Bash task's notification summary ends:
+//   Background command "…" completed (exit code 0) · … failed with exit code 1
+const TASK_EXIT_RE = /(?:completed \(exit code (-?\d+)\)|failed with exit code (-?\d+))\.?$/;
+
+/**
+ * Outcome of a background test run from how it ended (pending-tasks.taskEnds)
+ * and the tail of its output file. A task that was killed or stopped produced
+ * no result: 'unknown'. Exit 0 — the output decides, as it does for a
+ * foreground run: `npm test | tail` exits 0 whatever the tests did. A non-zero
+ * exit reads as in testRunOutcome: red with a runner summary in the output,
+ * 'unknown' without one (#409).
+ * @param {{ status?: string, summary?: string }} end
+ * @param {string} outputText
+ * @returns {'pass'|'fail'|'unknown'}
+ */
+function backgroundRunOutcome(end, outputText) {
+  const status = end && end.status;
+  if (status !== 'completed' && status !== 'failed') return 'unknown';
+  const m = String(end.summary || '').trim().match(TASK_EXIT_RE);
+  const exitCode = m ? Number(m[1] !== undefined ? m[1] : m[2]) : (status === 'failed' ? 1 : 0);
+  if (exitCode === 0) return outcomeFromText(outputText);
+  return testRunOutcome({ exit_code: exitCode, stdout: outputText || '' });
+}
+
+/**
+ * Settle recorded background runs against the task ends seen so far: a run
+ * whose notification arrived yields its outcome, one launched less than
+ * BG_RUN_MAX_MS ago is still running, an older one is dropped unverified.
+ * @param {Array<{ id: string, at: number }>} runs
+ * @param {Map<string, { status: string, summary: string, outputFile: string }>} ends
+ * @param {(outputFile: string) => string} readOutput — tail of a task's output file
+ * @param {number} now — epoch ms
+ * @returns {{ outcomes: Array<'pass'|'fail'|'unknown'>, running: Array<{ id: string, at: number }> }}
+ */
+function settleBackgroundRuns(runs, ends, readOutput, now) {
+  const outcomes = [];
+  const running = [];
+  for (const run of runs) {
+    const end = ends.get(run.id);
+    if (end) outcomes.push(backgroundRunOutcome(end, end.outputFile ? readOutput(end.outputFile) : ''));
+    else if (now - run.at < BG_RUN_MAX_MS) running.push(run);
+  }
+  return { outcomes, running };
 }
 
 // ---------------------------------------------------------------------------
@@ -459,12 +594,13 @@ function hasSkipJustification(text) {
  * @param {'dom'|'runner'|'any'} [s.kind] — required verification kind (for reason)
  * @param {number}  [s.blockCount]   — how many times this gate already blocked
  * @param {boolean} [s.skipJustified]— response carries an explicit SKIP-VERIFICATION token
+ * @param {boolean} [s.inFlight]     — a test run is still running in the background
  * @returns {{ action:'block'|'pass', resetFlags:boolean, reason?:string,
  *            incrementBlock?:boolean, markSkipped?:boolean }}
  */
 function decideLightTest({
   pending, verified, red, stopHookActive, silent, kind,
-  blockCount = 0, skipJustified = false,
+  blockCount = 0, skipJustified = false, inFlight = false,
 }) {
   if (silent) {
     // Background tick — never enforce. Clear our own flags so the next real
@@ -479,6 +615,13 @@ function decideLightTest({
   }
 
   // --- verification is still owed ---
+
+  if (inFlight) {
+    // A test run is still running in the background: its notification settles
+    // it — a pass verifies, a red run blocks then. Until then no block, and
+    // every flag stays; nothing is verified, nothing counted.
+    return { action: 'pass', resetFlags: false };
+  }
 
   if (skipJustified) {
     // Conscious, reasoned skip — yield and record it so the card stays honest.
@@ -620,6 +763,11 @@ module.exports = {
   normalizeToolResponse,
   testRunOutcome,
   hasRunnerOutput,
+  BG_RUN_MAX_MS,
+  parseBackgroundRuns,
+  formatBackgroundRuns,
+  backgroundRunOutcome,
+  settleBackgroundRuns,
   hasSkipJustification,
   decideLightTest,
   buildLightTestReason,

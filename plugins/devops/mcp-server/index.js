@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.11.1
+ * @version 0.12.0
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -9,7 +9,9 @@
  *                                (cookie-authed in-page fetch, headless Edge)
  *   - `render_completion_card` — fetches usage, computes build-ID, renders card.
  *       V&V gate: stamps ⚠ UNVERIFIED/RED when the Light-verification flags show
- *       the turn is finishing without a passing check, renders the `validation`
+ *       the turn is finishing without a passing check — or ◐ "test still
+ *       running" when that check is a background run whose result is still
+ *       out (light-bgrun) — renders the `validation`
  *       block, and writes the validation-attested flag consumed by
  *       stop.flow.guard.
  *
@@ -687,7 +689,10 @@ function buildEvidencePosts(input, lang, key) {
   }
 
   const dev = deviationOnlyPosts(tests);
-  if (input.vv && input.vv.unverified) {
+  if (input.vv && input.vv.running) {
+    // Its check is still running — "no test ran" would be false.
+    dev.push({ glyph: '◐', text: lang === 'en' ? 'test still running in the background' : 'Test läuft noch im Hintergrund', dim: false });
+  } else if (input.vv && input.vv.unverified) {
     dev.push({ glyph: '⚠', text: lang === 'en' ? 'unverified — no test ran' : 'ungeprüft — kein Test lief', dim: false });
   }
   if (hasPending(input.pending)) {
@@ -993,6 +998,7 @@ const HEADINGS = {
     concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
     'vv-unverified': () => '⚠ Ungeprüft shippen?',
+    'vv-running': () => '⏳ Test läuft noch — Ergebnis abwarten?',
     'ship-compact': (c) => `🗜 Kontext ${c.size} Tokens — vor dem Ship kompaktieren?`,
   },
   en: {
@@ -1022,6 +1028,7 @@ const HEADINGS = {
     concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
     'vv-unverified': () => '⚠ Ship unverified?',
+    'vv-running': () => '⏳ Test still running — wait for its result?',
     'ship-compact': (c) => `🗜 Context ${c.size} tokens — compact before the ship?`,
   },
 };
@@ -1154,6 +1161,10 @@ function pointsForKey(input, key, lang) {
       return [lang === 'en'
         ? 'npm test did not run — run it first, or ship anyway.'
         : 'npm test lief nicht — Tests laufen lassen oder trotzdem shippen.'];
+    case 'vv-running':
+      return [lang === 'en'
+        ? 'A test run is still going in the background — its result verifies once it ends.'
+        : 'Ein Testlauf läuft noch im Hintergrund — sein Ergebnis verifiziert, sobald er endet.'];
     default:
       return [];
   }
@@ -1181,7 +1192,7 @@ function resolveCardKey(input) {
   const delivery = input.delivery || {};
 
   if (variant === 'ready') {
-    if (input.vv && input.vv.unverified) return 'vv-unverified';
+    if (input.vv && input.vv.unverified) return input.vv.running ? 'vv-running' : 'vv-unverified';
     return evidenceHasDeviation(input) ? 'ready-red' : 'ready';
   }
   if (variant === 'ship-blocked') return 'ship-blocked';
@@ -1473,7 +1484,26 @@ function readVVState(sessionId) {
   const pending = sessionFlagExists('dotclaude-devops-light-pending', sessionId, EXACT);
   const verified = sessionFlagExists('dotclaude-devops-light-verified', sessionId, EXACT);
   const red = sessionFlagExists('dotclaude-devops-light-red', sessionId, EXACT);
-  return { unverified: pending && !verified, red };
+  const unverified = pending && !verified;
+  return { unverified, red, running: unverified && backgroundRunInFlight(sessionId) };
+}
+
+/**
+ * A test run the harness put in the background whose result is still out —
+ * recorded in light-bgrun by post.flow.completion (hooks/lib/light-bgrun.js).
+ * The work is not unverified-because-skipped then: its check is running. Only
+ * a record inside BG_RUN_MAX_MS counts — past it the Stop gate stops waiting too.
+ */
+function backgroundRunInFlight(sessionId) {
+  const raw = readSessionFlagRaw('dotclaude-devops-light-bgrun', sessionId, { exact: true });
+  if (raw === null) return false;
+  try {
+    const { parseBackgroundRuns, BG_RUN_MAX_MS } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'browsertest-guard.js'));
+    const now = Date.now();
+    return parseBackgroundRuns(raw).some(r => now - r.at < BG_RUN_MAX_MS);
+  } catch {
+    return false;
+  }
 }
 
 /**
