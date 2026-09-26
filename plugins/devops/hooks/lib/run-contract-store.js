@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.3.2
+ * @version 0.4.0
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -108,8 +108,15 @@ const FILES = Object.freeze({
 // names run-contract.js (the facade / CLI entry) even though it is defined
 // here, so every module can build the same hint without a circular require.
 const LIB_PATH = path.join(__dirname, 'run-contract.js');
-function rearmHint() {
-  return `node "${LIB_PATH}" arm --mode <prompt|backlog|audit> --flow <interactive|autonomous> --ship <auto|manual> --passes <harden,polish|none>`;
+// R16: the CLI `arm` refuses to replace an active contract without
+// --replace, so every re-arm hint carries it — a model that follows one
+// must not bounce off that guard. `{replace: false}` is the plain arm line
+// for a hint that fires while the session has no live contract (post's
+// "answers NOT recorded" note): --replace there has nothing of its own to
+// replace and could only clobber another session's run in a shared checkout.
+function rearmHint(opts) {
+  const replace = !(opts && opts.replace === false);
+  return `node "${LIB_PATH}" arm --mode <prompt|backlog|audit> --flow <interactive|autonomous> --ship <auto|manual> --passes <harden,polish|none>${replace ? ' --replace' : ''}`;
 }
 
 const HOUR = 3600_000;

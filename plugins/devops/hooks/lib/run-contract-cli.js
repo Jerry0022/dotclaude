@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.3.1
+ * @version 0.4.0
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
  *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
@@ -11,12 +11,16 @@
  *   AUD-010: `status` / `done` measure qa through lib/run-contract-qa.js's
  *   measureQa() — the same helper pre.run.contract.js's gate uses — instead
  *   of evaluating obligations against an empty ctx.
+ *
+ *   R16: `arm` refuses (exit 1) while the work tree has an active contract —
+ *   of any session — unless `--replace` is given; see liveContract().
  */
 
 const {
-  disabled, contractPath, batchHandoffPath, readContract, arm, record, close,
+  LIB_PATH, disabled, contractPath, batchHandoffPath, readContract, arm, record, close,
   clearBatchHandoff, eventsOf, readJson, nowOf,
 } = require('./run-contract-store');
+const { projectRoot, samePath } = require('./project-root');
 const { segments, openObligations, short } = require('./run-contract-obligations');
 // AUD-010: `status` / `done` used to evaluate obligations against an empty
 // ctx — qa was never measured there, so `done` could close a run while qa
@@ -46,8 +50,28 @@ function parseArgv(argv) {
 }
 
 /**
+ * R16: the contract a CLI `arm` would replace — active (not closed, not
+ * expired), whichever session armed it, and this work tree's own. On
+ * 2026-09-25 a QA subagent smoke-testing this CLI ran `arm` without --cwd
+ * inside its parent's worktree: the parent's live contract and its events
+ * (the `skill auto-harden` that satisfied the chosen Harden pass) went to
+ * the archive and the release gate would have blocked. A header whose
+ * `root` names another checkout (Desktop copies the main checkout's
+ * untracked `.claude/` into new worktrees, RT2-Q4) is no live run here; one
+ * without a string `root` (written before RT2-Q4, or hand-edited) counts as
+ * this tree's.
+ * @returns {object|null}
+ */
+function liveContract(cwd, now) {
+  const c = readContract(cwd, { now });
+  if (!c) return null;
+  if (typeof c.root === 'string' && c.root && !samePath(c.root, projectRoot(cwd))) return null;
+  return c;
+}
+
+/**
  * CLI entry. Commands: status · skip <ob> [--item N] --reason "<why>" ·
- * done [--reason] · abort --reason · arm --mode --flow --ship --passes [--strict] [--items].
+ * done [--reason] · abort --reason · arm --mode --flow --ship --passes [--strict] [--items] [--replace].
  * @returns {number} 0 success, 1 usage error / nothing to act on
  */
 // H-D14: one small handler per command. Each gets the parsed call
@@ -147,14 +171,26 @@ const CLI_COMMANDS = {
     }
     const items = typeof flags.items === 'string' ? flags.items.split(',') : [];
     const sessionId = typeof flags.session === 'string' ? flags.session : null;
+    // R16: replacing a live run is explicit — `--replace` keeps the old
+    // behaviour (archive it with its events, arm fresh).
+    const live = liveContract(cwd, now);
+    if (live && !(flags.replace === true || flags.replace === 'on')) {
+      const status = `node "${LIB_PATH}" status${typeof flags.cwd === 'string' ? ` --cwd "${flags.cwd}"` : ''}`;
+      write({
+        ok: false,
+        error: `an active run contract exists in ${projectRoot(cwd)} (mode ${live.mode} · flow ${live.flow} · armed ${live.armedAt}) — arm does not replace it. Inspect it: ${status} · replace it on purpose (it and its events are archived to run-contract.prev.json): re-run this arm with --replace`,
+        active: { id: live.id, mode: live.mode, flow: live.flow, armedAt: live.armedAt },
+      });
+      return 1;
+    }
     const h = arm(cwd, { source: 'cli', mode, modeFrom: 'cli', flow, ship, passes, strict: flags.strict === true || flags.strict === 'on', items, sessionId }, { now });
     if (!h) return fail(disabled() ? 'run contract disabled (DOTCLAUDE_RUN_CONTRACT=off)' : 'could not write the contract');
-    write({ ok: true, armed: true, contract: h });
+    write({ ok: true, armed: true, contract: h, ...(live ? { replaced: live.id } : {}) });
     return 0;
   },
 };
 
-const CLI_USAGE = 'usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]';
+const CLI_USAGE = 'usage: run-contract.js status | skip <ob> [--item N] --reason "<why>" | park <item> --reason "<why>" | done [--reason "<why>"] | abort --reason "<why>" | batch-clear --reason "<why>" | arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]';
 
 function cli(argv, opts = {}) {
   const { pos, flags } = parseArgv(Array.isArray(argv) ? argv : []);

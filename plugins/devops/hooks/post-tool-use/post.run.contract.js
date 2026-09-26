@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.4.2
+ * @version 0.4.3
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
@@ -152,11 +152,13 @@ function onAsk({ hook, input, root, sessionId, s, RC }) {
   // signature and arms with or without the marker.
   // RT3-R8: for a partial call (1) a fresh do-run marker → a new run → arm;
   // (2) else this session's active contract (any age) → merge; (3) else the
-  // answer is dropped — said so, with the re-arm line.
+  // answer is dropped — said so, with the arm line. R16: the plain one, no
+  // --replace — this session has no live contract to replace, and the CLI's
+  // refusal must still guard another session's run in a shared checkout.
   if (!fields) return null;
   const partial = RC.isPartialRouterCall(questions);
   if (partial && !marker && !RC.mergeRouterAnswers(root, questions, fields, s)) {
-    return `[run-contract] These do-run answers were NOT recorded: no do-run just ran and this session has no active run contract. To gate this run, arm it: ${RC.rearmHint()}`;
+    return `[run-contract] These do-run answers were NOT recorded: no do-run just ran and this session has no active run contract. To gate this run, arm it: ${RC.rearmHint({ replace: false })}`;
   }
   // A failed write must not delete the marker (AUD-001): keep it so the
   // next gated call's pre-hook fallback arm can retry.

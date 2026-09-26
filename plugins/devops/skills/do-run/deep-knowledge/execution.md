@@ -58,7 +58,7 @@ node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
-node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]
 ```
 
 `status` prints the header and what is still open for the current segment.
