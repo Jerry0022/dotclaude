@@ -279,8 +279,8 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   widget HTML to `<tmp>/dotclaude-devops-card-widget-<session>` and names
   it in the `[CARD WIDGET]` block, and `stop.flow.guard` blocks a card turn
   on which `show_widget` was never called, pointing at that file. The widget draws the
-  title (h3) and both blocks, colours (green `#8fae8f` posts, red
-  `#e0a0a0`, yellow `#d9c58a`, lilac code spans `#aab4e6`), app-styled
+  title (h3) and both blocks, colours (green posts, red, yellow, lilac
+  glyphs — see **Text colours** below), app-styled
   tooltips (Info 1500 ms, Label 500 ms for the budget bars), the budget bars, the quiet PR link and the buttons. Nothing is
   drawn twice (observed 2026-09-21: widget + full markdown showed the whole
   card twice). The widget wraps result lines instead of cutting them — the
@@ -338,15 +338,34 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   not passed made no sense), narrow and soft so it reads as a glint, not as
   a second bar. Every `›` line (result lines, context,
   points) draws the glyph in lilac at weight 500, inset 6px from the heading
-  edge and hugging its text (8px column, 4px gap), with the text in
+  edge and hugging its text (8px column, 4px gap, 4px vertical margin), with the text in
   `--text-secondary`: the glyph leads, the line does
   not shout (feedback 2026-09-21: glyph too faint, text too loud). The widget
   never numbers the points — `1.` stays a terminal-markdown form. Block 1
   order on every variant: title → result lines → evidence → pipeline →
   budget; the pipeline line and the budget row carry their own vertical
-  padding (4px) so they do not stick to the evidence row. The white frame around the whole
+  padding (4px) so they do not stick to the evidence row. A run-contract line
+  right under the pipeline line drops its top padding, so the two related dim
+  lines sit 10px apart like the rest of the block, not 14px; the renderer
+  decides that, because a `<style>` rule cannot beat the line's inline
+  padding. The decision box has 10px 12px inner padding. The white frame around the whole
   widget is the Desktop app's `show_widget` container — not part of the card
   and not controllable from inside.
+- **Text colours** (polish 2026-09-26): the palette was tuned for the dark
+  theme and measured 1.5–2.2:1 (status colours) and 3.3:1 (dim lines) on the
+  light card surface, below WCAG AA. Every text colour now goes through the
+  host's tokens, so each theme gets its own value. The status colours are the
+  host's `--text-success` / `--text-danger` / `--text-warning` /
+  `--text-tint-violet` softened toward `--text-secondary` (30 / 55 / 40 /
+  60 %), fitted so the dark theme keeps its muted palette (`#8fae8f`,
+  `#e0a0a0`, `#d9c58a`, `#aab4e6`): 7.2–7.9:1 light, 8.2–8.9:1 dark. The dim
+  lines (pipeline line, all-✓ run-contract line, ladder labels, context-health
+  note) are the watermark hue `#7d84a8` pulled 25 % toward `--text-primary`:
+  5.0:1 light, 7.1:1 dark, still a step quieter than the body text. Measured
+  on Claude Desktop 2.9939's own tokens (canvas `--surface-0`). Only the bar
+  graphics keep literals (track, fill, marker, and the watermark inside the
+  always-dark track); the unmixed role tokens were rejected because they turn
+  the dark theme's green and amber loud.
 - The `ready-red` heading names what is actually red: `N roten Tests` only
   when tests failed, else `N unerfüllten Anforderungen`, else `N teilweise
   erfüllten Anforderungen` (an unmet requirement is no red test).
