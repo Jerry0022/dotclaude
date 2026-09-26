@@ -113,6 +113,12 @@ the `redteam` agent in Wave 0.
   `curl`, `cat`, `sed -n` stay costly. A command that cannot be reasoned
   about stays costly; the one exception is a detached `run_in_background`
   non-reader
+- For Read, a file the Read tool shows as an image (png, jpg/jpeg, gif, webp)
+  is priced by its pixels from the file header (`hooks/lib/image-tokens`:
+  pixels / 750 after the downscale to 2576 px and 3.75 MP, at most ~4.8K
+  tokens), never by its bytes — a screenshot is no longer blocked as tens of
+  thousands of tokens. An unreadable header costs the per-image cap; PDFs,
+  `.bmp` and every other file keep the byte estimate
 - A block is a confirm-once gate: retrying the same operation releases it for
   30 minutes, keyed per project. Reword the description or flip
   `run_in_background` freely — neither affects the key

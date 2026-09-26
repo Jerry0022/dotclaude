@@ -68,6 +68,20 @@ describe("prompt.issue.detect — quoted or example numbers are no reference", (
     expect(tracked("detect-log")).toBeNull();
     expect(r.stdout).not.toMatch(/#\d/);
   });
+
+  // 2026-09-26: this kind of prompt put issues #7 and #8 In Progress, and the
+  // session's cards then asked for Done/Todo plus a comment on both.
+  test("hex colours in a prompt are neither tracked nor asked about", () => {
+    const prompt =
+      "#7d84a8 is the dim watermark: the pipeline line keeps it when every step is ✓.\n" +
+      "The palette (green #8fae8f, red #e0a0a0, yellow #d9c58a) has no light counterpart; " +
+      "color:#123456 and #000080 are colours too.";
+    const r = run(prompt, "detect-hex");
+    expect(r.code).toBe(0);
+    expect(tracked("detect-hex")).toBeNull();
+    expect(asked("detect-hex")).toBeNull();
+    expect(r.stdout).not.toMatch(/#\d/);
+  });
 });
 
 describe("prompt.issue.detect — a request to work on an issue is tracked", () => {

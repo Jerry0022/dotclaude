@@ -164,6 +164,11 @@ describe("parseFollowUp", () => {
     expect(R.parseFollowUp([{ header: "Ergebnis", question: "x" }], { x: "Audit umsetzen (Recommended)" })).toEqual({ auditResult: "implement", modeHint: "audit" });
     expect(R.parseFollowUp(CURRENT, {})).toBeNull();
   });
+
+  test("an issue title that names a hex colour picks only the issue", () => {
+    const qs = [{ header: "Issues", question: "Welche Issues?" }];
+    expect(R.parseFollowUp(qs, { "Welche Issues?": "#12 Card colour #7d84a8 fails AA" })).toEqual({ items: ["12"], modeHint: "backlog" });
+  });
 });
 
 describe("extractAnswers", () => {

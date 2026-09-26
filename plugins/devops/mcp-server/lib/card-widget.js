@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.9.0
+ * @version 0.10.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -352,11 +352,22 @@ function linkifyHtml(s, lang = "de") {
     .join("");
 }
 
+// Text colours come from the host's tokens, so the light theme gets its own
+// counterpart: the dark-tuned literals (#8fae8f, #e0a0a0, #d9c58a, #aab4e6)
+// measured 1.5–2.2:1 on the light card surface. Each status colour is the
+// host's role token softened toward --text-secondary, the share fitted so
+// the dark theme keeps the muted palette it was tuned for: 7.2–7.9:1 light,
+// 8.2–8.9:1 dark. `dim` is the old watermark hue pulled 25 % toward
+// --text-primary: 5.0:1 light (the literal #7d84a8 was 3.3:1), 7.1:1 dark,
+// still a step quieter than the body text. Measured on Claude Desktop
+// 2.9939's own tokens, 2026-09-26. The bar graphics below sit on their own
+// always-dark track and keep literal colours.
 const COLOR = {
-  green: "#8fae8f",
-  red: "#e0a0a0",
-  yellow: "#d9c58a",
-  lilac: "#aab4e6",
+  green: "color-mix(in srgb, var(--text-success) 30%, var(--text-secondary))",
+  red: "color-mix(in srgb, var(--text-danger) 55%, var(--text-secondary))",
+  yellow: "color-mix(in srgb, var(--text-warning) 40%, var(--text-secondary))",
+  lilac: "color-mix(in srgb, var(--text-tint-violet) 60%, var(--text-secondary))",
+  dim: "color-mix(in srgb, #7d84a8 75%, var(--text-primary))",
   fillLilac: "#4a5384",
   track: "#2b2d3a",
   watermark: "#7d84a8",
@@ -422,11 +433,11 @@ function channelLadderHtml(ladder, lang) {
   if (!ladder || !Array.isArray(ladder.groups) || !ladder.groups.length) return "";
   const skipped = lang === "en" ? "skipped" : "übersprungen";
   const lead = ladder.allEqual ? COLOR.green : COLOR.lilac;
-  const sep = `<span aria-hidden="true" style="color:${COLOR.watermark}">›</span>`;
+  const sep = `<span aria-hidden="true" style="color:${COLOR.dim}">›</span>`;
   const parts = ladder.groups.map((g) => {
-    const name = `<span style="color:${COLOR.watermark}">${escapeHtml(g.channels.join(" · "))}</span>`;
-    if (g.skipped) return `<span>${name} <span style="color:${COLOR.watermark}">${skipped}</span></span>`;
-    if (!g.version) return `<span>${name} <span style="color:${COLOR.watermark}">—</span></span>`;
+    const name = `<span style="color:${COLOR.dim}">${escapeHtml(g.channels.join(" · "))}</span>`;
+    if (g.skipped) return `<span>${name} <span style="color:${COLOR.dim}">${skipped}</span></span>`;
+    if (!g.version) return `<span>${name} <span style="color:${COLOR.dim}">—</span></span>`;
     const ver = g.top
       ? `<span style="color:${lead};font-weight:500">v${escapeHtml(g.version)}${ladder.allEqual ? " ✓" : ""}</span>`
       : `<span style="color:var(--text-secondary)">v${escapeHtml(g.version)}</span>`;
@@ -439,42 +450,47 @@ function channelLadderHtml(ladder, lang) {
 }
 
 /**
- * The do-run run-contract line (§ J) — dim watermark treatment like the
+ * The do-run run-contract line (§ J) — dim treatment (`COLOR.dim`) like the
  * pipeline line right above it when every step is ✓ (purely informational),
  * but the body-text colour (`--text-secondary`, same as `card-result` lines)
- * when it carries an open step (✗) or a caveat (⚠) — AUD-021: the watermark
- * colour fails WCAG AA contrast on the light card surface, and this is the
- * one line the user must not miss.
+ * when it carries an open step (✗) or a caveat (⚠) — AUD-021: this is the one
+ * line the user must not miss. (AUD-021 also found the old watermark literal
+ * below AA on the light surface; `COLOR.dim` has passed it since 0.9.0.)
  * RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
  * neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss" as
  * an open step, so it gets the same readable colour.
  * Polish: the state marks themselves carry the state, as the evidence row's
  * glyphs do (glyphColor) — ✗ / ⚠ in the danger colour, a doubtful ` ?` in
- * the warning colour — through the host's own tokens (the literal palette is
- * only the fallback: it is tuned for the dark theme), so both themes keep
- * their contrast. ✓ stays plain.
+ * the warning colour — from the same host-token palette (`COLOR`), so both
+ * themes keep their contrast. ✓ stays plain.
+ * Spacing: right under the pipeline line (`afterPipeline`) the line drops its
+ * top padding — the pipeline line's own 4px plus the panel gap already
+ * separate them (14px → 10px). An inline padding beats any `<style>` rule,
+ * so the renderer decides, not a sibling selector.
  *
  * @param {string} [text] the run-contract line, e.g. from `model.runContract`
+ * @param {{ afterPipeline?: boolean }} [opts] the pipeline line sits right above
  * @returns {string} the `<div class="card-run-contract">…</div>` fragment, or
  *   '' when `text` is empty/nullish (H-D16).
  */
-export function runContractLineHtml(text) {
+export function runContractLineHtml(text, { afterPipeline = false } = {}) {
   if (!text) return "";
   const hasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(text);
-  const color = hasOpenStep ? "var(--text-secondary)" : COLOR.watermark;
+  const color = hasOpenStep ? "var(--text-secondary)" : COLOR.dim;
   const marked = escapeHtml(text)
-    .replace(/[✗⚠]/g, (g) => `<span style="color:var(--text-danger, ${COLOR.red})">${g}</span>`)
-    .replace(/(\s)\?(?=\s|$)/g, `$1<span style="color:var(--text-warning, ${COLOR.yellow})">?</span>`);
-  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:4px 0">${marked}</div>`;
+    .replace(/[✗⚠]/g, (g) => `<span style="color:${COLOR.red}">${g}</span>`)
+    .replace(/(\s)\?(?=\s|$)/g, `$1<span style="color:${COLOR.yellow}">?</span>`);
+  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:${afterPipeline ? "0 0 4px" : "4px 0"}">${marked}</div>`;
 }
 
 // › lines (result lines, context, points): the glyph visible — lilac,
 // weight 500 — and inset 6px from the heading edge; the text a step quieter
 // than the headings (`--text-secondary`), so the glyph leads and the line
 // does not shout. Deviation label kept red. Shared by resultLinesHtml,
-// contextHtml and pointsHtml below.
-function glyphLineHtml(cls, inner, extra = "") {
-  return `<div class="${cls}" style="display:flex;gap:4px;margin:3px 0;padding-left:6px;font-size:14px;line-height:1.5;color:var(--text-secondary)${extra}"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
+// contextHtml and pointsHtml below: 14px on the 4px spacing scale by
+// default, the context line passes its own size and margin.
+function glyphLineHtml(cls, inner, { size = 14, margin = "4px 0" } = {}) {
+  return `<div class="${cls}" style="display:flex;gap:4px;margin:${margin};padding-left:6px;font-size:${size}px;line-height:1.5;color:var(--text-secondary)"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
 }
 
 /** The "changes" › lines — the deviation label (`**…**` lead-in) kept red. */
@@ -494,14 +510,14 @@ function evidenceHtml(evidence) {
 /** The budget-bar row plus the optional context-health watermark, or '' when omitted. */
 function budgetRowHtml(budget) {
   return budget && !budget.omitted
-    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(Array.isArray(budget.bars) ? budget.bars : []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.watermark}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
+    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(Array.isArray(budget.bars) ? budget.bars : []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.dim}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
     : "";
 }
 
 /** The pipeline line (commit → push → PR → merge), or '' without one. */
 function pipelineHtml(pipeline, pipelinePr, repoUrl) {
   return pipeline
-    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.watermark};padding:4px 0">${escapeHtml(pipeline).replace(/#(\d+)/, () => pipelinePrHtml(pipelinePr, repoUrl))}</div>`
+    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.dim};padding:4px 0">${escapeHtml(pipeline).replace(/#(\d+)/, () => pipelinePrHtml(pipelinePr, repoUrl))}</div>`
     : "";
 }
 
@@ -526,7 +542,7 @@ function blockAHtml(model, lang, repoUrl) {
     resultLinesHtml(model.resultLines, lang),
     evidenceHtml(model.evidence),
     pipelineHtml(model.pipeline, model.pipelinePr, repoUrl),
-    runContractLineHtml(model.runContract),
+    runContractLineHtml(model.runContract, { afterPipeline: !!model.pipeline }),
     channelLadderHtml(model.ladder, lang),
     budgetRowHtml(model.budget),
     `</div>`,
@@ -541,7 +557,7 @@ function headingHtml(heading) {
 // Context line: same › glyph, one size smaller.
 function contextHtml(context, lang) {
   return context
-    ? glyphLineHtml("card-context", linkifyHtml(context.replace(/^›\s*/, ""), lang), ";font-size:13px;margin:0 0 4px")
+    ? glyphLineHtml("card-context", linkifyHtml(context.replace(/^›\s*/, ""), lang), { size: 13, margin: "0 0 4px" })
     : "";
 }
 
@@ -581,7 +597,7 @@ function buttonsRowHtml(model, lang) {
  */
 function blockBHtml(model, lang) {
   return [
-    `<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 14px;margin-top:10px">`,
+    `<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 12px;margin-top:10px">`,
     headingHtml(model.heading),
     contextHtml(model.context, lang),
     pointsHtml(model.points, lang),

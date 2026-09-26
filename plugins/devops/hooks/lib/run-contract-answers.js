@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-answers
- * @version 0.1.1
+ * @version 0.1.2
  * @plugin devops
  * @description Run-contract answer extraction: the do-run router / follow-up
  *   AskUserQuestion parsing (spec B) and the machine-prompt parsing
@@ -406,7 +406,9 @@ function parseFollowUp(questions, answers) {
     } else if (ISSUES_HEADER_RE.test(h)) {
       hit = true;
       const nums = [];
-      for (const t of tokens) for (const m of t.matchAll(/#(\d+)/g)) nums.push(m[1]);
+      // `#N` as a token of its own (issue-refs.js): a title that names a hex
+      // colour ("#12 Card colour #7d84a8 fails AA") picks no issue #7.
+      for (const t of tokens) for (const m of t.matchAll(/(?<![\p{L}\p{N}_/&#:])#([1-9]\d*)(?![\p{L}\p{N}_])/gu)) nums.push(m[1]);
       if (nums.length) patch.items = [...new Set([...(patch.items || []), ...nums])];
     } else if (/^pc danach$/i.test(h)) {
       hit = true;

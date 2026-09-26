@@ -21,6 +21,14 @@ import {
 const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
 const terminal = { CLAUDE_CODE_ENTRYPOINT: "cli" };
 
+// The widget's text colours (card-widget.js COLOR): host tokens, so the
+// light theme has its own counterpart; the dark-tuned literals only survive
+// on the bar graphics.
+const DIM = "color-mix(in srgb, #7d84a8 75%, var(--text-primary))";
+const RED = "color-mix(in srgb, var(--text-danger) 55%, var(--text-secondary))";
+const YELLOW = "color-mix(in srgb, var(--text-warning) 40%, var(--text-secondary))";
+const LILAC = "color-mix(in srgb, var(--text-tint-violet) 60%, var(--text-secondary))";
+
 const baseModel = (over = {}) => ({
   variant: "ready",
   lang: "de",
@@ -268,10 +276,10 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(cardWidgetHtml(baseModel({ runContract: null }), "")).not.toContain("card-run-contract");
   });
 
-  test("AUD-021: run-contract line is dim watermark colour when every step is ✓", () => {
+  test("AUD-021: run-contract line is the dim colour when every step is ✓", () => {
     const html = cardWidgetHtml(baseModel({ runContract: "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · QA ✓" }), "");
     const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];
-    expect(block).toContain("#7d84a8");
+    expect(block).toContain(`color:${DIM}`);
     expect(block).not.toContain("var(--text-secondary)");
   });
 
@@ -309,9 +317,9 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(runContractLineHtml(undefined)).toBe("");
   });
 
-  test("H-D16: runContractLineHtml uses the watermark colour when every step is ✓", () => {
+  test("H-D16: runContractLineHtml uses the dim colour when every step is ✓", () => {
     const html = runContractLineHtml("🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · QA ✓");
-    expect(html).toContain("#7d84a8");
+    expect(html).toContain(`color:${DIM}`);
     expect(html).not.toContain("var(--text-secondary)");
   });
 
@@ -327,9 +335,9 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
 
   test("polish: the ✗ / ⚠ / ? marks carry their state through host colour tokens, ✓ stays plain", () => {
     const html = runContractLineHtml("🧾 Run · Audit · Autonom · Ship auto — Harden ✓ · Polish ⚠ (keine UI) · QA ? · do-ship ✗");
-    expect(html).toContain('<span style="color:var(--text-danger, #e0a0a0)">✗</span>');
-    expect(html).toContain('<span style="color:var(--text-danger, #e0a0a0)">⚠</span>');
-    expect(html).toContain('QA <span style="color:var(--text-warning, #d9c58a)">?</span>');
+    expect(html).toContain(`<span style="color:${RED}">✗</span>`);
+    expect(html).toContain(`<span style="color:${RED}">⚠</span>`);
+    expect(html).toContain(`QA <span style="color:${YELLOW}">?</span>`);
     expect(html).toContain("Harden ✓ · ");
     expect(html).not.toMatch(/<span[^>]*>✓<\/span>/);
     // Only a standalone "?" token is a state mark — never one inside a word.
@@ -354,7 +362,23 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     const runContract = "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · do-ship ✗";
     const html = cardWidgetHtml(baseModel({ runContract }), "");
     const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];
-    expect(block).toBe(runContractLineHtml(runContract));
+    expect(block).toBe(runContractLineHtml(runContract, { afterPipeline: true }));
+    const alone = cardWidgetHtml(baseModel({ runContract, pipeline: "" }), "");
+    expect(alone.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0]).toBe(runContractLineHtml(runContract));
+  });
+
+  // Polish 2026-09-26: the pipeline line's 4px, the panel gap and the run
+  // line's own 4px stacked to 14px between two related dim lines. The run
+  // line's padding is inline, so a `<style>` sibling rule cannot reach it —
+  // the renderer drops the top padding right under the pipeline line.
+  test("the run-contract line drops its top padding right under the pipeline line, keeps it elsewhere", () => {
+    const runContract = "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓";
+    const under = cardWidgetHtml(baseModel({ runContract }), "");
+    expect(under.match(/<div class="card-run-contract" style="([^"]*)"/)[1]).toMatch(/padding:0 0 4px$/);
+    const alone = cardWidgetHtml(baseModel({ runContract, pipeline: "" }), "");
+    expect(alone.match(/<div class="card-run-contract" style="([^"]*)"/)[1]).toMatch(/padding:4px 0$/);
+    expect(runContractLineHtml(runContract)).toMatch(/padding:4px 0">/);
+    expect(under).not.toMatch(/\.card-pipeline\s*\+/);
   });
 
   test("the widget HTML puts the versioned prompt on the promote button", () => {
@@ -507,7 +531,40 @@ describe("cardWidgetHtml", () => {
       evidence: [{ glyph: "✗", text: "1 Test rot", dim: false, tooltip: "npm test · 41s" }],
     }), "");
     expect(html).toContain("npm test · 41s");
-    expect(html).toContain("#e0a0a0"); // red for a failed post
+    expect(html).toContain(`class="card-post" style="color:${RED}"`); // red for a failed post
+  });
+
+  // Polish 2026-09-26: the palette was tuned for the dark theme and measured
+  // 1.5–2.2:1 (status colours) and 3.3:1 (dim lines) on the light card
+  // surface. Every text colour now resolves through a host token; a literal
+  // colour is left only on the bar graphics, which sit on their own dark track.
+  test("every text colour goes through a host token — literals only inside the budget bar", () => {
+    const html = cardWidgetHtml(baseModel({
+      resultLines: ["**Nicht erreicht:** Overlay", "Zwei Dateien geändert"],
+      evidence: [{ glyph: "✗", text: "1 Test rot" }, { glyph: "◐", text: "2/3" }, { glyph: "✓", text: "3464 grün" }],
+      pipeline: "✓ commit → ✓ push → ✓ merge · main",
+      runContract: "🧾 Run — Harden ✓ · Polish ⚠ · QA ? · do-ship ✗",
+      ladder: { allEqual: false, groups: [
+        { channels: ["alpha"], version: "0.2.0", top: true },
+        { channels: ["beta"], version: "0.1.0", lag: { versions: 1 } },
+        { channels: ["stable"], skipped: true },
+      ] },
+      budget: { omitted: false, contextHealth: "🧠 1180 Calls", bars: [
+        { label: "5h", pct: 60, elapsedPct: 40, level: "red", watermark: "3 h", tooltip: "t" },
+      ] },
+      context: "› alpha liegt vorn",
+    }), "");
+    const body = html.slice(0, html.indexOf("<script>"));
+    // The bar track and everything inside it are graphics.
+    const outsideBar = body.replace(/<span style="position:relative;display:inline-block;width:220px[\s\S]*?<\/span><\/span>/g, "");
+    const colors = [...outsideBar.matchAll(/(?<![-\w])color:([^;"]+)/g)].map((m) => m[1].trim());
+    expect(colors.length).toBeGreaterThan(10);
+    for (const c of colors) expect(c, c).toMatch(/^(inherit|var\(--|color-mix\(in srgb, .*var\(--)/);
+    expect(outsideBar).toContain(`color:${DIM}">🧠 1180 Calls`);
+    expect(outsideBar).toContain(`<span style="color:${DIM}">alpha</span>`);
+    // Inside the bar: the watermark and the marker keep their literals.
+    expect(body).toContain("font-size:11px;color:#7d84a8;white-space:nowrap\">3 h");
+    expect(body).toContain("background:#e07a7a;z-index:2");
   });
 
   test("empty model yields no HTML", () => {
@@ -581,10 +638,28 @@ describe("cardWidgetHtml", () => {
       expect(m[1]).toContain("gap:4px");
       expect(m[2]).toContain("width:8px");
       expect(m[1]).toContain("color:var(--text-secondary)");
-      expect(m[2]).toContain("color:#aab4e6");
+      expect(m[2]).toContain(`color:${LILAC}`);
       expect(m[2]).toContain("font-weight:500");
+      // One font-size and one margin per line — no overridden duplicates.
+      expect(m[1].match(/font-size:/g), cls).toHaveLength(1);
+      expect(m[1].match(/(^|;)margin:/g), cls).toHaveLength(1);
     }
     expect(html.match(/<div class="card-point"/g)).toHaveLength(2);
+  });
+
+  // Polish 2026-09-26: the › lines were the file's only 3px and the decision
+  // box its only 14px — both now on the 4px spacing scale.
+  test("› lines and the decision box sit on the 4px spacing scale", () => {
+    const html = cardWidgetHtml(baseModel({ context: "› c" }), "");
+    for (const cls of ["card-result", "card-point"]) {
+      expect(html.match(new RegExp(`<div class="${cls}" style="([^"]*)"`))[1], cls).toContain("margin:4px 0;");
+    }
+    const context = html.match(/<div class="card-context" style="([^"]*)"/)[1];
+    expect(context).toContain("margin:0 0 4px;");
+    expect(context).toContain("font-size:13px;");
+    expect(html.match(/<div class="card-box" style="([^"]*)"/)[1]).toContain("padding:10px 12px;");
+    expect(html).not.toContain("margin:3px");
+    expect(html).not.toContain("padding:10px 14px");
   });
 
   test("exactly four text sizes — 16 / 14 / 13 / 11 — and none below 11px", () => {

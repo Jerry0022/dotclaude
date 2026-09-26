@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.14.0
+ * @version 0.14.1
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
  *   significant percentage of the ~200K context window. Threshold scales
  *   with the user's Claude plan (pro/max_5/max_20). Uses a flag-file
  *   mechanism: first call blocks with warning, retry allows through.
+ *
+ *   A Read of an image (png/jpg/jpeg/gif/webp — the Read tool's image types)
+ *   is priced by its pixels from the file header (`hooks/lib/image-tokens`),
+ *   at most ~4.8K tokens, not by its bytes: screenshots of 81 KB and 238 KB
+ *   were blocked as ~20.7K and ~60.9K tokens (2026-09-26).
  *
  *   For Bash, a large file only counts when a command actually READS it
  *   (`hooks/lib/bash-context-cost`): passing the path as an argument — a
@@ -88,6 +93,9 @@ try {
 // Falls back to the pre-0.9 substring match rather than failing open.
 let bashCost = null;
 try { bashCost = require('../lib/bash-context-cost'); } catch { /* fallback below */ }
+// An image Read is priced by pixels; without the module, by bytes as before.
+let imageCost = null;
+try { imageCost = require('../lib/image-tokens'); } catch { /* byte estimate below */ }
 
 // Telemetry only — never lets a metrics failure affect the guard's verdict.
 let metricsLib = null;
@@ -537,8 +545,13 @@ process.stdin.on('end', () => {
     const absPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
     try {
       const stat = fs.statSync(absPath);
-      let est = Math.ceil(stat.size * (cfg.tokensPerByte || 0.25));
-      if (toolInput.limit && toolInput.limit > 0) {
+      // The Read tool shows png/jpg/jpeg/gif/webp as an image, billed by its
+      // pixels (lib/image-tokens) — never by its bytes, and `limit` has no
+      // lines to cut there.
+      let imageEst = null;
+      try { imageEst = imageCost ? imageCost.readImageTokens(absPath) : null; } catch { imageEst = null; }
+      let est = imageEst != null ? imageEst : Math.ceil(stat.size * (cfg.tokensPerByte || 0.25));
+      if (imageEst == null && toolInput.limit && toolInput.limit > 0) {
         try {
           const content = fs.readFileSync(absPath, 'utf8');
           const totalLines = content.split('\n').length;

@@ -38,6 +38,8 @@ describe("issueRefs — numbers that are no reference", () => {
     ["curly quotes", "it said “fix #12” twice"],
     ["guillemets", "da stand »fix #12« drin"],
     ["round brackets", "reports are excluded already (#473)"],
+    // Decided 2026-09-26: a lone bracketed number stays a citation too.
+    ["a lone number in round brackets", "(#42)"],
     ["square brackets", "see [fix #12] above"],
     ["a blockquote line", "> fix #12\nwhat does this mean?"],
     ["a tagged log line", "[issue-status] Tracked issues this session: #530\nwhy?"],
@@ -62,6 +64,30 @@ describe("issueRefs — numbers that are no reference", () => {
   });
 });
 
+// 2026-09-26: a prompt about card colours ("COLOR.watermark #7d84a8", "green
+// #8fae8f") was read as issues #7 and #8 — the old `#(\d+)` stopped at the
+// first letter. An all-digit colour needs the `:` and leading-zero rules.
+describe("issueRefs — a hex colour is no issue", () => {
+  test.each([
+    "#7d84a8",
+    "#8fae8f",
+    "#e0a0a0",
+    "&#123;",
+    "color:#123abc",
+    "color:#123456",
+    "fill:#333",
+    "#000080",
+    "fix the border #007700",
+    "The pipeline line keeps the dim COLOR.watermark #7d84a8; green #8fae8f, red #e0a0a0",
+  ])("%s", (prompt) => {
+    expect(issueRefs(prompt)).toEqual(NONE);
+  });
+
+  test("a real reference beside a colour still counts", () => {
+    expect(issueRefs("fix #42 — its border is #7d84a8")).toEqual({ track: ["42"], ask: [] });
+  });
+});
+
 describe("issueRefs — a request to work on the issue is tracked", () => {
   test.each([
     ["fix #12", ["12"]],
@@ -76,6 +102,9 @@ describe("issueRefs — a request to work on the issue is tracked", () => {
     ["#12", ["12"]],
     ["Issue #12: das Dropdown flackert", ["12"]],
     ["Issue 12 bitte", ["12"]],
+    ["Issue #42", ["42"]],
+    ["issue 42", ["42"]],
+    ["#42.", ["42"]],
     ["fix #12 and #13", ["12", "13"]],
     ["fix #12-#13", ["12", "13"]],
     ["fix #12 — #40 is only the log", ["12"]],
