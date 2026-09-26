@@ -604,6 +604,13 @@ describe("testRunOutcome", () => {
     expect(hasRunnerOutput(null)).toBe(false);
   });
 
+  test("the maven/gradle/go-bare forms are case-sensitive: a build step's own words are no runner", () => {
+    expect(hasRunnerOutput("Build failed")).toBe(false);
+    expect(hasRunnerOutput("pass")).toBe(false);
+    expect(hasRunnerOutput("[INFO] BUILD SUCCESS")).toBe(true);
+    expect(hasRunnerOutput("FAIL")).toBe(true);
+  });
+
   // Node's spec reporter prints counts AFTER the word ("ℹ fail 0") — without
   // an exit code in the response, the bare \bFAIL\b signal used to flag every
   // GREEN node --test run as red and the gate blocked on passing suites.

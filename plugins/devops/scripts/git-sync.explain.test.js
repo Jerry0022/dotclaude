@@ -28,6 +28,14 @@ describe("--explain names every no-merge exit", () => {
     expect(out).not.toContain("skipped");
   });
 
+  test("a caller deadline too close for a merge plus its recovery → skipped, nothing written", async () => {
+    const { wt, other } = await makeWorld();
+    await advanceOrigin(other, "from-main.txt", "main\n", "main moves");
+    const out = await runSyncExplain(wt, { DEVOPS_GIT_SYNC_DEADLINE_MS: String(Date.now() + 1000) });
+    expect(out).toContain("skipped: the caller's time budget is nearly spent");
+    expect(fs.existsSync(path.join(wt, "from-main.txt"))).toBe(false);
+  });
+
   test("detached HEAD → skipped with the reason", async () => {
     const { wt, other } = await makeWorld();
     await advanceOrigin(other, "from-main.txt", "main\n", "main moves");

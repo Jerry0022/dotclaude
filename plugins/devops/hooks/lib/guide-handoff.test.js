@@ -368,6 +368,7 @@ describe("AUD-C042: web hand-offs that must be detected", () => {
     ["DE separable richte … ein, dotted domain", "Richte bei cron-job.org einen Cron-Job ein, der alle 5 Minuten /api/tick aufruft.", "cron-job.org"],
     ["DE separable gib … ein", "Gib im Stripe-Dashboard unter Webhooks das Secret ein.", "Stripe"],
     ["EN bot token", "You need to create a bot in the Discord Developer Portal and paste its token into .env.", "Discord Developer Portal"],
+    ["a backticked host is a web target, not a local file", "1. Öffne `dashboard.stripe.com/apikeys` und kopiere den Secret Key.", "Stripe"],
   ])("chat: %s", (_label, text, service) => {
     expect(detectWebHandoff(text)).toEqual({ service });
   });

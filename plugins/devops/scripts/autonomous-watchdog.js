@@ -222,8 +222,9 @@ function isValidWatchdogScriptPath(scriptPath, tempRoot = os.tmpdir()) {
 const SPAWN_OPTS = { encoding: 'utf8', timeout: SPAWN_TIMEOUT_MS, windowsHide: true };
 
 /** schtasks answered "no such task" — the task is gone either way. */
+// German schtasks says "Das System kann die angegebene Datei nicht finden".
 function taskNotFound(result) {
-  return /cannot find|nicht gefunden|does not exist/i.test(
+  return /cannot find|nicht gefunden|nicht finden|does not exist/i.test(
     ((result && result.stderr) || '') + ((result && result.stdout) || ''));
 }
 

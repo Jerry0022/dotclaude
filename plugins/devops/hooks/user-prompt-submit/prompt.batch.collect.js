@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.9.0
+ * @version 0.9.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -96,14 +96,18 @@ const SYNC_TIMEOUT_MS = 45_000;
  *   - local reads (rev-parse/rev-list/diff probes, no network — one round
  *     trip through the read budget covers the realistic worst case of a
  *     single slow probe on a loaded disk): SYNC_READ_TIMEOUT_MS = 5s
- *   - the merge write itself: SYNC_WRITE_TIMEOUT_MS = 20s
- *   17s + 5s + 20s = 42s, leaving 3s of margin under the 45s outer kill for
- *   node/git process spawn overhead. A parent segment that does not already
- *   have a local branch or remote-tracking ref (the common `claude/<slug>`
- *   layout's `claude` segment) is skipped WITHOUT a fetch (git-sync.js), so
- *   it never adds a third fetch to this sum.
+ *   - the merge write itself and one recovery write (commit, abort or
+ *     restore after a failed merge): 2 * SYNC_WRITE_TIMEOUT_MS(12s) = 24s
+ *   A second parent, a conflict path or a slow restore could still add up
+ *   past 45s, so the fixed sum is not the guard: git-sync gets the absolute
+ *   deadline (DEVOPS_GIT_SYNC_DEADLINE_MS, 2s before the outer kill) and
+ *   starts a merge only while the merge plus one recovery write still fit
+ *   (git-sync.js outOfTime) — otherwise it skips it and the next sync
+ *   retries. A parent segment that does not already have a local branch or
+ *   remote-tracking ref (the common `claude/<slug>` layout's `claude`
+ *   segment) is skipped WITHOUT a fetch (git-sync.js).
  */
-const SYNC_WRITE_TIMEOUT_MS = 20_000;
+const SYNC_WRITE_TIMEOUT_MS = 12_000;
 const SYNC_READ_TIMEOUT_MS = 5_000;
 const SYNC_FETCH_TIMEOUT_MS = 12_000;
 
@@ -632,6 +636,7 @@ function syncMain(cwd) {
   env.DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS = String(SYNC_WRITE_TIMEOUT_MS);
   env.DEVOPS_GIT_SYNC_TIMEOUT_MS = String(SYNC_READ_TIMEOUT_MS);
   env.DEVOPS_GIT_SYNC_FETCH_TIMEOUT_MS = String(SYNC_FETCH_TIMEOUT_MS);
+  env.DEVOPS_GIT_SYNC_DEADLINE_MS = String(Date.now() + SYNC_TIMEOUT_MS - 2000);
   try {
     // --explain: a skipped sync must say so, or it reads as "up to date".
     const out = execFileSync(process.execPath, [script, '--explain'], {

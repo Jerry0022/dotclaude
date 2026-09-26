@@ -1,6 +1,6 @@
 /**
  * @module browsertest-guard
- * @version 0.8.1
+ * @version 0.8.2
  * @description Pure decision logic for the Light-verification enforcement gate
  *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
  *   rules can be unit-tested without mocking stdin or temp files.
@@ -419,8 +419,13 @@ const EXPLICIT_FAIL_RE =
 //   unittest   Ran N tests in                        dotnet 8+    Test summary: total:
 //   maven      Tests run: N / BUILD SUCCESS|FAILURE  gradle       BUILD SUCCESSFUL|FAILED, N tests completed
 //   go         a bare PASS / FAIL line
+// The unittest / dotnet 8+ / maven / gradle / go-bare forms are matched
+// case-sensitively: "Build failed" from a build step or a stray "pass" line is
+// no runner summary, and must keep a dead chain at #409's `unknown`.
+const RUNNER_OUTPUT_CS_RE =
+  /^\s*Ran\s+\d+\s+tests?\s+in\s|\bTest summary:\s+total:\s*\d+|^\s*(?:\[[A-Z]+\]\s+)?Tests run:\s*\d+,|^\s*(?:\[[A-Z]+\]\s+)?BUILD (?:SUCCESS(?:FUL)?|FAILURE|FAILED)\b|^\s*\d+\s+tests?\s+completed,|^(?:PASS|FAIL)\s*$/m;
 const RUNNER_OUTPUT_RE =
-  /^\s*Ran\s+\d+\s+tests?\s+in\s|\bTest summary:\s+total:\s*\d+|^\s*(?:\[[A-Z]+\]\s+)?Tests run:\s*\d+,|^\s*(?:\[[A-Z]+\]\s+)?BUILD (?:SUCCESS(?:FUL)?|FAILURE|FAILED)\b|^\s*\d+\s+tests?\s+completed,|^(?:PASS|FAIL)\s*$|ℹ\s+(?:tests|pass|fail|suites)\s+\d+|\bTests?(?:\s+Files)?:?\s+\d+\s+(?:passed|failed|skipped|total)|\bTests?\s+\d+\s+(?:passed|failed)\b|^(?:ok|not ok)\s+\d+|^1\.\.\d+\s*$|\b\d+\s+(?:passed|failed|errors?|skipped)\b|\b\d+\s+(?:passing|failing|pending)\b|^(?:ok|FAIL|---\s+(?:PASS|FAIL))\s+\S|\btest result:\s+(?:ok|FAILED)\b|\b(?:Passed|Failed)!\s+-\s+Failed:\s+\d+|\bOK \(\d+ tests?\b|\b\d+ examples?,\s+\d+ failures?\b/im;
+  /ℹ\s+(?:tests|pass|fail|suites)\s+\d+|\bTests?(?:\s+Files)?:?\s+\d+\s+(?:passed|failed|skipped|total)|\bTests?\s+\d+\s+(?:passed|failed)\b|^(?:ok|not ok)\s+\d+|^1\.\.\d+\s*$|\b\d+\s+(?:passed|failed|errors?|skipped)\b|\b\d+\s+(?:passing|failing|pending)\b|^(?:ok|FAIL|---\s+(?:PASS|FAIL))\s+\S|\btest result:\s+(?:ok|FAILED)\b|\b(?:Passed|Failed)!\s+-\s+Failed:\s+\d+|\bOK \(\d+ tests?\b|\b\d+ examples?,\s+\d+ failures?\b/im;
 
 /**
  * Does the output carry a test runner's own summary line — i.e. did a runner
@@ -430,7 +435,8 @@ const RUNNER_OUTPUT_RE =
  */
 function hasRunnerOutput(text) {
   if (!text) return false;
-  return RUNNER_OUTPUT_RE.test(String(text).replace(ANSI_RE, ''));
+  const s = String(text).replace(ANSI_RE, '');
+  return RUNNER_OUTPUT_CS_RE.test(s) || RUNNER_OUTPUT_RE.test(s);
 }
 
 /**
@@ -514,7 +520,7 @@ function verdictFromText(text) {
   // The runner ran (a passing test's line, a runner's own output line) and
   // nothing above says red: a pass. Only text showing no runner at all — a
   // crash before anything ran, an empty response — carries no verdict.
-  return sawPassingTest || RUNNER_OUTPUT_RE.test(body) ? 'pass' : 'none';
+  return sawPassingTest || RUNNER_OUTPUT_CS_RE.test(body) || RUNNER_OUTPUT_RE.test(body) ? 'pass' : 'none';
 }
 
 /**

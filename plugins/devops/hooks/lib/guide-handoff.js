@@ -1,6 +1,6 @@
 /**
  * @module guide-handoff
- * @version 0.6.0
+ * @version 0.6.1
  * @description Detection + pending-hint state for stop.guide.handoff —
  *   decides whether the turn's own final answer hands the user a manual,
  *   click-through job on an external website/dashboard instead of invoking
@@ -194,7 +194,9 @@ function isOfferQuestion(sentence) {
  * file name or `KEY=value`, or a file/editor/terminal/code noun — is local
  * code work, not a web click-through ("1. Öffne `src/config.ts`").
  */
-const BACKTICK_LOCAL_RE = /`(?!https?:)[^`]*(?:[\\/]|\.[a-z0-9]{1,5}(?![\p{L}\p{N}])|=)[^`]*`/u;
+// A backticked host (`dashboard.stripe.com/apikeys`, `supabase.com`) is a web
+// target, not a local file — its dots and slashes must not count as a path.
+const BACKTICK_LOCAL_RE = /`(?!https?:)(?!(?:[a-z0-9-]+\.)+(?:com|org|net|io|dev|app|de|co|ai|cloud|eu|info|me|tv|gg|xyz|us|uk|at|ch|so|page|site|tech|biz)(?::\d+)?(?:[/?#`]))[^`]*(?:[\\/]|\.[a-z0-9]{1,5}(?![\p{L}\p{N}])|=)[^`]*`/iu;
 const LOCAL_TARGET_RE = new RegExp(
   BACKTICK_LOCAL_RE.source +
   '|' + wordAlt([

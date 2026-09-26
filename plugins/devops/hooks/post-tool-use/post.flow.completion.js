@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.29.4
+ * @version 0.29.5
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -77,8 +77,6 @@
  *   reads use lib/git-timeout.js's gitRun (harden scan 2026-09-26).
  */
 
-require('../lib/plugin-guard');
-
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -98,6 +96,8 @@ let loadError = false;
 let loadingModule = '';
 const guardedRequire = (m) => { loadingModule = m; return require(m); };
 try {
+  // plugin-guard loads project-root itself — inside the guard, like the pre/prompt hooks.
+  guardedRequire('../lib/plugin-guard');
   ({ sessionFile, readSessionFile, writeSessionFile } = guardedRequire('../lib/session-id'));
   ({ projectRoot, inOwnWorkTree } = guardedRequire('../lib/project-root'));
   ({ gitRun } = guardedRequire('../lib/git-timeout'));

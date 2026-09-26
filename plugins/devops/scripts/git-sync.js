@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.8.0
+ * @version 0.8.1
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -109,6 +109,17 @@ function git(args) {
 const WRITE_TIMEOUT_MS = writeTimeoutMs(process.env, GIT_TIMEOUT_MS);
 const gitWrite = gitRunner({ cwd, timeoutMs: WRITE_TIMEOUT_MS, env: GIT_ENV });
 
+// A caller that kills this process itself (do-batch waits 45 s) passes its
+// deadline (epoch ms). A merge starts only while the merge AND one recovery
+// write (commit, abort or restore) still fit before it — otherwise the outer
+// kill could land mid-merge or mid-restore, whatever the per-call budgets say.
+const DEADLINE_MS = (() => {
+  const n = Number(process.env.DEVOPS_GIT_SYNC_DEADLINE_MS);
+  return Number.isFinite(n) && n > 0 ? n : null;
+})();
+const MERGE_HEADROOM_MS = 2 * WRITE_TIMEOUT_MS + 3000;
+const outOfTime = () => DEADLINE_MS !== null && DEADLINE_MS - Date.now() < MERGE_HEADROOM_MS;
+
 // Reads whose FAILURE matters (the behind-count probe): git() folds a
 // failure into null, and null used to read as "0 behind" — a timed-out probe
 // then reported "= already in" for a sync that never ran. Local only — no
@@ -122,8 +133,9 @@ const gitRead = gitRunner({ cwd, timeoutMs: GIT_TIMEOUT_MS, env: GIT_ENV });
 const gitFetch = gitRunner({ cwd, timeoutMs: FETCH_TIMEOUT_MS, env: GIT_ENV });
 
 /** One-line cause of a failed read: its timeout, else git's own error line. */
-function readFailure(res) {
-  if (res.timedOut) return `timed out after ${Math.round(GIT_TIMEOUT_MS / 1000)} s`;
+/** `timeoutMs` is the runner's own budget — a fetch reports FETCH_TIMEOUT_MS. */
+function readFailure(res, timeoutMs = GIT_TIMEOUT_MS) {
+  if (res.timedOut) return `timed out after ${Math.round(timeoutMs / 1000)} s`;
   return firstErrorLine(res.err) || 'git error';
 }
 
@@ -173,7 +185,7 @@ if (branch === MAIN) {
   // main. Under --explain say whether the local branch trails its remote.
   if (EXPLAIN) {
     const f = gitFetch(['fetch', origin, `+refs/heads/${MAIN}:refs/remotes/${origin}/${MAIN}`, '--quiet']);
-    if (!f.ok) quit(`on ${MAIN} itself; fetch of ${MAIN} failed (${readFailure(f)}) — stale ref, ${origin}/${MAIN} may be ahead`);
+    if (!f.ok) quit(`on ${MAIN} itself; fetch of ${MAIN} failed (${readFailure(f, FETCH_TIMEOUT_MS)}) — stale ref, ${origin}/${MAIN} may be ahead`);
     const b = gitRead(['rev-list', '--count', `HEAD..refs/remotes/${origin}/${MAIN}`]);
     if (!b.ok) quit(`on ${MAIN} itself; behind-count probe failed (${readFailure(b)})`);
     const n = parseInt(b.out.trim(), 10) || 0;
@@ -532,6 +544,7 @@ function tryMerge(source) {
   // invisible to them, so ask again with the index about to be written.
   if (repoBusy()) return { source, skipped: 'another git operation started meanwhile' };
   if (shipInFlight()) return { source, skipped: 'a /do-ship run started meanwhile' };
+  if (outOfTime()) return { source, skipped: 'the caller\'s time budget is nearly spent — the next sync retries' };
 
   // What a merge that dies half-way is put back to, and when it started (an
   // index.lock written after this moment is the merge's own).
@@ -667,10 +680,10 @@ for (const p of getParentChain(branch)) {
   // cannot delete one it does not write) or whose fetch failed with none ever
   // written falls back to the same "no tracking ref" report as before.
   if (git(['rev-parse', '--verify', '--quiet', tracking]) === null) {
-    if (!f.ok && !missing) fetchSkips.push(`– skipped: fetch of ${p} failed (${readFailure(f)}) — no tracking ref`);
+    if (!f.ok && !missing) fetchSkips.push(`– skipped: fetch of ${p} failed (${readFailure(f, FETCH_TIMEOUT_MS)}) — no tracking ref`);
     continue;
   }
-  if (!f.ok && !missing) staleFetch.set(`${origin}/${p}`, readFailure(f));
+  if (!f.ok && !missing) staleFetch.set(`${origin}/${p}`, readFailure(f, FETCH_TIMEOUT_MS));
   sources.push(`${origin}/${p}`);
 }
 
