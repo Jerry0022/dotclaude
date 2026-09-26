@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.212.3] — 2026-09-26
+
+### Fixed
+- **The open-in-browser ack says what happened, in plain words.** Clicking a card's open button shows the Desktop app's red "Ein Hook hat deine Eingabe blockiert" panel. Under it, the ack said the prompt "kostet so keinen Turn" / "costs no turn" — jargon the owner had to decode (#542). It now reads `✓ Seite im Standardbrowser geöffnet: <url>`, followed by: the red "blocked" notice is intended, the plugin opened the page itself without sending the input to Claude, and so it costs no tokens (de + en). The doc comments that repeated the old wording say the same.
+
 ## [0.212.2] — 2026-09-26
 
 ### Fixed
