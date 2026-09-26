@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.12.2
+ * @version 0.12.3
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -350,22 +350,32 @@ function remoteNames(cwd) {
 }
 
 /**
- * Is `cwd` inside a git work tree? `null` when nothing can be concluded: git
- * did not answer in time (ship/lib/repo-mode.js draws the same line), or the
- * directory is gone — a ship card is often rendered after ship_cleanup
- * removed the worktree it names. Git missing altogether reads as "no work
- * tree": there is no repo to use.
+ * Is `cwd` inside a git work tree? `false` only on git's own "not a git
+ * repository" answer; `null` whenever nothing can be concluded:
+ *  - no `cwd`: the server's own cwd is the plugin directory
+ *    (${CLAUDE_PLUGIN_ROOT} in .mcp.json), never the project — probing it
+ *    made every cwd-less card file-only and downgraded a real ship;
+ *  - the directory is gone — a ship card is often rendered after
+ *    ship_cleanup removed the worktree it names;
+ *  - git did not answer in time (ship/lib/repo-mode.js draws the same line),
+ *    is missing, or refused the repo ("dubious ownership").
+ * The probe runs under LC_ALL=C so git's refusal is matched in English.
  */
 function insideWorkTree(cwd) {
+  if (!cwd) return null;
   try {
-    if (cwd && !statSync(cwd).isDirectory()) return null;
+    if (!statSync(cwd).isDirectory()) return null;
   } catch {
     return null;
   }
   try {
-    return execSync('git rev-parse --is-inside-work-tree', { ...GIT_PROBE_OPTS, cwd: cwd || undefined }).trim() === 'true';
+    const out = execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd, encoding: 'utf8', timeout: GIT_PROBE_OPTS.timeout, windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, LC_ALL: 'C', LANGUAGE: 'C' },
+    });
+    return String(out).trim() === 'true';
   } catch (err) {
-    return err && (err.code === 'ETIMEDOUT' || err.killed === true) ? null : false;
+    return /not a git repository/i.test(String((err && err.stderr) || '')) ? false : null;
   }
 }
 
@@ -593,10 +603,21 @@ function firstCount(text) {
   return m ? m[0] : '';
 }
 
+/**
+ * The test count of a freeform result: the number standing next to "Tests"
+ * ("248 Dateien · 7286 Tests grün" → 7286 — the first integer there is the
+ * FILE count), else the first integer ("3464 grün · 3 skipped" → 3464).
+ */
+function testCount(text) {
+  const r = String(text || '');
+  const m = /(\d[\d.]*)\s*tests?\b/i.exec(r) || /\btests?\s*:?\s*(\d[\d.]*)/i.exec(r);
+  return m ? m[1] : firstCount(r);
+}
+
 /** "3464 Tests grün" / "2 Tests rot" — number + noun + state (§ 2.3). */
 function testsPostText(result, glyph, lang) {
   const r = String(result || '');
-  const n = firstCount(r);
+  const n = testCount(r);
   if (!n) return r;
   const noun = lang === 'en' ? 'tests' : 'Tests';
   if (glyph === '✗') {
@@ -2392,6 +2413,7 @@ server.registerTool(
 // Exported for unit tests — the usage meter is pure and worth asserting on
 // directly (column grid, bar semantics) without driving the whole card.
 export {
+  insideWorkTree, withDetectedRepoMode,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   resolveCardKey, buildDecisionBlock, buildCardModel,

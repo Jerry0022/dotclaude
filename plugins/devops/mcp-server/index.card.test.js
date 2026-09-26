@@ -286,6 +286,25 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  // Redteam R2: the server's own cwd is ${CLAUDE_PLUGIN_ROOT} — for an
+  // installed plugin a cache dir outside any repo. A cwd-less card must never
+  // probe it: that turned every such card file-only and downgraded a real
+  // ship-successful to ready-files.
+  test("without a cwd, or with one git cannot judge, the card never turns file-only", async () => {
+    const mod = await import("./index.js");
+    expect(mod.insideWorkTree(undefined)).toBeNull();
+    expect(mod.insideWorkTree("")).toBeNull();
+    expect(mod.insideWorkTree(join(tmpdir(), `card-gone-${process.pid}-${Date.now()}`))).toBeNull();
+    const params = { variant: "ready", state: {} };
+    mod.withDetectedRepoMode(params);
+    expect(params.state.mode).toBeUndefined();
+    const shipped = await cardText({
+      variant: "ship-successful", summary: "Shipped", lang: "de", session_id: "test-anatomy-norepo-d",
+      state: { pushed: true, merged: "main", commit: "abc1234" },
+    });
+    expect(shipped).not.toMatch(/kein Repo|ready-files|Fertig auf der Platte/);
+  });
+
   test("no remote + unshipped work: no card, the caller is told to ship locally", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
@@ -781,6 +800,20 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(text).toContain("✓ 3464 Tests grün");
     expect(text).not.toMatch(/⏭/);
     expect(text).toMatch(/^## 📦 Shippen trotz 2 Vorbehalten\?$/m);
+  });
+
+  test("the count is the one next to 'Tests', not a file count before it", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Zählung", lang: "de", session_id: "test-ev-count",
+      tests: [{ method: "npm test", result: "248 Dateien · 7286 Tests grün" }],
+    });
+    expect(text).toContain("✓ 7286 Tests grün");
+    expect(text).not.toContain("✓ 248 Tests grün");
+    const summary = await cardText({
+      variant: "ready", summary: "Zählung", lang: "en", session_id: "test-ev-count-en",
+      tests: [{ method: "vitest", result: "Test Files 248 passed · Tests 7286 passed" }],
+    });
+    expect(summary).toContain("✓ 7286 tests green");
   });
 
   test("'0 rot' is green; '2 rot' is ✗ 2 Tests rot and routes to the ⚠ heading", async () => {
