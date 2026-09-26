@@ -145,7 +145,7 @@ process.stdin.on('end', () => {
   if (unasked.length === 0) return;
 
   asked.push(...unasked);
-  try { writeSessionFile(askedFile, JSON.stringify(asked)); } catch {}
+  try { writeSessionFile(askedFile, JSON.stringify(asked)); } catch { /* the question still goes out */ }
 
   const unaskedList = unasked.map(n => `#${n}`).join(', ');
   const lead = askSource === 'mention'
