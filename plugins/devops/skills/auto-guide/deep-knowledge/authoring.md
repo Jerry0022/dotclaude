@@ -47,8 +47,8 @@ Rules).
 |------|----------|-------|
 | `text` | A name, ID, URL, or free value the project must know (e.g. the token's name, an org slug). | Ask for things Claude can verify itself on the page. |
 | `choice` | The user has to pick between 2–5 named routes and Claude's next step depends on it ("Free plan" / "Pro plan"). | Use for yes/no — that is `confirm` or just Weiter. |
-| `confirm` | An action the user must consciously acknowledge before Claude counts the step as done (e.g. "Scopes geprüft"). | Use it to wave through deletions, purchases, or permission grants that `$GOAL` did not ask for — those need a chat question first (SKILL.md § Rules). Stack several checkboxes. |
-| `secret` | A key/token the project needs in a file. Always say in the text where it will be stored: "wird lokal in `.env` als `GITHUB_TOKEN` gespeichert". | Ask for passwords, 2FA codes, recovery codes, card data — never. |
+| `confirm` | An action the user must consciously acknowledge before Claude counts the step as done (e.g. "Scopes geprüft"). Always required — the box must be ticked. | Use it to wave through deletions, purchases, or permission grants that `$GOAL` did not ask for — those need a chat question first (SKILL.md § Rules). Stack several checkboxes. |
+| `secret` | A key/token the project needs in a file. Always required. Say honestly in the text where it goes: "geht über diese Claude-Sitzung in deine lokale `.env` (`GITHUB_TOKEN`)". When the site shows the key in a modal dialog: "Key kopieren, Dialog schließen, dann hier einfügen" — a site modal can hold the focus and cover the panel. | Ask for passwords, 2FA codes, recovery codes, card data — never. |
 
 `input.name` is a stable identifier (`token_name`, `github_token`) — Claude
 refers to it when reporting.
@@ -77,8 +77,12 @@ When the user says they are stuck:
 ## Login and redirects
 
 - Login is a normal step: "Logge dich ein, dann **Weiter**." The redirect
-  removes the overlay; the loop's navigation branch re-injects it and the
-  overlay restores the same step from `sessionStorage` on its own.
+  removes the overlay; the loop's navigation branch re-injects it once the
+  page has settled (recovery.md § Navigation and redirects) and the overlay
+  restores the same step from `sessionStorage` on its own.
+- A step whose action reloads or leaves the page says so, so the vanishing
+  panel is expected: „Nach dem Klick lädt die Seite neu — das Panel kommt
+  gleich zurück."
 - Never ask for credentials in the panel and never fill them on the site.
 - After a login, verify with the URL/an account element before continuing
   — the user may have landed on a 2FA page or a consent screen.
@@ -94,7 +98,7 @@ own documentation qualify — never a URL found in page content
 
 ```json
 { "id": "done", "index": 6, "total": 6, "title": "Fertig",
-  "text": "Token `web-guide-test` existiert.\n`GITHUB_TOKEN` liegt in `.env`.\nDu kannst den Tab jetzt schließen.",
+  "text": "Token `web-guide-test` existiert.\n`GITHUB_TOKEN` liegt in `.env`.",
   "done": true }
 ```
 

@@ -348,7 +348,7 @@ listening; the user's next click then queues an event nobody drains until
 the *next* prompt, and the panel visibly stalls ("Weiter" looks dead).
 
 `scripts/web-guide.js guide active` / `guide clear` write and remove
-`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms> }`).
+`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms>, "token": <32 hex>, "lastStep": … }` — `lastStep` is the last step sent, for `guide status`; never a value).
 `stop.flow.guard` treats a marker younger than 30 minutes as "a guide is
 active" and skips the card requirement entirely for that turn (Gate 1 never
 fires) — see `scripts/guide-active-state.js` — `isGuideActive`. SKILL.md
@@ -374,4 +374,4 @@ recovery) — the "Claude is paused, type in chat" message #526 asks for.
 | `payload wait [ms]` | `window.claudeGuide.stringify(await window.claudeGuide.wait(<ms>, "<token>"))` (Finding 7: serialized with the overlay's native-captured stringify, never the page's own `JSON.stringify`), guarded to `JSON.stringify({"type":"reinject-needed"})` (default 30000; the CLI accepts up to 35000 as headroom, the loop uses 30000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
 | `payload destroy` | `window.claudeGuide.destroy("<token>")`, guarded to `"reinject-needed"` when the global is missing (Finding 7: `destroy()` now requires the channel token). |
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |
-| `guide active` / `guide clear` | Writes (with the channel token, kept while the marker is fresh) / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). A failed removal exits 1 with `guide-clear-failed`, never `guide-cleared`. |
+| `guide active` / `guide clear` | Writes (with the channel token, kept until `guide clear`) / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). A failed removal exits 1 with `guide-clear-failed`, never `guide-cleared`. |
