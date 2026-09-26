@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.213.3] — 2026-09-26
+
+### Changed
+- **The concept templates reference is split into 16 topic parts.** `auto-concept/deep-knowledge/templates.md` had grown to about 15,000 lines against the 600-line deep-knowledge budget, so every lookup loaded far more than it needed. It is now an index with a reading-order table. The content lives in `templates-common.md`, `templates-panel.md`, `templates-decision.md`, the four `templates-design*.md` parts, `templates-section-nav.md`, `templates-submit.md` and the others. Each part opens with a numbered header and continues the text of the part before it. A new loader, `templates-source.js`, follows the index order, strips the headers and returns the joined text byte for byte as before. The concept tests, the concept gate's drift checks and `build-concept-fixture.js` all read through it. `templates-source.test.js` fails when a part is missing from the index or out of order. Section references in the skill, its deep-knowledge, the concept gate hints and code comments now name the part that holds the section. Generated concept pages do not change: fixtures built before and after differ only in their timestamp.
+
 ## [0.213.2] — 2026-09-26
 
 ### Fixed

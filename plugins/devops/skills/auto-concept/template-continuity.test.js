@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // Two defects, both found on real generated pages (four labyrinth concepts,
 // 2026-09-07/08), both with the same symptom: halfway through a design
@@ -26,7 +27,7 @@ import { JSDOM } from "jsdom";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const realityDoc = fs.readFileSync(path.join(DK, "reality-check.md"), "utf8");

@@ -325,7 +325,7 @@ function findStructural(html) {
   return issues;
 }
 
-// --- Information mapping specs (templates.md § Information Mapping (engine)) -
+// --- Information mapping specs (templates-mapping.md § Information Mapping (engine)) -
 
 const MAP_ID_RE = /^[a-z0-9_]+$/;
 const MAP_RESERVED_RE = /^u\d+$/; // `u{n}` belongs to ad-hoc items
@@ -502,7 +502,7 @@ function validateMappingSpec(raw, mid, at, issues) {
 }
 
 /**
- * Information-mapping specs (templates.md § Information Mapping (engine) →
+ * Information-mapping specs (templates-mapping.md § Information Mapping (engine) →
  * Spec; design spec § 11 rules M1–M4 and M9).
  *
  * Every `section[data-mapping]` must carry a `<script data-mapping-spec>`
@@ -748,7 +748,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
     lines.push('frames. A mock rule on a bare generic name (.overlay, .card) or on an engine class restyles');
     lines.push('them — the panel then sits docked left with a dead ☰ FAB (#400). Fix: prefix every mock');
     lines.push('class per design (.d1-…) or scope it under the design ([data-design="d1"] …); never name an');
-    lines.push('engine class. See templates.md § Design layout rules → Mock CSS is namespaced.');
+    lines.push('engine class. See templates-design-wiring.md § Design layout rules → Mock CSS is namespaced.');
     lines.push('The rest of the page passed — re-write the file and open it once this gate passes.');
     return lines.join('\n');
   }
@@ -784,7 +784,7 @@ function buildBlockReason(filePath, missing, forbidden, structural, mapping, ove
   if (mapping.length) {
     lines.push('Mapping spec problems — the information-mapping engine cannot render these sections as authored:');
     mapping.forEach(i => lines.push(`  - ${i.kind}: ${i.why}`));
-    lines.push('  Fix: regenerate the spec from skills/auto-concept/deep-knowledge/templates.md § Information Mapping (engine) → Spec');
+    lines.push('  Fix: regenerate the spec from skills/auto-concept/deep-knowledge/templates-mapping.md § Information Mapping (engine) → Spec');
     lines.push('  (ids ^[a-z0-9_]+$, unique, data-mapping = section id; ≥ 1 item; lists are arrays; proposal/submitted');
     lines.push('  refer only to declared items and {src}.{part} targets; a ctx value present iff the spec has "context"');
     lines.push("  with values). When freezing a round, write \"submitted\" into the frozen spec from the payload's");

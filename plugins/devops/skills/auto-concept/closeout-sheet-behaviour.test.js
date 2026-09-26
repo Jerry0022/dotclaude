@@ -1,8 +1,7 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // The close-out sheet is the last screen of a concept session and the only
 // one whose single click creates GitHub issues, writes code, cuts a release
@@ -18,9 +17,7 @@ import { JSDOM } from "jsdom";
 // The block under test is copied VERBATIM into every generated page, so a
 // defect here ships into all of them at once.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 
 function scanBlocks(src) {
   const lines = src.split("\n");

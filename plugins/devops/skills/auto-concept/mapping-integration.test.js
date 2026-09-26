@@ -5,7 +5,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { md, scanBlocks, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
 
-// The information-mapping engine (templates.md § Information Mapping (engine))
+// The information-mapping engine (templates-mapping.md § Information Mapping (engine))
 // is wired into the page's shared systems: persistence renders it before
 // restoreState() and refreshes it after, all three collectDecisions branches
 // emit `mappings`, the ☰ design nav nests `data-view-for` views under their

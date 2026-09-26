@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // The reality check diverts an `implement` submission into ONE extra round when
 // the default branch moved under the concept. Everything here pins the two
@@ -19,7 +20,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const iterRules = fs.readFileSync(path.join(DK, "iteration-rules.md"), "utf8");
 const bridge = fs.readFileSync(path.join(DK, "bridge-server.md"), "utf8");

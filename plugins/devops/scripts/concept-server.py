@@ -1152,7 +1152,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             # to POST /reset for the optimistic-concurrency check to work.
             # `processed_at` is the ISO timestamp of the last /reset and lets
             # the browser detect "Claude finished processing" without a JS
-            # eval round-trip — see templates.md § Panel State Reset.
+            # eval round-trip — see templates-submit.md § Panel State Reset.
             # `picked_up_at` and `phase` drive the progress-list rendering
             # in the submit panel (§ Submit Progress Steps).
             #

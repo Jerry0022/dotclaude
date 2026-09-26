@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // #297 — dock notes destroyed on reload / design switch. One symptom, two
 // independent causes, both pinned here because either alone still loses text:
@@ -23,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 
 // Line-based fence scanner — same reason as panel-chrome.test.js /
