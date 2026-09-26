@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.211.4] — 2026-09-26
+
+### Fixed
+- **A test render never picks up live usage.** `DEVOPS_COMPLETION_NO_USAGE=1`, the escape hatch every test run sets, was checked only after the warm path that serves a fresh `~/.claude/usage-live.json`. When a terminal session's statusLine writer refreshed that file between two renders, one of two cards that must be byte-identical carried a budget line (a flaky `index.card.test.js` case), and the render wrote the developer's real delta baseline. The escape hatch is now checked first: no file read, no baseline write, no fetch.
+- **The green run misread on 2026-09-26 is pinned by a test.** A passing card test whose title carries ✗, above "Tests 794 passed (794)", reads as a pass under the 0.211.0 summary rule; the same tail with "1 failed" stays red.
+
 ## [0.211.3] — 2026-09-26
 
 ### Fixed
