@@ -21,7 +21,7 @@ const page = extra => `<!doctype html><html data-template="free">
 ${extra}
 <script>function pollHeartbeat(){}</script>
 <div class="panel-here"><div id="panel-status"></div></div>
-<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){}</script>
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){} async function restoreInFlightRound(){}</script>
 </body></html>`;
 
 const spec = extra => JSON.stringify({

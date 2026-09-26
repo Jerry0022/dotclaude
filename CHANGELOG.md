@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.211.3] — 2026-09-26
+
+### Fixed
+- **The issue-status check leaves an issue alone that this session never worked on.** At the end of a turn the completion flow told Claude to set every tracked issue Done or Todo on the project board and to comment on it — there was no way to leave one untouched. Tracking now follows the prompt's wording (0.211.1), but a pattern can still read a cited number as a request, and the step that writes to GitHub is the one that has to hold: it now asks first whether this session worked on the issue, and one the prompt only cited gets no status change and no comment. A new test also pins that the tracked list is keyed by the session: another session's list is neither read nor changed.
+
+## [0.211.2] — 2026-09-26
+
+### Fixed
+- **A sent round keeps its grey veil across a reload.** After "Nächste Iteration", "Feedback implementieren" or "Alles ausführen", a reload dropped the content dimmer and the "sent" panel state although Claude was still working on that round. The page now asks the bridge (or its offline queue) on load: a pending iterate/implement payload for the live round brings back the veil, the sent panel and its progress steps; dismissing the veil by click or Escape still works. The payload carries its round number, so a new round loaded before the bridge reset stays clear. Existing concept pages pick this up with the next appended round (engine anchor, validation gate 30c).
+- **A running close-out survives a reload in a concept with earlier rounds.** The finalize restore bailed on the `_processed_at` stamp every earlier reset leaves behind, so it never applied after round 1; it now checks the pending finalize payload and its round instead, and restores the veil too.
+- **The final-report close-out sheet fits on a Full HD screen.** The panel foot reserved a gutter for the 💬 button, which is hidden while the panel is open — the sheet scrolled with empty space below it. The gutter is gone, and so is the "Iterationen ansehen" link: the 🕘 rounds chip in the panel head does the same.
+
 ## [0.211.1] — 2026-09-26
 
 ### Fixed

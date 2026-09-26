@@ -474,6 +474,23 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     cleanup(dir);
   });
 
+  // Its own list is no work order either: prompt.issue.detect tracks every #N
+  // a prompt names, including one it only cites. Without a way out, each of
+  // them was owed a board move and a comment — the same foreign-issue writes.
+  test("an issue the session only cited is left untouched before any write", () => {
+    const dir = project();
+    const sid = "s-issues-cited";
+    fs.writeFileSync(flag(dir, "tracked-issues", sid), '["290"]');
+    const out = runHook(dir, sid, "Read");
+    expect(out).toContain("[issue-status] Tracked issues this session: #290");
+    expect(out).toContain("Did this session work on it?");
+    const untouched = out.indexOf("leave it untouched — no status change, no comment");
+    expect(untouched).toBeGreaterThan(-1);
+    expect(untouched).toBeLessThan(out.indexOf("gh issue view"));
+    expect(untouched).toBeLessThan(out.indexOf('"Done"'));
+    cleanup(dir);
+  });
+
   test("a running /auto-guide loop gets a waiver instead of the contract (#526)", () => {
     const dir = project();
     const marker = path.join(dir, ".claude", "auto-guide-active.json");

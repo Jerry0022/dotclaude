@@ -1815,7 +1815,7 @@ half — `closeoutStorageKey`, `loadCloseoutAnswered`, `saveCloseoutAnswered`,
 wiring (bound to `closeoutButtonClick`, never directly to `submitFinalize`),
 the delegated row-head click listener (bound to `closeoutRowClick`, never
 straight to `openCloseoutRow` — that is what keeps the accordion sequential),
-the `view-iterations-btn` wiring, the `change` listener and the
+the `change` listener and the
 `DOMContentLoaded` wiring — MUST be copied verbatim from
 `deep-knowledge/templates.md` (the block starting at the comment
 `// --- Final-report close-out sheet (action: "finalize") ---`). Do NOT
