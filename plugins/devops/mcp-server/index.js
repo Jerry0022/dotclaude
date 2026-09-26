@@ -2356,4 +2356,11 @@ try {
   process.exit(1);
 }
 bootMs = Math.round(process.uptime() * 1000);
+// The heartbeat the hooks read to tell a live server from a dead one
+// (hooks/lib/mcp-heartbeat.js). Its register call went out with an "unused
+// import" cleanup in #93, so every hook reported this server as dead and told
+// Claude to render the card offline first. Only the server path registers —
+// the --render-card CLI exits long before this point.
+const { register: registerHeartbeat } = await import("./lib/heartbeat.js");
+registerHeartbeat(SERVER_NAME);
 console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);
