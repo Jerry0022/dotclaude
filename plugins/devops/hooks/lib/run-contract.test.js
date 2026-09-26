@@ -349,6 +349,7 @@ describe("state", () => {
     // Surfaced once, through the same channel expiryNotice() already uses.
     const notice = R.expiryNotice(cwd, { sessionId: "s1" });
     expect(notice).toMatch(/quarantined/);
+    expect(notice).toMatch(/arm --mode .* --replace$/); // R16: the re-arm line carries --replace
     expect(R.expiryNotice(cwd, { sessionId: "s1" })).toBeNull();
   });
 
@@ -707,6 +708,49 @@ describe("CLI", () => {
     expect(r.code).toBe(1);
     expect(r.out).toEqual({ ok: false, error: "could not write the contract" });
   });
+
+  test("R16: arm refuses over an active contract (exit 1), --replace replaces it", () => {
+    const first = run("arm", "--mode", "audit", "--flow", "autonomous", "--ship", "auto", "--passes", "harden,polish");
+    expect(first.code).toBe(0);
+    const live = first.out.contract;
+    R.record(cwd, { k: "skill", name: "auto-harden" });
+
+    const refused = run("arm", "--mode", "prompt", "--passes", "none");
+    expect(refused.code).toBe(1);
+    expect(refused.out).toEqual({
+      ok: false,
+      error: expect.any(String),
+      active: { id: live.id, mode: "audit", flow: "autonomous", armedAt: live.armedAt },
+    });
+    for (const part of ["mode audit", "flow autonomous", `armed ${live.armedAt}`, 'run-contract.js" status', "--replace"]) {
+      expect(refused.out.error).toContain(part);
+    }
+    // Nothing moved: the same header, its events, no archive.
+    expect(R.readContract(cwd).id).toBe(live.id);
+    expect(R.events(cwd).map((e) => e.name)).toEqual(["auto-harden"]);
+    expect(fs.existsSync(R.prevPath(cwd))).toBe(false);
+
+    const replaced = run("arm", "--mode", "prompt", "--passes", "none", "--replace");
+    expect(replaced.code).toBe(0);
+    expect(replaced.out).toMatchObject({ ok: true, armed: true, replaced: live.id, contract: { mode: "prompt", passes: [] } });
+    expect(R.readContract(cwd).id).toBe(replaced.out.contract.id);
+    expect(R.events(cwd)).toEqual([]);
+    const prev = JSON.parse(fs.readFileSync(R.prevPath(cwd), "utf8"));
+    expect(prev).toMatchObject({ id: live.id, mode: "audit" });
+    expect(prev.events.map((e) => e.name)).toEqual(["auto-harden"]);
+  });
+
+  test("R16: the refusal's status line keeps the --cwd it was given", () => {
+    const other = repo();
+    try {
+      expect(run("arm", "--cwd", other, "--passes", "none").code).toBe(0);
+      const r = run("arm", "--cwd", other, "--passes", "none");
+      expect(r.code).toBe(1);
+      expect(r.out.error).toContain(`status --cwd "${other}"`);
+      // The session's own work tree was never touched.
+      expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
+    } finally { fs.rmSync(other, { recursive: true, force: true }); }
+  });
 });
 
 // ── harden pass ────────────────────────────────────────────────────────────
@@ -891,7 +935,8 @@ describe("harden pass", () => {
     expect(run("arm", "--flow", "x").code).toBe(1);
     expect(run("arm", "--ship", "x").code).toBe(1);
     expect(run("arm", "--passes").out.contract.passes).toEqual([]);
-    const r = run("arm", "--passes", "--items", "1,#2", "--session", "s1");
+    // R16: the contract above is active — replacing it takes --replace.
+    const r = run("arm", "--passes", "--items", "1,#2", "--session", "s1", "--replace");
     expect(r.code).toBe(0);
     expect(r.out.contract).toMatchObject({ passes: [], items: ["1", "2"], sessionId: "s1" });
   });

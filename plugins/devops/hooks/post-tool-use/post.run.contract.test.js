@@ -144,6 +144,8 @@ describe("one-time announcement", () => {
     const ctx = JSON.parse(first.stdout).hookSpecificOutput.additionalContext;
     expect(ctx).toContain("click-through defaults");
     expect(ctx).toContain("run-contract.js\" arm --mode");
+    // R16: re-arming replaces this live contract — the CLI needs --replace for that.
+    expect(ctx).toMatch(/Re-arm: node ".*" arm --mode .* --replace\n/);
     expect(ctx).toContain("done");
     expect(RC.readContract(dir).announced).toBe(true);
     expect(run("Agent", { subagent_type: "Explore" }).stdout).toBe("");
@@ -348,6 +350,8 @@ describe("red-team pass 3 (RT3-*)", () => {
     const ctx = ctxOf(r);
     expect(ctx).toContain("NOT recorded");
     expect(ctx).toContain("run-contract.js\" arm --mode");
+    // R16: no live contract of this session to replace — the plain arm line.
+    expect(ctx).not.toContain("--replace");
   });
 
   test("RT3-X1: an interrupted or non-zero-exit git commit / branch is not recorded", () => {
@@ -365,6 +369,7 @@ describe("red-team pass 3 (RT3-*)", () => {
     const first = ctxOf(run("Write", { file_path: path.join(dir, ".claude/x.md") }));
     expect(first).toContain("expired after 12 h");
     expect(first).toContain("arm --mode");
+    expect(first).toContain("--replace"); // R16: every re-arm line carries it
     expect(run("Write", { file_path: path.join(dir, ".claude/x.md") }).stdout).toBe("");
   });
 

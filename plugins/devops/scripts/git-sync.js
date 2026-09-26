@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -10,11 +10,16 @@
  *   resolution (see deep-knowledge/merge-safety.md).
  *   Standalone: called by prompt.git.sync hook and session-start cron.
  *   `--explain` (do-batch merge): every no-merge exit names its reason.
+ *   A merge that dies mid-checkout (its timeout, or its own error) never
+ *   stays half-applied: what it wrote is put back (hooks/lib/git-sync-recover.js).
  */
 
 const { execFileSync } = require('child_process');
 const { existsSync, readFileSync, writeFileSync } = require('fs');
 const { join } = require('path');
+const {
+  writeTimeoutMs, gitRunner, firstErrorLine, headState, releaseKilledIndexLock, restoreIncomingTree,
+} = require('../hooks/lib/git-sync-recover');
 
 const cwd = process.cwd();
 
@@ -66,6 +71,16 @@ function git(args) {
   }
 }
 
+// Writes get their own, much longer ceiling (5 min unless
+// DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS says otherwise). On 2026-09-26 the 15 s read
+// budget killed a fast-forward mid-checkout on a loaded machine: half the
+// incoming tree on disk, HEAD and index on the old commit, a stale index.lock.
+// Nobody waits on this detached process, so a slow merge costs nothing; a
+// killed one costs the user's worktree. The result keeps stderr and whether
+// the timeout fired — the failure path below needs both.
+const WRITE_TIMEOUT_MS = writeTimeoutMs(process.env, GIT_TIMEOUT_MS);
+const gitWrite = gitRunner({ cwd, timeoutMs: WRITE_TIMEOUT_MS });
+
 // Only run in a git repo
 if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') {
   quit('not a git work tree', { nothingToDo: true });
@@ -112,7 +127,7 @@ const gitDir = git(['rev-parse', '--absolute-git-dir']);
 if (!gitDir) quit('git dir unreadable');
 
 /**
- * git, with the repo's commit hooks switched off.
+ * Prefix for the writing calls that would run the repo's commit hooks.
  *
  * Deliberately `core.hooksPath` rather than `--no-verify`: `git merge` only
  * learned `--no-verify` in 2.36 (Apr 2022), and on an older git — Ubuntu 20.04
@@ -122,9 +137,6 @@ if (!gitDir) quit('git dir unreadable');
  * that cannot exist works back to 2.9 and covers `pre-merge-commit` too.
  */
 const NO_HOOKS = ['-c', `core.hooksPath=${join(gitDir, 'devops-git-sync-no-hooks')}`];
-function gitNoHooks(args) {
-  return git([...NO_HOOKS, ...args]);
-}
 
 const IN_PROGRESS = ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'BISECT_LOG', 'rebase-merge', 'rebase-apply'];
 
@@ -318,7 +330,7 @@ function resolveFile(filePath) {
   }
 
   writeFileSync(fullPath, result, 'utf8');
-  git(['add', '--', filePath]);
+  gitWrite(['add', '--', filePath]);
   return { resolved: true, content: result };
 }
 
@@ -369,6 +381,74 @@ function dirtyOverlap(source) {
   return incoming.split('\n').filter(Boolean).filter(f => dirty.has(f));
 }
 
+function seconds(ms) {
+  return ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`;
+}
+
+/** At most `max` paths, then a count — a ✗ line stays one readable line. */
+function listPaths(paths, max = 8) {
+  return paths.length <= max ? paths.join(', ') : `${paths.slice(0, max).join(', ')} and ${paths.length - max} more`;
+}
+
+/**
+ * A merge that failed without leaving a single conflicted file. That is a
+ * FAILURE, not a conflict — reporting it as ⚠ used to hand the assistant the
+ * full semantic-resolution procedure for an empty file list.
+ *
+ * Nor is it always "refused": a merge killed by the write timeout, or stopped
+ * by its own error on a file it cannot write (a smudge filter, a Windows file
+ * lock), dies mid-checkout with part of the incoming tree already on disk and
+ * HEAD and index still on the old commit. That part is put back
+ * (hooks/lib/git-sync-recover.js), so the worktree is never left half-merged,
+ * and the reason says what actually happened.
+ */
+function undoFailedMerge({ source, count, merge, lock, preHead }) {
+  const fail = reason => ({ source, commits: count, failed: true, reason });
+  const why = merge.timedOut ? '' : firstErrorLine(merge.err);
+  const cause = merge.timedOut
+    ? `merge timed out after ${seconds(WRITE_TIMEOUT_MS)}`
+    : `merge failed${why ? ` (${why})` : ''}`;
+  // Everything from here runs under the write ceiling, reads included: the
+  // machine that just outran the merge's budget would outrun 15 s here too,
+  // and a repair that gives up leaves the half-applied tree behind.
+  const topRes = gitWrite(['rev-parse', '--show-toplevel']);
+  const top = topRes.ok ? topRes.out.trim() : '';
+  const run = gitRunner({ cwd: top || cwd, timeoutMs: WRITE_TIMEOUT_MS });
+
+  const head = headState(run, preHead, source);
+  // Stopped after its ref update: the merge is in, only its epilogue was cut.
+  if (head === 'completed') return { source, commits: count };
+  if (head !== 'unchanged') {
+    return fail(`${cause}, and HEAD ${head === 'moved' ? 'moved meanwhile' : 'is unreadable'} — worktree left as is`);
+  }
+  if (lock === 'held') return fail(`${cause} — another process holds index.lock, worktree left as is`);
+
+  if (existsSync(join(gitDir, 'MERGE_HEAD'))) {
+    gitWrite(['merge', '--abort']);
+    // Same check as the other two abort sites: an abort that did not unwind
+    // leaves the worktree mid-merge, which the quiescence gate then reads as
+    // "busy" and silences every future sync in this worktree.
+    return fail(existsSync(join(gitDir, 'MERGE_HEAD'))
+      ? 'merge refused with no conflicted files, and the worktree is still mid-merge — run `git merge --abort`'
+      : `merge refused, no conflicted files${why ? ` — ${why}` : ''}`);
+  }
+
+  if (!top) return fail(`${cause} — work tree root unreadable, check \`git status\``);
+  const rec = restoreIncomingTree({ run, top, preHead, source });
+  const undone = rec.restored.length + rec.removed.length;
+  const lockNote = lock === 'removed' ? ', stale index.lock removed' : '';
+  if (rec.error) return fail(`${cause} — could not check what it wrote (${rec.error}), check \`git status\``);
+  if (rec.manual.length) {
+    return fail(
+      `${cause} mid-checkout — put ${undone} file(s) back${lockNote}; needs manual repair: ${listPaths(rec.manual)} ` +
+      `(compare with \`git show ${source}:<path>\`, restore with \`git checkout HEAD -- <path>\`)`
+    );
+  }
+  if (undone) return fail(`${cause} mid-checkout — worktree restored to ${preHead.slice(0, 7)} (${undone} file(s)${lockNote}); the next sync retries`);
+  if (merge.timedOut) return fail(`${cause} before it wrote anything${lockNote}; the next sync retries`);
+  return fail(`merge refused, no conflicted files${why ? ` — ${why}` : ''}`);
+}
+
 // Try merging source into HEAD. Resolve trivial conflicts automatically,
 // warn only for genuinely ambiguous conflicts that need semantic resolution.
 // See deep-knowledge/merge-safety.md for the full resolution protocol.
@@ -388,6 +468,12 @@ function tryMerge(source) {
   if (repoBusy()) return { source, skipped: 'another git operation started meanwhile' };
   if (shipInFlight()) return { source, skipped: 'a /do-ship run started meanwhile' };
 
+  // What a merge that dies half-way is put back to, and when it started (an
+  // index.lock written after this moment is the merge's own).
+  const preHead = git(['rev-parse', 'HEAD']);
+  if (!preHead) return { source, skipped: 'HEAD unreadable' };
+  const startedAt = Date.now();
+
   // Both git calls that write run with hooks disabled: this process is
   // detached and has no console, so a repo hook that prompts cannot be
   // answered, and one that rejects — a commitlint `commit-msg` refusing git's
@@ -396,31 +482,19 @@ function tryMerge(source) {
   // sync into a ✗ repeating for as long as main stays ahead. Hook policy
   // belongs to the commits the user makes, not to a background fast-forward of
   // their own default branch.
-  if (gitNoHooks(['merge', source, '--no-edit', '--quiet']) !== null) {
+  const merge = gitWrite([...NO_HOOKS, 'merge', source, '--no-edit', '--quiet']);
+  if (merge.ok) {
     return { source, commits: count };
   }
+  // A child killed by the timeout could not remove its index.lock (Windows),
+  // and every step below needs the index.
+  const lock = releaseKilledIndexLock({ gitDir, startedAt, timedOut: merge.timedOut });
 
   // Merge conflicted — try resolving trivial conflicts
   const conflictOutput = git(['diff', '--name-only', '--diff-filter=U']);
   const files = conflictOutput ? conflictOutput.split('\n').filter(Boolean) : [];
 
-  if (files.length === 0) {
-    // git refused the merge without leaving a single conflicted file. That is
-    // a FAILURE, not a conflict — reporting it as ⚠ used to hand the assistant
-    // the full semantic-resolution procedure for an empty file list.
-    git(['merge', '--abort']);
-    // Same check as the other two abort sites: an abort that did not unwind
-    // leaves the worktree mid-merge, which the quiescence gate then reads as
-    // "busy" and silences every future sync in this worktree.
-    return {
-      source,
-      commits: count,
-      failed: true,
-      reason: existsSync(join(gitDir, 'MERGE_HEAD'))
-        ? 'merge refused with no conflicted files, and the worktree is still mid-merge — run `git merge --abort`'
-        : 'merge refused, no conflicted files',
-    };
-  }
+  if (files.length === 0) return undoFailedMerge({ source, count, merge, lock, preHead });
 
   let totalAmbiguous = 0;
   const ambiguousFiles = [];
@@ -435,7 +509,7 @@ function tryMerge(source) {
 
   if (totalAmbiguous > 0) {
     // Some conflicts couldn't be resolved — abort and warn
-    git(['merge', '--abort']);
+    gitWrite(['merge', '--abort']);
 
     // Verify the abort actually unwound the merge. Deliberately NOT
     // `status --porcelain`: that reports untracked files and any unrelated
@@ -459,14 +533,18 @@ function tryMerge(source) {
   // All conflicts resolved — complete the merge. The commit is checked, not
   // assumed: a consumer repo's pre-commit hook runs here too, in a detached,
   // console-less process, and a hook that fails (or blocks on a prompt until
-  // the 15s timeout) leaves MERGE_HEAD in place. Reporting ✓ then would hand
+  // the write timeout) leaves MERGE_HEAD in place. Reporting ✓ then would hand
   // the user's next `git commit` a merge commit they never made.
-  if (gitNoHooks(['commit', '--no-edit']) === null || existsSync(join(gitDir, 'MERGE_HEAD'))) {
+  const commitStartedAt = Date.now();
+  const commit = gitWrite([...NO_HOOKS, 'commit', '--no-edit']);
+  if (!commit.ok || existsSync(join(gitDir, 'MERGE_HEAD'))) {
     // Unwind before giving up. Returning with MERGE_HEAD still in place would
     // leave the worktree mid-merge, and the quiescence gate at the top of this
     // file would then silence every future sync in it — the failure path
-    // wedging the whole feature shut, in the one place nobody looks.
-    git(['merge', '--abort']);
+    // wedging the whole feature shut, in the one place nobody looks. A commit
+    // killed by its timeout left its index.lock, which would block the abort.
+    releaseKilledIndexLock({ gitDir, startedAt: commitStartedAt, timedOut: commit.timedOut });
+    gitWrite(['merge', '--abort']);
     const stuck = existsSync(join(gitDir, 'MERGE_HEAD'));
     return {
       source,

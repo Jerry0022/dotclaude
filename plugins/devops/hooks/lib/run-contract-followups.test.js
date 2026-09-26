@@ -395,6 +395,115 @@ describe("C9: a GitLab origin", () => {
   });
 });
 
+describe("R16: a CLI arm never replaces a live contract by accident", () => {
+  // The 2026-09-25 incident, verbatim: a QA subagent smoke-tested the CLI
+  // without --cwd inside the parent session's worktree.
+  const SMOKE = ["arm", "--mode", "audit", "--flow", "autonomous", "--ship", "auto", "--passes", "harden,polish"];
+  const T = Date.parse("2026-09-26T08:00:00Z");
+  const cliAt = (now, ...args) => {
+    let out = null;
+    const code = cli(args, { cwd: dir, now, out: (o) => { out = o; } });
+    return { code, out };
+  };
+  const openAtRelease = () => RC.openObligations(RC.readContract(dir), RC.events(dir), "release").map((o) => o.ob);
+
+  test("the incident's smoke arm is refused; the live contract keeps the event that satisfied Harden", () => {
+    const live = RC.arm(dir, { source: "router", mode: "audit", flow: "autonomous", ship: "auto", passes: ["harden", "polish"], sessionId: "s1" });
+    RC.record(dir, { k: "edit" }, { sessionId: "s1" });
+    RC.record(dir, { k: "skill", name: "devops:auto-harden" }, { sessionId: "s1" });
+    expect(openAtRelease()).not.toContain("harden");
+
+    const r = runCli(...SMOKE);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatchObject({ ok: false, active: { id: live.id, mode: "audit", flow: "autonomous", armedAt: live.armedAt } });
+    expect(r.out.error).toMatch(/run-contract\.js" status/);
+    expect(r.out.error).toMatch(/--replace/);
+
+    expect(RC.readContract(dir, { sessionId: "s1" })).toMatchObject({ id: live.id, source: "router" });
+    expect(RC.events(dir).some((e) => e.k === "skill" && e.name === "auto-harden")).toBe(true);
+    expect(openAtRelease()).not.toContain("harden");
+    expect(fs.existsSync(RC.prevPath(dir))).toBe(false);
+  });
+
+  test("whose run it is does not matter: the same or another session's live contract is refused", () => {
+    RC.arm(dir, { mode: "prompt", sessionId: "s1" });
+    expect(runCli(...SMOKE, "--session", "s1").code).toBe(1);
+    expect(runCli(...SMOKE, "--session", "s2").code).toBe(1);
+    RC.update(dir, { sessionId: null });
+    expect(runCli(...SMOKE).code).toBe(1);
+  });
+
+  test("--replace archives the live contract with its events and arms fresh", () => {
+    const live = RC.arm(dir, { mode: "audit", flow: "autonomous", ship: "auto", sessionId: "s1" });
+    RC.record(dir, { k: "skill", name: "auto-harden" });
+    const r = runCli(...SMOKE, "--replace");
+    expect(r.code).toBe(0);
+    expect(r.out).toMatchObject({ ok: true, armed: true, replaced: live.id, contract: { source: "cli", sessionId: null } });
+    expect(r.out.contract.id).not.toBe(live.id);
+    const prev = JSON.parse(fs.readFileSync(RC.prevPath(dir), "utf8"));
+    expect(prev.id).toBe(live.id);
+    expect(prev.events.map((e) => e.name)).toEqual(["auto-harden"]);
+    expect(RC.events(dir)).toEqual([]);
+    // `--replace=off` is no replace.
+    expect(runCli(...SMOKE, "--replace=off").code).toBe(1);
+  });
+
+  test("no live contract → arms without --replace: empty, closed, expired", () => {
+    const empty = cliAt(T, "arm", "--passes", "none");
+    expect(empty.code).toBe(0);
+    expect(empty.out).not.toHaveProperty("replaced");
+
+    // Closed — still on disk for the card's 15-min grace, but not active.
+    RC.close(dir, "done", { now: T });
+    const closed = cliAt(T + 60_000, "arm", "--mode", "audit", "--passes", "none");
+    expect(closed.code).toBe(0);
+    expect(JSON.parse(fs.readFileSync(RC.prevPath(dir), "utf8")).id).toBe(empty.out.contract.id);
+
+    // Expired — 12 h idle (interactive).
+    RC.arm(dir, { mode: "prompt", passes: [] }, { now: T - 13 * 3600_000 });
+    const expired = cliAt(T, "arm", "--mode", "backlog", "--passes", "none");
+    expect(expired.code).toBe(0);
+    expect(expired.out).not.toHaveProperty("replaced");
+    expect(RC.readRawContract(dir).mode).toBe("backlog");
+  });
+
+  test("a header copied in from another checkout (RT2-Q4 root) is no live run here; one without root still is", () => {
+    RC.arm(dir, { mode: "prompt" });
+    const file = RC.contractPath(dir);
+    const copied = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify({ ...copied, root: path.join(os.tmpdir(), "rc-main-checkout") }));
+    expect(runCli("arm", "--passes", "none").code).toBe(0);
+
+    const legacy = JSON.parse(fs.readFileSync(file, "utf8"));
+    delete legacy.root;
+    fs.writeFileSync(file, JSON.stringify(legacy));
+    expect(runCli("arm", "--passes", "none").code).toBe(1);
+
+    // A hand-edited non-string root is no path to compare — refused, never a throw.
+    fs.writeFileSync(file, JSON.stringify({ ...legacy, root: 42 }));
+    const r = runCli("arm", "--passes", "none");
+    expect(r.code).toBe(1);
+    expect(r.out.ok).toBe(false);
+  });
+
+  test("the re-arm hint carries --replace and, filled in, replaces a live contract; the plain one does not", () => {
+    RC.arm(dir, { source: "fallback", mode: "prompt" });
+    const hint = RC.rearmHint();
+    expect(hint.endsWith(" --replace")).toBe(true);
+    const argv = hint.slice(hint.indexOf('" ') + 2)
+      .replace("<prompt|backlog|audit>", "audit").replace("<interactive|autonomous>", "interactive")
+      .replace("<auto|manual>", "manual").replace("<harden,polish|none>", "none")
+      .split(" ");
+    const r = runCli(...argv);
+    expect(r.code).toBe(0);
+    expect(r.out.contract).toMatchObject({ source: "cli", mode: "audit", passes: [] });
+
+    const plain = RC.rearmHint({ replace: false });
+    expect(plain).not.toContain("--replace");
+    expect(hint.startsWith(plain)).toBe(true);
+  });
+});
+
 describe("R2 Q10: a defensive `done` without an active contract must not fail", () => {
   test("no active contract → exit 0, ok:true, closed:false", () => {
     const d = runCli("done");

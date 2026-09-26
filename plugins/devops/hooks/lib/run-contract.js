@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @module run-contract
- * @version 0.3.0
+ * @version 0.3.1
  * @plugin devops
  * @description State, answer parsing, obligations and CLI of the do-run RUN
  *   CONTRACT: what the user chose in the do-run router (passes, ship mode,
@@ -25,7 +25,7 @@
  * `module.exports`; AUD-016: grep the sibling `run-contract-*.js` files for
  * the implementation of each):
  *   OTHER_PLACEHOLDERS                            the "Other" answer tokens (post.ask.answers imports them)
- *   LIB_PATH / rearmHint()                        this file's path / the `arm` re-arm command line
+ *   LIB_PATH / rearmHint({replace})               this file's path / the `arm … --replace` re-arm line ({replace:false} → plain `arm`)
  *   disabled()                                    → boolean  kill switch on
  *   contractPath(cwd) / eventsPath(cwd) / prevPath(cwd) / pendingPath(cwd) / batchHandoffPath(cwd) → string
  *   readContract(cwd, {now})                      → header | null (active only)

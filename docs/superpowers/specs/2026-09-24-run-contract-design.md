@@ -173,7 +173,8 @@ API (CommonJS, pure where possible, every fs error swallowed → "no contract"):
 Expiry: a contract with no activity for 12 h (interactive) / 30 h
 (autonomous or backlog) — every event but `block`, `measure` and `card`
 counts — reads as absent and is archived to `run-contract.prev.json` on the
-next write. A new router answer set replaces an active contract (archived).
+next write. A new router answer set replaces an active contract (archived);
+the CLI `arm` does so only with `--replace` (R16, below).
 When post finds this session's contract expired unclosed (a Q&A-only run —
 cards are no activity), it says so once in `additionalContext` with the `arm`
 re-arm line and marks the header `expiryAnnounced` (RT3-X2).
@@ -194,8 +195,23 @@ CLI (`node hooks/lib/run-contract.js …`, prints one JSON line):
   and closes as `aborted: true` with one (card: ✗ + reason).
 - `abort --reason "<why>"` — closes it as aborted (card shows it).
 - `batch-clear --reason "<why>"` — deletes a stale batch hand-off marker.
-- `arm … [--session <id>]` — manual arm; without `--session` the first
-  session hook that sees the fresh contract claims it.
+- `arm … [--session <id>] [--replace]` — manual arm; without `--session` the
+  first session hook that sees the fresh contract claims it. It refuses
+  (exit 1, `ok: false`, `active: {id, mode, flow, armedAt}`, an error naming
+  that contract's mode / flow / `armedAt` and the two ways out: `status`, or
+  the same `arm` with `--replace`) while the work tree holds an active,
+  unexpired contract — whichever session armed it (R16: a subagent
+  smoke-testing the CLI without `--cwd` re-armed its parent's live contract
+  and archived the `skill auto-harden` event that satisfied the chosen
+  Harden pass). `--replace` archives it with its events and arms fresh, as
+  `arm` always did (`replaced: <old id>`); an empty, closed or expired state
+  needs no flag, and a header whose `root` names another checkout (a Desktop
+  copy, RT2-Q4) does not count. The re-arm lines the hooks print
+  (`rearmHint()`: the fallback / machine announcement, the fallback note on a
+  block, the expiry and quarantine notices) end in `--replace`; post's
+  "answers NOT recorded" note (B) keeps the plain `arm` line — the session
+  has no live contract to replace there, and the refusal still guards
+  another session's run in a shared checkout.
 
 Session binding: every header and marker stores `sessionId`; gates, arming,
 recording and the card line apply only when it equals the hook's
@@ -604,8 +620,9 @@ runtime state to close:
 - `lib/plugin-guard.js` still requires `project-root` at load time; H-B17
   only moved the hooks' own requires into their try/catch.
 - Two sessions in ONE checkout share one contract file: the second
-  session's router answers archive the first one's contract (B11); worktree
-  isolation (one work tree per session) avoids it.
+  session's router answers archive the first one's contract (B11) — a CLI
+  `arm` refuses instead (R16); worktree isolation (one work tree per
+  session) avoids it.
 
 ## Acceptance
 
@@ -633,5 +650,6 @@ runtime state to close:
 | A leftover contract gates unrelated later work | 12 h / 30 h idle expiry; a new router answer set replaces it; `done` in every block message |
 | Latency on every Edit / Bash | existence check first; git only at release / card / branch gates |
 | Parallel subagents writing events | append-only JSONL; header written only on arm / update / close |
+| A subagent's CLI `arm` (a smoke test) replaces the live run | `arm` refuses over an active contract; replacing it takes `--replace` (R16) |
 | Worktree-isolated agents | own work-tree root → no contract there → never gated |
 | Old cached plugin labels | legacy labels parsed (table B) |

@@ -273,6 +273,8 @@ describe("pending-arm fallback (spec B)", () => {
     const r = run("Edit", { file_path: f("src/a.js") });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("click-through defaults");
+    // R16: the fallback note's re-arm replaces this contract → --replace.
+    expect(r.stderr).toMatch(/Wrong\? node ".*" arm --mode .* --replace/);
     const c = RC.readContract(dir);
     expect(c).toMatchObject({ source: "fallback", mode: "backlog", flow: "interactive", ship: "manual", passes: ["harden", "polish"] });
     expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
