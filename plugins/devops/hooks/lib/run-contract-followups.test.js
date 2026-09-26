@@ -16,6 +16,7 @@ vi.setConfig({ testTimeout: 30_000 });
 
 const require = createRequire(import.meta.url);
 const RC = require("./run-contract.js");
+const store = require("./run-contract-store.js");
 const { cli } = require("./run-contract-cli.js");
 const P = require("../pre-tool-use/pre.run.contract.js");
 const Q = require("./run-contract-qa.js");
@@ -422,7 +423,7 @@ describe("R16: a CLI arm never replaces a live contract by accident", () => {
     expect(RC.readContract(dir, { sessionId: "s1" })).toMatchObject({ id: live.id, source: "router" });
     expect(RC.events(dir).some((e) => e.k === "skill" && e.name === "auto-harden")).toBe(true);
     expect(openAtRelease()).not.toContain("harden");
-    expect(fs.existsSync(RC.prevPath(dir))).toBe(false);
+    expect(fs.existsSync(store.prevPath(dir))).toBe(false);
   });
 
   test("whose run it is does not matter: the same or another session's live contract is refused", () => {
@@ -440,7 +441,7 @@ describe("R16: a CLI arm never replaces a live contract by accident", () => {
     expect(r.code).toBe(0);
     expect(r.out).toMatchObject({ ok: true, armed: true, replaced: live.id, contract: { source: "cli", sessionId: null } });
     expect(r.out.contract.id).not.toBe(live.id);
-    const prev = JSON.parse(fs.readFileSync(RC.prevPath(dir), "utf8"));
+    const prev = JSON.parse(fs.readFileSync(store.prevPath(dir), "utf8"));
     expect(prev.id).toBe(live.id);
     expect(prev.events.map((e) => e.name)).toEqual(["auto-harden"]);
     expect(RC.events(dir)).toEqual([]);
@@ -457,19 +458,19 @@ describe("R16: a CLI arm never replaces a live contract by accident", () => {
     RC.close(dir, "done", { now: T });
     const closed = cliAt(T + 60_000, "arm", "--mode", "audit", "--passes", "none");
     expect(closed.code).toBe(0);
-    expect(JSON.parse(fs.readFileSync(RC.prevPath(dir), "utf8")).id).toBe(empty.out.contract.id);
+    expect(JSON.parse(fs.readFileSync(store.prevPath(dir), "utf8")).id).toBe(empty.out.contract.id);
 
     // Expired — 12 h idle (interactive).
     RC.arm(dir, { mode: "prompt", passes: [] }, { now: T - 13 * 3600_000 });
     const expired = cliAt(T, "arm", "--mode", "backlog", "--passes", "none");
     expect(expired.code).toBe(0);
     expect(expired.out).not.toHaveProperty("replaced");
-    expect(RC.readRawContract(dir).mode).toBe("backlog");
+    expect(store.readRawContract(dir).mode).toBe("backlog");
   });
 
   test("a header copied in from another checkout (RT2-Q4 root) is no live run here; one without root still is", () => {
     RC.arm(dir, { mode: "prompt" });
-    const file = RC.contractPath(dir);
+    const file = store.contractPath(dir);
     const copied = JSON.parse(fs.readFileSync(file, "utf8"));
     fs.writeFileSync(file, JSON.stringify({ ...copied, root: path.join(os.tmpdir(), "rc-main-checkout") }));
     expect(runCli("arm", "--passes", "none").code).toBe(0);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.3
+ * @version 0.4.4
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -21,18 +21,18 @@
  *   `*__merge_pull_request` call hit the release gate too (RT3-R4).
  *
  *   Fast path: none of run-contract.json / run-contract.pending /
- *   batch-handoff.json in the work-tree root → exit 0 before loading the lib.
+ *   batch-handoff.json / run-contract.json.corrupt.pending in the work-tree
+ *   root (lib/run-contract-store.js hasState) → exit 0 before loading the lib.
  *   qa counts changed code files from git only at release / card / branch
  *   gates, via lib/run-contract-qa.js (shared with the CLI, AUD-010); any git
  *   failure or an expired gitBudget means unknown and never blocks (AUD-019:
  *   one 15 s budget bounds the whole call's git chain, not just one call).
  *   An internal error never blocks. Kill switch: DOTCLAUDE_RUN_CONTRACT=off.
+ *   Stdin, parsing and the reply go through lib/hook-input.js's runHook;
+ *   main() walks the numbered steps 1–7 below in order.
  */
 
 require('../lib/plugin-guard');
-
-const fs = require('fs');
-const path = require('path');
 
 function batchBlock(RC) {
   return [
@@ -151,114 +151,103 @@ function armFromPending(hook, root, RC, C, sessionId, budget) {
   return { source };
 }
 
-function main(hook) {
-  const cwd = hook.cwd || process.cwd();
-  // H-B17: required here, inside the stdin handler's try/catch — a load
-  // error never crashes the hook.
-  const { projectRoot } = require('../lib/project-root');
-  const C = require('../lib/run-contract-calls');
-  // AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
-  // named once in lib/git-timeout.js — this hook no longer keeps its own
-  // GIT_TIMEOUT constant. H-B17: required here (inside main's own try), not
-  // at module scope — a half-written lib during a plugin update must not
-  // break every matched PreToolUse call.
-  const { gitBudget, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS } = require('../lib/git-timeout');
-  // AUD-010: qa's own git chain (base resolution + diff) moved to a shared lib
-  // so run-contract-cli.js's `status` / `done` measure it exactly like this
-  // gate does, instead of evaluating obligations against an empty ctx.
-  const { resolveBase, codeFilesChanged } = require('../lib/run-contract-qa');
-  // H-B1: ship_release / the card act on tool_input.cwd — its root is tried
-  // second; post records into the same root.
-  const { root, inputRoot, roots } = C.contractRoots(hook, projectRoot);
-  // R5: after a corrupt header is quarantined, run-contract.json is gone —
-  // only run-contract.json.corrupt.pending is left on disk — so this fast
-  // path used to return 0 before the notice was ever read. Counting the
-  // marker keeps the path open long enough to deliver it once.
-  const hasState = (r) => ['run-contract.json', 'run-contract.pending', 'batch-handoff.json', 'run-contract.json.corrupt.pending']
-    .some(n => fs.existsSync(path.join(r, '.claude', n)));
-  if (!roots.some(hasState)) return 0;
-
-  // The kill switch is checked before main() runs (H-F20).
-  const RC = require('../lib/run-contract');
-  // R5: deliver the corrupt/expiry one-shot notice here too, independent of
-  // whether this call hits a gate — PreToolUse never blocks on it (H-F20).
-  // R2 (red-team round 2 Q6): the notice is consumed (one-shot), but must NOT
-  // go to stdout yet — Claude Code ignores stdout on an exit-2 hook result,
-  // so writing it immediately loses the notice on every gate this same call
-  // goes on to hit. `ok()` emits it on the exit-0 paths below; the exit-2
-  // paths append it to the stderr block instead.
-  // H9: expiryNotice() is read lazily, AT EMIT TIME (inside ok()/blocked()),
-  // not once up front — a call whose own RC.readContract() below discovers a
-  // corrupt run-contract.json quarantines it AND writes the one-shot marker
-  // DURING this same call; reading the notice before that point (the old
-  // behaviour) always missed it, so it only ever surfaced on the NEXT gated
-  // call. Every return path in this function goes through ok()/blocked(),
-  // so the notice is still delivered exactly once, whichever path returns.
-  const notice = () => RC.expiryNotice(root, { sessionId: hook.session_id || null });
-  const ok = () => {
-    const n = notice();
-    if (n) {
-      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: n } })}\n`);
-    }
-    return 0;
+/**
+ * 1. The call's two replies (runHook sends them: `{context}` → exit 0,
+ * `{block}` → exit 2). R5: the corrupt/expiry one-shot notice rides both,
+ * independent of whether this call hits a gate — PreToolUse never blocks on
+ * it (H-F20). R2 (red-team round 2 Q6): the notice is consumed (one-shot),
+ * but must NOT go to stdout on a refusal — Claude Code ignores stdout on an
+ * exit-2 hook result, so it would be lost on every gate this same call hits.
+ * `ok()` carries it as additionalContext on the exit-0 paths; `blocked()`
+ * appends it to the stderr block instead.
+ * H9: expiryNotice() is read lazily, AT REPLY TIME (inside ok()/blocked()),
+ * not once up front — a call whose own RC.readContract() discovers a corrupt
+ * run-contract.json quarantines it AND writes the one-shot marker DURING this
+ * same call; reading the notice before that point (the old behaviour) always
+ * missed it, so it only ever surfaced on the NEXT gated call. Every return
+ * path of main() after the fast path goes through ok()/blocked(), so the
+ * notice is still delivered exactly once, whichever path returns.
+ */
+function replies(RC, root, sessionId) {
+  const notice = () => RC.expiryNotice(root, { sessionId });
+  return {
+    ok() {
+      const n = notice();
+      return n ? { context: n } : null;
+    },
+    blocked(msg) {
+      const n = notice();
+      return { block: `${msg}${n ? `\n\n${n}` : ''}` };
+    },
   };
-  const blocked = (msg) => {
-    const n = notice();
-    process.stderr.write(`${msg}${n ? `\n\n${n}` : ''}\n`);
-    return 2;
-  };
+}
 
-  const call = classify(hook, root, cwd, C);
-  if (!call) return ok();
+/**
+ * 2. A do-batch plan waits for its hand-off (spec E): an implementing call
+ * is refused. → the block text, or null.
+ */
+function batchRefusal(call, root, RC, sessionId) {
+  if (!call.batch || !RC.batchHandoffPending(root, { sessionId })) return null;
+  // AUD-004: a refused call leaves a lasting trace. A no-op when no
+  // contract is active yet (record() needs one) — the batch marker itself
+  // is that trace then.
+  RC.record(root, { k: 'block', gate: 'batch', open: [] }, { sessionId });
+  return batchBlock(RC);
+}
 
-  const sessionId = hook.session_id || null;
-  if (call.batch && RC.batchHandoffPending(root, { sessionId })) {
-    // AUD-004: a refused call leaves a lasting trace. A no-op when no
-    // contract is active yet (record() needs one) — the batch marker itself
-    // is that trace then.
-    RC.record(root, { k: 'block', gate: 'batch', open: [] }, { sessionId });
-    return blocked(batchBlock(RC));
-  }
-
-  // R12: ONE overall deadline for the whole invocation — before this it
-  // bounded only the git chain below; the transcript walk (routerFromTrans
-  // cript, backward up to 32 MB) could run long past it and a timed-out
-  // PreToolUse fails open (exits 0, gating nothing). Created here, ahead of
-  // armFromPending, so the walk shares the exact same ceiling as the git
-  // calls that follow it, not a fresh one.
-  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
-  const armed = armFromPending(hook, root, RC, C, sessionId, budget);
-  let croot = null;
-  let contract = null;
+/**
+ * 4. H-B1: the first of `roots` holding this session's contract (claimed on
+ * the way). → {croot, contract} | null
+ */
+function sessionContract(roots, RC, sessionId) {
   for (const r of roots) {
     RC.claim(r, sessionId);
-    contract = RC.readContract(r, { sessionId });
-    if (contract) { croot = r; break; }
+    const contract = RC.readContract(r, { sessionId });
+    if (contract) return { croot: r, contract };
   }
-  if (!contract) return ok();
-  // AUD-019: the same deadline also bounds every git call this gated call
-  // makes (base resolution, diffs, ls-files, the pushHead branch check) — an
-  // expired budget reads as unknown (never a block), it just stops asking git.
-  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget, SMALL_GIT_BUDGET_MS)) {
+  return null;
+}
+
+/**
+ * 5. RT3-R4: a push of the current branch is a release under ship: auto
+ * when that branch is main / master — adds the release gate to `call`.
+ * AUD-019: the call's shared deadline also bounds this branch check — an
+ * expired budget reads as unknown (never a block), it just stops asking git.
+ */
+function promotePushHead(call, contract, root, C, budget, fallbackTimeoutMs) {
+  if (call.pushHead && contract.ship === 'auto' && !call.gates.includes('release') && onMainBranch(root, C, budget, fallbackTimeoutMs)) {
     call.gates.push('release');
   }
-  if (!call.gates.length) return ok();
-  const evs = RC.events(croot);
-  const seg = RC.currentSegment(contract, evs);
-  const gitRoot = inputRoot || root;
-  // H-F20: one base and one count per release / non-release case per call,
-  // not per gate (one compound shell line can hit branch, card and release).
+}
+
+/**
+ * 6. H-F20: one base and one count per release / non-release case per call,
+ * not per gate (one compound shell line can hit branch, card and release).
+ * Measured lazily — only a gate that needs qa asks git.
+ * @param {{resolveBase: Function, codeFilesChanged: Function}} Q lib/run-contract-qa.js
+ * @returns {(gate: string) => number|null}
+ */
+function qaCounter(gitRoot, explicitBase, C, Q, budget) {
   let base;
   const counts = new Map();
-  const countFor = (gate) => {
+  return (gate) => {
     const key = gate === 'release' ? 'release' : 'other';
     if (!counts.has(key)) {
-      if (base === undefined) base = resolveBase(gitRoot, call.base, C, budget);
-      counts.set(key, budget.expired() ? null : codeFilesChanged(gitRoot, gate, base, C.gitLines, budget));
+      if (base === undefined) base = Q.resolveBase(gitRoot, explicitBase, C, budget);
+      counts.set(key, budget.expired() ? null : Q.codeFilesChanged(gitRoot, gate, base, C.gitLines, budget));
     }
     return counts.get(key);
   };
+}
 
+/**
+ * 7. The first of the call's gates that an open obligation refuses → the
+ * block text, or null. A gate that needs qa records its measure before
+ * deciding; a refusal records a `block` event.
+ */
+function gateRefusal(call, { croot, contract }, RC, countFor, armed, sessionId) {
+  const evs = RC.events(croot);
+  const seg = RC.currentSegment(contract, evs);
   for (const gate of call.gates) {
     if (gate === 'release' && call.shellRelease && contract.ship !== 'auto') continue;
     const ctx = { closes: call.closes || [] };
@@ -277,28 +266,72 @@ function main(hook) {
     if (armed && armed.source === 'fallback') {
       msg += `\nNote: this contract was armed from the click-through defaults (the do-run answers were not found). Wrong? ${RC.rearmHint()}`;
     }
-    return blocked(msg);
+    return msg;
   }
-  return ok();
+  return null;
+}
+
+/**
+ * The hook: the reply runHook sends — `{block}` (exit 2), `{context}` or
+ * null (exit 0).
+ */
+function main(hook) {
+  // H-B17: every lib is required here, inside runHook's try — a half-written
+  // lib during a plugin update must not break every matched PreToolUse call.
+  const store = require('../lib/run-contract-store');
+  // H-F20: the kill switch before anything else runs.
+  if (store.disabled()) return null;
+  const cwd = hook.cwd || process.cwd();
+  const { projectRoot } = require('../lib/project-root');
+  const C = require('../lib/run-contract-calls');
+  // AUD-019/AUD-031: the one git subprocess timeout + shared-chain budget,
+  // named once in lib/git-timeout.js — this hook keeps no GIT_TIMEOUT of its own.
+  const { gitBudget, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS } = require('../lib/git-timeout');
+  // AUD-010: qa's own git chain (base resolution + diff) lives in a shared lib
+  // so run-contract-cli.js's `status` / `done` measure it exactly like this
+  // gate does, instead of evaluating obligations against an empty ctx.
+  const Q = require('../lib/run-contract-qa');
+  // H-B1: ship_release / the card act on tool_input.cwd — its root is tried
+  // second; post records into the same root.
+  const { root, inputRoot, roots } = C.contractRoots(hook, projectRoot);
+  // Fast path. R5: once a corrupt header is quarantined only
+  // run-contract.json.corrupt.pending is left on disk — hasState counts it,
+  // so the path stays open long enough to deliver the notice once.
+  if (!roots.some(r => store.hasState(r, { pending: true, batch: true }))) return null;
+
+  const RC = require('../lib/run-contract');
+  const sessionId = hook.session_id || null;
+  const { ok, blocked } = replies(RC, root, sessionId);
+
+  const call = classify(hook, root, cwd, C);
+  if (!call) return ok();
+
+  const batchMsg = batchRefusal(call, root, RC, sessionId);
+  if (batchMsg) return blocked(batchMsg);
+
+  // 3. R12: ONE overall deadline for the whole invocation — before this it
+  // bounded only the git chain below; the transcript walk (routerFromTrans
+  // cript, backward up to 32 MB) could run long past it and a timed-out
+  // PreToolUse fails open (exits 0, gating nothing). Created here, ahead of
+  // armFromPending, so the walk shares the exact same ceiling as the git
+  // calls that follow it (base resolution, diffs, ls-files, the pushHead
+  // branch check), not a fresh one.
+  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
+  const armed = armFromPending(hook, root, RC, C, sessionId, budget);
+
+  const found = sessionContract(roots, RC, sessionId);
+  if (!found) return ok();
+  promotePushHead(call, found.contract, root, C, budget, SMALL_GIT_BUDGET_MS);
+  if (!call.gates.length) return ok();
+
+  const countFor = qaCounter(inputRoot || root, call.base, C, Q, budget);
+  const refusal = gateRefusal(call, found, RC, countFor, armed, sessionId);
+  return refusal ? blocked(refusal) : ok();
 }
 
 if (require.main === module) {
-  let inputData = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', d => { inputData += d; });
-  process.stdin.on('end', () => {
-    let code = 0;
-    try {
-      if (String(process.env.DOTCLAUDE_RUN_CONTRACT || '').trim().toLowerCase() === 'off') process.exit(0);
-      const { parseHookInput } = require('../lib/hook-input');
-      const hook = parseHookInput(inputData);
-      if (!hook) process.exit(0);
-      code = main(hook);
-    } catch {
-      code = 0; // an internal error never surfaces as a hook failure
-    }
-    process.exit(code);
-  });
+  // The try: a lib that fails to load never surfaces as a hook failure.
+  try { require('../lib/hook-input').runHook(main, { event: 'PreToolUse' }); } catch { /* fail open */ }
 }
 
 module.exports = { armFromPending };

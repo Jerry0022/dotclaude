@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.main.guard
- * @version 0.1.0
+ * @version 0.1.1
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash
@@ -20,11 +20,16 @@
  *
  *   Read-only git commands (status, log, diff, fetch, branch listing) pass
  *   through untouched.
+ *
+ *   Every git probe goes through lib/git-timeout.js's gitOut — GIT_TIMEOUT_MS
+ *   per call; before, these calls had no timeout at all. A failed or hung
+ *   probe reads as "not a repo" / "no branch" / "no origin", as a failure
+ *   always did.
  */
 
 require('../lib/plugin-guard');
 
-const { execFileSync } = require('node:child_process');
+const { gitOut } = require('../lib/git-timeout');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
 
 const WRITE_PATTERNS = [
@@ -46,24 +51,11 @@ const WRITE_PATTERNS = [
 ];
 
 function currentBranch(cwd) {
-  try {
-    return execFileSync('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return null;
-  }
+  return gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
 }
 
 function isGitRepo(cwd) {
-  try {
-    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  return gitOut(cwd, ['rev-parse', '--is-inside-work-tree']) !== null;
 }
 
 /**
@@ -77,14 +69,7 @@ function isGitRepo(cwd) {
  * blocked with an escape hatch that could not be executed.
  */
 function hasRemote(cwd) {
-  try {
-    execFileSync('git', ['remote', 'get-url', 'origin'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  return gitOut(cwd, ['remote', 'get-url', 'origin']) !== null;
 }
 
 let inputData = '';

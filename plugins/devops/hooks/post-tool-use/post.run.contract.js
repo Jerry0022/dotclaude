@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.run.contract
- * @version 0.4.3
+ * @version 0.4.4
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion|Skill|Agent|Edit|Write|NotebookEdit|Bash|PowerShell|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request
@@ -35,13 +35,12 @@
  *     session's contract expired unclosed → one notice.
  *   A contract armed from `fallback` or `machine` is announced once via
  *   additionalContext. Never fails the tool call; kill switch
- *   DOTCLAUDE_RUN_CONTRACT=off.
+ *   DOTCLAUDE_RUN_CONTRACT=off. Stdin, parsing and the reply go through
+ *   lib/hook-input.js's runHook; the fast path asks lib/run-contract-store.js
+ *   hasState instead of naming the state files itself.
  */
 
 require('../lib/plugin-guard');
-
-const fs = require('fs');
-const path = require('path');
 
 function announcement(h, RC) {
   const from = h.source === 'machine' ? 'a machine prompt (autostart)' : 'the click-through defaults — the do-run answers were not found';
@@ -258,11 +257,16 @@ function handlerFor(tool, C) {
   return null;
 }
 
+/**
+ * The hook: the reply runHook sends as additionalContext (`{context}`), or
+ * null. Never refuses — PostToolUse only records.
+ */
 function main(hook) {
   const cwd = hook.cwd || process.cwd();
-  // H-B17: required here, inside the stdin handler's try/catch.
+  // H-B17: required here, inside runHook's try.
   const { projectRoot } = require('../lib/project-root');
   const C = require('../lib/run-contract-calls');
+  const { hasState } = require('../lib/run-contract-store');
   // H-B1: the same root choice as pre (session root, then tool_input.cwd's
   // root for the MCP tools).
   const { root, roots } = C.contractRoots(hook, projectRoot);
@@ -270,19 +274,16 @@ function main(hook) {
   // Fast path: only AskUserQuestion (arming) and Skill (arm / batch markers)
   // can matter without a contract on disk. R5: the corrupt-quarantine
   // marker (run-contract.json.corrupt.pending) can be the ONLY file left in
-  // `.claude/` once the header itself was quarantined — count it too, else
-  // this path returns before the notice is ever read.
-  if (tool !== 'AskUserQuestion' && tool !== 'Skill'
-    && !roots.some(r => ['run-contract.json', 'run-contract.json.corrupt.pending']
-      .some(n => fs.existsSync(path.join(r, '.claude', n))))) return null;
+  // `.claude/` once the header itself was quarantined — hasState counts it
+  // too, else this path returns before the notice is ever read.
+  if (tool !== 'AskUserQuestion' && tool !== 'Skill' && !roots.some(r => hasState(r))) return null;
   const RC = require('../lib/run-contract');
   if (RC.disabled()) return null;
-  const ctxOut = (text) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text } });
   const handler = handlerFor(tool, C);
   if (!handler) {
     // R5: no handler for this tool still must not drop a pending notice.
     const expired = RC.expiryNotice(root, { sessionId: hook.session_id || null });
-    return expired ? ctxOut(expired) : null;
+    return expired ? { context: expired } : null;
   }
   const sessionId = hook.session_id || null;
   const s = { sessionId };
@@ -310,23 +311,12 @@ function main(hook) {
     }
   }
   if (expired) parts.push(expired);
-  return parts.length ? ctxOut(parts.join('\n\n')) : null;
+  return parts.length ? { context: parts.join('\n\n') } : null;
 }
 
 if (require.main === module) {
-  let inputData = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', d => { inputData += d; });
-  process.stdin.on('end', () => {
-    try {
-      const { parseHookInput } = require('../lib/hook-input');
-      const hook = parseHookInput(inputData);
-      if (!hook) process.exit(0);
-      const out = main(hook);
-      if (out) process.stdout.write(`${out}\n`);
-    } catch { /* never surfaces as a hook failure */ }
-    process.exit(0);
-  });
+  // The try: a lib that fails to load never surfaces as a hook failure.
+  try { require('../lib/hook-input').runHook(main, { event: 'PostToolUse' }); } catch { /* fail open */ }
 }
 
 module.exports = { backlogFinished, recordCard, onAsk, onSkill, onShell, onRelease, onCard, onMcpMerge, main };

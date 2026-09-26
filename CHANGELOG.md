@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.212.1] — 2026-09-26
+
+### Fixed
+- **Three branch guards no longer wait on a git that hangs.** `pre.main.guard`, `pre.edit.branch` and the ship detection in `prompt.ship.detect` started git with no timeout at all, so a stalled git (a locked repository, a file system that stops answering on a loaded machine) held the call until Claude Code gave up on the hook. They now use the shared git helpers (`gitOut`, 5 s per call) and read a failure exactly as before: not a repo, no branch, no origin. A new test keeps every git call a hook makes on a timeout.
+- **Two hooks accept a payload that starts with a byte-order mark.** `post.agent.nudge` and `post.flow.completion` parsed their input with a raw `JSON.parse`; they now use the shared tolerant parser like the run-contract hooks.
+
+### Changed
+- **One stdin runner for the hooks.** `runHook(main, { event })` in `hooks/lib/hook-input.js` reads stdin, parses the payload and writes the reply: `{ block }` exits 2 with the reason on stderr, `{ context }` becomes the `additionalContext` envelope for the event, anything else exits 0. The run-contract, agent-nudge and completion hooks use it; their exit codes are unchanged.
+- **Internal cleanup, same behaviour.** The git helpers moved into `hooks/lib/git-timeout.js`; `pre.run.contract`'s main function and the completion hook's two longest functions are split along their numbered steps; the run-contract hooks ask the store's `hasState()` instead of naming its files. The run-contract facade no longer re-exports the seven entries only tests used (`contractPath`, `eventsPath`, `prevPath`, `pendingPath`, `batchHandoffPath`, `readRawContract`, `followUpModeHint`); they stay in their own modules.
+
 ## [0.212.0] — 2026-09-26
 
 ### Fixed

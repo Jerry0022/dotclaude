@@ -1,12 +1,13 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.2
+ * @version 0.5.3
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
  *   call the same way. Pure parsing plus two small fs reads (card payload,
- *   transcript tail); no git, no contract state.
+ *   transcript tail) and a few budgeted git reads (baseBranch, originMatches)
+ *   through git-timeout.js's helpers; no contract state.
  *
  *   SHIP_RELEASE, RENDER_CARD, EDIT_TOOLS, SHELL_TOOLS   constants
  *   MACHINE_ARM_RE / MACHINE_TURN_RE / BACKLOG_AUTOSTART_RE   machine-prompt openers
@@ -39,14 +40,17 @@
  *   baseBranch(root, newName, after) → string | null  (git, 3 s timeout)
  *   isItemBranch(facts, hook, current) → boolean (backlog item boundary, R6)
  *   gitOut(root, args, {budget}) → string | null · gitLines(root, args, {timeout, budget}) → string[]
- *     (throws; `budget` is an optional git-timeout gitBudget() shared across a chain of calls — AUD-031)
+ *     (throws; `budget` is an optional git-timeout gitBudget() shared across a chain of calls — AUD-031;
+ *     re-exported from git-timeout.js, where the helpers live)
  *   readTail(file)             → transcript tail (AUD-015c: this list matches module.exports)
  *   linesBackward(file)        → generator: whole lines newest first, 2 MB chunks, ≤ 32 MB (QA-T1)
  */
 
 const fs = require('fs');
 const path = require('path');
-const { GIT_TIMEOUT_MS, gitBudget } = require('./git-timeout');
+// The git helpers moved to git-timeout.js (harden scan 2026-09-26); gitOut /
+// gitLines stay in this module's exports for its existing callers and tests.
+const { gitBudget, gitOut, gitLines } = require('./git-timeout');
 
 // R11: post.run.contract's hook timeout is 10 s (hooks.json); baseBranch can
 // make 2 unbudgeted GIT_TIMEOUT_MS (5 s) calls, 10 s worst case, killing the
@@ -840,41 +844,6 @@ function contractRoots(hook, projectRoot) {
 function toolInput(hook) {
   const i = hook && hook.tool_input;
   return i && typeof i === 'object' ? i : {};
-}
-
-function gitRun(root, args, timeout) {
-  const { execFileSync } = require('child_process');
-  return execFileSync('git', args, {
-    cwd: root, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
-  });
-}
-
-/**
- * AUD-031: the timeout for one call — a caller's shared `budget` (from
- * git-timeout's gitBudget) bounds a whole CHAIN of calls together; without
- * one, GIT_TIMEOUT_MS is each call's own ceiling.
- */
-function callTimeout(budget) {
-  return budget ? budget.timeout() : GIT_TIMEOUT_MS;
-}
-
-/**
- * Trimmed git stdout, or null on an error AND on empty output.
- * @param {object} [opts] `{budget}` — an optional git-timeout gitBudget() to
- *   bound a chain of calls instead of each re-arming its own timeout.
- */
-function gitOut(root, args, { budget } = {}) {
-  try { return gitRun(root, args, callTimeout(budget)).trim() || null; } catch { return null; }
-}
-
-/**
- * H-A6: git stdout as non-empty lines. THROWS on a git failure, so a caller
- * can tell "unknown" from "no lines" (pre's qa count).
- * @param {object} [opts] `{timeout, budget}` — an explicit `timeout` wins;
- *   otherwise a shared `budget` bounds the chain, else GIT_TIMEOUT_MS.
- */
-function gitLines(root, args, { timeout, budget } = {}) {
-  return gitRun(root, args, timeout || callTimeout(budget)).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
 /**
