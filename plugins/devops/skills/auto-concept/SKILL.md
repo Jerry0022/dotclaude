@@ -132,7 +132,7 @@ would also fit.
    **`design` is almost always a click-dummy.** If a design has 2+ screens,
    the mockup's own buttons/links MUST be wired to navigate between screens
    (not just styled rectangles) — clicking "Continue" on screen 1 lands on
-   screen 2, "Back" returns, etc. See `deep-knowledge/templates.md`
+   screen 2, "Back" returns, etc. See `deep-knowledge/templates-design.md`
    § Template: design for the `data-screen-link` attribute pattern.
 
    **"Screen" is a logical state, not a full page.** A screen can be a
@@ -178,7 +178,7 @@ would also fit.
    **Optional views:** alongside the ≥1 design, this same `design` iteration
    MAY also hold `section[data-view]` — fullscreen, non-visual questions
    with their own TOC entry, switched exactly like a design (see
-   `deep-knowledge/templates.md` § Views (optional)).
+   `deep-knowledge/templates-design.md` § Views (optional)).
    Three kinds ship as templates: `decision` (2..n named alternatives, bi-state per alternative),
    `comparison` (2..n concrete candidates side by side, verdict per
    option, optional criteria matrix) and `mapping` (many items assigned to
@@ -234,7 +234,7 @@ would also fit.
    an assignment, not a choice between alternatives — is a `free` round
    carrying ≥ 1 `section[data-mapping]`; inside a design concept it is a
    `data-view-kind="mapping"` subpage instead. (Authoring rules: § 1c;
-   markup: `deep-knowledge/templates.md` § Mapping block (optional).)
+   markup: `deep-knowledge/templates-free.md` § Mapping block (optional).)
 
 **Entangled questions split across iterations (the mixed mode, Step 0.5).**
 If a concept's visual questions (which layout / design direction) and its
@@ -260,7 +260,7 @@ most and then asks its own, design-independent question.
 
 The ☰ panel and the 💬 feedback dock are the same overlays in all three —
 both are page chrome, not part of the layout, and neither moves between
-rounds (`deep-knowledge/templates.md` § Panel Chrome (all templates)). What
+rounds (`deep-knowledge/templates-panel.md` § Panel Chrome (all templates)). What
 differs per round is only what the dock holds and where the itemised
 feedback is written: per-screen / per-design / per-view rows over a mockup,
 inline textareas in a document round — the general note lives in the dock
@@ -268,7 +268,7 @@ in every round.
 
 `design` is the canonical name; `prototype` is accepted as a legacy alias
 (older pages/prompts) and is normalised to `design` — see
-`deep-knowledge/templates.md` § `applyIterationTemplate()`.
+`deep-knowledge/templates-rounds.md` § `applyIterationTemplate()`.
 
 **Template continuity — decide once, per concept.** The template belongs to
 the concept, not to the mood of a round. Once a concept has rendered a
@@ -321,7 +321,7 @@ the page opens straight into the phone frames.
 Declaring device views constrains the mockup markup — no `<script>`,
 `<canvas>`, `<style>` or `<iframe>` inside a screen, no `vh`/`vw` units, no
 `position: fixed`, no `#id` selectors in mock CSS. See
-`deep-knowledge/templates.md` § Responsive device views for what each of
+`deep-knowledge/templates-design.md` § Responsive device views for what each of
 those does once the screen is cloned into a frame.
 
 ### 1b. If template is `decision`: pick a content variant
@@ -352,7 +352,7 @@ A mapping (`section[data-mapping]` in a `free` round, or a
 the engine from one JSON spec — Claude writes the wrapper, the heading /
 intro, the spec and (free rounds only) the note textarea; never a cell, a
 state input or a control. Field table and grammar:
-`deep-knowledge/templates.md` § Information Mapping (engine) → Spec. Rules:
+`deep-knowledge/templates-mapping.md` § Information Mapping (engine) → Spec. Rules:
 
 - **A proposal is mandatory.** Pre-fill `proposal` for every matrix — the
   user corrects an assignment, they do not build one from zero. In a later
@@ -392,14 +392,15 @@ Build a single self-contained HTML file. Requirements:
 
 Mock CSS in a round's `<style>` is namespaced per design (`.d1-…`) and never
 names an engine chrome class — the panel, FABs, dock, tabs and frames belong
-to the engine's head stylesheet (templates.md § Design layout rules → Mock
+to the engine's head stylesheet (templates-design-wiring.md § Design layout rules → Mock
 CSS is namespaced; gate P32, #400).
 
 The page's **engine** — the Kompass panel skeleton, § Layout CSS, § Section
 Navigation JS, § Claude Connection Heartbeat, § Two-Button Submit, § State
 Persistence, § Attachments, the viewport switcher — is copied **verbatim from
-`deep-knowledge/templates.md` of the plugin running this session**, every
-time a page is generated. Older concept pages in `docs/concepts/` (this
+the template parts of the plugin running this session** (`deep-knowledge/templates.md`
+lists all `templates-*.md` parts in reading order; the engine spans all of
+them), every time a page is generated. Older concept pages in `docs/concepts/` (this
 project's or any other) are **content references only**: read them for
 tone, tokens, the project's CSP line and how a mockup was built — never lift
 their `<style>`, `<script>` or panel markup. A page assembled that way opens
@@ -425,7 +426,7 @@ are writing to Claude in THIS conversation). Then:
    engine's `map.*` strings — view toggle, tier labels, palette filters,
    counts, status line, reset / copy / add item, "Added by you", violation
    texts, the frozen-without-`submitted` banner) from the matching
-   column of the UI Locale table in `deep-knowledge/templates.md` § UI Locale.
+   column of the UI Locale table in `deep-knowledge/templates-common.md` § UI Locale.
    `map.*` cells are substituted into single-quoted JS literals
    (`MAP_LOCALE`), so a locale cell that lands in a JS literal contains no
    `'`, no backtick and no backslash — a new column follows the same rule.
@@ -444,7 +445,7 @@ page.
 - Modern, clean design, **dark by default** (`<html data-theme="dark">`; a
   project `reference.md` may override the default).
 - The dark/light theme toggle is a quiet emoji button in the ☰ panel's head
-  row next to the ✕ (templates.md § Theme Toggle) — the same control on every
+  row next to the ✕ (templates-utilities.md § Theme Toggle) — the same control on every
   template, never in the content column, never a FAB.
 - Responsive layout (works on any screen size)
 - No external dependencies — all CSS/JS inline
@@ -470,7 +471,7 @@ as a compact `.iteration-intro` block right after the opening tag.
 
 The panel itself is **not** template-specific: one 360px overlay, sliding in
 from the right, toggled by the ☰ FAB in the top-right corner, in every
-template (`deep-knowledge/templates.md` § Panel Chrome (all templates)). It
+template (`deep-knowledge/templates-panel.md` § Panel Chrome (all templates)). It
 used to dock into a ~20% sidebar for `decision` / `free` rounds, which meant a
 concept that mixed templates moved its panel — and the surface the user writes
 feedback on — from behind the FAB into the page, mid-session.
@@ -526,7 +527,7 @@ column of four parts; only part 2 scrolls, parts 1, 3 and 4 are pinned):**
 3. **Status line** (`.panel-status`) — ONE line, one glyph, six mutually
    exclusive states (saved / saving / connecting / local-only / submitted /
    frozen); the progress steps expand under it after a submit. See
-   `deep-knowledge/templates.md` § Decision Panel State CSS.
+   `deep-knowledge/templates-panel-state.md` § Decision Panel State CSS.
 4. **CTA foot** (`.panel-cta`, ≤120px) — the split button (primary +
    ▾ menu with the implement action), or the submitted / frozen /
    final-report block. Reachable without scrolling the panel, however many
@@ -544,7 +545,7 @@ The content area is reserved for the actual concept.
   every Bi-State variant/finding card MUST carry an adjacent
   `<textarea data-comment="$decisionId-note">` so the user can attach a
   free-form override (e.g. "only for X", "with variant Y") to the include/
-  discard choice. See `deep-knowledge/templates.md` § Comment Slot Injection
+  discard choice. See `deep-knowledge/templates-persistence.md` § Comment Slot Injection
   for the HTML pattern, the `ensureCommentSlots()` JS safety net, and the
   rationale. Skipping this is the most common interactive-element regression
   — the user has nowhere to caveat their selection.
@@ -607,7 +608,7 @@ findings I marked Miteinbeziehen").
 
 A **speech-bubble feedback dock** anchored to the 💬 FAB (bottom-right) is
 page chrome on every concept page (#399), like the ☰ panel: the same markup
-(`templates.md` § Common Structure, § Panel Chrome (all templates) → Feedback
+(`templates-common.md` § Common Structure, § Panel Chrome (all templates) → Feedback
 dock) on a `decision`, `free` and `design` round. In a **document round** it
 holds exactly one thing — the general-notes textarea with its attachment
 slot — and renders `compact`; the itemised notes of such a round are the
@@ -650,7 +651,7 @@ accent circle differing only in glyph and corner, and the open dock has
 exactly two widths (compact 420px / wide 560px, picked by `applyDockSize()`).
 Copy these verbatim; hand-tuning them per concept is what made the two FABs
 different sizes and the dock alternately a mini-box and a full-width bar. See
-`deep-knowledge/templates.md` § Panel Chrome (all templates) for the dock's
+`deep-knowledge/templates-panel.md` § Panel Chrome (all templates) for the dock's
 HTML/CSS/JS and the geometry rationale, and § Template: design for the
 per-screen / per-design / per-view rows only a design round adds.
 
@@ -673,7 +674,7 @@ nothing is missing — but that is the exception, not the default.
   bubble beside it. Collapsed, the bubble shows a truncated question line;
   clicking it (or the pin) expands to the full question, an answer
   textarea, and an attachment bar — any file type, drag & drop / Ctrl+V /
-  picker, same as every other feedback field (`deep-knowledge/templates.md`
+  picker, same as every other feedback field (`deep-knowledge/templates-attachments.md`
   § Attachments).
 - The **eye pill** (top-left, directly below the screen-position indicator)
   toggles the whole layer for the whole page. It shows how many questions
@@ -684,7 +685,7 @@ nothing is missing — but that is the exception, not the default.
   or hidden. The feedback dock stays the normal, always-available way to
   leave general notes.
 
-See `deep-knowledge/templates.md` § Annotation Layer (optional) for the
+See `deep-knowledge/templates-design.md` § Annotation Layer (optional) for the
 full HTML/CSS/JS reference, the payload shape (`annotations[]`), and how a
 frozen iteration keeps its annotations browsable and read-only.
 
@@ -700,7 +701,7 @@ alternatives, bi-state per alternative) and `data-view-kind="comparison"`
 (2..n concrete candidates side by side, verdict per option, optional
 criteria matrix — mandatory skeleton, free interior). See § Step 1a above
 for when to use a view instead of a separate `decision` iteration, and
-`deep-knowledge/templates.md` § Views (optional) for the full HTML/CSS/JS
+`deep-knowledge/templates-design.md` § Views (optional) for the full HTML/CSS/JS
 reference and the payload shape (`decisions[].view`, `comments.views`).
 **≥1 `data-design` stays mandatory** — views augment a design iteration,
 they never replace it. **And a view never re-asks the design choice** — the
@@ -713,7 +714,7 @@ notes, not from a view that lists the designs again.
 The HTML page MUST persist interactive element state via `localStorage` (with
 a 24-hour TTL) so that user selections survive page reloads, accidental tab
 closes, and even browser restarts. Include the state persistence pattern from
-`deep-knowledge/templates.md` § State Persistence in every generated concept
+`deep-knowledge/templates-persistence.md` § State Persistence in every generated concept
 page. Theme preference is also persisted to prevent flash.
 
 The `concept-submitted` class is NOT persisted — after a reload the page is
@@ -766,7 +767,7 @@ selections, never a reason to discard comments.
 
 Additionally, the offline submit queue (`localStorage` key `{slug}-pending`)
 caches decisions submitted while Claude is disconnected and auto-delivers
-them when the connection is restored (see `templates.md` § Offline Submit Queue).
+them when the connection is restored (see `templates-submit.md` § Offline Submit Queue).
 
 ### Feedback Mechanism
 
@@ -797,7 +798,7 @@ signal Claude monitors.
    `deep-knowledge/iteration-rules.md` § Rules, "Veil + floating bar").
 5. Switch the decision panel from "ready" to "submitted" state — showing a
    clear "Entscheidungen übermittelt" indicator with a hint to switch to the
-   Claude chat (see `deep-knowledge/templates.md` § Submit Handler)
+   Claude chat (see `deep-knowledge/templates-submit.md` § Submit Handler)
 
 **Decision panel states** (the foot + the pinned status line above it):
 - **Ready**: split button active, decision summary visible; the status line
@@ -807,7 +808,7 @@ signal Claude monitors.
   on reconnect, the cache badge on the button says so); the status line flips
   to the one categorically different state, "⚠ Nur lokal gespeichert ·
   getrennt" on a warning background (Claude heartbeat stale or three failed
-  draft flushes — see `deep-knowledge/templates.md` § Claude Connection
+  draft flushes — see `deep-knowledge/templates-utilities.md` § Claude Connection
   Heartbeat)
 - **Submitted**: "Entscheidungen übermittelt" + "Wechsle zum Claude Chat"
   hint in the foot; the status line reads "⏳ Übermittelt · Claude arbeitet"
@@ -852,7 +853,7 @@ Every concept page is a stack of iteration tabs. The tab bar lives at the
 NOT in the left-hand content area. Only the active iteration accepts input;
 earlier ones are clickable but frozen. See `deep-knowledge/iteration-rules.md`
 for the full rules (panel placement, freeze behavior, single-file invariant)
-and `deep-knowledge/templates.md` § Iteration Tabs for the reference HTML.
+and `deep-knowledge/templates-rounds.md` § Iteration Tabs for the reference HTML.
 
 ### Post-Generation Validation (mandatory gate)
 
@@ -1218,7 +1219,7 @@ the sidebar on the hourglass while the page waits for the user.
    path}]` inline; a `design` template iteration instead carries a
    top-level `attachments` object keyed by slot (`general`, `design-{id}`,
    `{screenId}`, `view-{id}`, `anno-{id}`, `{decisionId}-note}` — see
-   `deep-knowledge/templates.md` § Decision schema (design branch) — walk
+   `deep-knowledge/templates-design-wiring.md` § Decision schema (design branch) — walk
    every key and treat each entry the same as an inline one. Both shapes
    are already persisted by the bridge at
    `.claude/concepts/{date}-{slug}/attachments/<id>` (§ Bridge server §
@@ -1239,7 +1240,7 @@ is in the DOM but missing in the payload, flag it to the user immediately
 function"). See `deep-knowledge/validation-gate.md` § Generic Form
 Collection for the required pattern.
 
-**Mappings:** `mappings[]` (`deep-knowledge/templates.md` § Information
+**Mappings:** `mappings[]` (`deep-knowledge/templates-mapping.md` § Information
 Mapping (engine)) is typed and always present (`[]` when the round has
 none) — read it before `decisions[]`. Its `diff` is what changed against
 your proposal, `assigned` (keyed by matrix key) is the full truth,
@@ -1672,7 +1673,7 @@ iteration must be live in the browser BEFORE the server signals "processed".
 
 1. Read the existing HTML file (same path, always).
 2. Freeze the currently-active iteration section per the rules in
-   `deep-knowledge/templates.md` § Freezing Past Iterations (authoritative
+   `deep-knowledge/templates-rounds.md` § Freezing Past Iterations (authoritative
    source). In short: remove `data-active`, add `hidden`, disable every
    `input`/`textarea`/`select`/`button` inside the section, set `readonly`
    on text inputs and textareas, preserve the submitted values exactly
@@ -1686,7 +1687,7 @@ iteration must be live in the browser BEFORE the server signals "processed".
    under `cells`) renders the red `map.frozen_missing` banner over the
    proposal and fails the deterministic gate (M9). See
    `deep-knowledge/iteration-rules.md` § Freezing Design Iterations →
-   Mappings and `deep-knowledge/templates.md` § Information Mapping
+   Mappings and `deep-knowledge/templates-mapping.md` § Information Mapping
    (engine) → Freezing.
 2.5. **Verify form collection coverage.** Read the existing JS for
    `collectDecisions()` (or its template-specific variant). Confirm it
@@ -1731,7 +1732,7 @@ iteration must be live in the browser BEFORE the server signals "processed".
    final step. The browser's `pollProcessedState` is a safety-net —
    it will only restore the panel state when a reload counter advance
    has been observed OR a long stale timeout elapses. See
-   `deep-knowledge/templates.md` § Panel State Reset for the polling contract.
+   `deep-knowledge/templates-submit.md` § Panel State Reset for the polling contract.
 7. **Immediately re-launch the pickup waker** (Step 5d) — right here, not
    after the rest of the round. `/reset` clears the pending flag and
    `/reload` has already handed the user a fresh panel, so from this moment
@@ -1760,7 +1761,7 @@ preservation) stays identical.
    `<section data-iteration="{N+1}" data-iteration-template="free" data-final-report data-active>`
    to the same file. The `data-final-report` flag switches the panel to
    `panel-final-report` mode (no iterate/implement buttons — see
-   `deep-knowledge/templates.md` § Final Report Panel). The template is
+   `deep-knowledge/templates-rounds.md` § Final Report Panel). The template is
    **always `free`** and is never omitted: a report is a document with a TOC,
    the `design` layout is built for a mockup, and a section that declares no
    template used to inherit whatever tab the reader came from — the same
@@ -1879,7 +1880,7 @@ part B), or to nothing. Write `data-issue-body` for every item as if it were
 BOTH: an issue read cold in three months and a brief handed to an
 implementing agent ten minutes later. The presence of this section is what
 adds the follow-up block to the close-out sheet — see
-`deep-knowledge/templates.md` § Final Report Panel for the HTML pattern.
+`deep-knowledge/templates-rounds.md` § Final Report Panel for the HTML pattern.
 Default each `<input type="checkbox">` to `checked` so the user opts items
 OUT rather than IN. The validation gate rejects a final report whose open
 points lack `data-oq-origin` (`deep-knowledge/validation-gate.md` pattern
@@ -1970,7 +1971,7 @@ bridge-server state** and render a completion card.
 
 Before rendering the completion card, dispose of the bridge server, its
 state file, AND the on-disk concept artefacts. The on-disk steps depend
-on the user's disposition choice (see `deep-knowledge/templates.md`
+on the user's disposition choice (see `deep-knowledge/templates-rounds.md`
 § Disposition Control for the UI + payload shape).
 
 **Determine the disposition** in this order of preference:

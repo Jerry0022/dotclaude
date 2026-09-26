@@ -4,7 +4,7 @@ Every concept page is a stack of iteration tabs. The **tab bar lives at the
 top of the right-side decision panel** (a compact vertical chip list inside
 the panel's scroll box `.panel-nav-scroll`, together with the section TOC;
 the status line and the submit foot below it are pinned and never scroll
-away — templates.md § Common Structure "Panel anatomy"). It must NEVER
+away — templates-common.md § Common Structure "Panel anatomy"). It must NEVER
 render inside the left-hand content area — the content area is reserved for
 the actual concept. Each
 chip represents exactly one iteration; the active one is interactive, all
@@ -47,7 +47,7 @@ selections, read-only comments).
   live round → the dimmer is hidden and every past round is locked). So at
   most ONE past round is unlocked at any time, and zero while the live round
   is shown. The bar is page-level chrome outside `section[data-iteration]`
-  and must be copied verbatim into every template skeleton (see templates.md
+  and must be copied verbatim into every template skeleton (see templates-common.md
   § Common Structure; gate entry 30b).
   - **Exemption for `design` iterations:** freezing must NOT disable
     navigation — the user still has to be able to revisit the mockups. The
@@ -66,7 +66,7 @@ selections, read-only comments).
     reads as the complete "controls that must survive freezing" set; the
     sweep itself never reaches them and needs no exemption for them.
     **When the iteration uses views (optional, see
-    templates.md § Views (optional)), also skip `.view-switch-item` and
+    templates-design.md § Views (optional)), also skip `.view-switch-item` and
     `.screen-nav-view-item`** — switching to/between views must keep working
     on a frozen tab exactly like switching designs/screens does. Textareas
     (including annotation answers and view notes) still go `readonly`
@@ -99,12 +99,12 @@ selections, read-only comments).
   Falls back to horizontal scroll only when the panel collapses to the
   bottom on narrow screens.
 
-See `templates.md` § Iteration Tabs for the reference HTML/CSS/JS.
+See `templates-rounds.md` § Iteration Tabs for the reference HTML/CSS/JS.
 
 ## The panel tree ("Kompass")
 
 The bar, the head's rounds list and the section TOC are built by
-`buildSectionNav()` (templates.md § Section Navigation) from the flat chip
+`buildSectionNav()` (templates-section-nav.md § Section Navigation) from the flat chip
 list and the sections — never by hand:
 
 - **The bar is hidden; the head is the round switcher.** `nav.iteration-tabs`
@@ -191,7 +191,7 @@ and revisit their own submitted notes:
   OUTSIDE `section[data-iteration]`, same decorative caveat as
   `#panel-toggle`/`#feedback-toggle` above.
 - `.view-switch-item` — the view segments in the top-centre switcher, when
-  the iteration uses views (optional, templates.md § Views (optional)).
+  the iteration uses views (optional, templates-design.md § Views (optional)).
 - `.screen-nav-view-item` — the view entries in the panel's second nav
   group. Their (non-interactive) `.screen-nav-views-heading` label needs no
   exemption — it was never disabled in the first place.
@@ -208,7 +208,7 @@ every other comment field — they go `readonly`, never `disabled`, and their
 submitted answer is what the reader sees when they reopen the pin's bubble.
 
 **The feedback dock needs explicit handling — in EVERY template.** The
-dock is page chrome (templates.md § Panel Chrome (all templates), #399): its
+dock is page chrome (templates-panel.md § Panel Chrome (all templates), #399): its
 general-notes textarea, and on a design round its per-screen / per-design /
 per-view textareas, live OUTSIDE `section[data-iteration]`, so the freeze
 sweep never reaches them — a frozen tab would otherwise show an empty,
@@ -231,7 +231,7 @@ section. A `decision` / `free` round carries just the general note; a
 
 Write `general` exactly as the payload delivered it (`comments.general`, the
 `{ text, attachments }` object); a bare string is still accepted for pages
-frozen before #399. `applyDockFreezeState()` (templates.md § Panel Chrome
+frozen before #399. `applyDockFreezeState()` (templates-panel.md § Panel Chrome
 (all templates) → Feedback dock) reads that blob whenever
 `body.viewing-frozen` is set, fills the dock read-only, and restores the live
 iteration's unsent text when the user switches back — on a document page
@@ -269,7 +269,7 @@ step beyond "same as every other comment textarea".
 
 **Mappings (§ Information Mapping):** a `[data-mapping]` — a
 `data-view-kind="mapping"` view in a design round or a `section[data-mapping]`
-block in a free round (templates.md § Information Mapping (engine)) — is
+block in a free round (templates-mapping.md § Information Mapping (engine)) — is
 rendered by the engine at load time, so the freeze sweep finds only its
 wrapper, its JSON spec and (free rounds) its note textarea in the static
 HTML. The rules:
@@ -310,7 +310,7 @@ HTML. The rules:
 iteration. It applies to every template, not just `design`. Without that block
 the panel's lower half is simply empty on a frozen tab, and the only way back
 is guessing which chip is live — which is not the last one once a final report
-exists. See templates.md § Common Structure.
+exists. See templates-common.md § Common Structure.
 
 ## Iteration append checklist
 

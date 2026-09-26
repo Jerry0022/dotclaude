@@ -1,15 +1,12 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // Shared jsdom harness for the information-mapping engine
 // (templates.md § Information Mapping (engine)). Not a test file on purpose:
 // vitest collects `plugins/**/*.test.js`, so importing this module from
 // several suites does not re-register anyone's tests.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+export const md = readTemplates();
 
 export function scanBlocks(src) {            // same line scanner as panel-anatomy.test.js
   const lines = src.split("\n"); const out = []; let open = null, body = [];

@@ -4,7 +4,8 @@
  * @version 0.1.0
  * @plugin devops
  * @description Assemble a standalone concept page from the reference blocks in
- *   `skills/auto-concept/deep-knowledge/templates.md` — the same fenced HTML / CSS
+ *   concept templates (`skills/auto-concept/deep-knowledge/templates.md` and the
+ *   parts it lists, joined by `templates-source.js`) — the same fenced HTML / CSS
  *   / JS a generated page is copied from — with a synthetic history of N
  *   rounds, so the Kompass decision panel (archive fold, TOC groups, the six
  *   status-line states, the split button, the mobile bottom bar, the FAB
@@ -37,7 +38,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const TEMPLATES = path.join(__dirname, '..', 'skills', 'auto-concept', 'deep-knowledge', 'templates.md');
+const { readTemplates } = require('../skills/auto-concept/templates-source.js');
 
 function parseArgs(argv) {
   const out = { out: '', rounds: 8, entries: 14, mode: 'decision', locale: 'en', mapping: false, designs: 1 };
@@ -348,7 +349,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: system
 .variant-card { border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; background: var(--panel-bg); }
 `;
 
-function build(opts, md = fs.readFileSync(TEMPLATES, 'utf8')) {
+function build(opts, md = readTemplates()) {
   const blocks = scanBlocks(md);
   const html = blocks.filter(b => b.info === 'html');
   const css = blocks.filter(b => b.info === 'css').map(b => b.code).join('\n\n');
@@ -413,7 +414,7 @@ function build(opts, md = fs.readFileSync(TEMPLATES, 'utf8')) {
   return page;
 }
 
-module.exports = { parseArgs, scanBlocks, localeMap, build, TEMPLATES };
+module.exports = { parseArgs, scanBlocks, localeMap, build };
 
 if (require.main === module) {
   const opts = parseArgs(process.argv.slice(2));

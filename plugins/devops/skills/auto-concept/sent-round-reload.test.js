@@ -1,8 +1,6 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // A reload while Claude still works on the round the user just sent (iterate
 // or implement) used to come back in the READY state: `concept-submitted` is
@@ -18,8 +16,7 @@ import { JSDOM } from "jsdom";
 //
 // Runs the reference functions from templates.md verbatim on jsdom.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+const md = readTemplates();
 
 function fnSource(name) {
   const m = md.match(new RegExp("(async )?function " + name + "\\([^)]*\\) \\{[\\s\\S]*?\\n\\}"));

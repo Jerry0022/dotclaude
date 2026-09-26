@@ -1,7 +1,5 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // The ☰ decision panel is the only navigation a design concept has that is
 // not a floating overlay: it lists every design and every screen, and it is
@@ -24,9 +22,7 @@ import { fileURLToPath } from "node:url";
 // templates.md is a REFERENCE Claude copies verbatim into generated pages, so
 // a defect here ships silently into every concept produced afterwards.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 
 // Line-based scanner (same reason as viewport-switcher.test.js): a lazy
 // `\`\`\`css\n([\s\S]*?)\`\`\`` regex desynchronises on the first block whose

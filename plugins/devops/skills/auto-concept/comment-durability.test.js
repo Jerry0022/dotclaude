@@ -1,8 +1,6 @@
 import { describe, test, expect, beforeEach } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // Behavioural proof for "a comment is never lost". The other concept tests
 // grep templates.md for the right shapes; this one RUNS the persistence engine
@@ -20,9 +18,7 @@ import { JSDOM } from "jsdom";
 // Every one of those is a single line of JS, which is exactly why they need a
 // test that executes rather than one that reads.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 
 /** The first fenced js block after `heading`. */
 function blockAfter(heading) {

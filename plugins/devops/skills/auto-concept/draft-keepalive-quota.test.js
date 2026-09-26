@@ -1,8 +1,6 @@
 import { describe, test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
 import vm from "node:vm";
-import { fileURLToPath } from "node:url";
+import { readTemplates } from "./templates-source.js";
 
 // Gate 65 — the draft mirror went dark mid-round while the bridge kept
 // answering 200. Seen live: `drafts/<slug>.jsonl` stopped at rev 33 — 67 566
@@ -21,8 +19,7 @@ import { fileURLToPath } from "node:url";
 // from templates.md against it — and, so it cannot pass vacuously, runs the
 // pre-fix flushDraft against the same model and watches it die.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const md = fs.readFileSync(path.join(__dirname, "deep-knowledge", "templates.md"), "utf8");
+const md = readTemplates();
 
 function fnSource(name) {
   const m = md.match(new RegExp("(?:async )?function " + name + "\\([^)]*\\) \\{[\\s\\S]*?\\n\\}"));

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { readTemplates } from "./templates-source.js";
 
 // The decision panel used to be one scrolling column: iteration chips, a flat
 // TOC, the connection pill, then the two CTAs. On any long concept the call
@@ -22,7 +23,7 @@ import { JSDOM } from "jsdom";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
-const md = fs.readFileSync(path.join(DK, "templates.md"), "utf8");
+const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
 
