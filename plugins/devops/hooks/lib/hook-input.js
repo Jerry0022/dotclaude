@@ -20,7 +20,11 @@
  *   // a whole hook file: main(hook) returns its reply (see runHook); the
  *   // try keeps a lib that fails to load from surfacing as a hook failure
  *   if (require.main === module) {
- *     try { require('../lib/hook-input').runHook(main, { event: 'PostToolUse' }); } catch {}
+ *     try {
+ *       require('../lib/hook-input').runHook(main, { event: 'PostToolUse' });
+ *     } catch {
+ *       // fail open
+ *     }
  *   }
  */
 

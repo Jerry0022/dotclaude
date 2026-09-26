@@ -293,7 +293,7 @@ function run(hook) {
 if (require.main === module) {
   // run() returns the serialized envelope (or ''), written as is; the try:
   // a lib that fails to load never surfaces as a hook failure.
-  try { require('../lib/hook-input').runHook(run, { event: 'PostToolUse' }); } catch {}
+  try { require('../lib/hook-input').runHook(run, { event: 'PostToolUse' }); } catch { /* fail open */ }
 }
 
 module.exports = {
