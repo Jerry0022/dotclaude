@@ -18,8 +18,9 @@ It fires whenever a task is fully completed and Claude is waiting for the next u
 1. **Verify** — visual verification per `deep-knowledge/visual-verification.md`
    and `deep-knowledge/test-strategy.md`. For larger changes (5+ edits) to
    UI projects, offer automated desktop testing per `deep-knowledge/desktop-testing.md`
-2. **Issue status** — if an issue is tracked (via `prompt.issue.detect` hook),
-   update its status
+2. **Issue status** — for each tracked issue (via `prompt.issue.detect` hook)
+   this session worked on, update its status; an issue the prompt only cited
+   stays untouched — no status change, no comment
 3. **Completion Card** — render per `templates/completion-card.md`, anatomy
    pinned in `deep-knowledge/completion-card-design.md` (source of truth when
    the two disagree)

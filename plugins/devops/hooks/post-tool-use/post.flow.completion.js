@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.29.0
+ * @version 0.29.1
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -819,6 +819,12 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
  * handed a fresh session the newest list of any session (2026-09-26: a Q&A
  * session with no issue work was told to move four foreign issues to Todo
  * and comment on them).
+ *
+ * Its own list is no proof of work either: prompt.issue.detect tracks the
+ * numbers a prompt reads as a request (lib/issue-refs.js), and a pattern read
+ * can still take a cited number for one. Without the "worked on it?" step
+ * every tracked number was owed a board move and a comment, whatever the
+ * session did.
  */
 function appendIssueStatusInstruction(hook, lines, cardContract) {
   let trackedIssues = [];
@@ -836,10 +842,13 @@ function appendIssueStatusInstruction(hook, lines, cardContract) {
     lines.push(
       '',
       `[issue-status] Tracked issues this session: ${issueList}`,
+      'Tracked means a prompt read as a request for it — not that this session worked on it.',
       'BEFORE rendering the completion card, evaluate each tracked issue:',
-      '1. Read the issue body and acceptance criteria from GitHub (gh issue view N)',
-      '2. Compare against the changes made in this session',
-      '3. For each issue:',
+      '1. Did this session work on it? If the prompt only cited it (context, a reference),',
+      '   leave it untouched — no status change, no comment — and skip the steps below.',
+      '2. Read the issue body and acceptance criteria from GitHub (gh issue view N)',
+      '3. Compare against the changes made in this session',
+      '4. Then:',
       '   - If ALL acceptance criteria are met → set status to "Done" on the GitHub project board',
       '   - If NOT fully done → set status to "Todo" on the GitHub project board',
       '     AND post a comment on the issue summarizing:',

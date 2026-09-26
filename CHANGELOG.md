@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.211.3] — 2026-09-26
+
+### Fixed
+- **The issue-status check leaves an issue alone that this session never worked on.** At the end of a turn the completion flow told Claude to set every tracked issue Done or Todo on the project board and to comment on it — there was no way to leave one untouched. Tracking now follows the prompt's wording (0.211.1), but a pattern can still read a cited number as a request, and the step that writes to GitHub is the one that has to hold: it now asks first whether this session worked on the issue, and one the prompt only cited gets no status change and no comment. A new test also pins that the tracked list is keyed by the session: another session's list is neither read nor changed.
+
 ## [0.211.2] — 2026-09-26
 
 ### Fixed
