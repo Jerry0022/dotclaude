@@ -501,3 +501,78 @@ describe("--render-card CLI — malformed payloads (#396)", () => {
     expect(out).toContain("✓ 12 Tests grün");
   });
 });
+
+// A test run the harness put in the background verifies nothing until its
+// result arrives (hooks/lib/light-bgrun.js). Meanwhile the owed check is not
+// "unverified — no test ran": it is running, and the card says so.
+describe("--render-card CLI — V&V while a background test run is in flight", () => {
+  const written = [];
+  const flag = (name, sid, content) => {
+    const file = join(tmpdir(), `dotclaude-devops-${name}-${sid}`);
+    writeFileSync(file, content);
+    written.push(file);
+  };
+  afterAll(() => {
+    for (const f of written) { try { unlinkSync(f); } catch { /* already gone */ } }
+  });
+
+  test("owed check + running background run → ◐ running post and the wait heading", async () => {
+    const sid = S("vv-running");
+    flag("light-pending", sid, "a.js");
+    flag("light-bgrun", sid, `b68oycrr6 ${Date.now()}`);
+    const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid });
+    expect(out).toMatch(/^## ⏳ Test läuft noch — Ergebnis abwarten\?$/m);
+    expect(out).toContain("◐ Test läuft noch im Hintergrund");
+    expect(out).not.toContain("kein Test lief");
+  });
+
+  test("the Desktop widget offers Jetzt shippen, and no Tests-laufen-lassen button", async () => {
+    const sid = S("vv-running-desktop");
+    flag("light-pending", sid, "a.js");
+    flag("light-bgrun", sid, `b68oycrr6 ${Date.now()}`);
+    const { stderr } = await renderCardFull(
+      { variant: "ready", summary: "x", lang: "de", session_id: sid },
+      { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
+    );
+    expect(stderr).toContain("Jetzt shippen");
+    expect(stderr).not.toContain("Tests laufen lassen");
+  });
+
+  test("a `pending` field still owns the heading; the evidence names the running test", async () => {
+    const sid = S("vv-running-pending");
+    flag("light-pending", sid, "a.js");
+    flag("light-bgrun", sid, `b68oycrr6 ${Date.now()}`);
+    const out = await renderCard({
+      variant: "ready", summary: "x", lang: "de", session_id: sid,
+      pending: [{ name: "npx vitest run", kind: "task", doing: "Suite" }],
+    });
+    expect(out).toMatch(/^## ⏳ Noch nicht fertig — .+$/m);
+    expect(out).toContain("◐ Test läuft noch im Hintergrund");
+    expect(out).not.toContain("kein Test lief");
+  });
+
+  test("without a background run — or with one past 30 minutes — it stays ⚠ ungeprüft", async () => {
+    const plain = S("vv-plain");
+    flag("light-pending", plain, "a.js");
+    const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: plain });
+    expect(out).toMatch(/^## ⚠ Ungeprüft shippen\?$/m);
+    expect(out).toContain("⚠ ungeprüft — kein Test lief");
+
+    const stale = S("vv-stale");
+    flag("light-pending", stale, "a.js");
+    flag("light-bgrun", stale, `b68oycrr6 ${Date.now() - 31 * 60 * 1000}`);
+    expect(await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: stale }))
+      .toMatch(/^## ⚠ Ungeprüft shippen\?$/m);
+  });
+
+  test("a verified run shows neither", async () => {
+    const sid = S("vv-verified");
+    flag("light-pending", sid, "a.js");
+    flag("light-verified", sid, "background run");
+    flag("light-bgrun", sid, `b68oycrr6 ${Date.now()}`);
+    const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid });
+    expect(out).toMatch(/^## 📦 Shippen\?$/m);
+    expect(out).not.toContain("Test läuft noch");
+    expect(out).not.toContain("ungeprüft");
+  });
+});

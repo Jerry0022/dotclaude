@@ -1,6 +1,6 @@
 /**
  * @module pending-tasks
- * @version 0.7.0
+ * @version 0.8.0
  * @description Detects background work that is STILL RUNNING when a turn ends —
  *   subagents launched with run_in_background, backgrounded Bash tasks (started
  *   with run_in_background, or moved to the background by the harness when a
@@ -41,6 +41,10 @@
  *
  *   Scanned chronologically as a state machine, so a resume after a completion
  *   re-opens the task and the final set reflects the true end-of-turn state.
+ *
+ *   taskEnds() reads the other half — how a task ENDED (status, the exit-code
+ *   summary, the output file). The Light gate settles a test run the harness
+ *   ran in the background from it (lib/light-bgrun).
  *
  *   QUOTED TEXT IS NOT AN EVENT. A Grep hit on this very file, a Read of a
  *   transcript, a script that prints a launch line — all put the marker shapes
@@ -608,6 +612,77 @@ function openTaskNames(openTasks) {
   return out;
 }
 
+/** One <task-notification> block, and the fields read from it. */
+const NOTIFICATION_BLOCK_RE = /<task-notification>([\s\S]*?)<\/task-notification>/g;
+// Own copy for matchAll(), which starts at the lastIndex the regex carries —
+// TASK_NOTIFICATION_RE is shared with scanOpenTasks' exec() loop.
+const NOTIFICATION_ID_RE = /<task-id>\s*([A-Za-z0-9_-]+)\s*<\/task-id>/g;
+const NOTIFICATION_STATUS_RE = /<status>([^<]*)<\/status>/;
+const NOTIFICATION_SUMMARY_RE = /<summary>([\s\S]*?)<\/summary>/;
+const NOTIFICATION_OUTPUT_RE = /<output-file>([^<]*)<\/output-file>/;
+
+/** The trimmed first capture of `re` in `text`, or ''. */
+function fieldOf(text, re) {
+  const m = text.match(re);
+  return m ? m[1].trim() : '';
+}
+
+/**
+ * The strings of a parsed transcript entry that carry a notification — decoded,
+ * so an <output-file> path keeps single backslashes. A tool_result payload is
+ * skipped, as in notificationText().
+ * @param {*} value — a parsed entry, or any value inside one
+ * @param {string[]} out
+ */
+function notificationStrings(value, out) {
+  if (typeof value === 'string') {
+    if (value.includes('<task-notification>')) out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const v of value) notificationStrings(v, out);
+  } else if (value && typeof value === 'object' && value.type !== 'tool_result') {
+    for (const v of Object.values(value)) notificationStrings(v, out);
+  }
+  return out;
+}
+
+/**
+ * How each background task ENDED, read from the notifications in a transcript:
+ * task id → { status, summary, outputFile }. For a background Bash task,
+ * verified against 1,500+ notifications in the local transcripts:
+ *   completed   <summary>Background command "…" completed (exit code 0)</summary>
+ *   failed      <summary>Background command "…" failed with exit code 1</summary>
+ *   killed · stopped — the task produced no result
+ * plus the <output-file> the command wrote to. Same guard as scanOpenTasks — a
+ * line counts only when it IS a notification (notificationText()) — and the
+ * latest one for an id wins. A block naming several ids (the orphan summary a
+ * resumed session writes) ends each of them. A task ended with TaskStop gets
+ * no notification: it is absent.
+ *
+ * @param {string} transcriptContent — raw JSONL (a tail slice is fine)
+ * @returns {Map<string, { status: string, summary: string, outputFile: string }>}
+ */
+function taskEnds(transcriptContent) {
+  const ends = new Map();
+  if (!transcriptContent || !transcriptContent.includes('<task-notification>')) return ends;
+  for (const raw of transcriptContent.split('\n')) {
+    const line = raw.trim();
+    if (!line.includes('<task-notification>') || !notificationText(line)) continue;
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+    for (const text of notificationStrings(entry, [])) {
+      for (const [, body] of text.matchAll(NOTIFICATION_BLOCK_RE)) {
+        const end = {
+          status: fieldOf(body, NOTIFICATION_STATUS_RE),
+          summary: fieldOf(body, NOTIFICATION_SUMMARY_RE),
+          outputFile: fieldOf(body, NOTIFICATION_OUTPUT_RE),
+        };
+        for (const [, id] of body.matchAll(NOTIFICATION_ID_RE)) ends.set(id, end);
+      }
+    }
+  }
+  return ends;
+}
+
 module.exports = {
   AGENT_LAUNCH_MARKER,
   BASH_LAUNCH_MARKER,
@@ -622,6 +697,7 @@ module.exports = {
   isConceptInfra,
   scanOpenTasks,
   openTaskNames,
+  taskEnds,
   labelFor,
   sanitizeLabel,
 };

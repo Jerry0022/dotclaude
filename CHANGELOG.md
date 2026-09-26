@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.211.1] — 2026-09-26
+
+### Fixed
+- **An issue number is tracked only when the prompt asks for work on it.** `prompt.issue.detect` read every `#N` as "the user referenced issue #N": the issue went In Progress, and every card of the session told Claude to set it Done or Todo and comment on it. A task-chip prompt that quoted "[issue-status] Tracked issues this session: #530, #409, #431, #469" as an example put four unrelated issues on that track. Now a work verb before the number ("fix #12", "arbeite an #12", "mach Issue #12 fertig", "closes #12"), a German infinitive after it ("#12 bitte umsetzen") or the number opening the prompt tracks it; one or two numbers only mentioned are asked about first ("Arbeitest du an Issue #12?"), like a branch name. Numbers in quotes, code, brackets, pasted log or hook lines and lists or ranges of three or more are no reference, and neither are pull requests, milestones or list items ("PR #471", "merge #490", "Meilenstein #14", "Punkt #2"). Replayed over the 31 real prompts with issue numbers in the local transcripts: none is tracked any more (before: all 31), four draw a question.
+
+## [0.211.0] — 2026-09-26
+
+### Fixed
+- **A green test run stays green when a test title says "fail".** The V&V gate matched `FAIL` case-insensitively, so a passing vitest run with a test named "… must not fail" was reported as "A test ran this session but FAILED". The runner's own summary now decides: "Tests 1 failed | 56 passed" and a `FAIL src/x.test.js` line are red, "56 passed" and node's "ℹ fail 0" are green. ✗, `AssertionError` and a capital `FAIL` count only in output without a summary, passing test lines (✓, √, `ok N`) are never read as signals, and ANSI colours are stripped first.
+- **A test run started in the background no longer verifies at its launch.** The launch report of a `run_in_background` command says nothing about the result, yet it satisfied the Light-verification gate. The launch is now recorded, and the result comes from the run's task notification and output file when it arrives: green verifies, red marks the run red. While the run is in flight (at most 30 minutes) the stop gate waits instead of blocking; an edit after the launch drops the record.
+
+### Added
+- **The completion card names a test that is still running.** Instead of "⚠ ungeprüft — kein Test lief" it shows "◐ Test läuft noch im Hintergrund" (en: "test still running in the background") under the heading "⏳ Test läuft noch — Ergebnis abwarten?". Its one button, "Jetzt shippen" / "Ship now", ships without waiting; waiting needs no button, the notification brings the result.
+
 ## [0.210.1] — 2026-09-26
 
 ### Fixed
