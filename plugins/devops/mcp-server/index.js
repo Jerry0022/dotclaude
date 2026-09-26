@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.13.0
+ * @version 0.13.1
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -1428,6 +1428,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     };
   }
   const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
+  // A manual web step in the card payload keeps its guide button on the
+  // concept, batch and pending cards too (AUD-C042) — only the compact stop
+  // above is the one decision of its card.
+  const guideHandoff = detectGuideHandoff(input);
 
   if (hasConcept(input.concept)) {
     const url = conceptUrl(input.cwd, input.concept);
@@ -1437,11 +1441,11 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null };
+    return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null, guideHandoff };
   }
   if (batch) {
     const guide = batchGuide(batch, lang);
-    return { heading: T.batch({ n: batch.notes || 0 }), context: guide.context, points: guide.points, buttonsKey: null };
+    return { heading: T.batch({ n: batch.notes || 0 }), context: guide.context, points: guide.points, buttonsKey: null, guideHandoff };
   }
   if (hasPending(input.pending)) {
     const what = pendingWhat(input.pending, lang);
@@ -1449,7 +1453,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null };
+    return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null, guideHandoff };
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);
@@ -1490,8 +1494,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
-    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip,
-    guideHandoff: detectGuideHandoff(input),
+    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff,
   };
 }
 

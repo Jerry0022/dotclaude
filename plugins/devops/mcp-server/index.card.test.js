@@ -1034,6 +1034,17 @@ describe("render_completion_card — web hand-off in the card payload (#506)", (
     expect(consumePendingHandoff("test-guide-handoff-open")).toBe("Supabase");
   });
 
+  test("a pending card keeps the hand-off (AUD-C042)", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-pending",
+      open: ["Noch einen Supabase-Bucket für Assets anlegen"],
+      pending: [{ name: "devops:qa", kind: "agent", doing: "volle Testsuite" }],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-pending")).toBe("Supabase");
+  });
+
   test("no hand-off signal → nothing recorded", async () => {
     const { createRequire } = await import("node:module");
     const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
