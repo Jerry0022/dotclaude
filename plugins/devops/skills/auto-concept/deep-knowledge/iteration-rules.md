@@ -146,7 +146,9 @@ list and the sections — never by hand:
 - **"+N weitere" is overflow-only.** After render, `applyNavOverflow()` hides
   the TOC's tail only if `.panel-nav-scroll`'s `scrollHeight` exceeds its
   `clientHeight`, and the toggle expands it in place — never a fixed
-  cut-off on a round that already fits.
+  cut-off on a round that already fits. It never hides the top-level entry
+  or group that holds the active entry (the first one when none is active):
+  when that group alone is taller than the box, the box scrolls instead.
 
 The append checklist above is unchanged by all of this: the page author
 appends one chip string and one section, and the tree is re-derived.
