@@ -240,6 +240,24 @@ therefore reported as `✗`, never as a `⚠` with an empty file list, and a rea
 conflict is never downgraded to `✗` because unrelated scratch files happen to
 sit in the worktree.
 
+**A merge that dies mid-checkout is put back, never left half-applied.**
+`git merge` writes the working tree first, then the index, then HEAD. Killed by
+a timeout, or stopped by its own error on a file it cannot write (a smudge
+filter, a Windows file lock), it leaves part of the incoming tree on disk with
+HEAD and index on the old commit — on Windows also a stale `index.lock` that
+fails every later git write (observed 2026-09-26: a fast-forward killed by the
+15 s budget on a loaded machine). So the sync's writing calls (merge, abort,
+add, commit) run under their own ceiling — `DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS`,
+default 5 min; reads keep 15 s — and a failed merge without conflicted files
+goes through `hooks/lib/git-sync-recover.js`: a path whose content is exactly
+the source's blob, or that is gone while HEAD has it, goes back to HEAD
+(`.gitattributes` first, so the rest is written with HEAD's attributes); a path
+matching neither side may be the user's and is left alone, named in the `✗`
+line for manual repair; an `index.lock` is removed only when the merge child
+the sync killed wrote it. The `✗` line says what happened (`merge timed out
+after …` / `merge failed (<git's reason>) mid-checkout — worktree restored to
+<sha>`), and the next sync retries.
+
 ## How ship_release Prevents Overwrites
 
 `ship_release` enforces a **two-phase rebase gate** plus a **post-merge tree
