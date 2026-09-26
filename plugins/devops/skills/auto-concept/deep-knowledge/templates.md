@@ -145,7 +145,6 @@ must see their own language. The locale hint is authoritative.
 | `final.dispose_move_label`     | Move to (optional):            | Verschieben nach (optional): |
 | `final.dispose_move_placeholder` | e.g. docs/architecture/      | z.B. docs/architecture/ |
 | `final.ship_hint`              | Runs the full ship pipeline (build, version bump, release, merge). | Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge). |
-| `final.view_iterations`        | Review iterations              | Iterationen ansehen |
 | `final.closeout_heading`       | Close-out                      | Abschluss |
 | `final.followups_q`            | Open points                    | Offene Punkte |
 | `final.closeout_ship_q`        | Ship this now?                 | Jetzt shippen? |
@@ -815,8 +814,6 @@ the `[ui-locale: ...]` hint produced.
             <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
           </p>
         </div>
-
-        <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
       </div>
       </div><!-- /.panel-cta -->
     </aside>
@@ -876,10 +873,12 @@ the `[ui-locale: ...]` hint produced.
        (2) Frozen veil: showIteration() re-arms it on EVERY entry into a
        non-live tab, locking the past round behind the same overlay. In both
        roles the panel + FABs sit above z-index 50 and stay clickable, and the
-       dimmer is click/Escape-to-dismiss. The submit role auto-clears on the
-       next reload (`content-dimmed` is not persisted); the veil role comes
-       back on the next tab switch, so at most the one past round on screen is
-       ever unlocked. -->
+       dimmer is click/Escape-to-dismiss. The submit role comes back on a
+       reload while the round is still sent (restoreInFlightRound() /
+       restoreInFlightCloseout() ask the bridge) and on every tab switch back
+       to it; the Claude-driven reload onto the next round comes back clear.
+       The veil role comes back on the next tab switch, so at most the one
+       past round on screen is ever unlocked. -->
   <div class="content-dimmer" id="content-dimmer"
        role="button" tabindex="-1"
        aria-label="{{panel.dim_dismiss}}"
@@ -1150,11 +1149,12 @@ html:not([data-template="design"]) body.panel-open { overflow: hidden; }
    open, exactly like the design switcher does. */
 body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
 
-/* The 💬 FAB (60px circle, bottom: 2rem — see .panel-fab/.feedback-fab) floats
-   over the panel's bottom-right corner in EVERY template now, so the pinned
-   foot reserves its row under the call to action everywhere — this used to
-   be a design-scoped rule, back when only a design round had the FAB. */
-.panel-cta { padding-bottom: calc(60px + 2rem); }
+/* No FAB gutter under the pinned foot. The foot used to reserve
+   `padding-bottom: calc(60px + 2rem)` for the 💬 FAB's row, but the FAB
+   hides whenever the panel is open (`body.panel-open .feedback-fab` above)
+   and the panel is only ever visible open — so the reserve was ~92px of dead
+   space under the close-out sheet, while its rows region scrolled on a Full
+   HD screen for want of exactly that height. */
 
 /* ── One-shot attention pulse on the 💬 FAB ──
    The dock is where every note is written, and an unlabelled emoji circle in
@@ -3234,8 +3234,8 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
           </ol>
         </details>
       </div>
-      <!-- CTA foot — pinned, ≤120px, and it reserves the 💬 FAB's row below
-           it (§ Panel Chrome CSS: padding-bottom: calc(60px + 2rem)). -->
+      <!-- CTA foot — pinned, ≤120px, no FAB gutter below it: the 💬 FAB
+           hides while the panel is open (§ Panel Chrome CSS). -->
       <div class="panel-cta">
       <div id="panel-ready">
         <div class="submit-split">
@@ -7588,9 +7588,6 @@ body.viewing-final .panel-cta {
   min-height: 0;
   flex: 1 1 auto;
 }
-#panel-final-report #view-iterations-btn {
-  flex: none;
-}
 /* The final report has no status line: the sheet's one button carries the
    submission state itself (running/done/stalled — setCloseoutButtonState())
    and the disconnected case as its "wird zwischengespeichert" label
@@ -8323,12 +8320,6 @@ html[data-template="design"] .frozen-bar {
   text-decoration: underline;
 }
 .link-btn:hover { opacity: 0.8; }
-/* Transient highlight when "Review iterations" nudges the tab bar into view. */
-.iteration-tabs.tabs-nudge { animation: tabs-nudge 1.2s ease; }
-@keyframes tabs-nudge {
-  0%, 100% { box-shadow: none; }
-  30% { box-shadow: 0 0 0 2px var(--accent-color, #58a6ff); }
-}
 
 .closeout-sheet #closeout-followups-none {
   color: var(--warning-color, #d29922);
@@ -11703,6 +11694,11 @@ function collectDecisions(action = 'iterate') {
   else payload = collectDecisionDecisions();
   payload.action = action;
   payload.allFields = allFields;
+  // The round this payload answers. restoreInFlightRound() needs it after a
+  // reload: Claude posts /reload BEFORE /reset, so the NEXT round loads while
+  // this payload is still pending on the bridge — only the round number tells
+  // "this round is still sent" apart from "the previous round's payload".
+  payload.iteration = (active.dataset && active.dataset.iteration) || null;
   return payload;
 }
 
@@ -12057,6 +12053,61 @@ async function submitWithAction(action) {
 wireSubmit('submit-iterate-btn', 'iterate');
 wireSubmit('submit-implement-btn', 'implement');
 
+// --- A sent round survives a reload ---
+// `concept-submitted` is not persisted, on purpose: the Claude-driven reload
+// onto the NEXT round must come back ready. But a manual reload while Claude
+// is still working on THIS round used to drop the sent state with it — the
+// grey veil over the content was gone and the submit buttons were live again
+// over a round already in flight. So ask the bridge (and, offline, the local
+// queue) whether a payload for the live round is still pending, and if so put
+// the round back exactly as submitWithAction() left it. The veil is then
+// click/Escape-dismissable as always — only a reload brings it back.
+// A payload without `iteration` (a page generated before it carried one) is
+// never restored: it cannot be told apart from the previous round's payload,
+// which is still pending for a moment after every Claude-driven reload.
+// A finalize is restoreInFlightCloseout()'s job (§ close-out sheet).
+async function restoreInFlightRound() {
+  const live = document.querySelector('section[data-iteration][data-active]');
+  if (!live || live.hasAttribute('data-final-report')) return;
+  if (_submittedAt || _submitInFlight) return;
+  let data = null;
+  try {
+    const res = await fetch('/decisions', { cache: 'no-store' });
+    if (res.ok) data = await res.json();
+  } catch (e) { /* bridge unreachable — the local queue below still knows */ }
+  if (!(data && data.submitted === true)) {
+    try { data = JSON.parse(localStorage.getItem(STORAGE_KEY + '-pending') || 'null'); }
+    catch (e) { data = null; }
+  }
+  if (!data || data.submitted !== true) return;
+  if (data.action !== 'iterate' && data.action !== 'implement') return;
+  if (data.iteration == null || String(data.iteration) !== String(live.dataset.iteration)) return;
+  // The user may have submitted from this tab while the fetch was out.
+  if (_submittedAt || _submitInFlight) return;
+  if (typeof markDockSubmitted === 'function') markDockSubmitted();
+  document.body.classList.add('concept-submitted', 'content-dimmed');
+  showContentDimmer();
+  const ready = document.getElementById('panel-ready');
+  const sent = document.getElementById('panel-submitted');
+  const onLive = !document.body.classList.contains('viewing-frozen');
+  if (ready) ready.style.display = 'none';
+  if (sent && onLive) sent.style.display = 'block';
+  // Re-join the submit-state machine so pollProcessedState() hands the panel
+  // back once Claude is done (or the safety timeout fires).
+  if (_bootReloadCounter === null && typeof pollReload === 'function') await pollReload();
+  _submittedAt = Date.now();
+  _submittedReloadCounter = _bootReloadCounter;
+  _submittedAction = data.action;
+  if (typeof resetStatusSteps === 'function') resetStatusSteps(data.action);
+  if (typeof updateStatusSteps === 'function') updateStatusSteps(data);
+  if (typeof renderPanelStatus === 'function') renderPanelStatus();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', restoreInFlightRound);
+} else {
+  restoreInFlightRound();
+}
+
 // --- Submit menu (the implement action lives one level deeper) ---
 // ▾ toggles #submit-menu; aria-expanded mirrors [hidden]. Escape and any
 // click outside close it; choosing the item closes it before the confirm
@@ -12169,8 +12220,9 @@ function clearSubmitWarning() {
 // clear and clickable. The dimmer itself is click-to-dismiss — clicking
 // anywhere on it removes `content-dimmed` and hides the overlay, letting
 // the user re-engage with the content without losing the submitted state.
-// On page reload (next iteration / final report) the body class is naturally
-// gone, so no extra cleanup is needed.
+// The Claude-driven reload onto the next round comes back without the body
+// class (it is not persisted); a manual reload while THIS round is still sent
+// gets it back from restoreInFlightRound() / restoreInFlightCloseout().
 function showContentDimmer() {
   const dim = document.getElementById('content-dimmer');
   if (dim) dim.hidden = false;
@@ -12910,6 +12962,7 @@ async function submitFinalize() {
     submitted: true,
     action: 'finalize',
     submission_id: newSubmissionId(),
+    iteration: active ? active.dataset.iteration : null,
     issues: { create: issues.length > 0, items: issues },
     implement: { run: implement.length > 0, items: implement },
     ship: { run: closeoutShipChoice() === 'yes' },
@@ -12986,14 +13039,21 @@ async function restoreInFlightCloseout() {
     const res = await fetch('/decisions', { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
-    if (!data || !data.submitted || data.action !== 'finalize') return;
-    // Processed: Claude is done with it. Either this page is about to be
-    // rewritten, or the session is over — nothing to re-arm and nothing to
-    // freeze.
-    if (data._processed_at) return;
+    // Processed means `submitted: false` — /reset replaces the payload. The
+    // `_processed_at` stamp is NOT that signal: the bridge keeps the stamp of
+    // the LAST /reset across new submissions, so every concept with an
+    // earlier round carried one and this check used to bail on exactly the
+    // reload it exists for.
+    if (!data || data.submitted !== true || data.action !== 'finalize') return;
+    // A payload that names another round is not this sheet's (older pages
+    // sent none — kept as before).
+    const live = finalReportSection();
+    if (data.iteration != null && String(data.iteration) !== String(live.dataset.iteration)) return;
     setCloseoutFrozen(true);
     setCloseoutButtonState('running');
-    document.body.classList.add('concept-submitted');
+    // Same veil submitFinalize() put up — a reload must not lift it.
+    document.body.classList.add('concept-submitted', 'content-dimmed');
+    showContentDimmer();
     // Re-join the submit-state machine so pollProcessedState() keeps tracking
     // the round that outlived its tab.
     _submittedAt = Date.now();
@@ -13017,11 +13077,9 @@ function markCloseoutStalled() {
   setCloseoutButtonState('stalled');
 }
 
-// "Iterationen ansehen" is wired in wireCloseout() below — non-committal,
-// client-only: it scrolls the iteration tab bar into view and flashes it so
-// the user can revisit earlier rounds without leaving the final report. The
-// sheet stays put; the whole point of the persistent panel is that there is
-// nothing to re-open.
+// No "Iterationen ansehen" link under the sheet: earlier rounds are one click
+// away through the panel head's rounds chip (🕘 N, `#panel-here-rounds-btn`)
+// and the tab bar, so a third way only cost the sheet a row of height.
 
 // Recompute whenever an input the plan summarises changes — the open-questions
 // checkboxes in the body, a follow-up route, the ship choice, the disposition
@@ -13059,14 +13117,6 @@ function wireCloseout() {
     const head = e.target.closest('[data-closeout-row]');
     if (!head) return;
     closeoutRowClick(head.closest('.closeout-block'));
-  });
-  document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
-    const tabs = document.querySelector('.iteration-tabs');
-    if (!tabs) return;
-    tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    tabs.classList.remove('tabs-nudge');
-    void tabs.offsetWidth;  // force reflow so the animation restarts
-    tabs.classList.add('tabs-nudge');
   });
   refreshCloseout({ reset: true });
   restoreInFlightCloseout();
@@ -14309,7 +14359,8 @@ function showIteration(n) {
   // past round or back to the live one — relocks it. The bar stays up after
   // the user lifts the veil: the veil is clicked away by reflex, the bar is
   // what still tells them they are in history. On the live tab the dimmer is
-  // hidden (a veil lifted on a past round must not reappear over the live one).
+  // hidden (a veil lifted on a past round must not reappear over the live one)
+  // unless the live round itself is sent and waiting on Claude.
   const frozenBar = document.getElementById('frozen-bar');
   if (frozenBar) {
     frozenBar.hidden = !!isLive;
@@ -14317,7 +14368,10 @@ function showIteration(n) {
     const tab = document.querySelector('.iteration-tab[data-iteration="' + n + '"]');
     if (title) title.textContent = tab ? (tab.dataset.tabLabel || tab.textContent.trim()) : String(n);
   }
-  if (isLive) hideContentDimmer(); else lockFrozenView();
+  // A sent live round is veiled too (restoreInFlightRound() after a reload,
+  // submitWithAction() before it): coming back to it from a past tab relocks
+  // it like any tab switch does. Only a click/Escape lifts the veil.
+  if (isLive && !submitted) hideContentDimmer(); else lockFrozenView();
   // Pinned "you are here" head: the selected tab's label — no "· aktiv"
   // suffix on the live round, an {{nav.archived}} marker on a frozen one —
   // plus, on a frozen tab, the compact "↩ zur Runde N" link back to the live
@@ -14435,7 +14489,7 @@ The right-side panel automatically switches to `panel-final-report` mode
 when `showIteration()` detects `data-final-report` on the active section
 — no iterate / implement buttons, **no status line and no pipeline recap**:
 the foot is the **close-out sheet** (`#closeout-sheet`) and nothing else,
-with a non-committal "Iterationen ansehen" link below it. The panel's
+and nothing below it — earlier rounds are the head's 🕘 rounds chip. The panel's
 `.panel-status` line ("Gespeichert · verbunden") is hidden on this tab
 (`body.viewing-final .panel-status`), and the persistent status channel
 that used to sit above the sheet is gone — both said things the sheet's one
@@ -14450,8 +14504,7 @@ present because the section carries `data-final-report`, so it survives
 reloads and stays fully visible even when the Claude heartbeat is stale —
 the close-out affordance must never vanish just because the connection
 flickered. Reviewing earlier iterations (via the ever-present tab bar or the
-"Iterationen ansehen" nudge) never hides it, so there is nothing to
-"re-open".
+head's 🕘 rounds chip) never hides it, so there is nothing to "re-open".
 
 **A final report is a document round.** Append it with
 `data-iteration-template="free"` — never leave the attribute off (see
