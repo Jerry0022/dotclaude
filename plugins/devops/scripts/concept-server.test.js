@@ -283,6 +283,94 @@ describe.skipIf(!PY)("concept-server per-tab registry and /bye (#397)", () => {
   });
 });
 
+describe.skipIf(!PY)("concept-server submission_id de-dup survives /reset (#finding-10)", () => {
+  test("a re-POSTed submission_id is answered as a duplicate and never re-armed, across a restart too", async () => {
+    const port = PORT + 3;
+    const store = storeFor(port);
+    const url = (p) => `http://127.0.0.1:${port}${p}`;
+    let proc = spawn(PY, [SERVER, String(port), "--store", store], { stdio: ["ignore", "pipe", "pipe"] });
+    try {
+      const deadline0 = Date.now() + 10000;
+      while (Date.now() < deadline0) {
+        try { if ((await fetch(url("/reload"))).ok) break; } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      const payload = JSON.stringify({
+        submitted: true, action: "finalize", submission_id: "sub-dup-1", decisions: [], comments: [],
+      });
+
+      // First POST: accepted normally, bumps version and arms /pending.
+      const post1 = await fetch(url("/decisions"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: payload,
+      });
+      expect(post1.ok).toBe(true);
+      const body1 = await post1.json();
+      expect(body1).toMatchObject({ ok: true, version: 1, durable: true });
+      expect(body1.duplicate).toBeUndefined();
+
+      // Claude processes it and resets — this is what wipes the client-side
+      // "already in /decisions" check the page relies on first.
+      const resetRes = await fetch(url("/reset"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: 1 }),
+      });
+      expect(resetRes.ok).toBe(true);
+      const afterReset = await (await fetch(url("/decisions"))).json();
+      expect(afterReset.submitted).toBe(false);
+
+      // The queued retry lands AFTER the reset. The bridge must recognize the
+      // id from its journal and refuse to re-arm anything.
+      const post2 = await fetch(url("/decisions"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: payload,
+      });
+      expect(post2.ok).toBe(true);
+      const body2 = await post2.json();
+      expect(body2).toMatchObject({ ok: true, durable: true, duplicate: true });
+      expect(body2.version).toBeUndefined();
+
+      const afterDup = await (await fetch(url("/decisions"))).json();
+      expect(afterDup.submitted).toBe(false); // still not re-armed
+      const pendingAfterDup = await (await fetch(url("/pending"))).json();
+      expect(pendingAfterDup).toMatchObject({ pending: false, version: 1 }); // untouched
+
+      // A restart must still know the id — it is rebuilt from the journal,
+      // not just kept in RAM.
+      await stopServer(proc);
+      proc = spawn(PY, [SERVER, String(port), "--store", store], { stdio: ["ignore", "pipe", "pipe"] });
+      const deadline1 = Date.now() + 10000;
+      while (Date.now() < deadline1) {
+        try { if ((await fetch(url("/reload"))).ok) break; } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+      const post3 = await fetch(url("/decisions"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: payload,
+      });
+      expect(post3.ok).toBe(true);
+      const body3 = await post3.json();
+      expect(body3).toMatchObject({ ok: true, durable: true, duplicate: true });
+      const afterRestartDup = await (await fetch(url("/decisions"))).json();
+      expect(afterRestartDup.submitted).toBe(false);
+
+      // A payload with no submission_id at all (older page build) keeps the
+      // unconditional-accept behaviour — it is simply a new submission both times.
+      const legacyPayload = JSON.stringify({ submitted: true, action: "iterate", decisions: [], comments: [] });
+      const leg1 = await fetch(url("/decisions"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: legacyPayload,
+      });
+      const leg1Body = await leg1.json();
+      expect(leg1Body.duplicate).toBeUndefined();
+      const leg2 = await fetch(url("/decisions"), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: legacyPayload,
+      });
+      const leg2Body = await leg2.json();
+      expect(leg2Body.duplicate).toBeUndefined();
+      expect(leg2Body.version).toBeGreaterThan(leg1Body.version);
+    } finally {
+      await stopServer(proc);
+    }
+  }, 30000);
+});
+
 describe.skipIf(!PY)("concept-server watcher id echo — duplicate pulsers / wakers find each other", () => {
   test("POST /heartbeat?pulser= and GET /pending?waker= echo the PREVIOUS poller; an id-less poll keeps the stored one", async () => {
     const proc = startServer();
