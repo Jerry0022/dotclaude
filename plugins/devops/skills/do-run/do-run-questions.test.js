@@ -330,3 +330,34 @@ describe("Step 7 ship lockout (red-team R5)", () => {
     expect(step7()).toMatch(/stale after 6 h/);
   });
 });
+
+// AUD-036: the audit mode's standalone intake (run without router presets)
+// asks the router's F1/F2 verbatim — same headers, labels, order and
+// recommended marker — so the run contract reads either answer the same way.
+describe("audit.md standalone intake mirrors follow-up F1/F2", () => {
+  const block = (src, key) => {
+    const at = src.indexOf(key + "  header:");
+    expect(at, key).toBeGreaterThan(-1);
+    const rest = src.slice(at);
+    const stop = rest.search(/\n\s*\n|\n```/);
+    return rest.slice(0, stop);
+  };
+  const shape = (b) => ({
+    header: /header: "([^"]+)"/.exec(b)[1],
+    labels: [...b.matchAll(/^\s+\d\. "([^"]+)"/gm)].map((m) => m[1]),
+  });
+
+  test.each(["F1", "F2"])("%s: header and option labels in the same order", (key) => {
+    const want = shape(block(questions, key));
+    expect(want.labels.length).toBeGreaterThan(1);
+    expect(shape(block(mode("audit"), key))).toEqual(want);
+  });
+
+  test("none of the old diverging labels or headers survive", () => {
+    const audit = mode("audit");
+    for (const old of ["Nur Chat-Kontext", "Funktionale Anforderungen (48h)", "Alles inkl. letzte 48h",
+      "Audit + Umsetzung", "Audit als DevOps-Concept", 'header: "Scope"', '"Output"']) {
+      expect(audit, old).not.toContain(old);
+    }
+  });
+});

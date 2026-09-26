@@ -4383,6 +4383,30 @@ design round has: the three row builders and the ordering of stash → rebuild
     return it ? it.querySelector('section[data-view][data-view-active="true"]:not([hidden])') : null;
   }
 
+  // Label + note marker of one screen-nav row, built as DOM nodes. Never
+  // innerHTML: `dataset.navLabel` hands back the DECODED attribute, so a label
+  // Claude escaped correctly (`data-nav-label="Login &lt;img …&gt;"`) would be
+  // parsed as markup again — a script sink on the concept page. textContent
+  // keeps it text, exactly like buildSectionNav().
+  function navRowLabel(row, label, idx) {
+    const span = document.createElement('span');
+    if (idx !== null) {
+      const num = document.createElement('span');
+      num.className = 'screen-idx';
+      num.textContent = idx;
+      span.appendChild(num);
+    }
+    span.appendChild(document.createTextNode(label));
+    row.appendChild(span);
+  }
+  // `key` is the camelCase dataset key (`noteMarker` → data-note-marker).
+  function navRowMarker(row, key, value) {
+    const marker = document.createElement('span');
+    marker.className = 'has-notes';
+    marker.dataset[key] = value;
+    row.appendChild(marker);
+  }
+
   // Build screen-nav (two-level: design heading + nested pages), the design
   // switcher ghost bar, and per-screen textareas — all scoped to the
   // VISIBLE iteration (may be a frozen tab the user clicked back to, not
@@ -4444,8 +4468,8 @@ design round has: the three row builders and the ordering of stash → rebuild
       btn.className = 'screen-nav-view-item';
       btn.type = 'button';
       btn.dataset.viewId = v.dataset.view;
-      btn.innerHTML = `<span>${v.dataset.navLabel || v.dataset.view}</span>
-        <span class="has-notes" data-view-note-marker="${v.dataset.view}"></span>`;
+      navRowLabel(btn, v.dataset.navLabel || v.dataset.view, null);
+      navRowMarker(btn, 'viewNoteMarker', v.dataset.view);
       btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
       return btn;
     };
@@ -4458,8 +4482,8 @@ design round has: the three row builders and the ordering of stash → rebuild
       heading.type = 'button';
       heading.dataset.designId = d.dataset.design;
       heading.dataset.active = String(d === active);
-      heading.innerHTML = `<span>${d.dataset.navLabel || d.dataset.design}</span>
-        <span class="has-notes" data-design-note-marker="${d.dataset.design}"></span>`;
+      navRowLabel(heading, d.dataset.navLabel || d.dataset.design, null);
+      navRowMarker(heading, 'designNoteMarker', d.dataset.design);
       heading.addEventListener('click', () => { showDesign(d.dataset.design); closePanel(); });
       group.appendChild(heading);
 
@@ -4476,8 +4500,8 @@ design round has: the three row builders and the ordering of stash → rebuild
         btn.type = 'button';
         btn.dataset.screenId = sec.id;
         btn.dataset.designId = d.dataset.design;
-        btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
-          <span class="has-notes" data-note-marker></span>`;
+        navRowLabel(btn, sec.dataset.navLabel || sec.id, `${idx + 1}.`);
+        navRowMarker(btn, 'noteMarker', '');
         btn.addEventListener('click', () => {
           // Resolve the active design at CLICK time. buildDesignUI() only
           // runs on iteration:changed / DOMContentLoaded, never on a design
@@ -12068,9 +12092,10 @@ wireSubmit('submit-implement-btn', 'implement');
 // onto the NEXT round must come back ready. But a manual reload while Claude
 // is still working on THIS round used to drop the sent state with it — the
 // grey veil over the content was gone and the submit buttons were live again
-// over a round already in flight. So ask the bridge (and, offline, the local
-// queue) whether a payload for the live round is still pending, and if so put
-// the round back exactly as submitWithAction() left it. The veil is then
+// over a round already in flight. So ask the bridge (and, ONLY when the bridge
+// cannot be reached, the local queue) whether a payload for the live round is
+// still pending, and if so put the round back exactly as submitWithAction()
+// left it. The veil is then
 // click/Escape-dismissable as always — only a reload brings it back.
 // A payload without `iteration` (a page generated before it carried one) is
 // never restored: it cannot be told apart from the previous round's payload,
@@ -12081,11 +12106,18 @@ async function restoreInFlightRound() {
   if (!live || live.hasAttribute('data-final-report')) return;
   if (_submittedAt || _submitInFlight) return;
   let data = null;
+  let bridgeThrew = false;
   try {
     const res = await fetch('/decisions', { cache: 'no-store' });
     if (res.ok) data = await res.json();
-  } catch (e) { /* bridge unreachable — the local queue below still knows */ }
-  if (!(data && data.submitted === true)) {
+  } catch (e) { bridgeThrew = true; }
+  // The local queue speaks only for an UNREACHABLE bridge. A bridge that
+  // answers and reports nothing pending is the truth: a `-pending` copy next
+  // to it is a payload that never arrived (or one already processed), and
+  // veiling the round over it promised "Claude arbeitet" for a round Claude
+  // never received. retryPendingSubmission() delivers that copy on the next
+  // connected heartbeat instead.
+  if (bridgeThrew) {
     try { data = JSON.parse(localStorage.getItem(STORAGE_KEY + '-pending') || 'null'); }
     catch (e) { data = null; }
   }
@@ -13138,10 +13170,23 @@ if (document.readyState === 'loading') {
 }
 
 // --- Offline Submit Queue ---
+// Runs on EVERY connected heartbeat — also while the submitted panel is up,
+// because that is exactly when an offline submit sits queued. So it must be
+// idempotent: one retry at a time (a slow POST outlives the 5 s heartbeat),
+// and never alongside submitWithAction()'s own POST of the same payload.
+let _pendingRetryInFlight = false;
 async function retryPendingSubmission() {
+  if (_pendingRetryInFlight || _submitInFlight) return;
   const pendingKey = STORAGE_KEY + '-pending';
   const pending = localStorage.getItem(pendingKey);
   if (!pending) return;
+  _pendingRetryInFlight = true;
+  try { await _deliverPending(pendingKey, pending); }
+  finally { _pendingRetryInFlight = false; }
+  // Images that never made it up get another attempt on the same trigger.
+  if (typeof restoreAttachments === 'function') restoreAttachments();
+}
+async function _deliverPending(pendingKey, pending) {
   // Did this exact payload already land? `fetch` can throw after the bridge
   // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
   // that is already being processed. Re-POSTing a finalize that way runs its
@@ -13167,8 +13212,6 @@ async function retryPendingSubmission() {
     // `res.ok` alone is not that confirmation — see submitWithAction.
     if (res.ok && body.durable !== false) localStorage.removeItem(pendingKey);
   } catch (e) { /* still offline */ }
-  // Images that never made it up get another attempt on the same trigger.
-  if (typeof restoreAttachments === 'function') restoreAttachments();
 }
 ```
 
@@ -14024,6 +14067,13 @@ function checkClaudeConnection() {
   // own label instead, so it has to follow the heartbeat too.
   if (typeof updateCloseoutButton === 'function') updateCloseoutButton();
 
+  // Deliver a queued payload BEFORE the submitted-panel return below: an
+  // offline submit leaves exactly that panel up, and pollProcessedState() only
+  // releases it once Claude stamps _processed_at — which a payload that never
+  // reached the bridge cannot produce. retryPendingSubmission() is idempotent
+  // (one at a time, never beside submitWithAction), so every beat may call it.
+  if (isConnected) retryPendingSubmission();
+
   // While the submitted panel is up, leave the ready-panel BUTTONS alone —
   // only the button handling below is skipped, never the line above.
   if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
@@ -14036,8 +14086,6 @@ function checkClaudeConnection() {
   // user knows the click will be queued rather than lost.
   _setCacheHints(state === 'disconnected');
   btns.forEach(b => { b.disabled = false; });
-
-  if (isConnected) retryPendingSubmission();
 }
 
 // Kick an immediate heartbeat poll on load so the pill resolves to

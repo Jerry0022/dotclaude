@@ -59,6 +59,10 @@ const ENGINE = [
   // A page without it drops the grey veil and re-arms the submit buttons when
   // the user reloads while Claude is still working on the round they sent.
   { token: 'async function restoreInFlightRound', why: 'sent round survives a reload — § Two-Button Submit (gate 30c)' },
+  // A page without it strands a round whose submit never reached the bridge
+  // on "Übermittelt · Claude arbeitet": the queued payload is never retried
+  // while the submitted panel is up (AUD-020).
+  { token: 'let _pendingRetryInFlight', why: 'an undelivered round is retried, not stranded — § Offline Submit Queue (gate 30d)' },
   // A page without it collapses a TOC whose open group is taller than the
   // panel to a lone "+N weitere" button — every entry hidden (#541).
   { token: 'function navOverflowFloor', why: 'TOC overflow keeps the active entry visible — § Section Navigation JS (gate 60b)' },
@@ -85,6 +89,9 @@ const ENGINE_DESIGN = [
   { token: '.screen-nav {', why: 'screen-nav stylesheet rule — § Layout CSS (design engine CSS gutted?)' },
   { token: 'function activeDesign', why: 'active-design resolver — § Layout JS (design engine JS gutted?)' },
   { token: 'showScreen', re: /window\.showScreen\s*=|function\s+showScreen\b/, why: 'screen switcher — § Layout JS (design engine JS gutted?)' },
+  // Currency, not integrity: a design page from before AUD-018 builds its nav
+  // labels with innerHTML from the entity-decoded dataset — a markup sink.
+  { token: 'function navRowLabel', why: 'nav labels built as text, never as markup — § Layout JS (design engine predates the AUD-018 fix)' },
 ];
 const ENGINE_DOCUMENT = [
   { token: '.concept-layout {', why: 'document-round layout rule — § Layout — Document rounds (engine CSS gutted?)' },

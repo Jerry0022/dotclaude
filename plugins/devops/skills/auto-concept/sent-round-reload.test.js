@@ -118,6 +118,18 @@ describe("a sent round survives a reload", () => {
     expect(p.submitted()).toBe("block");
   });
 
+  test("a reachable bridge with nothing pending outranks a stale local copy (AUD-020)", async () => {
+    // The copy is a payload that never arrived (or was already processed).
+    // Veiling the round over it promised "Claude arbeitet" for a round Claude
+    // never received; the heartbeat's retry delivers it instead.
+    const p = await page({ decisions: { submitted: false }, pending: { submitted: true, action: "iterate", iteration: "3" } });
+    expect(p.veiled()).toBe(false);
+    expect(p.sent()).toBe(false);
+    expect(p.ready()).toBe("block");
+    expect(p.window.__state().at).toBe(0);
+    expect(p.window.localStorage.getItem("concept-test-pending"), "the copy stays queued for the retry").not.toBeNull();
+  });
+
   test("a finalize is left to restoreInFlightCloseout()", async () => {
     const p = await page({ decisions: { submitted: true, action: "finalize", iteration: "3" } });
     expect(p.veiled()).toBe(false);
@@ -133,5 +145,58 @@ describe("a sent round survives a reload", () => {
   test("the payload names its round, and the restore is wired on load", () => {
     expect(fnSource("collectDecisions")).toContain("payload.iteration = (active.dataset && active.dataset.iteration) || null;");
     expect(md).toContain("document.addEventListener('DOMContentLoaded', restoreInFlightRound);");
+  });
+});
+
+// AUD-020 (b): the retry now runs on every connected heartbeat, also while the
+// submitted panel is up — so it has to be idempotent.
+function retryPage({ submitInFlight = false } = {}) {
+  const dom = new JSDOM("<body></body>", { runScripts: "outside-only", url: "https://concept.test/" });
+  const { window } = dom;
+  window.__posts = [];
+  window.__release = [];
+  window.localStorage.setItem("concept-test-pending", JSON.stringify({ submitted: true, action: "iterate", iteration: "3" }));
+  window.eval(
+    [
+      "window.STORAGE_KEY = 'concept-test';",
+      `var _submitInFlight = ${submitInFlight};`,
+      // Every POST hangs until the test releases it — a slow bridge outliving
+      // the 5 s heartbeat is exactly when a second beat would re-POST.
+      "window.fetch = (url, opts) => { if (!opts || opts.method !== 'POST') return Promise.resolve({ ok: true, json: async () => ({}) }); window.__posts.push(opts.body); return new Promise(r => window.__release.push(() => r({ ok: true, json: async () => ({ durable: true }) }))); };",
+      md.match(/let _pendingRetryInFlight = false;/)[0],
+      fnSource("retryPendingSubmission"),
+      fnSource("_deliverPending"),
+    ].join(";\n")
+  );
+  return window;
+}
+
+describe("the offline queue is retried idempotently", () => {
+  test("two heartbeats during one slow POST deliver the payload once", async () => {
+    const w = retryPage();
+    const first = w.retryPendingSubmission();
+    await w.retryPendingSubmission();
+    expect(w.__posts.length).toBe(1);
+    w.__release.forEach(f => f());
+    await first;
+    expect(w.localStorage.getItem("concept-test-pending"), "cleared on the durable ack").toBeNull();
+    await w.retryPendingSubmission();
+    expect(w.__posts.length, "nothing left to re-send").toBe(1);
+  });
+
+  test("never beside submitWithAction()'s own POST", async () => {
+    const w = retryPage({ submitInFlight: true });
+    await w.retryPendingSubmission();
+    expect(w.__posts.length).toBe(0);
+  });
+
+  test("the connected heartbeat retries ahead of the submitted-panel return", () => {
+    const fn = fnSource("checkClaudeConnection");
+    const retry = fn.indexOf("if (isConnected) retryPendingSubmission();");
+    const bail = fn.indexOf("if (panelSubmitted && panelSubmitted.style.display !== 'none') return;");
+    expect(retry).toBeGreaterThan(-1);
+    expect(bail).toBeGreaterThan(-1);
+    expect(retry).toBeLessThan(bail);
+    expect(fn.indexOf("retryPendingSubmission();", bail), "no second, unreachable call").toBe(-1);
   });
 });

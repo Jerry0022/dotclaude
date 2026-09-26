@@ -24,7 +24,7 @@ import {
 // Kompass panel skeleton, § Section Navigation JS and § Claude Connection
 // Heartbeat; the gate only greps for the tokens.
 const ENGINE_STUB = `<div class="panel-here"><div id="panel-status"></div></div>
-<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){} async function restoreInFlightRound(){} function navOverflowFloor(){}</script>`;
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){} async function restoreInFlightRound(){} let _pendingRetryInFlight = false; function navOverflowFloor(){}</script>`;
 // The engine's head stylesheet (#430 integrity anchor). Lives in <head> like
 // the real engine CSS — a <style> after the live section would be attributed
 // to that round by the P32 collision scan.
@@ -38,7 +38,7 @@ const ENGINE_CSS_STUB = `<style>.concept-decision-panel { position: fixed }</sty
 const DOCUMENT_ENGINE_CSS_STUB = `<style>.concept-layout { display: grid } .concept-content { min-width: 0 }</style>`;
 const DESIGN_ENGINE_CSS_STUB = `<style>.screen-nav { display: flex }</style>`;
 const DESIGN_ENGINE_STUB = `<nav id="screen-nav"></nav>
-<script>function activeDesign(){} window.showScreen = function(){};</script>`;
+<script>function activeDesign(){} window.showScreen = function(){}; function navRowLabel(){}</script>`;
 
 // A minimal but valid live-bridge concept page: contains every required
 // marker, no clipboard fallback. Real pages are far larger; the gate only
@@ -806,6 +806,15 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
     expect(findStaleEngine(html).map(e => e.token)).toEqual(["function navOverflowFloor"]);
     expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
   });
+
+  test("a page that strands an undelivered round on the sent panel is stale (gate 30d)", () => {
+    // Without the idempotent retry the connected heartbeat returned early while
+    // the submitted panel was up, so an offline-queued payload never reached
+    // the bridge and the round sat on "Claude arbeitet" forever (AUD-020).
+    const html = VALID.replace(" let _pendingRetryInFlight = false;", "");
+    expect(findStaleEngine(html).map(e => e.token)).toEqual(["let _pendingRetryInFlight"]);
+    expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
+  });
 });
 
 // #430 — round 11 of a design concept lost `.concept-decision-panel { … }`
@@ -851,6 +860,8 @@ describe("findStaleEngine — engine blocks gutted after generation (#430)", () 
     expect(missingOne("function activeDesign(){}", "")).toEqual(["function activeDesign"]);
     expect(missingOne("window.showScreen = function(){};", "")).toEqual(["showScreen"]);
     expect(missingOne("window.showScreen = function(){};", "function showScreen(id){}")).toEqual([]);
+    // AUD-018: a design page whose nav still parses labels as markup is stale.
+    expect(missingOne(" function navRowLabel(){}", "")).toEqual(["function navRowLabel"]);
   });
 
   test("document anchors: the layout rules of a decision / free page; not asserted on a design page", () => {

@@ -42,9 +42,11 @@ Scan `$ARGUMENTS` for:
 ## Step 2 — Intake (one AskUserQuestion call, two questions)
 
 **Answered by the do-run router** — its follow-up asks both (F1 "Ergebnis",
-F2 "Audit-Umfang", same meaning, fixed order) and passes `--scope=` and
-`--mode=`, so Step 1 presets them and this step asks nothing. It runs only
-when a preset is missing.
+F2 "Audit-Umfang" in `{PLUGIN_ROOT}/skills/do-run/deep-knowledge/questions.md`)
+and passes `--scope=` and `--mode=`, so Step 1 presets them and this step asks
+nothing. It runs only when a preset is missing — and then asks exactly those
+two questions: same headers, labels, order and recommended marker, so the run
+contract reads a standalone answer the same way as the router's.
 
 First detect whether **this conversation already developed something**:
 files written/edited by this session, or commits made in it. Hold as
@@ -52,31 +54,29 @@ files written/edited by this session, or commits made in it. Hold as
 `AskUserQuestion` call (skip a question whose answer was preset in Step 1):
 
 ```
-Q1  header: "Scope"
-    question: "Was soll auditiert werden?" / "What should be audited?"
-    options:
-      - "Nur Chat-Kontext" / "This chat's work only"
-        → only when $CHAT_HAS_WORK. What this conversation asked for and
-          built: its requirements, the files it touched, their direct callers.
-      - "Funktionale Anforderungen (48h)" / "Functional requirements (48h)"
-        → every functional requirement stated or shipped in the last 48 h,
-          traced to evidence. Functional dimension only (plus tests).
-      - "Alles inkl. letzte 48h" / "Everything incl. last 48h"
-        → the whole app across all dimensions, PLUS the 48 h requirement
-          trace.
-    recommended (listed first, label suffixed "(Recommended)"):
-      $CHAT_HAS_WORK → "Nur Chat-Kontext"; otherwise → "Alles inkl. letzte 48h"
-      (the chat option is then absent: two options remain).
+F1  header: "Ergebnis"      multiSelect: false
+    question: "Was soll mit dem Ergebnis passieren?"
+    1. "Audit umsetzen (Recommended)"   — Sichere Fixes anwenden, vorher/nachher belegt.
+       → $MODE = implement: safe fixes applied, verified before/after, risky ones flagged.
+    2. "Audit als Concept"              — Nichts ändern; Befunde + Roadmap als Concept-Seite.
+       → $MODE = concept: findings + prioritized roadmap on a concept page,
+         where you pick what gets implemented, filed as issues or dropped.
 
-Q2  header: "Ergebnis" / "Output"
-    question: "Was soll mit dem Ergebnis passieren?" / "What happens with the result?"
-    options:
-      - "Audit + Umsetzung (Recommended)" / "Audit + implementation (Recommended)"
-        → safe fixes applied, verified before/after, risky ones flagged.
-      - "Audit als DevOps-Concept" / "Audit as DevOps concept"
-        → nothing changed; findings + prioritized roadmap on a concept page,
-          where you pick what gets implemented, filed as issues or dropped.
+F2  header: "Audit-Umfang"  multiSelect: false
+    question: "Was soll auditiert werden?"
+    1. "Chat-Arbeit prüfen (Recommended)" — Was dieser Chat gebaut hat.   [only when $CHAT_HAS_WORK]
+       → $SCOPE = chat: what this conversation asked for and built — its
+         requirements, the files it touched, their direct callers.
+    2. "Alles prüfen"                     — Ganze App, alle Dimensionen, plus 48h-Anforderungen.   [(Recommended) when option 1 is hidden]
+       → $SCOPE = all: the whole app across all dimensions, PLUS the 48 h
+         requirement trace.
+    3. "48h-Anforderungen prüfen"         — Nur funktionale Anforderungen der letzten 48 h.
+       → $SCOPE = 48h: every functional requirement stated or shipped in the
+         last 48 h, traced to evidence. Functional dimension only (plus tests).
 ```
+
+The labels stay German whatever the chat language — they are the contract
+strings `questions.md` defines, not prose to translate.
 
 Autonomous defaults: `$SCOPE = chat` when `$CHAT_HAS_WORK`, else `all`.
 
@@ -268,7 +268,7 @@ owns the card once its page is open.
 
 | Situation | Behavior |
 |---|---|
-| `$SCOPE=chat` but nothing developed in the chat | Q1 hides the option; preset `--scope=chat` falls back to `all` with a one-line note |
+| `$SCOPE=chat` but nothing developed in the chat | F2 hides the option; preset `--scope=chat` falls back to `all` with a one-line note |
 | No 48 h activity at all | Catalog is empty → say so; `48h` scope ends as `analysis`, `all` continues on implicit requirements |
 | App does not start | Live dimensions → `blocked`; static evidence continues; card lists the start failure |
 | `gh` unavailable / unauthenticated | Skip PR + issue sources, note it in `requirements.md` |
