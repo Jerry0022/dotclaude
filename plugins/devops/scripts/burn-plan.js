@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script burn-plan
- * @version 0.2.1
+ * @version 0.2.2
  * @plugin devops
  * @description The deterministic core of `/do-run burn`. Everything the burn
  *   mode used to ask the model to compute or remember lives here, as code
@@ -790,12 +790,29 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
     // Running total of every blind task's projected window spend since the
     // last good reading (or since the window itself rolled over while still
     // blind): without it, several blind tasks each fit alone but together
-    // overrun the 5-hour cap.
-    if (!sameWindow) s.blind.windowSpentPct = 0;
-    else s.blind.windowSpentPct = s.blind.windowSpentPct || 0;
+    // overrun the 5-hour cap. The reset happens exactly once per window
+    // (tracked by windowResetAt, keyed on winResetMs) — winResetMs itself
+    // stays fixed for as long as the run is blind (budgetAt does not move
+    // until a sighted reading lands), so re-deriving "is this a new window"
+    // from sameWindow alone would otherwise zero the total on every call
+    // after the reset instead of accumulating within it.
+    if (!sameWindow) {
+      if (s.blind.windowResetAt !== winResetMs) {
+        s.blind.windowSpentPct = 0;
+        s.blind.windowResetAt = winResetMs;
+      } else {
+        s.blind.windowSpentPct = s.blind.windowSpentPct || 0;
+      }
+    } else {
+      s.blind.windowSpentPct = s.blind.windowSpentPct || 0;
+    }
     const { rate: blindRate } = sessionRatePerLane(s, s.profile, cal);
-    const fitsBlindWindow = (t) => !sameWindow || lastWin < FRESH_WINDOW_PCT
-      || lastWin + s.blind.windowSpentPct + BLIND_SAFETY * blindRate * taskHours(t.size, taskProfile(t, runProfile), cal) <= 100 - SESSION_RESERVE_PCT;
+    // Same-window baseline is the last known session %; past a reset the
+    // window is unread (blind), so it starts from 0 and windowSpentPct alone
+    // tracks what has been spent in it since.
+    const winBase = sameWindow ? lastWin : 0;
+    const fitsBlindWindow = (t) => winBase + s.blind.windowSpentPct < FRESH_WINDOW_PCT
+      || winBase + s.blind.windowSpentPct + BLIND_SAFETY * blindRate * taskHours(t.size, taskProfile(t, runProfile), cal) <= 100 - SESSION_RESERVE_PCT;
     const pick = s.queue.find((t) => !conflicts(t) && fitsBlindBudget(t) && fitsBlindWindow(t));
     if (!pick) {
       if (sameWindow && s.queue.some(fitsBlindBudget) && Number.isFinite(winResetMs)) {
@@ -1351,14 +1368,22 @@ function isPidAlive(pid) {
  * write is one step. Two parallel `gate` calls (two free lanes, batched tool
  * calls) otherwise read the same queue and claim the same task. The lock is
  * a sibling `<state>.lock` created with 'wx', holding the holder's PID and
- * timestamp. It is taken over once its PID is dead or it is older than
+ * timestamp. It is taken over once its PID is confirmed dead, or once its
+ * PID cannot be read at all (mid-write / corrupt) and it is older than
  * LOCK_STALE_MS — by renaming it aside first (rename is atomic; only one
  * concurrent waiter can win a given name), so two waiters can never both
- * believe they cleared it and both end up holding a lock at once.
+ * believe they cleared it and both end up holding a lock at once. A LIVE
+ * holder is never taken over just for being old — age alone is not a crash
+ * signal (a long-running burn is normal) — a waiter behind a live holder
+ * instead rides out waitMs and fails loudly.
  */
 function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS), staleMs = LOCK_STALE_MS } = {}) {
   const lock = `${file}.lock`;
   const deadline = Date.now() + waitMs;
+  const giveUpOrRetry = () => {
+    if (Date.now() > deadline) throw new Error(`burn state is locked (${lock}) — another burn-plan call is running`);
+    sleepMs(25 + Math.floor(Math.random() * 50));
+  };
   let fd = null;
   while (fd === null) {
     try {
@@ -1370,31 +1395,45 @@ function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS
       const age = Date.now() - stat.mtimeMs;
       let holderPid = NaN;
       try { holderPid = parseInt(fs.readFileSync(lock, 'utf8').trim().split(/\s+/)[0], 10); } catch { /* mid-write, or gone */ }
-      const staleByAge = age > staleMs;
-      const staleByPid = Number.isFinite(holderPid) && !isPidAlive(holderPid);
-      if (staleByAge || staleByPid) {
+      const pidKnown = Number.isFinite(holderPid);
+      // A live PID is never taken over by age alone; only a dead PID, or an
+      // unreadable/unknown one that has also sat past staleMs (a holder that
+      // crashed before it could even write its PID).
+      const staleByDeadPid = pidKnown && !isPidAlive(holderPid);
+      const staleByUnknownPid = !pidKnown && age > staleMs;
+      if (staleByDeadPid || staleByUnknownPid) {
         // Rename-first takeover: only the waiter whose rename succeeds
         // proceeds; the rest loop back and retry 'wx' against a lock that no
-        // longer exists (or a fresh one the winner just created).
+        // longer exists (or a fresh one the winner just created). A rename
+        // that keeps failing (e.g. antivirus/indexer holding the file on
+        // Windows) must still respect the deadline and back off between
+        // attempts instead of spinning at full CPU.
         const graveyard = `${lock}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         try {
           fs.renameSync(lock, graveyard);
           try { fs.unlinkSync(graveyard); } catch { /* best-effort cleanup */ }
-        } catch { /* another waiter already took it over, or the holder released it */ }
+        } catch { /* another waiter already took it over, the holder released it, or the rename itself failed */ }
+        giveUpOrRetry();
         continue;
       }
-      if (Date.now() > deadline) throw new Error(`burn state is locked (${lock}) — another burn-plan call is running`);
-      sleepMs(25 + Math.floor(Math.random() * 50));
+      giveUpOrRetry();
     }
   }
+  const owner = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
-    fs.writeSync(fd, `${process.pid} ${new Date().toISOString()}\n`);
+    fs.writeSync(fd, `${process.pid} ${new Date().toISOString()} ${owner}\n`);
     fs.closeSync(fd);
     fd = -1;
     return fn();
   } finally {
     if (fd > 0) try { fs.closeSync(fd); } catch { /* closed */ }
-    try { fs.unlinkSync(lock); } catch { /* already gone */ }
+    // Only unlink the lock if it still holds our token: a run that took
+    // longer than staleMs may have already been taken over by another
+    // waiter, whose lock we must not delete out from under them.
+    try {
+      const held = fs.readFileSync(lock, 'utf8');
+      if (held.trim().endsWith(owner)) fs.unlinkSync(lock);
+    } catch { /* already gone */ }
   }
 }
 

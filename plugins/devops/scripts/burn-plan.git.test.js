@@ -321,4 +321,59 @@ describe("CLI lifecycle — init, gate, state, resume-check", () => {
     expect(r2.json.calibration).toMatchObject({ unitCostPct: expect.any(Number), laneHourlyPct: expect.any(Number) });
     expect(JSON.parse(fs.readFileSync(calFile, "utf8"))["Max 20x"].unitCostPct).toHaveLength(1);
   });
+
+  test("state checkpoint accumulates and remembers the last sha", () => {
+    run(["init", `--queue=${queue}`, "--slug=x", "--integration-branch=burn/x", "--session=S1"]);
+    run(["gate"]);
+    run(["state", "agent", "p0", "--agent-id=A1", "--branch=burn/x-core-1"]);
+    run(["state", "checkpoint", "p0", "--sha=abc"]);
+    const r = run(["state", "checkpoint", "p0", "--sha=abc"]);
+    expect(r.code).toBe(0);
+    const s = JSON.parse(fs.readFileSync(path.join(repo, "BURN-STATE.json"), "utf8"));
+    const task = s.inFlight.find((t) => t.id === "p0");
+    expect(task.checkpoints).toBe(2);
+    expect(task.lastCheckpointSha).toBe("abc");
+  });
+
+  test("an unknown state op exits 1, leaves the state file byte-identical, and cleans up its lock", () => {
+    run(["init", `--queue=${queue}`, "--slug=x", "--integration-branch=burn/x", "--session=S1"]);
+    const statePath = path.join(repo, "BURN-STATE.json");
+    const before = fs.readFileSync(statePath);
+    const r = run(["state", "bogus", "p0"]);
+    expect(r.code).toBe(1);
+    expect(fs.readFileSync(statePath).equals(before)).toBe(true);
+    expect(fs.existsSync(`${statePath}.lock`)).toBe(false);
+  });
+
+  test("state pause --resume-at sets resumeAt; an unparseable date pins to no resume date (falls back to null)", () => {
+    run(["init", `--queue=${queue}`, "--slug=x", "--integration-branch=burn/x", "--session=S1"]);
+    let r = run(["state", "pause", "--resume-at=2026-09-26T12:00:00.000Z"]);
+    expect(r.code).toBe(0);
+    let s = JSON.parse(fs.readFileSync(path.join(repo, "BURN-STATE.json"), "utf8"));
+    expect(s.pause.resumeAt).toBe("2026-09-26T12:00:00.000Z");
+    r = run(["state", "pause", "--resume-at=not-a-date"]);
+    expect(r.code).toBe(0);
+    s = JSON.parse(fs.readFileSync(path.join(repo, "BURN-STATE.json"), "utf8"));
+    expect(s.pause.resumeAt).toBeNull();
+  });
+
+  test("--auto-armed=yes|NO map to true/false; =true errors and writes no state; a bare flag errors the same way", () => {
+    run(["init", `--queue=${queue}`, "--slug=x", "--integration-branch=burn/x", "--session=S1"]);
+    let r = run(["state", "resume-policy", "--auto-armed=yes"]);
+    expect(r.code).toBe(0);
+    let s = JSON.parse(fs.readFileSync(path.join(repo, "BURN-STATE.json"), "utf8"));
+    expect(s.resume.autoArmed).toBe(true);
+    r = run(["state", "resume-policy", "--auto-armed=NO"]);
+    expect(r.code).toBe(0);
+    s = JSON.parse(fs.readFileSync(path.join(repo, "BURN-STATE.json"), "utf8"));
+    expect(s.resume.autoArmed).toBe(false);
+    const before = fs.readFileSync(path.join(repo, "BURN-STATE.json"));
+    r = run(["state", "resume-policy", "--auto-armed=true"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/must be yes\|no/);
+    expect(fs.readFileSync(path.join(repo, "BURN-STATE.json")).equals(before)).toBe(true);
+    r = run(["state", "resume-policy", "--auto-armed"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/must be yes\|no/);
+  });
 });

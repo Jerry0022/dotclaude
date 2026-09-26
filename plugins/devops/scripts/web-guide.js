@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script web-guide
+ * @version 0.1.1
  * @description CLI helper for the `/auto-guide` skill. Builds the three
  *   `javascript_tool` payloads exchanged with `web-guide-overlay.js` (inject /
  *   step / wait) and manages the `store` command that upserts a secret the
@@ -35,7 +36,18 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { markGuideActive, clearGuideActive, touchGuideToken } = require('./guide-active-state');
+const { markGuideActive, clearGuideActive, touchGuideToken, readGuideToken } = require('./guide-active-state');
+
+// touchGuideToken writes the marker to disk (extends its TTL); a write
+// failure (EPERM on rename, two payload calls racing) must not cost the
+// caller its token — fall back to a read-only lookup instead.
+function touchGuideTokenSafe() {
+  try {
+    return touchGuideToken(process.cwd());
+  } catch {
+    return readGuideToken(process.cwd());
+  }
+}
 
 // All file operations here are synchronous and local (no network, no child
 // processes), so no explicit timeout wrapper is needed per CONVENTIONS.md
@@ -147,7 +159,7 @@ function withToken(src, token) {
 // guide running longer than the marker TTL inside one turn keeps its token
 // instead of falling back to "reinject-needed" and losing what the user typed.
 function tokenArg() {
-  const token = touchGuideToken(process.cwd());
+  const token = touchGuideTokenSafe();
   return token ? `, "${token}"` : '';
 }
 
@@ -162,7 +174,7 @@ function payloadInject(args) {
     return;
   }
   const raw = Array.isArray(args) && args.includes('--raw');
-  const token = touchGuideToken(process.cwd());
+  const token = touchGuideTokenSafe();
   if (!token) {
     process.stderr.write('warning: no active guide marker (run `guide active` first) - injecting without a channel token\n');
   }
@@ -666,6 +678,8 @@ module.exports = {
   gitStatusOf,
   withToken,
   payloadDestroy,
+  tokenArg,
+  payloadInject,
 };
 
 if (require.main === module) {

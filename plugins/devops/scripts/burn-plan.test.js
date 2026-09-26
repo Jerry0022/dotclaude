@@ -453,6 +453,24 @@ describe("state transitions", () => {
     expect(s.queue[0]).toMatchObject({ branch: "burn/t-core-1", requeues: 1 });
   });
 
+  test("requeue with excluded stamps the queue item, its event, and the next spawn's task", () => {
+    let s = bp.claimTask(s0(), "p0", NOW, { branch: "burn/t-core-1" });
+    s = bp.requeueTask(s, "p0", { branch: "burn/t-core-1", excluded: [".env"] }, NOW + 1);
+    expect(s.queue[0]).toMatchObject({ id: "p0", excluded: [".env"] });
+    expect(s.events[s.events.length - 1]).toMatchObject({ type: "requeue", excluded: [".env"] });
+    const g = bp.gate(s, u0, NOW + 2, null);
+    expect(g.task).toMatchObject({ id: "p0", excluded: [".env"] });
+  });
+
+  test("requeue without excluded (or an empty list) adds no excluded field", () => {
+    let s = bp.claimTask(s0(), "p0", NOW, { branch: "burn/t-core-1" });
+    let r = bp.requeueTask(s, "p0", { branch: "burn/t-core-1" }, NOW + 1);
+    expect(r.queue[0]).not.toHaveProperty("excluded");
+    s = bp.claimTask(s0(), "p0", NOW, { branch: "burn/t-core-1" });
+    r = bp.requeueTask(s, "p0", { branch: "burn/t-core-1", excluded: [] }, NOW + 1);
+    expect(r.queue[0]).not.toHaveProperty("excluded");
+  });
+
   test("events are capped and every transition beats the heartbeat", () => {
     let s = s0();
     for (let i = 0; i < 250; i++) s = bp.setResumePolicy(s, { auto: i % 2 ? "off" : "continue" }, NOW + i);
@@ -539,6 +557,53 @@ describe("2026-09-26 audit — blind mode keeps the checks that need no reading 
       else break;
     }
     expect(decisions).toEqual(["spawn", "spawn", "pause"]);
+  });
+
+  test("finding: a fresh (< FRESH_WINDOW_PCT) last reading still enforces the window cap via the running blind total, and a reset restarts the total exactly once", () => {
+    const q20 = Array.from({ length: 20 }, (_, i) => task(`t${i}`, "S", "P0"));
+    const p20 = bp.derivePlan({ usage: u0, queue: q20, plan: "Max 20x" });
+    const t1 = NOW + 50 * 60000;
+    let s = stateFor(p20, q20, u0);
+    // last good reading: window nearly empty (5 %, under FRESH_WINDOW_PCT),
+    // 250 min to its reset — the old bug let every blind task through
+    // forever because the shortcut only ever looked at the stale 5 %.
+    s = bp.gate(s, bp.normalizeUsage({ ...raw({ weeklyUsed: 43, sessionUsed: 5, sessionResetMin: 250 }), timestamp: new Date(t1).toISOString() }, t1, 2), t1, null, { claim: false }).state;
+    s.status = "running";
+    delete s.pause;
+
+    let spawns = 0;
+    let last;
+    for (let i = 0; i < 20; i++) {
+      s.holds = bp.HOLD_LIMIT - 1;
+      const g = bp.gate(s, blind, t1 + (i + 1) * 60000, null);
+      last = g;
+      s = g.state;
+      if (g.decision !== "spawn") break;
+      spawns++;
+      s = bp.landTask(s, g.task.id, {}, t1 + (i + 1) * 60000 + 30000);
+    }
+    // the cap now bites well before the queue runs out
+    expect(spawns).toBeGreaterThan(0);
+    expect(spawns).toBeLessThan(20);
+    expect(last.decision).toBe("pause");
+    const windowResetAt = s.blind.windowResetAt;
+
+    // simulate the window's own reset (no sighted reading arrives — still blind)
+    s.status = "running";
+    delete s.pause;
+    const winResetMs = t1 + 250 * 60000;
+    let g2 = bp.gate(s, blind, winResetMs + 10 * 60000, null);
+    expect(g2.decision).toBe("spawn");
+    expect(g2.state.blind.windowSpentPct).toBeLessThan(s.blind.windowSpentPct);
+    expect(g2.state.blind.windowResetAt).not.toBe(windowResetAt);
+    s = bp.landTask(g2.state, g2.task.id, {}, winResetMs + 11 * 60000);
+    const spentAfterFirst = s.blind.windowSpentPct;
+    const resetAtAfterFirst = s.blind.windowResetAt;
+
+    // the next call in the SAME new window must accumulate, not zero again
+    const g3 = bp.gate(s, blind, winResetMs + 12 * 60000, null);
+    expect(g3.state.blind.windowResetAt).toBe(resetAtAfterFirst);
+    expect(g3.state.blind.windowSpentPct).toBeGreaterThan(spentAfterFirst);
   });
 });
 

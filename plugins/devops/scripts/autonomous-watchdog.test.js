@@ -9,6 +9,7 @@ import {
   removeRegistrationsFor,
   staleWatchdogTaskNames,
   sweepStaleWatchdogs,
+  isValidWatchdogScriptPath,
   STALE_AFTER_MS,
 } from "./autonomous-watchdog.js";
 
@@ -379,6 +380,12 @@ describe("removeRegistrationsFor — a written flag removes its own task", () =>
     expect(fs.existsSync(other.data.scriptPath)).toBe(true);
   });
 
+  test("a task German schtasks can no longer find counts as removed", () => {
+    const mine = sentinel("ClaudeAutonomousWatchdog-333", "C:\\proj\\AUTONOMOUS-DONE.flag");
+    const spawn = () => ({ status: 1, stdout: "", stderr: "FEHLER: Das System kann die angegebene Datei nicht finden." });
+    expect(removeRegistrationsFor("C:\\proj\\AUTONOMOUS-DONE.flag", { spawn, sentinels: [mine] })).toEqual(["ClaudeAutonomousWatchdog-333"]);
+  });
+
   test("a tampered task name is never handed to schtasks", () => {
     const bad = sentinel("\\Microsoft\\Windows\\Defrag", "C:\\proj\\AUTONOMOUS-DONE.flag");
     const calls = [];
@@ -391,5 +398,44 @@ describe("removeRegistrationsFor — a written flag removes its own task", () =>
     const mine = sentinel("ClaudeAutonomousWatchdog-333", "C:\\proj\\AUTONOMOUS-DONE.flag");
     const spawn = () => ({ status: 1, stdout: "", stderr: "FEHLER: Zugriff verweigert" });
     expect(removeRegistrationsFor("C:\\proj\\AUTONOMOUS-DONE.flag", { spawn, sentinels: [mine] })).toEqual([]);
+  });
+
+  test("a sentinel whose scriptPath fails validation leaves that file alone — only a valid one is ever unlinked", () => {
+    const tempRoot = os.tmpdir();
+    const outsideTemp = path.join(tempRoot, "..", "wd-outside-temp.ps1");
+    const inSubfolder = path.join(tempRoot, "sub", "claude-autonomous-watchdog-1.ps1");
+    const traversal = path.join(tempRoot, "..", "claude-autonomous-watchdog-2.ps1");
+    const wrongPrefixSuffix = path.join(tempRoot, "not-a-watchdog-script.txt");
+    fs.mkdirSync(path.dirname(inSubfolder), { recursive: true });
+    for (const p of [outsideTemp, inSubfolder, traversal, wrongPrefixSuffix]) {
+      fs.writeFileSync(p, "x");
+      created.push(p);
+    }
+    // isValidWatchdogScriptPath itself rejects every one of these
+    expect(isValidWatchdogScriptPath(outsideTemp)).toBe(false);
+    expect(isValidWatchdogScriptPath(inSubfolder)).toBe(false);
+    expect(isValidWatchdogScriptPath(traversal)).toBe(false);
+    expect(isValidWatchdogScriptPath(wrongPrefixSuffix)).toBe(false);
+
+    const flagPath = "C:\\proj\\AUTONOMOUS-DONE.flag";
+    const spawn = () => ({ status: 0, stdout: "", stderr: "" });
+    for (const scriptPath of [outsideTemp, inSubfolder, traversal, wrongPrefixSuffix]) {
+      const file = path.join(os.tmpdir(), `wd-test-sentinel-bad-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      fs.writeFileSync(file, "{}");
+      created.push(file);
+      removeRegistrationsFor(flagPath, { spawn, sentinels: [{ file, data: { taskName: null, flagPath, scriptPath } }] });
+      expect(fs.existsSync(scriptPath)).toBe(true);
+      // the sentinel itself is still always cleaned up
+      expect(fs.existsSync(file)).toBe(false);
+    }
+  });
+
+  test("a spawn that throws still cleans up script and sentinel; nothing is reported removed", () => {
+    const mine = sentinel("ClaudeAutonomousWatchdog-444", "C:\\proj\\AUTONOMOUS-DONE.flag");
+    const spawn = () => { throw new Error("spawnSync EPERM"); };
+    const removed = removeRegistrationsFor("C:\\proj\\AUTONOMOUS-DONE.flag", { spawn, sentinels: [mine] });
+    expect(removed).toEqual([]);
+    expect(fs.existsSync(mine.file)).toBe(false);
+    expect(fs.existsSync(mine.data.scriptPath)).toBe(false);
   });
 });

@@ -343,6 +343,66 @@ describe("AUD-C022 — parallel gate calls never claim the same task", () => {
     expect(renameCalls).toBeGreaterThanOrEqual(1);
     expect(fs.existsSync(lock)).toBe(false);
   });
+
+  test("a holder that overran the stale window must not delete the lock a takeover already claimed", () => {
+    const file = path.join(tmp, "S4.json");
+    const lock = `${file}.lock`;
+    let ranOnce = false;
+    const r = bp.withStateLock(file, () => {
+      if (!ranOnce) {
+        ranOnce = true;
+        // Simulate a second process taking the lock over mid-hold (it
+        // considered us stale and rewrote the lock with its own token).
+        fs.writeFileSync(lock, `123456 ${new Date().toISOString()} someone-else\n`);
+      }
+      return "first-holder-done";
+    });
+    expect(r).toBe("first-holder-done");
+    // The first holder's finally must not have unlinked the takeover's lock.
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(fs.readFileSync(lock, "utf8")).toMatch(/someone-else/);
+  });
+
+  test("a LIVE holder older than LOCK_STALE_MS is never taken over — a waiter behind it rides out the deadline and fails loudly", () => {
+    const file = path.join(tmp, "S5.json");
+    const lock = `${file}.lock`;
+    fs.writeFileSync(lock, `${process.pid} old\n`); // our own PID: always alive
+    const old = new Date(Date.now() - 300000); // far past LOCK_STALE_MS (60s)
+    fs.utimesSync(lock, old, old);
+    expect(() => bp.withStateLock(file, () => 1, { waitMs: 150 })).toThrow(/locked/);
+    // never taken over: the (still-live) lock is exactly as we left it
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(fs.readFileSync(lock, "utf8")).toMatch(new RegExp(`^${process.pid} old`));
+  });
+
+  test("a stale lock whose takeover keeps losing the rename backs off between attempts instead of spinning", () => {
+    const file = path.join(tmp, "S6.json");
+    const lock = `${file}.lock`;
+    fs.writeFileSync(lock, "999999 old\n"); // an unreachable PID: dead, eligible for takeover
+    const old = new Date(Date.now() - 120000);
+    fs.utimesSync(lock, old, old);
+    const realRename = fs.renameSync;
+    let renameCalls = 0;
+    fs.renameSync = () => {
+      renameCalls++;
+      const err = new Error("EBUSY: resource busy or locked");
+      err.code = "EBUSY";
+      throw err;
+    };
+    const t0 = Date.now();
+    try {
+      expect(() => bp.withStateLock(file, () => 1, { waitMs: 200 })).toThrow(/locked/);
+    } finally {
+      fs.renameSync = realRename;
+    }
+    const elapsed = Date.now() - t0;
+    // ~200ms of waitMs at ~25-75ms sleeps between attempts bounds the call
+    // count well under what a 100%-CPU busy-loop would rack up in the same
+    // window; a spin would run into the thousands.
+    expect(renameCalls).toBeGreaterThan(0);
+    expect(renameCalls).toBeLessThan(30);
+    expect(elapsed).toBeGreaterThanOrEqual(150);
+  });
 });
 
 describe("AUD-C049/C050 — strict CLI knobs", () => {

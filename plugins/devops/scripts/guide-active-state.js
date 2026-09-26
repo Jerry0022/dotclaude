@@ -1,6 +1,6 @@
 /**
  * @module guide-active-state
- * @version 0.2.0
+ * @version 0.2.1
  * @description Small on-disk marker recording "an /auto-guide run is
  *   currently active", shared between `web-guide.js` (writer, called from
  *   SKILL.md Step 3 / Step 6 / Step 7) and `stop.flow.guard` (reader, #526):
@@ -54,9 +54,16 @@ function markGuideActive(cwd, now = Date.now()) {
     && typeof prev.token === 'string' && TOKEN_RE.test(prev.token);
   const token = keep ? prev.token : crypto.randomBytes(16).toString('hex');
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify({ ts: now, token }));
-  fs.renameSync(tmp, file);
+  // A unique temp name — two concurrent markGuideActive calls (payload step
+  // and payload wait racing) must not clobber each other's `.tmp` mid-write.
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ ts: now, token }));
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* never created / already renamed */ }
+    throw err;
+  }
   return file;
 }
 

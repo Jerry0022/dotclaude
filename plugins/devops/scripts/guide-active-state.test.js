@@ -169,4 +169,52 @@ describe("guide-active-state", () => {
     markGuideActive(dir, now + 1000);
     expect(readGuideToken(dir, now + 1000)).toBe(token);
   });
+
+  test("markGuideActive leaves no .tmp file behind on success", () => {
+    const dir = makeTmpDir();
+    markGuideActive(dir);
+    const files = fs.readdirSync(path.dirname(guideActiveFilePath(dir)));
+    expect(files.some((f) => f.endsWith(".tmp"))).toBe(false);
+  });
+
+  test("markGuideActive removes its own temp file when the rename fails, and rethrows", () => {
+    const dir = makeTmpDir();
+    const file = guideActiveFilePath(dir);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const realRename = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      if (to === file) {
+        const err = new Error("EPERM: operation not permitted, rename");
+        err.code = "EPERM";
+        throw err;
+      }
+      return realRename(from, to);
+    };
+    try {
+      expect(() => markGuideActive(dir)).toThrow(/EPERM/);
+    } finally {
+      fs.renameSync = realRename;
+    }
+    const leftover = fs.readdirSync(path.dirname(file)).filter((f) => f.endsWith(".tmp"));
+    expect(leftover).toEqual([]);
+  });
+
+  test("two concurrent markGuideActive calls use different temp names (no shared .tmp race)", () => {
+    const dir = makeTmpDir();
+    const file = guideActiveFilePath(dir);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const seen = new Set();
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (p, ...rest) => {
+      if (typeof p === "string" && p.includes(".tmp")) seen.add(p);
+      return realWrite(p, ...rest);
+    };
+    try {
+      markGuideActive(dir);
+      markGuideActive(dir);
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(seen.size).toBe(2);
+  });
 });

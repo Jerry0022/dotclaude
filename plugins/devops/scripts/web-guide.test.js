@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach } from "vitest";
+import { describe, test, expect, afterEach, vi } from "vitest";
 import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
@@ -843,5 +843,73 @@ describe("CLI: channel token and missing channel", () => {
     expect(r.code).toBe(1);
     expect(r.stdout).not.toContain("guide-cleared");
     expect(r.stderr).toContain("guide-clear-failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLI: payload destroy
+// ---------------------------------------------------------------------------
+
+describe("CLI: payload destroy", () => {
+  test("with an active guide, destroy carries the token and the marker ts is refreshed", () => {
+    const dir = makeTmpDir();
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const markerPath = path.join(dir, ".claude", "auto-guide-active.json");
+    const before = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    const r = run(["payload", "destroy"], { cwd: dir });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`destroy("${before.token}")`);
+    const after = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    expect(after.token).toBe(before.token);
+    expect(after.ts).toBeGreaterThanOrEqual(before.ts);
+  });
+
+  test("without a marker, destroy carries no token", () => {
+    const dir = makeTmpDir();
+    const r = run(["payload", "destroy"], { cwd: dir });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("destroy()");
+    expect(r.stdout).not.toMatch(/destroy\("/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// tokenArg / payloadInject — touchGuideToken write failure falls back to a
+// read-only token lookup instead of losing the token and exiting 1.
+// ---------------------------------------------------------------------------
+
+describe("tokenArg / payloadInject — touchGuideToken write failure", () => {
+  test("a failing write (EPERM on rename, or two concurrent payload calls racing) still yields the read token", async () => {
+    const dir = makeTmpDir();
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const markerPath = path.join(dir, ".claude", "auto-guide-active.json");
+    const { token } = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+
+    vi.resetModules();
+    vi.doMock("./guide-active-state.js", () => ({
+      touchGuideToken: () => { throw new Error("EPERM: operation not permitted, rename"); },
+      readGuideToken: () => token,
+      markGuideActive: () => { throw new Error("EPERM: operation not permitted, rename"); },
+      clearGuideActive: () => {},
+    }));
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(dir);
+    try {
+      const wg = await import("./web-guide.js");
+      expect(wg.tokenArg()).toBe(`, "${token}"`);
+
+      let out = "";
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation((s) => { out += s; return true; });
+      try {
+        wg.payloadInject([]);
+      } finally {
+        writeSpy.mockRestore();
+      }
+      expect(out).toContain(`var TOKEN = "${token}";`);
+      expect(process.exitCode).not.toBe(1);
+    } finally {
+      cwdSpy.mockRestore();
+      vi.doUnmock("./guide-active-state.js");
+      vi.resetModules();
+    }
   });
 });
