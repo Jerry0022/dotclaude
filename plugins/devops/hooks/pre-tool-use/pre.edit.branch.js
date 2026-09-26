@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.edit.branch
- * @version 0.1.0
+ * @version 0.1.1
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit
@@ -16,33 +16,26 @@
  *     - Sentinel file .claude/.ship-in-progress exists (ship pipeline active)
  *     - DEVOPS_ALLOW_MAIN=1 in environment
  *     - Target path is outside the repo working tree (e.g. ~/.claude/**)
+ *
+ *   Every git probe goes through lib/git-timeout.js's gitOut — GIT_TIMEOUT_MS
+ *   per call; before, these calls had no timeout at all. A failed or hung
+ *   probe reads as "not a repo" / "no branch" / "no origin", as a failure
+ *   always did.
  */
 
 require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('node:child_process');
+const { gitOut } = require('../lib/git-timeout');
 const { isActive: sentinelActive } = require('../lib/ship-sentinel');
 
 function currentBranch(cwd) {
-  try {
-    return execFileSync('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return null;
-  }
+  return gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
 }
 
 function gitTopLevel(cwd) {
-  try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return null;
-  }
+  return gitOut(cwd, ['rev-parse', '--show-toplevel']);
 }
 
 /**
@@ -53,14 +46,7 @@ function gitTopLevel(cwd) {
  * fails on both halves, so an Edit was refused with an unusable remedy.
  */
 function hasRemote(cwd) {
-  try {
-    execFileSync('git', ['remote', 'get-url', 'origin'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  return gitOut(cwd, ['remote', 'get-url', 'origin']) !== null;
 }
 
 function extractTargetPath(toolName, input) {

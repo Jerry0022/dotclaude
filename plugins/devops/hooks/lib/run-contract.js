@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @module run-contract
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description State, answer parsing, obligations and CLI of the do-run RUN
  *   CONTRACT: what the user chose in the do-run router (passes, ship mode,
@@ -21,16 +21,20 @@
  *   need no changes. This file stays the CLI entry point
  *   (`node run-contract.js status` etc., via the `require.main` guard below).
  *
+ *   0.4.0 (harden scan 2026-09-26, the user's call): the seven entries no
+ *   production caller used left the facade — contractPath, eventsPath,
+ *   prevPath, pendingPath, batchHandoffPath, readRawContract (all in
+ *   `run-contract-store.js`) and followUpModeHint (`run-contract-answers.js`).
+ *   Only tests read them; they require the owning module now.
+ *
  * Exports (the hook wave imports these names — kept in sync with the bottom
  * `module.exports`; AUD-016: grep the sibling `run-contract-*.js` files for
  * the implementation of each):
  *   OTHER_PLACEHOLDERS                            the "Other" answer tokens (post.ask.answers imports them)
  *   LIB_PATH / rearmHint()                        this file's path / the `arm` re-arm command line
  *   disabled()                                    → boolean  kill switch on
- *   contractPath(cwd) / eventsPath(cwd) / prevPath(cwd) / pendingPath(cwd) / batchHandoffPath(cwd) → string
  *   readContract(cwd, {now})                      → header | null (active only)
  *   readContractForCard(cwd, {now})               → header | null (active, or closed ≤ 15 min ago)
- *   readRawContract(cwd)                          → header | null (as on disk, no checks)
  *   expiryNotice(cwd, {sessionId, now})           → string | null (once: this session's contract expired unclosed)
  *   claim(cwd, sessionId, {now})                  → header | null (adopts a session-less fresh contract)
  *   arm(cwd, header, {now})                       → header | null (archives an existing one)
@@ -47,7 +51,6 @@
  *   answeredFields(fields)                        → only the fields a router call answered (R7)
  *   mergeRouterAnswers(cwd, questions, fields, {sessionId, now}) → header | null (R7 merge)
  *   parseFollowUp(questions, answers)             → patch | null
- *   followUpModeHint(questions)                   → 'backlog' | 'audit' | null
  *   applyFollowUp(cwd, patch, {sessionId, now})   → header | null
  *   hasHeader(questions, header)                  → boolean
  *   parseMachinePrompt(text)                      → header fields | null
@@ -105,12 +108,11 @@ const cliModule = require('./run-contract-cli');
 
 module.exports = {
   OTHER_PLACEHOLDERS: answers.OTHER_PLACEHOLDERS, LIB_PATH: store.LIB_PATH, rearmHint: store.rearmHint,
-  disabled: store.disabled, contractPath: store.contractPath, eventsPath: store.eventsPath,
-  prevPath: store.prevPath, pendingPath: store.pendingPath, batchHandoffPath: store.batchHandoffPath,
+  disabled: store.disabled,
   claim: store.claim, applyFollowUp: answers.applyFollowUp, answeredFields: answers.answeredFields,
   isPartialRouterCall: answers.isPartialRouterCall, mergeRouterAnswers: answers.mergeRouterAnswers,
-  hasHeader: answers.hasHeader, followUpModeHint: answers.followUpModeHint, machinePatch: answers.machinePatch,
-  readContract: store.readContract, readContractForCard: store.readContractForCard, readRawContract: store.readRawContract,
+  hasHeader: answers.hasHeader, machinePatch: answers.machinePatch,
+  readContract: store.readContract, readContractForCard: store.readContractForCard,
   expiryNotice: store.expiryNotice, arm: store.arm, update: store.update, record: store.record, close: store.close,
   events: store.events,
   markPendingArm: store.markPendingArm, pendingArm: store.pendingArm, clearPendingArm: store.clearPendingArm,

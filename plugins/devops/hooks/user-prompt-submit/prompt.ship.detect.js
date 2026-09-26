@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.7.1
+ * @version 0.7.2
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -26,12 +26,14 @@
  *   A promotion that names a version ("promote stable 0.193.0", the card's
  *   promote buttons) is promotion-only by definition: the mandate forbids
  *   shipping new work, so a stale button click never ships later edits.
+ *   The git-repo probe goes through lib/git-timeout.js's gitOut
+ *   (GIT_TIMEOUT_MS; it had no timeout before).
  */
 
 require('../lib/plugin-guard');
 
 const fs = require('fs');
-const { execFileSync } = require('child_process');
+const { gitOut } = require('../lib/git-timeout');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { parseShipRequest } = require('../lib/ship-intent');
 const { hasUnshippedWork } = require('../lib/ship-unshipped');
@@ -48,14 +50,7 @@ const ADVISED_PREFIX = 'dotclaude-devops-ship-compact-advised';
  * @returns {boolean}
  */
 function isGitRepo(cwd) {
-  try {
-    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  return gitOut(cwd, ['rev-parse', '--is-inside-work-tree']) !== null;
 }
 
 let inputData = '';

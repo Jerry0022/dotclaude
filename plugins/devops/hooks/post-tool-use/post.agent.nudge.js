@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.agent.nudge
- * @version 0.3.0
+ * @version 0.3.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -54,7 +54,9 @@
  *   fired this turn (R14d); or the delegation kill switch
  *   (`lib/delegation.js`) resolves to `off`.
  *
- *   Never blocks: every failure path exits 0 silently.
+ *   Never blocks: every failure path exits 0 silently. Stdin and parsing go
+ *   through lib/hook-input.js's runHook (parseHookInput — a BOM-prefixed
+ *   payload now parses instead of reading as no payload).
  */
 
 require('../lib/plugin-guard');
@@ -289,18 +291,9 @@ function run(hook) {
 }
 
 if (require.main === module) {
-  let inputData = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', d => { inputData += d; });
-  process.stdin.on('end', () => {
-    let hook = null;
-    try { hook = JSON.parse(inputData); } catch { /* run(null) below is silent */ }
-    try {
-      const out = run(hook);
-      if (out) process.stdout.write(out);
-    } catch { /* never surface an internal error */ }
-    process.exitCode = 0;
-  });
+  // run() returns the serialized envelope (or ''), written as is; the try:
+  // a lib that fails to load never surfaces as a hook failure.
+  try { require('../lib/hook-input').runHook(run, { event: 'PostToolUse' }); } catch {}
 }
 
 module.exports = {

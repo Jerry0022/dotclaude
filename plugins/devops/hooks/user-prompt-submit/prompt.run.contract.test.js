@@ -10,6 +10,7 @@ vi.setConfig({ testTimeout: 30_000 });
 
 const require = createRequire(import.meta.url);
 const RC = require("../lib/run-contract.js");
+const store = require("../lib/run-contract-store.js");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "prompt.run.contract.js");
 const ENV = { ...process.env };
@@ -97,7 +98,7 @@ describe("prompt.run.contract", () => {
   test("ordinary prompts and the kill switch do nothing", () => {
     run("mach mal RUN_BACKLOG_AUTOSTART: nicht");
     run("RUN_BACKLOG_AUTOSTART: ship=auto", { DOTCLAUDE_RUN_CONTRACT: "off" });
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 });
 
@@ -123,7 +124,7 @@ describe("AUD-002: a typed devops slash command records a skill event", () => {
   test("no active contract → no event, no crash", () => {
     const r = run("/auto-polish");
     expect(r.code).toBe(0);
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 
   test("a non-devops typed slash command is ignored", () => {

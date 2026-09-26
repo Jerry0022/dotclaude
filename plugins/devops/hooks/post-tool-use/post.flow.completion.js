@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.28.1
+ * @version 0.28.2
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -67,6 +67,10 @@
  *   The card widget ends the turn: this hook runs the plugin's Stop hooks and,
  *   when none blocks, answers `{"continue": false}` — no model call follows the
  *   card, so no recap, no nudge reply, no post-card step (hooks/lib/card-turn-end.js).
+ *
+ *   Stdin, parsing and the reply go through lib/hook-input.js's runHook; main()
+ *   runs the numbered sections below in order and returns the reply. Its git
+ *   reads use lib/git-timeout.js's gitRun (harden scan 2026-09-26).
  */
 
 require('../lib/plugin-guard');
@@ -74,10 +78,9 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { projectRoot, inOwnWorkTree } = require('../lib/project-root');
-const { GIT_TIMEOUT_MS } = require('../lib/git-timeout');
+const { gitRun } = require('../lib/git-timeout');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
@@ -182,16 +185,15 @@ const SHIP_NUDGE_EDITS = 5;
 
 /**
  * Hand text to Claude. A PostToolUse hook reaches the model only through
- * `hookSpecificOutput.additionalContext`; plain stdout lands in the transcript
- * and nowhere else. Nothing to say → no output at all.
+ * `hookSpecificOutput.additionalContext` — runHook writes that envelope for a
+ * `{context}` reply; plain stdout lands in the transcript and nowhere else.
+ * Nothing to say → no reply at all.
  * @param {string[]} lines
+ * @returns {{context: string}|null}
  */
-function emit(lines) {
+function contextOf(lines) {
   const text = lines.join('\n').trim();
-  if (!text) return;
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text },
-  }));
+  return text ? { context: text } : null;
 }
 
 const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
@@ -270,7 +272,6 @@ const MERGE_CMD_RE = /\bgit\b[\s\S]*\b(?:merge|pull|cherry-pick|rebase|am|revert
 // `commit (merge)` ends in `)`, where `\b` cannot match — kept outside the \b group.
 const MERGE_SUBJECT_RE = /^(?:(?:merge|pull|cherry-pick|rebase|am|revert)\b|commit \(merge\))/;
 const MERGE_MAX_AGE_S = 30 * 60;
-const GIT_OPTS = { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true };
 
 /**
  * Files a merge-like HEAD move of THIS call brought into the checkout.
@@ -281,14 +282,17 @@ const GIT_OPTS = { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 
  * seen at the previous read, rewritten on every read) keeps one merge from
  * being owed twice; the second line disambiguates entries in the same second.
  *
+ * Both git reads run through gitRun with its per-call GIT_TIMEOUT_MS: two
+ * calls stay far below this hook's harness timeout, so no shared budget. The
+ * raw stdout is parsed as before — the watermark compares whole lines.
+ *
  * @returns {string[]} absolute paths (unfiltered — the caller applies the gates' rules)
  */
 function mergedFiles(cwd, sessionId) {
   const root = projectRoot(cwd || process.cwd());
   let out;
   try {
-    out = execFileSync('git', ['reflog', '-n', '200', '--format=%H %gd %gs', '--date=unix', 'HEAD'],
-      { ...GIT_OPTS, cwd: root });
+    out = gitRun(root, ['reflog', '-n', '200', '--format=%H %gd %gs', '--date=unix', 'HEAD']);
   } catch {
     return [];
   }
@@ -323,7 +327,7 @@ function mergedFiles(cwd, sessionId) {
   const before = entries[i].sha;
   const after = entries[top].sha;
   try {
-    const names = execFileSync('git', ['diff', '--name-only', before, after], { ...GIT_OPTS, cwd: root });
+    const names = gitRun(root, ['diff', '--name-only', before, after]);
     return String(names).split(/\r?\n/).filter(Boolean).map(p => path.join(root, p));
   } catch {
     return [];
@@ -401,12 +405,24 @@ function handleShipAndCardFlags(hook, toolName) {
  * Increments the edit and tool-call counters (1, 1b), writes the per-turn
  * work-happened flag and last-activity timestamp (1c, 1d), and updates the
  * light-verification / validation gate flags consumed by stop.flow.browsertest
- * and stop.flow.guard (1e).
+ * and stop.flow.guard (1e) — in that order, each best effort.
  * @returns {{ editCount: number, firstOfTurn: boolean }} the edit count after
  *   this call, and whether this call created the turn's work-happened flag
  */
 function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
-  // --- 1. Increment edit counter (only for Edit/Write) ---
+  const editCount = bumpEditCounter(hook, isCodeEdit);
+  bumpToolCallCounter(hook);
+  const firstOfTurn = claimWorkHappened(hook, toolName);
+  touchLastActivity(hook);
+  updateLightGateFlags(hook, toolName, isCodeEdit);
+  return { editCount, firstOfTurn };
+}
+
+/**
+ * --- 1. Increment edit counter (only for Edit/Write) ---
+ * @returns {number} the session's code-edit count after this call
+ */
+function bumpEditCounter(hook, isCodeEdit) {
   let editCount = 0;
   const counterFile = sessionFile('dotclaude-devops-edits', hook.session_id);
   try {
@@ -417,8 +433,11 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
     editCount++;
     try { writeSessionFile(counterFile, editCount.toString()); } catch { /* best effort */ }
   }
+  return editCount;
+}
 
-  // --- 1b. Increment tool-call counter (all tool calls) ---
+/** --- 1b. Increment tool-call counter (all tool calls) --- */
+function bumpToolCallCounter(hook) {
   const toolCallFile = sessionFile('dotclaude-devops-toolcalls', hook.session_id);
   let toolCallCount = 0;
   try {
@@ -426,85 +445,60 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
   } catch { /* first tool call this session */ }
   toolCallCount++;
   try { writeSessionFile(toolCallFile, toolCallCount.toString()); } catch { /* best effort */ }
+}
 
-  // --- 1c. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
-  // stop.flow.guard deletes it when a turn ends, so the call that CREATES it is
-  // the turn's first — the one that carries the card reminder (section 2). The
-  // create is exclusive ('wx'), so hooks running side by side for parallel tool
-  // calls can never both claim "first".
+/**
+ * --- 1c. Write per-turn work-happened flag (consumed by stop.flow.guard) ---
+ * stop.flow.guard deletes it when a turn ends, so the call that CREATES it is
+ * the turn's first — the one that carries the card reminder (section 2). The
+ * create is exclusive ('wx'), so hooks running side by side for parallel tool
+ * calls can never both claim "first".
+ * @returns {boolean} whether this call created the flag (the turn's first call)
+ */
+function claimWorkHappened(hook, toolName) {
   const workFile = sessionFile('dotclaude-devops-work-happened', hook.session_id);
-  let firstOfTurn = false;
   try {
     fs.writeFileSync(workFile, toolName, { flag: 'wx' });
-    firstOfTurn = true;
+    return true;
   } catch {
     // Already there: a later call of this turn (or the exclusive create lost a
     // race to a parallel call) — keep the flag's content current, best effort.
     try { writeSessionFile(workFile, toolName); } catch { /* best effort */ }
+    return false;
   }
+}
 
-  // --- 1d. Write last-activity timestamp (consumed by cache-timeout check) ---
+/** --- 1d. Write last-activity timestamp (consumed by cache-timeout check) --- */
+function touchLastActivity(hook) {
   try {
     const activityFile = sessionFile('dotclaude-devops-last-activity', hook.session_id);
     writeSessionFile(activityFile, Date.now().toString());
   } catch { /* best effort */ }
+}
 
-  // --- 1e. Light-verification gate flags (consumed by stop.flow.browsertest) ---
-  //   light-pending → a code file changed and still needs a Light check, scoped
-  //     to the active $TEST_PROFILE (DOM profiles → web-renderable files only;
-  //     runner/unknown profiles → any source file). Docs/markdown/config edits,
-  //     *.test/*.spec files, and concept pages never set this.
-  //   light-kind   → which Light check is required ('dom' | 'runner' | 'any'),
-  //     so the Stop hook can render the right instruction.
-  //   light-verified → an OBSERVABLE matching verification ran (browser tool for
-  //     DOM, test runner for runner). A subagent delegation does NOT count —
-  //     the main thread cannot see inside it (closed loophole, intentional).
+/**
+ * --- 1e. Light-verification gate flags (consumed by stop.flow.browsertest) ---
+ *   light-pending → a code file changed and still needs a Light check, scoped
+ *     to the active $TEST_PROFILE (DOM profiles → web-renderable files only;
+ *     runner/unknown profiles → any source file). Docs/markdown/config edits,
+ *     *.test/*.spec files, and concept pages never set this.
+ *   light-kind   → which Light check is required ('dom' | 'runner' | 'any'),
+ *     so the Stop hook can render the right instruction.
+ *   light-verified → an OBSERVABLE matching verification ran (browser tool for
+ *     DOM, test runner for runner). A subagent delegation does NOT count —
+ *     the main thread cannot see inside it (closed loophole, intentional).
+ * One try around the whole sequence: a failing write skips the rest of it,
+ * the observation included.
+ */
+function updateLightGateFlags(hook, toolName, isCodeEdit) {
   try {
-    const { profileClass, carveOuts, domPaths } = readProfileConfig(
-      hook.session_id,
-      hook.cwd || process.cwd(),
-    );
-    const unlinkFlag = (prefix) => {
-      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch { /* not written this turn */ }
-    };
-
-    // What a change of `editedPath` owes — shared by edits and merged files, so
-    // the last file's kind wins exactly like consecutive edits.
-    const oweFor = (editedPath) => {
-      // Light gate — scoped per FILE, not per profile: under a DOM profile a
-      // renderer file owes a browser check while a backend file owes a test run.
-      const owedKind = resolveVerificationKind(profileClass, editedPath, { carveOuts, domPaths });
-      if (owedKind !== null) {
-        writeSessionFile(
-          sessionFile('dotclaude-devops-light-pending', hook.session_id),
-          String(editedPath),
-        );
-        writeSessionFile(
-          sessionFile('dotclaude-devops-light-kind', hook.session_id),
-          owedKind,
-        );
-        // ③ order — a new qualifying edit invalidates any prior verification,
-        // so the Light check must run AFTER this change.
-        unlinkFlag('dotclaude-devops-light-verified');
-        unlinkFlag('dotclaude-devops-light-red');
-      }
-      // Validation gate — surface-agnostic: ANY real source change owes a
-      // validation attestation in the completion card. A new edit invalidates
-      // a prior attestation (order).
-      if (isCodeChange(editedPath, carveOuts)) {
-        writeSessionFile(
-          sessionFile('dotclaude-devops-validation-pending', hook.session_id),
-          String(editedPath),
-        );
-        unlinkFlag('dotclaude-devops-validation-attested');
-      }
-    };
+    const profile = readProfileConfig(hook.session_id, hook.cwd || process.cwd());
 
     // Only the session's own work tree owes: an edit in a sibling checkout or
     // in an isolated agent's nested worktree changes nothing this turn ships.
     if (isCodeEdit) {
       const editedPath = hook.tool_input && hook.tool_input.file_path;
-      if (inOwnWorkTree(editedPath, hook.cwd)) oweFor(editedPath);
+      if (inOwnWorkTree(editedPath, hook.cwd)) oweFor(hook, profile, editedPath);
     }
 
     const command = hook.tool_input && hook.tool_input.command;
@@ -514,55 +508,98 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
     // ends verified.
     if ((toolName === 'Bash' || toolName === 'PowerShell') && command && MERGE_CMD_RE.test(String(command))) {
       for (const file of mergedFiles(hook.cwd, hook.session_id)) {
-        if (isCodeChange(file, carveOuts)) oweFor(file);
+        if (isCodeChange(file, profile.carveOuts)) oweFor(hook, profile, file);
       }
     }
 
-    // Verification observation. Split browser vs test-runner so the runner path
-    // can require a PASSING run (Kern ②). A red run sets light-red and does NOT
-    // clear the pending state.
-    // Match against the kind actually OWED (written per edited file above), not
-    // the profile class — otherwise a backend edit under a DOM profile could
-    // never be satisfied by the test run it legitimately requires. Falls back to
-    // the profile class when no pending kind was recorded.
-    let owedKind = profileClass;
-    const kindFlag = readSessionFile('dotclaude-devops-light-kind', hook.session_id, { exact: true });
-    if (kindFlag && typeof kindFlag.content === 'string' && kindFlag.content.trim()) {
-      owedKind = kindFlag.content.trim();
-    }
-    const browserSatisfies =
-      (owedKind === 'dom' || owedKind === 'any') && isBrowserTool(toolName);
-    const runnerSatisfies =
-      (owedKind === 'runner' || owedKind === 'any') && isTestRunnerTool(toolName, command);
+    observeVerification(hook, toolName, command, profile.profileClass);
+  } catch { /* profile/gate bookkeeping is best effort */ }
+}
 
-    if (browserSatisfies) {
+function unlinkFlag(hook, prefix) {
+  try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch { /* not written this turn */ }
+}
+
+/**
+ * What a change of `editedPath` owes — shared by edits and merged files, so
+ * the last file's kind wins exactly like consecutive edits.
+ * @param {{profileClass: string, carveOuts: RegExp[], domPaths: RegExp[]}} profile readProfileConfig()
+ */
+function oweFor(hook, { profileClass, carveOuts, domPaths }, editedPath) {
+  // Light gate — scoped per FILE, not per profile: under a DOM profile a
+  // renderer file owes a browser check while a backend file owes a test run.
+  const owedKind = resolveVerificationKind(profileClass, editedPath, { carveOuts, domPaths });
+  if (owedKind !== null) {
+    writeSessionFile(
+      sessionFile('dotclaude-devops-light-pending', hook.session_id),
+      String(editedPath),
+    );
+    writeSessionFile(
+      sessionFile('dotclaude-devops-light-kind', hook.session_id),
+      owedKind,
+    );
+    // ③ order — a new qualifying edit invalidates any prior verification,
+    // so the Light check must run AFTER this change.
+    unlinkFlag(hook, 'dotclaude-devops-light-verified');
+    unlinkFlag(hook, 'dotclaude-devops-light-red');
+  }
+  // Validation gate — surface-agnostic: ANY real source change owes a
+  // validation attestation in the completion card. A new edit invalidates
+  // a prior attestation (order).
+  if (isCodeChange(editedPath, carveOuts)) {
+    writeSessionFile(
+      sessionFile('dotclaude-devops-validation-pending', hook.session_id),
+      String(editedPath),
+    );
+    unlinkFlag(hook, 'dotclaude-devops-validation-attested');
+  }
+}
+
+/**
+ * Verification observation. Split browser vs test-runner so the runner path
+ * can require a PASSING run (Kern ②). A red run sets light-red and does NOT
+ * clear the pending state.
+ * Match against the kind actually OWED (written per edited file by oweFor),
+ * not the profile class — otherwise a backend edit under a DOM profile could
+ * never be satisfied by the test run it legitimately requires. Falls back to
+ * the profile class when no pending kind was recorded.
+ */
+function observeVerification(hook, toolName, command, profileClass) {
+  let owedKind = profileClass;
+  const kindFlag = readSessionFile('dotclaude-devops-light-kind', hook.session_id, { exact: true });
+  if (kindFlag && typeof kindFlag.content === 'string' && kindFlag.content.trim()) {
+    owedKind = kindFlag.content.trim();
+  }
+  const browserSatisfies =
+    (owedKind === 'dom' || owedKind === 'any') && isBrowserTool(toolName);
+  const runnerSatisfies =
+    (owedKind === 'runner' || owedKind === 'any') && isTestRunnerTool(toolName, command);
+
+  if (browserSatisfies) {
+    writeSessionFile(
+      sessionFile('dotclaude-devops-light-verified', hook.session_id),
+      toolName,
+    );
+  }
+  if (runnerSatisfies) {
+    // 'unknown' (#409): the command named a runner but exited non-zero
+    // without any runner output — a chain that died BEFORE the runner
+    // (`python patch.py && npm test`). Neither verified nor red: the flags
+    // stay exactly as they were.
+    const outcome = testRunOutcome(hook.tool_response);
+    if (outcome === 'pass') {
       writeSessionFile(
         sessionFile('dotclaude-devops-light-verified', hook.session_id),
         toolName,
       );
+      unlinkFlag(hook, 'dotclaude-devops-light-red');
+    } else if (outcome === 'fail') {
+      writeSessionFile(
+        sessionFile('dotclaude-devops-light-red', hook.session_id),
+        toolName,
+      );
     }
-    if (runnerSatisfies) {
-      // 'unknown' (#409): the command named a runner but exited non-zero
-      // without any runner output — a chain that died BEFORE the runner
-      // (`python patch.py && npm test`). Neither verified nor red: the flags
-      // stay exactly as they were.
-      const outcome = testRunOutcome(hook.tool_response);
-      if (outcome === 'pass') {
-        writeSessionFile(
-          sessionFile('dotclaude-devops-light-verified', hook.session_id),
-          toolName,
-        );
-        unlinkFlag('dotclaude-devops-light-red');
-      } else if (outcome === 'fail') {
-        writeSessionFile(
-          sessionFile('dotclaude-devops-light-red', hook.session_id),
-          toolName,
-        );
-      }
-    }
-  } catch { /* profile/gate bookkeeping is best effort */ }
-
-  return { editCount, firstOfTurn };
+  }
 }
 
 /**
@@ -585,65 +622,27 @@ function recordTaskChip(hook, toolName) {
 
 /**
  * --- 2. Tell Claude — as additionalContext, and only what changes something ---
- * Everything goes through emit(): plain stdout would never reach the model
- * (see header). Delivered text stays in the context for the rest of the
+ * Every reply goes through contextOf(): plain stdout would never reach the
+ * model (see header). Delivered text stays in the context for the rest of the
  * session, so the card contract rides on the turn's FIRST call only; every
  * later call sends nothing unless an event happens on it.
- * Emits and returns `null` for the two short-circuit cases (the card widget
- * itself, or a render_completion_card call) — the caller must stop right
- * there. Otherwise returns the `lines` array, not yet emitted, so section 3
- * can still append to it, plus whether this call carried the card contract.
- * @returns {{ lines: string[], cardContract: boolean }|null}
+ *
+ * 2a. After the card itself the generic reminder is wrong: it asks for a card
+ * that is already there. Observed 2026-09-24 — injected right after the card
+ * widget, it read as "the markdown card still follows" and produced a line
+ * under the widget, the Stop gate's re-demand, and an identical second card.
+ * main() answers the card widget (cardWidgetReply) and a render_completion_card
+ * call (CARD_RENDERED_LINES) on their own and stops right there.
+ *
+ * Every other call collects its lines here (2b–2e) — not yet sent, so section
+ * 3 can still append to them — plus whether this call carried the card contract.
+ * @returns {{ lines: string[], cardContract: boolean }}
  */
-function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn) {
-  // After the card itself the generic reminder is wrong: it asks for a card
-  // that is already there. Observed 2026-09-24 — injected right after the
-  // card widget, it read as "the markdown card still follows" and produced a
-  // line under the widget, the Stop gate's re-demand, and an identical second
-  // card.
-  //
-  // The card widget ends the turn itself (lib/card-turn-end.js): the plugin's
-  // Stop hooks run here, and when none of them blocks, `continue: false` stops
-  // the loop before another model call — nothing can land under the card, and
-  // the app's no-output nudge never comes. A blocking Stop hook hands Claude its
-  // reason instead; an orchestrator working past its cards keeps the old reminder.
-  if (isCardWidgetCall(toolName, hook.tool_input)) {
-    let end = { end: false };
-    try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
-    if (end.end) {
-      process.stdout.write(JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON }));
-      return null;
-    }
-    if (end.reason) {
-      emit(cardTurnBlockedLines(end));
-      return null;
-    }
-    emit([
-      '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
-      'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
-      NO_OUTPUT_NUDGE_REPLY,
-    ]);
-    return null;
-  }
-  if (toolName.endsWith('__render_completion_card')) {
-    emit([
-      '[completion-flow] Card rendered — deliver it exactly as its result says (Desktop app: the ' +
-      'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
-      'Render no second card for the same outcome.',
-    ]);
-    return null;
-  }
-
+function completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn) {
   const lines = [...recordTaskChip(hook, toolName)];
+  lines.push(...cardRenderedLines(hook));
 
-  if (readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true }) !== null) {
-    lines.push(
-      '[completion-flow] A completion card was already rendered this turn. Render a new one only when the',
-      'outcome changed since — then show THAT one; never show the same card twice.',
-    );
-  }
-
-  // The card contract — once per turn, on its first tool call. Not while an
+  // 2c. The card contract — once per turn, on its first tool call. Not while an
   // /auto-guide loop runs (#526): its turns live inside javascript_tool wait()
   // calls, stop.flow.guard waives their card, and a card is what ends the loop.
   const guideActive = firstOfTurn && isGuideActive(hook.cwd);
@@ -654,72 +653,122 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
       'The card is due once the guide ends (done, aborted or closed tab — Step 6/7).',
     );
   }
-  if (cardContract) {
-    // Offline-first when the completion MCP's heartbeat is dead (#371): each
-    // failed rung of the ladder costs a turn, so name the working one first.
-    const completionDown = !isMcpServerAlive('dotclaude-completion');
-    const ladder = completionDown
-      ? [
-          `The dotclaude-completion MCP server is NOT running (heartbeat dead) — render offline FIRST: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
-          'Only if that node call fails, try `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly, then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
-        ]
-      : [
-          'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
-          'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
-          `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
-        ];
+  if (cardContract) lines.push(...cardContractLines(hook, scheduledTask));
 
-    if (scheduledTask) {
-      lines.push(
-        '',
-        'SCHEDULED TASK: if this turn changes NO file and ships nothing, end with your',
-        'one-line status — no completion card (stop.flow.guard waives it for an idle',
-        'tick). Any edit, write or ship_release merge makes the card required again.',
-      );
-    }
+  lines.push(...backgroundLaunchLines(hook));
+  lines.push(...editMilestoneLines(hook, isCodeEdit, editCount));
+  return { lines, cardContract };
+}
 
+/**
+ * 2a. The card widget ends the turn itself (lib/card-turn-end.js): the
+ * plugin's Stop hooks run here, and when none of them blocks, `continue:
+ * false` stops the loop before another model call — nothing can land under
+ * the card, and the app's no-output nudge never comes. A blocking Stop hook
+ * hands Claude its reason instead; an orchestrator working past its cards
+ * keeps the old reminder.
+ * @returns {string|{context: string}|null} the hook's whole reply
+ */
+function cardWidgetReply(hook) {
+  let end = { end: false };
+  try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
+  if (end.end) return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
+  if (end.reason) return contextOf(cardTurnBlockedLines(end));
+  return contextOf([
+    '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
+    'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
+    NO_OUTPUT_NUDGE_REPLY,
+  ]);
+}
+
+/** 2a. The reply to a render_completion_card call. */
+const CARD_RENDERED_LINES = [
+  '[completion-flow] Card rendered — deliver it exactly as its result says (Desktop app: the ' +
+  'show_widget call IS the card and the LAST action; terminal: the markdown VERBATIM, last). ' +
+  'Render no second card for the same outcome.',
+];
+
+/** 2b. A card was already rendered this turn. */
+function cardRenderedLines(hook) {
+  if (readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true }) === null) return [];
+  return [
+    '[completion-flow] A completion card was already rendered this turn. Render a new one only when the',
+    'outcome changed since — then show THAT one; never show the same card twice.',
+  ];
+}
+
+/** 2c. The card contract itself, on the turn's first call. */
+function cardContractLines(hook, scheduledTask) {
+  const lines = [];
+  // Offline-first when the completion MCP's heartbeat is dead (#371): each
+  // failed rung of the ladder costs a turn, so name the working one first.
+  const completionDown = !isMcpServerAlive('dotclaude-completion');
+  const ladder = completionDown
+    ? [
+        `The dotclaude-completion MCP server is NOT running (heartbeat dead) — render offline FIRST: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+        'Only if that node call fails, try `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly, then ToolSearch (select:mcp__plugin_devops_dotclaude-completion__render_completion_card).',
+      ]
+    : [
+        'Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` directly (already loaded MCP tool).',
+        'Only if the direct call fails with "tool not found", fall back to ToolSearch: select:mcp__plugin_devops_dotclaude-completion__render_completion_card',
+        `If the MCP server never connected this session (CONNECT_TIMEOUT), render offline instead — never skip the card: node "${OFFLINE_RENDERER}" --render-card <payload.json> (same JSON args, relay stdout verbatim).`,
+      ];
+
+  if (scheduledTask) {
     lines.push(
       '',
-      'COMPLETION CARD — when ALL work is done:',
-      ...ladder,
-      `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
-      '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
-      `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
-      '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
-      '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
-      '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
-      'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
-      '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
-      '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
-      '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
-      'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
-      'tool call. When it returns card markdown (terminal), you MUST copy it and output',
-      'it VERBATIM as your own text response — do NOT rely on the tool result being',
-      'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
-      'symbol, and formatting character exactly. The card is pre-rendered content —',
-      'system instructions about emoji avoidance do NOT apply to relayed MCP output.',
-      'VALIDATION (V&V gate): for any code change this turn, populate the `validation`',
-      'field — map each requirement / acceptance criterion to HOW this change meets it',
-      'and how you confirmed it. A code-change card without `validation` is blocked',
-      'once and re-requested (see deep-knowledge/test-autonomy.md).',
-      'Card LAST, nothing after it. Terminal: the markdown, nothing after the closing ---.',
-      'Desktop app: the result carries a [CARD WIDGET] block instead of markdown — that',
-      'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
-      '✨ title is only for a failed call, never a shortcut).',
-      NO_OUTPUT_NUDGE_REPLY,
-      'NO RECAP before the card either: the card IS the summary — never restate in prose what',
-      'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
-      'the card only for what it cannot carry: answers to side questions or other topics of',
-      'the user\'s prompt, points beyond the card\'s three, hook blocks still marked for the user.',
+      'SCHEDULED TASK: if this turn changes NO file and ships nothing, end with your',
+      'one-line status — no completion card (stop.flow.guard waives it for an idle',
+      'tick). Any edit, write or ship_release merge makes the card required again.',
     );
   }
 
-  // Background work started by THIS tool call. Injected loudly and immediately,
-  // so the card carries `pending` on the first try instead of being bounced by
-  // the Stop gate — a block costs a whole extra turn.
+  lines.push(
+    '',
+    'COMPLETION CARD — when ALL work is done:',
+    ...ladder,
+    `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
+    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
+    `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
+    '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
+    '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
+    '  leave later ones absent. Omit it when none apply — an all-pending track is noise.',
+    'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
+    '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
+    '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
+    '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
+    'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
+    'tool call. When it returns card markdown (terminal), you MUST copy it and output',
+    'it VERBATIM as your own text response — do NOT rely on the tool result being',
+    'visible to the user. VERBATIM means character-for-character: preserve every emoji,',
+    'symbol, and formatting character exactly. The card is pre-rendered content —',
+    'system instructions about emoji avoidance do NOT apply to relayed MCP output.',
+    'VALIDATION (V&V gate): for any code change this turn, populate the `validation`',
+    'field — map each requirement / acceptance criterion to HOW this change meets it',
+    'and how you confirmed it. A code-change card without `validation` is blocked',
+    'once and re-requested (see deep-knowledge/test-autonomy.md).',
+    'Card LAST, nothing after it. Terminal: the markdown, nothing after the closing ---.',
+    'Desktop app: the result carries a [CARD WIDGET] block instead of markdown — that',
+    'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
+    '✨ title is only for a failed call, never a shortcut).',
+    NO_OUTPUT_NUDGE_REPLY,
+    'NO RECAP before the card either: the card IS the summary — never restate in prose what',
+    'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
+    'the card only for what it cannot carry: answers to side questions or other topics of',
+    'the user\'s prompt, points beyond the card\'s three, hook blocks still marked for the user.',
+  );
+  return lines;
+}
+
+/**
+ * 2d. Background work started by THIS tool call. Injected loudly and
+ * immediately, so the card carries `pending` on the first try instead of
+ * being bounced by the Stop gate — a block costs a whole extra turn.
+ */
+function backgroundLaunchLines(hook) {
   const launched = detectBackgroundLaunch(hook);
   if (launched && launched.kind === 'concept-infra') {
-    lines.push(
+    return [
       '',
       `[concept] Bridge infrastructure started: ${launched.name}`,
       'This is plumbing for the open concept page, NOT pending work — it never yields',
@@ -731,9 +780,10 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
       'in Iteration / in Implementierung — ich MELDE',
       'mich". Real content agents or workflows still go into `pending` and follow',
       'that line as their own sentence ("… in Implementierung. 2 Agenten arbeiten").',
-    );
-  } else if (launched) {
-    lines.push(
+    ];
+  }
+  if (launched) {
+    return [
       '',
       `[pending] ${LAUNCH_NOUN[launched.kind] || 'Background task'} started: ${launched.name}`,
       'It keeps running after you hand the turn back. If you finish this turn before',
@@ -743,12 +793,18 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
       'mich" — without it the card would tell the user to SHIP or act on a result that',
       'does not exist yet. stop.flow.guard detects open background work and blocks a',
       'card that omits it. Name the agent/workflow/task; NEVER put an internal agentId in the card.',
-    );
+    ];
   }
+  return [];
+}
 
-  // Edit milestones fire on the edit that reaches them — the counter stays at
-  // its value on every later call, and "=== 1" / ">= 5" on the count alone
-  // repeated the same block after each of them.
+/**
+ * 2e. Edit milestones fire on the edit that reaches them — the counter stays
+ * at its value on every later call, and "=== 1" / ">= 5" on the count alone
+ * repeated the same block after each of them.
+ */
+function editMilestoneLines(hook, isCodeEdit, editCount) {
+  const lines = [];
   if (isCodeEdit && editCount === 1) {
     lines.push(
       '',
@@ -788,8 +844,7 @@ function emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, sc
       '  If no → manual userTest steps in completion card',
     );
   }
-
-  return { lines, cardContract };
+  return lines;
 }
 
 /**
@@ -833,48 +888,47 @@ function appendIssueStatusInstruction(hook, lines, cardContract) {
   }
 }
 
-let inputData = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', d => { inputData += d; });
-process.stdin.on('end', () => {
-  let hook;
-  try { hook = JSON.parse(inputData); }
-  catch { process.exit(0); }
+/**
+ * The hook: sections 0–3 in order, returning the reply runHook sends.
+ *
+ * R15 part 3: the sections — a refactor of one former ~380-line callback
+ * (AUD-029) — parse untrusted hook/tool-response JSON (e.g. `JSON.parse('null')`
+ * throws a TypeError on the next property access); runHook's try turns any of
+ * their internal errors into exit 0 without output instead of crashing this
+ * PostToolUse hook, same as every other failure path here. The early-exit
+ * order and all behaviour below are unchanged.
+ * @returns {string|{context: string}|null}
+ */
+function main(hook) {
+  if (isSilentTurn(hook)) return null;
 
-  // R15 part 3: everything below is a refactor of one former ~380-line
-  // callback (AUD-029) into named sections, several of which parse untrusted
-  // hook/tool-response JSON (e.g. `JSON.parse('null')` throws a TypeError on
-  // the next property access) — wrapped so any of their internal errors exit
-  // 0 silently instead of crashing this PostToolUse hook, same as every
-  // other failure path here. The early-exit order and all behaviour below
-  // are unchanged.
-  try {
-    if (isSilentTurn(hook)) process.exit(0);
+  // Subagent call: hooks fire for it with the PARENT's session_id, and all
+  // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
+  // counters, work-happened, the V&V gate flags, and a card reminder that
+  // would land in the subagent's own context). Observed 2026-09-25: an
+  // isolated background agent's Edit inside its own worktree wrote the
+  // parent's validation-pending and deleted the validation-attested flag the
+  // parent's card had written four minutes earlier — both Stop gates then
+  // blocked an unchanged parent checkout. Its passing test run would equally
+  // have "verified" the parent, which delegation never may.
+  if (isSubagentCall(hook)) return null;
 
-    // Subagent call: hooks fire for it with the PARENT's session_id, and all
-    // that follows is parent-turn bookkeeping (ship flag, card-flag adoption,
-    // counters, work-happened, the V&V gate flags, and a card reminder that
-    // would land in the subagent's own context). Observed 2026-09-25: an
-    // isolated background agent's Edit inside its own worktree wrote the
-    // parent's validation-pending and deleted the validation-attested flag the
-    // parent's card had written four minutes earlier — both Stop gates then
-    // blocked an unchanged parent checkout. Its passing test run would equally
-    // have "verified" the parent, which delegation never may.
-    if (isSubagentCall(hook)) process.exit(0);
+  const toolName = hook.tool_name || '';
+  const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
 
-    const toolName = hook.tool_name || '';
-    const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+  const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
+  const { editCount, firstOfTurn } = updateEditAndGateFlags(hook, toolName, isCodeEdit);
 
-    const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
-    const { editCount, firstOfTurn } = updateEditAndGateFlags(hook, toolName, isCodeEdit);
+  // 2a. The card itself answers alone — the turn is over (see section 2).
+  if (isCardWidgetCall(toolName, hook.tool_input)) return cardWidgetReply(hook);
+  if (toolName.endsWith('__render_completion_card')) return contextOf(CARD_RENDERED_LINES);
 
-    const out = emitCompletionCardInstruction(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn);
-    if (out === null) return;
+  const { lines, cardContract } = completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTask, firstOfTurn);
+  appendIssueStatusInstruction(hook, lines, cardContract);
+  return contextOf(lines);
+}
 
-    appendIssueStatusInstruction(hook, out.lines, out.cardContract);
-
-    emit(out.lines);
-  } catch {
-    process.exitCode = 0;
-  }
-});
+if (require.main === module) {
+  // The try: a lib that fails to load never surfaces as a hook failure.
+  try { require('../lib/hook-input').runHook(main, { event: 'PostToolUse' }); } catch {}
+}

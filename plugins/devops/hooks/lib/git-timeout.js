@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module git-timeout
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description The one git subprocess timeout, named once (AUD-031). Before
  *   this module the same idea lived in three places with two values —
@@ -15,6 +15,13 @@
  *   past 60 s worst case — gitBudget() bounds a whole CHAIN of calls to one
  *   shared ceiling instead of letting each call re-arm its own.
  *
+ *   The git helpers live here too (harden scan 2026-09-26): they sat inside
+ *   run-contract-calls.js, a shell-parser module, while post.flow.completion
+ *   kept its own options object and pre.main.guard / pre.edit.branch /
+ *   prompt.ship.detect spawned git with no timeout at all. run-contract-calls
+ *   still re-exports gitOut / gitLines (tests spy on C.gitOut and hand C to
+ *   run-contract-qa's resolveBase).
+ *
  *   GIT_TIMEOUT_MS       the one per-call timeout (ms)
  *   SMALL_GIT_BUDGET_MS  a short shared budget (ms) for a 1-2 call git chain
  *     (H8: named once — pre.run.contract's onMainBranch fallback and
@@ -23,6 +30,9 @@
  *   gitBudget(totalMs)   → {timeout(), expired()} — a shared deadline for a
  *     chain of git calls; timeout() is the ms left, clamped to
  *     GIT_TIMEOUT_MS and never below 1 (execFileSync rejects 0 / negative).
+ *   gitRun(root, args, timeout?) → raw stdout (throws) — the one options object
+ *   gitOut(root, args, {budget}) → trimmed stdout | null (error or empty output)
+ *   gitLines(root, args, {timeout, budget}) → non-empty trimmed lines (throws)
  */
 
 /** The single git subprocess timeout (ms) — see the module header. */
@@ -68,4 +78,47 @@ function gitBudget(totalMs = GIT_TIMEOUT_MS) {
   };
 }
 
-module.exports = { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS, gitBudget };
+/**
+ * One git subprocess: stdout as utf8, stdin and stderr ignored, no console
+ * window on Windows. THROWS on a non-zero exit or a timeout.
+ * @param {string} root the working directory git runs in
+ * @param {string[]} args
+ * @param {number} [timeout] ms (default GIT_TIMEOUT_MS)
+ * @returns {string} raw stdout
+ */
+function gitRun(root, args, timeout = GIT_TIMEOUT_MS) {
+  const { execFileSync } = require('child_process');
+  return execFileSync('git', args, {
+    cwd: root, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+  });
+}
+
+/**
+ * AUD-031: the timeout for one call — a caller's shared `budget` (from
+ * gitBudget) bounds a whole CHAIN of calls together; without one,
+ * GIT_TIMEOUT_MS is each call's own ceiling.
+ */
+function callTimeout(budget) {
+  return budget ? budget.timeout() : GIT_TIMEOUT_MS;
+}
+
+/**
+ * Trimmed git stdout, or null on an error AND on empty output.
+ * @param {object} [opts] `{budget}` — an optional gitBudget() to bound a
+ *   chain of calls instead of each re-arming its own timeout.
+ */
+function gitOut(root, args, { budget } = {}) {
+  try { return gitRun(root, args, callTimeout(budget)).trim() || null; } catch { return null; }
+}
+
+/**
+ * H-A6: git stdout as non-empty lines. THROWS on a git failure, so a caller
+ * can tell "unknown" from "no lines" (pre's qa count).
+ * @param {object} [opts] `{timeout, budget}` — an explicit `timeout` wins;
+ *   otherwise a shared `budget` bounds the chain, else GIT_TIMEOUT_MS.
+ */
+function gitLines(root, args, { timeout, budget } = {}) {
+  return gitRun(root, args, timeout || callTimeout(budget)).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+}
+
+module.exports = { GIT_TIMEOUT_MS, TOTAL_GIT_BUDGET_MS, SMALL_GIT_BUDGET_MS, gitBudget, gitRun, gitOut, gitLines };

@@ -1,9 +1,10 @@
 /**
  * AUD-016: run-contract.js was split into run-contract-store.js /
  * run-contract-answers.js / run-contract-obligations.js / run-contract-cli.js.
- * This asserts the facade's export surface never drifts from the snapshot
- * taken before the split, and that every export actually resolves through
- * one of the sibling modules (no dangling re-export).
+ * This asserts the facade's export surface never drifts from its snapshot,
+ * and that every export actually resolves through one of the sibling modules
+ * (no dangling re-export). The facade is public API: a key leaves it only by
+ * an explicit decision (2026-09-26: the seven no production caller used).
  */
 import { describe, test, expect } from "vitest";
 import fs from "node:fs";
@@ -18,13 +19,14 @@ const answers = require("./run-contract-answers.js");
 const obligations = require("./run-contract-obligations.js");
 const cli = require("./run-contract-cli.js");
 
-// Snapshot taken from the pre-split run-contract.js `module.exports` (AUD-016).
+// Snapshot of the pre-split run-contract.js `module.exports` (AUD-016), minus
+// the seven entries dropped on 2026-09-26 — see DROPPED below.
 const EXPECTED_KEYS = [
   "OTHER_PLACEHOLDERS", "LIB_PATH", "rearmHint",
-  "disabled", "contractPath", "eventsPath", "prevPath", "pendingPath", "batchHandoffPath",
+  "disabled",
   "claim", "applyFollowUp", "answeredFields", "isPartialRouterCall", "mergeRouterAnswers",
-  "hasHeader", "followUpModeHint", "machinePatch",
-  "readContract", "readContractForCard", "readRawContract", "expiryNotice", "arm", "update",
+  "hasHeader", "machinePatch",
+  "readContract", "readContractForCard", "expiryNotice", "arm", "update",
   "record", "close", "events",
   "markPendingArm", "pendingArm", "clearPendingArm", "markBatchHandoff", "batchHandoffPending", "clearBatchHandoff",
   "extractAnswers", "isRouterCall", "parseRouterAnswers", "parseFollowUp", "parseMachinePrompt",
@@ -32,9 +34,26 @@ const EXPECTED_KEYS = [
   "formatBlock", "chosenLine", "summaryForCard", "cli",
 ].sort();
 
+// No production caller used these through the facade; they stay exported by
+// their owning module (tests require it directly).
+const DROPPED = {
+  store: ["contractPath", "eventsPath", "prevPath", "pendingPath", "batchHandoffPath", "readRawContract"],
+  answers: ["followUpModeHint"],
+};
+
 describe("run-contract.js facade (AUD-016)", () => {
-  test("exports exactly the pre-split key set", () => {
+  test("exports exactly the snapshot key set", () => {
     expect(Object.keys(RC).sort()).toEqual(EXPECTED_KEYS);
+  });
+
+  test("the dropped entries are gone from the facade but still live in their owning module", () => {
+    const modules = { store, answers };
+    for (const [modName, keys] of Object.entries(DROPPED)) {
+      for (const key of keys) {
+        expect(RC[key], key).toBeUndefined();
+        expect(typeof modules[modName][key], key).toBe("function");
+      }
+    }
   });
 
   test("every export is defined and LIB_PATH / OTHER_PLACEHOLDERS keep their shape", () => {
@@ -48,12 +67,12 @@ describe("run-contract.js facade (AUD-016)", () => {
 
   test("each export is reachable through its owning sibling module", () => {
     const owners = {
-      store: ["disabled", "contractPath", "eventsPath", "prevPath", "pendingPath", "batchHandoffPath",
-        "claim", "readContract", "readContractForCard", "readRawContract", "expiryNotice", "arm", "update",
+      store: ["disabled",
+        "claim", "readContract", "readContractForCard", "expiryNotice", "arm", "update",
         "record", "close", "events", "markPendingArm", "pendingArm", "clearPendingArm",
         "markBatchHandoff", "batchHandoffPending", "clearBatchHandoff", "LIB_PATH", "rearmHint"],
       answers: ["OTHER_PLACEHOLDERS", "applyFollowUp", "answeredFields", "isPartialRouterCall", "mergeRouterAnswers",
-        "hasHeader", "followUpModeHint", "machinePatch", "extractAnswers", "isRouterCall", "parseRouterAnswers",
+        "hasHeader", "machinePatch", "extractAnswers", "isRouterCall", "parseRouterAnswers",
         "parseFollowUp", "parseMachinePrompt"],
       obligations: ["skillName", "segments", "currentSegment", "segmentHasWork", "openObligations",
         "formatBlock", "chosenLine", "summaryForCard"],

@@ -13,6 +13,7 @@ vi.setConfig({ testTimeout: 60_000 });
 
 const require = createRequire(import.meta.url);
 const RC = require("./lib/run-contract.js");
+const store = require("./lib/run-contract-store.js");
 const C = require("./lib/run-contract-calls.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -86,19 +87,19 @@ describe("R1 — no clobbering re-arm", () => {
     RC.markPendingArm(dir, { sessionId: "s1", args: "" });
     pre("Edit", { file_path: f("src/a.js") });
     expect(RC.readContract(dir)).toMatchObject({ id: c.id, mode: "audit", ship: "auto" });
-    expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(dir))).toBe(false);
   });
 
   test("R1: a marker of another session never fallback-arms", () => {
     RC.markPendingArm(dir, { sessionId: "s2", args: "backlog" });
     expect(pre("Edit", { file_path: f("src/a.js") }).code).toBe(0);
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 
   test("R1: Skill do-run in a machine-prompt turn writes no arm marker", () => {
     for (const opener of ["AUTONOMOUS_AUTOSTART: mode=implement", "AUTONOMOUS_RESUME: x", "RUN_BACKLOG_AUTOSTART: queue=1"]) {
       post("Skill", { skill: "devops:do-run", args: "autonomous" }, {}, { transcript_path: transcript(opener) });
-      expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
+      expect(fs.existsSync(store.pendingPath(dir))).toBe(false);
     }
     post("Skill", { skill: "devops:do-run", args: "" }, {}, { transcript_path: transcript("mach das mal") });
     expect(RC.pendingArm(dir)).toMatchObject({ sessionId: "s1" });
@@ -108,7 +109,7 @@ describe("R1 — no clobbering re-arm", () => {
     RC.markPendingArm(dir, { sessionId: "s1" });
     const q = [{ header: "Fortsetzen", question: "Run fortsetzen?", options: [{ label: "Run fortsetzen" }, { label: "Neu starten" }] }];
     post("AskUserQuestion", { questions: q }, { questions: q, answers: { "Run fortsetzen?": "Run fortsetzen" } });
-    expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(dir))).toBe(false);
   });
 });
 
@@ -187,7 +188,7 @@ describe("R4 — batch hand-off way out", () => {
     expect(r.stderr).toContain("DOTCLAUDE_RUN_CONTRACT=off");
     expect(cli("batch-clear").code).toBe(1);
     expect(cli("batch-clear", "--reason", "stale from yesterday").out).toMatchObject({ ok: true, cleared: true });
-    expect(fs.existsSync(RC.batchHandoffPath(dir))).toBe(false);
+    expect(fs.existsSync(store.batchHandoffPath(dir))).toBe(false);
     expect(pre("Edit", { file_path: f("src/a.ts") }).stderr).not.toContain("do-batch plan");
   });
 });
@@ -376,7 +377,7 @@ describe("release / card gates use tool_input.cwd", () => {
       expect(RC.events(other).filter(e => e.k === "card")).toHaveLength(1);
       expect(RC.readContract(other, { sessionId: "s1" })).toBeNull();
       expect(RC.readContractForCard(other).closeReason).toContain("final card");
-      expect(fs.existsSync(RC.eventsPath(dir))).toBe(false);
+      expect(fs.existsSync(store.eventsPath(dir))).toBe(false);
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
   });
 
@@ -538,8 +539,8 @@ describe("C — atomic arm and update", () => {
     try {
       expect(RC.arm(dir, { mode: "backlog", sessionId: "s1" })).toBeNull();
     } finally { nodeFs.renameSync = real; }
-    expect(RC.readRawContract(dir)).toMatchObject({ id: old.id, mode: "audit" });
-    expect(fs.existsSync(RC.prevPath(dir))).toBe(false);
+    expect(store.readRawContract(dir)).toMatchObject({ id: old.id, mode: "audit" });
+    expect(fs.existsSync(store.prevPath(dir))).toBe(false);
   });
 
   test("C-arm-order: one failed rename is retried after 50 ms", () => {
@@ -554,8 +555,8 @@ describe("C — atomic arm and update", () => {
     let h;
     try { h = RC.arm(dir, { mode: "backlog", sessionId: "s1" }); } finally { nodeFs.renameSync = real; }
     expect(h).toMatchObject({ mode: "backlog" });
-    expect(RC.readRawContract(dir).id).toBe(h.id);
-    const prev = JSON.parse(fs.readFileSync(RC.prevPath(dir), "utf8"));
+    expect(store.readRawContract(dir).id).toBe(h.id);
+    const prev = JSON.parse(fs.readFileSync(store.prevPath(dir), "utf8"));
     expect(prev).toMatchObject({ id: old.id, mode: "audit" });
     expect(prev.events).toHaveLength(1);
     expect(RC.events(dir)).toEqual([]);
@@ -563,19 +564,19 @@ describe("C — atomic arm and update", () => {
 
   test("C-update-race: update re-reads before writing and never clears a concurrent close", () => {
     const c = armS1({ source: "fallback" });
-    const openText = fs.readFileSync(RC.contractPath(dir), "utf8");
+    const openText = fs.readFileSync(store.contractPath(dir), "utf8");
     RC.close(dir, "done: final card");
     const real = nodeFs.readFileSync;
     let stale = 2; // archiveIfExpired + readContract see the pre-close header
     let served = false;
     nodeFs.readFileSync = (file, ...rest) => {
-      if (stale > 0 && String(file) === RC.contractPath(dir)) { stale--; served = true; return openText; }
+      if (stale > 0 && String(file) === store.contractPath(dir)) { stale--; served = true; return openText; }
       return real(file, ...rest);
     };
     let out;
     try { out = RC.update(dir, { announced: true, closedAt: null }); } finally { nodeFs.readFileSync = real; }
     expect(served).toBe(true);
-    const raw = RC.readRawContract(dir);
+    const raw = store.readRawContract(dir);
     expect(raw.id).toBe(c.id);
     expect(raw.closedAt).not.toBeNull();
     expect(raw.closeReason).toBe("done: final card");
