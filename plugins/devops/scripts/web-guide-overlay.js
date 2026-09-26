@@ -515,18 +515,20 @@
     var spaceAbove = fabTop - GAP - M;
     var spaceBelow = vh - (fabTop + FAB + GAP) - M;
     var above = spaceAbove >= spaceBelow;
-    var top, maxH;
+    var maxH;
     if (above) {
+      // Anchored by its bottom edge just above the FAB: a short panel sits
+      // next to it, a long one grows upwards and stops at the top margin.
       maxH = Math.max(120, spaceAbove);
-      top = Math.max(M, fabTop - GAP - maxH);
-      maxH = Math.min(maxH, fabTop - GAP - top);
+      panel.style.top = "";
+      panel.style.bottom = Math.round(vh - fabTop + GAP) + "px";
     } else {
-      top = fabTop + FAB + GAP;
+      var top = fabTop + FAB + GAP;
       maxH = Math.max(120, Math.min(spaceBelow, vh - top - M));
+      panel.style.top = Math.round(top) + "px";
+      panel.style.bottom = "";
     }
     var right = clampNum(pos.right, M, Math.max(M, vw - panelW - M));
-    panel.style.top = Math.round(top) + "px";
-    panel.style.bottom = "";
     panel.style.right = Math.round(right) + "px";
     panel.style.left = "";
     panel.style.maxHeight = Math.round(maxH) + "px";

@@ -136,8 +136,8 @@ page without the overlay (it navigated between two calls) they return
 | `location` | Optional, 1-80 chars, no HTML. The navigation breadcrumb ("Wo: …"), rendered as its own prominent block at the top of the step — never buried inline in `text`. |
 | `copy` | Optional, non-empty array of `{ "value": string (1-200 chars), "label"?: string (1-40 chars) }`. Renders as chips with a clipboard button (`navigator.clipboard.writeText`, called only inside the click handler). The user still pastes the value in themselves — see § the user always submits. |
 | `checklist` | Optional, **2-4** strings (1-140 chars each, no HTML). Locally tickable sub-actions for one screen that needs more than one click; purely client-side UI state, never emitted as an event, and it does not participate in verification. |
-| `input` | Optional. Types: `text`, `secret`, `choice`, `confirm`. `secret` renders `<input type="password">` — value is still returned in the event (see § Secrets). `choice` renders one button per `options[]` entry; clicking one is the event (no separate Weiter). `confirm` is a checkbox the user must tick before Weiter. `required: true` disables Weiter until non-empty. |
-| `done` | `true` on the final step: panel shows a ✅ state, primary button reads **Fertig**, subtitle says the tab can be closed. |
+| `input` | Optional. Types: `text`, `secret`, `choice`, `confirm`. `secret` renders `<input type="password">` — value is still returned in the event (see § Secrets). `choice` renders one button per `options[]` entry; clicking one is the event (no separate Weiter). `confirm` is a checkbox the user must tick before Weiter. `required: true` disables Weiter until non-empty; `secret` and `confirm` are always required, and a secret is trimmed (whitespace alone never enables Weiter). |
+| `done` | `true` on the final step: panel shows a ✅ state, primary button reads **Fertig**, the hint says „Klicke **Fertig** — danach kannst du den Tab schließen." |
 
 ### The user always submits (#514)
 
@@ -198,12 +198,16 @@ Panel …" or "Abbruch gesendet – Claude beendet den Guide …". It swaps that
 "Claude hört gerade nicht zu — schreib im Chat „weiter"." (after an abort:
 „Guide beenden“) only when a click of this step
 is still undelivered, no `wait()` is live (one armed less than ~44 s ago),
-and the last live listener ended more than 10 s ago (AUD-C038) — never
-during a normal long-poll, and never after the click reached a live
-`wait()` (Claude has it and is working). The
-Claude loop separately re-sends the current step after 10 consecutive
-`wait()` timeouts and ends the guide after 30 (≈ 17 min of silence) —
-unrelated to the heartbeat, which only concerns the status text.
+and the last live listener ended more than 45 s ago (AUD-C038;
+`HEARTBEAT_STALE_MS` — normal gaps between two polls stay far below it) —
+never during a normal long-poll, and never after the click reached a live
+`wait()` (Claude has it and is working). A click that was delivered but got
+no new step within 90 s (`DELIVERED_STALE_MS`, typically a question Claude
+asked in the chat) turns the line into "Claude braucht länger – steht im
+Chat eine Frage, antworte bitte dort." The Claude loop separately counts
+time: 5 min without a real event → it re-sends the current step, 20 min →
+the guide pauses (recovery.md § Waiting) — unrelated to the heartbeat, which
+only concerns the status text.
 
 **Surviving a dead caller (#529).** `deliverEvent` (fired by every panel
 button) **always** pushes onto `eventQueue` first. It hands the event to the
@@ -220,7 +224,7 @@ forever — it always gets a definitive (if unobserved) resolution.
 ### State
 
 ```json
-{ "version": "1.12.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null, "lastDeliveredStepId": null, "sent": false, "destroyed": false }
+{ "version": "1.13.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null, "lastDeliveredStepId": null, "sent": false, "destroyed": false }
 ```
 
 `pendingWaiter` is `true` while a `wait()` call is currently armed (waiting
@@ -362,16 +366,18 @@ While the panel is genuinely unattended (Claude's turn ended without
 clearing the marker, or between turns), the overlay's own #513 heartbeat
 tells the user visibly instead of just disabling the button: a click nobody
 picked up switches the status line to "Claude hört gerade nicht zu — schreib
-im Chat „weiter"." once no listener was live for 10 s (§ Lost result
+im Chat „weiter"." once no listener was live for 45 s (§ Lost result
 recovery) — the "Claude is paused, type in chat" message #526 asks for.
 
 ## Payload helper — `scripts/web-guide.js`
 
 | Command | Output |
 |---------|--------|
-| `payload inject [--raw]` | The overlay source (lean by default) with the guide's token baked in, ending with `"injected"` / `"already-injected"` / `"blocked"` / `"reload-needed"` — paste into `javascript_tool.text`. |
+| `payload inject [--raw]` | The overlay source (lean by default) with the guide's token baked in, ending with `"injected"` / `"already-injected"` / `"blocked"` / `"reload-needed"` — paste into `javascript_tool.text`. Without a guide marker (no `guide active` yet) it exits 1 and prints nothing: an untokened overlay would drop every click. `--allow-untokened` bypasses that for the repo's tests only. |
 | `payload step <step.json>` | `window.claudeGuide.setStep(<json>, "<token>")`, guarded to `"reinject-needed"` when the global is missing, with the JSON validated against the schema above (exit 1 + reason on violation). |
 | `payload wait [ms]` | `window.claudeGuide.stringify(await window.claudeGuide.wait(<ms>, "<token>"))` (Finding 7: serialized with the overlay's native-captured stringify, never the page's own `JSON.stringify`), guarded to `JSON.stringify({"type":"reinject-needed"})` (default 30000; the CLI accepts up to 35000 as headroom, the loop uses 30000 — the CDP limit is ≈ 45 s). `ms=0` is the "drain" call (#529): reclaims a stranded event from the queue without arming a real wait. |
 | `payload destroy` | `window.claudeGuide.destroy("<token>")`, guarded to `"reinject-needed"` when the global is missing (Finding 7: `destroy()` now requires the channel token). |
-| `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600. Prints only `stored KEY → <path>`. |
+| `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600 — and inside a git work tree the file must be gitignored (`git check-ignore`), else it refuses and names the `.gitignore` line to add: an untracked secret file is one `git add -A` away from a push. Prints only `stored KEY → <path>`. |
+| `pause <seconds>` | Sleeps 1–55 s and prints `paused Ns` — the gap between two `payload wait 0` drains while the tab is hidden, and between two probes of a redirect chain (`recovery.md`). |
 | `guide active` / `guide clear` | Writes (with the channel token, kept until `guide clear`) / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). A failed removal exits 1 with `guide-clear-failed`, never `guide-cleared`. |
+| `guide status` | `{active, ageMinutes, lastStep}` from the marker — the last step sent, for resuming after a compaction or restart. Never prints the token. |

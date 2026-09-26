@@ -503,6 +503,20 @@ describe("#530: panel position clamps to the viewport (Fix 3)", () => {
     expect(right).toBeGreaterThanOrEqual(8);
     expect(400 - right - 340).toBeGreaterThanOrEqual(8 - 0.5); // left edge inside the viewport margin
   });
+
+  // Live check: with the FAB in its default bottom-right spot the panel was
+  // pinned to the top of the window, far away from the FAB it belongs to.
+  test("with the FAB at the bottom the panel sits right above it and grows upwards", () => {
+    const a = page();
+    Object.defineProperty(a.w, "innerWidth", { value: 1100, configurable: true });
+    Object.defineProperty(a.w, "innerHeight", { value: 640, configurable: true });
+    a.api().setStep(STEP, TOKEN);
+    const panel = a.shadow().querySelector(".panel");
+    // FAB: bottom 24 + 56 high → its top edge at 560; the panel ends 12 px above.
+    expect(panel.style.top).toBe("");
+    expect(panel.style.bottom).toBe("92px");
+    expect(parseFloat(panel.style.maxHeight)).toBe(640 - 80 - 12 - 8);
+  });
 });
 
 describe("#530: the done step (Fix 4)", () => {
