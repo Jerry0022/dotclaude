@@ -223,11 +223,14 @@ describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C0
   const skippedWt = (res, name) => res.autoClean.skipped.find((s) => s.kind === "worktree" && path.basename(s.path) === name);
 
   test("isRegenerable: build output only", () => {
-    for (const e of ["node_modules/", "pkg/a/node_modules/", "dist/", "src/__pycache__/", "x/y.pyc", "target/debug/app", ".next/"]) {
-      expect(isRegenerable(e)).toBe(true);
+    for (const e of ["node_modules/", "pkg/a/node_modules/", "dist/", "src/__pycache__/", "x/y.pyc", "target/debug/", ".next/"]) {
+      expect(isRegenerable(e), e).toBe(true);
     }
-    for (const e of [".env", "BURN-SALVAGE-1.patch", ".claude/audit/", ".claude/batch.md", "concepts/", "dist", "notes/dist.txt"]) {
-      expect(isRegenerable(e)).toBe(false);
+    // A file listed on its own under a build-named folder: that folder is not
+    // ignored as a whole, so the file is no build output (a secret, a keystore).
+    for (const e of [".env", "BURN-SALVAGE-1.patch", ".claude/audit/", ".claude/batch.md", "concepts/", "dist", "notes/dist.txt",
+      "build/.env", "target/release.keystore", "out/cert.p12", "target/debug/app"]) {
+      expect(isRegenerable(e), e).toBe(false);
     }
   });
 

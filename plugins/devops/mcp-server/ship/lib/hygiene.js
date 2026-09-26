@@ -317,9 +317,12 @@ export function isRegenerable(entry) {
   const p = String(entry).replace(/\\/g, "/");
   const isDir = p.endsWith("/");
   const segs = p.replace(/\/+$/, "").split("/").filter(Boolean);
-  const dirs = isDir ? segs : segs.slice(0, -1);
-  if (dirs.some((s) => REGENERABLE_DIRS.has(s))) return true;
-  return !isDir && REGENERABLE_FILE.test(segs[segs.length - 1] || "");
+  // `--ignored=matching` names an ignored folder as a whole ("dist/"). A FILE
+  // listed on its own under a build-named folder ("build/.env") means that
+  // folder is not ignored — the file is not build output and may be the only
+  // copy (a secret, a keystore).
+  if (isDir) return segs.some((s) => REGENERABLE_DIRS.has(s));
+  return REGENERABLE_FILE.test(segs[segs.length - 1] || "");
 }
 
 /**
