@@ -652,6 +652,9 @@ describe("AUD-025: gate budget", () => {
     const main = src.slice(src.indexOf("function main("));
     expect(main.indexOf("gitBudget(TOTAL_GIT_BUDGET_MS)")).toBeGreaterThan(-1);
     expect(main.indexOf("gitBudget(TOTAL_GIT_BUDGET_MS)")).toBeLessThan(main.indexOf("classify(hook"));
+    // … and handed into it, down to shellCallFacts' HEAD read.
+    expect(main).toContain("classify(hook, root, cwd, C, budget)");
+    expect(src).toContain("C.shellCallFacts(hook, root, cwd, { after: false, budget })");
   });
 
 });

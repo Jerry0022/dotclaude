@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.5
+ * @version 0.4.6
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -71,14 +71,14 @@ function onMainBranch(root, C, budget, fallbackTimeoutMs) {
 }
 
 /** The gates this call hits: {gates:[], batch:boolean, closes, base}. */
-function classify(hook, root, cwd, C) {
+function classify(hook, root, cwd, C, budget) {
   const tool = hook.tool_name || '';
   const input = C.toolInput(hook);
   if (C.EDIT_TOOLS.has(tool)) {
     return C.isGatedEdit(tool, input, root, cwd) ? { gates: ['edit'], batch: true } : null;
   }
   if (C.SHELL_TOOLS.has(tool)) {
-    const f = C.shellCallFacts(hook, root, cwd, { after: false });
+    const f = C.shellCallFacts(hook, root, cwd, { after: false, budget });
     const gates = [];
     if (f.commit) gates.push('commit');
     if (f.itemBranch) gates.push('branch');
@@ -309,12 +309,12 @@ function main(hook) {
   // PreToolUse fails open (exits 0, gating nothing). The walk shares the
   // exact same ceiling as the git calls that follow it (base resolution,
   // diffs, ls-files, the pushHead branch check), not a fresh one. AUD-025:
-  // created BEFORE classify() — its branch-creation HEAD read (up to one
-  // 5 s git call, not budget-aware) now counts against the same 15 s
-  // deadline instead of adding to it (5 + 15 s met hooks.json's 20 s
-  // timeout, and a timed-out gate fails open).
+  // created BEFORE classify() and handed into it — its branch-creation HEAD
+  // read is bounded by the same 15 s deadline instead of adding a 5 s call
+  // on top of it (5 + 15 s met hooks.json's 20 s timeout, and a timed-out
+  // gate fails open).
   const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
-  const call = classify(hook, root, cwd, C);
+  const call = classify(hook, root, cwd, C, budget);
   if (!call) return ok();
 
   const batchMsg = batchRefusal(call, root, RC, sessionId);

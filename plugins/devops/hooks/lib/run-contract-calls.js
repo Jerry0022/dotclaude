@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.5
+ * @version 0.5.6
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -935,15 +935,16 @@ function isItemBranch(facts, hook, current) {
  * @returns {{commit:boolean, itemBranch:boolean, branchName:string|null,
  *   card:{readable:boolean, variant:string|null, final:boolean}|null, release:boolean}}
  */
-function shellCallFacts(hook, root, cwd, { after = false } = {}) {
+function shellCallFacts(hook, root, cwd, { after = false, budget: callerBudget } = {}) {
   // RT3-R5: the tool decides the dialect (PowerShell: `` ` `` escapes, no backtick substitution).
   const f = commandFacts(toolInput(hook).command, { tool: hook && hook.tool_name });
   let itemBranch = false;
   if (f.branch) {
     const plain = !(hook.agent_id || f.worktree || f.detach);
-    // R11: only the post path (`after`) needs a shared budget — pre's single
-    // HEAD read never chains a second call.
-    const budget = after ? gitBudget(POST_BASE_BRANCH_BUDGET_MS) : undefined;
+    // R11: the post path (`after`) chains two reads under its own budget;
+    // pre hands in its invocation budget so this HEAD read counts against
+    // the same 15 s deadline as the rest of the gate (AUD-025).
+    const budget = callerBudget || (after ? gitBudget(POST_BASE_BRANCH_BUDGET_MS) : undefined);
     itemBranch = isItemBranch(f, hook, plain ? baseBranch(root, f.branchName, after, budget) : null);
   }
   let card = null;

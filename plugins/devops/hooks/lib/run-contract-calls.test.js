@@ -347,6 +347,20 @@ describe("R11: baseBranch / shellCallFacts share one budget across their 2 git c
     expect(facts.branchName).toBe("item/1");
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  // AUD-025: pre hands its invocation budget in, so the branch-creation HEAD
+  // read is bounded by the gate's one deadline instead of a fresh 5 s call.
+  test("shellCallFacts(after:false) reads HEAD under the caller's budget", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rc-shellfacts-budget-"));
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    let asked = 0;
+    const budget = { timeout: () => { asked++; return 5000; }, expired: () => false };
+    const hook = { tool_name: "Bash", tool_input: { command: "git checkout -b fix/9" } };
+    const facts = C.shellCallFacts(hook, dir, dir, { after: false, budget });
+    expect(facts.branchName).toBe("fix/9");
+    expect(asked).toBeGreaterThanOrEqual(1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe("R15: originMatches — a GitHub MCP merge's owner/repo vs this checkout's origin", () => {
