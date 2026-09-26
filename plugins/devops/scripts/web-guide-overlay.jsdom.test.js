@@ -334,3 +334,25 @@ describe("harden pass: focus hand-off, labelled options, live status", () => {
     expect(spin.style.display).toBe("");
   });
 });
+
+describe("polish pass: a same-step re-send after a delivered click", () => {
+  test("re-arms the step instead of leaving it stuck in the sent state", async () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    btn(a, "Weiter").click();
+    const ev = await a.api().wait(0, TOKEN); // delivered: nothing queued any more
+    expect(ev).toMatchObject({ type: "next", stepId: "3" });
+    expect(btn(a, "Weiter").disabled).toBe(true); // still shows "sent"
+    expect(a.api().setStep(STEP, TOKEN)).toBe("ok"); // Claude asks again (SKILL.md 5c)
+    expect(btn(a, "Weiter").disabled).toBe(false);
+  });
+
+  test("an unchanged re-send while the click is still queued keeps the sent state", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    btn(a, "Weiter").click(); // nobody listening: queued
+    expect(a.api().setStep(STEP, TOKEN)).toBe("ok");
+    expect(btn(a, "Weiter").disabled).toBe(true);
+    expect(a.api().state().queued).toBe(1);
+  });
+});

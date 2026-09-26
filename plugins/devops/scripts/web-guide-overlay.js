@@ -260,9 +260,10 @@
     "button.btn.chipbtn{padding:4px 8px;font-size:12px;border-radius:6px}",
     ".primary{background:#6d28d9;color:#fff}",
     "button.btn:disabled{opacity:.5;cursor:not-allowed}",
-    "button.btn:not(:disabled):hover,.fab:hover,.edgetab:hover{filter:brightness(.93)}",
+    // Hover only where a pointer hovers — a tap must not leave the look behind.
+    "@media(hover:hover){button.btn:not(:disabled):hover,.fab:hover,.edgetab:hover{filter:brightness(.93)}",
+    "  .collapse:hover{background:rgba(255,255,255,.15)}}",
     "button.btn:not(:disabled):active{filter:brightness(.85)}",
-    ".collapse:hover{background:rgba(255,255,255,.15)}",
     ":focus-visible{outline:2px solid #6d28d9;outline-offset:2px}",
     ".head :focus-visible{outline-color:#fff}",
     ".secondary{background:#eee;color:#333}",
@@ -299,8 +300,12 @@
     "  .chip{background:#2a2a31}",
     "  .chipbtn{background:#3a3a44;color:#eee}",
     "  .status{color:#aaa}",
+    "  .tertiary{color:#f87171}",
     "  :focus-visible{outline-color:#e9d5ff}",
     "  .head :focus-visible{outline-color:#fff}",
+    "}",
+    "@media(prefers-color-scheme:dark) and (hover:hover){",
+    "  button.btn:not(:disabled):hover,.fab:hover,.edgetab:hover{filter:brightness(1.15)}",
     "}",
   ].join("\n");
   shadow.appendChild(styleEl);
@@ -956,11 +961,15 @@
   function panelKey(e) {
     if (e.type !== "keydown") return;
     if (e.key === "Escape") {
+      // An open tooltip is dismissed first (WCAG 1.4.13); the next Escape acts.
+      var tipOpen = !fabTip.hidden;
       hideFabTip();
+      if (tipOpen) return;
       if (edgeTab) {
         edgeTab = false; // #516: Escape restores from the edge tab, too
-        render();
+        render(true);
         saveState();
+        if (collapsed) focusHandle();
       } else if (!collapsed) {
         collapsed = true;
         render();
@@ -1015,8 +1024,12 @@
       var isNewStep = !currentStep || !step || currentStep.id !== step.id;
       // AUD-C008: the skill's recovery re-sends the same step after a
       // re-inject; an unchanged re-send keeps the panel (and a click the
-      // #513 queue preserved) exactly as it is.
-      if (!isNewStep && sameStepContent(step, currentStep)) {
+      // #513 queue preserved) exactly as it is — unless the panel still shows
+      // a click that was already delivered: then the re-send is Claude asking
+      // again (SKILL.md 5c) and the step must become answerable once more.
+      var queuedHere = !!step && eventQueue.some((e) => e.stepId === step.id);
+      var sentShown = !!statusEl && statusEl.style.display !== "none" && activeBtns.some((b) => b.disabled);
+      if (!isNewStep && sameStepContent(step, currentStep) && (queuedHere || !sentShown)) {
         saveState();
         return "ok";
       }

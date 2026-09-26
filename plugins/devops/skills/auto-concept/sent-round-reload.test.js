@@ -175,6 +175,10 @@ function retryPage({
       timeoutMs == null ? deadline : deadline.replace(/\d+/, String(timeoutMs)),
       fnSource("retryPendingSubmission"),
       fnSource("_deliverPending"),
+      fnSource("_pendingDelivered"),
+      "window.__cleared = 0; window.__restored = 0;",
+      "window.clearSubmitWarning = function () { window.__cleared++; };",
+      "window.restoreInFlightRound = function () { window.__restored++; };",
     ].join(";\n")
   );
   return window;
@@ -205,6 +209,16 @@ describe("the offline queue is retried idempotently", () => {
     await w.retryPendingSubmission();
     expect(w.__posts.length).toBe(0);
     expect(w.localStorage.getItem("concept-test-pending")).toBeNull();
+  });
+
+  test("a delivered retry retires the offline note and veils the round again (polish)", async () => {
+    const w = retryPage();
+    const run = w.retryPendingSubmission();
+    await new Promise(r => setTimeout(r, 0));
+    w.__release.forEach(f => f());
+    await run;
+    expect(w.__cleared, "the stale 'bridge unreachable' note is removed").toBe(1);
+    expect(w.__restored, "restoreInFlightRound() re-veils a round that came back unveiled").toBe(1);
   });
 
   test("a different submission on the bridge does not swallow the queued one", async () => {

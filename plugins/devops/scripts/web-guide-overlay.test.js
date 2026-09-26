@@ -22,7 +22,11 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // stringify()).
 // Raised from 48.5 KB for the harden pass (state styles, focus hand-off after
 // collapse, a live-region status line, labelled choice options).
-const MAX_BYTES = 49.5 * 1024;
+// Raised from 49.5 KB for the polish pass (hover only under (hover:hover),
+// dark hover/tertiary colours, Escape dismissing an open tooltip first, a
+// same-step re-send that re-arms a delivered step). The injected payload is
+// the lean form (comments and indentation stripped) — about two thirds of this.
+const MAX_BYTES = 52 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----

@@ -12077,8 +12077,10 @@ async function submitWithAction(action) {
       showSubmitWarning('{{panel.submit_queued_offline}}');
     } else {
       // The bridge answered but could not persist (disk full, store gone).
-      // Nothing retries this on its own, so do NOT leave a "sent" panel
-      // standing over it: hand control back and say why.
+      // The heartbeat retry keeps offering the local copy, but nothing says
+      // when the store recovers — so do NOT leave a "sent" panel standing
+      // over it: hand control back and say why (a later delivery veils the
+      // round again, _pendingDelivered()).
       restorePanelToReady();
       showSubmitWarning('{{panel.submit_not_durable}}');
     }
@@ -13216,7 +13218,7 @@ async function _deliverPending(pendingKey, pending) {
       if (id) {
         const cur = await fetch('/decisions', { cache: 'no-store', signal });
         const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
-        if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
+        if (seen.submission_id === id) { _pendingDelivered(pendingKey); return; }
       }
     } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
     const res = await fetch('/decisions', {
@@ -13229,9 +13231,21 @@ async function _deliverPending(pendingKey, pending) {
     // Drop the local copy ONLY once the bridge confirms it reached disk.
     // `res.ok` alone is not that confirmation — see submitWithAction — and
     // neither is a body the deadline cut off.
-    if (res.ok && body.durable !== false && !(signal && signal.aborted)) localStorage.removeItem(pendingKey);
+    if (res.ok && body.durable !== false && !(signal && signal.aborted)) _pendingDelivered(pendingKey);
   } catch (e) { /* still offline, or the deadline hit */ }
   finally { if (timer) clearTimeout(timer); }
+}
+// The queued round reached the bridge: drop the local copy, retire the
+// "bridge unreachable, will retry" note (only the attachments note can still
+// hold), and veil the round again — a reload while it sat in the queue came
+// back unveiled, because the bridge had nothing yet (restoreInFlightRound
+// does nothing while the round is already shown as sent).
+function _pendingDelivered(pendingKey) {
+  localStorage.removeItem(pendingKey);
+  if (typeof clearSubmitWarning === 'function') clearSubmitWarning();
+  if (typeof unsyncedAttachmentCount === 'function' && unsyncedAttachmentCount() > 0
+      && typeof showSubmitWarning === 'function') showSubmitWarning('{{panel.attachments_not_synced}}');
+  if (typeof restoreInFlightRound === 'function') restoreInFlightRound();
 }
 ```
 
