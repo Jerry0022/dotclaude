@@ -94,8 +94,13 @@ the agent starts). Order:
    (`usage-unknown`). Blind mode still honours the checks that need no
    fresh number: a passed week reset drains, and while the 5-hour window of
    the last reading has not reset, a task that would overrun it pauses until
-   that reset. A fresh reading ends blind mode. The first version
-   acted on whatever number was cached and ran the account into the limit.
+   that reset — the projection adds up every blind task claimed since that
+   reading (not just the one about to spawn), reset on the next fresh
+   reading or on the window itself rolling over while still blind; several
+   blind tasks in a row that each fit alone can still exceed the window
+   together, and this is what catches that. A fresh reading ends blind
+   mode. The first version acted on whatever number was cached and ran the
+   account into the limit.
 3. **Week reset** since the start → drain (`week-reset`): the budget being
    burned is gone — checked with or without a usage reading.
 4. **Reserve** reached → drain (`reserve`).
@@ -193,9 +198,18 @@ salvaged as a `wip(burn):` commit on its own branch (a refusing pre-commit
 hook → `BURN-SALVAGE-<id>.patch`; hooks are never skipped). Secret-shaped
 files (`.env*`, keys, certificates, credential and token files — matched
 case-insensitively) never enter the salvage, even when the agent had already
-staged them; a failed `git add` salvages nothing and says so. Every
-`gate`/`state` write holds `BURN-STATE.json.lock`, so parallel calls never
-claim one task twice. Then
+staged them; a failed `git add` salvages nothing and says so. The filter also
+catches real source files that happen to be secret-shaped (a `secrets.ts`, a
+committed `.npmrc`): `salvageWorktree` returns every path it left out as
+`excluded`, carried onto the requeued task and into `resume-check`'s printed
+actions, so the requeue is never silently missing files. Every `gate`/`state`
+write holds `BURN-STATE.json.lock` — written with the holder's PID and
+timestamp, taken over once that PID is dead or the lock is older than
+`LOCK_STALE_MS`, and only by renaming the stale lock to a unique name first
+(the loser of that race retries instead of also holding it) before creating a
+fresh one with `wx` — so parallel calls never claim one task twice and a
+holder killed mid-lock is never stuck blocking every waiter for the full
+stale window. Then
 `continue-agent` (same session, agent id known → `SendMessage`, context
 intact) · `merge` · `requeue-with-branch` (a fresh agent continues the wip
 branch — it re-reads, it does not redo) · `requeue`.

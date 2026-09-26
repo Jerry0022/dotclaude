@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script burn-plan
- * @version 0.2.0
+ * @version 0.2.1
  * @plugin devops
  * @description The deterministic core of `/do-run burn`. Everything the burn
  *   mode used to ask the model to compute or remember lives here, as code
@@ -530,7 +530,7 @@ function landTask(state, id, { sha, pushed = true }, nowMs) {
   return s;
 }
 
-function requeueTask(state, id, { branch, note, salvage } = {}, nowMs) {
+function requeueTask(state, id, { branch, note, salvage, excluded } = {}, nowMs) {
   const s = clone(state);
   const i = findIndex(s.inFlight, id);
   if (i === -1) throw new Error(`task ${id} is not in flight`);
@@ -541,11 +541,14 @@ function requeueTask(state, id, { branch, note, salvage } = {}, nowMs) {
     ...(branch || task.branch ? { branch: branch || task.branch } : {}),
     ...(note ? { note } : {}),
     ...(salvage ? { salvage } : {}),
+    // Paths the salvage refused as secret-shaped: the requeued task starts
+    // without them, so it needs to know rather than find out silently.
+    ...(excluded && excluded.length ? { excluded } : {}),
     requeues: (task.requeues || 0) + 1,
   };
   s.queue.unshift(back);
   s.queue = sortQueue(s.queue);
-  pushEvent(s, nowMs, 'requeue', { id, branch: back.branch || null, salvage: salvage || null });
+  pushEvent(s, nowMs, 'requeue', { id, branch: back.branch || null, salvage: salvage || null, excluded: back.excluded || null });
   return s;
 }
 
@@ -740,7 +743,7 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
   const spawnOut = (pick, profile, extra) => {
     if (claim) Object.assign(s, claimTask(s, pick.id, nowMs, { profile }));
     return out('spawn', {
-      task: { id: pick.id, task: pick.task, size: pick.size, priority: pick.priority, branch: pick.branch || null, note: pick.note || null, salvage: pick.salvage || null },
+      task: { id: pick.id, task: pick.task, size: pick.size, priority: pick.priority, branch: pick.branch || null, note: pick.note || null, salvage: pick.salvage || null, excluded: pick.excluded || null },
       taskProfile: profile,
       models: modelOverrides(profile),
       passes: PROFILES[profile].passes,
@@ -784,9 +787,15 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
       ? Date.parse(s.budgetAt.sessionResetAt)
       : (Number.isFinite(checkedMs) ? checkedMs + 5 * 3600000 : NaN);
     const sameWindow = lastWin !== null && !(nowMs >= winResetMs);
+    // Running total of every blind task's projected window spend since the
+    // last good reading (or since the window itself rolled over while still
+    // blind): without it, several blind tasks each fit alone but together
+    // overrun the 5-hour cap.
+    if (!sameWindow) s.blind.windowSpentPct = 0;
+    else s.blind.windowSpentPct = s.blind.windowSpentPct || 0;
     const { rate: blindRate } = sessionRatePerLane(s, s.profile, cal);
     const fitsBlindWindow = (t) => !sameWindow || lastWin < FRESH_WINDOW_PCT
-      || lastWin + BLIND_SAFETY * blindRate * taskHours(t.size, taskProfile(t, runProfile), cal) <= 100 - SESSION_RESERVE_PCT;
+      || lastWin + s.blind.windowSpentPct + BLIND_SAFETY * blindRate * taskHours(t.size, taskProfile(t, runProfile), cal) <= 100 - SESSION_RESERVE_PCT;
     const pick = s.queue.find((t) => !conflicts(t) && fitsBlindBudget(t) && fitsBlindWindow(t));
     if (!pick) {
       if (sameWindow && s.queue.some(fitsBlindBudget) && Number.isFinite(winResetMs)) {
@@ -803,6 +812,7 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
     }
     const profile = taskProfile(pick, runProfile);
     s.blind.estSpentPct = round2(s.blind.estSpentPct + taskCost(pick.size, profile, cal));
+    s.blind.windowSpentPct = round2(s.blind.windowSpentPct + BLIND_SAFETY * blindRate * taskHours(pick.size, profile, cal));
     return spawnOut(pick, profile, { blind: true, blindLeftPct: round1(left) });
   }
   s.holds = 0;
@@ -1190,6 +1200,14 @@ function stagedPaths(worktree) {
   return out.split('\0').filter(Boolean);
 }
 
+/** Every changed path in the worktree (tracked + untracked), git-ignored ones aside. */
+function dirtyPaths(worktree) {
+  const tracked = tryGit(worktree, ['diff', '--name-only', '--no-renames', '-z', 'HEAD']);
+  const untracked = tryGit(worktree, ['ls-files', '--others', '--exclude-standard', '-z']);
+  const all = [tracked, untracked].filter((s) => s != null).join('\0');
+  return [...new Set(all.split('\0').filter(Boolean))];
+}
+
 /**
  * Commit a dirty worktree's diff as wip on its own branch. Hooks stay on
  * (no --no-verify): when a pre-commit hook refuses the wip commit, the diff
@@ -1206,6 +1224,11 @@ function salvageWorktree(info, { stateDir }) {
   const current = tryGit(wt, ['rev-parse', '--abbrev-ref', 'HEAD']);
   if (!current || current === 'HEAD') return { ok: false, error: 'detached HEAD — not salvaged' };
   if (!mayWrite(stateDir, current)) return { ok: false, error: `on ${current} — never salvaged onto a protected branch above the session branch` };
+  // Taken before `add`: the excludes keep secret-shaped paths out of the
+  // index entirely, so diffing the final staged set against everything that
+  // was dirty is the only way to know what got left behind — including
+  // false positives like a real `secrets.ts` or a committed `.npmrc`.
+  const before = dirtyPaths(wt);
   const excludes = SALVAGE_EXCLUDES.map((p) => `:(exclude,glob,icase)**/${p}`);
   try {
     git(wt, ['add', '-A', '--', '.', ...excludes]);
@@ -1213,7 +1236,7 @@ function salvageWorktree(info, { stateDir }) {
     // Nothing is staged reliably after a failed add (a stale index.lock, a
     // timeout): a patch now would be empty or partial. Say so, keep the
     // worktree as it is — it is the only copy.
-    return { ok: false, error: `git add failed — nothing salvaged, worktree left as is: ${firstLine(err)}` };
+    return { ok: false, error: `git add failed — nothing salvaged, worktree left as is: ${firstLine(err)}`, excluded: [] };
   }
   let staged;
   try {
@@ -1224,12 +1247,14 @@ function salvageWorktree(info, { stateDir }) {
     if (left.length) throw new Error(`secret-shaped path(s) still staged: ${left.join(', ')}`);
   } catch (err) {
     tryGit(wt, ['reset', '-q']);
-    return { ok: false, error: `could not unstage secret-shaped files — nothing salvaged: ${firstLine(err)}` };
+    return { ok: false, error: `could not unstage secret-shaped files — nothing salvaged: ${firstLine(err)}`, excluded: before };
   }
-  if (!staged.length) return { ok: false, error: 'nothing but excluded files to salvage' };
+  const stagedSet = new Set(staged);
+  const excluded = before.filter((f) => !stagedSet.has(f));
+  if (!staged.length) return { ok: false, error: 'nothing but excluded files to salvage', excluded };
   try {
     git(wt, ['commit', '-q', '-m', msg], { timeout: GIT_COMMIT_TIMEOUT_MS });
-    return { ok: true, method: 'commit', sha: git(wt, ['rev-parse', '--short', 'HEAD']) };
+    return { ok: true, method: 'commit', sha: git(wt, ['rev-parse', '--short', 'HEAD']), excluded };
   } catch (err) {
     const file = path.join(stateDir, `BURN-SALVAGE-${info.id}.patch`);
     try {
@@ -1238,11 +1263,11 @@ function salvageWorktree(info, { stateDir }) {
       const bytes = fs.existsSync(file) ? fs.statSync(file).size : 0;
       if (!bytes) {
         try { fs.unlinkSync(file); } catch { /* never written */ }
-        return { ok: false, error: `commit failed and the patch came out empty — nothing salvaged: ${firstLine(err)}` };
+        return { ok: false, error: `commit failed and the patch came out empty — nothing salvaged: ${firstLine(err)}`, excluded };
       }
-      return { ok: true, method: 'patch', file, bytes, error: firstLine(err) };
+      return { ok: true, method: 'patch', file, bytes, error: firstLine(err), excluded };
     } catch (err2) {
-      return { ok: false, error: firstLine(err2) };
+      return { ok: false, error: firstLine(err2), excluded };
     }
   }
 }
@@ -1310,14 +1335,28 @@ function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+/** True if `pid` names a live process (or one we can't signal but that still exists). */
+function isPidAlive(pid) {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err && err.code === 'EPERM';
+  }
+}
+
 /**
  * Run `fn` under an exclusive lock on the state file: read → decide/claim →
  * write is one step. Two parallel `gate` calls (two free lanes, batched tool
  * calls) otherwise read the same queue and claim the same task. The lock is
- * a sibling `<state>.lock` created with 'wx'; a lock older than
- * LOCK_STALE_MS is a dead holder's and is taken over.
+ * a sibling `<state>.lock` created with 'wx', holding the holder's PID and
+ * timestamp. It is taken over once its PID is dead or it is older than
+ * LOCK_STALE_MS — by renaming it aside first (rename is atomic; only one
+ * concurrent waiter can win a given name), so two waiters can never both
+ * believe they cleared it and both end up holding a lock at once.
  */
-function withStateLock(file, fn, { waitMs = LOCK_WAIT_MS, staleMs = LOCK_STALE_MS } = {}) {
+function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS), staleMs = LOCK_STALE_MS } = {}) {
   const lock = `${file}.lock`;
   const deadline = Date.now() + waitMs;
   let fd = null;
@@ -1326,10 +1365,22 @@ function withStateLock(file, fn, { waitMs = LOCK_WAIT_MS, staleMs = LOCK_STALE_M
       fd = fs.openSync(lock, 'wx');
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
-      let age = 0;
-      try { age = Date.now() - fs.statSync(lock).mtimeMs; } catch { continue; /* released meanwhile */ }
-      if (age > staleMs) {
-        try { fs.unlinkSync(lock); } catch { /* another waiter took it over first */ }
+      let stat = null;
+      try { stat = fs.statSync(lock); } catch { continue; /* released meanwhile */ }
+      const age = Date.now() - stat.mtimeMs;
+      let holderPid = NaN;
+      try { holderPid = parseInt(fs.readFileSync(lock, 'utf8').trim().split(/\s+/)[0], 10); } catch { /* mid-write, or gone */ }
+      const staleByAge = age > staleMs;
+      const staleByPid = Number.isFinite(holderPid) && !isPidAlive(holderPid);
+      if (staleByAge || staleByPid) {
+        // Rename-first takeover: only the waiter whose rename succeeds
+        // proceeds; the rest loop back and retry 'wx' against a lock that no
+        // longer exists (or a fresh one the winner just created).
+        const graveyard = `${lock}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        try {
+          fs.renameSync(lock, graveyard);
+          try { fs.unlinkSync(graveyard); } catch { /* best-effort cleanup */ }
+        } catch { /* another waiter already took it over, or the holder released it */ }
         continue;
       }
       if (Date.now() > deadline) throw new Error(`burn state is locked (${lock}) — another burn-plan call is running`);
@@ -1545,6 +1596,7 @@ function cli(argv) {
             s = requeueTask(s, a.id, {
               branch: a.action === 'requeue-with-branch' ? a.branch : undefined,
               salvage: a.salvaged && a.salvaged.method === 'patch' ? a.salvaged.file : undefined,
+              excluded: a.salvaged && a.salvaged.excluded,
               note: 'after a hard stop',
             }, now);
             a.applied = true;

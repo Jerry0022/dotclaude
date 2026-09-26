@@ -155,6 +155,21 @@ describe("AUD-C005 — the salvage commit never carries a secret", () => {
     expect(git(wt, "log", "-1", "--format=%s")).toBe("init");
     expect(git(wt, "diff", "--cached", "--name-only")).toBe("");
   });
+
+  test("2026-09-26 finding 13: the salvage result lists what it left out, including a real-looking file the secret filter caught", () => {
+    const wt = agentWorktree();
+    put(wt, "work.js", "work\n");
+    put(wt, ".env", "API_KEY=x\n");
+    // a real source file whose name happens to be secret-shaped
+    put(wt, "src/secrets.ts", "export const featureFlags = {};\n");
+    put(wt, ".npmrc", "registry=https://registry.example.com\n");
+    const res = bp.salvageWorktree({ id: "t5", worktree: wt }, { stateDir: repo });
+    expect(res).toMatchObject({ ok: true, method: "commit" });
+    expect(committedFiles(wt)).toEqual(["work.js"]);
+    expect(res.excluded.sort()).toEqual([".env", ".npmrc", "src/secrets.ts"].sort());
+    // still on disk, uncommitted — nothing silently dropped
+    expect(fs.readFileSync(path.join(wt, "src/secrets.ts"), "utf8")).toMatch(/featureFlags/);
+  });
 });
 
 describe("AUD-C018 — a failed git add fails loudly, never an empty patch", () => {
@@ -284,8 +299,49 @@ describe("AUD-C022 — parallel gate calls never claim the same task", () => {
     fs.utimesSync(lock, old, old);
     expect(bp.withStateLock(file, () => 42)).toBe(42);
     expect(fs.existsSync(lock)).toBe(false);
-    fs.writeFileSync(lock, "1 now\n");
+    // A live, current-process PID: a real holder, not stale by age or PID.
+    fs.writeFileSync(lock, `${process.pid} now\n`);
     expect(() => bp.withStateLock(file, () => 1, { waitMs: 100 })).toThrow(/locked/);
+  });
+
+  test("2026-09-26 finding 12: a fresh lock whose PID is already dead is taken over immediately, not after LOCK_STALE_MS", () => {
+    const file = path.join(tmp, "S2.json");
+    const lock = `${file}.lock`;
+    // A PID that (almost certainly) names no live process, timestamped now:
+    // age alone would make a waiter wait the full stale window.
+    fs.writeFileSync(lock, "999999 now\n");
+    expect(bp.withStateLock(file, () => "won", { waitMs: 200 })).toBe("won");
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
+  test("2026-09-26 finding 12: a rename that loses the takeover race retries instead of also taking the lock", () => {
+    const file = path.join(tmp, "S3.json");
+    const lock = `${file}.lock`;
+    fs.writeFileSync(lock, "999999 old\n");
+    const old = new Date(Date.now() - 120000);
+    fs.utimesSync(lock, old, old);
+    const realRename = fs.renameSync;
+    let renameCalls = 0;
+    fs.renameSync = (from, to) => {
+      renameCalls++;
+      if (renameCalls === 1) {
+        // simulate another waiter having already renamed the lock away: our
+        // rename must lose, not silently "succeed" onto a lock we don't own
+        const err = new Error("ENOENT: no such file or directory");
+        err.code = "ENOENT";
+        throw err;
+      }
+      return realRename(from, to);
+    };
+    try {
+      expect(bp.withStateLock(file, () => "won", { waitMs: 2000 })).toBe("won");
+    } finally {
+      fs.renameSync = realRename;
+    }
+    // the losing rename never created a lock of its own: only one `wx`
+    // create happened, and it is cleaned up at the end
+    expect(renameCalls).toBeGreaterThanOrEqual(1);
+    expect(fs.existsSync(lock)).toBe(false);
   });
 });
 

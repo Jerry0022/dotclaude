@@ -517,6 +517,29 @@ describe("2026-09-26 audit — blind mode keeps the checks that need no reading 
     expect(g2.decision).toBe("spawn");
     expect(g2.blind).toBe(true);
   });
+
+  test("2026-09-26 finding 11: blind spend accumulates across tasks in the same window, so the third of three (each alone fits) pauses", () => {
+    const q5 = [task("p0", "S", "P0"), task("p1", "S", "P0"), task("p2", "S", "P0"), task("p3", "S", "P0")];
+    const p5 = bp.derivePlan({ usage: u0, queue: q5, plan: "Max 20x" });
+    const t1 = NOW + 50 * 60000;
+    let s = stateFor(p5, q5, u0);
+    // last good reading: window at 78 %, 250 min to its reset — plenty of
+    // room for any one small task, not for three in a row.
+    s = bp.gate(s, bp.normalizeUsage({ ...raw({ weeklyUsed: 43, sessionUsed: 78, sessionResetMin: 250 }), timestamp: new Date(t1).toISOString() }, t1, 2), t1, null, { claim: false }).state;
+    s.status = "running";
+    delete s.pause;
+
+    const decisions = [];
+    for (let i = 0; i < 3; i++) {
+      s.holds = bp.HOLD_LIMIT - 1;
+      const g = bp.gate(s, blind, t1 + (i + 1) * 60000, null);
+      decisions.push(g.decision);
+      s = g.state;
+      if (g.decision === "spawn") s = bp.landTask(s, g.task.id, {}, t1 + (i + 1) * 60000 + 30000);
+      else break;
+    }
+    expect(decisions).toEqual(["spawn", "spawn", "pause"]);
+  });
 });
 
 describe("2026-09-26 audit — strict parsing (AUD-C049/C050)", () => {
