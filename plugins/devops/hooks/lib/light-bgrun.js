@@ -69,13 +69,13 @@ function settleRecordedRuns(sessionId, transcriptPath, now = Date.now()) {
 
   if (outcomes.includes('pass')) {
     writeSessionFile(sessionFile('dotclaude-devops-light-verified', sessionId), 'background run');
-    try { fs.unlinkSync(sessionFile('dotclaude-devops-light-red', sessionId)); } catch {}
+    try { fs.unlinkSync(sessionFile('dotclaude-devops-light-red', sessionId)); } catch { /* already gone */ }
   } else if (outcomes.includes('fail')) {
     writeSessionFile(sessionFile('dotclaude-devops-light-red', sessionId), 'background run');
   }
 
   if (running.length === 0) {
-    try { fs.unlinkSync(flag.filePath); } catch {}
+    try { fs.unlinkSync(flag.filePath); } catch { /* already gone */ }
   } else if (running.length !== runs.length) {
     writeSessionFile(flag.filePath, formatBackgroundRuns(running));
   }

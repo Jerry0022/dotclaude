@@ -66,7 +66,7 @@ process.stdin.on('end', () => {
   // this Stop. One still running keeps the gate from blocking instead.
   let inFlight = false;
   if (!silentResult) {
-    try { inFlight = settleRecordedRuns(sessionId, hook.transcript_path).running > 0; } catch {}
+    try { inFlight = settleRecordedRuns(sessionId, hook.transcript_path).running > 0; } catch { /* unreadable: no in-flight exemption */ }
   }
 
   const pendingResult = readSessionFile('dotclaude-devops-light-pending', sessionId, EXACT);
@@ -124,7 +124,7 @@ process.stdin.on('end', () => {
     if (redResult) try { fs.unlinkSync(redResult.filePath); } catch {}
     if (kindResult) try { fs.unlinkSync(kindResult.filePath); } catch {}
     if (blockCountResult) try { fs.unlinkSync(blockCountResult.filePath); } catch {}
-    if (bgRunResult) try { fs.unlinkSync(bgRunResult.filePath); } catch {}
+    if (bgRunResult) try { fs.unlinkSync(bgRunResult.filePath); } catch { /* already gone */ }
   }
 
   if (decision.action === 'block') {

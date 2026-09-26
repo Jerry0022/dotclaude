@@ -21,7 +21,7 @@ function project() {
 }
 
 function cleanup(dir) {
-  for (const d of [dir, dir + "-tmp"]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
+  for (const d of [dir, dir + "-tmp"]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
 }
 
 const flagPath = (dir, name) => path.join(dir + "-tmp", `dotclaude-devops-${name}-${SESSION}`);

@@ -528,7 +528,7 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
     // A background test run settles as soon as its task-notification is in the
     // transcript — on this call already, so a card rendered in the turn the
     // result arrives in sees it. Nothing is read while no run is recorded.
-    try { settleRecordedRuns(hook.session_id, hook.transcript_path); } catch {}
+    try { settleRecordedRuns(hook.session_id, hook.transcript_path); } catch { /* fail open */ }
 
     // Verification observation. Split browser vs test-runner so the runner path
     // can require a PASSING run (Kern ②). A red run sets light-red and does NOT
