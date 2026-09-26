@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.213.0] — 2026-09-26
+
+### Added
+- **A paused card for work you pause to continue later.** Pausing ("machen wir später weiter", "pause for now") used to end on the fallback card, "🔧 Erledigt — noch etwas?", and a "🔧 Done –" session title, so the sidebar reported unfinished work as finished (#548). `render_completion_card` now takes `variant: "paused"`. The decision box reads "⏸️ Pausiert — weiter, wann du willst" / "⏸️ Paused — pick it up whenever you like", followed by "Schreib hier, um weiterzumachen." / "Write here to continue.", and has no buttons. The result lines say what was stopped and what was kept. The session title becomes `⏸️ Paused – …`, and the next work prompt turns it into `⏳ …` without stacking. The Stop guard's variant list and the card contract name the new variant. The run contract treats it as non-final: it is never refused for passes still to come and never closes the run. Pausing an open concept page (stopping its bridge and watchers, a hint-only resume) follows in #555.
+
 ## [0.212.5] — 2026-09-26
 
 ### Fixed
