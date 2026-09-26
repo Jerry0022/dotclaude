@@ -20,7 +20,9 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // Raised from 46 KB for Finding 7 (native-captured JSON.stringify/Object.create/
 // defineProperty, Object.create(null)-built events, tokened destroy(), exposed
 // stringify()).
-const MAX_BYTES = 48.5 * 1024;
+// Raised from 48.5 KB for the harden pass (state styles, focus hand-off after
+// collapse, a live-region status line, labelled choice options).
+const MAX_BYTES = 49.5 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----

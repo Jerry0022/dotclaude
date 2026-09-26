@@ -286,3 +286,51 @@ describe("AUD-C062/C063/C064", () => {
     expect(a.shadow().getElementById(label.htmlFor)).toBe(a.shadow().querySelector("input.f"));
   });
 });
+
+describe("harden pass: focus hand-off, labelled options, live status", () => {
+  const key = (p, target, k) => target.dispatchEvent(new p.w.KeyboardEvent("keydown", { key: k, bubbles: true, composed: true, cancelable: true }));
+
+  test("collapsing by Escape or – hands keyboard focus to the FAB, » to the edge tab", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    key(a, btn(a, "Weiter"), "Escape");
+    expect(a.shadow().activeElement).toBe(a.shadow().querySelector("button.fab"));
+
+    const b = page();
+    b.api().setStep(STEP, TOKEN);
+    b.shadow().querySelector('button.collapse[aria-label="Einklappen"]').click();
+    expect(b.shadow().activeElement).toBe(b.shadow().querySelector("button.fab"));
+
+    const c = page();
+    c.api().setStep(STEP, TOKEN);
+    c.shadow().querySelector('button.collapse[aria-label="Guide ausblenden"]').click();
+    expect(c.shadow().activeElement).toBe(c.shadow().querySelector("button.edgetab"));
+  });
+
+  test("choice options point back at their question", () => {
+    const a = page();
+    a.api().setStep({ ...STEP, input: { type: "choice", name: "region", label: "Welche Region?", options: ["EU", "US"] } }, TOKEN);
+    const question = [...a.shadow().querySelectorAll("p.lbl")].find((el) => el.textContent === "Welche Region?");
+    expect(question.id).toMatch(/^wg-q-/);
+    for (const option of ["EU", "US"]) expect(btn(a, option).getAttribute("aria-describedby")).toBe(question.id);
+  });
+
+  test("the status line is a live region, and a send after a lost secret shows the spinner again", () => {
+    const a = page();
+    a.api().setStep(SECRET_STEP, TOKEN);
+    const input = a.shadow().querySelector("input.f");
+    input.value = "ghp_SECRET";
+    input.dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+    btn(a, "Weiter").click();
+
+    const b = page({ session: session(a) });
+    expect(b.shadow().querySelector(".status").getAttribute("role")).toBe("status");
+    const spin = b.shadow().querySelector(".spin");
+    expect(spin.style.display).toBe("none");
+    const again = b.shadow().querySelector("input.f");
+    again.value = "ghp_AGAIN";
+    again.dispatchEvent(new b.w.Event("input", { bubbles: true, composed: true }));
+    btn(b, "Weiter").click();
+    expect(spin.style.display).toBe("");
+  });
+});

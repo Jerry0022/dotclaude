@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.11.0
+ * @version 1.11.1
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -256,15 +256,23 @@
     ".checklist label{display:flex;gap:6px;align-items:flex-start;font-size:13px}",
     ".foot{padding:10px 12px;border-top:1px solid #eee;display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
     "button.btn{font:inherit;border:none;border-radius:8px;padding:8px 12px;cursor:pointer}",
+    // button.btn outranks .chipbtn — the copy button keeps its compact size.
+    "button.btn.chipbtn{padding:4px 8px;font-size:12px;border-radius:6px}",
     ".primary{background:#6d28d9;color:#fff}",
-    ".primary:disabled{opacity:.5;cursor:not-allowed}",
+    "button.btn:disabled{opacity:.5;cursor:not-allowed}",
+    "button.btn:not(:disabled):hover,.fab:hover,.edgetab:hover{filter:brightness(.93)}",
+    "button.btn:not(:disabled):active{filter:brightness(.85)}",
+    ".collapse:hover{background:rgba(255,255,255,.15)}",
+    ":focus-visible{outline:2px solid #6d28d9;outline-offset:2px}",
+    ".head :focus-visible{outline-color:#fff}",
     ".secondary{background:#eee;color:#333}",
     ".tertiary{background:transparent;color:#a33}",
-    ".lbl{display:block;font-size:12px;font-weight:600;margin:0 0 4px}",
+    ".lbl{display:block;font-size:12px;font-weight:700;margin:0 0 4px}",
     "input.f,textarea.f{width:100%;font:inherit;padding:8px;border:1px solid #ccc;border-radius:8px;margin-bottom:8px}",
-    ".status{font-size:12px;color:#777;display:flex;align-items:center;gap:6px;padding:0 12px 10px}",
+    ".status{font-size:12px;color:#666;display:flex;align-items:center;gap:6px;padding:0 12px 10px}",
     ".spin{width:12px;height:12px;border-radius:50%;border:2px solid #ccc;border-top-color:#6d28d9;animation:wgs .8s linear infinite}",
     "@keyframes wgs{to{transform:rotate(360deg)}}",
+    "@media(prefers-reduced-motion:reduce){.spin{animation:none}}",
     ".tip{position:fixed;max-width:260px;padding:6px 10px;border-radius:8px;background:#fff;color:#111;border:1px solid #ddd;",
     "  box-shadow:0 6px 20px rgba(0,0,0,.25);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1.45;pointer-events:auto}",
     ".tip[hidden]{display:none}",
@@ -290,6 +298,9 @@
     "  .loc{background:#2e1065;color:#e9d5ff}",
     "  .chip{background:#2a2a31}",
     "  .chipbtn{background:#3a3a44;color:#eee}",
+    "  .status{color:#aaa}",
+    "  :focus-visible{outline-color:#e9d5ff}",
+    "  .head :focus-visible{outline-color:#fff}",
     "}",
   ].join("\n");
   shadow.appendChild(styleEl);
@@ -498,9 +509,12 @@
       var undelivered = !!currentStep && eventQueue.some((e) => e.stepId === currentStep.id);
       var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
       var lastLive = listenerLive() ? Date.now() : Math.max(lastPoll, deadAt);
-      waitLabelEl.textContent = undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS
+      var text = undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS
         ? "Claude hört gerade nicht zu — schreib im Chat „weiter“."
         : "Warte auf Claude…";
+      // The status line is a live region: rewrite it only on a change, or
+      // the 2 s tick would re-announce it to a screen reader.
+      if (waitLabelEl.textContent !== text) waitLabelEl.textContent = text;
     }
     heartbeatTimer = setTimeout(tickHeartbeat, HEARTBEAT_TICK_MS);
   }
@@ -552,6 +566,8 @@
 
   function disableActiveButtons() {
     if (statusEl) statusEl.style.display = "flex";
+    // The re-enter-a-lost-secret state hid the spinner; a send brings it back.
+    if (spinnerEl) spinnerEl.style.display = "";
     activeBtns.forEach(function (btn) {
       btn.disabled = true;
     });
@@ -591,6 +607,15 @@
     container.appendChild(wrap);
     try {
       textarea.focus();
+    } catch {}
+  }
+
+  // Collapsing destroys the focused control: hand keyboard focus to what
+  // replaced it (the FAB or the edge tab), never back to the page body.
+  function focusHandle() {
+    var target = edgeTab ? edgeTabBtn : fabButton;
+    try {
+      target.focus();
     } catch {}
   }
 
@@ -650,6 +675,7 @@
       edgeTab = true;
       render();
       saveState();
+      focusHandle();
     });
     head.appendChild(edgeBtn);
     var collapseBtn = mk("button", "collapse", "–");
@@ -659,6 +685,7 @@
       collapsed = true;
       render();
       saveState();
+      focusHandle();
     });
     head.appendChild(collapseBtn);
     makeDraggable(head);
@@ -714,10 +741,12 @@
           chip.appendChild(mk("code", null, c.value));
           var copyLabel = c.label ? "Kopieren: " + c.label : "Kopieren";
           // AUD-C063: "Kopiert!" only once the clipboard write succeeded.
+          var resetTimer = null;
           var copyBtn = makeButton(copyLabel, "chipbtn", function () {
             var flash = function (text) {
               copyBtn.textContent = text;
-              setTimeout(function () {
+              clearTimeout(resetTimer); // a second click restarts the 1.5 s, never cuts it short
+              resetTimer = setTimeout(function () {
                 copyBtn.textContent = copyLabel;
               }, 1500);
             };
@@ -807,11 +836,17 @@
       }
 
       if (input && input.type === "choice") {
-        if (input.label) body.appendChild(mk("p", "lbl", input.label)); // AUD-C064
+        var questionId = null;
+        if (input.label) { // AUD-C064 — the options sit in the foot, so they point back at the question
+          var question = mk("p", "lbl", input.label);
+          questionId = question.id = "wg-q-" + String(stepId).replace(/[^\w-]/g, "_");
+          body.appendChild(question);
+        }
         (input.options || []).forEach(function (option) {
           var optBtn = makeButton(String(option), "primary", function () {
             emit("next", input.name, option);
           });
+          if (questionId) optBtn.setAttribute("aria-describedby", questionId);
           foot.appendChild(optBtn);
           activeBtns.push(optBtn);
         });
@@ -863,6 +898,7 @@
       panel.appendChild(foot);
 
       statusEl = mk("div", "status");
+      statusEl.setAttribute("role", "status");
       statusEl.style.display = "none";
       spinnerEl = mk("span", "spin");
       statusEl.appendChild(spinnerEl);
@@ -929,6 +965,7 @@
         collapsed = true;
         render();
         saveState();
+        focusHandle();
       }
     } else if (e.key === "Enter" && enterSubmit && shadow.activeElement === enterSubmit.input) {
       if (typeof e.preventDefault === "function") e.preventDefault();
