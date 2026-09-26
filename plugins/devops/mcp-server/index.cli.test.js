@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -115,6 +115,31 @@ describe("--render-card CLI fallback", () => {
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
     const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: S("clean") });
     expect(out).not.toContain("DO NOT OUTPUT THIS BLOCK");
+  });
+
+  // 2026-09-26: the escape hatch sat behind the warm-file fast path, so a
+  // usage-live.json that a running terminal session's statusLine writer had just
+  // refreshed put a budget line into one of two "byte-identical" cards
+  // (index.card.test.js) — and wrote the developer's real delta baseline.
+  test("DEVOPS_COMPLETION_NO_USAGE=1 ignores even a fresh usage-live.json — no budget line, no baseline write", async () => {
+    const home = mkdtempSync(join(tmpdir(), "devops-card-cli-home-"));
+    try {
+      mkdirSync(join(home, ".claude"));
+      writeFileSync(join(home, ".claude", "usage-live.json"), JSON.stringify({
+        timestamp: new Date().toISOString(), plan: "Max 20x",
+        session: { pct: 90, resetInMinutes: 30 }, weekly: { pct: 95, resetInMinutes: 1500 },
+      }));
+      // os.homedir() reads USERPROFILE on Windows, HOME elsewhere.
+      const { stdout } = await renderCardFull(
+        { variant: "ready", summary: "Ohne Usage", lang: "de", session_id: S("no-usage"), buildId: "abc1234" },
+        { HOME: home, USERPROFILE: home },
+      );
+      expect(stdout).toMatch(/✨✨✨ Ohne Usage ✨✨✨/);
+      expect(stdout).not.toMatch(/(5h|Wk) [▰▱│]/);
+      expect(existsSync(join(home, ".claude", "usage-baseline.json"))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   test("the session-title instruction rides on stderr, never in the card", async () => {
