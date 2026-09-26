@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.213.2] — 2026-09-26
+
+### Fixed
+- **The completion server counts as alive again.** The hooks tell a live devops MCP server from a dead one by the PID file each server writes after connecting. The completion server's register call was removed in #93 (April) as an "unused import", so every hook has read it as dead ever since. The card contract then told Claude to render the card offline first on every turn, although the tool answered. The server registers its heartbeat again right after connecting. It does so through a dynamic import, so the `--render-card` CLI, which exits earlier, never writes one. A test pins the register call after `server.connect` for all three servers.
+
 ## [0.213.1] — 2026-09-26
 
 ### Fixed

@@ -37,6 +37,22 @@ function registerAs(pid, dir) {
   fs.writeFileSync(legacyPidFile(NAME, dir), String(pid));
 }
 
+// The completion server lost its register call in #93 ("unused import"), so
+// every hook read it as dead and put the offline card path first. Each of the
+// three servers must register under its .mcp.json name after connecting.
+describe("heartbeat — every devops server registers itself", () => {
+  for (const [file, name] of [["../index.js", "dotclaude-completion"], ["../ship/index.js", "dotclaude-ship"], ["../issues/index.js", "dotclaude-issues"]]) {
+    test(`${name} registers after server.connect`, () => {
+      const src = fs.readFileSync(new URL(file, import.meta.url), "utf8");
+      const mcpName = new RegExp(`const SERVER_NAME = "${name}"`);
+      expect(src).toMatch(mcpName);
+      const reg = src.indexOf("registerHeartbeat(SERVER_NAME)");
+      expect(reg).toBeGreaterThan(-1);
+      expect(reg).toBeGreaterThan(src.indexOf("server.connect("));
+    });
+  }
+});
+
 describe("heartbeat — one file per server process", () => {
   test("two registrations, the first-registered exits → still alive", () => {
     withTmp((dir) => {
