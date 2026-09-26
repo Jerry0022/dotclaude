@@ -70,16 +70,27 @@ describe("devops-config — resolution project > global > default", () => {
     expect(cfg.load(wt, { home }).values.cleanup.nudgeThreshold).toBe(33);
   });
 
-  test("an invalid stored value falls through to the next layer; a broken file counts as absent", () => {
+  test("an unreadable stored value falls through to the next layer; a broken file counts as absent", () => {
     const { main } = fakeClone();
     const home = mkTmp("cfg-home-");
     write(path.join(home, ".claude", "devops-config.json"), { cleanup: { nudgeThreshold: 70 } });
-    write(path.join(main, ".claude", "devops-config.json"), { cleanup: { nudgeThreshold: -5, autoClean: "no" } });
+    write(path.join(main, ".claude", "devops-config.json"), { cleanup: { nudgeThreshold: -5, autoClean: "vielleicht" } });
     const { values } = cfg.load(main, { home });
     expect(values.cleanup.nudgeThreshold).toBe(70);
     expect(values.cleanup.autoClean).toBe(true);
     fs.writeFileSync(path.join(main, ".claude", "devops-config.json"), "{ not json");
     expect(cfg.load(main, { home }).values.cleanup.nudgeThreshold).toBe(70);
+  });
+
+  test("a hand-edited string is read the way `set` parses it — \"false\" never cleans (AUD-C053)", () => {
+    const { main } = fakeClone();
+    const home = mkTmp("cfg-home-");
+    write(path.join(home, ".claude", "devops-config.json"), { cleanup: { autoClean: true, nudgeThreshold: 70 } });
+    write(path.join(main, ".claude", "devops-config.json"), { cleanup: { autoClean: "false", nudgeThreshold: " 80 " } });
+    const { values, sources } = cfg.load(main, { home });
+    expect(values.cleanup.autoClean).toBe(false);
+    expect(sources["cleanup.autoClean"]).toBe("project");
+    expect(values.cleanup.nudgeThreshold).toBe(80);
   });
 });
 

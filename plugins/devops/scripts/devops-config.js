@@ -52,15 +52,20 @@ function invalidEntries(cwd, opts = {}) {
   return out;
 }
 
-/** Name every ignored hand-edited value on stderr (all, or only `onlyKey`). */
+/**
+ * Name every wrong-typed hand edit on stderr (all, or only `onlyKey`): one
+ * `load()` reads anyway (a string "false") with the command that stores it
+ * typed, one it cannot read as ignored.
+ */
 function warnInvalid(args, onlyKey) {
   for (const e of invalidEntries(args.cwd)) {
     if (onlyKey && e.key !== onlyKey) continue;
-    const hint = e.fix !== null ? `run: set ${e.key} ${e.fix} --${e.scope}` : 'remove it or set a valid value';
-    process.stderr.write(
-      `[devops-config] ignored ${e.key} = ${JSON.stringify(e.raw)} in ${e.scope} (${e.file}) — ` +
-      `not a valid ${cfg.specOf(e.key).spec.type}, the next layer applies; ${hint}\n`
-    );
+    const type = cfg.specOf(e.key).spec.type;
+    process.stderr.write(e.fix !== null
+      ? `[devops-config] read ${e.key} = ${JSON.stringify(e.raw)} in ${e.scope} (${e.file}) as ${e.fix} — ` +
+        `stored as text, not a ${type}; run: set ${e.key} ${e.fix} --${e.scope}\n`
+      : `[devops-config] ignored ${e.key} = ${JSON.stringify(e.raw)} in ${e.scope} (${e.file}) — ` +
+        `not a valid ${type}, the next layer applies; remove it or set a valid value\n`);
   }
 }
 
