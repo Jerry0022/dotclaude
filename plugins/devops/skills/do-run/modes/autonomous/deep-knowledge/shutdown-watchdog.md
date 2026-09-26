@@ -322,8 +322,9 @@ nothing left to do. No separate `unregister` call is needed; use it only to
 drop a watchdog without writing the flag (e.g. the user resumes by hand).
 Tasks clean up after themselves too (#544): each registration's trigger ends
 30 min after its fire time and Task Scheduler then deletes it
-(`DeleteExpiredTaskAfter`), and every `register` first sweeps
-`ClaudeAutonomousWatchdog-*` tasks and helper scripts older than 26 h that
-earlier plugin versions left behind (`swept` in its JSON). A live
+(`DeleteExpiredTaskAfter`), and every `register` — once its own task is
+armed, under an 8 s budget — sweeps `ClaudeAutonomousWatchdog-*` tasks and
+helper scripts older than 26 h that earlier plugin versions left behind
+(`swept` in its JSON). A live
 registration is at most 24 h old, so a sibling session's watchdog is never
 touched.

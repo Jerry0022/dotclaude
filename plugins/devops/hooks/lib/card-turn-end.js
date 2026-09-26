@@ -1,6 +1,6 @@
 /**
  * @module card-turn-end
- * @version 0.2.0
+ * @version 0.2.1
  * @description End the turn at the Desktop completion-card widget — no model
  *   call after the card, so nothing can land under it.
  *
@@ -25,8 +25,8 @@
  *
  *   Never ends the turn while an orchestrator still works after its cards: an
  *   active autonomous lockout (`/do-run` AFK and backlog runs — shutdown and
- *   finalizers follow the card), an autonomous run whose watchdog is armed and
- *   whose done-flag is not written yet (its report and Step 8 follow the card),
+ *   finalizers follow the card), this session's open autonomous run (its live
+ *   run contract — the report and Step 8 follow the card),
  *   or a ship queue marker (`.claude/.ship-queue`, several ships and cards in
  *   one turn). `DOTCLAUDE_CARD_HARD_STOP=0` turns it
  *   off. Fail-open: any error → the turn continues exactly as before.
@@ -107,15 +107,21 @@ function lockoutActive(dir) {
 }
 
 /**
- * An autonomous run of `dirs` still before its Step 8c: its watchdog is armed
- * and the done-flag unwritten. The do-run lockout only spans the ship, so
- * without this the Step 7 card widget ended the run before its report, the
- * fail-safe cancel and the done-flag (a false stall, an open contract).
+ * This session's autonomous run is still open: its run contract (armed by
+ * the do-run router, flow "autonomous") is live and not yet closed by the
+ * run's Step 8. The do-run lockout only spans the ship, so without this the
+ * Step 7 card widget ended the run before its report, the fail-safe cancel
+ * and the done-flag (a false stall, an open contract). Bound to the session
+ * that armed it: another session in the same checkout, or this one after the
+ * run closed, ends its turns at the card as usual (red-team review R4).
  */
-function autonomousRunOpen(dirs) {
+function autonomousRunOf(hook, root) {
+  const sessionId = hook && hook.session_id;
+  if (!sessionId) return false;
   try {
-    const { runOpenIn } = require('../../scripts/autonomous-watchdog');
-    return runOpenIn(dirs);
+    const { readContract } = require('./run-contract');
+    const c = readContract(root, { sessionId });
+    return !!(c && c.flow === 'autonomous');
   } catch {
     return false;
   }
@@ -146,7 +152,7 @@ function holdReason(hook, env = process.env) {
     if (lockoutActive(dir)) return 'autonomous-lockout';
     if (queueActive(dir)) return 'ship-queue';
   }
-  if (autonomousRunOpen(dirs)) return 'autonomous-run';
+  if (autonomousRunOf(hook, root)) return 'autonomous-run';
   return '';
 }
 

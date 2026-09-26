@@ -7,7 +7,6 @@ import {
   buildRecoveryScript,
   pickSentinel,
   removeRegistrationsFor,
-  runOpenIn,
   staleWatchdogTaskNames,
   sweepStaleWatchdogs,
   STALE_AFTER_MS,
@@ -324,53 +323,29 @@ describe("sweepStaleWatchdogs — best-effort cleanup at register", () => {
     expect(sweepStaleWatchdogs({ now: NOW, spawn, tmp })).toEqual({ tasks: [], scripts: 0 });
   });
 
+  // Red-team review: a slow Task Scheduler must not stretch the register call.
+  test("stops deleting once its budget is spent, and bounds each call by what is left", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wd-sweep-"));
+    const rows = Array.from({ length: 5 }, (_, i) => `"\\ClaudeAutonomousWatchdog-${oldTs - i}","N/A","Ready"`).join("\r\n");
+    let t = 0;
+    const timeouts = [];
+    const spawn = (exe, args, opts) => {
+      timeouts.push(opts.timeout);
+      t += 3000; // every schtasks call takes 3 s
+      return args[0] === "/Query" ? { status: 0, stdout: rows, stderr: "" } : { status: 0, stdout: "", stderr: "" };
+    };
+    const swept = sweepStaleWatchdogs({ now: NOW, spawn, tmp, budgetMs: 8000, clock: () => t });
+    expect(swept.tasks).toHaveLength(2); // query at 0 s, deletes at 3 s and 6 s, then 9 s > 8 s
+    expect(timeouts[0]).toBe(8000);
+    expect(timeouts[timeouts.length - 1]).toBeLessThanOrEqual(2000);
+  });
+
   test("deletes at most 25 tasks per call", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wd-sweep-"));
     const rows = Array.from({ length: 40 }, (_, i) => `"\\ClaudeAutonomousWatchdog-${oldTs - i}","N/A","Ready"`).join("\r\n");
     const { spawn, calls } = fakeSpawn(rows);
     expect(sweepStaleWatchdogs({ now: NOW, spawn, tmp }).tasks).toHaveLength(25);
     expect(calls.filter((c) => c[1] === "/Delete")).toHaveLength(25);
-  });
-});
-
-describe("runOpenIn — an autonomous run still before its Step 8c", () => {
-  const NOW = 1_790_425_000_000;
-  let tmp = null;
-  let proj = null;
-  afterEach(() => {
-    for (const d of [tmp, proj]) if (d) fs.rmSync(d, { recursive: true, force: true });
-    tmp = proj = null;
-  });
-
-  function setup(fireAt, name = "claude-autonomous-watchdog-ClaudeAutonomousWatchdog-1.json") {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wd-open-"));
-    proj = fs.mkdtempSync(path.join(os.tmpdir(), "wd-proj-"));
-    const flagPath = path.join(proj, "AUTONOMOUS-DONE.flag");
-    fs.writeFileSync(path.join(tmp, name), JSON.stringify({ taskName: "ClaudeAutonomousWatchdog-1", flagPath, fireAt: new Date(fireAt).toISOString() }));
-    return flagPath;
-  }
-
-  test("armed watchdog, flag missing → open; the written flag closes it", () => {
-    const flagPath = setup(NOW + 3600_000);
-    expect(runOpenIn([proj], { now: NOW, tmp })).toBe(true);
-    fs.writeFileSync(flagPath, "{}");
-    expect(runOpenIn([proj], { now: NOW, tmp })).toBe(false);
-  });
-
-  test("a watchdog that already fired no longer holds anything", () => {
-    setup(NOW - 1);
-    expect(runOpenIn([proj], { now: NOW, tmp })).toBe(false);
-  });
-
-  test("another directory's run is not this one's", () => {
-    setup(NOW + 3600_000);
-    expect(runOpenIn([path.join(proj, "sub")], { now: NOW, tmp })).toBe(false);
-    expect(runOpenIn([], { now: NOW, tmp })).toBe(false);
-  });
-
-  test("the legacy single sentinel counts too", () => {
-    setup(NOW + 3600_000, "claude-autonomous-watchdog.json");
-    expect(runOpenIn([proj + path.sep], { now: NOW, tmp })).toBe(true);
   });
 });
 

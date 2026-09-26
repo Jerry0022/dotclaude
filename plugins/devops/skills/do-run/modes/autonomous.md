@@ -604,8 +604,8 @@ without `state.pushed` + `merged` the card's variant guard downgrades it).
 **Capture the full card output** — it will be embedded in the HTML report.
 On the Desktop app do NOT show the card widget yet: the widget ends the turn
 (`hooks/lib/card-turn-end.js`), so it is the run's very last action, after
-Step 8. The hard stop also holds on its own while the run's watchdog is armed
-and its done-flag unwritten.
+Step 8. The hard stop also holds on its own while this session's autonomous
+run contract is open — Step 8 closes it.
 
 **Always forward `userFinalTest` items** collected during Step 5 Live Testing
 (packaged Electron/Tauri without takeover, 3rd-party integrations). The card

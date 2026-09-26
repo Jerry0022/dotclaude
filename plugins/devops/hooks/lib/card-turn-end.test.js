@@ -95,21 +95,25 @@ describe("holdReason — orchestrators that work past their cards keep the turn"
     expect(holdReason({ cwd: dir }, {})).toBe("autonomous-lockout");
   });
 
-  // Redteam R1 (2026-09-26): the do-run lockout spans only the ship, so the
+  // Red-team (2026-09-26): the do-run lockout spans only the ship, so the
   // Step 7 card widget of an autonomous run ended the turn before the report,
-  // the fail-safe cancel and the done-flag. An armed watchdog without its
-  // flag is the run's own "still finalizing" signal.
-  test("an autonomous run whose watchdog is armed and whose done-flag is missing", () => {
-    const sentinel = path.join(os.tmpdir(), `claude-autonomous-watchdog-ClaudeAutonomousWatchdog-cte${process.pid}${Date.now()}.json`);
-    const flagPath = path.join(dir, "AUTONOMOUS-DONE.flag");
-    try {
-      fs.writeFileSync(sentinel, JSON.stringify({ taskName: "ClaudeAutonomousWatchdog-1", flagPath, fireAt: new Date(Date.now() + 3600_000).toISOString() }));
-      expect(holdReason({ cwd: dir }, {})).toBe("autonomous-run");
-      fs.writeFileSync(flagPath, "{}");
-      expect(holdReason({ cwd: dir }, {})).toBe("");
-    } finally {
-      fs.rmSync(sentinel, { force: true });
-    }
+  // the fail-safe cancel and the done-flag. The run's own live contract is the
+  // "still finalizing" signal — bound to the session that armed it, so another
+  // session in the checkout (or this one once Step 8 closed the run) is not held.
+  test("this session's open autonomous run — and only that one", () => {
+    const RC = require("./run-contract.js");
+    RC.arm(dir, { mode: "audit", flow: "autonomous", ship: "manual", passes: [], sessionId: "s-auto" });
+    expect(holdReason({ cwd: dir, session_id: "s-auto" }, {})).toBe("autonomous-run");
+    expect(holdReason({ cwd: dir, session_id: "s-other" }, {})).toBe("");
+    expect(holdReason({ cwd: dir }, {})).toBe("");
+    RC.close(dir, "done");
+    expect(holdReason({ cwd: dir, session_id: "s-auto" }, {})).toBe("");
+  });
+
+  test("an interactive run is not held", () => {
+    const RC = require("./run-contract.js");
+    RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual", passes: [], sessionId: "s-int" });
+    expect(holdReason({ cwd: dir, session_id: "s-int" }, {})).toBe("");
   });
 });
 

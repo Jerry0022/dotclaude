@@ -36,10 +36,11 @@
  *                                  previous registration for the SAME flag path
  *                                  is replaced). The task deletes itself once its
  *                                  trigger window has passed (EndBoundary +
- *                                  DeleteExpiredTaskAfter), and every register
- *                                  first sweeps watchdog tasks and helper scripts
- *                                  older than STALE_AFTER_MS that earlier plugin
- *                                  versions left behind (#544).
+ *                                  DeleteExpiredTaskAfter), and once the new task
+ *                                  is armed, register sweeps watchdog tasks and
+ *                                  helper scripts older than STALE_AFTER_MS that
+ *                                  earlier plugin versions left behind (#544),
+ *                                  under one short budget.
  *                                  → { ok, taskName, flagPath, fireAt, action, swept }
  *
  *   flag [flag-path]               Write the completion flag (signals success).
@@ -95,6 +96,9 @@ const REGISTER_TIMEOUT_MS = 60_000;
 // Deletions per sweep: the backlog of expired tasks shrinks over a few runs
 // instead of stalling one registration.
 const SWEEP_MAX = 25;
+// The whole sweep (query + deletions) stays inside this budget — it runs
+// after the deadman is armed and must not stretch the register call.
+const SWEEP_BUDGET_MS = 8_000;
 
 function fail(msg) {
   process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
@@ -251,14 +255,19 @@ function staleWatchdogTaskNames(csv, nowMs, maxAgeMs = STALE_AFTER_MS) {
  * @param {{now?: number, spawn?: Function, tmp?: string}} [deps]
  * @returns {{tasks: string[], scripts: number}}
  */
-function sweepStaleWatchdogs({ now = Date.now(), spawn = spawnSync, tmp = os.tmpdir() } = {}) {
+function sweepStaleWatchdogs({ now = Date.now(), spawn = spawnSync, tmp = os.tmpdir(), budgetMs = SWEEP_BUDGET_MS, clock = Date.now } = {}) {
   const swept = { tasks: [], scripts: 0 };
+  // One deadline for the whole sweep: a slow or hung Task Scheduler (right
+  // after boot, a loaded machine) must never hold the registration's caller.
+  const deadline = clock() + budgetMs;
+  const left = () => deadline - clock();
   try {
-    const query = spawn('schtasks.exe', ['/Query', '/FO', 'CSV', '/NH'], SPAWN_OPTS);
+    const query = spawn('schtasks.exe', ['/Query', '/FO', 'CSV', '/NH'], { ...SPAWN_OPTS, timeout: Math.max(1, Math.min(SPAWN_TIMEOUT_MS, left())) });
     const stale = query && query.status === 0
       ? staleWatchdogTaskNames(query.stdout, now).slice(0, SWEEP_MAX) : [];
     for (const name of stale) {
-      const del = spawn('schtasks.exe', ['/Delete', '/TN', name, '/F'], SPAWN_OPTS);
+      if (left() <= 0) break;
+      const del = spawn('schtasks.exe', ['/Delete', '/TN', name, '/F'], { ...SPAWN_OPTS, timeout: Math.max(1, Math.min(SPAWN_TIMEOUT_MS, left())) });
       if (del && (del.status === 0 || taskNotFound(del))) swept.tasks.push(name);
     }
   } catch { /* best effort: the next registration sweeps again */ }
@@ -272,37 +281,6 @@ function sweepStaleWatchdogs({ now = Date.now(), spawn = spawnSync, tmp = os.tmp
     try { fs.unlinkSync(file); swept.scripts++; } catch { /* in use or already gone */ }
   }
   return swept;
-}
-
-/**
- * Is an autonomous run of one of `dirs` still before its Step 8c? Its watchdog
- * is registered (a sentinel names a flag path directly in that directory), has
- * not fired yet, and the done-flag is not written. Read-only — never prunes.
- * card-turn-end holds the turn on it, so the Step 7 card widget cannot end the
- * run before its report and finalization (Desktop ends the turn at the card).
- * @param {string[]} dirs
- * @param {{now?: number, tmp?: string}} [opts]
- * @returns {boolean}
- */
-function runOpenIn(dirs, { now = Date.now(), tmp = os.tmpdir() } = {}) {
-  const norm = (p) => path.resolve(p).toLowerCase().replace(/[\\/]+$/, '');
-  const want = new Set((Array.isArray(dirs) ? dirs : []).filter(Boolean).map(norm));
-  if (!want.size) return false;
-  let names = [];
-  try { names = fs.readdirSync(tmp); } catch { return false; }
-  const legacy = path.basename(LEGACY_SENTINEL_FILE);
-  for (const name of names) {
-    const perRegistration = name.startsWith(SENTINEL_PREFIX) && name.endsWith(SENTINEL_SUFFIX);
-    if (!perRegistration && name !== legacy) continue;
-    const data = readSentinelFile(path.join(tmp, name));
-    const flag = data && typeof data.flagPath === 'string' ? data.flagPath : '';
-    if (!flag) continue;
-    const fireAt = Date.parse(data.fireAt || '');
-    if (!Number.isFinite(fireAt) || now >= fireAt) continue;
-    if (!want.has(norm(path.dirname(flag)))) continue;
-    if (!fs.existsSync(flag)) return true;
-  }
-  return false;
 }
 
 /**
@@ -497,9 +475,6 @@ function runRegister(args) {
   const recoveryFlagPath = path.join(path.dirname(flagPath), 'AUTONOMOUS-RECOVERY.flag');
   const workingDir = path.dirname(flagPath);
 
-  // Tasks and scripts earlier registrations left behind (#544) go first.
-  const swept = sweepStaleWatchdogs();
-
   // Clean up a previous watchdog FOR THIS PROJECT ONLY (same flagPath).
   // Parallel autonomous sessions in other projects keep their watchdogs —
   // the old global "only one active at a time" takeover deleted the sibling
@@ -551,6 +526,11 @@ function runRegister(args) {
     action,
     ...(action === 'resume' ? { resumePrompt } : {}),
   }, null, 2));
+
+  // Leftovers of earlier registrations (#544) go only now, once the deadman
+  // is armed, under one short budget — a hung Task Scheduler can delay
+  // the cleanup, never the watchdog itself.
+  const swept = sweepStaleWatchdogs();
 
   ok({ taskName, flagPath, fireAt: fireAt.toISOString(), scriptPath, action, swept });
 }
@@ -682,7 +662,6 @@ module.exports = {
   isValidWatchdogScriptPath,
   pickSentinel,
   removeRegistrationsFor,
-  runOpenIn,
   sentinelFileFor,
   staleWatchdogTaskNames,
   sweepStaleWatchdogs,
