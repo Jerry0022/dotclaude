@@ -688,9 +688,17 @@ describe("classify — a re-activation while collecting is absorbed", () => {
     },
   );
 
-  test.each(["off", "aus", "go", "los", "merge", "status", "marker"])(
+  test.each(["off", "aus", "status", "marker"])(
     "the exit %j while active → passthrough", (args) => {
       expect(on(expanded(args))).toBe("passthrough");
+    },
+  );
+
+  // AUD-C027: go/los/merge fire the same hook merge as the marker, mode on or off.
+  test.each(["go", "los", "merge"])(
+    "the exit %j fires the hook merge (execute)", (args) => {
+      expect(on(expanded(args))).toBe("execute");
+      expect(off(expanded(args))).toBe("execute");
     },
   );
 
@@ -875,5 +883,72 @@ describe("pruneAssets — image copies of long-finished collections go (#490)", 
     expect(manifest["/tmp/a/1.png"]).toBe("pruned"); // still taken — never claimed again
     expect(manifest["/tmp/a/2.png"]).toBe(freshCopy);
     expect(pruneAssets(cwd)).toEqual([]);
+  });
+});
+
+// ── 2026-09-26 audit regressions ──────────────────────────────────────────
+import { createRequire as _auditRequire } from "node:module";
+const _req = _auditRequire(import.meta.url);
+
+describe("AUD-051 — machine turns (task notifications, scheduled tasks) are never collected", () => {
+  const B = _req("./batch-state.js");
+  const silent = _req("../user-prompt-submit/prompt.flow.silent-turn.js");
+
+  test("parity: batch-state carries silent-turn's machine-turn and scheduled-task patterns verbatim", () => {
+    const own = B.MACHINE_PATTERNS.map((r) => `${r.source}/${r.flags}`);
+    expect(own).toContain(`${silent.MACHINE_TURN_PATTERN.source}/${silent.MACHINE_TURN_PATTERN.flags}`);
+    expect(own).toContain(`${silent.SCHEDULED_TASK_PATTERN.source}/${silent.SCHEDULED_TASK_PATTERN.flags}`);
+  });
+
+  test.each([
+    ["task notification", "<task-notification>\n<status>completed</status>\n<summary>ran /do-batch go</summary>\n</task-notification>"],
+    ["system notification", "[SYSTEM NOTIFICATION] agent finished"],
+    ["channel message", '<channel source="slack">hi</channel>'],
+    ["scheduled task", "<scheduled-task name=\"x\">run the check</scheduled-task>"],
+  ])("%s → machine prompt, passthrough with the mode on, no activation", (_l, text) => {
+    expect(B.isMachinePrompt(text)).toBe(true);
+    expect(B.classify({ text, hookInput: {}, marker: ">>", modeActive: true })).toBe("passthrough");
+    expect(B.detectActivation(text).activating).toBe(false);
+    expect(silent.isMachineTurn(text) || silent.isScheduledTask(text)).toBe(true);
+  });
+});
+
+describe("AUD-C056 — a one-word HTML comment line does not split a note", () => {
+  let dir;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "bs-sep-")); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  test("<!-- todo --> on its own line stays inside its note", () => {
+    const B = _req("./batch-state.js");
+    B.appendNote(dir, "erste Zeile\n<!-- todo -->\nzweite Zeile");
+    B.appendNote(dir, "nächste Notiz");
+    const notes = B.readNotes(dir);
+    expect(notes).toHaveLength(2);
+    expect(notes[0].text).toBe("erste Zeile\n<!-- todo -->\nzweite Zeile");
+  });
+});
+
+describe("AUD-C031 — pruning never takes an image an archive still names", () => {
+  let dir;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "bs-prune-")); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  test("old referenced copy stays, old orphan goes", () => {
+    const B = _req("./batch-state.js");
+    const assets = B.assetsDir(dir);
+    fs.mkdirSync(assets, { recursive: true });
+    const kept = path.join(assets, "2026-01-01T00-00-00-000Z-1.png");
+    const orphan = path.join(assets, "2026-01-02T00-00-00-000Z-1.png");
+    for (const f of [kept, orphan]) {
+      fs.writeFileSync(f, "png");
+      const old = new Date(Date.now() - 90 * 86_400_000);
+      fs.utimesSync(f, old, old);
+    }
+    fs.writeFileSync(path.join(B.claudeDir(dir), "batch-2026-01-01T00-00-00-000Z.md"),
+      `# do-batch notes\n\n<!-- 2026-01-01T00:00:00.000Z -->\nsiehe Bild\n[Anhang-Datei] ${kept}\n`);
+    const removed = B.pruneAssets(dir);
+    expect(removed).toEqual([orphan]);
+    expect(fs.existsSync(kept)).toBe(true);
+    expect(fs.existsSync(orphan)).toBe(false);
   });
 });

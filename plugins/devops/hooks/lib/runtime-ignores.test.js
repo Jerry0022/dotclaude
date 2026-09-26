@@ -85,3 +85,19 @@ describe("AUD-016: the run-contract store's sibling files are ignored", () => {
     } finally { fs.rmSync(d, { recursive: true, force: true }); }
   });
 });
+
+describe("AUD-C023 — archived batches and the guide flag are ignored", () => {
+  test("git check-ignore matches .claude/batch-<ts>.md and .claude/auto-guide-active.json", async () => {
+    const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+    const { execFileSync } = require("node:child_process");
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "ri-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: d });
+      fs.writeFileSync(path.join(d, ".git", "info", "exclude"), renderBlock() + "\n");
+      const names = [".claude/batch-2026-09-26T10-00-00-000Z.md", ".claude/auto-guide-active.json"];
+      const out = execFileSync("git", ["check-ignore", "--no-index", ...names], { cwd: d, encoding: "utf8" });
+      expect(out.trim().split(/\r?\n/)).toEqual(names);
+      expect(() => execFileSync("git", ["check-ignore", "--no-index", ".claude/batch-notes-draft.txt"], { cwd: d, stdio: "pipe" })).toThrow();
+    } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  });
+});

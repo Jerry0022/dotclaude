@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.7.1
+ * @version 0.8.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -79,6 +79,16 @@ const GIT_SYNC_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'git-sync
 const SYNC_TIMEOUT_MS = 45_000;
 
 /**
+ * git-sync's own budgets while this hook waits on it (AUD-C004). Its merge may
+ * otherwise write for 5 min (git-sync-recover WRITE_TIMEOUT_DEFAULT_MS); the
+ * 45 s kill above would then land mid-checkout and leave half the incoming
+ * tree plus index.lock behind. With these, git-sync's own kill-and-restore
+ * fires first and puts the worktree back.
+ */
+const SYNC_WRITE_TIMEOUT_MS = 20_000;
+const SYNC_READ_TIMEOUT_MS = 8_000;
+
+/**
  * Inline the full note text up to this size.
  *
  * Beyond it the notes are NOT dropped in favour of a bare file pointer — that
@@ -140,15 +150,21 @@ function buildAck(count, marker, question, bounds = {}, images = 0) {
  * @param {boolean} stored whether the invocation carried text that is now a note
  * @param {{expiryHours?:number,maxNotes?:number}} [bounds]
  */
-function buildRearmAck(count, marker, stored, bounds = {}) {
+function buildRearmAck(count, marker, stored, bounds = {}, images = 0) {
   const lines = [
     stored
-      ? `[do-batch] Sammelmodus läuft bereits — der Text wurde als Notiz #${count} gespeichert, kein Fehler.`
+      ? `[do-batch] Sammelmodus läuft bereits — der Aufruf wurde als Notiz #${count} gespeichert, kein Fehler.`
       : '[do-batch] Sammelmodus läuft bereits — Aufruf ignoriert, kein Fehler.',
+  ];
+  if (stored && images > 0) {
+    // AUD-C057: the panel used to stay silent about a kept image.
+    lines.push(`📎 ${images === 1 ? 'Das Bild ist' : `${images} Bilder sind`} mit der Notiz gespeichert — der Merge sieht ${images === 1 ? 'es' : 'sie'}.`);
+  }
+  lines.push(
     'Ein erneutes Einschalten ist nicht nötig; alles Weitere wird weiter gesammelt.',
     '',
     B.renderModeSummary({ marker, count, ...bounds }),
-  ];
+  );
   return lines.join('\n');
 }
 
@@ -179,10 +195,21 @@ function renderSyncLines(sync) {
     // --explain: the sync stepped aside (dirty overlap, detached HEAD, a merge
     // or ship in progress). The branch may be behind main — never report that
     // as "already contained".
+    lines.push(`main (bzw. ein Eltern-Branch) wurde NICHT vollständig gemerged: ${sync.output}`);
+    if (/fetch of .+ failed|probe failed|behind origin\//.test(sync.output || '')) {
+      // AUD-C003: a sync that never reached the remote — the stand of main is
+      // UNKNOWN, which is the opposite of "already contained".
+      lines.push(
+        'Der Stand von main ist UNBEKANNT (Fetch/Prüfung fehlgeschlagen oder lokaler main',
+        'hinter dem Remote) — sag NICHT, main sei enthalten.',
+      );
+    }
+    if (/[⚠✗]/.test(sync.output || '')) {
+      lines.push('Dazu ein Konflikt oder Fehlschlag: löse ihn ZUERST (merge-safety.md: nie --ours/--theirs).');
+    }
     lines.push(
-      `main (bzw. ein Eltern-Branch) wurde NICHT vollständig gemerged: ${sync.output}`,
       'Behebe den genannten Grund ZUERST (z. B. WIP committen, Branch auschecken,',
-      `laufende Operation abschließen) und führe dann node "${script}" --explain aus —`,
+      `laufende Operation abschließen, Netz/Remote prüfen) und führe dann node "${script}" --explain aus —`,
       'erst wenn main drin ist, die Notizen prüfen.',
     );
   } else if (sync.output && /[✓⚠✗]/.test(sync.output)) {
@@ -210,9 +237,13 @@ function renderSyncLines(sync) {
 
 /** One line per note: number, timestamp, first EXCERPT_CHARS characters. */
 function noteIndexLine(note, i) {
-  const flat = note.text.replace(/\s+/g, ' ').trim();
+  // Attachment lines stay whole (AUD-C028): a late-matched image exists only in
+  // the injected copy, never in batch.md, so a cut excerpt lost it for good.
+  const lines = note.text.split('\n');
+  const attach = lines.filter(l => /^\s*\[Anhang-Datei\]/.test(l)).map(l => `   ${l.trim()}`);
+  const flat = lines.filter(l => !/^\s*\[Anhang-Datei\]/.test(l)).join(' ').replace(/\s+/g, ' ').trim();
   const cut = flat.length > EXCERPT_CHARS ? `${flat.slice(0, EXCERPT_CHARS)} …` : flat;
-  return `#${i + 1} (${note.at}) ${cut}`;
+  return [`#${i + 1} (${note.at}) ${cut}`, ...attach].join('\n');
 }
 
 /**
@@ -273,7 +304,17 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     '   - sonst Skill devops:do-run mit --from=do-batch (do-run überspringt dann "Was?").',
     '   Vorher: archiveNotes(cwd) aus hooks/lib/batch-state.js (archivieren, nie',
     '   löschen) und den archivierten Pfad in die Übergabe schreiben. Die Übergabe',
-    '   trägt den Abschnitt "Bündel:" (do-batch 4.9).',
+    '   trägt den Abschnitt "Bündel:" (do-batch 4.9). Übergabe-Form (do-batch 4.9):',
+    // AUD-C058: the marker path never loads the skill, so the template has to
+    // travel with the context — without it the hand-off body was improvised.
+    '     --from=do-batch',
+    '     Notizen: <archivierter Pfad>',
+    '     Abdeckung: #1 … #N, je eine Zeile, Dispositionen wie oben',
+    '     Plan: <der zusammengeführte Plan, jedes Notiz-Detail erhalten>',
+    '     Bündel:',
+    '       B1 <Name> — Notizen #…; besitzt <Dateien/Flächen>; Schnittstellen: <Vertrag mit Bx>; nach: <Bx | —>; Prüfung: <Verifikation>',
+    '     Konflikte / nicht machbar: <jeder benannt, mit gewähltem Default oder "offen">',
+    '     Offene Entscheidungen: <nur auto-concept — die Gabelungen, die dorthin geführt haben>',
     '   Die Übergabe an do-run (--from=do-batch) bzw. auto-concept (--from=do-batch) wird',
     '   per Hook erzwungen: Edits und Commits werden abgelehnt, bis einer der beiden aufgerufen ist.',
     '',
@@ -334,6 +375,11 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     // No silent cap: a truncated index that looks complete is the same failure
     // as a dropped note.
     out.push(`… #${shown.length + 1} bis #${n} sind hier NICHT gelistet — hol sie aus der Datei.`);
+    // Their image lines may exist only here (late-matched), never in the file.
+    const rest = notes.slice(shown.length).flatMap((note, k) => note.text.split('\n')
+      .filter(l => /^\s*\[Anhang-Datei\]/.test(l))
+      .map(l => `#${shown.length + k + 1} ${l.trim()}`));
+    if (rest.length) out.push('Anhänge dieser Notizen (stehen NICHT in der Datei):', ...rest);
   }
   return out.join('\n');
 }
@@ -358,6 +404,8 @@ function buildEmptyQueueNotice(notesFile, exists, bytes, marker) {
     lines.push(
       'Sag dem Nutzer NICHT, es gebe keine Notizen. Die Datei hat Inhalt, nur der',
       'Parser findet darin keine Trenner (manuell editiert, Trennzeile zerstört).',
+      'Der Sammelmodus ist mit diesem Prompt BEENDET — Folgeprompts laufen normal, sonst',
+      'würde deine Rückfrage als Notiz verschluckt. Sag das dem Nutzer in einer Zeile.',
       'Vorgehen:',
       '1. Lies die Datei roh und vollständig.',
       '2. Steht dort Inhalt, benutze ihn als Notizen und führe den Merge normal durch',
@@ -437,8 +485,8 @@ function buildAttachmentGuard(marker, refs) {
  * activated yet, and a "note" written for a question ABOUT the mode would be
  * corruption), so it states the rule in the turn where the decision is made.
  */
-function buildActivationGuard() {
-  return [
+function buildActivationGuard(copies = []) {
+  const lines = [
     '[do-batch] Dieser Prompt startet den Sammelmodus UND trägt zusätzlichen Inhalt.',
     '',
     'Der Inhalt neben der Aktivierung ist NOTIZ, nicht Auftrag:',
@@ -459,7 +507,16 @@ function buildActivationGuard() {
     'Modus, ein Status, /do-batch off, oder einfach ein Satz, in dem der',
     'Sammelmodus nur vorkommt —, ignoriere diesen Hinweis vollständig und',
     'bearbeite den Prompt normal. Die Erkennung ist eine Heuristik.',
-  ].join('\n');
+  ];
+  if (copies.length) {
+    lines.push(
+      '',
+      'Das eingefügte Bild ist bereits gesichert. Hänge diese Zeile(n) WÖRTLICH an die',
+      'erste Notiz an, damit der Merge es sieht:',
+      B.attachmentFileLines(copies),
+    );
+  }
+  return lines.join('\n');
 }
 
 /** How long a collected prompt waits for the harness to write its pasted
@@ -553,6 +610,8 @@ function syncMain(cwd) {
   // The background spawner routes output into a result file; here stdout IS
   // the result.
   delete env.DEVOPS_GIT_SYNC_RESULT_FILE;
+  env.DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS = String(SYNC_WRITE_TIMEOUT_MS);
+  env.DEVOPS_GIT_SYNC_TIMEOUT_MS = String(SYNC_READ_TIMEOUT_MS);
   try {
     // --explain: a skipped sync must say so, or it reads as "up to date".
     const out = execFileSync(process.execPath, [script, '--explain'], {
@@ -565,10 +624,38 @@ function syncMain(cwd) {
     });
     return { ran: true, output: String(out || '').trim(), script };
   } catch (err) {
-    const reason = err && err.killed
+    const killed = Boolean(err && (err.killed || err.code === 'ETIMEDOUT'));
+    let reason = killed
       ? `Timeout nach ${SYNC_TIMEOUT_MS / 1000} s`
       : String(err && err.message || err).split('\n')[0];
+    if (killed) {
+      const left = leftoverMerge(cwd);
+      if (left) reason += ` — ${left}`;
+    }
     return { ran: false, reason, script };
+  }
+}
+
+/**
+ * What a sync killed from outside may have left behind: git's index.lock or an
+ * unfinished merge. Named so the turn repairs it instead of re-running a sync
+ * that would refuse (project memory: killed fast-forward repair). '' when clean
+ * or unreadable. Bounded: one git call, 3 s.
+ */
+function leftoverMerge(cwd) {
+  try {
+    const gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
+      cwd, encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+    }).trim();
+    const found = [];
+    if (fs.existsSync(path.join(gitDir, 'index.lock'))) found.push('index.lock');
+    if (fs.existsSync(path.join(gitDir, 'MERGE_HEAD'))) found.push('MERGE_HEAD');
+    if (!found.length) return '';
+    return `HALBFERTIGER MERGE: ${found.join(' + ')} in ${gitDir} liegt noch. Prüfe \`git status\` gegen HEAD `
+      + '(halb ausgecheckte Dateien zurück mit `git checkout HEAD -- <pfad>`), entferne index.lock nur, '
+      + 'wenn kein git-Prozess mehr läuft, dann den Sync erneut ausführen';
+  } catch {
+    return '';
   }
 }
 
@@ -577,7 +664,7 @@ function syncMain(cwd) {
  * @param {{cwd:string,text:string,marker:string,modeActive:boolean,sessionId?:string}} ctx
  * @param {{buildMergeContext?:Function, write?:Function}} [deps] test seam
  */
-function fireMerge({ cwd, text, marker, modeActive, sessionId }, deps = {}) {
+function fireMerge({ cwd, text, marker, modeActive, sessionId, rest: restOverride }, deps = {}) {
   const build = deps.buildMergeContext || buildMergeContext;
   const write = deps.write || ((s) => process.stdout.write(s));
   const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd), Date.now());
@@ -587,11 +674,16 @@ function fireMerge({ cwd, text, marker, modeActive, sessionId }, deps = {}) {
     let bytes = 0;
     try { bytes = fs.statSync(B.notesPath(cwd)).size; exists = true; } catch { /* absent */ }
     if (modeActive || (exists && bytes > 0)) {
-      process.stdout.write(`${buildEmptyQueueNotice(B.notesPath(cwd), exists, bytes, marker)}\n`);
+      write(`${buildEmptyQueueNotice(B.notesPath(cwd), exists, bytes, marker)}\n`);
     }
-    return; // mode stays armed — the user just fired early
+    // AUD-C029: a file with content the parser cannot read is merged by hand
+    // this turn — collection must end here, or the turn's own follow-up
+    // (the user's answer) is swallowed as a note. A truly empty queue keeps
+    // the mode armed: the user just fired early.
+    if (exists && bytes > 0) { try { B.deactivate(cwd); } catch { /* best effort */ } }
+    return;
   }
-  const rest = B.stripMarker(text, marker);
+  const rest = typeof restOverride === 'string' ? restOverride : B.stripMarker(text, marker);
   // Before the notes are even shown: bring main in. The plan is checked against
   // the code as it is now, not as it was when the first note was written.
   const sync = syncMain(cwd);
@@ -638,7 +730,11 @@ process.stdin.on('end', () => {
   if (verdict === 'execute') {
     // Reached with the mode off as well: an expired or note-capped mode must not
     // strand the notes it collected.
-    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id || null }); } catch { /* non-fatal — the turn still runs */ }
+    // `/do-batch go <text>` fires the same merge (AUD-C027); its residue is
+    // the text beside the trigger, as after a marker.
+    let rest;
+    try { const inv = B.parseBatchCommand(text); if (inv?.route === 'go') rest = inv.residue; } catch { /* marker path */ }
+    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id || null, rest }); } catch { /* non-fatal — the turn still runs */ }
     process.exit(0);
   }
 
@@ -671,8 +767,14 @@ process.stdin.on('end', () => {
       const now = Date.now();
       const copies = captureNoteImages(cwd, hook.session_id, now);
       const noteText = [residue, copies.length ? B.attachmentFileLines(copies) : ''].filter(Boolean).join('\n');
-      const count = noteText ? B.appendNote(cwd, noteText, now) : B.countNotes(cwd);
-      process.stderr.write(`${buildRearmAck(count, marker, Boolean(noteText), bounds)}\n`);
+      const before = B.countNotes(cwd);
+      const count = noteText ? B.appendNote(cwd, noteText, now) : before;
+      if (noteText && count <= before) {
+        // Nothing landed — blocking would erase the text with no note (AUD-C006).
+        process.stderr.write('[do-batch] Aufruf konnte nicht als Notiz gespeichert werden — Skill übernimmt.\n');
+        process.exit(0);
+      }
+      process.stderr.write(`${buildRearmAck(count, marker, Boolean(noteText), bounds, copies.length)}\n`);
       process.exit(2);
     } catch (err) {
       // Could not store — let the skill handle it, as before this branch existed.
@@ -694,9 +796,18 @@ process.stdin.on('end', () => {
     }
     // Mode off. The one prompt collection can never catch is the one that turns
     // it on — when it also carries work, say so before the model starts doing it.
+    // Machine turns (task notifications, crons) are never an activation, even
+    // when they quote "/do-batch …" (AUD-051).
+    if (B.isMachinePrompt(text)) process.exit(0);
     try {
       const act = B.detectActivation(text);
-      if (act.activating && act.carriesContent) process.stdout.write(`${buildActivationGuard()}\n`);
+      if (act.activating && act.carriesContent) {
+        // AUD-C032: an image pasted with the activating prompt is taken NOW;
+        // waiting for the merge's late match lost it once note #1 was filed
+        // more than a minute later.
+        const copies = captureNoteImages(cwd, hook.session_id, Date.now());
+        process.stdout.write(`${buildActivationGuard(copies)}\n`);
+      }
     } catch { /* advisory only — never let this cost a turn */ }
     process.exit(0);
   }
@@ -706,8 +817,20 @@ process.stdin.on('end', () => {
   try {
     const now = Date.now();
     const copies = captureNoteImages(cwd, hook.session_id, now);
-    const noteText = copies.length ? `${text}\n${B.attachmentFileLines(copies)}` : text;
+    const noteText = [text.trim(), copies.length ? B.attachmentFileLines(copies) : ''].filter(Boolean).join('\n');
+    if (!noteText) {
+      // AUD-C006: an image-only Desktop prompt whose image was not found in
+      // time. Blocking would erase it with nothing stored — let it through
+      // with the attachment guard, so the turn files it while it sees it.
+      process.stdout.write(`${buildAttachmentGuard(marker, [])}\n`);
+      process.exit(0);
+    }
+    const before = B.countNotes(cwd);
     const count = B.appendNote(cwd, noteText, now);
+    if (count <= before) {
+      process.stderr.write('[do-batch] Notiz konnte nicht gespeichert werden — Prompt läuft normal weiter.\n');
+      process.exit(0);
+    }
     process.stderr.write(`${buildAck(count, marker, B.looksLikeQuestion(text), bounds, copies.length)}\n`);
     process.exit(2);
   } catch (err) {
@@ -728,6 +851,10 @@ module.exports = {
   buildAttachmentGuard,
   buildEmptyQueueNotice,
   syncMain,
+  leftoverMerge,
+  SYNC_TIMEOUT_MS,
+  SYNC_WRITE_TIMEOUT_MS,
+  SYNC_READ_TIMEOUT_MS,
   INLINE_LIMIT,
   GIT_SYNC_SCRIPT,
 };

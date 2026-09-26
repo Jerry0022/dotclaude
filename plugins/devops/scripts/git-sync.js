@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.6.0
+ * @version 0.7.0
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -12,6 +12,8 @@
  *   `--explain` (do-batch merge): every no-merge exit names its reason.
  *   A merge that dies mid-checkout (its timeout, or its own error) never
  *   stays half-applied: what it wrote is put back (hooks/lib/git-sync-recover.js).
+ *   A sync that never happened — a failed fetch, a failed behind-count probe,
+ *   a session on a local main behind its remote — is "– skipped:", never "=".
  */
 
 const { execFileSync } = require('child_process');
@@ -81,6 +83,22 @@ function git(args) {
 const WRITE_TIMEOUT_MS = writeTimeoutMs(process.env, GIT_TIMEOUT_MS);
 const gitWrite = gitRunner({ cwd, timeoutMs: WRITE_TIMEOUT_MS });
 
+// Reads whose FAILURE matters (fetches, the behind-count probe): git() folds a
+// failure into null, and null used to read as "0 behind" — a killed fetch or a
+// timed-out probe then reported "= already in" for a sync that never ran.
+const gitRead = gitRunner({ cwd, timeoutMs: GIT_TIMEOUT_MS });
+
+/** One-line cause of a failed read: its timeout, else git's own error line. */
+function readFailure(res) {
+  if (res.timedOut) return `timed out after ${Math.round(GIT_TIMEOUT_MS / 1000)} s`;
+  return firstErrorLine(res.err) || 'git error';
+}
+
+/** A fetch refused because the branch does not exist upstream — not a failure. */
+function isMissingUpstream(res) {
+  return !res.timedOut && /couldn't find remote ref|could not find remote ref/i.test(res.err);
+}
+
 // Only run in a git repo
 if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') {
   quit('not a git work tree', { nothingToDo: true });
@@ -117,7 +135,19 @@ const MAIN = (() => {
 // an exotic one.
 const branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
 if (!branch) quit('detached HEAD — check out a branch first');
-if (branch === MAIN) quit(`on ${MAIN} itself`, { nothingToDo: true });
+if (branch === MAIN) {
+  // Nothing to merge INTO main — but "=" would claim the session sees current
+  // main. Under --explain say whether the local branch trails its remote.
+  if (EXPLAIN) {
+    const f = gitRead(['fetch', origin, `+refs/heads/${MAIN}:refs/remotes/${origin}/${MAIN}`, '--quiet']);
+    if (!f.ok) quit(`on ${MAIN} itself; fetch of ${MAIN} failed (${readFailure(f)}) — stale ref, ${origin}/${MAIN} may be ahead`);
+    const b = gitRead(['rev-list', '--count', `HEAD..refs/remotes/${origin}/${MAIN}`]);
+    if (!b.ok) quit(`on ${MAIN} itself; behind-count probe failed (${readFailure(b)})`);
+    const n = parseInt(b.out.trim(), 10) || 0;
+    if (n > 0) quit(`on ${MAIN} itself, ${n} commit(s) behind ${origin}/${MAIN} — pull first`);
+  }
+  quit(`on ${MAIN} itself`, { nothingToDo: true });
+}
 
 // An unfinished merge/rebase/cherry-pick/revert/bisect owns the index. A merge
 // attempted on top of one fails without conflicts of its own, and the recovery
@@ -453,10 +483,12 @@ function undoFailedMerge({ source, count, merge, lock, preHead }) {
 // warn only for genuinely ambiguous conflicts that need semantic resolution.
 // See deep-knowledge/merge-safety.md for the full resolution protocol.
 function tryMerge(source) {
-  const behind = git(['rev-list', '--count', `HEAD..${source}`]);
-  if (!behind || parseInt(behind) === 0) return null; // already up to date
-
-  const count = parseInt(behind);
+  const probe = gitRead(['rev-list', '--count', `HEAD..${source}`]);
+  // A failed probe is not "0 behind" — it is "unknown", and says so.
+  if (!probe.ok) return { source, skipped: `behind-count probe failed (${readFailure(probe)})` };
+  const count = parseInt(probe.out.trim(), 10);
+  if (!Number.isFinite(count)) return { source, skipped: `behind-count probe unreadable (${JSON.stringify(probe.out.trim().slice(0, 40))})` };
+  if (count === 0) return null; // already up to date
 
   // Work in progress on a file the merge would rewrite → not now, and silently.
   const overlap = dirtyOverlap(source);
@@ -572,29 +604,51 @@ function tryMerge(source) {
 // for weeks while origin/main moved. refs/remotes/<origin>/<x> is never checked
 // out and can therefore always be updated.
 const sources = [];
+/** source → why its fetch failed: its tracking ref is stale, "=" would lie. */
+const staleFetch = new Map();
+/** --explain lines for parents whose fetch failed with no ref to fall back on. */
+const fetchSkips = [];
 for (const p of getParentChain(branch)) {
   const tracking = `refs/remotes/${origin}/${p}`;
-  git(['fetch', origin, `+refs/heads/${p}:${tracking}`, '--quiet']);
+  const f = gitRead(['fetch', origin, `+refs/heads/${p}:${tracking}`, '--quiet']);
+  const missing = !f.ok && isMissingUpstream(f);
   // Skips parents that do not exist upstream (e.g. the "claude" segment of
   // claude/some-branch). A failed fetch with a tracking ref left from an
-  // earlier run is fine: those commits are real, merging them is the job.
-  if (git(['rev-parse', '--verify', '--quiet', tracking]) === null) continue;
+  // earlier run still merges — those commits are real — but is reported as
+  // stale, never as "already in".
+  if (git(['rev-parse', '--verify', '--quiet', tracking]) === null) {
+    if (!f.ok && !missing) fetchSkips.push(`– skipped: fetch of ${p} failed (${readFailure(f)}) — no tracking ref`);
+    continue;
+  }
+  if (!f.ok && !missing) staleFetch.set(`${origin}/${p}`, readFailure(f));
   sources.push(`${origin}/${p}`);
 }
 
-if (!sources.length) quit('no parent branch exists upstream', { nothingToDo: true });
+if (!sources.length) {
+  if (fetchSkips.length) quit(fetchSkips.map(l => l.replace(/^– skipped: /, '')).join(' | '));
+  quit('no parent branch exists upstream', { nothingToDo: true });
+}
 
 // Best effort, never load-bearing: keep the local main ref in step for repos
 // where nothing has it checked out. Fails silently in the layout above.
 git(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
 
 // Merge each parent into current branch (root → closest parent)
-const messages = [];
+const messages = EXPLAIN ? [...fetchSkips] : [];
 for (const parent of sources) {
   const result = tryMerge(parent);
+  const stale = staleFetch.get(parent);
+  const staleNote = stale ? `fetch of ${parent.slice(origin.length + 1)} failed (${stale}) — stale ref` : '';
   if (!result) {
-    if (EXPLAIN) messages.push(`= ${parent} already in ${branch}`);
+    if (EXPLAIN) {
+      messages.push(stale
+        ? `– ${parent} → ${branch}: skipped: ${staleNote}, ${parent} may be ahead`
+        : `= ${parent} already in ${branch}`);
+    }
     continue;
+  }
+  if (stale && EXPLAIN && !result.skipped) {
+    messages.push(`– ${parent} → ${branch}: skipped: ${staleNote} — merged what the old ref had, more may be pending`);
   }
   if (result.skipped) {
     // Background mode stays silent: the next window finds the same commits.
