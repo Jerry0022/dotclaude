@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.browsertest
- * @version 0.3.0
+ * @version 0.4.0
  * @event Stop
  * @plugin devops
  * @description Light-verification enforcement gate (the "V" of the V&V gate).
@@ -23,6 +23,11 @@
  *     - Green-not-just-ran (②) and order (③) are enforced by the writer
  *       (post.flow.completion): the verified flag is only set on a passing run
  *       and is cleared whenever a new qualifying edit lands.
+ *     - A test run in the BACKGROUND verifies nothing at launch. Its outcome is
+ *       settled here at the latest, from its task-notification (lib/light-bgrun),
+ *       before the flags are read; while it is still running the gate does not
+ *       block (BG_RUN_MAX_MS at most) and keeps every flag for the Stop that
+ *       sees its result.
  *
  *   Flags are written by post.flow.completion; docs/markdown/config and
  *   concept pages are excluded there. Decision logic lives in
@@ -38,6 +43,7 @@ const fs = require('fs');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { decideLightTest, hasSkipJustification } = require('../lib/browsertest-guard');
 const { safeReadTranscript, lastAssistantText } = require('../lib/card-guard');
+const { BGRUN_FLAG, settleRecordedRuns } = require('../lib/light-bgrun');
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -53,12 +59,22 @@ process.stdin.on('end', () => {
   // unlinks them on reset — a glob fallback would let it fire on a concurrent
   // session's state and then delete that session's still-owed pending flag.
   const EXACT = { exact: true };
+  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId, EXACT);
+
+  // A background test run whose notification arrived after the last tool call
+  // settles here — before the flags below are read, so its verdict counts at
+  // this Stop. One still running keeps the gate from blocking instead.
+  let inFlight = false;
+  if (!silentResult) {
+    try { inFlight = settleRecordedRuns(sessionId, hook.transcript_path).running > 0; } catch {}
+  }
+
   const pendingResult = readSessionFile('dotclaude-devops-light-pending', sessionId, EXACT);
   const verifiedResult = readSessionFile('dotclaude-devops-light-verified', sessionId, EXACT);
   const redResult = readSessionFile('dotclaude-devops-light-red', sessionId, EXACT);
   const kindResult = readSessionFile('dotclaude-devops-light-kind', sessionId, EXACT);
-  const silentResult = readSessionFile('dotclaude-devops-silent-turn', sessionId, EXACT);
   const blockCountResult = readSessionFile('dotclaude-devops-light-blockcount', sessionId, EXACT);
+  const bgRunResult = readSessionFile(BGRUN_FLAG, sessionId, EXACT);
 
   const blockCount = blockCountResult ? (parseInt(blockCountResult.content, 10) || 0) : 0;
 
@@ -79,6 +95,7 @@ process.stdin.on('end', () => {
     kind: (kindResult && kindResult.content) || 'any',
     blockCount,
     skipJustified,
+    inFlight,
   });
 
   if (decision.incrementBlock) {
@@ -107,6 +124,7 @@ process.stdin.on('end', () => {
     if (redResult) try { fs.unlinkSync(redResult.filePath); } catch {}
     if (kindResult) try { fs.unlinkSync(kindResult.filePath); } catch {}
     if (blockCountResult) try { fs.unlinkSync(blockCountResult.filePath); } catch {}
+    if (bgRunResult) try { fs.unlinkSync(bgRunResult.filePath); } catch {}
   }
 
   if (decision.action === 'block') {

@@ -5,7 +5,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  scanOpenTasks, openTaskNames, labelFor, isConceptInfra, responseTaskId, responseLaunch,
+  scanOpenTasks, openTaskNames, labelFor, isConceptInfra, responseTaskId, responseLaunch, taskEnds,
   AGENT_LAUNCH_MARKER, BASH_LAUNCH_MARKER, WORKFLOW_LAUNCH_MARKER,
 } from './pending-tasks.js';
 
@@ -987,5 +987,64 @@ describe('isConceptInfra', () => {
     expect(isConceptInfra({ command: 'node scripts/concept-drift.js --capture' })).toBe(false);
     expect(isConceptInfra({})).toBe(false);
     expect(isConceptInfra(undefined)).toBe(false);
+  });
+});
+
+// How a background task ended — the Light gate settles a background test run
+// from it. Shapes as the harness writes them (a queue-operation entry, and the
+// plain-string user message a resumed session gets).
+describe('taskEnds — how a background task ended', () => {
+  const notification = (id, status, summary, outputFile) =>
+    `<task-notification>\n<task-id>${id}</task-id>\n<tool-use-id>toolu_01W</tool-use-id>\n` +
+    (outputFile ? `<output-file>${outputFile}</output-file>\n` : '') +
+    `<status>${status}</status>\n<summary>${summary}</summary>\n</task-notification>`;
+  const OUT = 'C:\\Users\\x\\AppData\\Local\\Temp\\claude\\p\\s\\tasks\\b6fca8o0j.output';
+  const COMPLETED = notification('b6fca8o0j', 'completed', 'Background command "Run the suite" completed (exit code 0)', OUT);
+
+  test('a queue-operation notification: status, summary and the decoded output path', () => {
+    const line = JSON.stringify({ type: 'queue-operation', operation: 'enqueue', content: COMPLETED });
+    expect(taskEnds(line).get('b6fca8o0j')).toEqual({
+      status: 'completed',
+      summary: 'Background command "Run the suite" completed (exit code 0)',
+      outputFile: OUT,
+    });
+  });
+
+  test('a plain-string user message counts too; the latest end of an id wins', () => {
+    const failed = notification('bzpmyzcyk', 'failed', 'Background command "Serve build" failed with exit code 1', '');
+    const stopped = notification('bzpmyzcyk', 'stopped', "Background shell command didn't finish before the previous session ended", '');
+    const lines = [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: failed } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: stopped } }),
+    ].join('\n');
+    expect(taskEnds(lines).get('bzpmyzcyk').status).toBe('stopped');
+  });
+
+  test('a block naming several ids ends each of them', () => {
+    const orphan = JSON.stringify({
+      type: 'queue-operation', operation: 'enqueue',
+      content: '<task-notification>\n<task-id>b1aaaaaaa</task-id><task-id>b2bbbbbbb</task-id>' +
+        '<task-id>__orphan_summary__:shell</task-id>\n<status>stopped</status>\n</task-notification>',
+    });
+    const ends = taskEnds(orphan);
+    expect([...ends.keys()]).toEqual(['b1aaaaaaa', 'b2bbbbbbb']);
+  });
+
+  test('a quoted notification — in a tool_result or an assistant message — is no end', () => {
+    const inResult = JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_g', content: COMPLETED }] },
+    });
+    const inAssistant = JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: `It said ${COMPLETED}` }] },
+    });
+    expect(taskEnds([inResult, inAssistant].join('\n')).size).toBe(0);
+  });
+
+  test('no notification, or no transcript → no ends', () => {
+    expect(taskEnds(toolResult('toolu_b', BASH_BG_TEXT)).size).toBe(0);
+    expect(taskEnds('').size).toBe(0);
+    expect(taskEnds(undefined).size).toBe(0);
   });
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.28.1
+ * @version 0.29.0
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -35,6 +35,10 @@
  *       reason and the card stamp). "Ran" means the runner's own summary is in
  *       the output: a chained command that dies before the runner (#409) is
  *       'unknown' and touches neither flag.
+ *     - light-bgrun — a test run the harness put in the background: its launch
+ *       report verifies nothing. It is recorded and settled from its
+ *       task-notification on a later call (lib/light-bgrun), and a qualifying
+ *       edit drops it (③).
  *     - validation-pending — any source change owes a validation attestation in
  *       the completion card; a new edit clears a prior validation-attested flag.
  *   Subagent delegation does not satisfy any of these gates, and a subagent
@@ -81,7 +85,8 @@ const { GIT_TIMEOUT_MS } = require('../lib/git-timeout');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
 const { getLocale, t } = require('../lib/locale');
-const { responseLaunch, labelFor, isConceptInfra } = require('../lib/pending-tasks');
+const { responseLaunch, responseTaskId, labelFor, isConceptInfra } = require('../lib/pending-tasks');
+const { BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = require('../lib/light-bgrun');
 const { SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = require('../lib/task-chips');
 const {
   decideCardTurnEnd,
@@ -484,9 +489,11 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
           owedKind,
         );
         // ③ order — a new qualifying edit invalidates any prior verification,
-        // so the Light check must run AFTER this change.
+        // so the Light check must run AFTER this change. A run still going in
+        // the background tests the code before it, so its record goes too.
         unlinkFlag('dotclaude-devops-light-verified');
         unlinkFlag('dotclaude-devops-light-red');
+        unlinkFlag(BGRUN_FLAG);
       }
       // Validation gate — surface-agnostic: ANY real source change owes a
       // validation attestation in the completion card. A new edit invalidates
@@ -517,6 +524,11 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
         if (isCodeChange(file, carveOuts)) oweFor(file);
       }
     }
+
+    // A background test run settles as soon as its task-notification is in the
+    // transcript — on this call already, so a card rendered in the turn the
+    // result arrives in sees it. Nothing is read while no run is recorded.
+    try { settleRecordedRuns(hook.session_id, hook.transcript_path); } catch {}
 
     // Verification observation. Split browser vs test-runner so the runner path
     // can require a PASSING run (Kern ②). A red run sets light-red and does NOT
@@ -559,6 +571,11 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
           toolName,
         );
       }
+      // A run the harness put in the background is 'unknown' at launch — its
+      // response is the launch report. Recorded, it settles from its
+      // task-notification on a later call or at the Stop gate.
+      const backgroundTask = responseTaskId(hook.tool_response);
+      if (backgroundTask) recordBackgroundRun(hook.session_id, backgroundTask);
     }
   } catch { /* profile/gate bookkeeping is best effort */ }
 
