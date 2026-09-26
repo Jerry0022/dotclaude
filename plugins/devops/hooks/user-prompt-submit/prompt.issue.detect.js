@@ -116,11 +116,15 @@ process.stdin.on('end', () => {
     return;
   }
 
-  // Already tracked issues are never tracked or asked about again
+  // Already tracked issues are never tracked or asked about again. Without a
+  // session id there is no list (#540): sessionFile() would fall back to the
+  // one `…-unknown` file every id-less session shares, and the list drives
+  // GitHub writes in the completion flow (board status, issue comments).
   const trackedFile = sessionFile('dotclaude-devops-tracked-issues', hook.session_id);
-  const tracked = readList(trackedFile);
+  const tracked = hook.session_id ? readList(trackedFile) : [];
 
   if (trackNumbers.length > 0) {
+    if (!hook.session_id) return;
     const newIssues = trackNumbers.filter(n => !tracked.includes(n));
     if (newIssues.length === 0) return;
 
