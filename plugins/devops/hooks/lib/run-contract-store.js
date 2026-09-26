@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.5.0
+ * @version 0.6.0
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -92,6 +92,14 @@
  *   worktree) can tell it apart from this worktree's own contract. A header
  *   without the field (written before this change) reads back `root: null`
  *   and behaves exactly as before.
+ * AUD-021 (arm vs update): `arm()` takes the header lock too; `update()`
+ *   refuses its write when the header re-read right before it carries a
+ *   different id (an arm landed in between), and the `expiryNotice()` /
+ *   `compactEvents()` write-backs re-check the id right before writing.
+ * AUD-022 (items): `sanitize()` keeps only issue numbers in `items`.
+ * AUD-040: the expiry and quarantine notices print the plain arm line —
+ *   the session has no live contract of its own then, and `--replace`
+ *   could only archive another session's run in a shared checkout.
  */
 
 const fs = require('fs');
@@ -476,7 +484,7 @@ function quarantineCorrupt(cwd, opts = {}) {
 function corruptNotice(cwd) {
   if (!fileExists(corruptPendingPath(cwd))) return null;
   unlinkQuiet(corruptPendingPath(cwd));
-  return `[run-contract] A corrupt run-contract.json was found and quarantined (run-contract.json.corrupt-*) — its gates were off. Still in a do-run? Re-arm: ${rearmHint()}`;
+  return `[run-contract] A corrupt run-contract.json was found and quarantined (run-contract.json.corrupt-*) — its gates were off. Still in a do-run? Re-arm: ${rearmHint({ replace: false })}`;
 }
 
 function strList(v) {
@@ -487,7 +495,9 @@ function strList(v) {
 function sanitize(h) {
   const out = { ...h };
   out.passes = strList(out.passes).filter(p => p === 'harden' || p === 'polish');
-  out.items = strList(out.items).map(s => s.replace(/^#/, ''));
+  // AUD-022: only issue numbers — a free-form item (`12),13`) used to reach
+  // a RegExp built from it later and throw there.
+  out.items = strList(out.items).map(s => s.replace(/^#/, '')).filter(s => /^\d+$/.test(s));
   out.milestones = strList(out.milestones);
   out.strict = !!out.strict;
   out.rethink = !!out.rethink;
@@ -637,6 +647,10 @@ function compactEvents(cwd, header) {
       try { afterStat = fs.statSync(file); } catch { afterStat = null; }
       const grew = beforeStat ? (!afterStat || afterStat.size !== beforeStat.size) : !!afterStat;
       if (grew) { unlinkQuiet(tmp); return; }
+      // AUD-021: an arm() that replaced the contract since `header` was read
+      // owns the events file now — never overwrite it with the old segments.
+      const current = readRawContract(cwd);
+      if (!current || current.id !== header.id) { unlinkQuiet(tmp); return; }
       fs.renameSync(tmp, file);
     } catch {
       unlinkQuiet(tmp);
@@ -744,8 +758,18 @@ function expiryNotice(cwd, opts = {}) {
   const h = readRawContract(cwd);
   if (!h || h.closedAt || h.expiryAnnounced || h.sessionId !== opts.sessionId) return null;
   if (!isExpired(h, eventsOf(cwd, h), now)) return null;
-  if (!writeJsonRetry(contractPath(cwd), { ...h, expiryAnnounced: true })) return null;
-  return `[run-contract] The run contract expired after ${expiryMs(h) / HOUR} h without work — its gates are off. Still in a do-run? Re-arm: ${rearmHint()}`;
+  // AUD-021: re-check the id under the header lock right before the
+  // write-back — an arm() landing since the read above must not be
+  // overwritten by the old, expired header. No lock in time → re-check only.
+  const token = acquireLock(cwd, { lockWaitMs: 200 });
+  try {
+    const cur = readRawContract(cwd);
+    if (!cur || cur.id !== h.id || cur.closedAt) return null;
+    if (!writeJsonRetry(contractPath(cwd), { ...cur, expiryAnnounced: true })) return null;
+  } finally {
+    if (token) releaseLock(cwd, token);
+  }
+  return `[run-contract] The run contract expired after ${expiryMs(h) / HOUR} h without work — its gates are off. Still in a do-run? Re-arm: ${rearmHint({ replace: false })}`;
 }
 
 /** Archive an expired header sitting on disk (the "next write" of spec A). */
@@ -764,7 +788,9 @@ function newId(now) {
 
 /**
  * Arm a new contract. An existing header (active, closed or expired) is
- * archived first. Returns the written header, or null (kill switch / fs error).
+ * archived first. Returns the written header, or null (kill switch / fs
+ * error). Runs under the header lock (AUD-021); a lock that cannot be taken
+ * in time does not stop the arm (same as close(), RT1-R6).
  * @param {string} cwd
  * @param {object} header fields per spec A; missing ones take DEFAULT_HEADER
  * @param {{now?:number}} [opts]
@@ -772,6 +798,16 @@ function newId(now) {
 function arm(cwd, header = {}, opts = {}) {
   if (disabled()) return null;
   const now = nowOf(opts);
+  try { fs.mkdirSync(projectClaudeDir(cwd), { recursive: true }); } catch { /* the write below reports it */ }
+  const token = acquireLock(cwd, opts);
+  try {
+    return armLocked(cwd, header, opts, now);
+  } finally {
+    if (token) releaseLock(cwd, token);
+  }
+}
+
+function armLocked(cwd, header, opts, now) {
   const existing = readRawContract(cwd);
   const oldEvents = existing ? eventsOf(cwd, existing).slice(-ARCHIVE_EVENTS) : [];
   const h = sanitize({
@@ -834,10 +870,12 @@ function update(cwd, patch = {}, opts = {}) {
     // more, immediately before the atomic write (still under whatever lock
     // this call holds), and refuse ONLY the write that would silently drop
     // a closedAt `fresh` never saw.
-    if (!fresh.closedAt) {
-      const justBeforeWrite = readRawContract(cwd);
-      if (justBeforeWrite && justBeforeWrite.id === h.id && justBeforeWrite.closedAt) return null;
-    }
+    // AUD-021: the same re-read also refuses the write when the id changed —
+    // an arm() that replaced the contract in between must not be overwritten
+    // by this patch of the old one.
+    const justBeforeWrite = readRawContract(cwd);
+    if (!justBeforeWrite || justBeforeWrite.id !== h.id) return null;
+    if (!fresh.closedAt && justBeforeWrite.closedAt) return null;
     return writeJsonRetry(contractPath(cwd), next) ? next : null;
   } finally {
     releaseLock(cwd, token);

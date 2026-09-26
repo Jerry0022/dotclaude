@@ -697,3 +697,64 @@ describe("hasState: the hooks' fast-path probe (harden scan 2026-09-26)", () => 
     expect(store.hasState(cwd, { batch: true })).toBe(true);
   });
 });
+
+describe("AUD-021: arm() vs update() / expiryNotice() write-backs", () => {
+  test("arm() takes the header lock (waits on a held one)", () => {
+    fs.mkdirSync(path.dirname(lockFile(cwd)), { recursive: true });
+    fs.writeFileSync(lockFile(cwd), "someone-else");
+    const t = Date.now();
+    const h = store.arm(cwd, {}, { now: T0, lockWaitMs: 150, lockStaleMs: 60_000 });
+    expect(Date.now() - t).toBeGreaterThanOrEqual(100);
+    expect(h).toBeTruthy(); // no lock in time → still arms (like close())
+    expect(fs.readFileSync(lockFile(cwd), "utf8")).toBe("someone-else"); // never released a foreign lock
+  });
+
+  function swapHeaderOnRead(n, id) {
+    let reads = 0;
+    const orig = fs.readFileSync;
+    return vi.spyOn(fs, "readFileSync").mockImplementation(function (file, ...rest) {
+      if (String(file) === store.contractPath(cwd) && ++reads === n) {
+        const h = JSON.parse(orig.call(fs, file, "utf8"));
+        fs.writeFileSync(store.contractPath(cwd), JSON.stringify({ ...h, id, closedAt: null }));
+      }
+      return orig.call(fs, file, ...rest);
+    });
+  }
+
+  test("update() refuses its write when an arm() replaced the contract in between", () => {
+    store.arm(cwd, {}, { now: T0 });
+    const spy = swapHeaderOnRead(4, "rc-new-by-arm");
+    let r;
+    try { r = store.update(cwd, { strict: true }, { now: T0 + 1000 }); } finally { spy.mockRestore(); }
+    expect(r).toBeNull();
+    const disk = store.readRawContract(cwd);
+    expect(disk.id).toBe("rc-new-by-arm");
+    expect(disk.strict).toBe(false);
+  });
+
+  test("expiryNotice() does not write the old header back over a fresh arm", () => {
+    store.arm(cwd, { sessionId: "w2-A" }, { now: T0 });
+    const spy = swapHeaderOnRead(2, "rc-new-by-arm");
+    let n;
+    try { n = store.expiryNotice(cwd, { sessionId: "w2-A", now: T0 + 13 * 3600_000 }); } finally { spy.mockRestore(); }
+    expect(n).toBeNull();
+    const disk = store.readRawContract(cwd);
+    expect(disk.id).toBe("rc-new-by-arm");
+    expect(disk.expiryAnnounced).toBeUndefined();
+  });
+});
+
+describe("AUD-022 / AUD-040: items sanitised, notices print the plain arm line", () => {
+  test("items keep issue numbers only", () => {
+    const h = store.arm(cwd, { items: ["12", "#13", "12),13", "abc", " 14 "] }, { now: T0 });
+    expect(h.items).toEqual(["12", "13", "14"]);
+  });
+
+  test("the expiry notice's re-arm line carries no --replace", () => {
+    store.arm(cwd, { sessionId: "w2-A" }, { now: T0 });
+    const n = store.expiryNotice(cwd, { sessionId: "w2-A", now: T0 + 13 * 3600_000 });
+    expect(n).toMatch(/expired/);
+    expect(n).toContain(" arm --mode ");
+    expect(n).not.toContain("--replace");
+  });
+});

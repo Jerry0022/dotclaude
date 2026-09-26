@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.4.0
+ * @version 0.4.1
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
  *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
@@ -14,6 +14,9 @@
  *
  *   R16: `arm` refuses (exit 1) while the work tree has an active contract —
  *   of any session — unless `--replace` is given; see liveContract().
+ *   AUD-022: `--items` takes issue numbers only (`12,13` / `#12,#13`).
+ *   AUD-023: `status` / `done` measure qa from the work-tree root
+ *   (projectRoot(cwd)) like the gate, not from the raw --cwd.
  */
 
 const {
@@ -85,7 +88,7 @@ const CLI_COMMANDS = {
     const segs = segments(c, evs);
     // AUD-010: measured exactly like the gate — an unknown count (git
     // failure / expired budget) reports as `qa: null` here, "QA ?" on the card.
-    const codeFilesChanged = measureQa(cwd, 'release', undefined, { totalMs: TOTAL_GIT_BUDGET_MS });
+    const codeFilesChanged = measureQa(projectRoot(cwd), 'release', undefined, { totalMs: TOTAL_GIT_BUDGET_MS });
     write({
       ok: true, active: true, contract: c, segment: segs.length, events: evs.length,
       qa: codeFilesChanged, open: openObligations(c, evs, 'release', { codeFilesChanged }),
@@ -116,7 +119,7 @@ const CLI_COMMANDS = {
     }
     // AUD-010: measured before deciding — `done` must not close a run while
     // qa is owed just because nobody ever asked git for the diff.
-    const codeFilesChanged = c ? measureQa(cwd, 'card', undefined, { totalMs: TOTAL_GIT_BUDGET_MS }) : null;
+    const codeFilesChanged = c ? measureQa(projectRoot(cwd), 'card', undefined, { totalMs: TOTAL_GIT_BUDGET_MS }) : null;
     const open = c ? openObligations(c, eventsOf(cwd, c), 'card', { codeFilesChanged }) : [];
     if (open.length) {
       const names = open.map(o => (o.item ? `${o.ob} #${o.item}` : o.ob)).join(', ');
@@ -169,12 +172,17 @@ const CLI_COMMANDS = {
       passes = /^(none|keine|)$/i.test(raw) ? [] : raw.split(',').map(s => s.trim().toLowerCase());
       if (passes.some(p => p !== 'harden' && p !== 'polish')) return fail('--passes harden,polish|none');
     }
-    const items = typeof flags.items === 'string' ? flags.items.split(',') : [];
+    // AUD-022: issue numbers only — a free-form item (`12),13`) used to be
+    // stored and later crash a RegExp built from it.
+    const rawItems = typeof flags.items === 'string' ? flags.items.split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (flags.items === true || rawItems.some(s => !/^#?\d+$/.test(s))) return fail('--items takes issue numbers: 12,13 (or #12,#13)');
+    const items = rawItems.map(s => s.replace(/^#/, ''));
     const sessionId = typeof flags.session === 'string' ? flags.session : null;
     // R16: replacing a live run is explicit — `--replace` keeps the old
     // behaviour (archive it with its events, arm fresh).
     const live = liveContract(cwd, now);
-    if (live && !(flags.replace === true || flags.replace === 'on')) {
+    const replace = flags.replace === true || flags.replace === 'on';
+    if (live && !replace) {
       const status = `node "${LIB_PATH}" status${typeof flags.cwd === 'string' ? ` --cwd "${flags.cwd}"` : ''}`;
       write({
         ok: false,

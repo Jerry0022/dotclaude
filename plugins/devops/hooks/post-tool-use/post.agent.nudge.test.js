@@ -325,3 +325,40 @@ describe("post.agent.nudge", () => {
     expect(res.stdout || "").toBe("");
   });
 });
+
+describe("AUD-026 / AUD-030: one pass, marker first, a hooks.json timeout", () => {
+  const { scanTurn, editedFilesThisTurn, lastUserPromptEntryId } = require("./post.agent.nudge.js");
+
+  test("scanTurn() matches the two separate walks it replaces", () => {
+    const dir = project();
+    const entries = [promptEntry("old", "u-old"), editEntry("Edit", path.join(dir, "old.js")),
+      promptEntry("now", "u-now"), { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "hi" }] } }];
+    for (let i = 0; i < 3; i++) entries.push(editEntry(i % 2 ? "Write" : "Edit", path.join(dir, `f${i}.js`)));
+    const t = entries.map(e => JSON.stringify(e)).join("\n");
+    const { files, promptId } = scanTurn(t, dir);
+    expect([...files].sort()).toEqual([...editedFilesThisTurn(t, dir)].sort());
+    expect(files.size).toBe(3);
+    expect(promptId).toBe(lastUserPromptEntryId(t));
+    expect(promptId).toBe("u-now");
+  });
+
+  test("a fired turn returns before the count and the skill / machine walks", () => {
+    const dir = project();
+    const entries = [promptEntry("go", `u-${process.pid}-${Date.now()}`)];
+    for (let i = 0; i < 7; i++) entries.push(editEntry("Edit", path.join(dir, `g${i}.js`)));
+    const t = writeTranscript(dir, entries);
+    const hook = hookFor(dir, t, path.join(dir, "g0.js"), { session_id: `w2-${process.pid}-${Date.now()}` });
+    expect(run(hook)).toContain("agent-nudge");
+    const t0 = Date.now();
+    expect(run(hook)).toBe("");
+    expect(Date.now() - t0).toBeLessThan(1000);
+  });
+
+  test("hooks.json gives post.agent.nudge a timeout", () => {
+    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks.json"), "utf8"));
+    const entries = Object.values(cfg.hooks).flat().flatMap(g => g.hooks || [])
+      .filter(h => String(h.command).includes("post.agent.nudge.js"));
+    expect(entries.length).toBeGreaterThan(0);
+    for (const h of entries) expect(h.timeout).toBe(10);
+  });
+});

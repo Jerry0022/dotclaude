@@ -356,7 +356,9 @@ describe("state", () => {
     // Surfaced once, through the same channel expiryNotice() already uses.
     const notice = R.expiryNotice(cwd, { sessionId: "s1" });
     expect(notice).toMatch(/quarantined/);
-    expect(notice).toMatch(/arm --mode .* --replace$/); // R16: the re-arm line carries --replace
+    // AUD-040: the plain arm line — --replace could archive another session's live run
+    expect(notice).toMatch(/arm --mode .* --passes \S+$/);
+    expect(notice).not.toContain("--replace");
     expect(R.expiryNotice(cwd, { sessionId: "s1" })).toBeNull();
   });
 

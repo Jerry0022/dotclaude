@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.4
+ * @version 0.4.5
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -303,20 +303,23 @@ function main(hook) {
   const sessionId = hook.session_id || null;
   const { ok, blocked } = replies(RC, root, sessionId);
 
+  // 3. R12: ONE overall deadline for the whole invocation — before this it
+  // bounded only the git chain below; the transcript walk (routerFromTrans
+  // cript, backward up to 32 MB) could run long past it and a timed-out
+  // PreToolUse fails open (exits 0, gating nothing). The walk shares the
+  // exact same ceiling as the git calls that follow it (base resolution,
+  // diffs, ls-files, the pushHead branch check), not a fresh one. AUD-025:
+  // created BEFORE classify() — its branch-creation HEAD read (up to one
+  // 5 s git call, not budget-aware) now counts against the same 15 s
+  // deadline instead of adding to it (5 + 15 s met hooks.json's 20 s
+  // timeout, and a timed-out gate fails open).
+  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
   const call = classify(hook, root, cwd, C);
   if (!call) return ok();
 
   const batchMsg = batchRefusal(call, root, RC, sessionId);
   if (batchMsg) return blocked(batchMsg);
 
-  // 3. R12: ONE overall deadline for the whole invocation — before this it
-  // bounded only the git chain below; the transcript walk (routerFromTrans
-  // cript, backward up to 32 MB) could run long past it and a timed-out
-  // PreToolUse fails open (exits 0, gating nothing). Created here, ahead of
-  // armFromPending, so the walk shares the exact same ceiling as the git
-  // calls that follow it (base resolution, diffs, ls-files, the pushHead
-  // branch check), not a fresh one.
-  const budget = gitBudget(TOTAL_GIT_BUDGET_MS);
   const armed = armFromPending(hook, root, RC, C, sessionId, budget);
 
   const found = sessionContract(roots, RC, sessionId);

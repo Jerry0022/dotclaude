@@ -185,3 +185,4 @@ describe("RT2-R2: the <command-name> tag only counts when it opens the prompt", 
     expect(RC.events(dir)).not.toContainEqual(expect.objectContaining({ k: "skill", name: "auto-harden" }));
   });
 });
+

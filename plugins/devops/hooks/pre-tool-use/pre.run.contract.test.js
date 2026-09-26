@@ -645,3 +645,13 @@ describe("R5: the corrupt-quarantine notice is delivered even when run-contract.
     expect(r2.stdout).toBe("");
   });
 });
+
+describe("AUD-025: gate budget", () => {
+  test("the overall budget is created before classify() runs its HEAD read", () => {
+    const src = fs.readFileSync(path.join(__dirname, "pre.run.contract.js"), "utf8");
+    const main = src.slice(src.indexOf("function main("));
+    expect(main.indexOf("gitBudget(TOTAL_GIT_BUDGET_MS)")).toBeGreaterThan(-1);
+    expect(main.indexOf("gitBudget(TOTAL_GIT_BUDGET_MS)")).toBeLessThan(main.indexOf("classify(hook"));
+  });
+
+});

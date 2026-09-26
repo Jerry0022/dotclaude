@@ -61,3 +61,27 @@ describe("runtime-ignores — the one list of project-rooted runtime paths", () 
     expect(allEntries()).toContain(".claude/*.tmp");
   });
 });
+
+describe("AUD-016: the run-contract store's sibling files are ignored", () => {
+  test("lock, stale-lock, quarantine and pending-marker names are covered", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const fs = (await import("node:fs")).default;
+    const os = (await import("node:os")).default;
+    const path = (await import("node:path")).default;
+    expect(PLUGIN_STATE).toContain(".claude/run-contract.json.*");
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "w2-ign-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: d });
+      fs.writeFileSync(path.join(d, ".git", "info", "exclude"), renderBlock() + "\n");
+      const names = [
+        ".claude/run-contract.json.lock",
+        ".claude/run-contract.json.lock.stale-123-abcdef",
+        ".claude/run-contract.json.corrupt-1790000000000-123-abcdef",
+        ".claude/run-contract.json.corrupt.pending",
+        ".claude/run-contract.json",
+      ];
+      const out = execFileSync("git", ["check-ignore", "--no-index", ...names], { cwd: d, encoding: "utf8" });
+      expect(out.trim().split(/\r?\n/)).toEqual(names);
+    } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  });
+});

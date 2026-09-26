@@ -140,10 +140,15 @@ silently dropped just because the lock was busy.
 **Events compaction.** `record()` compacts `run-contract.events.jsonl` once
 it has grown more than 500 lines (`EVENTS_COMPACT_LINES`) past the line count
 as of the last compaction — dropping foreign/previous-contract lines and,
-within each already-closed segment, the `block`/`measure`/`card` lines
-obligations never read. Compaction runs under the header lock and re-checks
-the file size right before the rename so a lock-free append that raced in is
-never silently lost (skipped, retried next time, RT1-R8).
+within every segment (the current, still-open one included), the `block`
+lines, all but the segment's last `measure`, and every `card` line other
+than a `ship-blocked` / `aborted` one — the lines obligations never read.
+Compaction runs under the header lock and re-checks the file size (and the
+header's contract id, AUD-021) right before the rename so a lock-free append
+that raced in, or an `arm()` that replaced the contract, is never silently
+lost (skipped, retried next time, RT1-R8). `arm()` takes the same lock;
+`update()` and the expiry-notice write-back refuse to write when the header
+re-read right before the write carries a different id (AUD-021).
 
 Events (`k` = kind, `t` = iso time):
 
@@ -208,10 +213,13 @@ CLI (`node hooks/lib/run-contract.js …`, prints one JSON line):
   needs no flag, and a header whose `root` names another checkout (a Desktop
   copy, RT2-Q4) does not count. The re-arm lines the hooks print
   (`rearmHint()`: the fallback / machine announcement, the fallback note on a
-  block, the expiry and quarantine notices) end in `--replace`; post's
-  "answers NOT recorded" note (B) keeps the plain `arm` line — the session
-  has no live contract to replace there, and the refusal still guards
-  another session's run in a shared checkout.
+  block) end in `--replace`; post's "answers NOT recorded" note (B) and the
+  expiry and quarantine notices (AUD-040) keep the plain `arm` line — the
+  session has no live contract of its own to replace there, and the refusal
+  still guards another session's run in a shared checkout. `--items` takes
+  issue numbers only (`12,13` / `#12,#13`), anything else exits 1 (AUD-022);
+  `status` / `done` measure qa from the work-tree root, like the gate
+  (AUD-023).
 
 Session binding: every header and marker stores `sessionId`; gates, arming,
 recording and the card line apply only when it equals the hook's
@@ -226,7 +234,7 @@ cleared). A pending marker never replaces an active same-session contract.
 under a session id of `"self"` (the ccd_session convention), a Claude
 Desktop `local_…` id, or none — those count as "the calling session itself",
 not as a stored/foreign id. Any other explicit id must match the contract's
-own `sessionId` (`mode-state.js#isSelfSessionId`).
+own `sessionId` (`mode-state.js#isSelfSessionMarker`).
 
 ### B. Parsing the router answers
 
@@ -613,8 +621,9 @@ runtime state to close:
 - A failed `git commit` whose exit is masked by a later command
   (`git commit …; echo done`) reaches PostToolUse as a success and still
   records `commit` — the harness reports only the last exit (RT3-X1).
-- The expiry notice (A) is emitted by post only (after the next matched
-  call), not by pre. `env -S` / `xargs` / `Start-Process` are read only in
+- The expiry / quarantine notice (A) rides the next matched call's reply —
+  pre's (both its allow and its block reply, read at reply time) and
+  post's, whichever runs first; it is one-shot. `env -S` / `xargs` / `Start-Process` are read only in
   their plain forms (`Start-Process` flags other than the file / argument /
   value flags are assumed to take no value).
 - `lib/plugin-guard.js` still requires `project-root` at load time; H-B17
