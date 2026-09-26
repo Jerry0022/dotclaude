@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { git, gitStrict, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
+import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
 import { detectRepoMode, refusesGitWrites, probeTimeoutError } from "../lib/repo-mode.js";
@@ -114,7 +114,7 @@ export async function handler(params) {
   const current = branchBeforeCleanup;
   if (current !== base) {
     try {
-      gitStrict(`checkout ${base}`, opts);
+      gitArgs(["checkout", base], opts);
       cleaned.push(`checkout:${base}`);
     } catch (e) {
       clearSentinel(cwd);
@@ -137,7 +137,7 @@ export async function handler(params) {
   const noRemote = repoMode === "git-no-remote";
   if (!noRemote) {
     try {
-      gitStrict(`pull --ff-only origin ${base}`, { ...opts, timeout: NETWORK_TIMEOUT });
+      gitArgs(["pull", "--ff-only", "origin", base], { ...opts, timeout: NETWORK_TIMEOUT });
       cleaned.push(`sync:${base}`);
     } catch (e) {
       warnings.push(
@@ -146,8 +146,8 @@ export async function handler(params) {
       );
     }
     // Hard post-condition: local base must equal origin/base after a ship.
-    const localBase = git(`rev-parse ${base}`, opts);
-    const remoteBase = git(`rev-parse origin/${base}`, opts);
+    const localBase = gitTry(["rev-parse", base], opts);
+    const remoteBase = gitTry(["rev-parse", `origin/${base}`], opts);
     if (localBase && remoteBase && localBase !== remoteBase) {
       warnings.push(
         `Local '${base}' (${localBase.slice(0, 7)}) != origin/${base} (${remoteBase.slice(0, 7)}) ` +
@@ -157,10 +157,10 @@ export async function handler(params) {
   }
 
   // Verify remote branch is gone (merge step should have deleted it)
-  const remoteBranch = noRemote ? null : git(`ls-remote --heads origin ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
+  const remoteBranch = noRemote ? null : gitTry(["ls-remote", "--heads", "origin", branch], { ...opts, timeout: NETWORK_TIMEOUT });
   if (remoteBranch) {
     try {
-      gitStrict(`push origin --delete ${branch}`, { ...opts, timeout: NETWORK_TIMEOUT });
+      gitArgs(["push", "origin", "--delete", branch], { ...opts, timeout: NETWORK_TIMEOUT });
       cleaned.push(`remote-branch:${branch}`);
     } catch {
       warnings.push(`Could not delete remote branch ${branch} — may already be deleted`);
@@ -169,7 +169,7 @@ export async function handler(params) {
 
   // Delete local branch
   try {
-    gitStrict(`branch -D ${branch}`, opts);
+    gitArgs(["branch", "-D", branch], opts);
     cleaned.push(`local-branch:${branch}`);
   } catch {
     warnings.push(`Local branch ${branch} not found or already deleted`);
@@ -204,7 +204,7 @@ export async function handler(params) {
   // Restore the original branch if we switched away from a non-base branch
   if (branchBeforeCleanup && branchBeforeCleanup !== base && branchBeforeCleanup !== branch) {
     try {
-      gitStrict(`checkout ${branchBeforeCleanup}`, opts);
+      gitArgs(["checkout", branchBeforeCleanup], opts);
       cleaned.push(`restored:${branchBeforeCleanup}`);
     } catch {
       warnings.push(`Could not restore original branch '${branchBeforeCleanup}' — staying on '${base}'`);

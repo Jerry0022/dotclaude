@@ -81,12 +81,14 @@ export function isSessionWorktreePath(p) {
  * lines. `git status --porcelain` excludes gitignored files by default, so a
  * non-empty result means uncommitted tracked changes OR non-gitignored
  * untracked files — exactly the "limbo" state we must not ship past.
+ * `--untracked-files=all` keeps new files visible under a
+ * `status.showUntrackedFiles=no` config (AUD-C013).
  *
  * On git failure (path gone, not a worktree) we report dirty:false — a path we
  * cannot inspect must not manufacture a false-positive block.
  */
 export function worktreeDirty(path, opts = {}) {
-  const status = git("status --porcelain", { ...opts, cwd: path });
+  const status = git("status --porcelain --untracked-files=all", { ...opts, cwd: path });
   if (status === null) return { path, dirty: false, changes: 0 };
   const lines = status.split("\n").filter(Boolean);
   return { path, dirty: lines.length > 0, changes: lines.length };

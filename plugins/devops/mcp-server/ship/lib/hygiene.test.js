@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
+  isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -214,6 +215,132 @@ describe("auto-clean — worktrees", () => {
   });
 });
 
+describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C010)", () => {
+  const run = (dir, extra = {}) => runHygiene({
+    cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"),
+    now: NOW, fetchMerged: offline, projectsDir: null, ...extra,
+  });
+  const skippedWt = (res, name) => res.autoClean.skipped.find((s) => s.kind === "worktree" && path.basename(s.path) === name);
+
+  test("isRegenerable: build output only", () => {
+    for (const e of ["node_modules/", "pkg/a/node_modules/", "dist/", "src/__pycache__/", "x/y.pyc", "target/debug/app", ".next/"]) {
+      expect(isRegenerable(e)).toBe(true);
+    }
+    for (const e of [".env", "BURN-SALVAGE-1.patch", ".claude/audit/", ".claude/batch.md", "concepts/", "dist", "notes/dist.txt"]) {
+      expect(isRegenerable(e)).toBe(false);
+    }
+  });
+
+  test("an ignored .env keeps the worktree; node_modules alone does not (hyg1)", () => {
+    const { dir, c1 } = makeRepo();
+    fs.writeFileSync(path.join(dir, ".git", "info", "exclude"), ".env\nnode_modules/\n*.patch\n");
+    const secret = sessionWorktree(dir, "wt-secret", c1, 40);
+    fs.writeFileSync(path.join(secret, ".env"), "API_KEY=only-copy\n");
+    fs.writeFileSync(path.join(secret, "BURN-SALVAGE-1.patch"), "diff\n");
+    const build = sessionWorktree(dir, "wt-build", c1, 40);
+    fs.mkdirSync(path.join(build, "node_modules", "x"), { recursive: true });
+    fs.writeFileSync(path.join(build, "node_modules", "x", "i.js"), "1\n");
+
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(fs.readFileSync(path.join(secret, ".env"), "utf8")).toBe("API_KEY=only-copy\n");
+    const why = plan.keep.find((u) => u.branch === "wt-secret").reason;
+    expect(why).toMatch(/^holds ignored files: /);
+    expect(why).toContain(".env");
+    expect(why).toContain("BURN-SALVAGE-1.patch");
+    expect(fs.existsSync(build)).toBe(false);
+  });
+
+  test("isToolingState: Claude and plugin state, never an audit dossier or a salvage patch", () => {
+    for (const e of [".claude/", ".claude/.ship-watcher/", ".claude/concepts/", ".claude/project-map.md", "AUTONOMOUS-LOG.md",
+      "AUTONOMOUS-REPORT.html", "BACKLOG-DONE.flag", "BURN-STATE.json", "BURN-STATE.json.lock", "graphify-out/"]) {
+      expect(isToolingState(e), e).toBe(true);
+    }
+    for (const e of [".claude/audit/", ".claude/audit/2026-x/findings.md", "BURN-SALVAGE-1.patch", ".env", "notes/AUTONOMOUS-LOG.md", "BURN-1.md"]) {
+      expect(isToolingState(e), e).toBe(false);
+    }
+  });
+
+  test("seeded .claude/ state and run journals do not keep a worktree; an audit dossier only it holds does", () => {
+    const { dir, c1 } = makeRepo();
+    fs.writeFileSync(path.join(dir, ".git", "info", "exclude"), "AUTONOMOUS-*\n");
+    const seeded = sessionWorktree(dir, "wt-seeded", c1, 40);
+    fs.mkdirSync(path.join(seeded, ".claude", ".ship-watcher"), { recursive: true });
+    fs.writeFileSync(path.join(seeded, ".claude", ".ship-watcher", "state.json"), "{}\n");
+    fs.writeFileSync(path.join(seeded, "AUTONOMOUS-LOG.md"), "# log\n");
+    const audited = sessionWorktree(dir, "wt-audited", c1, 40);
+    fs.mkdirSync(path.join(audited, ".claude", "audit", "2026-09-26-own"), { recursive: true });
+    fs.writeFileSync(path.join(audited, ".claude", "audit", "2026-09-26-own", "findings.md"), "only copy\n");
+    const copied = sessionWorktree(dir, "wt-copied", c1, 40);
+    fs.mkdirSync(path.join(copied, ".claude", "audit", "2026-09-01-main"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".claude", "audit", "2026-09-01-main"), { recursive: true });
+
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(fs.existsSync(seeded), "plugin state and a run journal are no reason to stay").toBe(false);
+    expect(fs.existsSync(copied), "a dossier the main checkout holds is the seed copy").toBe(false);
+    expect(fs.readFileSync(path.join(audited, ".claude", "audit", "2026-09-26-own", "findings.md"), "utf8")).toBe("only copy\n");
+    expect(plan.keep.find((u) => u.branch === "wt-audited").reason).toBe("holds ignored files: .claude/audit/2026-09-26-own/");
+  });
+
+  test("an untracked file counts under status.showUntrackedFiles=no (hyg3)", () => {
+    const { dir, c1 } = makeRepo();
+    git(dir, "config", "status.showUntrackedFiles", "no");
+    const wt = sessionWorktree(dir, "wt-untracked", c1, 40);
+    fs.writeFileSync(path.join(wt, "new-work.txt"), "only copy\n");
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(fs.existsSync(path.join(wt, "new-work.txt"))).toBe(true);
+    expect(plan.keep.find((u) => u.branch === "wt-untracked").reason).toBe("uncommitted-changes");
+  });
+
+  test("a worktree with a fresh Claude transcript is live and stays; a stale one does not count", () => {
+    const { dir, c1 } = makeRepo();
+    const live = sessionWorktree(dir, "wt-live", c1, 40);
+    const idle = sessionWorktree(dir, "wt-idle", c1, 40);
+    const projects = mkTmp("hy-projects-");
+    const liveDir = path.join(projects, path.resolve(live).replace(/[\\/:.]/g, "-"));
+    fs.mkdirSync(liveDir);
+    fs.writeFileSync(path.join(liveDir, "s.jsonl"), "{}\n");
+    const idleDir = path.join(projects, path.resolve(idle).replace(/[\\/:.]/g, "-"));
+    fs.mkdirSync(idleDir);
+    fs.writeFileSync(path.join(idleDir, "s.jsonl"), "{}\n");
+    const old = new Date(Date.now() - LIVE_SESSION_MS - 60_000);
+    fs.utimesSync(path.join(idleDir, "s.jsonl"), old, old);
+
+    const res = run(dir, { projectsDir: projects });
+    expect(fs.existsSync(live)).toBe(true);
+    expect(fs.existsSync(idle)).toBe(false);
+    expect(res.autoClean.removed.map((r) => r.name || path.basename(r.path)).sort()).toEqual(["wt-idle", "wt-idle"]);
+    expect(hasLiveSession(live, projects)).toBe(true);
+  });
+
+  test("a removal that fails is reported as damaged and the closing prune is skipped", () => {
+    const { dir, c1 } = makeRepo();
+    sessionWorktree(dir, "wt-slow", c1, 40);
+    // a stale registration the final prune would otherwise drop
+    const gone = sessionWorktree(dir, "wt-gone", c1, 0);
+    fs.rmSync(gone, { recursive: true, force: true });
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    expect(plan.remove.some((u) => u.branch === "wt-slow")).toBe(true);
+    const done = executeAutoClean(plan, scan, { cwd: dir, removeTimeout: 1, projectsDir: null });
+    const s = done.skipped.find((x) => x.kind === "worktree");
+    expect(s.reason).toMatch(/damaged — manual check$/);
+    expect(s.orphan).toBe(s.path);
+    expect(done.pruned).toBe(false);
+    expect(git(dir, "worktree", "list", "--porcelain")).toContain("wt-gone");
+    expect(skippedWt({ autoClean: done }, "wt-slow")).toBeTruthy();
+  });
+
+  test("the per-removal ceiling is not the 120 s one git-hygiene.md forbids", () => {
+    expect(REMOVE_TIMEOUT).toBeGreaterThanOrEqual(15 * 60_000);
+  });
+});
+
 describe("auto-clean — re-check right before each removal", () => {
   test("a branch whose tip moved after planning is skipped, not deleted", () => {
     const { dir, c0, c1 } = makeRepo();
@@ -291,5 +418,12 @@ describe("cardLines", () => {
     expect(cardLines(r, "en").tests.result).toBe("2 branches · 1 worktree removed · 1 skipped");
     expect(cardLines(r, "en").open.text).toMatch(/say "branch cleanup"/);
     expect(cardLines(r, "en").open.reply).toBe("Yes, branch cleanup.");
+  });
+});
+
+describe("cardLines — a damaged removal names its path (AUD-C010)", () => {
+  test("the orphan path is on the card", () => {
+    const out = cardLines({ autoClean: { ran: true, removed: [], skipped: [{ kind: "worktree", path: "/r/.claude/worktrees/x", reason: "remove-timeout: damaged — manual check", orphan: "/r/.claude/worktrees/x" }] } }, "en");
+    expect(out.tests.result).toContain("damaged — manual check: /r/.claude/worktrees/x");
   });
 });

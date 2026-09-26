@@ -33,6 +33,7 @@ vi.mock("../lib/git.js", () => ({
   NETWORK_TIMEOUT: 60_000,
   gitStrict: vi.fn(() => ""),
   gitArgs: vi.fn(() => ""),
+  gitTry: vi.fn(),
   currentBranch: vi.fn(() => "feature-x"),
   headShort: vi.fn(() => "abc1234"),
   dirtyState: vi.fn(() => ({ dirty: false, modified: [], untracked: [], lines: [] })),
@@ -137,6 +138,7 @@ beforeEach(() => {
   gitLib.dirtyState.mockReturnValue({ dirty: false, modified: [], untracked: [], lines: [] });
   gitLib.isWorktree.mockReturnValue(false);
   gitLib.isRebasedOnto.mockReturnValue(true);
+  gitLib.detectDefaultBranch.mockReturnValue("main");
   gitLib.fileOverlap.mockReturnValue({ mergeBase: "base", branchFiles: [], baseFiles: [], overlap: [] });
   gitLib.syncLocalBranch.mockReturnValue({ updated: true, method: "fetch-refspec" });
   // Distinct-but-equal trees keyed by ref → postMergeTreeMatch is true ONLY when
@@ -151,9 +153,18 @@ beforeEach(() => {
   // Default: the rev-parse resolves to a remote sha (→ explicit lease); adds and
   // push return empty. Individual tests override for the brand-new-branch and
   // staging-failure paths.
-  gitLib.gitArgs.mockImplementation((args) =>
-    Array.isArray(args) && args[0] === "rev-parse" ? "remoteSha" : "",
-  );
+  //
+  // Base fetches and the channel-tag push take branch/tag names, so they run
+  // as argv (gitArgs, no shell — AUD-C014); the reads with a name use gitTry.
+  // Route both to the string fakes `gitStrict` / `git` ("fetch origin main",
+  // "ls-remote --tags origin alpha/v1.0.0") so the ordering and failure
+  // scenarios below stay readable.
+  gitLib.gitArgs.mockImplementation((args, o) => {
+    if (!Array.isArray(args)) return "";
+    if (args[0] === "fetch" || (args[0] === "push" && !args.includes("-u"))) return gitLib.gitStrict(args.join(" "), o);
+    return args[0] === "rev-parse" ? "remoteSha" : "";
+  });
+  gitLib.gitTry.mockImplementation((args, o) => gitLib.git(args.join(" "), o));
   ghLib.findExistingPR.mockReturnValue(null);
   ghLib.createPR.mockReturnValue({ number: 42, url: "https://example.com/pull/42" });
   ghLib.mergePR.mockReturnValue({ sha: "merge12", verified: true });
@@ -1021,5 +1032,24 @@ describe("ship_release — remote branch deletion in worktrees (#442)", () => {
     expect(res.success).toBe(true);
     expect(res.remoteBranchDeleted).toBe(true);
     expect(res.remoteBranchWarning).toBeUndefined();
+  });
+});
+
+describe("ship_release — names never reach a shell (AUD-C014)", () => {
+  test("base fetch and channel-tag reads/pushes pass the name as one argv element", async () => {
+    const evil = "main&whoami";
+    gitLib.detectDefaultBranch.mockReturnValue(evil);
+    await handler(params({ base: evil }));
+    const argvCalls = gitLib.gitArgs.mock.calls.map((c) => c[0]).filter(Array.isArray);
+    expect(argvCalls.some((a) => a[0] === "fetch" && a[1] === "origin" && a[2] === evil)).toBe(true);
+    const tryCalls = gitLib.gitTry.mock.calls.map((c) => c[0]);
+    expect(tryCalls.every(Array.isArray)).toBe(true);
+    // the string-form helpers are only reached through the argv routing above
+    for (const [cmd] of gitLib.git.mock.calls) {
+      expect(tryCalls.some((a) => a.join(" ") === cmd)).toBe(true);
+    }
+    for (const [cmd] of gitLib.gitStrict.mock.calls) {
+      expect(argvCalls.some((a) => a.join(" ") === cmd)).toBe(true);
+    }
   });
 });

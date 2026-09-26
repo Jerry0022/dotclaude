@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, gitArgs, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
+import { gitArgs, gitTry, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
@@ -235,7 +235,7 @@ export async function handler(params) {
     }
 
     // Safety gate: verify branch is rebased onto latest base (prevents silent overwrites)
-    gitStrict(`fetch origin ${base}`, { cwd, timeout: NETWORK_TIMEOUT });
+    gitArgs(["fetch", "origin", base], { cwd, timeout: NETWORK_TIMEOUT });
     if (!isRebasedOnto(`origin/${base}`, opts)) {
       // Check overlap to give actionable context
       const overlap = fileOverlap(`origin/${base}`, opts);
@@ -340,7 +340,7 @@ export async function handler(params) {
     // with --admin, the exact silent-overwrite vector #207 describes. Re-checking
     // here restores that guarantee at merge time. The skill's Step 1 loop rebases
     // and retries on rebaseRequired. (#207)
-    gitStrict(`fetch origin ${base}`, { cwd, timeout: NETWORK_TIMEOUT });
+    gitArgs(["fetch", "origin", base], { cwd, timeout: NETWORK_TIMEOUT });
     if (!isRebasedOnto(`origin/${base}`, opts)) {
       const overlap = fileOverlap(`origin/${base}`, opts);
       result.success = false;
@@ -387,8 +387,8 @@ export async function handler(params) {
     if (!baseFetched) {
       const refetch = await retryUntil(
         () => {
-          gitStrict(`fetch origin ${base}`, { cwd, timeout: NETWORK_TIMEOUT });
-          const sha = git(`rev-parse --short origin/${base}`, opts);
+          gitArgs(["fetch", "origin", base], { cwd, timeout: NETWORK_TIMEOUT });
+          const sha = gitTry(["rev-parse", "--short", `origin/${base}`], opts);
           return sha ? sha.trim() : null;
         },
         { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
@@ -476,7 +476,7 @@ export async function handler(params) {
         // auth blip) used to read as "tag absent" and silently decide to create
         // one — the same fail-open the verification below was hardened against.
         const existing = await retryUntil(
-          () => git(`ls-remote --tags origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT }),
+          () => gitTry(["ls-remote", "--tags", "origin", channelTag], { ...opts, timeout: NETWORK_TIMEOUT }),
           { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
         );
         if (!existing.ok) {
@@ -501,7 +501,7 @@ export async function handler(params) {
           // push whose client side timed out after the ref landed is harmless
           // to repeat: pushing an identical existing tag is a no-op success.
           const pushed = await retryUntil(
-            () => { gitStrict(`push origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT }); return true; },
+            () => { gitArgs(["push", "origin", channelTag], { ...opts, timeout: NETWORK_TIMEOUT }); return true; },
             { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
           );
           if (!pushed.ok) throw new Error(`tag push failed after ${pushed.attempts} attempts: ${pushed.error?.message?.slice(0, 200) || "unknown error"}`);
@@ -509,7 +509,7 @@ export async function handler(params) {
           // nothing (replica lag), which is the #251 false-negative class.
           const verified = await retryUntil(
             () => {
-              const out = git(`ls-remote --tags origin ${channelTag}`, { ...opts, timeout: NETWORK_TIMEOUT });
+              const out = gitTry(["ls-remote", "--tags", "origin", channelTag], { ...opts, timeout: NETWORK_TIMEOUT });
               return out !== null && remoteTagExists(out, channelTag) ? true : null;
             },
             { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },

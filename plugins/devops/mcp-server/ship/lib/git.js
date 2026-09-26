@@ -68,6 +68,19 @@ export function gitArgs(args, opts = {}) {
 }
 
 /**
+ * gitArgs() that returns null on failure instead of throwing — the array-form
+ * counterpart to git(). Use wherever a branch/ref/tag name is interpolated
+ * and a failure is an expected answer (ref absent, offline). (AUD-C014)
+ */
+export function gitTry(args, opts = {}) {
+  try {
+    return gitArgs(args, opts);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get current branch name.
  */
 export function currentBranch(opts) {
@@ -88,12 +101,16 @@ export function currentBranch(opts) {
  *
  * Paths are returned relative to the repository root (porcelain semantics),
  * regardless of `opts.cwd`.
+ *
+ * `--untracked-files=all` overrides a `status.showUntrackedFiles=no` config,
+ * which would otherwise hide every new file from the clean-tree check and
+ * from release staging (AUD-C013).
  */
 export function dirtyState(opts) {
   const { cwd = process.cwd(), timeout = DEFAULT_TIMEOUT } = opts || {};
   let raw;
   try {
-    raw = execSync("git status --porcelain -z", {
+    raw = execSync("git status --porcelain -z --untracked-files=all", {
       cwd,
       encoding: "utf8",
       timeout,
@@ -135,7 +152,7 @@ export function dirtyState(opts) {
  * Count commits ahead of base branch.
  */
 export function commitsAhead(base = "main", opts) {
-  const count = git(`rev-list --count ${base}..HEAD`, opts);
+  const count = gitTry(["rev-list", "--count", `${base}..HEAD`], opts);
   return count ? parseInt(count, 10) : 0;
 }
 
@@ -227,9 +244,9 @@ export function worktreePathForBranch(branch, opts) {
  */
 export function syncLocalBranch(branch, opts = {}) {
   // Refresh origin/branch first (best-effort; failure surfaces below as "none").
-  git(`fetch origin ${branch}`, { ...opts, timeout: opts.timeout ?? NETWORK_TIMEOUT });
+  gitTry(["fetch", "origin", branch], { ...opts, timeout: opts.timeout ?? NETWORK_TIMEOUT });
 
-  const remoteRef = git(`rev-parse --verify refs/remotes/origin/${branch}`, opts);
+  const remoteRef = gitTry(["rev-parse", "--verify", `refs/remotes/origin/${branch}`], opts);
   if (!remoteRef) {
     return {
       updated: false,
@@ -238,7 +255,7 @@ export function syncLocalBranch(branch, opts = {}) {
     };
   }
 
-  const localRef = git(`rev-parse --verify refs/heads/${branch}`, opts);
+  const localRef = gitTry(["rev-parse", "--verify", `refs/heads/${branch}`], opts);
   if (localRef === remoteRef) {
     return { updated: false, method: "already-current" };
   }
@@ -246,7 +263,7 @@ export function syncLocalBranch(branch, opts = {}) {
   const wtPath = worktreePathForBranch(branch, opts);
   if (wtPath) {
     try {
-      gitStrict(`merge --ff-only origin/${branch}`, { ...opts, cwd: wtPath });
+      gitArgs(["merge", "--ff-only", `origin/${branch}`], { ...opts, cwd: wtPath });
       return { updated: true, method: "merge-ff", path: wtPath };
     } catch (e) {
       return {
@@ -264,7 +281,7 @@ export function syncLocalBranch(branch, opts = {}) {
 
   // Not checked out anywhere → update the ref directly (ff-only by git default).
   try {
-    gitStrict(`fetch origin ${branch}:${branch}`, { ...opts, timeout: opts.timeout ?? NETWORK_TIMEOUT });
+    gitArgs(["fetch", "origin", `${branch}:${branch}`], { ...opts, timeout: opts.timeout ?? NETWORK_TIMEOUT });
     return { updated: true, method: "fetch-refspec" };
   } catch (e) {
     return {
@@ -290,7 +307,7 @@ export function detectDefaultBranch(opts) {
     // `git init`s still default to master. The local branch that exists is
     // the base a local ship merges into; "main" stays the caller's fallback.
     for (const name of ["main", "master"]) {
-      if (git(`rev-parse --verify --quiet refs/heads/${name}`, opts)) return name;
+      if (gitTry(["rev-parse", "--verify", "--quiet", `refs/heads/${name}`], opts)) return name;
     }
     return null;
   }
@@ -302,9 +319,9 @@ export function detectDefaultBranch(opts) {
  * Check if a branch exists locally or on origin.
  */
 export function branchExists(name, opts) {
-  const local = git(`rev-parse --verify refs/heads/${name}`, opts);
+  const local = gitTry(["rev-parse", "--verify", `refs/heads/${name}`], opts);
   if (local !== null) return "local";
-  const remote = git(`rev-parse --verify refs/remotes/origin/${name}`, opts);
+  const remote = gitTry(["rev-parse", "--verify", `refs/remotes/origin/${name}`], opts);
   if (remote !== null) return "remote";
   return null;
 }
@@ -314,11 +331,11 @@ export function branchExists(name, opts) {
  * Returns { mergeBase, branchFiles, baseFiles, overlap }.
  */
 export function fileOverlap(base, opts) {
-  const mergeBase = git(`merge-base HEAD ${base}`, opts);
+  const mergeBase = gitTry(["merge-base", "HEAD", base], opts);
   if (!mergeBase) return { mergeBase: null, branchFiles: [], baseFiles: [], overlap: [] };
 
-  const branchRaw = git(`diff --name-only ${mergeBase} HEAD`, opts) || "";
-  const baseRaw = git(`diff --name-only ${mergeBase} ${base}`, opts) || "";
+  const branchRaw = gitTry(["diff", "--name-only", mergeBase, "HEAD"], opts) || "";
+  const baseRaw = gitTry(["diff", "--name-only", mergeBase, base], opts) || "";
 
   const branchFiles = branchRaw.split("\n").filter(Boolean);
   const baseFiles = baseRaw.split("\n").filter(Boolean);
@@ -333,7 +350,7 @@ export function fileOverlap(base, opts) {
  * Returns true if HEAD is up-to-date with (or ahead of) base.
  */
 export function isRebasedOnto(base, opts) {
-  const behind = git(`rev-list --count HEAD..${base}`, opts);
+  const behind = gitTry(["rev-list", "--count", `HEAD..${base}`], opts);
   return behind !== null && parseInt(behind, 10) === 0;
 }
 
@@ -353,7 +370,7 @@ export function treeOf(ref, opts) {
   // ("HEAD{tree}" → fatal) and treeOf returned null on EVERY Windows call,
   // firing ship_release's post-merge tree guard as a permanent false alarm.
   // `show -s --format=%T` yields the same tree id with shell-safe syntax.
-  return git(`show -s --format=%T ${ref}`, opts);
+  return gitTry(["show", "-s", "--format=%T", ref], opts);
 }
 
 /**

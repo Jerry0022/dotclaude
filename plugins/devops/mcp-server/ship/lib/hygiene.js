@@ -13,7 +13,12 @@
  *          of a merged PR (squash merges), or every file it touched is
  *          identical in the default branch;
  *        - worktree: a session worktree (under `.claude/worktrees/`), not
- *          locked, clean (`status --porcelain` empty), idle for the age above
+ *          locked, clean (`status --porcelain --untracked-files=all
+ *          --ignored=matching` lists nothing but regenerable build artifacts
+ *          and Claude/plugin tooling state — `worktree remove` deletes
+ *          ignored files too, so a `.env`, a patch or an audit dossier only
+ *          this worktree holds keeps it), no Claude transcript for it
+ *          written in the last `LIVE_SESSION_MS`, idle for the age above
  *          (newest of HEAD commit and the worktree's index/HEAD/log mtimes),
  *          and its HEAD landed as above — its branch goes with it.
  *      Never touched: the default branch, main/master/HEAD/origin, the
@@ -21,6 +26,10 @@
  *      remote branches. Every destructive step re-checks its subject right
  *      before it runs (git-hygiene.md § Protection scope): a branch whose tip
  *      moved, a worktree that got dirty or locked is skipped, not removed.
+ *      A removal gets `REMOVE_TIMEOUT` (git-hygiene.md, "A half-done worktree
+ *      removal": never a 120 s ceiling); one that fails or times out is
+ *      reported as damaged with its path, and the closing `worktree prune` is
+ *      skipped so the half-deleted checkout keeps its registration.
  *      Branch removal is `branch -D` (a squash-merged branch is no git
  *      ancestor, so `-d` would refuse); the tip SHA is logged for recovery.
  *   2. Nudge (after ship and promote). More than `nudgeThreshold` leftovers
@@ -42,9 +51,28 @@ import path from "node:path";
 const DAY_MS = 86_400_000;
 const GIT_TIMEOUT = 15_000;
 const NETWORK_TIMEOUT = 60_000;
-const REMOVE_TIMEOUT = 120_000;
-/** Wall-clock cap for all worktree removals of one run (a big node_modules is slow on Windows). */
+/** Per-removal ceiling — a big node_modules takes minutes on Windows; a kill mid-delete leaves an orphan. */
+export const REMOVE_TIMEOUT = 15 * 60_000;
+/** No NEW removal starts after this much wall-clock time in one run; a running one is never cut short. */
 export const REMOVAL_BUDGET_MS = 180_000;
+/** A Claude transcript for the worktree written this recently → a session may still be in it. */
+export const LIVE_SESSION_MS = 2 * 3_600_000;
+/**
+ * Ignored entries `worktree remove` may delete: regenerable build output only
+ * (git-hygiene.md orphan rule). Any other ignored file keeps the worktree.
+ */
+const REGENERABLE_DIRS = new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".cache",
+  "coverage", ".turbo", "__pycache__", ".pytest_cache", "target"]);
+const REGENERABLE_FILE = /\.pyc$/i;
+/**
+ * Root-level files of do-run's autonomous, backlog and burn modes: journals,
+ * flags, resume state and reports — the run's own bookkeeping, not work. A
+ * burn's `BURN-SALVAGE-*.patch` is work and is deliberately not listed.
+ */
+const TOOLING_ROOT_ENTRY = new RegExp("^(?:AUTONOMOUS-(?:LOG\\.md|REPORT\\.html|DONE\\.flag|RECOVERY\\.flag|LOCKOUT\\.flag"
+  + "|RESUME\\.json|STALLED\\.txt|INTERRUPTED\\.txt)|BACKLOG-(?:LOG\\.md|REPORT\\.html|DONE\\.flag|RESUME\\.json)"
+  + "|BURN-STATE(?:\\.prev)?\\.json(?:\\.lock)?|graphify-out/)$");
+const AUDIT_DIR = ".claude/audit";
 const NEVER_DELETE = new Set(["main", "master", "HEAD", "origin"]);
 const SESSION_WORKTREE_MARKER = "/.claude/worktrees/";
 /** More touched files than this and the tree comparison is left to the page. */
@@ -261,14 +289,109 @@ export function landedVia(sha, branch, ctx) {
   return treeLanded(sha, ctx) ? "tree" : null;
 }
 
+/** An ignored porcelain path that is regenerable build output. */
+export function isRegenerable(entry) {
+  const p = String(entry).replace(/\\/g, "/");
+  const isDir = p.endsWith("/");
+  const segs = p.replace(/\/+$/, "").split("/").filter(Boolean);
+  const dirs = isDir ? segs : segs.slice(0, -1);
+  if (dirs.some((s) => REGENERABLE_DIRS.has(s))) return true;
+  return !isDir && REGENERABLE_FILE.test(segs[segs.length - 1] || "");
+}
+
+const isAuditEntry = (p) => p === `${AUDIT_DIR}/` || p.startsWith(`${AUDIT_DIR}/`);
+
+/**
+ * An ignored porcelain path that is Claude or plugin tooling state: anything
+ * under `.claude/` but the audit dossiers (Desktop seeds every new worktree
+ * with a copy of the main checkout's `.claude/`, and the plugin's runtime
+ * files live there — counting them kept every session worktree forever), and
+ * the do-run modes' root-level bookkeeping.
+ */
+export function isToolingState(entry) {
+  const p = String(entry).replace(/\\/g, "/");
+  if (isAuditEntry(p)) return false;
+  return p.startsWith(".claude/") || TOOLING_ROOT_ENTRY.test(p);
+}
+
+/**
+ * Audit dossiers only this worktree holds. `.claude/audit/` is git-excluded,
+ * so `worktree remove` would delete a dossier for good — but one the main
+ * checkout holds too is Desktop's seed copy (or already back home).
+ */
+export function ownAuditDossiers(wtPath, mainPath) {
+  let names;
+  try {
+    names = fs.readdirSync(path.join(wtPath, AUDIT_DIR));
+  } catch {
+    return [];
+  }
+  return names.filter((n) => !mainPath || !fs.existsSync(path.join(mainPath, AUDIT_DIR, n)));
+}
+
+/**
+ * Why a worktree's content forbids `worktree remove`, or null. Counts
+ * untracked files regardless of `status.showUntrackedFiles` and every ignored
+ * file that is neither regenerable build output nor tooling state, plus the
+ * audit dossiers the main checkout (`mainPath`) does not hold.
+ */
+export function worktreeContentReason(wtPath, mainPath = null) {
+  let out;
+  try {
+    out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching"], {
+      cwd: wtPath, encoding: "utf8", timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    return "status-unreadable";
+  }
+  const entries = out.split("\0").filter(Boolean);
+  if (entries.some((e) => !e.startsWith("!! "))) return "uncommitted-changes";
+  const kept = entries.map((e) => e.slice(3).replace(/\\/g, "/"))
+    .filter((e) => !isRegenerable(e) && !isToolingState(e) && !isAuditEntry(e));
+  kept.push(...ownAuditDossiers(wtPath, mainPath).map((n) => `${AUDIT_DIR}/${n}/`));
+  if (kept.length === 0) return null;
+  const shown = kept.slice(0, 3).join(", ") + (kept.length > 3 ? `, +${kept.length - 3}` : "");
+  return `holds ignored files: ${shown}`;
+}
+
+/** Candidate ~/.claude/projects folder names for a checkout path. */
+export function transcriptDirNames(wtPath) {
+  const p = path.resolve(String(wtPath));
+  return [...new Set([p.replace(/[\\/:.]/g, "-"), p.replace(/[^A-Za-z0-9]/g, "-")])];
+}
+
+/** A Claude transcript for `wtPath` was written within LIVE_SESSION_MS. */
+export function hasLiveSession(wtPath, projectsDir, now = Date.now()) {
+  if (!projectsDir) return false;
+  for (const name of transcriptDirNames(wtPath)) {
+    let files;
+    try {
+      files = fs.readdirSync(path.join(projectsDir, name));
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      if (!f.endsWith(".jsonl")) continue;
+      try {
+        if (now - fs.statSync(path.join(projectsDir, name, f)).mtimeMs < LIVE_SESSION_MS) return true;
+      } catch { /* vanished */ }
+    }
+  }
+  return false;
+}
+
+export function defaultProjectsDir() {
+  return path.join(os.homedir(), ".claude", "projects");
+}
+
 /** Why `unit` must stay, or null when it can go. */
 function keepReason(unit, ctx) {
   if (unit.kind === "worktree") {
     if (!unit.session) return "not-a-session-worktree";
     if (unit.locked) return "locked";
-    const st = gitOut(["status", "--porcelain"], unit.path);
-    if (st === null) return "status-unreadable";
-    if (st !== "") return "uncommitted-changes";
+    if (hasLiveSession(unit.path, ctx.projectsDir)) return "live-session";
+    const why = worktreeContentReason(unit.path, ctx.mainPath);
+    if (why) return why;
   }
   return landedVia(unit.head, unit.branch, ctx) ? null : "not-landed";
 }
@@ -277,7 +400,7 @@ function keepReason(unit, ctx) {
  * Which leftovers the auto-clean removes, if its gate opens.
  * @param {{units:object[], defaultBranch:string}} scan
  * @param {{autoCleanGateDays:number, autoCleanMinAgeDays:number}} settings
- * @param {{cwd:string, fetchMerged?:Function}} io
+ * @param {{cwd:string, fetchMerged?:Function, projectsDir?:string|null}} io
  * @returns {{gateOpen:boolean, reason:string|null, remove:object[], keep:object[], offline:boolean}}
  */
 export function planAutoClean(scan, settings, io) {
@@ -290,7 +413,7 @@ export function planAutoClean(scan, settings, io) {
   const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
   const fetchMerged = io.fetchMerged || fetchMergedHeads;
   const merged = fetchMerged(io.cwd, scan.defaultBranch);
-  const ctx = { cwd: io.cwd, baseRef, merged };
+  const ctx = { cwd: io.cwd, baseRef, merged, projectsDir: io.projectsDir, mainPath: scan.main || null };
   const remove = [];
   const keep = [];
   for (const u of scan.units.filter((x) => x.ageDays > minAge)) {
@@ -320,8 +443,11 @@ function deleteBranch(name, sha, cwd, defaultBranch) {
   return gitOk(["branch", "-D", name], cwd) ? null : "delete-failed";
 }
 
-/** `worktree remove` (never --force) after re-checking the subject. */
-function removeWorktree(unit, cwd, current, timeout) {
+/**
+ * `worktree remove` (never --force) after re-checking the subject.
+ * @returns {string|null|{damaged:true, reason:string}}
+ */
+function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
   const live = listWorktrees(cwd);
   if (!live) return "worktree-list-unreadable";
   const entry = live.find((w) => normPath(w.path) === normPath(unit.path));
@@ -329,10 +455,16 @@ function removeWorktree(unit, cwd, current, timeout) {
   if (normPath(entry.path) === current) return "current";
   if (entry.locked) return "locked";
   if (entry.head !== unit.head || entry.branch !== unit.branch) return "moved";
-  const st = gitOut(["status", "--porcelain"], unit.path);
-  if (st === null) return "status-unreadable";
-  if (st !== "") return "uncommitted-changes";
-  return gitOk(["worktree", "remove", unit.path], cwd, timeout) ? null : "remove-failed";
+  if (hasLiveSession(unit.path, projectsDir)) return "live-session";
+  const why = worktreeContentReason(unit.path, mainPath);
+  if (why) return why;
+  try {
+    execFileSync("git", ["worktree", "remove", unit.path], { cwd, timeout, stdio: ["pipe", "pipe", "pipe"] });
+    return null;
+  } catch (e) {
+    const timedOut = e && (e.code === "ETIMEDOUT" || e.signal);
+    return { damaged: true, reason: `${timedOut ? "remove-timeout" : "remove-failed"}: damaged — manual check` };
+  }
 }
 
 /**
@@ -340,9 +472,12 @@ function removeWorktree(unit, cwd, current, timeout) {
  * then plain branches. Worktree removals share a wall-clock budget; the rest
  * waits for the next ship.
  */
-export function executeAutoClean(plan, scan, { cwd, budgetMs = REMOVAL_BUDGET_MS, now = Date.now } = {}) {
+export function executeAutoClean(plan, scan, {
+  cwd, budgetMs = REMOVAL_BUDGET_MS, now = Date.now, removeTimeout = REMOVE_TIMEOUT, projectsDir = defaultProjectsDir(),
+} = {}) {
   const removed = [];
   const skipped = [];
+  let damaged = false;
   const deadline = now() + budgetMs;
   for (const u of plan.remove.filter((x) => x.kind === "worktree")) {
     const left = deadline - now();
@@ -350,7 +485,12 @@ export function executeAutoClean(plan, scan, { cwd, budgetMs = REMOVAL_BUDGET_MS
       skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: "time-budget" });
       continue;
     }
-    const why = removeWorktree(u, cwd, scan.current, Math.min(REMOVE_TIMEOUT, left));
+    const why = removeWorktree(u, cwd, scan.current, removeTimeout, projectsDir, scan.main || null);
+    if (why && typeof why === "object") {
+      damaged = true;
+      skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: why.reason, orphan: u.path });
+      continue;
+    }
     if (why) {
       skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: why });
       continue;
@@ -367,8 +507,10 @@ export function executeAutoClean(plan, scan, { cwd, budgetMs = REMOVAL_BUDGET_MS
     if (why) skipped.push({ kind: "branch", name: u.branch, reason: why });
     else removed.push({ kind: "branch", name: u.branch, sha: u.head });
   }
-  gitOk(["worktree", "prune"], cwd);
-  return { removed, skipped };
+  // a failed/timed-out removal may have left a half-deleted checkout; prune
+  // would drop its registration and turn it into an unlisted orphan
+  if (!damaged) gitOk(["worktree", "prune"], cwd);
+  return { removed, skipped, pruned: !damaged };
 }
 
 export function defaultStatePath() {
@@ -415,6 +557,8 @@ export function cardLines(result, lang = "de") {
       ? `${parts.join(" · ")} ${de ? "entfernt" : "removed"}`
       : (de ? "nichts entfernt" : "nothing removed");
     if (ac.skipped.length) text += de ? ` · ${ac.skipped.length} übersprungen` : ` · ${ac.skipped.length} skipped`;
+    const damaged = ac.skipped.filter((x) => x.orphan).map((x) => x.orphan);
+    if (damaged.length) text += de ? ` · beschädigt, manuell prüfen: ${damaged.join(", ")}` : ` · damaged — manual check: ${damaged.join(", ")}`;
     out.tests = { method: de ? "Aufräumen (auto)" : "Cleanup (auto)", result: text };
   }
   if (result.nudge) {
@@ -443,6 +587,8 @@ export function cardLines(result, lang = "de") {
  * @param {number} [p.now]
  * @param {Function} [p.fetchMerged]    injectable for tests
  * @param {number} [p.budgetMs]
+ * @param {number} [p.removeTimeout]
+ * @param {string|null} [p.projectsDir]  ~/.claude/projects (live-session check)
  */
 export function runHygiene(p) {
   const { cwd, trigger, settings, lang = "de" } = p;
@@ -472,13 +618,16 @@ export function runHygiene(p) {
   } else if (!settings.autoClean) {
     result.autoClean.reason = "disabled (cleanup.autoClean)";
   } else {
-    const plan = planAutoClean(scan, settings, { cwd, fetchMerged: p.fetchMerged });
+    const projectsDir = p.projectsDir === undefined ? defaultProjectsDir() : p.projectsDir;
+    const plan = planAutoClean(scan, settings, { cwd, fetchMerged: p.fetchMerged, projectsDir });
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
     if (!plan.gateOpen) {
       result.autoClean.reason = plan.reason;
     } else {
-      const done = executeAutoClean(plan, scan, { cwd, budgetMs: p.budgetMs ?? REMOVAL_BUDGET_MS });
+      const done = executeAutoClean(plan, scan, {
+        cwd, budgetMs: p.budgetMs ?? REMOVAL_BUDGET_MS, removeTimeout: p.removeTimeout ?? REMOVE_TIMEOUT, projectsDir,
+      });
       result.autoClean.ran = true;
       result.autoClean.removed = done.removed;
       result.autoClean.skipped = done.skipped;

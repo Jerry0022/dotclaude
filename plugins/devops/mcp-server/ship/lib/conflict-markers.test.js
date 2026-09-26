@@ -2,13 +2,14 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("./git.js", () => ({
   git: vi.fn(() => null),
+  gitTry: vi.fn(),
   dirtyState: vi.fn(() => ({ dirty: false, modified: [], untracked: [], lines: [] })),
 }));
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { git, dirtyState } from "./git.js";
+import { git, gitTry, dirtyState } from "./git.js";
 import {
   findMarkersInText,
   candidateFiles,
@@ -21,6 +22,8 @@ let dir;
 beforeEach(() => {
   vi.clearAllMocks();
   git.mockReturnValue(null);
+  // ref-interpolating calls use the argv form; route them through the same fake
+  gitTry.mockImplementation((args, o) => git(args.join(" "), o));
   dirtyState.mockReturnValue({ dirty: false, modified: [], untracked: [], lines: [] });
   dir = mkdtempSync(join(tmpdir(), "conflict-markers-"));
 });
