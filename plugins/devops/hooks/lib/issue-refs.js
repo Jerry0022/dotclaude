@@ -1,6 +1,6 @@
 /**
  * @module issue-refs
- * @version 0.1.2
+ * @version 0.1.3
  * @description Which issue numbers in a prompt ask for work — for
  *   prompt.issue.detect. Every `#N` used to count as "the user referenced
  *   issue #N": the numbers were tracked, set In Progress, and every card of
@@ -27,16 +27,24 @@
  *        #19–#24 ab" track every number of it.
  *     2a. A digit-only `#333` / `#123456` (3, 4, 6 or 8 digits) is a hex
  *        colour when a colour word (color, Farbe, Rahmenfarbe, background,
- *        border, fill, rgb, hex, …) stands within 20 characters before or
- *        after it in the same clause, or a hyphenated CSS property with a
- *        colon precedes it (`border-top-color: #333`). "fix the #333 text
- *        colour" and "setze #999 als Rahmenfarbe" tracked #333 and #999
- *        (2026-09-26). `hashRefs` / `isColourRef` are the one copy of this
+ *        border, fill, rgb, hex, …) stands right beside it — directly before
+ *        (only `:`/`=`/one preposition between) or as the first or second
+ *        word after, with no dash, colon or comma between — or a hyphenated
+ *        CSS property with a colon precedes it (`border-top-color: #333`).
+ *        "fix the #333 text colour" and "setze #999 als Rahmenfarbe" tracked
+ *        #333 and #999 (2026-09-26). A close keyword, a work verb or the word
+ *        issue/ticket directly before the `#N` beats the colour word ("Closes
+ *        #412 border radius"); only "keyword: #N" with a colour word beside
+ *        stays a colour ("fix: #999 border"). The first cut (AUD-011) let any
+ *        colour word within 20 characters claim the number and lost real
+ *        3-digit references ("fix the border bug #412", "#540 fill the TOC",
+ *        red-team R3). `hashRefs` / `isColourRef` are the one copy of this
  *        rule: closesOf (run-contract-calls), the run's issue picker
  *        (run-contract-answers) and refine matching (run-contract-obligations)
  *        use them too.
  *     3. A number (or a pair) is `track` when a work verb leads it ("fix #12",
- *        "arbeite an #12", "mach Issue #12 fertig", "closes #12"), a German
+ *        "arbeite an #12", "mach Issue #12 fertig", "closes #12", "fix the
+ *        border bug #412" — one free word before bug/issue/task), a German
  *        infinitive follows it ("#12 bitte umsetzen") or it opens the prompt
  *        ("#12", "Issue #12: …"). Any other number is only mentioned: with no
  *        `track`, one or two of them are `ask` — the hook asks instead of
@@ -79,15 +87,43 @@ const HASH_RE = /(?<![\p{L}\p{N}_/&#:])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
 /** Hex colour lengths: #RGB, #RGBA, #RRGGBB, #RRGGBBAA. */
 const COLOUR_LENGTHS = new Set([3, 4, 6, 8]);
 /** Colour words, German compounds included (Rahmenfarbe, Textfarbe, Hintergrundbild). */
-const COLOUR_WORD_RE = /(?<![\p{L}\p{N}_])(?:\p{L}*(?:farbe|farben|color|colors|colour|colours|hintergrund)\p{L}*|background|backgrounds|bg|border|borders|fill|stroke|solid|rgba?|hex|hsla?|shade|tint|palette|accent|akzent|farbton|outline)(?![\p{L}\p{N}_])/giu;
-/** Ends a clause, or names an issue: a colour word past it describes something else. */
-const CLAUSE_BREAK_RE = /[,;!?\n]|\.\s|(?<![\p{L}])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|issues?|tickets?|schließ\p{L}*|behebe?)(?![\p{L}])/iu;
+const COLOUR_WORD_RE = /(?<![\p{L}\p{N}_])(?:\p{L}*(?:farbe|farben|color|colors|colour|colours|hintergrund)\p{L}*|background|backgrounds|bg|border|borders|fill|stroke|solid|rgba?|hex|hsla?|shade|tint|palette|accent|akzent|farbton|outline)(?![\p{L}\p{N}_])/iu;
 /** `border-top-color: #333`, `--accent: #333` — a CSS property before the value. */
 const CSS_PROP_BEFORE_RE = /(?<![\p{L}\p{N}_-])-*[\p{L}][\p{L}\p{N}]*(?:-[\p{L}\p{N}]+)+\s*:\s*$|(?<![\p{L}\p{N}_-])--[\p{L}\p{N}-]+\s*:\s*$/u;
-const COLOUR_REACH = 20;
+/** A colour word right before the value: only `:` `=`, whitespace and at most
+ *  one preposition between ("color: #123456", "set the border to #333"). */
+const COLOUR_BEFORE_RE = new RegExp(
+  String.raw`${COLOUR_WORD_RE.source}\s*[:=]?\s*(?:(?:to|in|of|as|auf|zu|von|mit|als)\s+)?$`, 'iu');
+/** A colour word as the first or second word after the value, whitespace only
+ *  between — any dash, colon or comma ends the clause ("#412 — border").
+ *  A colour word followed by an article is a verb ("#540 fill the TOC"). */
+const COLOUR_AFTER_RE = new RegExp(
+  String.raw`^\s+(?:[\p{L}\p{N}]+\s+)?${COLOUR_WORD_RE.source}(?!\s+(?:the|a|an|this|that|die|der|das|den|dem|ein|eine|einen)(?![\p{L}]))`, 'iu');
+/** Directly before `#N` (only whitespace, or a colon, between), these make it
+ *  an issue whatever colour word stands near: a close keyword, a work verb, the
+ *  word issue/ticket. "setz(e)" stays out — setting a value is colour talk
+ *  ("setze #999 als Rahmenfarbe"). Capture 1 is the colon. */
+const ISSUE_ANCHOR_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}_])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|schließt|behebt|issues?|tickets?|${
+    ['fix', 'fixes', 'close', 'closes', 'resolve', 'resolves', 'solve', 'implement', 'work on',
+      'tackle', 'handle', 'address', 'finish', 'complete', 'continue', 'start', 'ship', 'pick up',
+      'take care of', 'fixe', 'mach', 'mache', 'arbeite', 'bearbeite', 'löse', 'loese', 'erledige',
+      'implementiere', 'schließ', 'schließe', 'schliess', 'schliesse', 'übernimm', 'starte',
+      'beginne', 'kümmer', 'kümmere', 'behebe', 'beheb', 'repariere', 'weiter mit', 'weiter an']
+      .map(w => w.split(' ').join('\\s+')).join('|')})[ \t]*(:?)[ \t]*$`, 'iu');
 
 /**
  * Whether the `#N` at `text[index, end)` is a hex colour, not an issue.
+ * Only a digit-only `#N` of hex length can be one. In order:
+ *   1. A close keyword, a work verb or issue/ticket directly before it makes it
+ *      an issue ("fix #412 border", "Closes #412", "issue #412") — unless a
+ *      colon follows the keyword and a colour word sits right beside the value
+ *      ("fix: #999 border" is a colour; "fix: #412" is an issue).
+ *   2. A CSS property with a colon before it makes it a colour.
+ *   3. A colour word right before it, or as the first or second word after it
+ *      in the same clause, makes it a colour ("the border #333", "#333 text
+ *      colour", "#999 als Rahmenfarbe"). A colour word farther off describes
+ *      something else ("fix the border bug #412", "#412 — background image").
  * @param {string} text
  * @param {number} index  position of the `#`
  * @param {number} end    position after the last digit
@@ -98,17 +134,11 @@ function isColourRef(text, index, end) {
   const digits = s.slice(index + 1, end);
   if (!/^\d+$/.test(digits) || !COLOUR_LENGTHS.has(digits.length)) return false;
   const before = s.slice(Math.max(0, index - 80), index);
-  if (CSS_PROP_BEFORE_RE.test(before)) return true;
-  for (const m of before.matchAll(COLOUR_WORD_RE)) {
-    const gap = before.slice(m.index + m[0].length);
-    if (gap.length <= COLOUR_REACH && !CLAUSE_BREAK_RE.test(gap)) return true;
-  }
   const after = s.slice(end, end + 80);
-  for (const m of after.matchAll(COLOUR_WORD_RE)) {
-    const gap = after.slice(0, m.index);
-    if (gap.length <= COLOUR_REACH && !CLAUSE_BREAK_RE.test(gap)) return true;
-  }
-  return false;
+  const beside = COLOUR_BEFORE_RE.test(before) || COLOUR_AFTER_RE.test(after);
+  const anchor = before.match(ISSUE_ANCHOR_RE);
+  if (anchor) return anchor[1] === ':' && beside;
+  return CSS_PROP_BEFORE_RE.test(before) || beside;
 }
 
 /**
@@ -171,8 +201,11 @@ const alt = (list) => list.map(w => w.split(' ').map(escapeRe).join('\\s+')).joi
 const NOT_WORD_BEFORE = '(?<![\\p{L}\\p{N}_])';
 const NOT_WORD_AFTER = '(?![\\p{L}\\p{N}_])';
 
+/** One free word may name the kind of issue: "fix the border bug #412". */
+const LEAD_NOUNS = ['bug', 'bugs', 'issue', 'ticket', 'task', 'aufgabe', 'problem', 'fehler'];
 const LEAD_RE = new RegExp(
-  `${NOT_WORD_BEFORE}(?:${alt(LEAD_VERBS)}):?(?:\\s+(?:${alt(LEAD_FILLERS)})){0,3}\\s*$`, 'iu');
+  `${NOT_WORD_BEFORE}(?:${alt(LEAD_VERBS)}):?(?:\\s+(?:${alt(LEAD_FILLERS)})){0,3}` +
+  `(?:\\s+[\\p{L}\\p{N}-]+\\s+(?:${alt(LEAD_NOUNS)}))?\\s*$`, 'iu');
 const TRAIL_RE = new RegExp(
   `^:?(?:\\s+(?:${alt(TRAIL_FILLERS)})){0,2}\\s+(?:${alt(TRAIL_VERBS)})${NOT_WORD_AFTER}`, 'iu');
 

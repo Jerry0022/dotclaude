@@ -721,8 +721,23 @@ describe("AUD-011: the shared `#N` reading at every site", () => {
 
   test("closesOf skips a digit-only colour", () => {
     expect(C.closesOf("fix: #999 border, closes #540")).toEqual(["540"]);
-    expect(C.closesOf("Fixes #333 text colour\nCloses #12")).toEqual(["12"]);
+    expect(C.closesOf("Fixes: #333 text colour\nCloses #12")).toEqual(["12"]);
     expect(C.closesOf("Closes #540")).toEqual(["540"]);
+  });
+
+  // Red-team R3: the keyword right before `#N` beats a colour word — GitHub
+  // closes #412 on "Closes #412 — border radius" / "Fixes #333 text colour".
+  test("R3: closesOf keeps a keyword-led number beside a colour word", () => {
+    expect(C.closesOf("Closes #412 — border radius")).toEqual(["412"]);
+    expect(C.closesOf("Fixes #333 text colour\nCloses #12")).toEqual(["333", "12"]);
+    expect(C.closesOf("Resolves: #412 — border radius")).toEqual(["412"]);
+  });
+
+  test("R3: refine matching finds `issue #N` beside a colour word", () => {
+    expect(O.issueNamed("refine issue #412 — card border", "412")).toBe(true);
+    expect(O.issueNamed("refine issue: #412 border", "412")).toBe(true);
+    expect(O.issueNamed("refine the border bug #412", "412")).toBe(true);
+    expect(O.issueNamed("refine issue about the border #333", "333")).toBe(false);
   });
 
   test("the issue picker takes a label's leading number, and no colour past it", () => {

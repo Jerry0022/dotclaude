@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.6
+ * @version 0.5.7
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -990,7 +990,9 @@ function isGatedEdit(tool, input, root, cwd) {
 }
 
 /** Issue numbers a PR body closes. `#N` is read as issue-refs.js reads it:
- *  "Fixes #8fae8f contrast" closes no issue #8, "fix: #999 border" no #999. */
+ *  "Fixes #8fae8f contrast" closes no issue #8, "fix: #999 border" no #999 —
+ *  but the keyword right before `#N` beats a colour word ("Closes #412 —
+ *  border radius" closes #412, as GitHub would). */
 function closesOf(body) {
   const out = [];
   if (typeof body !== 'string') return out;

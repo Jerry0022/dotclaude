@@ -168,6 +168,49 @@ describe("AUD-011: a digit-only hex colour beside a colour word is no issue", ()
   });
 });
 
+// Red-team R3: AUD-011's 20-character colour reach lost real 3-digit issue
+// numbers. The colour word must sit right beside the value now, and a close
+// keyword, work verb or issue/ticket directly before `#N` beats it.
+describe("R3: a colour word nearby does not swallow a real issue number", () => {
+  test.each([
+    ["fix the border bug #412", ["412"]],
+    ["#540 fill the TOC", ["540"]],
+    ["fix #412 — background image missing", ["412"]],
+    ["fix #412 – background image missing", ["412"]],
+    ["fix #412 - background image missing", ["412"]],
+    ["Closes #412 border radius", ["412"]],
+    ["fix: #412", ["412"]],
+    ["fix: #412 — border radius", ["412"]],
+    ["mach Issue #412 fertig, Rahmenfarbe passt nicht", ["412"]],
+    ["the background task from #412: fix it", []],
+  ])("%s tracks %j", (prompt, track) => {
+    expect(issueRefs(prompt).track).toEqual(track);
+  });
+
+  test("#412 after a colon that opens prose is no colour", () => {
+    expect(hashRefs("Hintergrund: siehe #412").map(r => r.n)).toEqual(["412"]);
+    expect(hashRefs("background: #412 image missing").map(r => r.n)).toEqual([]);
+  });
+
+  test.each([
+    "fix the #333 text colour",
+    "setze #999 als Rahmenfarbe",
+    "color: #123456;",
+    "border-top-color: #333",
+    "set the border to #333",
+    "the #999 border",
+  ])("AUD-011 colour still a colour: %s", (prompt) => {
+    expect(hashRefs(prompt)).toEqual([]);
+  });
+
+  test("the keyword-colon boundary", () => {
+    // "keyword: #N" + a colour word beside → colour; without the colon → issue.
+    expect(hashRefs("fix: #999 border, closes #540").map(r => r.n)).toEqual(["540"]);
+    expect(hashRefs("fix #999 border").map(r => r.n)).toEqual(["999"]);
+    expect(hashRefs("fix: #999, the border").map(r => r.n)).toEqual(["999"]);
+  });
+});
+
 // AUD-011 / redteam R5: a list of 3+ was dropped before the work verb was
 // looked at — "fix #12, #13 and #14" and "arbeite #19–#24 ab" tracked nothing.
 describe("AUD-011 R5: a list led by a work verb tracks every number", () => {

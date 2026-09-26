@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.3.3
+ * @version 0.3.4
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -96,8 +96,9 @@ function codeFilesOf(seg, ctx) {
   return m && typeof m.codeFiles === 'number' ? m.codeFiles : null;
 }
 /** Whether auto-issue args name item `n`: a `#n` read as issue-refs.js reads
- *  it (`#7d84a8` and "#333 border" name no #7 / #333), or `n` as a token of
- *  its own after the word issue. AUD-022: `n` is escaped — an item holding a
+ *  it (`#7d84a8` and "#333 border" name no #7 / #333), or `n` / `#n` as a
+ *  token of its own after the word issue ("refine issue #412 — card border"
+ *  names 412, red-team R3). AUD-022: `n` is escaped — an item holding a
  *  regex metacharacter used to throw and fail the card gate open. */
 function issueNamed(args, n) {
   const text = typeof args === 'string' ? args : String(args == null ? '' : args);
@@ -105,7 +106,8 @@ function issueNamed(args, n) {
   if (!item) return false;
   if (hashRefs(text).some(r => r.n === item)) return true;
   const esc = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`\\bissues?\\b[^\\n]*?(?<![\\p{L}\\p{N}_#])${esc}(?![\\p{L}\\p{N}_])`, 'iu').test(text);
+  // "issue #412 — card border": the `#` form right after the word, too.
+  return new RegExp(`\\bissues?\\b(?:[ \\t]*:?[ \\t]*#|[^\\n]*?(?<![\\p{L}\\p{N}_#]))${esc}(?![\\p{L}\\p{N}_])`, 'iu').test(text);
 }
 
 // AUD-020: an unrelated Agent call (e.g. an Explore search) used to satisfy
