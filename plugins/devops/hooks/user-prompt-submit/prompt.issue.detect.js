@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.4.0
+ * @version 0.5.0
  * @event UserPromptSubmit
  * @plugin devops
- * @description Detect issue references in user messages. If explicit (#N or
- *   "Issue N"), instruct Claude to set it to In Progress on GitHub. If implicit
- *   (branch name pattern like feat/42-*), ask the user for confirmation first.
- *   On the first prompt of a session with no explicit/implicit match, instruct
- *   Claude to call the match_issues MCP tool for heuristic matching.
+ * @description Detect issue references in user messages. Only a request to
+ *   work on an issue is tracked and set In Progress: a work verb before the
+ *   number ("fix #12", "arbeite an #12", "mach Issue #12 fertig"), a German
+ *   infinitive after it ("#12 bitte umsetzen") or the number opening the
+ *   prompt ("#12", "Issue #12: …"). A number only mentioned in prose, a
+ *   branch named in the message and the current branch (feat/42-*) are asked
+ *   about first. Numbers in quotes, code, brackets, pasted log lines or a
+ *   list of 3+ are no reference at all (lib/issue-refs.js) — a task-chip
+ *   prompt that quoted "[issue-status] Tracked issues this session: #530, …"
+ *   as an example put four unrelated issues on the In Progress → Done/Todo +
+ *   comment track (2026-09-26).
+ *   On the first prompt of a session with no reference, instruct Claude to
+ *   call the match_issues MCP tool for heuristic matching.
  */
 
 require('../lib/plugin-guard');
@@ -16,6 +24,16 @@ require('../lib/plugin-guard');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
+const { issueRefs } = require('../lib/issue-refs');
+
+const BRANCH_ISSUE_RE = /\b(?:feat|fix|chore|docs)\/(\d+)[-/]/i;
+
+function readList(file) {
+  try {
+    const list = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+}
 
 // Read hook input from stdin (contains user's message)
 let inputData = '';
@@ -38,26 +56,25 @@ process.stdin.on('end', () => {
   // heuristic.
   if (require('../lib/non-user-prompt').isNonUserPrompt(message)) process.exit(0);
 
-  // Pattern 1: Explicit issue reference — #42, Issue #42, Issue 42, "mach Issue #42"
-  const explicitMatch = message.match(/#(\d+)/g) || message.match(/\bIssue\s+(\d+)/gi);
-  // Pattern 2: Branch name in message — feat/42-something
-  const branchMatch = message.match(/\b(?:feat|fix|chore|docs)\/(\d+)[-/]/i);
+  // A request to work on an issue is tracked; a number only mentioned is
+  // asked about. Quoted examples, code, brackets, pasted log lines and lists
+  // of 3+ are neither.
+  const refs = issueRefs(message);
+  const trackNumbers = refs.track;
+  let askNumbers = refs.ask;
+  let askSource = 'mention';
 
-  let issueNumbers = [];
-
-  if (explicitMatch) {
-    // Extract numbers from #N patterns
-    issueNumbers = [...new Set(
-      (message.match(/#(\d+)/g) || []).map(m => m.replace('#', ''))
-    )];
-  }
-
-  if (issueNumbers.length === 0 && branchMatch) {
-    issueNumbers = [branchMatch[1]];
+  // Branch name in message — feat/42-something
+  if (trackNumbers.length === 0 && askNumbers.length === 0) {
+    const branchMatch = message.match(BRANCH_ISSUE_RE);
+    if (branchMatch) {
+      askNumbers = [branchMatch[1]];
+      askSource = 'branch';
+    }
   }
 
   // Also check current git branch for implicit issue reference
-  if (issueNumbers.length === 0) {
+  if (trackNumbers.length === 0 && askNumbers.length === 0) {
     try {
       const branch = execSync('git rev-parse --abbrev-ref HEAD', {
         encoding: 'utf8',
@@ -66,14 +83,15 @@ process.stdin.on('end', () => {
       }).trim();
       const branchIssue = branch.match(/^(?:feat|fix|chore|docs)\/(\d+)[-/]/);
       if (branchIssue) {
-        issueNumbers = [branchIssue[1]];
+        askNumbers = [branchIssue[1]];
+        askSource = 'branch';
       }
     } catch {}
   }
 
-  // No explicit or implicit issue number found — try heuristic matching
-  // on the FIRST prompt of this session only.
-  if (issueNumbers.length === 0) {
+  // No issue reference found — try heuristic matching on the FIRST prompt of
+  // this session only.
+  if (trackNumbers.length === 0 && askNumbers.length === 0) {
     const heuristicFile = sessionFile('dotclaude-devops-heuristic-done', hook.session_id);
     let heuristicDone = false;
     try { heuristicDone = fs.existsSync(heuristicFile); } catch {}
@@ -94,55 +112,50 @@ process.stdin.on('end', () => {
       );
     }
 
-    process.exit(0);
+    return;
   }
 
-  // Load already tracked issues (avoid duplicate prompts)
+  // Already tracked issues are never tracked or asked about again
   const trackedFile = sessionFile('dotclaude-devops-tracked-issues', hook.session_id);
-  let tracked = [];
-  try {
-    tracked = JSON.parse(fs.readFileSync(trackedFile, 'utf8'));
-  } catch { tracked = []; }
+  const tracked = readList(trackedFile);
 
-  const newIssues = issueNumbers.filter(n => !tracked.includes(n));
-  if (newIssues.length === 0) {
-    process.exit(0);
-  }
+  if (trackNumbers.length > 0) {
+    const newIssues = trackNumbers.filter(n => !tracked.includes(n));
+    if (newIssues.length === 0) return;
 
-  // Determine if explicit or implicit
-  const isExplicit = explicitMatch && explicitMatch.length > 0;
-  const issueList = newIssues.map(n => `#${n}`).join(', ');
-
-  if (isExplicit) {
-    // Explicit mention — persist immediately and instruct Claude
+    // A request to work on it — persist immediately and instruct Claude
     tracked.push(...newIssues);
     try { writeSessionFile(trackedFile, JSON.stringify(tracked)); } catch {}
 
+    const issueList = newIssues.map(n => `#${n}`).join(', ');
     process.stdout.write(
-      `User explicitly referenced issue ${issueList}. ` +
+      `User asked to work on issue ${issueList}. ` +
       `Set ${issueList} to "In Progress" on the GitHub project board ` +
       `(use the GitHub API). Track this issue for the session — ` +
       `when work is complete, update status to "Done" in the completion flow.\n`
     );
-  } else {
-    // Implicit (branch name) — ask user first, do NOT persist yet.
-    // Use a separate "asked" marker to prevent re-prompting.
-    const askedFile = sessionFile('dotclaude-devops-asked-issues', hook.session_id);
-    let asked = [];
-    try { asked = JSON.parse(fs.readFileSync(askedFile, 'utf8')); } catch { asked = []; }
-    const unasked = newIssues.filter(n => !asked.includes(n));
-    if (unasked.length === 0) process.exit(0);
-
-    asked.push(...unasked);
-    try { writeSessionFile(askedFile, JSON.stringify(asked)); } catch {}
-
-    const unaskedList = unasked.map(n => `#${n}`).join(', ');
-    process.stdout.write(
-      `Current branch references issue ${unaskedList}. ` +
-      `Ask the user: "Arbeitest du an Issue ${unaskedList}?" ` +
-      `If confirmed, set to "In Progress" on the project board ` +
-      `and add to tracked issues for this session. ` +
-      `If declined, do not track and do not ask again.\n`
-    );
+    return;
   }
+
+  // Mentioned or implied by a branch — ask the user first, do NOT persist as
+  // tracked. A separate "asked" marker prevents re-prompting.
+  const askedFile = sessionFile('dotclaude-devops-asked-issues', hook.session_id);
+  const asked = readList(askedFile);
+  const unasked = askNumbers.filter(n => !tracked.includes(n) && !asked.includes(n));
+  if (unasked.length === 0) return;
+
+  asked.push(...unasked);
+  try { writeSessionFile(askedFile, JSON.stringify(asked)); } catch { /* the question still goes out */ }
+
+  const unaskedList = unasked.map(n => `#${n}`).join(', ');
+  const lead = askSource === 'mention'
+    ? `The prompt mentions issue ${unaskedList} but does not ask to work on it.`
+    : `Current branch references issue ${unaskedList}.`;
+  process.stdout.write(
+    `${lead} ` +
+    `Ask the user: "Arbeitest du an Issue ${unaskedList}?" ` +
+    `If confirmed, set to "In Progress" on the project board and, when the ` +
+    `work is complete, update it like a tracked issue in the completion flow. ` +
+    `If declined, do not track and do not ask again.\n`
+  );
 });
