@@ -784,6 +784,64 @@ describe("testRunOutcome — summary decides (Bash response, no exit code)", () 
 });
 
 // ---------------------------------------------------------------------------
+// testRunOutcome — every runner TEST_RUNNER_RE accepts reads its own verdict
+// ---------------------------------------------------------------------------
+
+// R1: after AUD-015 a Bash response without a recognised verdict reads
+// 'unknown'. A passing `go test` / `mvn test` / `gradle test` / unittest /
+// dotnet run printed no verdict the patterns knew, so the V&V gate blocked a
+// green run. One real passing and one real failing sample per runner family.
+describe("testRunOutcome — each runner family's own summary decides (R1)", () => {
+  const bash = (stdout) => ({ stdout, stderr: "", interrupted: false, isImage: false });
+  const cases = [
+    ["go test", "pass", "ok  \texample.com/pkg\t0.012s"],
+    ["go test (cached)", "pass", "ok  \texample.com/pkg\t(cached)"],
+    ["go test -v", "pass", "=== RUN   TestAdd\n--- PASS: TestAdd (0.00s)\nPASS\nok  \texample.com/pkg\t0.010s"],
+    ["go test -v, a passing test named for failure", "pass", "=== RUN   TestNoFailOnEmpty\n--- PASS: TestNoFailOnEmpty (0.00s)\nPASS"],
+    ["go test", "fail", "--- FAIL: TestAdd (0.00s)\n    add_test.go:9: got 3, want 4\nFAIL\nFAIL\texample.com/pkg\t0.011s\nFAIL"],
+    ["go test (build failure)", "fail", "# example.com/pkg\n./add.go:3:1: syntax error\nFAIL\texample.com/pkg [build failed]"],
+    ["mvn test", "pass", "[INFO] Results:\n[INFO] \n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n[INFO] \n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD SUCCESS"],
+    ["mvn test", "fail", "[ERROR] Tests run: 5, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.05 s <<< FAILURE! -- in com.x.AppTest\n[ERROR] Tests run: 5, Failures: 1, Errors: 0, Skipped: 0\n[INFO] BUILD FAILURE"],
+    ["mvn test (errors only)", "fail", "[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0"],
+    ["gradle test", "pass", "> Task :test\n\nBUILD SUCCESSFUL in 3s\n4 actionable tasks: 2 executed, 2 up-to-date"],
+    ["gradle test", "fail", "> Task :test FAILED\n\nAppTest > adds() FAILED\n    org.opentest4j.AssertionFailedError at AppTest.java:9\n\n5 tests completed, 1 failed\n\nFAILURE: Build failed with an exception.\n\nBUILD FAILED in 4s"],
+    ["gradle test (count only)", "fail", "5 tests completed, 1 failed"],
+    ["python -m unittest (bare OK)", "pass", "......\n----------------------------------------------------------------------\nRan 6 tests in 0.010s\n\nOK"],
+    ["python -m unittest (OK skipped)", "pass", "..s\n----------------------------------------------------------------------\nRan 3 tests in 0.001s\n\nOK (skipped=1)"],
+    ["python -m unittest", "fail", "F.\n======================================================================\nFAIL: test_add (test_x.T.test_add)\n----------------------------------------------------------------------\nRan 2 tests in 0.001s\n\nFAILED (failures=1)"],
+    ["dotnet test (.NET 8+)", "pass", "Restore complete (0.4s)\n  App.Tests test succeeded (1.2s)\n\nTest summary: total: 3, failed: 0, succeeded: 3, skipped: 0, duration: 1.1s\nBuild succeeded in 3.0s"],
+    ["dotnet test (.NET 8+)", "fail", "Test summary: total: 3, failed: 1, succeeded: 2, skipped: 0, duration: 1.1s\nBuild failed with 1 error(s) in 3.0s"],
+    ["dotnet test (legacy)", "pass", "Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3, Duration: 45 ms - App.Tests.dll (net6.0)"],
+    ["dotnet test (legacy)", "fail", "Failed!  - Failed:     1, Passed:     2, Skipped:     0, Total:     3, Duration: 45 ms - App.Tests.dll (net6.0)"],
+    ["cargo test", "pass", "running 3 tests\ntest tests::a ... ok\ntest tests::b ... ok\ntest tests::c ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"],
+    ["cargo test", "fail", "running 3 tests\ntest tests::a ... FAILED\n\nfailures:\n    tests::a\n\ntest result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"],
+    ["vitest", "pass", " ✓ src/a.test.ts (3 tests) 4ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)"],
+    ["vitest", "fail", " FAIL  src/a.test.ts > adds\n\n Test Files  1 failed (1)\n      Tests  1 failed | 2 passed (3)"],
+    ["jest", "pass", "PASS src/a.test.js\nTest Suites: 1 passed, 1 total\nTests:       3 passed, 3 total"],
+    ["jest", "fail", "FAIL src/a.test.js\nTest Suites: 1 failed, 1 total\nTests:       1 failed, 2 passed, 3 total"],
+    ["mocha", "pass", "  suite\n    ✔ adds\n\n  1 passing (4ms)"],
+    ["mocha", "fail", "  suite\n    1) adds\n\n  0 passing (4ms)\n  1 failing"],
+    ["pytest", "pass", "============================= 3 passed in 0.02s =============================="],
+    ["pytest", "fail", "FAILED test_x.py::test_add - assert 3 == 4\n========================= 1 failed, 2 passed in 0.03s ========================="],
+    ["node:test", "pass", "✔ adds (0.5ms)\nℹ tests 1\nℹ pass 1\nℹ fail 0"],
+    ["node:test", "fail", "✖ adds (0.5ms)\nℹ tests 1\nℹ pass 0\nℹ fail 1"],
+  ];
+  test.each(cases)("%s → %s", (_runner, expected, out) => {
+    expect(testRunOutcome(bash(out))).toBe(expected);
+  });
+
+  test("the AUD-015 rules still hold", () => {
+    // A runner that printed nothing of its own stays unknown.
+    expect(testRunOutcome(bash(""))).toBe("unknown");
+    expect(testRunOutcome(bash("build done"))).toBe("unknown");
+    // A logged failure count inside a console block never decides.
+    expect(testRunOutcome(bash("stdout | a.test.ts > x\nFailures: 2\n\nRan 3 tests in 0.1s\n\nOK"))).toBe("pass");
+    // A logged `Failures: 1` beside a green summary line does not redden it.
+    expect(testRunOutcome(bash("retry log Failures: 1\n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n[INFO] BUILD SUCCESS"))).toBe("pass");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // hasSkipJustification — explicit skip token
 // ---------------------------------------------------------------------------
 
