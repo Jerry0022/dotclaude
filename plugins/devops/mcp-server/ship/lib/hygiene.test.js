@@ -252,37 +252,90 @@ describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C0
     expect(fs.existsSync(build)).toBe(false);
   });
 
-  test("isToolingState: Claude and plugin state, never an audit dossier or a salvage patch", () => {
-    for (const e of [".claude/", ".claude/.ship-watcher/", ".claude/concepts/", ".claude/project-map.md", "AUTONOMOUS-LOG.md",
-      "AUTONOMOUS-REPORT.html", "BACKLOG-DONE.flag", "BURN-STATE.json", "BURN-STATE.json.lock", "graphify-out/"]) {
+  test("isToolingState: run bookkeeping and pure runtime state only", () => {
+    for (const e of [".claude/.ship-watcher/", ".claude/.ship-watcher/state.json", ".claude/project-map.md", ".claude/run-contract.json",
+      ".claude/batch-mode.json", "AUTONOMOUS-LOG.md", "AUTONOMOUS-REPORT.html", "BACKLOG-DONE.flag", "BURN-STATE.json",
+      "BURN-STATE.json.lock", "graphify-out/"]) {
       expect(isToolingState(e), e).toBe(true);
     }
-    for (const e of [".claude/audit/", ".claude/audit/2026-x/findings.md", "BURN-SALVAGE-1.patch", ".env", "notes/AUTONOMOUS-LOG.md", "BURN-1.md"]) {
+    for (const e of [".claude/", ".claude/batch.md", ".claude/batch-assets/", ".claude/concepts/", ".claude/audit/",
+      ".claude/audit/2026-x/findings.md", "BURN-SALVAGE-1.patch", ".env", "notes/AUTONOMOUS-LOG.md", "BURN-1.md"]) {
       expect(isToolingState(e), e).toBe(false);
     }
   });
 
-  test("seeded .claude/ state and run journals do not keep a worktree; an audit dossier only it holds does", () => {
+  test(".claude/ content goes only as runtime state or a byte-identical copy of the main checkout's", () => {
     const { dir, c1 } = makeRepo();
     fs.writeFileSync(path.join(dir, ".git", "info", "exclude"), "AUTONOMOUS-*\n");
+    const put = (root, rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      fs.writeFileSync(path.join(root, rel), text);
+    };
     const seeded = sessionWorktree(dir, "wt-seeded", c1, 40);
-    fs.mkdirSync(path.join(seeded, ".claude", ".ship-watcher"), { recursive: true });
-    fs.writeFileSync(path.join(seeded, ".claude", ".ship-watcher", "state.json"), "{}\n");
-    fs.writeFileSync(path.join(seeded, "AUTONOMOUS-LOG.md"), "# log\n");
+    put(seeded, ".claude/.ship-watcher/state.json", "{}\n");
+    put(seeded, "AUTONOMOUS-LOG.md", "# log\n");
+    put(dir, ".claude/audit/2026-09-01-main/findings.md", "same\n");
+    put(seeded, ".claude/audit/2026-09-01-main/findings.md", "same\n");
     const audited = sessionWorktree(dir, "wt-audited", c1, 40);
-    fs.mkdirSync(path.join(audited, ".claude", "audit", "2026-09-26-own"), { recursive: true });
-    fs.writeFileSync(path.join(audited, ".claude", "audit", "2026-09-26-own", "findings.md"), "only copy\n");
-    const copied = sessionWorktree(dir, "wt-copied", c1, 40);
-    fs.mkdirSync(path.join(copied, ".claude", "audit", "2026-09-01-main"), { recursive: true });
-    fs.mkdirSync(path.join(dir, ".claude", "audit", "2026-09-01-main"), { recursive: true });
+    put(audited, ".claude/audit/2026-09-26-own/findings.md", "only copy\n");
+    const extended = sessionWorktree(dir, "wt-extended", c1, 40);
+    put(extended, ".claude/audit/2026-09-01-main/findings.md", "same\n");
+    put(extended, ".claude/audit/2026-09-01-main/more.md", "added in the session\n");
+    const notes = sessionWorktree(dir, "wt-notes", c1, 40);
+    put(notes, ".claude/batch.md", "- a note never fired\n");
 
     const scan = scanRepo(dir, NOW);
     const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
     executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
-    expect(fs.existsSync(seeded), "plugin state and a run journal are no reason to stay").toBe(false);
-    expect(fs.existsSync(copied), "a dossier the main checkout holds is the seed copy").toBe(false);
-    expect(fs.readFileSync(path.join(audited, ".claude", "audit", "2026-09-26-own", "findings.md"), "utf8")).toBe("only copy\n");
-    expect(plan.keep.find((u) => u.branch === "wt-audited").reason).toBe("holds ignored files: .claude/audit/2026-09-26-own/");
+    const why = (b) => plan.keep.find((u) => u.branch === b).reason;
+    expect(fs.existsSync(seeded), "runtime state, a run journal and a seed copy are no reason to stay").toBe(false);
+    expect(why("wt-audited")).toBe("holds ignored files: .claude/audit/2026-09-26-own/findings.md");
+    expect(why("wt-extended"), "same dossier name, new content").toBe("holds ignored files: .claude/audit/2026-09-01-main/more.md");
+    expect(why("wt-notes")).toBe("holds ignored files: .claude/batch.md");
+    expect(fs.readFileSync(path.join(notes, ".claude", "batch.md"), "utf8")).toBe("- a note never fired\n");
+  });
+
+  test("a worktree holding another checkout stays", () => {
+    const { dir, c1 } = makeRepo();
+    const outer = sessionWorktree(dir, "wt-outer", c1, 40);
+    const inner = path.join(outer, ".claude", "worktrees", "wt-inner");
+    git(dir, "worktree", "add", "-q", "-b", "wt-inner", inner, c1);
+    fs.writeFileSync(path.join(inner, "draft.txt"), "uncommitted\n");
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(plan.keep.find((u) => u.branch === "wt-outer").reason).toMatch(/^holds another checkout: .*wt-inner$/);
+    expect(fs.readFileSync(path.join(inner, "draft.txt"), "utf8")).toBe("uncommitted\n");
+  });
+
+  test("an ignored link (a junctioned node_modules) keeps the worktree and its target", () => {
+    const { dir, c1 } = makeRepo();
+    fs.writeFileSync(path.join(dir, ".git", "info", "exclude"), "node_modules\n");
+    const shared = mkTmp("hy-shared-");
+    fs.writeFileSync(path.join(shared, "pkg.js"), "module.exports = 1;\n");
+    const wt = sessionWorktree(dir, "wt-linked", c1, 40);
+    fs.symlinkSync(shared, path.join(wt, "node_modules"), "junction");
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(plan.keep.find((u) => u.branch === "wt-linked").reason).toMatch(/^(holds a link: node_modules\/?|uncommitted-changes)$/);
+    expect(fs.existsSync(path.join(shared, "pkg.js"))).toBe(true);
+  });
+
+  test("a damaged removal stays on the card until its folder is gone", () => {
+    const { dir, c1 } = makeRepo();
+    const slow = sessionWorktree(dir, "wt-slow", c1, 40);
+    const statePath = path.join(mkTmp("hy-state-"), "s.json");
+    const base = { cwd: dir, trigger: "ship", statePath, now: NOW, fetchMerged: offline, projectsDir: null };
+    const same = (list) => list.map((p) => path.resolve(p));
+    const first = runHygiene({ ...base, settings: SETTINGS, removeTimeout: 1 });
+    expect(same(first.damaged)).toEqual([path.resolve(slow)]);
+    const later = runHygiene({ ...base, settings: { ...SETTINGS, autoClean: false } });
+    expect(same(later.damaged), "still reported on a run that removes nothing").toEqual([path.resolve(slow)]);
+    expect(later.card.tests.result).toContain("wt-slow");
+    fs.rmSync(slow, { recursive: true, force: true });
+    const cleared = runHygiene({ ...base, settings: { ...SETTINGS, autoClean: false } });
+    expect(cleared.damaged).toEqual([]);
   });
 
   test("an untracked file counts under status.showUntrackedFiles=no (hyg3)", () => {

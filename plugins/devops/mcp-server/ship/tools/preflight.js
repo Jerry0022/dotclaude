@@ -213,7 +213,9 @@ export async function handler(params) {
 
   // 4. Dirty state
   const state = dirtyState(opts);
-  if (state.dirty) {
+  if (state.error) {
+    errors.push(`Working tree unreadable: git status failed (${state.error}) — cannot prove it is clean`);
+  } else if (state.dirty) {
     errors.push(
       `Dirty working tree: ${state.modified.length} modified, ${state.untracked.length} untracked`
     );

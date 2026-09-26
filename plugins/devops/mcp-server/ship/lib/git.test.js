@@ -157,6 +157,15 @@ describe("dirtyState", () => {
     expect(state.lines).toEqual([]);
   });
 
+  test("a failed or timed-out status is never clean", () => {
+    execSync.mockImplementation(() => {
+      throw Object.assign(new Error("spawnSync git ETIMEDOUT"), { code: "ETIMEDOUT" });
+    });
+    const state = dirtyState();
+    expect(state.dirty).toBe(true);
+    expect(state.error).toMatch(/ETIMEDOUT/);
+  });
+
   test("modified and untracked files (-z format)", () => {
     // -z: NUL-terminated, first entry unstaged modification, second untracked.
     execSync.mockReturnValue(" M src/index.js\0?? new-file.txt\0");
@@ -199,12 +208,13 @@ describe("dirtyState", () => {
     expect(state.modified).toEqual(["new.js", "other.js"]);
   });
 
-  test("returns empty on git failure", () => {
+  test("a git failure lists nothing but says why, and counts as dirty", () => {
     execSync.mockImplementation(() => {
       throw new Error("not a git repo");
     });
     const state = dirtyState();
-    expect(state.dirty).toBe(false);
+    expect(state.dirty).toBe(true);
+    expect(state.error).toBe("not a git repo");
     expect(state.lines).toEqual([]);
   });
 });

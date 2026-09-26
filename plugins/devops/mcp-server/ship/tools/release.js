@@ -126,6 +126,9 @@ export async function handler(params) {
     // Optional: commit version-bumped files
     if (commitMessage) {
       const state = dirtyState(opts);
+      if (state.error) {
+        throw new Error(`git status failed (${state.error}) — cannot tell which files to commit. Nothing was committed.`);
+      }
       if (state.modified.length > 0) {
         // Stage every tracked modification across the repo in one call.
         // The `:/` pathspec anchors at the repo root, so this works whether
@@ -167,6 +170,9 @@ export async function handler(params) {
       result.commit = headShort(opts);
     } else {
       const state = dirtyState(opts);
+      if (state.error) {
+        throw new Error(`git status failed (${state.error}) — cannot prove the working tree is clean. Nothing was committed.`);
+      }
       if (state.dirty) {
         throw new Error(
           `Uncommitted changes detected but no commitMessage provided. ` +

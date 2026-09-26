@@ -14,10 +14,12 @@
  *          identical in the default branch;
  *        - worktree: a session worktree (under `.claude/worktrees/`), not
  *          locked, clean (`status --porcelain --untracked-files=all
- *          --ignored=matching` lists nothing but regenerable build artifacts
- *          and Claude/plugin tooling state — `worktree remove` deletes
- *          ignored files too, so a `.env`, a patch or an audit dossier only
- *          this worktree holds keeps it), no Claude transcript for it
+ *          --ignored=matching` lists nothing but regenerable build output,
+ *          run bookkeeping, `.claude/` runtime state and `.claude/` files the
+ *          main checkout holds byte-identical — `worktree remove` deletes
+ *          ignored files too and can follow a junction, so a `.env`, a patch,
+ *          unsent batch notes, a concept store or an ignored link keeps it),
+ *          no other checkout inside it, no Claude transcript for it
  *          written in the last `LIVE_SESSION_MS`, idle for the age above
  *          (newest of HEAD commit and the worktree's index/HEAD/log mtimes),
  *          and its HEAD landed as above — its branch goes with it.
@@ -28,8 +30,10 @@
  *      moved, a worktree that got dirty or locked is skipped, not removed.
  *      A removal gets `REMOVE_TIMEOUT` (git-hygiene.md, "A half-done worktree
  *      removal": never a 120 s ceiling); one that fails or times out is
- *      reported as damaged with its path, and the closing `worktree prune` is
- *      skipped so the half-deleted checkout keeps its registration.
+ *      reported as damaged with its path — on every card, and with the
+ *      closing `worktree prune` skipped, until that folder is gone (recorded
+ *      in the state file); one git refused before deleting anything is a
+ *      plain skip.
  *      Branch removal is `branch -D` (a squash-merged branch is no git
  *      ancestor, so `-d` would refuse); the tip SHA is logged for recovery.
  *   2. Nudge (after ship and promote). More than `nudgeThreshold` leftovers
@@ -72,7 +76,26 @@ const REGENERABLE_FILE = /\.pyc$/i;
 const TOOLING_ROOT_ENTRY = new RegExp("^(?:AUTONOMOUS-(?:LOG\\.md|REPORT\\.html|DONE\\.flag|RECOVERY\\.flag|LOCKOUT\\.flag"
   + "|RESUME\\.json|STALLED\\.txt|INTERRUPTED\\.txt)|BACKLOG-(?:LOG\\.md|REPORT\\.html|DONE\\.flag|RESUME\\.json)"
   + "|BURN-STATE(?:\\.prev)?\\.json(?:\\.lock)?|graphify-out/)$");
-const AUDIT_DIR = ".claude/audit";
+/**
+ * `.claude/` paths that are pure plugin/Claude runtime state: locks, flags,
+ * watcher and port state, caches, generated maps. Anything else under
+ * `.claude/` — batch notes and their images, concept stores, audit dossiers,
+ * plans — may be the only copy of someone's work and goes only when the main
+ * checkout holds the same bytes (Desktop seeds each new worktree with a copy
+ * of the main checkout's `.claude/`).
+ */
+const CLAUDE_RUNTIME = [
+  /^\.claude\/\.ship-(?:watcher\/|in-progress$|lockout$|queue$)/,
+  /^\.claude\/batch-(?:activity|mode\.json|watchdog\.lock|handoff\.json)$/,
+  /^\.claude\/(?:strict-mode|concept-active|session-opened-files|token-config|auto-guide-active|devops-config|graphify)\.json$/,
+  /^\.claude\/run-contract\./,
+  /^\.claude\/(?:project-map\.md|scheduled_tasks\.lock|settings\.local\.json)$/,
+  /^\.claude\/(?:\.cache|devops-livebrief|devops-concept|handoffs|skill-usage)\//,
+  /^\.claude\/[^/]+\.(?:log|tmp)$/,
+];
+/** Verifying `.claude/` content against the main checkout stops here; beyond it the worktree stays. */
+const VERIFY_MAX_FILES = 5000;
+const VERIFY_MAX_BYTES = 64 * 1024 * 1024;
 const NEVER_DELETE = new Set(["main", "master", "HEAD", "origin"]);
 const SESSION_WORKTREE_MARKER = "/.claude/worktrees/";
 /** More touched files than this and the tree comparison is left to the page. */
@@ -176,7 +199,7 @@ function worktreeLastActivityMs(wtPath, headTimeMs) {
  * Every leftover of the repo that contains `cwd`: linked worktrees except the
  * current one, and local branches no worktree has checked out, except the
  * default branch and main/master/HEAD/origin. Local git only — no network.
- * @returns {{units:object[], defaultBranch:string, current:string, main:string|null}|null}
+ * @returns {{units:object[], defaultBranch:string, current:string, main:string|null, paths:string[]}|null}
  */
 export function scanRepo(cwd, now = Date.now()) {
   const worktrees = listWorktrees(cwd);
@@ -227,7 +250,7 @@ export function scanRepo(cwd, now = Date.now()) {
       ageDays: Math.max(0, (now - Number(ts) * 1000) / DAY_MS),
     });
   }
-  return { units, defaultBranch, current, main };
+  return { units, defaultBranch, current, main, paths: worktrees.map((w) => normPath(w.path)) };
 }
 
 /**
@@ -299,41 +322,74 @@ export function isRegenerable(entry) {
   return !isDir && REGENERABLE_FILE.test(segs[segs.length - 1] || "");
 }
 
-const isAuditEntry = (p) => p === `${AUDIT_DIR}/` || p.startsWith(`${AUDIT_DIR}/`);
-
 /**
- * An ignored porcelain path that is Claude or plugin tooling state: anything
- * under `.claude/` but the audit dossiers (Desktop seeds every new worktree
- * with a copy of the main checkout's `.claude/`, and the plugin's runtime
- * files live there — counting them kept every session worktree forever), and
- * the do-run modes' root-level bookkeeping.
+ * An ignored porcelain path that is tooling state and can go unseen: the
+ * do-run modes' root-level bookkeeping, or pure runtime state under `.claude/`.
  */
 export function isToolingState(entry) {
   const p = String(entry).replace(/\\/g, "/");
-  if (isAuditEntry(p)) return false;
-  return p.startsWith(".claude/") || TOOLING_ROOT_ENTRY.test(p);
+  return TOOLING_ROOT_ENTRY.test(p) || CLAUDE_RUNTIME.some((re) => re.test(p));
+}
+
+/** `<wtPath>/<rel>` is a symlink or junction (Node reports junctions as links). */
+function isLink(wtPath, rel) {
+  try {
+    return fs.lstatSync(path.join(wtPath, rel.replace(/\/+$/, ""))).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/** The main checkout holds `rel` with the same bytes. */
+function sameInMain(wtPath, mainPath, rel) {
+  if (!mainPath) return false;
+  try {
+    const a = path.join(wtPath, rel);
+    const b = path.join(mainPath, rel);
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    if (!sa.isFile() || !sb.isFile() || sa.size !== sb.size) return false;
+    return fs.readFileSync(a).equals(fs.readFileSync(b));
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Audit dossiers only this worktree holds. `.claude/audit/` is git-excluded,
- * so `worktree remove` would delete a dossier for good — but one the main
- * checkout holds too is Desktop's seed copy (or already back home).
+ * Files under an ignored `.claude/` entry that `worktree remove` would
+ * destroy for good: neither runtime state nor held byte-identical by the main
+ * checkout. A link counts as own content (never followed). Null when the
+ * entry is too big to verify.
  */
-export function ownAuditDossiers(wtPath, mainPath) {
-  let names;
-  try {
-    names = fs.readdirSync(path.join(wtPath, AUDIT_DIR));
-  } catch {
-    return [];
-  }
-  return names.filter((n) => !mainPath || !fs.existsSync(path.join(mainPath, AUDIT_DIR, n)));
+export function ownClaudeFiles(wtPath, mainPath, entry) {
+  const own = [];
+  const budget = { files: VERIFY_MAX_FILES, bytes: VERIFY_MAX_BYTES };
+  const walk = (rel) => {
+    if (CLAUDE_RUNTIME.some((re) => re.test(rel)) || CLAUDE_RUNTIME.some((re) => re.test(`${rel}/`))) return true;
+    let st;
+    try { st = fs.lstatSync(path.join(wtPath, rel)); } catch { return true; }
+    if (st.isSymbolicLink()) { own.push(rel); return true; }
+    if (st.isDirectory()) {
+      let names;
+      try { names = fs.readdirSync(path.join(wtPath, rel)); } catch { own.push(`${rel}/`); return true; }
+      for (const n of names) if (!walk(`${rel}/${n}`)) return false;
+      return true;
+    }
+    budget.files -= 1;
+    budget.bytes -= st.size;
+    if (budget.files < 0 || budget.bytes < 0) return false;
+    if (!sameInMain(wtPath, mainPath, rel)) own.push(rel);
+    return true;
+  };
+  return walk(String(entry).replace(/\\/g, "/").replace(/\/+$/, "")) ? own : null;
 }
 
 /**
  * Why a worktree's content forbids `worktree remove`, or null. Counts
- * untracked files regardless of `status.showUntrackedFiles` and every ignored
- * file that is neither regenerable build output nor tooling state, plus the
- * audit dossiers the main checkout (`mainPath`) does not hold.
+ * untracked files regardless of `status.showUntrackedFiles`; an ignored entry
+ * that is a link (removal can delete through a junction); and every ignored
+ * file that is neither regenerable build output, tooling state, nor — under
+ * `.claude/` — a byte-identical copy of the main checkout's (`mainPath`).
  */
 export function worktreeContentReason(wtPath, mainPath = null) {
   let out;
@@ -346,12 +402,27 @@ export function worktreeContentReason(wtPath, mainPath = null) {
   }
   const entries = out.split("\0").filter(Boolean);
   if (entries.some((e) => !e.startsWith("!! "))) return "uncommitted-changes";
-  const kept = entries.map((e) => e.slice(3).replace(/\\/g, "/"))
-    .filter((e) => !isRegenerable(e) && !isToolingState(e) && !isAuditEntry(e));
-  kept.push(...ownAuditDossiers(wtPath, mainPath).map((n) => `${AUDIT_DIR}/${n}/`));
+  const kept = [];
+  for (const e of entries.map((x) => x.slice(3).replace(/\\/g, "/"))) {
+    if (isLink(wtPath, e)) return `holds a link: ${e}`;
+    if (isRegenerable(e) || isToolingState(e)) continue;
+    if (e === ".claude/" || e.startsWith(".claude/")) {
+      const own = ownClaudeFiles(wtPath, mainPath, e);
+      if (own === null) return `holds ignored files: ${e} (too much to verify)`;
+      kept.push(...own);
+      continue;
+    }
+    kept.push(e);
+  }
   if (kept.length === 0) return null;
   const shown = kept.slice(0, 3).join(", ") + (kept.length > 3 ? `, +${kept.length - 3}` : "");
   return `holds ignored files: ${shown}`;
+}
+
+/** A registered worktree (or the current checkout) inside `wtPath` — removing it would take that one along. */
+export function nestedCheckout(wtPath, paths, current) {
+  const root = `${normPath(wtPath)}/`;
+  return [...(paths || []), current].find((p) => p && normPath(p).startsWith(root)) || null;
 }
 
 /** Candidate ~/.claude/projects folder names for a checkout path. */
@@ -389,6 +460,8 @@ function keepReason(unit, ctx) {
   if (unit.kind === "worktree") {
     if (!unit.session) return "not-a-session-worktree";
     if (unit.locked) return "locked";
+    const inner = nestedCheckout(unit.path, ctx.paths, ctx.current);
+    if (inner) return `holds another checkout: ${inner}`;
     if (hasLiveSession(unit.path, ctx.projectsDir)) return "live-session";
     const why = worktreeContentReason(unit.path, ctx.mainPath);
     if (why) return why;
@@ -413,7 +486,9 @@ export function planAutoClean(scan, settings, io) {
   const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
   const fetchMerged = io.fetchMerged || fetchMergedHeads;
   const merged = fetchMerged(io.cwd, scan.defaultBranch);
-  const ctx = { cwd: io.cwd, baseRef, merged, projectsDir: io.projectsDir, mainPath: scan.main || null };
+  const ctx = {
+    cwd: io.cwd, baseRef, merged, projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
+  };
   const remove = [];
   const keep = [];
   for (const u of scan.units.filter((x) => x.ageDays > minAge)) {
@@ -455,6 +530,8 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
   if (normPath(entry.path) === current) return "current";
   if (entry.locked) return "locked";
   if (entry.head !== unit.head || entry.branch !== unit.branch) return "moved";
+  const inner = nestedCheckout(unit.path, live.map((w) => normPath(w.path)), current);
+  if (inner) return `holds another checkout: ${inner}`;
   if (hasLiveSession(unit.path, projectsDir)) return "live-session";
   const why = worktreeContentReason(unit.path, mainPath);
   if (why) return why;
@@ -463,6 +540,12 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
     return null;
   } catch (e) {
     const timedOut = e && (e.code === "ETIMEDOUT" || e.signal);
+    // Refused before deleting anything (submodules, a file held open): the
+    // checkout still has its .git file and git still reads it — a plain skip.
+    if (!timedOut && fs.existsSync(path.join(unit.path, ".git")) && gitOk(["rev-parse", "--is-inside-work-tree"], unit.path)) {
+      const line = String((e && (e.stderr || e.message)) || "").trim().split("\n")[0];
+      return `remove-refused${line ? `: ${line}` : ""}`;
+    }
     return { damaged: true, reason: `${timedOut ? "remove-timeout" : "remove-failed"}: damaged — manual check` };
   }
 }
@@ -474,10 +557,11 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
  */
 export function executeAutoClean(plan, scan, {
   cwd, budgetMs = REMOVAL_BUDGET_MS, now = Date.now, removeTimeout = REMOVE_TIMEOUT, projectsDir = defaultProjectsDir(),
+  holdPrune = false,
 } = {}) {
   const removed = [];
   const skipped = [];
-  let damaged = false;
+  let damaged = holdPrune;
   const deadline = now() + budgetMs;
   for (const u of plan.remove.filter((x) => x.kind === "worktree")) {
     const left = deadline - now();
@@ -511,6 +595,19 @@ export function executeAutoClean(plan, scan, {
   // would drop its registration and turn it into an unlisted orphan
   if (!damaged) gitOk(["worktree", "prune"], cwd);
   return { removed, skipped, pruned: !damaged };
+}
+
+/**
+ * Damaged removals stay on record until their folder is gone: a half-deleted
+ * checkout loses its `.git` file, turns prunable and drops out of the next
+ * scan, so only this list keeps it on the card (and `worktree prune` off).
+ */
+function openDamage(repo, fresh, now) {
+  const known = (Array.isArray(repo.damaged) ? repo.damaged : []).filter((d) => d && d.path && fs.existsSync(d.path));
+  for (const p of fresh) {
+    if (!known.some((d) => normPath(d.path) === normPath(p))) known.push({ path: p, at: new Date(now).toISOString() });
+  }
+  return known;
 }
 
 export function defaultStatePath() {
@@ -557,9 +654,14 @@ export function cardLines(result, lang = "de") {
       ? `${parts.join(" · ")} ${de ? "entfernt" : "removed"}`
       : (de ? "nichts entfernt" : "nothing removed");
     if (ac.skipped.length) text += de ? ` · ${ac.skipped.length} übersprungen` : ` · ${ac.skipped.length} skipped`;
-    const damaged = ac.skipped.filter((x) => x.orphan).map((x) => x.orphan);
+    const damaged = [...new Set([...ac.skipped.filter((x) => x.orphan).map((x) => x.orphan), ...(result.damaged || [])])];
     if (damaged.length) text += de ? ` · beschädigt, manuell prüfen: ${damaged.join(", ")}` : ` · damaged — manual check: ${damaged.join(", ")}`;
     out.tests = { method: de ? "Aufräumen (auto)" : "Cleanup (auto)", result: text };
+  } else if (result.damaged && result.damaged.length) {
+    out.tests = {
+      method: de ? "Aufräumen (auto)" : "Cleanup (auto)",
+      result: de ? `beschädigt, manuell prüfen: ${result.damaged.join(", ")}` : `damaged — manual check: ${result.damaged.join(", ")}`,
+    };
   }
   if (result.nudge) {
     out.open = de
@@ -612,6 +714,7 @@ export function runHygiene(p) {
   const state = readState(statePath);
   const repo = state.repos[key] || {};
   let dirty = false;
+  const priorDamage = openDamage(repo, [], now);
 
   if (trigger !== "ship") {
     result.autoClean.reason = "promote — nudge only";
@@ -627,10 +730,12 @@ export function runHygiene(p) {
     } else {
       const done = executeAutoClean(plan, scan, {
         cwd, budgetMs: p.budgetMs ?? REMOVAL_BUDGET_MS, removeTimeout: p.removeTimeout ?? REMOVE_TIMEOUT, projectsDir,
+        holdPrune: priorDamage.length > 0,
       });
       result.autoClean.ran = true;
       result.autoClean.removed = done.removed;
       result.autoClean.skipped = done.skipped;
+      repo.damaged = openDamage(repo, done.skipped.filter((x) => x.orphan).map((x) => x.orphan), now);
       repo.lastAutoClean = { at: new Date(now).toISOString(), removed: done.removed.slice(0, LOG_KEEP) };
       dirty = true;
       scan = scanRepo(cwd, now) || scan;
@@ -651,6 +756,11 @@ export function runHygiene(p) {
     }
   }
 
+  if (!result.autoClean.ran && (repo.damaged || []).length !== priorDamage.length) {
+    repo.damaged = priorDamage;
+    dirty = true;
+  }
+  result.damaged = (repo.damaged || priorDamage).map((d) => d.path);
   if (dirty) {
     state.repos[key] = repo;
     writeState(statePath, state);

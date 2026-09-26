@@ -116,8 +116,11 @@ export function dirtyState(opts) {
       timeout,
       stdio: ["pipe", "pipe", "pipe"],
     });
-  } catch {
-    return { dirty: false, untracked: [], modified: [], lines: [] };
+  } catch (err) {
+    // Fail closed: a status that timed out or failed proves nothing is clean —
+    // "clean" here let a release commit without the new files it never saw.
+    const why = String((err && (err.stderr || err.message)) || "git status failed").trim().split("\n")[0];
+    return { dirty: true, untracked: [], modified: [], lines: [], error: why || "git status failed" };
   }
 
   const tokens = raw.split("\0");
