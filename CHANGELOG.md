@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.211.2] — 2026-09-26
+
+### Fixed
+- **A sent round keeps its grey veil across a reload.** After "Nächste Iteration", "Feedback implementieren" or "Alles ausführen", a reload dropped the content dimmer and the "sent" panel state although Claude was still working on that round. The page now asks the bridge (or its offline queue) on load: a pending iterate/implement payload for the live round brings back the veil, the sent panel and its progress steps; dismissing the veil by click or Escape still works. The payload carries its round number, so a new round loaded before the bridge reset stays clear. Existing concept pages pick this up with the next appended round (engine anchor, validation gate 30c).
+- **A running close-out survives a reload in a concept with earlier rounds.** The finalize restore bailed on the `_processed_at` stamp every earlier reset leaves behind, so it never applied after round 1; it now checks the pending finalize payload and its round instead, and restores the veil too.
+- **The final-report close-out sheet fits on a Full HD screen.** The panel foot reserved a gutter for the 💬 button, which is hidden while the panel is open — the sheet scrolled with empty space below it. The gutter is gone, and so is the "Iterationen ansehen" link: the 🕘 rounds chip in the panel head does the same.
+
 ## [0.211.1] — 2026-09-26
 
 ### Fixed
