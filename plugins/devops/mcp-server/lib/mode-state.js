@@ -73,6 +73,7 @@ export const SESSION_PREFIX = Object.freeze({
   analysis: "📋 Analysis – ",
   pending: "⏳ ",
   fallback: "🔧 Done – ",
+  paused: "⏸️ Paused – ",
   work: "⏳ ",
 });
 
@@ -98,6 +99,7 @@ export const VARIANT_TITLE_PREFIX = Object.freeze({
   aborted: SESSION_PREFIX.aborted,
   analysis: SESSION_PREFIX.analysis,
   fallback: SESSION_PREFIX.fallback,
+  paused: SESSION_PREFIX.paused,
 });
 
 const ALL_PREFIXES = Object.freeze([...new Set([...Object.values(SESSION_PREFIX), ...LEGACY_PREFIXES])]);

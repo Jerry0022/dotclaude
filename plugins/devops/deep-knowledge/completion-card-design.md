@@ -236,6 +236,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage | pipeline = `➖ keine Änderungen` |
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |
 | `fallback` | `🔧 Erledigt — noch etwas?` | — | — | |
+| `paused` | `⏸️ Pausiert — weiter, wann du willst` | — | — | context line `› Schreib hier, um weiterzumachen.`; results = what was stopped and what was kept; for work the user pauses to continue later (#548), never `fallback`; title `⏸️ Paused – `; the run contract treats it as non-final |
 | pending override | `⏳ Noch nicht fertig — {what}` | what is running | — | evidence gets `◐ Belege vorläufig` |
 | concept override | by phase: `🧭 Concept wartet auf deine Entscheidungen` · `🧭 Concept in Iteration — ich melde mich` · `🧭 Concept in Implementierung — ich melde mich`; running work as its own sentence (`… in Implementierung. 2 Agenten arbeiten — …`) | the running items | — | context line = the page URL (quiet link); "wartet" during an implementation run is a regression |
 | batch override | `📥 Batch sammelt — {n} Einträge` | how to collect · fire (`<marker> <text>` / `/do-batch go`) · stop (`/do-batch off`, auto-end bounds) | — | context line = what happens to the next prompt; the card is the whole activation confirmation, no text block beside it |

@@ -42,7 +42,7 @@
  */
 export const CARD_VARIANTS = [
   "ship-successful", "ready", "released", "ship-blocked", "test",
-  "test-minimal", "analysis", "aborted", "fallback", "ready-files",
+  "test-minimal", "analysis", "aborted", "fallback", "ready-files", "paused",
 ];
 
 /**

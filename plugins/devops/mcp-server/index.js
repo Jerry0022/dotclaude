@@ -994,6 +994,7 @@ const HEADINGS = {
     analysis: () => '📋 Analyse gelesen — umsetzen oder Fragen?',
     aborted: (c) => `🚫 Abgebrochen wegen ${c.reason} — anders versuchen?`,
     fallback: () => '🔧 Erledigt — noch etwas?',
+    paused: () => '⏸️ Pausiert — weiter, wann du willst',
     pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
     concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
@@ -1024,6 +1025,7 @@ const HEADINGS = {
     analysis: () => '📋 Read through — questions?',
     aborted: (c) => `🚫 Aborted because of ${c.reason} — try differently?`,
     fallback: () => '🔧 Done — anything else?',
+    paused: () => '⏸️ Paused — pick it up whenever you like',
     pending: (c) => `⏳ Not done yet — ${c.what}`,
     concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
@@ -1210,6 +1212,7 @@ function resolveCardKey(input) {
   if (variant === 'test-minimal') return 'test-minimal';
   if (variant === 'analysis') return 'analysis';
   if (variant === 'aborted') return 'aborted';
+  if (variant === 'paused') return 'paused';
   return 'fallback';
 }
 
@@ -1264,6 +1267,8 @@ function decisionContext(input, key, delivery, state, lang) {
 function buildContextLine(input, key, delivery, lang) {
   if (input._downgraded) return '› ' + renderDowngradeNote(lang, input._downgradeReason);
   if (key === 'aborted' && input.cta && input.cta.info) return '› ' + input.cta.info;
+  // Paused (#548): the one thing left to say is how to pick it up again.
+  if (key === 'paused') return '› ' + (lang === 'en' ? 'Write here to continue.' : 'Schreib hier, um weiterzumachen.');
   return '';
 }
 
@@ -1299,7 +1304,7 @@ function shipCompactInfo(compact, lang) {
 }
 
 /** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
-const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback']);
+const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback', 'paused']);
 
 /** Decision keys whose widget offers "Nachbessern" with the prepared answer to the card's open points. */
 const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
@@ -2166,7 +2171,7 @@ server.registerTool(
       "and the app's one no-output nudge that follows gets an empty reply; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\"): the card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `⏸️ Paused – …`."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
