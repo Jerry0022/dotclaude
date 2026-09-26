@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.12.0
+ * @version 1.13.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -11,7 +11,7 @@
  *   imports/eval/network — last expression is the IIFE call, so
  *   Runtime.evaluate returns "injected"/"already-injected".
  */
-/* global window, document */
+/* global window, document, CSSStyleSheet */
 (function () {
   "use strict";
 
@@ -27,7 +27,7 @@
   var nativeObjectCreate = Object.create;
   var nativeDefineProperty = Object.defineProperty;
 
-  var VERSION = "1.12.0";
+  var VERSION = "1.13.0";
   // AUD-C007: per-guide channel token, substituted by `web-guide.js payload
   // inject` (32 hex chars). setStep()/wait() must pass it and every event
   // echoes it, so a page script can neither push steps nor steal events.
@@ -63,7 +63,15 @@
   var POS_STORAGE_KEY = "__wg.pos";
   var QUEUE_STORAGE_KEY = "__wg.queue";
   var STEP_TTL_MS = 30 * 60 * 1000;
-  var HEARTBEAT_STALE_MS = 10000; // AUD-C038: counted from the last live listener
+  // AUD-C038 / #530: raised from 10s — javascript_tool round trips routinely
+  // take 10-20s between polls, which made the old threshold fire during
+  // Claude's normal gaps. 45s stays well under the 90s "delivered but no
+  // reply" threshold below.
+  var HEARTBEAT_STALE_MS = 45000; // counted from the last live listener
+  // #530: once a click reached Claude (delivered, not merely queued) and
+  // neither a new setStep() nor a new wait() arrives for this long, the user
+  // likely has an unanswered question sitting in the chat.
+  var DELIVERED_STALE_MS = 90000;
   var HEARTBEAT_TICK_MS = 2000;
   var INPUT_TYPES = ["text", "secret", "choice", "confirm"];
 
@@ -79,9 +87,24 @@
   var CALLER_TIMEOUT_MS = 44000;
   var pendingWaiterArmedAt = 0, lastEventId = 0, lastDeliveredId = null, lastDeliveredStepId = null;
   var destroyed = false, secretLost = false, clickAgain = false, enterSubmit = null;
+  // #530 (render rebuild fix): sentFlag is the single, explicit source of
+  // truth for "the current step's click is shown as sent" — set only in
+  // disableActiveButtons(), cleared only where a step is (re)armed. Replaces
+  // the old heuristic (statusEl visible + some disabled button), which also
+  // triggered on a required-but-empty field. contentUpdated / awaiting* track
+  // two other status-line states across re-renders.
+  var sentFlag = false, contentUpdated = false, awaitingResponse = false, lastDeliveredAt = 0;
+  // Field state preserved across a re-render of the SAME step id (collapse,
+  // expand, edge-tab toggle, Escape) — render() always rebuilds the DOM, so
+  // typed/ticked values live here instead of in the (destroyed) elements.
+  var savedValues = {}, savedChecklist = [], savedHelpText = "";
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
+  }
+
+  function clampNum(v, lo, hi) {
+    return Math.min(Math.max(v, lo), Math.max(lo, hi));
   }
 
   // #514: copy[] chips and checklist[] sub-actions, validated the same
@@ -208,17 +231,37 @@
     return out;
   }
 
-  function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, function (ch) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
-    });
+  // Finding (Trusted Types): Google/Firebase/accounts.google.com enforce
+  // Trusted Types, which throws a TypeError on ANY string assignment to
+  // innerHTML/outerHTML/insertAdjacentHTML. **bold**/`code`/newline formatting
+  // is therefore built as real text + element nodes — never HTML strings —
+  // so no escaping step is needed either (textContent never interprets markup).
+  function appendFormatted(container, value) {
+    var text = String(value ?? "");
+    var re = /\*\*([^*]+)\*\*|`([^`]+)`|\n/g;
+    var last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) container.appendChild(document.createTextNode(text.slice(last, m.index)));
+      if (m[1] !== undefined) {
+        var b = document.createElement("b");
+        b.textContent = m[1];
+        container.appendChild(b);
+      } else if (m[2] !== undefined) {
+        var c = document.createElement("code");
+        c.textContent = m[2];
+        container.appendChild(c);
+      } else {
+        container.appendChild(document.createElement("br"));
+      }
+      last = re.lastIndex;
+    }
+    if (last < text.length) container.appendChild(document.createTextNode(text.slice(last)));
   }
 
-  function formatText(value) {
-    return escapeHtml(value)
-      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/\n/g, "<br>");
+  // Clears a container without touching innerHTML (Trusted Types).
+  function clearEl(el) {
+    if (typeof el.replaceChildren === "function") el.replaceChildren();
+    else while (el.children && el.children.length) el.removeChild(el.children[el.children.length - 1]);
   }
 
   function toBase64Utf8(value) {
@@ -229,8 +272,7 @@
   host.id = "wg-host-" + Math.random().toString(36).slice(2, 10);
   var shadow = host.attachShadow({ mode: "closed" });
 
-  var styleEl = document.createElement("style");
-  styleEl.textContent = [
+  var CSS_TEXT = [
     ":host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;color-scheme:light dark}",
     "*{box-sizing:border-box}",
     ".fab,.panel{pointer-events:auto;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#111}",
@@ -308,17 +350,50 @@
     "  button.btn:not(:disabled):hover,.fab:hover,.edgetab:hover{filter:brightness(1.15)}",
     "}",
   ].join("\n");
-  shadow.appendChild(styleEl);
+  // CSP hardening: a page with a style-src that omits 'unsafe-inline' blocks
+  // a plain <style> element. Constructable stylesheets (adoptedStyleSheets)
+  // are not subject to style-src at all — prefer them, fall back to <style>
+  // only where the engine has no support (older WebViews).
+  var adoptedCss = false;
+  try {
+    if (typeof CSSStyleSheet === "function" && "adoptedStyleSheets" in shadow) {
+      var sheet = new CSSStyleSheet();
+      sheet.replaceSync(CSS_TEXT);
+      shadow.adoptedStyleSheets = [sheet];
+      adoptedCss = true;
+    }
+  } catch {}
+  if (!adoptedCss) {
+    var styleEl = document.createElement("style");
+    styleEl.textContent = CSS_TEXT;
+    shadow.appendChild(styleEl);
+  }
 
   var fabButton = mk("button", "fab");
   fabButton.type = "button";
   fabButton.setAttribute("aria-label", "Claude Guide");
   fabButton.setAttribute("aria-expanded", "false");
   // #513: a compass glyph so the FAB reads as "the guide", not an empty dot.
+  // Built with createElementNS — Trusted Types blocks an innerHTML SVG string.
+  var SVG_NS = "http://www.w3.org/2000/svg";
   var fabIcon = mk("span", "fab-icon");
-  fabIcon.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' +
-    'stroke="currentColor" stroke-width="1.8" aria-hidden="true">' +
-    '<circle cx="12" cy="12" r="9"/><polygon points="14.5,9.5 12,12 9.5,14.5 12,12"/></svg>';
+  var iconSvg = document.createElementNS(SVG_NS, "svg");
+  iconSvg.setAttribute("width", "24");
+  iconSvg.setAttribute("height", "24");
+  iconSvg.setAttribute("viewBox", "0 0 24 24");
+  iconSvg.setAttribute("fill", "none");
+  iconSvg.setAttribute("stroke", "currentColor");
+  iconSvg.setAttribute("stroke-width", "1.8");
+  iconSvg.setAttribute("aria-hidden", "true");
+  var iconCircle = document.createElementNS(SVG_NS, "circle");
+  iconCircle.setAttribute("cx", "12");
+  iconCircle.setAttribute("cy", "12");
+  iconCircle.setAttribute("r", "9");
+  iconSvg.appendChild(iconCircle);
+  var iconPoly = document.createElementNS(SVG_NS, "polygon");
+  iconPoly.setAttribute("points", "14.5,9.5 12,12 9.5,14.5 12,12");
+  iconSvg.appendChild(iconPoly);
+  fabIcon.appendChild(iconSvg);
   fabButton.appendChild(fabIcon);
   var badge = mk("span", "badge");
   fabButton.appendChild(badge);
@@ -377,7 +452,7 @@
   shadow.appendChild(panel);
 
   // #516: the edge tab is a persistent sibling of fab/panel (never rebuilt by
-  // render()'s panel.innerHTML reset) — restores the guide without aborting it.
+  // render()'s panel rebuild) — restores the guide without aborting it.
   var edgeTabBtn = mk("button", "edgetab");
   edgeTabBtn.type = "button";
   edgeTabBtn.style.display = "none";
@@ -393,8 +468,8 @@
   function clampPosition() {
     var vw = window.innerWidth || 800;
     var vh = window.innerHeight || 600;
-    pos.right = Math.min(Math.max(pos.right, 8), Math.max(8, vw - 56 - 8));
-    pos.bottom = Math.min(Math.max(pos.bottom, 8), Math.max(8, vh - 56 - 8));
+    pos.right = clampNum(pos.right, 8, vw - 56 - 8);
+    pos.bottom = clampNum(pos.bottom, 8, vh - 56 - 8);
   }
 
   // #516: dock the edge tab to whichever screen edge the FAB's current
@@ -426,12 +501,42 @@
     }
   }
 
+  // Fix 3: the panel is placed relative to the FAB (never a fixed offset),
+  // flipping above/below as space allows and clamping fully inside the
+  // viewport (8px margin) with a max-height capped to the space actually
+  // available — a FAB dragged to any edge still leaves the header and
+  // buttons on screen.
+  function positionPanel() {
+    var vw = window.innerWidth || 800;
+    var vh = window.innerHeight || 600;
+    var M = 8, GAP = 12, FAB = 56;
+    var panelW = Math.min(340, Math.max(120, vw - M * 2));
+    var fabTop = vh - pos.bottom - FAB;
+    var spaceAbove = fabTop - GAP - M;
+    var spaceBelow = vh - (fabTop + FAB + GAP) - M;
+    var above = spaceAbove >= spaceBelow;
+    var top, maxH;
+    if (above) {
+      maxH = Math.max(120, spaceAbove);
+      top = Math.max(M, fabTop - GAP - maxH);
+      maxH = Math.min(maxH, fabTop - GAP - top);
+    } else {
+      top = fabTop + FAB + GAP;
+      maxH = Math.max(120, Math.min(spaceBelow, vh - top - M));
+    }
+    var right = clampNum(pos.right, M, Math.max(M, vw - panelW - M));
+    panel.style.top = Math.round(top) + "px";
+    panel.style.bottom = "";
+    panel.style.right = Math.round(right) + "px";
+    panel.style.left = "";
+    panel.style.maxHeight = Math.round(maxH) + "px";
+  }
+
   function applyPosition() {
     clampPosition();
     fabButton.style.right = pos.right + "px";
     fabButton.style.bottom = pos.bottom + "px";
-    panel.style.right = pos.right + "px";
-    panel.style.bottom = pos.bottom + 68 + "px";
+    positionPanel();
   }
 
   var INTERACTIVE_TAGS = ["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A"];
@@ -527,11 +632,18 @@
       var sent = undelivered ? mine[mine.length - 1].type : lastSentType;
       var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
       var lastLive = listenerLive() ? Date.now() : Math.max(lastPoll, deadAt);
-      var text = undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS
-        ? (sent === "abort"
+      var text;
+      if (undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS) {
+        text = sent === "abort"
           ? "Claude hört gerade nicht zu — schreib im Chat „Guide beenden“."
-          : "Claude hört gerade nicht zu — schreib im Chat „weiter“.")
-        : (SENT_TEXT[sent] || "Warte auf Claude…");
+          : "Claude hört gerade nicht zu — schreib im Chat „weiter“.";
+      } else if (!undelivered && awaitingResponse && Date.now() - lastDeliveredAt > DELIVERED_STALE_MS) {
+        // #530: the click reached Claude, but no new setStep/wait since —
+        // most likely a question is sitting unanswered in the chat.
+        text = "Claude braucht länger – steht im Chat eine Frage, antworte bitte dort.";
+      } else {
+        text = SENT_TEXT[sent] || "Warte auf Claude…";
+      }
       // The status line is a live region: rewrite it only on a change, or
       // the 2 s tick would re-announce it to a screen reader.
       if (waitLabelEl.textContent !== text) waitLabelEl.textContent = text;
@@ -560,6 +672,8 @@
       saveQueue();
       lastDeliveredId = queued.id;
       lastDeliveredStepId = queued.stepId;
+      awaitingResponse = true; // #530
+      lastDeliveredAt = Date.now();
       // Finding 7: hand the raw event to the waiter — it stamps+stringifies
       // itself (via the natives captured at injection) right before resolving.
       waiterFn(queued);
@@ -587,7 +701,12 @@
     };
   }
 
+  // #530: the single place sentFlag becomes true, and the single place
+  // contentUpdated is cleared — any user-visible "sent" state supersedes a
+  // stale "Hinweis aktualisiert" notice.
   function disableActiveButtons() {
+    sentFlag = true;
+    contentUpdated = false;
     if (statusEl) statusEl.style.display = "flex";
     // The re-enter-a-lost-secret state hid the spinner; a send brings it back.
     if (spinnerEl) spinnerEl.style.display = "";
@@ -610,27 +729,41 @@
     return btn;
   }
 
-  function openHelpBox(container, emit) {
-    if (helpOpen) return;
-    helpOpen = true;
+  // #530: split from the button's click handler so a re-render can restore
+  // an already-open help box (with its typed text) instead of leaving
+  // helpOpen === true while no box exists in the (rebuilt) DOM — which used
+  // to make "Ich komme nicht weiter" a permanent no-op until the next setStep.
+  function buildHelpBox(container, emit, opts) {
+    opts = opts || {};
     var wrap = document.createElement("div");
     wrap.style.marginTop = "8px";
     var textarea = mk("textarea", "f");
     textarea.rows = 2;
     textarea.placeholder = "Was hakt?";
     textarea.setAttribute("aria-label", "Was hakt?");
+    if (opts.initialText) textarea.value = opts.initialText;
+    textarea.addEventListener("input", function () { savedHelpText = textarea.value; });
     wrap.appendChild(textarea);
     var sendBtn = makeButton("Senden", "primary", function () {
       if (sendBtn.disabled) return;
       sendBtn.disabled = true; // AUD-C008: one help event per click, not per double-click
       emit("help", undefined, textarea.value || undefined);
       helpOpen = false;
+      savedHelpText = "";
     });
     wrap.appendChild(sendBtn);
     container.appendChild(wrap);
-    try {
-      textarea.focus();
-    } catch {}
+    if (opts.focus) {
+      try {
+        textarea.focus();
+      } catch {}
+    }
+  }
+
+  function openHelpBox(container, emit) {
+    if (helpOpen) return;
+    helpOpen = true;
+    buildHelpBox(container, emit, { focus: true });
   }
 
   // Collapsing destroys the focused control: hand keyboard focus to what
@@ -643,7 +776,7 @@
   }
 
   function render(focus) {
-    panel.innerHTML = "";
+    clearEl(panel);
     activeBtns = [];
     statusEl = null;
     spinnerEl = null;
@@ -725,6 +858,8 @@
     }
 
     var focusTarget = null;
+    var input = null;
+    var foot = mk("div", "foot");
 
     if (currentStep.done) {
       var doneTitle = mk("p", "t", "✅ " + (currentStep.title || "Fertig"));
@@ -732,19 +867,19 @@
       body.appendChild(doneTitle);
 
       var doneText = mk("p", "x");
-      doneText.innerHTML = formatText(currentStep.text || "");
+      appendFormatted(doneText, currentStep.text || "");
       body.appendChild(doneText);
 
-      var doneHint = mk("p", "x", "Du kannst den Tab jetzt schließen.");
+      // Fix 4: the hint and the button now agree — "click Fertig, then close".
+      var doneHint = mk("p", "x");
+      appendFormatted(doneHint, "Klicke **Fertig** — danach kannst du den Tab schließen.");
       body.appendChild(doneHint);
 
-      var doneFoot = mk("div", "foot");
       var doneBtn = makeButton("Fertig", "primary", function () {
         emit("next");
       });
-      doneFoot.appendChild(doneBtn);
+      foot.appendChild(doneBtn);
       activeBtns.push(doneBtn);
-      panel.appendChild(doneFoot);
       focusTarget = doneBtn;
     } else {
       var titleEl = mk("p", "t", currentStep.title || "");
@@ -752,7 +887,7 @@
       body.appendChild(titleEl);
 
       var textEl = mk("p", "x");
-      textEl.innerHTML = formatText(currentStep.text || "");
+      appendFormatted(textEl, currentStep.text || "");
       body.appendChild(textEl);
 
       // #514: copyable values as chips with a clipboard button — the user
@@ -773,6 +908,8 @@
                 copyBtn.textContent = copyLabel;
               }, 1500);
             };
+            // Fix 9: the failure path still leaves the user with a next step.
+            var COPY_FAIL = "Kopieren fehlgeschlagen – Wert markieren und mit Strg+C kopieren";
             var done;
             try {
               done = navigator.clipboard.writeText(c.value);
@@ -780,9 +917,9 @@
               done = null;
             }
             if (done && typeof done.then === "function") {
-              done.then(function () { flash("Kopiert!"); }, function () { flash("Kopieren fehlgeschlagen"); });
+              done.then(function () { flash("Kopiert!"); }, function () { flash(COPY_FAIL); });
             } else {
-              flash("Kopieren fehlgeschlagen");
+              flash(COPY_FAIL);
             }
           });
           chip.appendChild(copyBtn);
@@ -794,13 +931,17 @@
       // #514: 2-4 locally tickable sub-actions — one panel step can still
       // cover a whole screen without the total step count exploding. Purely
       // local UI state, never emitted: it does not change verification.
+      // Fix 2 (render rebuild): ticks are restored from savedChecklist so a
+      // collapse/expand or edge-tab toggle doesn't clear them.
       if (currentStep.checklist && currentStep.checklist.length) {
         var checklistEl = mk("ul", "checklist");
-        currentStep.checklist.forEach(function (item) {
+        currentStep.checklist.forEach(function (item, idx) {
           var li = mk("li");
           var itemLabel = document.createElement("label");
           var cb = document.createElement("input");
           cb.type = "checkbox";
+          cb.checked = !!savedChecklist[idx];
+          cb.addEventListener("change", function () { savedChecklist[idx] = cb.checked; });
           itemLabel.appendChild(cb);
           itemLabel.appendChild(mk("span", null, item));
           li.appendChild(itemLabel);
@@ -809,7 +950,7 @@
         body.appendChild(checklistEl);
       }
 
-      var input = currentStep.input;
+      input = currentStep.input;
       var readValue = function () {
         return undefined;
       };
@@ -825,17 +966,24 @@
         fieldLabel.htmlFor = inputEl.id;
         body.appendChild(fieldLabel);
         inputEl.setAttribute("aria-label", input.label || input.name);
+        // Fix 2: restore whatever the user already typed/pasted here.
+        if (savedValues[input.name] !== undefined) inputEl.value = savedValues[input.name];
         body.appendChild(inputEl);
         readValue = function () {
           return inputEl.value;
         };
+        inputEl.addEventListener("input", function () {
+          savedValues[input.name] = inputEl.value;
+        });
         focusTarget = inputEl;
       } else if (input && input.type === "confirm") {
         var confirmLabel = document.createElement("label");
         Object.assign(confirmLabel.style, { display: "flex", gap: "6px", marginBottom: "8px" });
         var checkbox = document.createElement("input");
         checkbox.type = "checkbox";
+        if (savedValues[input.name] !== undefined) checkbox.checked = !!savedValues[input.name];
         checkbox.addEventListener("change", function () {
+          savedValues[input.name] = checkbox.checked;
           updateSubmitEnabled();
         });
         confirmLabel.appendChild(checkbox);
@@ -848,14 +996,21 @@
         focusTarget = checkbox;
       }
 
-      var foot = mk("div", "foot");
       var submitBtn = null;
 
+      // Fix 5: secret and confirm are always required, never just on
+      // `input.required` — an empty secret or an unticked confirm must never
+      // be sendable. A secret's emptiness is judged after trimming.
       function updateSubmitEnabled() {
-        if (!submitBtn) return;
+        if (!submitBtn || !input) return;
         var value = readValue();
-        var isEmpty = input && input.type === "confirm" ? value !== true : value == null || value === "";
-        submitBtn.disabled = !!(input && input.required && isEmpty);
+        var isEmpty = input.type === "confirm"
+          ? value !== true
+          : input.type === "secret"
+            ? String(value ?? "").trim() === ""
+            : value == null || value === "";
+        var required = input.required || input.type === "secret" || input.type === "confirm";
+        submitBtn.disabled = !!(required && isEmpty);
       }
 
       if (input && input.type === "choice") {
@@ -878,7 +1033,8 @@
         submitBtn = makeButton(currentStep.done ? "Fertig" : "Weiter", "primary", function () {
           var value = readValue();
           if (input && input.type === "secret") {
-            emit("next", input.name, toBase64Utf8(value), { encoding: "base64" });
+            var trimmed = String(value ?? "").trim(); // Fix 5: whitespace never leaves the panel
+            emit("next", input.name, toBase64Utf8(trimmed), { encoding: "base64" });
           } else {
             emit("next", input ? input.name : undefined, value);
           }
@@ -918,34 +1074,47 @@
       foot.appendChild(abortBtn);
       activeBtns.push(abortBtn);
 
-      panel.appendChild(foot);
+      // Fix 2: the help box survives a re-render — same open/closed state,
+      // same typed text — instead of helpOpen staying true with no box left
+      // in the (rebuilt) DOM, which made the button a silent no-op.
+      if (helpOpen) buildHelpBox(body, emit, { initialText: savedHelpText });
+    }
 
-      statusEl = mk("div", "status");
-      statusEl.setAttribute("role", "status");
-      statusEl.style.display = "none";
-      spinnerEl = mk("span", "spin");
-      statusEl.appendChild(spinnerEl);
-      waitLabelEl = mk("span", null, "Warte auf Claude…");
-      statusEl.appendChild(waitLabelEl);
-      panel.appendChild(statusEl);
+    panel.appendChild(foot);
 
-      // AUD-C008: a restored, still-undelivered click keeps the panel in its
-      // "sent" state instead of inviting a second click.
-      if (eventQueue.some((e) => e.stepId === stepId)) {
-        disableActiveButtons();
-        armHeartbeat();
-      } else if (secretLost && input && input.type === "secret") {
-        // AUD-C037: the secret was not kept across the reload — ask again.
-        statusEl.style.display = "flex";
-        spinnerEl.style.display = "none";
-        waitLabelEl.textContent = "Bitte den Wert erneut eingeben – er wird nicht zwischengespeichert.";
-      } else if (clickAgain) {
-        // The last click reached a wait() nobody read (an interrupted turn,
-        // a dropped event): the step is answerable again — say so.
-        statusEl.style.display = "flex";
-        spinnerEl.style.display = "none";
-        waitLabelEl.textContent = "Claude hat deinen letzten Klick nicht erhalten – bitte noch einmal.";
-      }
+    statusEl = mk("div", "status");
+    statusEl.setAttribute("role", "status");
+    statusEl.style.display = "none";
+    spinnerEl = mk("span", "spin");
+    statusEl.appendChild(spinnerEl);
+    waitLabelEl = mk("span", null, "Warte auf Claude…");
+    statusEl.appendChild(waitLabelEl);
+    panel.appendChild(statusEl);
+
+    // Fix 2 (AUD-C008 heuristic replaced): sentFlag is the explicit source of
+    // truth for "this step's click is shown as sent" — set only by
+    // disableActiveButtons(), so it survives a collapse/expand/edge-tab
+    // re-render even after the event was already delivered (dequeued).
+    if (sentFlag) {
+      disableActiveButtons();
+      armHeartbeat();
+    } else if (secretLost && input && input.type === "secret") {
+      // AUD-C037: the secret was not kept across the reload — ask again.
+      statusEl.style.display = "flex";
+      spinnerEl.style.display = "none";
+      waitLabelEl.textContent = "Bitte den Wert erneut eingeben – er wird nicht zwischengespeichert.";
+    } else if (clickAgain) {
+      // The last click reached a wait() nobody read (an interrupted turn,
+      // a dropped event): the step is answerable again — say so.
+      statusEl.style.display = "flex";
+      spinnerEl.style.display = "none";
+      waitLabelEl.textContent = "Claude hat deinen letzten Klick nicht erhalten – bitte noch einmal.";
+    } else if (contentUpdated) {
+      // #530: the same step id came back with different content (typically
+      // Claude answering a help question) — flag it until the user acts.
+      statusEl.style.display = "flex";
+      spinnerEl.style.display = "none";
+      waitLabelEl.textContent = "Hinweis aktualisiert – lies den Schritt noch einmal.";
     }
 
     if (focus && focusTarget && focusTarget.focus) {
@@ -1052,20 +1221,31 @@
       // a click that was already delivered: then the re-send is Claude asking
       // again (SKILL.md 5c) and the step must become answerable once more.
       var queuedHere = !!step && eventQueue.some((e) => e.stepId === step.id);
-      var sentShown = !!statusEl && statusEl.style.display !== "none" && activeBtns.some((b) => b.disabled);
-      if (!isNewStep && sameStepContent(step, currentStep) && (queuedHere || !sentShown)) {
+      if (!isNewStep && sameStepContent(step, currentStep) && (queuedHere || !sentFlag)) {
         saveState();
         return "ok";
       }
       // Same step, unchanged, shown as sent, nothing queued: the click went to
       // a wait() nobody read — re-arm and ask for it once more.
-      clickAgain = !isNewStep && !queuedHere && sentShown && sameStepContent(step, currentStep);
+      clickAgain = !isNewStep && !queuedHere && sentFlag && sameStepContent(step, currentStep);
+      // #530: same id, but content actually differs (typically Claude
+      // answering a help question) — flag it for the status line, distinct
+      // from a lost-click re-arm.
+      contentUpdated = !isNewStep && !clickAgain && !sameStepContent(step, currentStep);
+      if (clickAgain || contentUpdated) sentFlag = false;
+      awaitingResponse = false; // Claude just sent us something — it isn't waiting any more
       currentStep = step;
       if (isNewStep) {
         collapsed = false;
         secretLost = false;
+        sentFlag = false;
+        contentUpdated = false;
+        edgeTab = false; // #530: a genuinely new step always undocks, so it's seen
+        savedValues = {};
+        savedChecklist = [];
       }
       helpOpen = false;
+      savedHelpText = "";
       abortConfirm = false;
       // AUD-C008: drop only events of another step — a queued click on this
       // very step is still the user's answer.
@@ -1083,6 +1263,7 @@
       // wait() nor receives an event.
       if (!authorized(token)) return Promise.resolve({ type: "bad-token" });
       lastPoll = Date.now(); // #513: heartbeat — every wait() records a poll.
+      awaitingResponse = false; // #530: a new poll means Claude is listening again
       // #529: a new wait() call proves the previous call's caller has moved
       // on (the protocol never runs two wait()s from one live loop). Give any
       // still-registered pendingWaiter a definitive resolution now instead of
@@ -1101,6 +1282,8 @@
           saveQueue();
           lastDeliveredId = queued.id;
           lastDeliveredStepId = queued.stepId;
+          awaitingResponse = true; // #530
+          lastDeliveredAt = Date.now();
           finish(queued);
           return;
         }
@@ -1168,10 +1351,10 @@
         pendingWaiter: !!pendingWaiter,
         lastDeliveredId,
         lastDeliveredStepId,
-        // A click of the current step is shown as sent (buttons disabled).
-        // With queued 0 and lastDeliveredStepId === stepId it went to a wait()
-        // nobody read: the skill re-sends the step, which re-arms it.
-        sent: !!statusEl && statusEl.style.display !== "none" && activeBtns.some((b) => b.disabled),
+        // Fix 2: explicit flag, not a DOM heuristic (which false-positived on
+        // a required-but-empty field: statusEl hidden, yet some button --
+        // the submit -- was disabled too).
+        sent: sentFlag,
         destroyed,
       };
     },
@@ -1194,6 +1377,12 @@
       currentStep = null;
       eventQueue = [];
       destroyed = true;
+      sentFlag = false;
+      contentUpdated = false;
+      awaitingResponse = false;
+      savedValues = {};
+      savedChecklist = [];
+      savedHelpText = "";
       try {
         sessionStorage.removeItem(STORAGE_KEY);
       } catch {}
@@ -1222,12 +1411,16 @@
   try {
     loadState();
     loadQueue();
+    // Fix 2: a restored, still-undelivered click must render as "sent"
+    // immediately, before any setStep() call re-establishes sentFlag.
+    sentFlag = !!currentStep && eventQueue.some((e) => e.stepId === currentStep.id);
     applyPosition();
     render();
   } catch {
     currentStep = null;
     collapsed = true;
     pos = { right: 24, bottom: 24 };
+    sentFlag = false;
     applyPosition();
     render();
   }

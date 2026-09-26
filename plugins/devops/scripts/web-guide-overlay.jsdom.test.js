@@ -86,7 +86,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
     expect(d.configurable).toBe(false);
     expect(Object.isFrozen(a.api())).toBe(true);
     a.w.eval('window.claudeGuide = { version: "x" }; try { window.claudeGuide.wait = function () {}; } catch (e) {}');
-    expect(a.api().version).toBe("1.12.0");
+    expect(a.api().version).toBe("1.13.0");
     expect(a.api().wait.length).toBe(2);
   });
 
@@ -107,7 +107,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   });
 
   test("a page-predefined same-version global yields already-injected (hostile on a fresh document)", () => {
-    const a = page({ pageScript: 'window.claudeGuide = { version: "1.12.0" };' });
+    const a = page({ pageScript: 'window.claudeGuide = { version: "1.13.0" };' });
     expect(a.result).toBe("already-injected");
     expect(a.w.document.querySelector("[id^=wg-host-]")).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   test("a page-defined configurable global of another version is replaced", () => {
     const a = page({ pageScript: 'window.claudeGuide = { version: "0.0.1", destroy: function () {} };' });
     expect(a.result).toBe("injected");
-    expect(a.api().version).toBe("1.12.0");
+    expect(a.api().version).toBe("1.13.0");
   });
 
   test("the token never reaches page-readable storage", () => {
@@ -275,7 +275,8 @@ describe("AUD-C062/C063/C064", () => {
     const copy = btn(a, "Kopieren");
     copy.click();
     await Promise.resolve();
-    expect(copy.textContent).toBe("Kopieren fehlgeschlagen");
+    // Fix 9: the failure message now names a next step, not a dead end.
+    expect(copy.textContent).toBe("Kopieren fehlgeschlagen – Wert markieren und mit Strg+C kopieren");
   });
 
   test("text inputs carry a visible label tied to the field", () => {
@@ -397,5 +398,200 @@ describe("a click that reached a wait() nobody read (interrupted turn)", () => {
     expect(btn(a, "Weiter").disabled).toBe(false);
     expect(a.api().state().sent).toBe(false);
     expect(a.shadow().querySelector(".status").textContent).toContain("bitte noch einmal");
+  });
+});
+
+// #530 robustness pass.
+describe("#530: Trusted Types (Fix 1)", () => {
+  test("injects and renders bold/code text even when Element.prototype.innerHTML throws", () => {
+    const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
+      url: "https://console.cloud.google.test/",
+      runScripts: "outside-only",
+      pretendToBeVisual: true,
+    });
+    const w = dom.window;
+    // Simulate a Trusted-Types-enforcing page: ANY string assignment to
+    // innerHTML throws a TypeError, on every Element subclass.
+    for (const proto of [w.Element.prototype, w.HTMLElement.prototype]) {
+      const desc = Object.getOwnPropertyDescriptor(proto, "innerHTML");
+      if (!desc) continue;
+      Object.defineProperty(proto, "innerHTML", {
+        configurable: true,
+        get: desc.get,
+        set() { throw new TypeError("This document requires 'TrustedHTML' assignment."); },
+      });
+    }
+    let shadow = null;
+    const orig = w.Element.prototype.attachShadow;
+    w.Element.prototype.attachShadow = function (o) { shadow = orig.call(this, o); return shadow; };
+    const result = w.eval(TOKENED);
+    w.Element.prototype.attachShadow = orig;
+
+    expect(result).toBe("injected");
+    w.claudeGuide.setStep({ ...STEP, text: "Klicke **Generate token**, dann `Weiter`." }, TOKEN);
+    const bold = [...shadow.querySelectorAll("b")].find((el) => el.textContent === "Generate token");
+    const code = [...shadow.querySelectorAll("code")].find((el) => el.textContent === "Weiter");
+    expect(bold).toBeTruthy();
+    expect(code).toBeTruthy();
+  });
+});
+
+describe("#530: state preserved across a re-render (Fix 2)", () => {
+  test("collapsing and expanding keeps a typed value and checklist ticks", () => {
+    const a = page();
+    a.api().setStep({
+      ...STEP,
+      input: { type: "text", name: "n", label: "Name" },
+      checklist: ["Scope gesetzt", "Ablaufdatum gewählt"],
+    }, TOKEN);
+    const input = a.shadow().querySelector("input.f");
+    input.value = "mein-wert";
+    input.dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+    const boxes = a.shadow().querySelectorAll('input[type="checkbox"]');
+    boxes[1].checked = true;
+    boxes[1].dispatchEvent(new a.w.Event("change", { bubbles: true }));
+
+    a.shadow().querySelector('button.collapse[aria-label="Einklappen"]').click(); // collapse
+    const fab = a.shadow().querySelector("button.fab");
+    fab.dispatchEvent(new a.w.MouseEvent("click", { bubbles: true, detail: 0 })); // expand
+
+    expect(a.shadow().querySelector("input.f").value).toBe("mein-wert");
+    expect([...a.shadow().querySelectorAll('input[type="checkbox"]')][1].checked).toBe(true);
+  });
+
+  test("the help box (open state and typed text) survives a collapse/expand", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    btn(a, "Ich komme nicht weiter").click();
+    a.shadow().querySelector("textarea.f").value = "Wo finde ich den Button?";
+    a.shadow().querySelector("textarea.f").dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+
+    const key = (p, target, k) => target.dispatchEvent(new p.w.KeyboardEvent("keydown", { key: k, bubbles: true, composed: true, cancelable: true }));
+    key(a, a.shadow().querySelector("textarea.f"), "Escape"); // collapse
+    a.shadow().querySelector("button.fab").dispatchEvent(new a.w.MouseEvent("click", { bubbles: true, detail: 0 })); // expand
+
+    const textarea = a.shadow().querySelector("textarea.f");
+    expect(textarea).toBeTruthy();
+    expect(textarea.value).toBe("Wo finde ich den Button?");
+  });
+
+  test("state().sent is false after a re-arm even with a required, empty field", () => {
+    const a = page();
+    a.api().setStep(SECRET_STEP, TOKEN); // secret is implicitly required, starts empty
+    expect(a.api().state().sent).toBe(false); // Fix 5/2: the old heuristic false-positived here
+    expect(btn(a, "Weiter").disabled).toBe(true); // still correctly disabled by validation
+  });
+});
+
+describe("#530: panel position clamps to the viewport (Fix 3)", () => {
+  test("a small viewport with the FAB near the top-left keeps the panel fully on screen", () => {
+    const a = page();
+    Object.defineProperty(a.w, "innerWidth", { value: 400, configurable: true });
+    Object.defineProperty(a.w, "innerHeight", { value: 400, configurable: true });
+    a.api().setStep(STEP, TOKEN);
+    const fab = a.shadow().querySelector("button.fab");
+    fab.dispatchEvent(new a.w.PointerEvent("pointerdown", { pointerId: 1, clientX: 0, clientY: 0, bubbles: true }));
+    fab.dispatchEvent(new a.w.PointerEvent("pointermove", { clientX: -318, clientY: -318, bubbles: true }));
+    fab.dispatchEvent(new a.w.PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+
+    const panel = a.shadow().querySelector(".panel");
+    const top = parseFloat(panel.style.top);
+    const maxH = parseFloat(panel.style.maxHeight);
+    const right = parseFloat(panel.style.right);
+    expect(top).toBeGreaterThanOrEqual(8);
+    expect(top + maxH).toBeLessThanOrEqual(400 - 8 + 0.5);
+    expect(right).toBeGreaterThanOrEqual(8);
+    expect(400 - right - 340).toBeGreaterThanOrEqual(8 - 0.5); // left edge inside the viewport margin
+  });
+});
+
+describe("#530: the done step (Fix 4)", () => {
+  test("the hint names Fertig, and Fertig shows the same sent status as any other step", () => {
+    const a = page();
+    a.api().setStep({ id: "9", index: 6, total: 6, title: "Fertig", text: "Alles erledigt.", done: true }, TOKEN);
+    const hint = [...a.shadow().querySelectorAll("p.x")].find((el) => el.textContent.indexOf("kannst du den Tab schließen") !== -1);
+    expect(hint.textContent).toBe("Klicke Fertig — danach kannst du den Tab schließen.");
+    expect(hint.querySelector("b").textContent).toBe("Fertig");
+    btn(a, "Fertig").click();
+    expect(a.shadow().querySelector(".status").textContent).toContain("Gesendet");
+    expect(btn(a, "Fertig").disabled).toBe(true);
+  });
+});
+
+describe("#530: secret/confirm required + trimmed (Fix 5)", () => {
+  test("a secret typed as only whitespace cannot be sent, and a real value is trimmed", async () => {
+    const a = page();
+    a.api().setStep(SECRET_STEP, TOKEN);
+    const input = a.shadow().querySelector("input.f");
+    input.value = "   ";
+    input.dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+    expect(btn(a, "Weiter").disabled).toBe(true);
+
+    input.value = "  ghp_SECRET  ";
+    input.dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+    expect(btn(a, "Weiter").disabled).toBe(false);
+    btn(a, "Weiter").click();
+    const ev = await a.api().wait(0, TOKEN);
+    expect(Buffer.from(ev.value, "base64").toString()).toBe("ghp_SECRET");
+  });
+
+  test("a confirm checkbox is required even without input.required", () => {
+    const a = page();
+    a.api().setStep({ ...STEP, input: { type: "confirm", name: "ack", label: "Verstanden" } }, TOKEN);
+    expect(btn(a, "Weiter").disabled).toBe(true);
+    a.shadow().querySelector('input[type="checkbox"]').click();
+    expect(btn(a, "Weiter").disabled).toBe(false);
+  });
+});
+
+describe("#530: CSP without 'unsafe-inline' (Fix 6)", () => {
+  test("prefers adoptedStyleSheets when constructable stylesheets are available", () => {
+    const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
+      url: "https://site.example/",
+      runScripts: "outside-only",
+      pretendToBeVisual: true,
+    });
+    const w = dom.window;
+    if (typeof w.CSSStyleSheet !== "function" || !("adoptedStyleSheets" in w.ShadowRoot.prototype)) return; // engine has no support
+    let shadow = null;
+    const orig = w.Element.prototype.attachShadow;
+    w.Element.prototype.attachShadow = function (o) { shadow = orig.call(this, o); return shadow; };
+    const result = w.eval(TOKENED);
+    w.Element.prototype.attachShadow = orig;
+    expect(result).toBe("injected");
+    expect(shadow.adoptedStyleSheets.length).toBe(1);
+    expect(shadow.querySelector("style")).toBeNull(); // no <style> fallback element was used
+  });
+});
+
+describe("#530: a same-id resend with changed content (Fix 7)", () => {
+  test("a genuinely new step undocks the edge tab", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    a.shadow().querySelector('button.collapse[aria-label="Guide ausblenden"]').click();
+    expect(a.api().state().edgeTab).toBe(true);
+    a.api().setStep({ ...STEP, id: "5" }, TOKEN); // a genuinely new step
+    expect(a.api().state().edgeTab).toBe(false);
+  });
+
+  test("the same id with different text shows the 'updated' status until the next action", async () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    btn(a, "Ich komme nicht weiter").click();
+    a.shadow().querySelector("textarea.f").value = "Wo genau?";
+    btn(a, "Senden").click();
+    await a.api().wait(0, TOKEN); // Claude drains the help event before answering it
+    a.api().setStep({ ...STEP, text: "Der Button heißt jetzt **Neuen Token erzeugen**." }, TOKEN); // same id, answered
+    expect(a.shadow().querySelector(".status").textContent).toContain("Hinweis aktualisiert");
+    btn(a, "Weiter").click(); // the next user action clears it
+    expect(a.shadow().querySelector(".status").textContent).not.toContain("Hinweis aktualisiert");
+  });
+});
+
+describe("#530: heartbeat thresholds (Fix 8)", () => {
+  test("HEARTBEAT_STALE_MS is 45s and a delivered-but-unanswered click gets its own message after 90s", () => {
+    expect(SRC).toMatch(/HEARTBEAT_STALE_MS\s*=\s*45000/);
+    expect(SRC).toMatch(/DELIVERED_STALE_MS\s*=\s*90000/);
+    expect(SRC).toMatch(/Claude braucht länger/);
   });
 });
