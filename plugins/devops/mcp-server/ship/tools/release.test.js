@@ -608,6 +608,37 @@ describe("ship_release — commitMessage staging (F1: no silent drop)", () => {
   });
 });
 
+describe("ship_release — git status unreadable (dirtyState.error)", () => {
+  test("with commitMessage: fails with 'git status failed' and 'Nothing was committed', nothing runs", async () => {
+    gitLib.dirtyState.mockReturnValue({ dirty: true, error: "timed out", modified: [], untracked: [], lines: [] });
+
+    const res = await handler(params({ commitMessage: "chore(release): v1.0.0" }));
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/git status failed/);
+    expect(res.error).toMatch(/Nothing was committed/);
+    expect(res.commit).toBeUndefined();
+    expect(addCalls()).toEqual([]);
+    expect(execFileSync).not.toHaveBeenCalledWith("git", expect.arrayContaining(["commit"]), expect.anything());
+    expect(pushCall()).toBeUndefined();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+  });
+
+  test("without commitMessage: fails with 'cannot prove the working tree is clean'", async () => {
+    gitLib.dirtyState.mockReturnValue({ dirty: true, error: "timed out", modified: [], untracked: [], lines: [] });
+
+    const res = await handler(params({ commitMessage: null }));
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/cannot prove the working tree is clean/);
+    expect(res.commit).toBeUndefined();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+    expect(pushCall()).toBeUndefined();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // #251 — the channel-tag verification must not trust one negative read
 // ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
 }));
 
 import { handler } from "./preflight.js";
-import { isWorktree, fileOverlap } from "../lib/git.js";
+import { isWorktree, fileOverlap, dirtyState } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
@@ -68,6 +68,7 @@ beforeEach(() => {
   // Re-apply defaults cleared by clearAllMocks.
   isWorktree.mockReturnValue(false);
   dirtySessionWorktrees.mockReturnValue([]);
+  dirtyState.mockReturnValue({ dirty: false, untracked: [], modified: [], lines: [] });
   // Default: empty diff (no overlap, no out-of-band artifacts). Tests that need
   // a populated diff override this — resetting here keeps them isolated.
   fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: [], baseFiles: [], overlap: [] });
@@ -160,6 +161,23 @@ describe("ship_preflight — session-worktree-clean gate", () => {
     // When in-worktree we must NOT scan siblings (clean-tree already covers cwd).
     expect(dirtySessionWorktrees).not.toHaveBeenCalled();
     expect(result.ready).toBe(true);
+  });
+});
+
+describe("ship_preflight — clean-tree gate", () => {
+  test("git status unreadable → 'Working tree unreadable', never the generic dirty message", async () => {
+    dirtyState.mockReturnValue({ dirty: true, error: "timed out", modified: [], untracked: [], lines: [] });
+    const result = await handler({ cwd: CWD });
+    expect(result.errors.some((e) => e.includes("Working tree unreadable: git status failed (timed out)"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("Dirty working tree"))).toBe(false);
+    expect(result.ready).toBe(false);
+  });
+
+  test("a real dirty tree still reports its modified/untracked counts", async () => {
+    dirtyState.mockReturnValue({ dirty: true, modified: ["a.js", "b.js"], untracked: ["c.js"], lines: [] });
+    const result = await handler({ cwd: CWD });
+    expect(result.errors.some((e) => e.includes("Dirty working tree: 2 modified, 1 untracked"))).toBe(true);
+    expect(result.ready).toBe(false);
   });
 });
 

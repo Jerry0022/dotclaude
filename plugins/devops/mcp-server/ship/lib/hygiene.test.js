@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
-  isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT,
+  isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -322,6 +322,21 @@ describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C0
     expect(fs.existsSync(path.join(shared, "pkg.js"))).toBe(true);
   });
 
+  test("a junction inside .claude/ keeps the worktree and its target survives", () => {
+    const { dir, c1 } = makeRepo();
+    const shared = mkTmp("hy-shared-");
+    fs.writeFileSync(path.join(shared, "secret.txt"), "only copy\n");
+    const wt = sessionWorktree(dir, "wt-claude-link", c1, 40);
+    fs.mkdirSync(path.join(wt, ".claude"), { recursive: true });
+    fs.symlinkSync(shared, path.join(wt, ".claude", "external"), "junction");
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(fs.existsSync(wt)).toBe(true);
+    expect(plan.keep.find((u) => u.branch === "wt-claude-link")).toBeTruthy();
+    expect(fs.readFileSync(path.join(shared, "secret.txt"), "utf8")).toBe("only copy\n");
+  });
+
   test("a damaged removal stays on the card until its folder is gone", () => {
     const { dir, c1 } = makeRepo();
     const slow = sessionWorktree(dir, "wt-slow", c1, 40);
@@ -389,6 +404,54 @@ describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C0
     expect(skippedWt({ autoClean: done }, "wt-slow")).toBeTruthy();
   });
 
+  test("holdPrune keeps a stale registration listed until the damaged folder is gone, then prunes it", () => {
+    const { dir, c1 } = makeRepo();
+    const slow = sessionWorktree(dir, "wt-slow", c1, 40);
+    const statePath = path.join(mkTmp("hy-state-"), "s.json");
+    const base = { cwd: dir, trigger: "ship", statePath, now: NOW, fetchMerged: offline, projectsDir: null, removeTimeout: 1 };
+
+    // run 1: wt-slow times out on removal → recorded as damaged.
+    const first = runHygiene({ ...base, settings: SETTINGS });
+    expect(first.damaged.map((p) => path.resolve(p))).toEqual([path.resolve(slow)]);
+
+    // run 2: gate opens again (a fresh old landed branch) and a stale
+    // registration (folder already deleted) is present — prune must be held
+    // because the damaged folder from run 1 is still around.
+    git(dir, "branch", "old-landed2", c1);
+    const gone = sessionWorktree(dir, "wt-gone", c1, 0);
+    fs.rmSync(gone, { recursive: true, force: true });
+    const second = runHygiene({ ...base, settings: SETTINGS });
+    expect(second.autoClean.ran).toBe(true);
+    expect(git(dir, "worktree", "list", "--porcelain")).toContain("wt-gone");
+    expect(second.damaged.map((p) => path.resolve(p))).toEqual([path.resolve(slow)]);
+
+    // run 3: the damaged folder is gone (now prunable itself), and another
+    // old landed branch keeps the gate open → the closing prune finally
+    // runs, dropping the stale registration.
+    fs.rmSync(slow, { recursive: true, force: true });
+    git(dir, "branch", "old-landed3", c1);
+    const third = runHygiene({ ...base, settings: SETTINGS });
+    expect(third.damaged).toEqual([]);
+    expect(git(dir, "worktree", "list", "--porcelain")).not.toContain("wt-gone");
+  });
+
+  test("the same damaged path recorded under a different slash style is not duplicated", () => {
+    const { dir, c1 } = makeRepo();
+    const slow = sessionWorktree(dir, "wt-slow", c1, 40);
+    const statePath = path.join(mkTmp("hy-state-"), "s.json");
+    // Seed the state file as if an earlier version had recorded the same
+    // damaged folder with backslashes — normPath must still recognize it as
+    // the same path as the forward-slash one git reports.
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    const key = normPath(dir);
+    fs.writeFileSync(statePath, JSON.stringify({
+      repos: { [key]: { damaged: [{ path: path.resolve(slow).replace(/\//g, "\\"), at: new Date(NOW).toISOString() }] } },
+    }));
+    const base = { cwd: dir, trigger: "ship", statePath, now: NOW, fetchMerged: offline, projectsDir: null };
+    const res = runHygiene({ ...base, settings: SETTINGS, removeTimeout: 1 });
+    expect(res.damaged).toHaveLength(1);
+  });
+
   test("the per-removal ceiling is not the 120 s one git-hygiene.md forbids", () => {
     expect(REMOVE_TIMEOUT).toBeGreaterThanOrEqual(15 * 60_000);
   });
@@ -406,6 +469,41 @@ describe("auto-clean — re-check right before each removal", () => {
     expect(done.removed).toEqual([]);
     expect(done.skipped).toEqual([{ kind: "branch", name: "old-landed", reason: "moved" }]);
     expect(branches(dir)).toContain("old-landed");
+  });
+
+  test("a worktree that got dirty after planning is skipped, folder and branch intact", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = sessionWorktree(dir, "wt-turned-dirty", c1, 40);
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    expect(plan.remove.map((u) => u.branch)).toEqual(["wt-turned-dirty"]);
+    fs.writeFileSync(path.join(wt, "late-write.txt"), "snuck in after planning\n");
+    const done = executeAutoClean(plan, scan, { cwd: dir, projectsDir: null });
+    expect(done.removed).toEqual([]);
+    expect(done.skipped).toHaveLength(1);
+    expect(done.skipped[0]).toMatchObject({ kind: "worktree", branch: "wt-turned-dirty", reason: "uncommitted-changes" });
+    expect(normPath(done.skipped[0].path)).toBe(normPath(wt));
+    expect(fs.existsSync(wt)).toBe(true);
+    expect(branches(dir)).toContain("wt-turned-dirty");
+  });
+
+  test("a worktree that got a live Claude transcript after planning is skipped, folder and branch intact", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = sessionWorktree(dir, "wt-turned-live", c1, 40);
+    const scan = scanRepo(dir, NOW);
+    const plan = planAutoClean(scan, SETTINGS, { cwd: dir, fetchMerged: offline, projectsDir: null });
+    expect(plan.remove.map((u) => u.branch)).toEqual(["wt-turned-live"]);
+    const projects = mkTmp("hy-projects-");
+    const liveDir = path.join(projects, path.resolve(wt).replace(/[\\/:.]/g, "-"));
+    fs.mkdirSync(liveDir);
+    fs.writeFileSync(path.join(liveDir, "s.jsonl"), "{}\n");
+    const done = executeAutoClean(plan, scan, { cwd: dir, projectsDir: projects });
+    expect(done.removed).toEqual([]);
+    expect(done.skipped).toHaveLength(1);
+    expect(done.skipped[0]).toMatchObject({ kind: "worktree", branch: "wt-turned-live", reason: "live-session" });
+    expect(normPath(done.skipped[0].path)).toBe(normPath(wt));
+    expect(fs.existsSync(wt)).toBe(true);
+    expect(branches(dir)).toContain("wt-turned-live");
   });
 });
 
