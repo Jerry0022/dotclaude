@@ -63,4 +63,78 @@ describe("pre.mcp.health — per-process heartbeats", () => {
     expect(fs.existsSync(legacy)).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test("a lone dead per-process file with no legacy corroboration fails open (another session's leftover)", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    const pid = deadPid();
+    const leftover = path.join(tmp, `dotclaude-mcp-dotclaude-completion-${pid}.pid`);
+    fs.writeFileSync(leftover, String(pid));
+    // No legacy file at all — this is exactly the shape a hard-killed
+    // NEWER-version server from a different session leaves behind while an
+    // older, never-heartbeating completion server (pre-0.3.0 / #93) is still
+    // alive and serving this session's calls.
+    const res = run(dir);
+    expect(res.status).toBe(0);
+    expect(res.stderr).toMatch(/inconclusive/i);
+    // Fails open without deleting evidence that may still matter elsewhere.
+    expect(fs.existsSync(leftover)).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a dead legacy file alone (no per-process file) still blocks as DOWN", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    const pid = deadPid();
+    const legacy = path.join(tmp, "dotclaude-mcp-dotclaude-completion.pid");
+    fs.writeFileSync(legacy, String(pid));
+    const res = run(dir);
+    expect(res.status).toBe(2);
+    expect(res.stderr).toMatch(/MCP SERVER DOWN/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stale-after-update sentinel (finding 14a): a shared, cross-session
+// heartbeat state must not let one session's evidence permanently silence
+// another session's stale block.
+// ---------------------------------------------------------------------------
+
+function writeSentinel(dir, mtime) {
+  const pluginsDir = path.join(dir, ".claude", "plugins");
+  fs.mkdirSync(pluginsDir, { recursive: true });
+  const file = path.join(pluginsDir, ".mcp-stale.json");
+  fs.writeFileSync(file, JSON.stringify({ plugins: [{ name: "devops", from: "0.1.0", to: "0.2.0" }] }));
+  fs.utimesSync(file, mtime, mtime);
+  return file;
+}
+
+describe("pre.mcp.health — stale-after-update sentinel", () => {
+  test("a respawned server passes but the shared sentinel is not deleted, so the block reappears once no live respawn is left", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    const before = new Date(Date.now() - 60_000);
+    const after = new Date(Date.now() + 60_000);
+    const sentinel = writeSentinel(dir, before);
+    const own = path.join(tmp, `dotclaude-mcp-dotclaude-completion-${process.pid}.pid`);
+    fs.writeFileSync(own, String(process.pid));
+    fs.utimesSync(own, after, after);
+
+    // A live server newer than the sentinel passes this call...
+    const first = run(dir);
+    expect(first.status).toBe(0);
+    // ...and must NOT delete the sentinel out from under other sessions.
+    expect(fs.existsSync(sentinel)).toBe(true);
+
+    // Once that respawn is no longer live evidence (server now dead, no
+    // other live PID exists), the very same sentinel blocks again.
+    const pid = deadPid();
+    fs.writeFileSync(own, String(pid));
+    const second = run(dir);
+    expect(second.status).toBe(2);
+    expect(second.stderr).toMatch(/MCP SERVER STALE/);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

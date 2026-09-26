@@ -1,6 +1,6 @@
 /**
  * @module mcp-heartbeat
- * @version 0.3.0
+ * @version 0.3.1
  * @description Best-effort liveness probe for the plugin's MCP servers, read
  *   from the PID files each server writes on boot (mcp-server/lib/heartbeat.js).
  *
@@ -107,7 +107,7 @@ function heartbeats(serverName, opts = {}) {
 
 /**
  * @param {string} serverName
- * @returns {{ alive: number[], dead: Array<{ file: string, pid: number|null, legacy: boolean }>, latestLiveMtimeMs: number, any: boolean }}
+ * @returns {{ alive: number[], dead: Array<{ file: string, pid: number|null, legacy: boolean, mtimeMs: number }>, latestLiveMtimeMs: number, any: boolean }}
  */
 function heartbeatState(serverName, opts) {
   const all = heartbeats(serverName, opts);
@@ -119,7 +119,7 @@ function heartbeatState(serverName, opts) {
       if (!alive.includes(h.pid)) alive.push(h.pid);
       latestLiveMtimeMs = Math.max(latestLiveMtimeMs, h.mtimeMs);
     } else {
-      dead.push({ file: h.file, pid: h.pid, legacy: h.legacy });
+      dead.push({ file: h.file, pid: h.pid, legacy: h.legacy, mtimeMs: h.mtimeMs });
     }
   }
   return { alive, dead, latestLiveMtimeMs, any: all.length > 0 };
