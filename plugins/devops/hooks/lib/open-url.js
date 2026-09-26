@@ -13,7 +13,8 @@
  *   out either. Read from the app bundle (Claude 2.7032, 2026-09-24). A
  *   prompt is the one channel from the widget that still reaches this
  *   machine: the button prefills it, Enter submits it, and the hook opens the
- *   page and blocks the prompt, so it costs no turn.
+ *   page and blocks the prompt, so it never reaches Claude and spends no
+ *   tokens.
  *
  *   Only loopback http(s) pages are opened. The card never links anything
  *   else this way, and a hook that opened any URL a composer text names would

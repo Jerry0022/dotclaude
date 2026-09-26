@@ -421,7 +421,9 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   with the button rules above, and `prompt.flow.open-url` opens the page on
   Enter. It opens in the OS default browser (`rundll32
   url.dll,FileProtocolHandler` / `open` / `xdg-open`, never a shell) and
-  blocks the prompt, so reopening costs no turn. Only a prompt that is
+  blocks the prompt, so reopening never reaches Claude and spends no tokens.
+  The ack under the harness's red "blocked" panel says exactly that, so the
+  block does not read as a failure. Only a prompt that is
   exactly the prefix plus one loopback URL is handled. If the browser cannot
   start, the prompt passes through and Claude opens the page itself. Any
   other http URL stays an anchor: dead on the Desktop app, but still a
