@@ -576,7 +576,7 @@ auto-harden / auto-polish with `--invoked-by=autonomous`, then, for
 `$SHIP=auto`, do-ship under the `do-run` lockout. Still no questions (the
 Lockout holds). A blocked pass or ship is logged and reported, the run
 continues to Step 7. Every chosen pass is gated by the run contract
-(`deep-knowledge/run-contract.md`) exactly as it is for any other do-run
+(`{PLUGIN_ROOT}/deep-knowledge/run-contract.md`) exactly as it is for any other do-run
 run — running it here, in order, satisfies the gate; there is no separate
 autonomous-mode exemption. INTERRUPTED / BLOCKED runs and `analyze` mode
 skip this step and instead close the contract in Step 7/8 below.
