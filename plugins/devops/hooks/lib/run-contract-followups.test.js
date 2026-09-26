@@ -284,8 +284,8 @@ describe("R2 Q2: an implement-mode audit's analysis card must not close before w
 describe("R2 Q2: parseFollowUp maps the exact do-run 'Ergebnis' labels to auditResult", () => {
   const q = [{ header: "Ergebnis", question: "Ergebnis" }];
   test.each([
-    ["Audit umsetzen (Recommended)", "implement"], // SKILL.md F1
-    ["Audit als Concept", "concept"], // SKILL.md F1
+    ["Audit umsetzen (Recommended)", "implement"], // do-run questions.md F1
+    ["Audit als Concept", "concept"], // do-run questions.md F1
     ["Audit + Umsetzung (Recommended)", "implement"], // modes/audit.md Q2 (de)
     ["Audit + implementation (Recommended)", "implement"], // modes/audit.md Q2 (en)
     ["Audit als DevOps-Concept", "concept"], // modes/audit.md Q2 (de)

@@ -332,7 +332,7 @@ function mergeRouterAnswers(cwd, questions, fields, opts = {}) {
 }
 
 // H-B7 / RT3-R7: exactly the headers do-run emits — F4 "Issues" / F3
-// "Milestones" (SKILL.md) and their numbered continuations of backlog.md
+// "Milestones" (do-run questions.md) and their numbered continuations of backlog.md
 // Step 1.2 ("Issues 2", "Issues (2)", "Issues 2/3") — never a header that
 // merely starts with the word ("Issues found", "Open issues list").
 const ISSUES_HEADER_RE = /^issues(?: (?:\d+(?:\/\d+)?|\(\d+(?:\/\d+)?\)))?$/;
@@ -391,7 +391,7 @@ function parseFollowUp(questions, answers) {
     if (/^ergebnis$/i.test(h)) {
       hit = true;
       const s = tokens.join(' ').toLowerCase();
-      // R2 (red-team round 2 Q2): SKILL.md F1 ("Audit umsetzen") and
+      // R2 (red-team round 2 Q2): do-run questions.md F1 ("Audit umsetzen") and
       // modes/audit.md Q2 ("Audit + Umsetzung (Recommended)") use different
       // German nouns/verbs for the same choice — "umsetz" (not "umsetzen")
       // covers both "umsetzen" and "Umsetzung".
