@@ -106,3 +106,16 @@ describe("prompt.issue.detect — a number only mentioned is asked about", () =>
     expect(tracked("detect-mention-then-fix")).toEqual(["12"]);
   });
 });
+
+// The list drives GitHub writes in the completion flow, which reads it back
+// exact (#539) — so the writer keys it by the harness session id as well:
+// another session's list neither swallows this session's request nor changes.
+describe("prompt.issue.detect — the list is keyed by the harness session id", () => {
+  test("another session's list is neither read nor changed", () => {
+    fs.writeFileSync(path.join(tmp, "dotclaude-devops-tracked-issues-detect-other"), JSON.stringify(["12", "7"]));
+    const r = run("fix #12", "detect-mine");
+    expect(r.stdout).toContain("User asked to work on issue #12");
+    expect(tracked("detect-mine")).toEqual(["12"]);
+    expect(tracked("detect-other")).toEqual(["12", "7"]);
+  });
+});
