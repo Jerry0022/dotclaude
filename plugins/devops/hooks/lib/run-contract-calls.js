@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.7
+ * @version 0.5.8
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -1203,9 +1203,12 @@ function routerFromTranscript(transcriptPath, sinceIso, RC, budget, info) {
     if (!line.includes('toolUseResult')) continue;
     let obj;
     try { obj = JSON.parse(line); } catch { continue; }
-    if (!obj || !isAskResult(obj.toolUseResult)) continue;
+    if (!obj) continue;
+    // Any tool result older than the marker ends the walk — checked before the
+    // AskUserQuestion filter, or every other result sent it on to 32 MB.
     const t = Date.parse(obj.timestamp);
     if (Number.isFinite(since) && Number.isFinite(t) && t < since) break;
+    if (!isAskResult(obj.toolUseResult)) continue;
     const { questions, answers } = RC.extractAnswers(obj.toolUseResult, {});
     if (RC.isRouterCall(questions)) {
       seen.push({ questions, answers });
