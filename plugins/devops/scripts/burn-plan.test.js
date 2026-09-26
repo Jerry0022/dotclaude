@@ -481,3 +481,81 @@ describe("classifyInFlight — resume actions (K2)", () => {
     expect(bp.classifyInFlight(base).action).toBe("requeue");
   });
 });
+
+describe("2026-09-26 audit — blind mode keeps the checks that need no reading (AUD-C019)", () => {
+  const u0 = usage({ weeklyUsed: 40, weeklyResetMin: 30 * 60, sessionUsed: 20, sessionResetMin: 120 });
+  const q = [task("p0", "M", "P0"), task("i1"), task("i2")];
+  const p = bp.derivePlan({ usage: u0, queue: q, plan: "Max 20x" });
+  const blind = { ok: false, reason: "cached: scraper profile not logged in" };
+
+  test("the weekly reset ends the burn even while usage is unreadable", () => {
+    const s = stateFor(p, q, u0);
+    const after = Date.parse(s.weekResetAt) + 10 * 60000;
+    const g = bp.gate(s, blind, after, null);
+    expect(g.decision).toBe("finish");
+    expect(g.reason).toBe("week-reset");
+    expect(g.state.inFlight).toHaveLength(0);
+  });
+
+  test("a window the last reading saw at 97 % pauses until its reset instead of spawning blind", () => {
+    const t1 = NOW + 50 * 60000;
+    let s = stateFor(p, q, u0);
+    // the last good reading: window at 97 %, 70 min to its reset
+    s = bp.gate(s, bp.normalizeUsage({ ...raw({ weeklyUsed: 43, sessionUsed: 97, sessionResetMin: 70 }), timestamp: new Date(t1).toISOString() }, t1, 2), t1, null, { claim: false }).state;
+    s.status = "running";
+    delete s.pause;
+    expect(s.budgetAt.sessionResetAt).toBe(new Date(t1 + 70 * 60000).toISOString());
+    s.holds = bp.HOLD_LIMIT - 1;
+    const g = bp.gate(s, blind, t1 + 5 * 60000, null);
+    expect(g.decision).toBe("pause");
+    expect(g.reason).toBe("window");
+    expect(g.blind).toBe(true);
+    expect(Date.parse(g.resumeAt)).toBe(t1 + (70 + bp.RESUME_BUFFER_MIN) * 60000);
+    // after that window's reset the blind gate may spawn again (capped)
+    s.holds = bp.HOLD_LIMIT - 1;
+    const g2 = bp.gate(s, blind, t1 + 75 * 60000, null);
+    expect(g2.decision).toBe("spawn");
+    expect(g2.blind).toBe(true);
+  });
+});
+
+describe("2026-09-26 audit — strict parsing (AUD-C049/C050)", () => {
+  test("parseResumeAuto: continue|on → continue, off → off, absent → continue, else error", () => {
+    expect(bp.parseResumeAuto(undefined)).toBe("continue");
+    expect(bp.parseResumeAuto("on")).toBe("continue");
+    expect(bp.parseResumeAuto("Continue")).toBe("continue");
+    expect(bp.parseResumeAuto("off")).toBe("off");
+    for (const bad of ["of", "no", "false", "", true]) expect(() => bp.parseResumeAuto(bad)).toThrow(/continue\|on\|off/);
+    expect(() => bp.setResumePolicy({ resume: {}, events: [] }, { auto: "aus" }, NOW)).toThrow();
+  });
+
+  test("parseNumberOpt: absent → fallback, out of range / not a number → error", () => {
+    const o = { min: 1, max: 16, integer: true };
+    expect(bp.parseNumberOpt("lane-cap", undefined, 4, o)).toBe(4);
+    expect(bp.parseNumberOpt("lane-cap", "3", 4, o)).toBe(3);
+    for (const bad of ["0", "17", "2.5", "x", "", true]) expect(() => bp.parseNumberOpt("lane-cap", bad, 4, o)).toThrow(/--lane-cap/);
+  });
+});
+
+describe("2026-09-26 audit — burn docs (AUD-C024, AUD-C054)", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.join(__dirname, "..");
+  const read = (...p) => fs.readFileSync(path.join(root, ...p), "utf8");
+  const burnDocs = ["burn-scheduler.md", "composite-prompt.md"].map((f) => read("skills", "do-run", "modes", "burn", "deep-knowledge", f));
+
+  test("sub-branches are dash-joined <parent>-<role>, never slash-nested", () => {
+    const orch = read("deep-knowledge", "agent-orchestration.md");
+    expect(orch).toMatch(/dash-joined `<parent>-<role>`/);
+    for (const text of [orch, ...burnDocs]) {
+      expect(text).not.toMatch(/<parent[-_a-z]*>\/<role>|\{slug\}\/\{?role|<slug>\/<role>/);
+    }
+    expect(burnDocs[0]).toMatch(/burn\/<slug>-<role>-<n>/);
+  });
+
+  test("the composite prompt pushes only when the repo has a remote", () => {
+    const composite = burnDocs[1];
+    expect(composite).toMatch(/Push nur, wenn das Repo ein Remote hat/);
+    expect(composite).toMatch(/--pushed=false/);
+  });
+});
