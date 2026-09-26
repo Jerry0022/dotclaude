@@ -596,10 +596,16 @@ this session:
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 ```
 
-Call `render_completion_card` (variant per status: "ship-successful" for COMPLETED,
-"ship-blocked" for BLOCKED, "ready" for INTERRUPTED,
-"analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
+Call `render_completion_card` (variant per status: "ready" for COMPLETED and
+INTERRUPTED — or the variant the work unit's own table names, e.g. audit
+mode's Step 8 —, "aborted" for BLOCKED, "analysis" for analyze-mode
+COMPLETED; "ship-successful" only when the router's Step 7 do-ship merged —
+without `state.pushed` + `merged` the card's variant guard downgrades it).
 **Capture the full card output** — it will be embedded in the HTML report.
+On the Desktop app do NOT show the card widget yet: the widget ends the turn
+(`hooks/lib/card-turn-end.js`), so it is the run's very last action, after
+Step 8. The hard stop also holds on its own while the run's watchdog is armed
+and its done-flag unwritten.
 
 **Always forward `userFinalTest` items** collected during Step 5 Live Testing
 (packaged Electron/Tauri without takeover, 3rd-party integrations). The card
@@ -638,8 +644,9 @@ node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
 See `{PLUGIN_ROOT}/deep-knowledge/browser-file-urls.md` for the full rule.
 
 The completion card is still rendered in the CLI as the last visible output
-(VERBATIM relay as always). The HTML report is the **primary deliverable** —
-the CLI card is the quick confirmation.
+(VERBATIM relay as always) — on the Desktop app as the widget shown after
+Step 8. The HTML report is the **primary deliverable** — the CLI card is the
+quick confirmation.
 
 ## Step 8 — Shutdown / Finalization
 
@@ -679,8 +686,8 @@ on resume).
 
 **Close the run contract, if still open.** COMPLETED already closed it (7a's
 abort branch does not apply); a run that reaches here without having called
-`abort` or `done` yet closes it now, after the card, so a leftover contract
-never gates the next unrelated session:
+`abort` or `done` yet closes it now — before the Desktop card widget, which
+ends the turn — so a leftover contract never gates the next unrelated session:
 
 ```bash
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done

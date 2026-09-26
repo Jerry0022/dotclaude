@@ -151,6 +151,9 @@ describe("variant contract (#406)", () => {
     expect(need({ merged: "main" })).toEqual(["state"]);
     expect(need({ pushed: "yes", merged: "main" })).toEqual(["state"]);
     expect(need({ pushed: true, merged: "main" })).toEqual([]);
+    // A boolean merge flag is no base branch — it rendered "merge true".
+    expect(need({ pushed: true, merged: true })).toEqual(["state", "state.merged"]);
+    expect(need({ pushed: true, merged: "  " })).toEqual(["state"]);
     expect(validateCardInput({ ...BASE, variant: "ship-successful", state: {} }).issues[0].message).toMatch(/state\.pushed: true and state\.merged/);
   });
 

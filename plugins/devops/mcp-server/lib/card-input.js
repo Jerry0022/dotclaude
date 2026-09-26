@@ -1,6 +1,6 @@
 /**
  * @module mcp-server/lib/card-input
- * @version 0.2.0
+ * @version 0.2.1
  * @description Lenient coercion + structural validation of the completion-card
  *   payload — the shapes the MCP tool's zod schema enforces, written once
  *   without a dependency so the `--render-card` CLI fallback can enforce them
@@ -162,7 +162,13 @@ export function validateCardInput(params) {
   if (params.variant === "ship-successful") {
     const s = isObj(params.state) ? params.state : null;
     if (s && s.mode === "file-only") issues.push({ path: "variant", message: 'a file-only project has no merge to report — use "ready-files"' });
-    else if (!s || s.pushed !== true || !s.merged) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
+    else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
+  }
+  // `merged` names the base branch; the card prints it ("✓ merge main", the
+  // track's base). A boolean read "merge true" and "Shipped v → true" (audit
+  // 2026-09-26) — the MCP schema already refuses it, the CLI now does too.
+  if (isObj(params.state) && params.state.merged != null && params.state.merged !== false && !isStr(params.state.merged)) {
+    issues.push({ path: "state.merged", message: 'must be the base branch the work merged into, e.g. "main" (a string, not true/false)' });
   }
   if (params.lang !== undefined && params.lang !== "de" && params.lang !== "en") issues.push({ path: "lang", message: 'must be "de" or "en"' });
 

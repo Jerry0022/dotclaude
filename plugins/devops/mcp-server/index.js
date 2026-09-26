@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.12.0
+ * @version 0.12.1
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -350,6 +350,26 @@ function remoteNames(cwd) {
 }
 
 /**
+ * Is `cwd` inside a git work tree? `null` when nothing can be concluded: git
+ * did not answer in time (ship/lib/repo-mode.js draws the same line), or the
+ * directory is gone — a ship card is often rendered after ship_cleanup
+ * removed the worktree it names. Git missing altogether reads as "no work
+ * tree": there is no repo to use.
+ */
+function insideWorkTree(cwd) {
+  try {
+    if (cwd && !statSync(cwd).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  try {
+    return execSync('git rev-parse --is-inside-work-tree', { ...GIT_PROBE_OPTS, cwd: cwd || undefined }).trim() === 'true';
+  } catch (err) {
+    return err && (err.code === 'ETIMEDOUT' || err.killed === true) ? null : false;
+  }
+}
+
+/**
  * Card callers outside /do-ship never ran ship_preflight, so they rarely pass
  * `state.mode`. Without it a local-only repo still got the Ship button and the
  * push → PR → merge track (#500). Fill it in the way repo-mode.js decides it:
@@ -359,6 +379,15 @@ function remoteNames(cwd) {
 function withDetectedRepoMode(params) {
   const state = params.state || {};
   if (state.mode) return;
+  // No work tree at all — a network share, a scratch folder: there is no
+  // commit, branch, PR or merge to draw, no build id to compute and nothing to
+  // ship, so the card takes the file-only form (audit 2026-09-26: such a card
+  // showed "○ commit → ○ push → ○ PR → ○ merge · Build no-build-id" and a Ship
+  // button). A probe that timed out proves nothing and changes nothing.
+  if (insideWorkTree(params.cwd) === false) {
+    params.state = { ...state, mode: 'file-only' };
+    return;
+  }
   const names = remoteNames(params.cwd);
   if (state.delivered === 'local-commit-only' || (names && !names.includes('origin'))) {
     params.state = { ...state, mode: 'git-no-remote' };
@@ -819,10 +848,13 @@ function renderPipelineLine(input, lang, buildId) {
   const delivery = input.delivery || {};
 
   if (state.mode === 'file-only') {
-    const n = state.filesModified || 0;
+    const n = state.filesModified;
     const noun = lang === 'en' ? (n === 1 ? 'file changed' : 'files changed') : 'Dateien geändert';
     const noRepo = lang === 'en' ? 'no repo' : 'kein Repo';
-    return '📂 ' + n + ' ' + noun + ' · ' + noRepo + (input.cwd ? ' · ' + input.cwd : '');
+    // A count only when the caller knows it — a detected file-only mode
+    // (withDetectedRepoMode) must not claim "0 files changed".
+    const count = typeof n === 'number' ? n + ' ' + noun + ' · ' : '';
+    return '📂 ' + count + noRepo + (input.cwd ? ' · ' + input.cwd : '');
   }
   if (input.variant === 'analysis') {
     const none = lang === 'en' ? 'no changes to repo' : 'keine Änderungen im Repo';
@@ -1193,7 +1225,9 @@ function resolveCardKey(input) {
 
   if (variant === 'ready') {
     if (input.vv && input.vv.unverified) return input.vv.running ? 'vv-running' : 'vv-unverified';
-    return evidenceHasDeviation(input) ? 'ready-red' : 'ready';
+    if (evidenceHasDeviation(input)) return 'ready-red';
+    // Without a repo the work is done on disk — nothing to ship (ready-files).
+    return state.mode === 'file-only' ? 'ready-files' : 'ready';
   }
   if (variant === 'ship-blocked') return 'ship-blocked';
   if (variant === 'ship-successful') {
@@ -1383,7 +1417,9 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // test cards stop asking "ship?" and the widget drops their Ship button
   // (#500). The keys that follow a ship attempt (ready-red, ship-blocked,
   // vv-unverified, ship-compact) keep theirs: a local ship still commits.
-  const noShip = state.mode === 'git-no-remote' && (key === 'ready' || key === 'test');
+  // Without any repo (file-only) there is nothing to ship either: the test
+  // card asks only to test.
+  const noShip = (state.mode === 'git-no-remote' || state.mode === 'file-only') && (key === 'ready' || key === 'test');
   const fn = T[noShip ? key + '-local' : key] || T.fallback;
   let heading = fn(ctx);
 
@@ -1878,7 +1914,9 @@ function buildCompletionCard(params) {
   const healthLine = renderContextHealth(toolCallCount);
 
   // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
-  const buildId = params.buildId || getBuildId(params.cwd);
+  // A file-only project has no build id: its pipeline line names none, and
+  // computing one only logged git's "not a git repository" on every card.
+  const buildId = params.buildId || (params.state && params.state.mode === 'file-only' ? '' : getBuildId(params.cwd));
 
   // 3b. V&V gate — derive the verification state from the Light flags so the
   //     card can stamp ⚠ ungeprüft on an unverified / red finish (evidence

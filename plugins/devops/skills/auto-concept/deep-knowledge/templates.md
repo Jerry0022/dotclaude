@@ -6839,14 +6839,24 @@ function applyNavOverflow(nav, scrollBox) {
   }
   if (!scrollBox || scrollBox.scrollHeight <= scrollBox.clientHeight) return;
   const items = [...nav.children];
+  const floor = navOverflowFloor(nav, items);
   let hiddenCount = 0;
-  for (let i = items.length - 1; i >= 0 && scrollBox.scrollHeight > scrollBox.clientHeight; i--) {
+  for (let i = items.length - 1; i > floor && scrollBox.scrollHeight > scrollBox.clientHeight; i--) {
     items[i].hidden = true;
     items[i].setAttribute('data-nav-overflow-hidden', '');
     hiddenCount++;
   }
   if (!hiddenCount) return;
   nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
+}
+// The overflow cut never hides the child that holds the active entry — or,
+// with nothing active yet, the first child — nor anything above it. When that
+// group alone is taller than the scroll box, hiding used to go on until the
+// panel showed nothing but "+N weitere" (#541); now the box scrolls instead.
+function navOverflowFloor(nav, items) {
+  const active = nav.querySelector('.section-nav-item.is-active');
+  const i = active ? items.findIndex(el => el === active || el.contains(active)) : -1;
+  return i < 0 ? 0 : i;
 }
 function makeNavMoreToggle(nav, hiddenCount) {
   const toggle = document.createElement('button');

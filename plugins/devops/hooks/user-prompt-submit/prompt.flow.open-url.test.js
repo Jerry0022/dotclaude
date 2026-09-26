@@ -23,8 +23,13 @@ describe("prompt.flow.open-url", () => {
     const res = await handle({ prompt: `Im Standardbrowser öffnen: ${URL_}` }, { open });
     expect(urls).toEqual([URL_]);
     expect(res.exitCode).toBe(2);
-    expect(res.stderr.split("\n")[0]).toBe(`[open-url] ✓ Im Standardbrowser geöffnet: ${URL_}`);
-    expect(res.stderr).toContain("Kein Fehler");
+    expect(res.stderr.split("\n")[0]).toBe(`[open-url] ✓ Seite im Standardbrowser geöffnet: ${URL_}`);
+    // #542: the second line says in plain words why the red panel is fine —
+    // the input never reached Claude, so it cost no tokens (no "Turn" jargon).
+    expect(res.stderr).toContain("Die rote Meldung „blockiert“ ist gewollt");
+    expect(res.stderr).toContain("ohne deine Eingabe an Claude zu schicken");
+    expect(res.stderr).toContain("spart Tokens");
+    expect(res.stderr).not.toMatch(/\bTurn\b/);
   });
 
   test("answers in the prompt's language", async () => {
@@ -33,6 +38,8 @@ describe("prompt.flow.open-url", () => {
     expect(res.exitCode).toBe(2);
     expect(res.stderr).toBe(renderAck(URL_, "en"));
     expect(res.stderr).toContain("Opened in your default browser");
+    expect(res.stderr).toContain("without sending your input to Claude, so it costs no tokens");
+    expect(res.stderr).not.toMatch(/\bturn\b/);
   });
 
   test("reads whichever prompt field the payload carries", async () => {

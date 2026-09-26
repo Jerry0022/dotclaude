@@ -316,7 +316,14 @@ directory unambiguously", do NOT guess — pass this run's flag path explicitly
 flag into a sibling session's project would silently mute that session's
 watchdog.
 
-We deliberately do NOT call `unregister` on the scheduled task — leaving it armed
-but flag-satisfied is simpler and self-cleans (the task fires once, sees the flag,
-exits, and removes its helper script). If you ever need to clean it up earlier
-(e.g. user manually resumes), use the `unregister` subcommand.
+`flag` also removes this run's scheduled task, its helper script and its
+sentinel (`unregistered` in the JSON) — with the flag written the task has
+nothing left to do. No separate `unregister` call is needed; use it only to
+drop a watchdog without writing the flag (e.g. the user resumes by hand).
+Tasks clean up after themselves too (#544): each registration's trigger ends
+30 min after its fire time and Task Scheduler then deletes it
+(`DeleteExpiredTaskAfter`), and every `register` first sweeps
+`ClaudeAutonomousWatchdog-*` tasks and helper scripts older than 26 h that
+earlier plugin versions left behind (`swept` in its JSON). A live
+registration is at most 24 h old, so a sibling session's watchdog is never
+touched.

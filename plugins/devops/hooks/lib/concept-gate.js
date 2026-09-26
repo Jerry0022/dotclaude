@@ -59,6 +59,9 @@ const ENGINE = [
   // A page without it drops the grey veil and re-arms the submit buttons when
   // the user reloads while Claude is still working on the round they sent.
   { token: 'async function restoreInFlightRound', why: 'sent round survives a reload — § Two-Button Submit (gate 30c)' },
+  // A page without it collapses a TOC whose open group is taller than the
+  // panel to a lone "+N weitere" button — every entry hidden (#541).
+  { token: 'function navOverflowFloor', why: 'TOC overflow keeps the active entry visible — § Section Navigation JS (gate 60b)' },
   // Engine-integrity anchors (#430). The entries above prove the page was
   // generated from the CURRENT templates.md; these prove the engine blocks
   // are still INTACT afterwards. Round 11 of a design concept lost the whole

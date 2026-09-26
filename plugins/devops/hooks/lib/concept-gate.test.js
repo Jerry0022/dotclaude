@@ -24,7 +24,7 @@ import {
 // Kompass panel skeleton, § Section Navigation JS and § Claude Connection
 // Heartbeat; the gate only greps for the tokens.
 const ENGINE_STUB = `<div class="panel-here"><div id="panel-status"></div></div>
-<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){} async function restoreInFlightRound(){}</script>`;
+<script>function renderPanelStatus(){} function buildRoundsChip(){} function buildIterationTree(){} function recoverFromFreeze(){} function _drainDraftResponse(){} async function submitWithAction(){} async function retryPendingSubmission(){} async function restoreInFlightRound(){} function navOverflowFloor(){}</script>`;
 // The engine's head stylesheet (#430 integrity anchor). Lives in <head> like
 // the real engine CSS — a <style> after the live section would be attributed
 // to that round by the P32 collision scan.
@@ -796,6 +796,14 @@ describe("findStaleEngine — a page whose engine was lifted from an older conce
     // sent round drops the grey veil and re-arms the submit buttons.
     const html = VALID.replace(" async function restoreInFlightRound(){}", "");
     expect(findStaleEngine(html).map(e => e.token)).toEqual(["async function restoreInFlightRound"]);
+    expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
+  });
+
+  test("a page whose TOC overflow can hide every entry is stale (gate 60b)", () => {
+    // Without navOverflowFloor() an open group taller than the panel collapsed
+    // the whole TOC to a lone "+N weitere" button (#541).
+    const html = VALID.replace(" function navOverflowFloor(){}", "");
+    expect(findStaleEngine(html).map(e => e.token)).toEqual(["function navOverflowFloor"]);
     expect(evaluate("docs/concepts/x.html", html).ok).toBe(false);
   });
 });

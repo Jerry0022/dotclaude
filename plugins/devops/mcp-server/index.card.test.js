@@ -259,6 +259,33 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  // Audit 2026-09-26: a card in a folder without any repo (a network share, a
+  // scratch folder) drew the git track, "Build no-build-id" and a Ship button.
+  test("no repo at all is detected from cwd: file-only form, no build id, nothing to ship", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { spawnSync } = await import("node:child_process");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "card-no-repo-"));
+    try {
+      // A machine whose TEMP sits inside a work tree cannot host this case.
+      const inside = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: dir, encoding: "utf8" });
+      if (String(inside.stdout).trim() === "true") return;
+      const ready = await cardText({ variant: "ready", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-a", cwd: dir });
+      expect(ready).toMatch(/^## 📂 Fertig auf der Platte — noch etwas\?$/m);
+      expect(ready).toContain("📂 kein Repo · " + dir);
+      expect(ready).not.toContain("0 Dateien geändert");
+      expect(ready).not.toMatch(/Build|no-build-id|○ push/);
+      const test = await cardText({ variant: "test", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-b", cwd: dir, userTest: ["Öffne die Datei"] });
+      expect(test).toMatch(/^## 🧪 Erst testen\?$/m);
+      // An explicit count still shows.
+      const counted = await cardText({ variant: "ready-files", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-c", cwd: dir, state: { mode: "file-only", filesModified: 3 } });
+      expect(counted).toContain("📂 3 Dateien geändert · kein Repo");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("no remote + unshipped work: no card, the caller is told to ship locally", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
@@ -339,10 +366,12 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
   });
 
   test("no run-contract on the project → no line, byte-identical to a card without cwd", async () => {
-    const withoutCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0a", buildId: "abc1234" });
+    // The repo mode is pinned: a bare temp dir is no work tree and would
+    // otherwise render the file-only form (withDetectedRepoMode).
+    const withoutCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0a", buildId: "abc1234", state: { mode: "git" } });
     const dir = mkdtempSync(join(tmpdir(), "rc-card-none-"));
     try {
-      const withCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0b", buildId: "abc1234", cwd: dir });
+      const withCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0b", buildId: "abc1234", cwd: dir, state: { mode: "git" } });
       expect(withCwd).toBe(withoutCwd);
       expect(withCwd).not.toContain("🧾 Run");
     } finally {

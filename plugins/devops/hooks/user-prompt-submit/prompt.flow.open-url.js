@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.open-url
- * @version 0.1.0
+ * @version 0.1.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Opens a local page in the default browser when the prompt is
  *   the card widget's open prompt ("Im Standardbrowser öffnen: <url>" /
  *   "Open in default browser: <url>"), then blocks the prompt (exit 2 — the
- *   harness erases it), so reopening a concept page or dev server costs no
- *   turn.
+ *   harness erases it), so reopening a concept page or dev server never
+ *   reaches Claude and costs no tokens.
  *
  *   Why: the Desktop Code tab drops every http link a widget tries to open,
  *   localhost included, so the card turns such a link into a button that
@@ -28,15 +28,18 @@ const { parseHookInput } = require('../lib/hook-input');
 const { parseOpenUrlPrompt, openInDefaultBrowser } = require('../lib/open-url');
 
 /**
- * Text for the harness's "a hook blocked your input" panel. The first line
- * carries the all-clear — the block IS the mechanism, nothing failed.
+ * Text for the harness's red "a hook blocked your input" panel. The first
+ * line carries the all-clear; the second says, in plain words, why the red
+ * headline is expected: the plugin opened the page itself and never sent the
+ * input to Claude, so the click cost no tokens (#542 — "costs no turn" was
+ * jargon nobody could decode in that panel).
  * @param {string} url
  * @param {'de'|'en'} lang
  */
 function renderAck(url, lang) {
   return lang === 'en'
-    ? `[open-url] ✓ Opened in your default browser: ${url}\nNo error: the prompt was caught on purpose, so it costs no turn.`
-    : `[open-url] ✓ Im Standardbrowser geöffnet: ${url}\nKein Fehler: Der Prompt wurde absichtlich abgefangen und kostet so keinen Turn.`;
+    ? `[open-url] ✓ Opened in your default browser: ${url}\nThe red "blocked" notice is intended: the plugin opened the page itself without sending your input to Claude, so it costs no tokens.`
+    : `[open-url] ✓ Seite im Standardbrowser geöffnet: ${url}\nDie rote Meldung „blockiert“ ist gewollt: Das Plugin hat die Seite direkt geöffnet, ohne deine Eingabe an Claude zu schicken — das spart Tokens.`;
 }
 
 /**
