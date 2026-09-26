@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.212.2] — 2026-09-26
+
+### Fixed
+- **Reading a screenshot no longer trips the token guard.** `pre.tokens.guard` priced every Read at bytes × `tokensPerByte`, so an 81 KB 760 × 900 JPEG counted as ~20.7K tokens and a 238 KB full-page PNG as ~60.9K — both blocked, although an image is billed by its pixels, and every retry went through anyway. A Read of a png, jpg/jpeg, gif or webp now takes the pixel size from the file header (`hooks/lib/image-tokens`, no new dependency; a JPEG by a segment walk that skips metadata of any size) and prices it at pixels / 750 after the downscale to 2576 px on the long edge and 3.75 megapixels — at most ~4.8K tokens per image. A header it cannot read costs that cap. PDFs, `.bmp` (the Read tool shows no bitmap as an image) and every other file keep the byte estimate, so a huge text file is still blocked.
+- **Hex colours are no issue references.** A prompt about the colours `#7d84a8` and `#8fae8f` was tracked as issues #7 and #8 — the pattern stopped at the first non-digit. A `#` number now counts only when it stands on its own: no letter, digit or underscore right after it, and none of those, nor `/`, `&`, `#` or `:`, right before it — so `&#123;` and `color:#123abc` stay text, while `#42`, `Issue #42`, `issue 42` and `#42.` still match. The run contract's `Closes #N` reader and its issue-number picker follow the same rule.
+- **The completion card is readable in the light theme.** Its text colours were literals tuned for the dark surface (`#8fae8f`, `#e0a0a0`, `#d9c58a`, `#aab4e6` — 1.5–2.2:1 on the light card). Every text colour now comes from the Claude Desktop host tokens — success, danger, warning and violet, each softened toward the secondary text colour, 7.2–7.9:1 light and 8.2–8.9:1 dark — and the pipeline line, channel ladder and context-health note use a themed dim tone (5.0:1 light instead of 3.3:1, 7.1:1 dark). Only the budget bar, which sits on its own dark track, keeps literal colours; a test keeps every other text colour on a host token.
+
+### Changed
+- **Card spacing on the 4 px scale.** The › lines keep a 4 px vertical margin (was 3 px), the decision box pads 12 px at the sides (was 14 px), and the run-contract line drops its top padding right under the pipeline line (the gap shrinks from 14 px to 10 px). The context line sets its size and margin once instead of overriding the › line's own.
+
 ## [0.212.1] — 2026-09-26
 
 ### Fixed
