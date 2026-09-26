@@ -742,6 +742,49 @@ describe("AUD-021: arm() vs update() / expiryNotice() write-backs", () => {
     expect(disk.id).toBe("rc-new-by-arm");
     expect(disk.expiryAnnounced).toBeUndefined();
   });
+
+  // compactEvents() carries the same "an arm() replaced the contract in
+  // between" guard as update()/expiryNotice() above (store.js ~:652) — it
+  // has no test of its own yet.
+  test("compactEvents() no-ops when the header it was given was re-armed away in the meantime", () => {
+    const headerA = store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    RC.record(cwd, { k: "edit" }, { now: T0 + 1000 });
+    // arm() unlinks the events file on every re-arm — headerB starts fresh.
+    store.arm(cwd, { mode: "prompt" }, { now: T0 + 2000 });
+    RC.record(cwd, { k: "edit" }, { now: T0 + 3000 });
+    RC.record(cwd, { k: "commit" }, { now: T0 + 4000 });
+    const file = store.eventsPath(cwd);
+    const before = fs.readFileSync(file, "utf8");
+    const headerBBefore = store.readRawContract(cwd);
+    expect(headerBBefore.id).not.toBe(headerA.id);
+
+    store.compactEvents(cwd, headerA); // stale header — must not touch B's events
+
+    const after = fs.readFileSync(file, "utf8");
+    expect(after).toBe(before); // byte-identical
+    const leftoverTmp = fs.readdirSync(path.dirname(file)).filter((n) => n.endsWith(".tmp"));
+    expect(leftoverTmp).toEqual([]);
+    const headerBAfter = store.readRawContract(cwd);
+    expect(headerBAfter.id).toBe(headerBBefore.id);
+    expect(headerBAfter.compactedAtLines).toBe(headerBBefore.compactedAtLines); // untouched
+  });
+
+  test("compactEvents() aborts when the header file is gone before the rename", () => {
+    const header = store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    RC.record(cwd, { k: "edit" }, { now: T0 + 1000 });
+    RC.record(cwd, { k: "commit" }, { now: T0 + 2000 });
+    const file = store.eventsPath(cwd);
+    const before = fs.readFileSync(file, "utf8");
+    fs.rmSync(store.contractPath(cwd));
+
+    store.compactEvents(cwd, header); // readRawContract() now returns null → abort
+
+    const after = fs.readFileSync(file, "utf8");
+    expect(after).toBe(before);
+    const leftoverTmp = fs.readdirSync(path.dirname(file)).filter((n) => n.endsWith(".tmp"));
+    expect(leftoverTmp).toEqual([]);
+    expect(store.readRawContract(cwd)).toBeNull();
+  });
 });
 
 describe("AUD-022 / AUD-040: items sanitised, notices print the plain arm line", () => {

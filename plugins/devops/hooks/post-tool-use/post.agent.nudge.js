@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.agent.nudge
- * @version 0.3.2
+ * @version 0.3.3
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -168,44 +168,12 @@ function scanTurn(transcriptContent, cwd) {
 
 /**
  * Distinct absolute paths edited by Edit/Write/NotebookEdit tool_use blocks
- * so far THIS turn, walking the transcript backward to (not including) the
- * turn's opening user-prompt entry — same walk as
- * `skill-invocations.js#skillInvokedThisTurn` / `card-guard.js#showWidgetCalledThisTurn`.
+ * so far THIS turn — a thin wrapper over `scanTurn()`'s single backward pass
+ * (AUD-026: the two walks used to be separate; now the logic lives once).
  * @returns {Set<string>}
  */
 function editedFilesThisTurn(transcriptContent, cwd) {
-  const out = new Set();
-  if (typeof transcriptContent !== 'string' || !transcriptContent) return out;
-  const lines = transcriptContent.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const raw = lines[i].trim();
-    if (!raw) continue;
-    let entry;
-    try { entry = JSON.parse(raw); } catch { continue; }
-    if (!entry || typeof entry !== 'object') continue;
-    if (entry.type === 'user') {
-      if (isPromptEntry(entry)) break;
-      continue;
-    }
-    if (entry.type !== 'assistant') continue;
-    const content = entry.message && entry.message.content;
-    if (!Array.isArray(content)) continue;
-    for (const block of content) {
-      if (!block || block.type !== 'tool_use') continue;
-      const m = typeof block.name === 'string' ? EDIT_TOOL_RE.exec(block.name) : null;
-      if (!m) continue;
-      const input = block.input && typeof block.input === 'object' ? block.input : {};
-      const p = editedPathOf(m[1], input);
-      if (!p) continue;
-      let abs;
-      try { abs = path.resolve(cwd || process.cwd(), String(p)); } catch { continue; }
-      // R14a: a memory / scratchpad / out-of-repo path must not count toward
-      // the 6, same rule as the CURRENT call's own file below.
-      if (!inOwnWorkTree(abs, cwd)) continue;
-      out.add(abs);
-    }
-  }
-  return out;
+  return scanTurn(transcriptContent, cwd).files;
 }
 
 function buildNudge() {
@@ -268,31 +236,17 @@ function anyDevopsSkillInvokedThisTurn(transcript) {
 /** Identity of the turn's opening user-prompt entry: its `uuid`, or its
  *  `timestamp` when no `uuid` is recorded. Q8: text is deliberately NOT used
  *  — a later turn that repeats the same short prompt ("weiter", "continue")
- *  must still get its own marker, not silently reuse an earlier turn's. */
+ *  must still get its own marker, not silently reuse an earlier turn's. A
+ *  thin wrapper over `scanTurn()`'s single backward pass (AUD-026). */
 function lastUserPromptEntryId(transcriptContent) {
-  if (typeof transcriptContent !== 'string' || !transcriptContent) return '';
-  const lines = transcriptContent.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const raw = lines[i].trim();
-    if (!raw) continue;
-    let entry;
-    try { entry = JSON.parse(raw); } catch { continue; }
-    if (!entry || entry.type !== 'user' || !isPromptEntry(entry)) continue;
-    return promptEntryId(entry);
-  }
-  return '';
+  return scanTurn(transcriptContent).promptId;
 }
 
-/** R14d: has the nudge already fired this turn? Keyed by session + cwd + the
- *  turn's opening prompt entry's identity (Q8: uuid, falling back to
- *  timestamp — never its text), so a fresh turn (new prompt entry) always
- *  gets a fresh marker even though the 1 MB transcript tail can make the
- *  running distinct-file count dip back below 6 and cross it again later. */
-function firedMarkerKey(hook, transcript) {
-  return markerKeyFor(hook, lastUserPromptEntryId(transcript));
-}
-
-/** firedMarkerKey() from an already-known prompt entry id (AUD-026). */
+/** R14d marker key: session + cwd + the turn's opening prompt entry's
+ *  identity (Q8: uuid, falling back to timestamp — never its text), so a
+ *  fresh turn (new prompt entry) always gets a fresh marker even though the
+ *  1 MB transcript tail can make the running distinct-file count dip back
+ *  below 6 and cross it again later. */
 function markerKeyFor(hook, id) {
   const raw = `${hook.session_id || ''}|${hook.cwd || ''}|${id}`;
   return crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20);
@@ -358,5 +312,5 @@ if (require.main === module) {
 
 module.exports = {
   run, editedPathOf, editedFilesThisTurn, inOwnWorkTree, isSubagentCall, buildNudge, NUDGE_AT,
-  firedMarkerKey, markerKeyFor, scanTurn, lastUserPromptEntryId, devopsSkillDirNames, anyDevopsSkillInvokedThisTurn,
+  scanTurn, lastUserPromptEntryId, devopsSkillDirNames, anyDevopsSkillInvokedThisTurn,
 };

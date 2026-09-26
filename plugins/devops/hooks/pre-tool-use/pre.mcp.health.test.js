@@ -137,4 +137,40 @@ describe("pre.mcp.health — stale-after-update sentinel", () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test("a malformed sentinel is deleted and does not block", () => {
+    const dir = project();
+    const pluginsDir = path.join(dir, ".claude", "plugins");
+    fs.mkdirSync(pluginsDir, { recursive: true });
+    const file = path.join(pluginsDir, ".mcp-stale.json");
+    fs.writeFileSync(file, "{not json");
+    const res = run(dir);
+    expect(res.status).toBe(0);
+    expect(fs.existsSync(file)).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a sentinel naming only another plugin does not block and is kept", () => {
+    const dir = project();
+    const pluginsDir = path.join(dir, ".claude", "plugins");
+    fs.mkdirSync(pluginsDir, { recursive: true });
+    const file = path.join(pluginsDir, ".mcp-stale.json");
+    fs.writeFileSync(file, JSON.stringify({ plugins: [{ name: "local-llm", from: "0.1.0", to: "0.2.0" }] }));
+    const res = run(dir);
+    expect(res.status).toBe(0);
+    expect(fs.existsSync(file)).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a sentinel with no `plugins` key counts as devops and blocks when no newer server is alive", () => {
+    const dir = project();
+    const pluginsDir = path.join(dir, ".claude", "plugins");
+    fs.mkdirSync(pluginsDir, { recursive: true });
+    const file = path.join(pluginsDir, ".mcp-stale.json");
+    fs.writeFileSync(file, JSON.stringify({}));
+    const res = run(dir);
+    expect(res.status).toBe(2);
+    expect(res.stderr).toMatch(/MCP SERVER STALE/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
