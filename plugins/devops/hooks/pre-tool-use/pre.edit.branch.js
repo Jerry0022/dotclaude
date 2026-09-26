@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.edit.branch
- * @version 0.1.1
+ * @version 0.1.2
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit
@@ -23,12 +23,20 @@
  *   always did.
  */
 
-require('../lib/plugin-guard');
-
 const fs = require('fs');
 const path = require('path');
-const { gitOut } = require('../lib/git-timeout');
-const { isActive: sentinelActive } = require('../lib/ship-sentinel');
+
+// A lib that fails to load (half-written during a plugin update, version skew)
+// makes this hook a silent no-op instead of a hook error on every edit
+// (AUD-028).
+let gitOut, sentinelActive;
+try {
+  require('../lib/plugin-guard');
+  ({ gitOut } = require('../lib/git-timeout'));
+  ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
+} catch {
+  process.exit(0);
+}
 
 function currentBranch(cwd) {
   return gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'HEAD']);

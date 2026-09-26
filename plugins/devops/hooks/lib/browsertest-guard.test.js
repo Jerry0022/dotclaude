@@ -637,10 +637,47 @@ describe("testRunOutcome", () => {
     expect(testRunOutcome("failures=0")).toBe("pass");
   });
 
-  test("unparseable / empty output defaults to pass (never false-block)", () => {
-    expect(testRunOutcome(null)).toBe("pass");
-    expect(testRunOutcome("")).toBe("pass");
-    expect(testRunOutcome({ stdout: "build done" })).toBe("pass");
+  test("unparseable / empty output without an exit code is unknown — never a pass, never red (AUD-015)", () => {
+    expect(testRunOutcome(null)).toBe("unknown");
+    expect(testRunOutcome("")).toBe("unknown");
+    expect(testRunOutcome({ stdout: "build done" })).toBe("unknown");
+  });
+
+  test("a runner that crashed before its summary is not a pass (AUD-015a)", () => {
+    const vitestStartup = [
+      " RUN  v3.2.4 C:/repo",
+      "",
+      "failed to load config from C:/repo/vitest.config.ts",
+      "",
+      "⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯",
+      "Error: Cannot find module 'vite-tsconfig-paths'",
+      "    at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)",
+    ].join("\n");
+    expect(testRunOutcome({ stdout: vitestStartup })).not.toBe("pass");
+    const tsc = "src/app.ts(3,7): error TS2322: Type 'string' is not assignable to type 'number'.";
+    expect(testRunOutcome({ stdout: tsc })).not.toBe("pass");
+  });
+
+  test("'npm ERR! Test failed' without a runner summary → fail (AUD-015a)", () => {
+    expect(testRunOutcome({ stderr: "npm ERR! Test failed.  See above for more details." })).toBe("fail");
+    expect(testRunOutcome({ stderr: "npm error Lifecycle script `test` failed with error:\nnpm error code 1" })).toBe("fail");
+  });
+
+  test("a logged '1 failed attempt' inside a green run stays a pass (AUD-015b)", () => {
+    const vitest = [
+      " ✓ src/retry.test.ts (3 tests) 12ms",
+      "stdout | src/retry.test.ts > retries once",
+      "retry: 1 failed attempt",
+      "",
+      " Test Files  1 passed (1)",
+      "      Tests  3 passed (3)",
+    ].join("\n");
+    expect(testRunOutcome({ stdout: vitest })).toBe("pass");
+    // Even outside a stdout | block, a summary line decides, not a log line.
+    const inline = "retry: 1 failed attempt\n  3 passing (12ms)";
+    expect(testRunOutcome({ stdout: inline })).toBe("pass");
+    // …while a red summary beside it is still red.
+    expect(testRunOutcome({ stdout: "retry: 1 failed attempt\n      Tests  1 failed | 2 passed (3)" })).toBe("fail");
   });
 
   test("zero exit code wins even if text mentions a failure", () => {

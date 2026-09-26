@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from "vitest";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -188,6 +188,52 @@ describe("releaseKilledIndexLock — only the killed child's lock", () => {
   test("no lock → absent", () => {
     const { gitDir } = makeRepo({ "a.txt": "a\n" }, { "a.txt": "A\n" });
     expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now(), timedOut: true })).toBe("absent");
+  });
+
+  // AUD-039: a lock the session's own git took in the kill gap is newer than
+  // the merge start too — only one that sits still is the killed child's.
+  // The settle wait blocks this thread, so the live writer is a child process.
+  const liveWriter = (lock, script) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["-e", script, lock], { stdio: ["ignore", "pipe", "ignore"] });
+    child.stdout.once("data", () => resolve(child));
+    child.on("error", reject);
+  });
+
+  test("a lock still being written during the settle window → held, left in place (AUD-039)", async () => {
+    const { gitDir, lock } = withLock();
+    const child = await liveWriter(lock, `
+      const fs = require("fs"); const lock = process.argv[1];
+      process.stdout.write("go");
+      const t = setInterval(() => { try { fs.appendFileSync(lock, "x"); } catch {} }, 40);
+      setTimeout(() => { clearInterval(t); process.exit(0); }, 3000);`);
+    try {
+      expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, settleMs: 400 })).toBe("held");
+      expect(fs.existsSync(lock)).toBe(true);
+    } finally {
+      child.kill();
+    }
+  });
+
+  test("a lock that vanishes during the settle window → held, not reported free (AUD-039)", async () => {
+    const { gitDir, lock } = withLock();
+    const child = await liveWriter(lock, `
+      const fs = require("fs"); const lock = process.argv[1];
+      process.stdout.write("go");
+      setTimeout(() => { try { fs.unlinkSync(lock); } catch {} process.exit(0); }, 100);`);
+    try {
+      expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, settleMs: 600 })).toBe("held");
+    } finally {
+      child.kill();
+    }
+  });
+
+  test("the default settle window is ~1.5 s and a still lock is removed after it (AUD-039)", () => {
+    expect(R.LOCK_SETTLE_MS).toBe(1500);
+    const { gitDir, lock } = withLock();
+    const t0 = Date.now();
+    expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true })).toBe("removed");
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
+    expect(fs.existsSync(lock)).toBe(false);
   });
 });
 

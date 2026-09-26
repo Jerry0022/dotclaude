@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module git-sync-recover
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Undo what a failed background merge already wrote, for
  *   scripts/git-sync.js.
@@ -31,6 +31,8 @@ const { execFileSync } = require('child_process');
 
 /** Filesystem timestamp slack when telling "created during the merge" from "older". */
 const LOCK_SLACK_MS = 2000;
+/** How long a lock must sit unchanged before it counts as the killed child's leftover. */
+const LOCK_SETTLE_MS = 1500;
 /** Paths per `git checkout` / `git rm` call — stays far below Windows' command-line limit. */
 const PATH_CHUNK = 100;
 const WRITE_TIMEOUT_DEFAULT_MS = 5 * 60_000;
@@ -114,14 +116,32 @@ function headState(run, preHead, source) {
  * TerminateProcess) leaves one. So: only after a timeout, and only a lock
  * written after the merge started — an older one belongs to someone else (the
  * merge could not have run past it).
+ *
+ * A newer lock is not proof enough (AUD-039): the session's own git (a status
+ * refresh, a `git add`) may have taken the lock in the gap after the kill and
+ * still be writing through it. So the lock must also sit unchanged — same
+ * inode, mtime and size — across a settle window. One that changed or
+ * vanished in that window had a live writer: left alone, reported 'held', and
+ * the recovery ends in "manual repair".
+ * @param {{gitDir:string, startedAt:number, timedOut:boolean, settleMs?:number}} o
  * @returns {'absent'|'removed'|'held'}
  */
-function releaseKilledIndexLock({ gitDir, startedAt, timedOut }) {
+function releaseKilledIndexLock({ gitDir, startedAt, timedOut, settleMs = LOCK_SETTLE_MS }) {
   const lock = path.join(gitDir, 'index.lock');
   let st;
   try { st = fs.statSync(lock); } catch { return 'absent'; }
   if (!timedOut || st.mtimeMs < startedAt - LOCK_SLACK_MS) return 'held';
+  if (settleMs > 0) sleepSync(settleMs);
+  let again;
+  try { again = fs.statSync(lock); } catch { return 'held'; }
+  if (again.ino !== st.ino || again.mtimeMs !== st.mtimeMs || again.size !== st.size) return 'held';
   try { fs.unlinkSync(lock); return 'removed'; } catch { return 'held'; }
+}
+
+/** Block the (background, console-less) git-sync process for `ms`. */
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+  catch { const end = Date.now() + ms; while (Date.now() < end) { /* spin */ } }
 }
 
 /**
@@ -272,6 +292,7 @@ function restoreIncomingTree({ run, top, preHead, source }) {
 
 module.exports = {
   LOCK_SLACK_MS,
+  LOCK_SETTLE_MS,
   WRITE_TIMEOUT_DEFAULT_MS,
   WRITE_TIMEOUT_MAX_MS,
   writeTimeoutMs,
