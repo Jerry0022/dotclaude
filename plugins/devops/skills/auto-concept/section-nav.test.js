@@ -140,6 +140,11 @@ describe("Kompass tree — source contracts", () => {
     const fn = fnSource("applyNavOverflow");
     expect(fn).toContain("scrollBox.scrollHeight <= scrollBox.clientHeight");
     expect(fnSource("makeNavMoreToggle")).toContain("{{nav.more_entries}}");
+    // Both cuts hide with `hidden`; `.section-nav-item { display: flex }`
+    // outranks the browser's [hidden] rule, so without this line a flat TOC
+    // kept every "hidden" entry on screen next to its toggle (seen in Edge
+    // at 1024x768 while verifying #541 — jsdom computes no layout).
+    expect(md).toContain("#section-nav > [hidden] { display: none; }");
     // The final report defers to the 3-entry window BEFORE the overflow
     // measurement — it must never fall through to the tail cut there.
     const branch = fn.indexOf("document.body.classList.contains('viewing-final')");
@@ -598,6 +603,10 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
 
     const nav = p.document.getElementById("section-nav");
     const box = p.document.querySelector(".panel-nav-scroll");
+    // Reading line at the top: jsdom's zero rects leave the spy on the last
+    // entry, and the child holding the active entry is never hidden (#541).
+    for (const el of nav.querySelectorAll(".section-nav-item.is-active")) el.classList.remove("is-active");
+    nav.querySelector(".section-nav-item").classList.add("is-active");
     Object.defineProperty(box, "scrollHeight", { value: 500, configurable: true });
     Object.defineProperty(box, "clientHeight", { value: 200, configurable: true });
     p.window.applyNavOverflow(nav, box);
@@ -609,6 +618,39 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     toggle.dispatchEvent(new p.window.MouseEvent("click", { bubbles: true }));
     expect(nav.querySelectorAll("[data-nav-overflow-hidden]").length).toBe(0);
     expect(p.document.querySelector(".nav-more-toggle")).toBeNull();
+  });
+
+  // #541: the open group alone was taller than the box (667 px in 444 px), so
+  // the tail cut went on until every child was hidden — the panel showed
+  // nothing but "+5 weitere". The child holding the active entry is the floor.
+  test("the group holding the active entry survives overflow — the box scrolls the rest", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 13, kinds: 5 })]);
+    p.window.buildSectionNav();
+    const nav = p.document.getElementById("section-nav");
+    const box = p.document.querySelector(".panel-nav-scroll");
+    const [variants, context] = [...nav.querySelectorAll("details.nav-group")];
+    for (const el of nav.querySelectorAll(".section-nav-item.is-active")) el.classList.remove("is-active");
+    variants.querySelector(".section-nav-item").classList.add("is-active");
+    // Geometry jsdom lacks: the active group alone overflows the box.
+    Object.defineProperty(box, "clientHeight", { value: 444, configurable: true });
+    Object.defineProperty(box, "scrollHeight", {
+      configurable: true,
+      get: () => [...nav.children].filter((el) => !el.hidden).reduce((h, el) => h + (el === variants ? 667 : 40), 0),
+    });
+    p.window.applyNavOverflow(nav, box);
+    expect(variants.hidden, "the active group must stay visible").toBe(false);
+    expect(context.hidden).toBe(true);
+    const children = [...nav.children].filter((el) => !el.classList.contains("nav-more-toggle"));
+    const floor = children.indexOf(variants);
+    expect(children.slice(0, floor + 1).every((el) => !el.hidden)).toBe(true);
+    expect(nav.querySelector(".nav-more-toggle").textContent).toBe(`+${children.length - floor - 1} nav.more_entries`);
+
+    // No active entry: the first child is the floor, never the whole list.
+    for (const el of nav.querySelectorAll(".section-nav-item.is-active")) el.classList.remove("is-active");
+    Object.defineProperty(box, "scrollHeight", { value: 5000, configurable: true });
+    p.window.applyNavOverflow(nav, box);
+    expect(children[0].hidden).toBe(false);
+    expect(children.slice(1).every((el) => el.hidden)).toBe(true);
   });
 
   test("final report: the TOC is a 3-entry window around the reading line, not a tail cut", () => {

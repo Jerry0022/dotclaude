@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.212.4] — 2026-09-26
+
+### Fixed
+- **The concept TOC keeps the entry you are reading.** When the reading line moved into a TOC group taller than the panel, `applyNavOverflow()` hid every top-level entry, the open group included, and the panel showed nothing but "+5 weitere" (#541). The entry or group holding the active entry is now the floor of the cut, or the first one when none is active; the panel scrolls the rest.
+- **Hidden TOC entries leave the screen.** The overflow cut and the final-report window hide entries with `hidden`, but `.section-nav-item { display: flex }` outranked the browser's own `[hidden]` rule. A flat TOC therefore showed every "hidden" entry next to its "+N weitere" toggle. `#section-nav > [hidden] { display: none; }` makes `hidden` mean hidden again (found in Edge at 1024×768 while verifying #541).
+
 ## [0.212.3] — 2026-09-26
 
 ### Fixed
