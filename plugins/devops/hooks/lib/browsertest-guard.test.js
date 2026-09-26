@@ -685,6 +685,21 @@ describe("testRunOutcome — summary decides (Bash response, no exit code)", () 
     expect(hasRunnerOutput(coloured)).toBe(true);
   });
 
+  // 2026-09-26: `npm test -- plugins/devops/mcp-server | tail` ended "Tests 794
+  // passed (794)" and still reddened the session — vitest had listed a slow
+  // passing card test whose title carries the ✗ glyph.
+  test("a ✗ glyph in a passing test title does not redden a green summary", () => {
+    const tail = [
+      `   ${ESC}[33m${ESC}[2m✓${ESC}[22m${ESC}[39m card > '2 rot' is ✗ 2 Tests rot and routes to the ⚠ heading ${ESC}[33m 7392${ESC}[2mms${ESC}[22m${ESC}[39m`,
+      "",
+      " Test Files  36 passed (36)",
+      "      Tests  794 passed (794)",
+    ].join("\n");
+    expect(testRunOutcome(bash(tail))).toBe("pass");
+    expect(testRunOutcome(bash(tail.replace(" Test Files  36 passed (36)\n      Tests  794 passed (794)",
+      " Test Files  1 failed | 35 passed (36)\n      Tests  1 failed | 793 passed (794)")))).toBe("fail");
+  });
+
   test("a non-zero failure count in the summary → fail", () => {
     expect(testRunOutcome(bash(" Test Files  1 failed | 1 passed (2)\n      Tests  1 failed | 56 passed (57)"))).toBe("fail");
     expect(testRunOutcome(bash("Tests  1 failed | 56 passed"))).toBe("fail");
