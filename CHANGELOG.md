@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.212.5] — 2026-09-26
+
+### Fixed
+- **A session without an id no longer inherits other sessions' tracked issues.** The tracked-issues list drives GitHub writes in the completion flow (board status, issue comments). #539 made its read exact and #549 asks "worked on it?" first, but a session whose hooks receive no `session_id` still shared one list, because `sessionFile()` falls back to the same `…-unknown` file for every such session (#540). `prompt.issue.detect` now neither reads nor writes the list without an id, and the completion flow reads none, so no `[issue-status]` block reaches such a session. The `unknown` fallback stays in place for the advisory flags that rely on it.
+
 ## [0.212.4] — 2026-09-26
 
 ### Fixed
