@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.212.1] — 2026-09-26
+
+### Fixed
+- **Three branch guards no longer wait on a git that hangs.** `pre.main.guard`, `pre.edit.branch` and the ship detection in `prompt.ship.detect` started git with no timeout at all, so a stalled git (a locked repository, a file system that stops answering on a loaded machine) held the call until Claude Code gave up on the hook. They now use the shared git helpers (`gitOut`, 5 s per call) and read a failure exactly as before: not a repo, no branch, no origin. A new test keeps every git call a hook makes on a timeout.
+- **Two hooks accept a payload that starts with a byte-order mark.** `post.agent.nudge` and `post.flow.completion` parsed their input with a raw `JSON.parse`; they now use the shared tolerant parser like the run-contract hooks.
+
+### Changed
+- **One stdin runner for the hooks.** `runHook(main, { event })` in `hooks/lib/hook-input.js` reads stdin, parses the payload and writes the reply: `{ block }` exits 2 with the reason on stderr, `{ context }` becomes the `additionalContext` envelope for the event, anything else exits 0. The run-contract, agent-nudge and completion hooks use it; their exit codes are unchanged.
+- **Internal cleanup, same behaviour.** The git helpers moved into `hooks/lib/git-timeout.js`; `pre.run.contract`'s main function and the completion hook's two longest functions are split along their numbered steps; the run-contract hooks ask the store's `hasState()` instead of naming its files. The run-contract facade no longer re-exports the seven entries only tests used (`contractPath`, `eventsPath`, `prevPath`, `pendingPath`, `batchHandoffPath`, `readRawContract`, `followUpModeHint`); they stay in their own modules.
+
+## [0.212.0] — 2026-09-26
+
+### Fixed
+- **The background git sync never leaves a merge half-applied.** On a loaded machine the sync's 15 s budget killed a fast-forward of main while it was writing the working tree: HEAD and index stayed on the old commit, part of the incoming files were already on disk, one was deleted on its way to a rewrite, and a stale `index.lock` failed every later git write in that worktree — reported only as "merge refused, no conflicted files". The merge and the sync's other writing calls now get their own ceiling (`DEVOPS_GIT_SYNC_WRITE_TIMEOUT_MS`, default 5 min; reads keep 15 s). A merge that still dies mid-checkout — by that timeout, or by its own error on a file it cannot write (a smudge filter, a locked file) — is put back: a file that is exactly what the merge wrote, or that it deleted, returns to HEAD (`.gitattributes` first), the lock is removed only when the killed merge wrote it, and a file matching neither side is left alone and named for manual repair. The ✗ line says what happened (`merge timed out after …` / `merge failed (<git's reason>) mid-checkout — worktree restored to <sha>`), and the next sync retries.
+- **`run-contract.js arm` no longer replaces a live run by accident.** A subagent smoke-testing the CLI without `--cwd` re-armed its parent session's contract: the old contract and the event that satisfied the chosen Harden pass went to the archive, and the release gate would have blocked. `arm` now refuses (exit 1) while the work tree holds an active contract of any session and names that contract's mode, flow and start time with the two ways out — `status`, or the same `arm` with `--replace`, which archives it and arms fresh as before. An empty, closed or expired state arms without the flag, and a contract Desktop copied in from another checkout does not count. The re-arm lines the hooks print carry `--replace`; the "answers NOT recorded" note keeps the plain `arm` line, since the session has no live contract to replace there.
+
+## [0.211.5] — 2026-09-26
+
+### Changed
+- **`/do-run`'s SKILL.md is back under its 250-line budget (464 → 247 lines).** The procedure moved word for word into two docs beside the skill, each named at the Step that needs it: `deep-knowledge/questions.md` holds the rules for every question, the conditions computed before the call, how the answers are read, the resume options and the follow-up questions F1–F8; `deep-knowledge/execution.md` holds how Strikt is armed, the run-contract gates and CLI, the auto-agents hand-off, the Autonom ship lockout and the mode-file index. The decisions — which branch, which target, which question — stay in SKILL.md, and no rule changed its wording or behavior. A new test fails when a Step points at a section that does not exist, or when a section of the two docs is reachable from no Step.
+
+## [0.211.4] — 2026-09-26
+
+### Fixed
+- **A test render never picks up live usage.** `DEVOPS_COMPLETION_NO_USAGE=1`, the escape hatch every test run sets, was checked only after the warm path that serves a fresh `~/.claude/usage-live.json`. When a terminal session's statusLine writer refreshed that file between two renders, one of two cards that must be byte-identical carried a budget line (a flaky `index.card.test.js` case), and the render wrote the developer's real delta baseline. The escape hatch is now checked first: no file read, no baseline write, no fetch.
+- **The green run misread on 2026-09-26 is pinned by a test.** A passing card test whose title carries ✗, above "Tests 794 passed (794)", reads as a pass under the 0.211.0 summary rule; the same tail with "1 failed" stays red.
+
 ## [0.211.3] — 2026-09-26
 
 ### Fixed

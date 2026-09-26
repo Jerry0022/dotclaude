@@ -1637,6 +1637,16 @@ function usageAgeMs(d) {
 }
 
 function refreshUsage() {
+  // Escape hatch — no usage at all: no file read, no baseline write, no
+  // headless fetch. Set in tests (so the card renderer never spawns Edge) and
+  // usable offline/CI. The card still renders; it just omits the usage meter
+  // (data === null). Checked FIRST: behind the warm path below, a usage-live.json
+  // that a running terminal session's statusLine writer refreshed between two
+  // test renders put a budget line into one card and not the other.
+  if (process.env.DEVOPS_COMPLETION_NO_USAGE === "1") {
+    return { success: false, data: null, delta5h: null, deltaWk: null };
+  }
+
   const baseline = readBaseline();
 
   // Resolve data + deltas. ONLY a live snapshot (fresh, not cache-served) may
@@ -1669,13 +1679,6 @@ function refreshUsage() {
   //    cache fallback (it stamps _cached/_failureReason into the file instead),
   //    so a zero exit code is NOT proof of a live fetch — the freshness of the
   //    re-read file is.
-  // Escape hatch — skip the external headless fetch entirely. Set in tests (so
-  // the card renderer never spawns Edge) and usable offline/CI. The card still
-  // renders; it just omits the usage meter (data === null).
-  if (process.env.DEVOPS_COMPLETION_NO_USAGE === "1") {
-    return { success: false, data: null, delta5h: null, deltaWk: null };
-  }
-
   const scraperScript = resolveScraperScript();
   let scrapeErr = null;
   if (scraperScript) {

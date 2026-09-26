@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-qa
- * @version 0.1.0
+ * @version 0.1.1
  * @plugin devops
  * @description The one qa measurement (AUD-010): base resolution + changed
  *   code files, shared by the PreToolUse gate (pre-tool-use/pre.run.contract.js)
@@ -17,6 +17,9 @@
  *     (opts: {C, budget, totalMs} — one gitBudget bounds the whole chain,
  *     AUD-019; an expired budget or any git failure reads as unknown, null,
  *     never a block)
+ *   The git helpers default to git-timeout.js's gitOut / gitLines (the same
+ *   functions run-contract-calls re-exports), so measuring qa no longer loads
+ *   the shell parser.
  */
 
 const SAFE_BASE_RE = /^[\p{L}\p{N}._/+@-]+$/u;
@@ -57,10 +60,10 @@ const { GIT_TIMEOUT_MS } = require('./git-timeout');
 /**
  * Changed code files for the qa rule, or null (unknown).
  * @param {(root:string, args:string[], opts?:object) => string[]} [gitLines]
- *   defaults to run-contract-calls' gitLines; tests inject a fake
+ *   defaults to git-timeout's gitLines; tests inject a fake
  * @param {object} [budget] an optional git-timeout gitBudget() shared across a chain (AUD-019)
  */
-function codeFilesChanged(root, gate, base, gitLines = require('./run-contract-calls').gitLines, budget) {
+function codeFilesChanged(root, gate, base, gitLines = require('./git-timeout').gitLines, budget) {
   try {
     // H-A6: gitLines throws on a git failure → the catch below = unknown.
     const opts = budget ? { budget } : { timeout: GIT_TIMEOUT_MS };
@@ -89,12 +92,13 @@ function codeFilesChanged(root, gate, base, gitLines = require('./run-contract-c
  * @param {'release'|'card'|'branch'|string} gate
  * @param {string} [explicitBase]
  * @param {{C?:object, budget?:object, totalMs?:number}} [opts]
- *   `C` defaults to run-contract-calls; a caller-supplied `budget` wins over
- *   `totalMs` (which else seeds a fresh gitBudget()).
+ *   `C` (anything with gitOut / gitLines) defaults to git-timeout's helpers;
+ *   a caller-supplied `budget` wins over `totalMs` (which else seeds a fresh
+ *   gitBudget()).
  * @returns {number|null}
  */
 function measureQa(root, gate, explicitBase, opts = {}) {
-  const C = opts.C || require('./run-contract-calls');
+  const C = opts.C || require('./git-timeout');
   const budget = opts.budget || require('./git-timeout').gitBudget(opts.totalMs);
   try {
     if (budget.expired()) return null;

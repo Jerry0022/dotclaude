@@ -10,6 +10,7 @@ vi.setConfig({ testTimeout: 30_000 });
 
 const require = createRequire(import.meta.url);
 const RC = require("../lib/run-contract.js");
+const store = require("../lib/run-contract-store.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.run.contract.js");
@@ -273,9 +274,11 @@ describe("pending-arm fallback (spec B)", () => {
     const r = run("Edit", { file_path: f("src/a.js") });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("click-through defaults");
+    // R16: the fallback note's re-arm replaces this contract → --replace.
+    expect(r.stderr).toMatch(/Wrong\? node ".*" arm --mode .* --replace/);
     const c = RC.readContract(dir);
     expect(c).toMatchObject({ source: "fallback", mode: "backlog", flow: "interactive", ship: "manual", passes: ["harden", "polish"] });
-    expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(dir))).toBe(false);
   });
 
   test("router answers found in the transcript tail → armed from them", () => {
@@ -298,7 +301,7 @@ describe("pending-arm fallback (spec B)", () => {
   test("a marker older than 2 h is ignored", () => {
     RC.markPendingArm(dir, { now: Date.now() - 3 * 3600_000 });
     expect(run("Edit", { file_path: f("src/a.js") }).code).toBe(0);
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 });
 
@@ -327,7 +330,7 @@ describe("AUD-001: a failed fallback arm keeps the pending marker", () => {
     const r = run("Edit", { file_path: f("src/a.js") });
     expect(r.code).toBe(0); // no contract could be armed → not gated (yet)
     expect(fs.existsSync(path.join(dir, ".claude", "run-contract.pending"))).toBe(true);
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 });
 

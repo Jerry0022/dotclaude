@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.3.2
+ * @version 0.5.0
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -19,6 +19,8 @@
  *     .claude/run-contract.prev.json     archive of the replaced / expired one
  *     .claude/run-contract.pending       arm marker (do-run Skill ran, no answers yet)
  *     .claude/batch-handoff.json         do-batch fired, hand-off pending
+ *   hasState(cwd, {pending, batch}) is the hooks' fast-path existence probe
+ *   over these names, so no hook spells them out itself.
  *   Every fs error is swallowed and behaves as "no contract".
  *   Kill switch: DOTCLAUDE_RUN_CONTRACT=off → no contract, no marker, no gate.
  *
@@ -108,8 +110,15 @@ const FILES = Object.freeze({
 // names run-contract.js (the facade / CLI entry) even though it is defined
 // here, so every module can build the same hint without a circular require.
 const LIB_PATH = path.join(__dirname, 'run-contract.js');
-function rearmHint() {
-  return `node "${LIB_PATH}" arm --mode <prompt|backlog|audit> --flow <interactive|autonomous> --ship <auto|manual> --passes <harden,polish|none>`;
+// R16: the CLI `arm` refuses to replace an active contract without
+// --replace, so every re-arm hint carries it — a model that follows one
+// must not bounce off that guard. `{replace: false}` is the plain arm line
+// for a hint that fires while the session has no live contract (post's
+// "answers NOT recorded" note): --replace there has nothing of its own to
+// replace and could only clobber another session's run in a shared checkout.
+function rearmHint(opts) {
+  const replace = !(opts && opts.replace === false);
+  return `node "${LIB_PATH}" arm --mode <prompt|backlog|audit> --flow <interactive|autonomous> --ship <auto|manual> --passes <harden,polish|none>${replace ? ' --replace' : ''}`;
 }
 
 const HOUR = 3600_000;
@@ -195,6 +204,26 @@ function ownedBy(obj, sessionId, at, now) {
 
 function fileExists(file) {
   try { fs.accessSync(file); return true; } catch { return false; }
+}
+
+/**
+ * The hooks' fast path (pre / post.run.contract): any run-contract state in
+ * `cwd`'s work-tree root worth loading the facade for? Existence only —
+ * nothing is read, parsed or checked for freshness. The header and the
+ * corrupt-quarantine marker always count (R5: the marker can be the only
+ * file left once a corrupt header was quarantined, and its one-shot notice
+ * must still reach the session); `pending` adds the do-run arm marker,
+ * `batch` the do-batch hand-off marker. Not on the facade: the hooks ask
+ * before they load it.
+ * @param {string} cwd
+ * @param {{pending?: boolean, batch?: boolean}} [opts]
+ * @returns {boolean}
+ */
+function hasState(cwd, { pending = false, batch = false } = {}) {
+  const files = [contractPath(cwd), corruptPendingPath(cwd)];
+  if (pending) files.push(pendingPath(cwd));
+  if (batch) files.push(batchHandoffPath(cwd));
+  return files.some(fileExists);
 }
 
 /** A regular file at `file`? (a directory sitting there is a structural
@@ -961,7 +990,7 @@ function clearBatchHandoff(cwd) { unlinkQuiet(batchHandoffPath(cwd)); }
 
 module.exports = {
   LIB_PATH, rearmHint,
-  disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath,
+  disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath, hasState,
   readContract, readContractForCard, readRawContract, expiryNotice, arm, update, claim, record, close, events,
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
   // shared with the sibling modules (not part of the facade's public list)

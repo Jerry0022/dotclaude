@@ -14,6 +14,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 
 const doRunSkill = read(join(here, "SKILL.md"));
+// Question and execution detail extracted from SKILL.md (content-conventions.md).
+const doRunQuestions = read(join(here, "deep-knowledge", "questions.md"));
+const doRunExecution = read(join(here, "deep-knowledge", "execution.md"));
 const backlog = read(join(here, "modes", "backlog.md"));
 const autonomous = read(join(here, "modes", "autonomous.md"));
 const autoAgents = read(join(here, "..", "auto-agents", "SKILL.md"));
@@ -41,11 +44,11 @@ describe("do-run SKILL.md — run contract", () => {
 });
 
 describe("RT3-R7: pinned follow-up headers", () => {
-  it("SKILL.md F3 / F4 pin Milestones / Issues and their numbered continuations", () => {
-    expect(doRunSkill).toMatch(/F3  header: "Milestones"/);
-    expect(doRunSkill).toMatch(/F4  header: "Issues"/);
-    expect(doRunSkill).toMatch(/"Issues 2", "Issues 3"/);
-    expect(doRunSkill).toMatch(/"Milestones 2", "Milestones 3"/);
+  it("questions.md F3 / F4 pin Milestones / Issues and their numbered continuations", () => {
+    expect(doRunQuestions).toMatch(/F3  header: "Milestones"/);
+    expect(doRunQuestions).toMatch(/F4  header: "Issues"/);
+    expect(doRunQuestions).toMatch(/"Issues 2", "Issues 3"/);
+    expect(doRunQuestions).toMatch(/"Milestones 2", "Milestones 3"/);
   });
 
   it("backlog.md Step 1.2 names the exact headers of a split selection", () => {
@@ -127,7 +130,8 @@ describe("D-docs: do-run Step 5b CLI list and the spec", () => {
   const spec = read(join(here, "..", "..", "..", "..", "docs", "superpowers", "specs", "2026-09-24-run-contract-design.md"));
 
   it("Step 5b lists status, skip, park, abort, done and batch-clear; done only when clean", () => {
-    const step5b = doRunSkill.slice(doRunSkill.indexOf("## Step 5b"), doRunSkill.indexOf("## Step 6"));
+    expect(doRunSkill.slice(doRunSkill.indexOf("## Step 5b"), doRunSkill.indexOf("## Step 6"))).toContain("`deep-knowledge/execution.md` § Run contract");
+    const step5b = doRunExecution.slice(doRunExecution.indexOf("## Run contract"), doRunExecution.indexOf("## auto-agents hand-off"));
     for (const verb of ["status", "skip <ob>", "park <N>", "abort --reason", "done", "batch-clear --reason"]) {
       expect(step5b).toContain(`run-contract.js" ${verb}`);
     }

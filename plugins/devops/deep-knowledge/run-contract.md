@@ -67,12 +67,14 @@ node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" park <N> --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done [--reason "<why>"]
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
-node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>]
+node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]
 ```
 
 `status` and `done` measure `qa` the same way the release/card gate does (`run-contract-qa.js#measureQa`, the shared 15 s git budget) instead of against an empty context — `done` refuses to close while `qa` is still owed (unless `--reason` closes it as aborted), and exits 1, not 0, when nothing actually closed (`closed: false`), so a caller reading only the exit code cannot mistake it for success.
 
 `<ob>` is one of `auto-agents | harden | polish | qa | do-ship | refine | triage`. Every call but `status` refuses without a reason where one is listed — a deviation is explicit, never silent. `skip` shows as `⚠ <reason>`. `park` records a blocked / `⏸ Rückfrage` backlog item once and ends its segment. `abort` closes a run that is over with open steps (card: ✗ + reason), before its card. `done` is only for a run where every chosen step ran (`prompt` / `audit` close at the final card anyway; `backlog` once every queued item shipped or was parked); with open obligations it refuses unless `--reason` is given and then closes as aborted.
+
+`arm` never replaces a live run by accident. While the work tree holds an active, unexpired contract — whichever session armed it — it exits 1 with `ok: false`, `active: {id, mode, flow, armedAt}` and an error naming that contract's mode, flow and `armedAt` plus the two ways out: `status` to inspect it, or the same `arm` with `--replace`, which archives it with its events to `run-contract.prev.json` and arms fresh (`replaced: <old id>`). An empty, closed or expired state arms without the flag; a header whose `root` names another checkout (a Desktop copy) does not count. The re-arm lines the hooks print (fallback / machine announcement, the fallback note on a block, the expiry and quarantine notices) end in `--replace`; the "answers NOT recorded" note keeps the plain `arm` line — the session has no live contract to replace there. A subagent smoke-testing this CLI passes `--cwd <temp repo>` on every verb: without it, it acts on its parent's live contract (on 2026-09-25 one re-armed it and archived the event that satisfied the chosen Harden pass).
 
 ## The batch hand-off gate
 

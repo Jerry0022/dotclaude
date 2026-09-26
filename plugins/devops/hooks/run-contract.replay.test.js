@@ -12,6 +12,7 @@ vi.setConfig({ testTimeout: 60_000 });
 
 const require = createRequire(import.meta.url);
 const RC = require("./lib/run-contract.js");
+const store = require("./lib/run-contract-store.js");
 const B = require("./lib/batch-state.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -109,7 +110,7 @@ describe("replay A — backlog session", () => {
     const c = RC.readContract(dir);
     expect(c).toMatchObject({ mode: "backlog", flow: "autonomous", ship: "auto", passes: ["harden", "polish"], strict: false, source: "router" });
     expect(c.items).toHaveLength(6);
-    expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(dir))).toBe(false);
     expect(ask.stdout).toContain('[answer-check] \\"Welche Issues (1/2) sollen abgearbeitet werden?\\" was answered with \\"Something else\\" and no text.');
 
     const branchCmd = "git fetch -q origin && git checkout -q -b fix/473-474-machine-turns origin/main";
@@ -173,12 +174,12 @@ describe("replay B — batch session", () => {
     const fire = run(BATCH, { prompt: ">> los: implementiere alles direkt" });
     expect(fire.code).toBe(0);
     expect(fire.stdout).toContain("per Hook erzwungen");
-    expect(fs.existsSync(RC.batchHandoffPath(dir))).toBe(true);
+    expect(fs.existsSync(store.batchHandoffPath(dir))).toBe(true);
 
     for (let i = 0; i < 4; i++) post("Agent", { subagent_type: "Explore", prompt: "look" });
     skill("devops:do-learn");
     skill("devops:auto-issue", "note");
-    expect(fs.existsSync(RC.batchHandoffPath(dir))).toBe(true);
+    expect(fs.existsSync(store.batchHandoffPath(dir))).toBe(true);
 
     const outside = path.join(os.tmpdir(), `rc-scratch-${process.pid}.md`);
     expect(pre("Write", { file_path: outside, content: "plan" }).code).toBe(0);
@@ -189,7 +190,7 @@ describe("replay B — batch session", () => {
     expect(firstLine(blocked.stderr)).toBe("[run-contract] BLOCKED: a do-batch plan is waiting for its hand-off.");
 
     skill("devops:do-run", "--from=do-batch plan in .claude/batch-archive.md");
-    expect(fs.existsSync(RC.batchHandoffPath(dir))).toBe(false);
+    expect(fs.existsSync(store.batchHandoffPath(dir))).toBe(false);
     const after = pre("Edit", edit);
     expect(after.stderr).not.toContain("do-batch plan is waiting");
   });

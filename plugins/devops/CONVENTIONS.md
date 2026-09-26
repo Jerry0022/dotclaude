@@ -97,6 +97,14 @@ Every hook exits 0 silently when its stdin is unusable — empty, `null`, a
 non-object, invalid JSON — and tolerates a UTF-8 BOM and CRLF. Parse with
 `parseHookInput()` from `hooks/lib/hook-input.js` and wrap the hook body in a
 try/catch that never lets an internal error surface as a hook failure.
+`runHook(main, { event })` from the same file does both: it reads stdin, hands
+the payload to `main(hook)` and turns its reply into the output — `{ block }`
+→ stderr + exit 2, `{ context }` → the `additionalContext` envelope for
+`event`, a string → stdout as is, anything else or a throw → exit 0.
+
+Every git subprocess carries a timeout: use `gitOut` / `gitLines` / `gitRun`
+from `hooks/lib/git-timeout.js` (`GIT_TIMEOUT_MS` per call, or a shared
+`gitBudget()` for a chain of calls) instead of a hand-rolled `execFileSync('git', …)`.
 
 A failed Bash/PowerShell call does not reach PostToolUse: the harness fires
 **PostToolUseFailure** with `error` (starts with `Exit code N`) and

@@ -638,3 +638,62 @@ describe("C2: update() refuses a write when a re-arm changed the header id betwe
     expect(raw.mode).toBe("backlog"); // the re-armed header, untouched by the stale patch
   });
 });
+
+describe("hasState: the hooks' fast-path probe (harden scan 2026-09-26)", () => {
+  const touch = (name) => {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".claude", name), "{}");
+  };
+
+  test("an empty work tree has no state, with or without the markers asked for", () => {
+    expect(store.hasState(cwd)).toBe(false);
+    expect(store.hasState(cwd, { pending: true, batch: true })).toBe(false);
+  });
+
+  test("the header always counts", () => {
+    touch("run-contract.json");
+    expect(store.hasState(cwd)).toBe(true);
+  });
+
+  test("R5: the corrupt-quarantine marker alone counts — its notice must still be delivered", () => {
+    touch("run-contract.json.corrupt.pending");
+    expect(store.hasState(cwd)).toBe(true);
+  });
+
+  test("the arm marker counts only with { pending: true }", () => {
+    touch("run-contract.pending");
+    expect(store.hasState(cwd)).toBe(false);
+    expect(store.hasState(cwd, { pending: true })).toBe(true);
+    expect(store.hasState(cwd, { batch: true })).toBe(false);
+  });
+
+  test("the do-batch hand-off marker counts only with { batch: true }", () => {
+    touch("batch-handoff.json");
+    expect(store.hasState(cwd)).toBe(false);
+    expect(store.hasState(cwd, { batch: true })).toBe(true);
+    expect(store.hasState(cwd, { pending: true })).toBe(false);
+  });
+
+  test("other run-contract files are no state of their own (events, archive, lock)", () => {
+    for (const n of ["run-contract.events.jsonl", "run-contract.prev.json", "run-contract.json.lock"]) touch(n);
+    expect(store.hasState(cwd, { pending: true, batch: true })).toBe(false);
+  });
+
+  test("a cwd below the work-tree root is answered for the root, like every store path", () => {
+    touch("run-contract.json");
+    const sub = path.join(cwd, "src", "deep");
+    fs.mkdirSync(sub, { recursive: true });
+    expect(store.hasState(sub)).toBe(true);
+  });
+
+  test("names exactly the files the store itself writes", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    expect(store.hasState(cwd)).toBe(true);
+    fs.rmSync(store.contractPath(cwd));
+    store.markPendingArm(cwd, { now: T0 });
+    expect(store.hasState(cwd, { pending: true })).toBe(true);
+    fs.rmSync(store.pendingPath(cwd));
+    store.markBatchHandoff(cwd, { now: T0 });
+    expect(store.hasState(cwd, { batch: true })).toBe(true);
+  });
+});

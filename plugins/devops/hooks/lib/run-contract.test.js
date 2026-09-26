@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import * as R from "./run-contract.js";
+import * as store from "./run-contract-store.js";
+import { followUpModeHint } from "./run-contract-answers.js";
 
 const require = createRequire(import.meta.url);
 
@@ -242,7 +244,7 @@ describe("state", () => {
 
   test("record without a contract is a no-op", () => {
     expect(R.record(cwd, edit)).toBeNull();
-    expect(fs.existsSync(R.eventsPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.eventsPath(cwd))).toBe(false);
   });
 
   test("AUD-009: record retries once after a transient appendFileSync failure", () => {
@@ -277,7 +279,7 @@ describe("state", () => {
     const b = R.arm(cwd, { mode: "audit" }, { now: T0 + 1000 });
     expect(b.id).not.toBe(a.id);
     expect(R.events(cwd)).toEqual([]);
-    const prev = JSON.parse(fs.readFileSync(R.prevPath(cwd), "utf8"));
+    const prev = JSON.parse(fs.readFileSync(store.prevPath(cwd), "utf8"));
     expect(prev.id).toBe(a.id);
     expect(prev.events).toHaveLength(1);
   });
@@ -303,8 +305,8 @@ describe("state", () => {
     expect(R.readContractForCard(cwd, { now: T0 + 17 * H })).toBeNull();
     // next write archives it
     expect(R.record(cwd, edit, { now: T0 + 17 * H })).toBeNull();
-    expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
-    expect(fs.existsSync(R.prevPath(cwd))).toBe(true);
+    expect(fs.existsSync(store.contractPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.prevPath(cwd))).toBe(true);
 
     R.arm(cwd, { mode: "backlog", flow: "interactive" }, { now: T0 });
     expect(R.readContract(cwd, { now: T0 + 29 * H })).not.toBeNull();
@@ -337,32 +339,33 @@ describe("state", () => {
 
   function corruptCopies(cwd) {
     const dir = path.join(cwd, ".claude");
-    const prefix = `${path.basename(R.contractPath(cwd))}.corrupt-`;
+    const prefix = `${path.basename(store.contractPath(cwd))}.corrupt-`;
     return fs.readdirSync(dir).filter((n) => n.startsWith(prefix)).sort();
   }
 
   test("AUD-022: corrupt header → no contract, quarantined, one-shot notice", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
-    fs.writeFileSync(R.contractPath(cwd), "{nope");
+    fs.writeFileSync(store.contractPath(cwd), "{nope");
     expect(R.readContract(cwd)).toBeNull();
     // Quarantined, not deleted: the header file is gone, its content lives on
     // under a unique name (RT1-R4 — never a fixed `.corrupt`).
-    expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.contractPath(cwd))).toBe(false);
     const copies = corruptCopies(cwd);
     expect(copies).toHaveLength(1);
     expect(fs.readFileSync(path.join(cwd, ".claude", copies[0]), "utf8")).toBe("{nope");
     // Surfaced once, through the same channel expiryNotice() already uses.
     const notice = R.expiryNotice(cwd, { sessionId: "s1" });
     expect(notice).toMatch(/quarantined/);
+    expect(notice).toMatch(/arm --mode .* --replace$/); // R16: the re-arm line carries --replace
     expect(R.expiryNotice(cwd, { sessionId: "s1" })).toBeNull();
   });
 
   test("AUD-022 / RT1-R4: a second corruption keeps both quarantine copies (unique names, no accumulation past the cap)", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
-    fs.writeFileSync(R.contractPath(cwd), "{first");
+    fs.writeFileSync(store.contractPath(cwd), "{first");
     expect(R.readContract(cwd)).toBeNull();
     R.expiryNotice(cwd, { sessionId: "s1" }); // consume the first notice
-    fs.writeFileSync(R.contractPath(cwd), "{second");
+    fs.writeFileSync(store.contractPath(cwd), "{second");
     expect(R.readContract(cwd)).toBeNull();
     const copies = corruptCopies(cwd);
     expect(copies).toHaveLength(2); // under the keep-max: nothing dropped yet
@@ -375,7 +378,7 @@ describe("state", () => {
   test("kill switch", () => {
     process.env.DOTCLAUDE_RUN_CONTRACT = "off";
     expect(R.arm(cwd, {})).toBeNull();
-    expect(fs.existsSync(R.contractPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.contractPath(cwd))).toBe(false);
     delete process.env.DOTCLAUDE_RUN_CONTRACT;
     R.arm(cwd, {}, { now: T0 });
     process.env.DOTCLAUDE_RUN_CONTRACT = "off";
@@ -388,7 +391,7 @@ describe("state", () => {
     R.markPendingArm(cwd, { sessionId: "s1", now: T0 });
     expect(R.pendingArm(cwd, { now: T0 + H })).toMatchObject({ sessionId: "s1" });
     expect(R.pendingArm(cwd, { now: T0 + 3 * H })).toBeNull();
-    expect(fs.existsSync(R.pendingPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(cwd))).toBe(false);
     R.markPendingArm(cwd, { now: T0 });
     R.clearPendingArm(cwd);
     expect(R.pendingArm(cwd, { now: T0 })).toBeNull();
@@ -712,6 +715,49 @@ describe("CLI", () => {
     expect(r.code).toBe(1);
     expect(r.out).toEqual({ ok: false, error: "could not write the contract" });
   });
+
+  test("R16: arm refuses over an active contract (exit 1), --replace replaces it", () => {
+    const first = run("arm", "--mode", "audit", "--flow", "autonomous", "--ship", "auto", "--passes", "harden,polish");
+    expect(first.code).toBe(0);
+    const live = first.out.contract;
+    R.record(cwd, { k: "skill", name: "auto-harden" });
+
+    const refused = run("arm", "--mode", "prompt", "--passes", "none");
+    expect(refused.code).toBe(1);
+    expect(refused.out).toEqual({
+      ok: false,
+      error: expect.any(String),
+      active: { id: live.id, mode: "audit", flow: "autonomous", armedAt: live.armedAt },
+    });
+    for (const part of ["mode audit", "flow autonomous", `armed ${live.armedAt}`, 'run-contract.js" status', "--replace"]) {
+      expect(refused.out.error).toContain(part);
+    }
+    // Nothing moved: the same header, its events, no archive.
+    expect(R.readContract(cwd).id).toBe(live.id);
+    expect(R.events(cwd).map((e) => e.name)).toEqual(["auto-harden"]);
+    expect(fs.existsSync(store.prevPath(cwd))).toBe(false);
+
+    const replaced = run("arm", "--mode", "prompt", "--passes", "none", "--replace");
+    expect(replaced.code).toBe(0);
+    expect(replaced.out).toMatchObject({ ok: true, armed: true, replaced: live.id, contract: { mode: "prompt", passes: [] } });
+    expect(R.readContract(cwd).id).toBe(replaced.out.contract.id);
+    expect(R.events(cwd)).toEqual([]);
+    const prev = JSON.parse(fs.readFileSync(store.prevPath(cwd), "utf8"));
+    expect(prev).toMatchObject({ id: live.id, mode: "audit" });
+    expect(prev.events.map((e) => e.name)).toEqual(["auto-harden"]);
+  });
+
+  test("R16: the refusal's status line keeps the --cwd it was given", () => {
+    const other = repo();
+    try {
+      expect(run("arm", "--cwd", other, "--passes", "none").code).toBe(0);
+      const r = run("arm", "--cwd", other, "--passes", "none");
+      expect(r.code).toBe(1);
+      expect(r.out.error).toContain(`status --cwd "${other}"`);
+      // The session's own work tree was never touched.
+      expect(fs.existsSync(store.contractPath(cwd))).toBe(false);
+    } finally { fs.rmSync(other, { recursive: true, force: true }); }
+  });
 });
 
 // ── harden pass ────────────────────────────────────────────────────────────
@@ -750,13 +796,13 @@ describe("harden pass", () => {
 
   test("H-B6: a header without passes / items still gates and renders", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
-    fs.writeFileSync(R.contractPath(cwd), JSON.stringify({ v: 1, id: "rc-hand", mode: "backlog", flow: "interactive", ship: "manual", armedAt: new Date(T0).toISOString() }));
+    fs.writeFileSync(store.contractPath(cwd), JSON.stringify({ v: 1, id: "rc-hand", mode: "backlog", flow: "interactive", ship: "manual", armedAt: new Date(T0).toISOString() }));
     const h = R.readContract(cwd, { now: T0 });
     expect(h).toMatchObject({ passes: [], items: [], milestones: [] });
     expect(obs(R.openObligations(h, [], "edit"))).toEqual(["auto-agents"]);
     expect(() => R.openObligations(h, [sk("auto-agents"), edit], "card")).not.toThrow();
     expect(R.summaryForCard(h, [sk("auto-agents"), edit], "de")).toMatch(/^🧾 Run · Backlog/);
-    expect(R.readRawContract(cwd).passes).toEqual([]);
+    expect(store.readRawContract(cwd).passes).toEqual([]);
   });
 
   test("H-B7: an empty / Other Issues answer keeps the recorded queue; only the exact headers match", () => {
@@ -769,23 +815,23 @@ describe("harden pass", () => {
       expect(R.applyFollowUp(cwd, p, { now: T0 + 1000 })).toMatchObject({ items: ["473"], milestones: ["v1"] });
     }
     expect(R.parseFollowUp([{ header: "Issues found", question: "Welche Issues found?" }], { "Welche Issues found?": "#9" })).toBeNull();
-    expect(R.followUpModeHint([{ header: "Issues found", question: "x" }])).toBeNull();
+    expect(followUpModeHint([{ header: "Issues found", question: "x" }])).toBeNull();
     expect(R.parseFollowUp([{ header: "Issues 2", question: "Mehr?" }], { "Mehr?": "#12 a" })).toMatchObject({ items: ["12"], modeHint: "backlog" });
-    expect(R.followUpModeHint([{ header: "Issues", question: "x" }])).toBe("backlog");
+    expect(followUpModeHint([{ header: "Issues", question: "x" }])).toBe("backlog");
   });
 
   test("RT3-R7: numbered Issues / Milestones continuations match; look-alike headers do not", () => {
     for (const header of ["Issues", "Issues 2", "Issues (2)", "Issues 2/2", "Issues 3"]) {
       expect(R.parseFollowUp([{ header, question: "q?" }], { "q?": "#7 a" }), header).toMatchObject({ items: ["7"], modeHint: "backlog" });
-      expect(R.followUpModeHint([{ header, question: "q?" }]), header).toBe("backlog");
+      expect(followUpModeHint([{ header, question: "q?" }]), header).toBe("backlog");
     }
     for (const header of ["Milestones", "Milestones 2", "Milestones (2)", "Milestones 2/3"]) {
       expect(R.parseFollowUp([{ header, question: "q?" }], { "q?": "v1 (3)" }), header).toMatchObject({ milestones: ["v1 (3)"] });
-      expect(R.followUpModeHint([{ header, question: "q?" }]), header).toBe("backlog");
+      expect(followUpModeHint([{ header, question: "q?" }]), header).toBe("backlog");
     }
     for (const header of ["Issues found", "Lose Issues", "Open issues list", "Milestones overview", "Issues 2 extra"]) {
       expect(R.parseFollowUp([{ header, question: "q?" }], { "q?": "#9" }), header).toBeNull();
-      expect(R.followUpModeHint([{ header, question: "q?" }]), header).toBeNull();
+      expect(followUpModeHint([{ header, question: "q?" }]), header).toBeNull();
     }
     const split = R.parseFollowUp(
       [{ header: "Milestones", question: "a?" }, { header: "Milestones 2", question: "b?" }, { header: "Issues", question: "c?" }, { header: "Issues 2", question: "d?" }],
@@ -796,10 +842,10 @@ describe("harden pass", () => {
   test("H-B9: markPendingArm / markBatchHandoff retry a transient rename failure", () => {
     const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw enoent("EPERM"); });
     expect(R.markPendingArm(cwd, { sessionId: "s1", now: T0 })).toMatchObject({ sessionId: "s1" });
-    expect(fs.existsSync(R.pendingPath(cwd))).toBe(true);
+    expect(fs.existsSync(store.pendingPath(cwd))).toBe(true);
     spy.mockImplementationOnce(() => { throw enoent("EPERM"); });
     expect(R.markBatchHandoff(cwd, { sessionId: "s1", now: T0 })).toMatchObject({ sessionId: "s1" });
-    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(true);
+    expect(fs.existsSync(store.batchHandoffPath(cwd))).toBe(true);
     spy.mockRestore();
   });
 
@@ -822,20 +868,20 @@ describe("harden pass", () => {
     spy.mockRestore();
     const dir = path.join(cwd, ".claude");
     expect(fs.readdirSync(dir).filter(f => f.endsWith(".tmp"))).toEqual([]);
-    expect(fs.existsSync(R.pendingPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(cwd))).toBe(false);
   });
 
   test("H-B14: an unparseable marker is removed", () => {
     fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
-    fs.writeFileSync(R.pendingPath(cwd), "{garbage");
+    fs.writeFileSync(store.pendingPath(cwd), "{garbage");
     expect(R.pendingArm(cwd, { now: T0 })).toBeNull();
-    expect(fs.existsSync(R.pendingPath(cwd))).toBe(false);
-    fs.writeFileSync(R.batchHandoffPath(cwd), "[1,2]");
+    expect(fs.existsSync(store.pendingPath(cwd))).toBe(false);
+    fs.writeFileSync(store.batchHandoffPath(cwd), "[1,2]");
     expect(R.batchHandoffPending(cwd, { now: T0 })).toBeNull();
-    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(false);
-    fs.writeFileSync(R.batchHandoffPath(cwd), JSON.stringify({ sessionId: "s" }));
+    expect(fs.existsSync(store.batchHandoffPath(cwd))).toBe(false);
+    fs.writeFileSync(store.batchHandoffPath(cwd), JSON.stringify({ sessionId: "s" }));
     expect(R.batchHandoffPending(cwd, { now: T0 })).toBeNull();
-    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.batchHandoffPath(cwd))).toBe(false);
   });
 
   test("H-B14b: a transient read error (EBUSY / EPERM) keeps a valid marker on disk", () => {
@@ -849,8 +895,8 @@ describe("harden pass", () => {
     expect(R.pendingArm(cwd, { now: T0 })).toBeNull();
     expect(R.batchHandoffPending(cwd, { now: T0 })).toBeNull();
     spy.mockRestore();
-    expect(fs.existsSync(R.pendingPath(cwd))).toBe(true);
-    expect(fs.existsSync(R.batchHandoffPath(cwd))).toBe(true);
+    expect(fs.existsSync(store.pendingPath(cwd))).toBe(true);
+    expect(fs.existsSync(store.batchHandoffPath(cwd))).toBe(true);
     expect(R.pendingArm(cwd, { now: T0 })).toMatchObject({ args: "backlog" });
     expect(R.batchHandoffPending(cwd, { now: T0 })).not.toBeNull();
   });
@@ -866,7 +912,7 @@ describe("harden pass", () => {
     });
     R.arm(cwd, { mode: "audit" }, { now: T0 + 1000 });
     spy.mockRestore();
-    expect(JSON.parse(fs.readFileSync(R.prevPath(cwd), "utf8")).id).toBe(a.id);
+    expect(JSON.parse(fs.readFileSync(store.prevPath(cwd), "utf8")).id).toBe(a.id);
   });
 
   test("H-C1: mergeRouterAnswers — partial call of the same session merges", () => {
@@ -896,7 +942,8 @@ describe("harden pass", () => {
     expect(run("arm", "--flow", "x").code).toBe(1);
     expect(run("arm", "--ship", "x").code).toBe(1);
     expect(run("arm", "--passes").out.contract.passes).toEqual([]);
-    const r = run("arm", "--passes", "--items", "1,#2", "--session", "s1");
+    // R16: the contract above is active — replacing it takes --replace.
+    const r = run("arm", "--passes", "--items", "1,#2", "--session", "s1", "--replace");
     expect(r.code).toBe(0);
     expect(r.out.contract).toMatchObject({ passes: [], items: ["1", "2"], sessionId: "s1" });
   });

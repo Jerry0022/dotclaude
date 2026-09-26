@@ -10,6 +10,7 @@ vi.setConfig({ testTimeout: 30_000 });
 
 const require = createRequire(import.meta.url);
 const RC = require("../lib/run-contract.js");
+const store = require("../lib/run-contract-store.js");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "post.run.contract.js");
@@ -62,12 +63,12 @@ describe("arming", () => {
 
   test("an unrelated AskUserQuestion changes nothing", () => {
     run("AskUserQuestion", { questions: [{ header: "Farbe", question: "Welche Farbe?" }] }, { answers: { "Welche Farbe?": "rot" } });
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 
   test("kill switch: no marker, no arm", () => {
     run("Skill", { skill: "devops:do-run", args: "" }, {}, { DOTCLAUDE_RUN_CONTRACT: "off" });
-    expect(fs.existsSync(RC.pendingPath(dir))).toBe(false);
+    expect(fs.existsSync(store.pendingPath(dir))).toBe(false);
   });
 });
 
@@ -117,9 +118,9 @@ describe("recording", () => {
   test("Skill do-run / auto-concept delete the batch hand-off marker", () => {
     RC.markBatchHandoff(dir, {});
     run("Skill", { skill: "devops:auto-issue" });
-    expect(fs.existsSync(RC.batchHandoffPath(dir))).toBe(true);
+    expect(fs.existsSync(store.batchHandoffPath(dir))).toBe(true);
     run("Skill", { skill: "devops:auto-concept", args: "--from=do-batch" });
-    expect(fs.existsSync(RC.batchHandoffPath(dir))).toBe(false);
+    expect(fs.existsSync(store.batchHandoffPath(dir))).toBe(false);
   });
 });
 
@@ -144,6 +145,8 @@ describe("one-time announcement", () => {
     const ctx = JSON.parse(first.stdout).hookSpecificOutput.additionalContext;
     expect(ctx).toContain("click-through defaults");
     expect(ctx).toContain("run-contract.js\" arm --mode");
+    // R16: re-arming replaces this live contract — the CLI needs --replace for that.
+    expect(ctx).toMatch(/Re-arm: node ".*" arm --mode .* --replace\n/);
     expect(ctx).toContain("done");
     expect(RC.readContract(dir).announced).toBe(true);
     expect(run("Agent", { subagent_type: "Explore" }).stdout).toBe("");
@@ -192,13 +195,13 @@ describe("harden pass (H-*)", () => {
 
   test("H-B13: Flow + Scope without a do-run marker arms nothing", () => {
     run("AskUserQuestion", { questions: FLOW_SCOPE }, { answers: FLOW_SCOPE_A });
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 
   test("H-B13: Passes alone without a marker arms nothing", () => {
     run("AskUserQuestion", { questions: [{ header: "Passes", question: "Which passes?", options: [{ label: "Harden danach" }] }] },
       { answers: { "Which passes?": "Harden danach" } });
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
   });
 
   test("H-B13: Flow + Scope after a do-run (fresh same-session marker) arms", () => {
@@ -228,7 +231,7 @@ describe("harden pass (H-*)", () => {
     run("AskUserQuestion", { questions: ROUTER_Q }, { answers: {
       "Was soll dieser Run tun?": "Prompt umsetzen", "Bleibst du erreichbar?": "Autonom · Ship automatisch",
       "Wie weit?": "Flexibel", "Welche Durchgänge?": ["Polish danach (Recommended)"] } });
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
     expect(RC.pendingArm(dir)).toMatchObject({ sessionId: "s" });
   });
 
@@ -239,7 +242,7 @@ describe("harden pass (H-*)", () => {
       RC.arm(other, { mode: "prompt", sessionId: "s" });
       run(SHIP, { cwd: other, body: "Closes #1" }, ok);
       expect(RC.events(other)).toEqual([expect.objectContaining({ k: "release", ok: true, closes: ["1"] })]);
-      expect(fs.existsSync(RC.eventsPath(dir))).toBe(false);
+      expect(fs.existsSync(store.eventsPath(dir))).toBe(false);
     } finally { fs.rmSync(other, { recursive: true, force: true }); }
   });
 
@@ -344,10 +347,12 @@ describe("red-team pass 3 (RT3-*)", () => {
 
   test("RT3-R8: a partial call with no marker and no active contract is not recorded and says so", () => {
     const r = run("AskUserQuestion", { questions: PASSES_Q }, { answers: { "Welche Durchgänge?": "Harden danach" } });
-    expect(RC.readRawContract(dir)).toBeNull();
+    expect(store.readRawContract(dir)).toBeNull();
     const ctx = ctxOf(r);
     expect(ctx).toContain("NOT recorded");
     expect(ctx).toContain("run-contract.js\" arm --mode");
+    // R16: no live contract of this session to replace — the plain arm line.
+    expect(ctx).not.toContain("--replace");
   });
 
   test("RT3-X1: an interrupted or non-zero-exit git commit / branch is not recorded", () => {
@@ -365,6 +370,7 @@ describe("red-team pass 3 (RT3-*)", () => {
     const first = ctxOf(run("Write", { file_path: path.join(dir, ".claude/x.md") }));
     expect(first).toContain("expired after 12 h");
     expect(first).toContain("arm --mode");
+    expect(first).toContain("--replace"); // R16: every re-arm line carries it
     expect(run("Write", { file_path: path.join(dir, ".claude/x.md") }).stdout).toBe("");
   });
 
