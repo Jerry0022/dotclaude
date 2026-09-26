@@ -52,7 +52,7 @@ function harness(rel, brokenLib) {
   return path.join(hooks, rel);
 }
 
-describe("hooks with a lib that fails to load exit 0 silently (AUD-028)", () => {
+describe("hooks with a lib that fails to load exit 0 with only a trace line (AUD-028, AUD-068)", () => {
   for (const { rel, input } of HOOKS) {
     test(`${rel}: every lib broken`, () => {
       const hook = harness(rel, "*");
@@ -63,7 +63,8 @@ describe("hooks with a lib that fails to load exit 0 silently (AUD-028)", () => 
         encoding: "utf8",
       });
       expect(res.status).toBe(0);
-      expect(res.stderr).toBe("");
+      // One trace line for the hook log (AUD-068) — never a block, never stdout.
+      expect(res.stderr).toMatch(/^\[[\w.]+\] off — a lib failed to load: .+\n$/);
       expect(res.stdout).toBe("");
     });
 
@@ -80,7 +81,8 @@ describe("hooks with a lib that fails to load exit 0 silently (AUD-028)", () => 
         encoding: "utf8",
       });
       expect(res.status).toBe(0);
-      expect(res.stderr).toBe("");
+      // One trace line for the hook log (AUD-068) — never a block, never stdout.
+      expect(res.stderr).toMatch(/^\[[\w.]+\] off — a lib failed to load: .+\n$/);
     });
   }
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.main.guard
- * @version 0.1.2
+ * @version 0.1.3
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash
@@ -35,7 +35,10 @@ try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
-} catch {
+} catch (err) {
+  // Silent to the user and the model (exit 0), but not traceless: the line
+  // lands in the hook log, so a persistent load error can be found (AUD-068).
+  process.stderr.write(`[pre.main.guard] off — a lib failed to load: ${(err && err.message) || err}\n`);
   process.exit(0);
 }
 

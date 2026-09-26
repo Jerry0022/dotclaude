@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.7.3
+ * @version 0.7.4
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -45,7 +45,10 @@ try {
   ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
   ({ currentContextTokens } = require('../lib/context-size'));
   ({ shipCompactAdvice } = require('../lib/ship-compact'));
-} catch {
+} catch (err) {
+  // Silent to the user and the model (exit 0), but not traceless: the line
+  // lands in the hook log, so a persistent load error can be found (AUD-068).
+  process.stderr.write(`[prompt.ship.detect] off — a lib failed to load: ${(err && err.message) || err}\n`);
   process.exit(0);
 }
 
