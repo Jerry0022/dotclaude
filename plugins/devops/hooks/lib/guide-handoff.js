@@ -1,6 +1,6 @@
 /**
  * @module guide-handoff
- * @version 0.6.1
+ * @version 0.6.2
  * @description Detection + pending-hint state for stop.guide.handoff —
  *   decides whether the turn's own final answer hands the user a manual,
  *   click-through job on an external website/dashboard instead of invoking
@@ -270,7 +270,13 @@ function matchService(text) {
   const domain = text.match(KNOWN_DOMAIN_RE);
   if (domain) return { name: domain[0], named: true };
   for (const m of text.matchAll(URL_RE)) {
-    if (!isExcludedUrl(m[0])) return { name: 'external URL', named: false };
+    if (isExcludedUrl(m[0])) continue;
+    // The literal "external URL" placeholder made the card button read
+    // "Führ mich per Web-Guide durch external URL" — the URL's host reads
+    // like a real hand-off target (e.g. "dashboard.stripe.com").
+    let host = 'external URL';
+    try { host = new URL(m[0]).hostname || host; } catch { /* isExcludedUrl already validated this parses */ }
+    return { name: host, named: false };
   }
   return null;
 }

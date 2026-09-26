@@ -1,6 +1,6 @@
 /**
  * @module guide-active-state
- * @version 0.3.0
+ * @version 0.4.0
  * @description Small on-disk marker recording "an /auto-guide run is
  *   currently active", shared between `web-guide.js` (writer, called from
  *   SKILL.md Step 3 / Step 6 / Step 7) and `stop.flow.guard` (reader, #526):
@@ -16,6 +16,16 @@
  *   Expires after GUIDE_ACTIVE_TTL_MS so a guide that crashed mid-loop (tab
  *   closed, process killed) without ever reaching Step 6/7 does not disable
  *   the card gate forever.
+ *
+ *   Resume support: the marker also carries `lastStep`/`lastStepTs` (the most
+ *   recent Step object `payload step` rendered) so a turn resumed after a
+ *   crash/compaction can recover which step the overlay was showing without
+ *   re-deriving it from the transcript. `recordGuideStep` refuses to persist
+ *   a step that carries a `value` field anywhere (recursively) — Step never
+ *   needs one except `copy[].value`, which is deliberately never written to
+ *   disk, keeping the marker free of anything that looks like user input.
+ *   `markGuideActive` preserves whatever `lastStep`/`lastStepTs` is already on
+ *   the marker across a plain refresh (it never writes step data itself).
  */
 
 const fs = require('fs');
@@ -25,6 +35,9 @@ const crypto = require('crypto');
 const GUIDE_ACTIVE_REL = path.join('.claude', 'auto-guide-active.json');
 const GUIDE_ACTIVE_TTL_MS = 30 * 60 * 1000;
 const TOKEN_RE = /^[0-9a-f]{32}$/;
+// Keeps the marker small (per the module description) — a step this size is
+// already far beyond anything protocol.md's Step shape allows.
+const MAX_LAST_STEP_JSON_LEN = 4000;
 
 function readMarker(cwd) {
   try {
@@ -37,6 +50,27 @@ function readMarker(cwd) {
 
 function guideActiveFilePath(cwd) {
   return path.join(cwd || process.cwd(), GUIDE_ACTIVE_REL);
+}
+
+/**
+ * Atomically write the marker's JSON content. Shared by markGuideActive and
+ * recordGuideStep so both honor the same "no clobbered .tmp on a race"
+ * guarantee.
+ * @param {string} file
+ * @param {object} data
+ */
+function writeMarkerFile(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // A unique temp name — two concurrent writers (payload step and payload
+  // wait racing) must not clobber each other's `.tmp` mid-write.
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(data));
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* never created / already renamed */ }
+    throw err;
+  }
 }
 
 /**
@@ -55,17 +89,57 @@ function markGuideActive(cwd, now = Date.now()) {
   const prev = readMarker(cwd);
   const keep = prev && typeof prev.token === 'string' && TOKEN_RE.test(prev.token);
   const token = keep ? prev.token : crypto.randomBytes(16).toString('hex');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  // A unique temp name — two concurrent markGuideActive calls (payload step
-  // and payload wait racing) must not clobber each other's `.tmp` mid-write.
-  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify({ ts: now, token }));
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    try { fs.unlinkSync(tmp); } catch { /* never created / already renamed */ }
-    throw err;
+  const data = { ts: now, token };
+  // A plain refresh (guide active / touchGuideToken) must not drop the last
+  // recorded step — only recordGuideStep and guide clear ever change it.
+  if (prev && prev.lastStep !== undefined) data.lastStep = prev.lastStep;
+  if (prev && typeof prev.lastStepTs === 'number') data.lastStepTs = prev.lastStepTs;
+  writeMarkerFile(file, data);
+  return file;
+}
+
+/**
+ * Recursively check whether a value carries a `value` key anywhere — Step
+ * never legitimately needs one on disk (see module description).
+ * @param {*} value
+ * @returns {boolean}
+ */
+function hasValueField(value) {
+  if (Array.isArray(value)) return value.some(hasValueField);
+  if (value && typeof value === 'object') {
+    return Object.prototype.hasOwnProperty.call(value, 'value') || Object.values(value).some(hasValueField);
   }
+  return false;
+}
+
+/**
+ * Record the most recently rendered Step object on the marker so a
+ * resumed/compacted turn can recover it via `guide status`. A no-op (returns
+ * null, writes nothing) when: there is no active marker to resume into (a
+ * stray call must not resurrect a cleared guide, mirroring touchGuideToken),
+ * the step carries a `value` field anywhere, or the step's JSON would make
+ * the marker too large.
+ * @param {string} cwd
+ * @param {*} step
+ * @param {number} [now]
+ * @returns {string|null} the marker file path, or null when nothing was written
+ */
+function recordGuideStep(cwd, step, now = Date.now()) {
+  const prev = readMarker(cwd);
+  if (!prev) return null;
+  if (hasValueField(step)) return null;
+  let json;
+  try {
+    json = JSON.stringify(step);
+  } catch {
+    return null;
+  }
+  if (typeof json !== 'string' || json.length > MAX_LAST_STEP_JSON_LEN) return null;
+
+  const file = guideActiveFilePath(cwd);
+  const keep = typeof prev.token === 'string' && TOKEN_RE.test(prev.token);
+  const token = keep ? prev.token : crypto.randomBytes(16).toString('hex');
+  writeMarkerFile(file, { ts: now, token, lastStep: step, lastStepTs: now });
   return file;
 }
 
@@ -132,6 +206,27 @@ function isGuideActive(cwd, now = Date.now()) {
   }
 }
 
+/**
+ * A resume/compaction-friendly snapshot of the marker — NEVER includes the
+ * channel token (`web-guide.js guide status` prints this verbatim to
+ * stdout, which can end up in a transcript).
+ * @param {string} cwd
+ * @param {number} [now]
+ * @returns {{active: boolean, ageMinutes: number|null, lastStep: *}}
+ */
+function getGuideStatus(cwd, now = Date.now()) {
+  const data = readMarker(cwd);
+  if (!data || typeof data.ts !== 'number') {
+    return { active: false, ageMinutes: null, lastStep: null };
+  }
+  const ageMinutes = Math.round(((now - data.ts) / 60000) * 100) / 100;
+  return {
+    active: now - data.ts <= GUIDE_ACTIVE_TTL_MS,
+    ageMinutes,
+    lastStep: data.lastStep !== undefined ? data.lastStep : null,
+  };
+}
+
 module.exports = {
   GUIDE_ACTIVE_REL,
   GUIDE_ACTIVE_TTL_MS,
@@ -141,4 +236,7 @@ module.exports = {
   readGuideToken,
   touchGuideToken,
   isGuideActive,
+  recordGuideStep,
+  hasValueField,
+  getGuideStatus,
 };

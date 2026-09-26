@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import vm from "vm";
-import { validateStep, upsertEnv, leanSource, gitStatusOf } from "./web-guide.js";
+import { validateStep, upsertEnv, leanSource, gitStatusOf, isInsideGitWorkTree } from "./web-guide.js";
 
 const CLI = path.join(__dirname, "web-guide.js");
 
@@ -273,11 +273,58 @@ describe("CLI: payload inject", () => {
     const source = "(() => { return 'injected'; })();";
     fs.writeFileSync(overlay, source);
 
-    const out = execFileSync("node", [CLI, "payload", "inject"], {
+    const out = execFileSync("node", [CLI, "payload", "inject", "--allow-untokened"], {
       encoding: "utf8",
       env: { ...process.env, WEB_GUIDE_OVERLAY: overlay },
     });
     expect(out).toBe(source);
+  });
+
+  test("without an active guide marker and without --allow-untokened, exits 1 with nothing on stdout", () => {
+    const dir = makeTmpDir();
+    const overlay = path.join(dir, "overlay.js");
+    fs.writeFileSync(overlay, "(() => 1)();");
+    let result;
+    try {
+      execFileSync("node", [CLI, "payload", "inject"], {
+        encoding: "utf8",
+        cwd: dir,
+        env: { ...process.env, WEB_GUIDE_OVERLAY: overlay },
+      });
+      result = { code: 0, stdout: "" };
+    } catch (err) {
+      result = { code: err.status, stdout: err.stdout, stderr: err.stderr };
+    }
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("guide active");
+  });
+
+  test("--allow-untokened bypasses the token requirement even with --raw", () => {
+    const dir = makeTmpDir();
+    const overlay = path.join(dir, "overlay.js");
+    const source = "(() => { return 'injected'; })();";
+    fs.writeFileSync(overlay, source);
+    const out = execFileSync("node", [CLI, "payload", "inject", "--raw", "--allow-untokened"], {
+      encoding: "utf8",
+      cwd: dir,
+      env: { ...process.env, WEB_GUIDE_OVERLAY: overlay },
+    });
+    expect(out).toBe(source);
+  });
+
+  test("with an active guide marker, inject succeeds without --allow-untokened", () => {
+    const dir = makeTmpDir();
+    const overlay = path.join(dir, "overlay.js");
+    const source = 'var TOKEN = "__WG_TOKEN__";\n(() => { return \'injected\'; })();';
+    fs.writeFileSync(overlay, source);
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const out = execFileSync("node", [CLI, "payload", "inject"], {
+      encoding: "utf8",
+      cwd: dir,
+      env: { ...process.env, WEB_GUIDE_OVERLAY: overlay },
+    });
+    expect(out).toContain("var TOKEN");
   });
 
   test("missing overlay source exits 1 with a stderr message", () => {
@@ -315,13 +362,13 @@ describe("CLI: payload inject", () => {
     ].join("\n");
     fs.writeFileSync(overlay, source);
 
-    const rawOut = execFileSync("node", [CLI, "payload", "inject", "--raw"], {
+    const rawOut = execFileSync("node", [CLI, "payload", "inject", "--raw", "--allow-untokened"], {
       encoding: "utf8",
       env: { ...process.env, WEB_GUIDE_OVERLAY: overlay },
     });
     expect(rawOut).toBe(source);
 
-    const leanOut = execFileSync("node", [CLI, "payload", "inject"], {
+    const leanOut = execFileSync("node", [CLI, "payload", "inject", "--allow-untokened"], {
       encoding: "utf8",
       env: { ...process.env, WEB_GUIDE_OVERLAY: overlay },
     });
@@ -628,6 +675,59 @@ describe("CLI: store", () => {
     expect(mode).toBe(0o600);
   });
 
+  test("integration: refuses to write an untracked, non-ignored secret inside a git work tree (#do-ship guard)", () => {
+    let gitAvailable = true;
+    try {
+      execFileSync("git", ["--version"], { stdio: "pipe" });
+    } catch {
+      gitAvailable = false;
+    }
+    if (!gitAvailable) return;
+
+    const dir = makeTmpDir();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    const file = path.join(dir, "untracked.env");
+
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN"], { input: "x\n", cwd: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("is not gitignored");
+    expect(r.stderr).toContain("untracked.env");
+    expect(r.stderr).toContain(".gitignore");
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("integration: stores into a gitignored file without refusing (skipped if git is unavailable)", () => {
+    let gitAvailable = true;
+    try {
+      execFileSync("git", ["--version"], { stdio: "pipe" });
+    } catch {
+      gitAvailable = false;
+    }
+    if (!gitAvailable) return;
+
+    const dir = makeTmpDir();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: dir });
+    fs.writeFileSync(path.join(dir, ".gitignore"), "ignored.env\n");
+    const file = path.join(dir, "ignored.env");
+
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN"], { input: "x\n", cwd: dir });
+    expect(r.code).toBe(0);
+    expect(fs.readFileSync(file, "utf8")).toBe("MY_TOKEN=x\n");
+  });
+
+  test("outside any git repo, store writes even though the file is untracked/not gitignored", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "web-guide-nogit-"));
+    tmpDirs.push(dir);
+    const file = path.join(dir, ".env");
+    const r = run(["store", "--file", file, "--key", "MY_TOKEN"], { input: "x\n", cwd: dir });
+    expect(r.code).toBe(0);
+    expect(fs.readFileSync(file, "utf8")).toBe("MY_TOKEN=x\n");
+  });
+
   test("integration: refuses to write into a git-tracked file (skipped if git is unavailable)", () => {
     let gitAvailable = true;
     try {
@@ -723,6 +823,129 @@ describe("gitStatusOf", () => {
     const untracked = path.join(dir, "untracked.env");
     fs.writeFileSync(untracked, "A=1\n");
     expect(gitStatusOf(untracked, dir)).toBe("untracked");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isInsideGitWorkTree
+// ---------------------------------------------------------------------------
+
+describe("isInsideGitWorkTree", () => {
+  test("true when rev-parse succeeds", () => {
+    const runner = () => "true\n";
+    expect(isInsideGitWorkTree("/repo", runner)).toBe(true);
+  });
+
+  test("false when rev-parse fails (not a repo, git missing, timeout)", () => {
+    const runner = () => { throw Object.assign(new Error("not a repo"), { status: 128 }); };
+    expect(isInsideGitWorkTree("/repo", runner)).toBe(false);
+  });
+
+  test("integration: true inside a real repo, false outside any repo", () => {
+    let gitAvailable = true;
+    try {
+      execFileSync("git", ["--version"], { stdio: "pipe" });
+    } catch {
+      gitAvailable = false;
+    }
+    if (!gitAvailable) return;
+
+    const dir = makeTmpDir();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    expect(isInsideGitWorkTree(dir)).toBe(true);
+
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "web-guide-nogit-"));
+    tmpDirs.push(outside);
+    expect(isInsideGitWorkTree(outside)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLI: pause
+// ---------------------------------------------------------------------------
+
+describe("CLI: pause", () => {
+  test("pauses for the given seconds and prints paused Ns", () => {
+    const started = Date.now();
+    const r = run(["pause", "1"]);
+    const elapsed = Date.now() - started;
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("paused 1s");
+    expect(elapsed).toBeGreaterThanOrEqual(900);
+  }, 10000);
+
+  test("rejects a value below the minimum (0)", () => {
+    const r = run(["pause", "0"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe("");
+  });
+
+  test("rejects a value above the maximum (56)", () => {
+    const r = run(["pause", "56"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe("");
+  });
+
+  test("rejects a non-integer value", () => {
+    const r = run(["pause", "1.5"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLI: guide status + resume (payload step records lastStep)
+// ---------------------------------------------------------------------------
+
+describe("CLI: guide status / resume", () => {
+  test("guide status without a marker reports inactive with no lastStep", () => {
+    const dir = makeTmpDir();
+    const r = run(["guide", "status"], { cwd: dir });
+    expect(r.code).toBe(0);
+    const status = JSON.parse(r.stdout);
+    expect(status).toEqual({ active: false, ageMinutes: null, lastStep: null });
+  });
+
+  test("payload step records the step, and guide status recovers it without the token", () => {
+    const dir = makeTmpDir();
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const step = validStep();
+    expect(run(["payload", "step", "-"], { cwd: dir, input: JSON.stringify(step) }).code).toBe(0);
+
+    const r = run(["guide", "status"], { cwd: dir });
+    expect(r.code).toBe(0);
+    const status = JSON.parse(r.stdout);
+    expect(status.active).toBe(true);
+    expect(typeof status.ageMinutes).toBe("number");
+    expect(status.lastStep).toEqual(step);
+    expect(r.stdout).not.toMatch(/[0-9a-f]{32}/); // never the token
+  });
+
+  test("a step carrying a value field anywhere is never persisted to the marker", () => {
+    const dir = makeTmpDir();
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const step = { ...validStep(), copy: [{ value: "secret-ish" }] };
+    expect(run(["payload", "step", "-"], { cwd: dir, input: JSON.stringify(step) }).code).toBe(0);
+
+    const status = JSON.parse(run(["guide", "status"], { cwd: dir }).stdout);
+    expect(status.lastStep).toBeNull();
+  });
+
+  test("payload step without an active marker does not create one (no resurrection)", () => {
+    const dir = makeTmpDir();
+    run(["payload", "step", "-"], { cwd: dir, input: JSON.stringify(validStep()) });
+    const file = path.join(dir, ".claude", "auto-guide-active.json");
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("guide clear removes lastStep along with the rest of the marker", () => {
+    const dir = makeTmpDir();
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    run(["payload", "step", "-"], { cwd: dir, input: JSON.stringify(validStep()) });
+    expect(run(["guide", "clear"], { cwd: dir }).code).toBe(0);
+
+    const status = JSON.parse(run(["guide", "status"], { cwd: dir }).stdout);
+    expect(status).toEqual({ active: false, ageMinutes: null, lastStep: null });
   });
 });
 

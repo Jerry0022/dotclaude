@@ -164,6 +164,28 @@ describe("stop.guide.handoff", () => {
     } finally { cleanup(dir); }
   });
 
+  test("a fresh guide-active marker (guide running / just resumed) → silent, no re-offer", async () => {
+    const dir = project();
+    try {
+      fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+      fs.writeFileSync(path.join(dir, ".claude", "auto-guide-active.json"), JSON.stringify({ ts: Date.now(), token: "a".repeat(32) }));
+      const out = await stop(dir, transcript(dir, UPSTASH));
+      expect(out.trim()).toBe("");
+      expect(fs.existsSync(pendingFile(dir))).toBe(false);
+    } finally { cleanup(dir); }
+  });
+
+  test("an expired guide-active marker does not suppress the offer", async () => {
+    const dir = project();
+    try {
+      fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+      const expiredTs = Date.now() - 31 * 60 * 1000; // past the 30-minute TTL
+      fs.writeFileSync(path.join(dir, ".claude", "auto-guide-active.json"), JSON.stringify({ ts: expiredTs, token: "a".repeat(32) }));
+      const out = await stop(dir, transcript(dir, UPSTASH));
+      expect(out).toContain('"decision":"block"');
+    } finally { cleanup(dir); }
+  });
+
   test("turn already invoked auto-guide → silent", async () => {
     const dir = project();
     try {

@@ -9,6 +9,9 @@ import {
   readGuideToken,
   touchGuideToken,
   isGuideActive,
+  recordGuideStep,
+  hasValueField,
+  getGuideStatus,
 } from "./guide-active-state.js";
 
 // Fixtures live under node_modules/ (gitignored) inside the repo, matching
@@ -221,5 +224,105 @@ describe("guide-active-state", () => {
       fs.writeFileSync = realWrite;
     }
     expect(seen.size).toBe(2);
+  });
+
+  // Resume support (payload step / guide status).
+  describe("hasValueField", () => {
+    test("false for a step without any value key", () => {
+      expect(hasValueField({ id: "1", title: "t", text: "x" })).toBe(false);
+    });
+
+    test("true for a top-level value key", () => {
+      expect(hasValueField({ id: "1", value: "x" })).toBe(true);
+    });
+
+    test("true for a nested value key (e.g. copy[].value)", () => {
+      expect(hasValueField({ id: "1", copy: [{ label: "l", value: "x" }] })).toBe(true);
+    });
+
+    test("false for non-object/array leaves", () => {
+      expect(hasValueField("x")).toBe(false);
+      expect(hasValueField(42)).toBe(false);
+      expect(hasValueField(null)).toBe(false);
+      expect(hasValueField(undefined)).toBe(false);
+    });
+  });
+
+  describe("recordGuideStep", () => {
+    test("does nothing without an existing marker (no resurrection)", () => {
+      const dir = makeTmpDir();
+      const result = recordGuideStep(dir, { id: "1" });
+      expect(result).toBeNull();
+      expect(fs.existsSync(guideActiveFilePath(dir))).toBe(false);
+    });
+
+    test("records the step and its ts when a marker exists", () => {
+      const dir = makeTmpDir();
+      const now = Date.now();
+      markGuideActive(dir, now);
+      const step = { id: "1", index: 1, total: 3, title: "t", text: "x" };
+      const result = recordGuideStep(dir, step, now + 10);
+      expect(result).toBe(guideActiveFilePath(dir));
+      const data = JSON.parse(fs.readFileSync(guideActiveFilePath(dir), "utf8"));
+      expect(data.lastStep).toEqual(step);
+      expect(data.lastStepTs).toBe(now + 10);
+      expect(data.token).toBe(readGuideToken(dir));
+    });
+
+    test("refuses to persist a step carrying a value field anywhere", () => {
+      const dir = makeTmpDir();
+      markGuideActive(dir);
+      const step = { id: "1", copy: [{ value: "x" }] };
+      expect(recordGuideStep(dir, step)).toBeNull();
+      const data = JSON.parse(fs.readFileSync(guideActiveFilePath(dir), "utf8"));
+      expect(data.lastStep).toBeUndefined();
+    });
+
+    test("refuses to persist a step whose JSON is too large", () => {
+      const dir = makeTmpDir();
+      markGuideActive(dir);
+      const step = { id: "1", text: "x".repeat(5000) };
+      expect(recordGuideStep(dir, step)).toBeNull();
+    });
+
+    test("markGuideActive preserves the recorded lastStep on a plain refresh", () => {
+      const dir = makeTmpDir();
+      const now = Date.now();
+      markGuideActive(dir, now);
+      const step = { id: "1", title: "t" };
+      recordGuideStep(dir, step, now + 10);
+      markGuideActive(dir, now + 20);
+      const data = JSON.parse(fs.readFileSync(guideActiveFilePath(dir), "utf8"));
+      expect(data.lastStep).toEqual(step);
+    });
+  });
+
+  describe("getGuideStatus", () => {
+    test("inactive with no marker", () => {
+      const dir = makeTmpDir();
+      expect(getGuideStatus(dir)).toEqual({ active: false, ageMinutes: null, lastStep: null });
+    });
+
+    test("active with a fresh marker, never returns the token", () => {
+      const dir = makeTmpDir();
+      const now = Date.now();
+      markGuideActive(dir, now);
+      const status = getGuideStatus(dir, now + 60000);
+      expect(status.active).toBe(true);
+      expect(status.ageMinutes).toBe(1);
+      expect(status.lastStep).toBeNull();
+      expect(JSON.stringify(status)).not.toMatch(/[0-9a-f]{32}/);
+    });
+
+    test("inactive once past the TTL, but still reports the last step", () => {
+      const dir = makeTmpDir();
+      const now = Date.now();
+      markGuideActive(dir, now);
+      const step = { id: "1" };
+      recordGuideStep(dir, step, now);
+      const status = getGuideStatus(dir, now + GUIDE_ACTIVE_TTL_MS + 1);
+      expect(status.active).toBe(false);
+      expect(status.lastStep).toEqual(step);
+    });
   });
 });

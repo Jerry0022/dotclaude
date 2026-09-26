@@ -37,11 +37,11 @@ describe("detectWebHandoff — must trigger (real session examples)", () => {
     expect(detectWebHandoff(text)).toEqual({ service: "Supabase" });
   });
 
-  test("numbered step with an external URL", () => {
+  test("numbered step with an external URL — service is the URL's host, not a placeholder", () => {
     const text =
       "3. Die unten erzeugte URL im Browser öffnen → deinen Server wählen → autorisieren.\n" +
       "(https://discord.com/oauth2/authorize?client_id=123)";
-    expect(detectWebHandoff(text)).toEqual({ service: "external URL" });
+    expect(detectWebHandoff(text)).toEqual({ service: "discord.com" });
   });
 
   test("≥2 arrows + a named service (no numbered list)", () => {
@@ -256,8 +256,12 @@ describe("matchService", () => {
     expect(matchService("In den GitHub Settings den Webhook anlegen")).toEqual({ name: "GitHub Settings", named: true });
   });
 
-  test("a non-excluded URL is an unnamed service", () => {
-    expect(matchService("see https://dash.example.com/keys")).toEqual({ name: "external URL", named: false });
+  test("a non-excluded URL is an unnamed service, named by its host", () => {
+    expect(matchService("see https://dash.example.com/keys")).toEqual({ name: "dash.example.com", named: false });
+  });
+
+  test("a URL with a port keeps only the hostname, not the port", () => {
+    expect(matchService("see https://dash.example.com:8443/keys")).toEqual({ name: "dash.example.com", named: false });
   });
 
   test("github.com settings pages still count", () => {
