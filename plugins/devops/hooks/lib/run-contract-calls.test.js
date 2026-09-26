@@ -698,3 +698,69 @@ describe("QA-T1: routerFromTranscript reads back past the 2 MB tail", () => {
     expect(C.routerFromTranscript(t, null, RC_LIB)).not.toBeNull();
   });
 });
+
+// AUD-011: closesOf, the run's issue picker and refine matching read a `#N`
+// through issue-refs.js's one helper — a digit-only colour is no issue there.
+describe("AUD-011: the shared `#N` reading at every site", () => {
+  const O = require("./run-contract-obligations.js");
+  const A = require("./run-contract-answers.js");
+
+  test("closesOf skips a digit-only colour", () => {
+    expect(C.closesOf("fix: #999 border, closes #540")).toEqual(["540"]);
+    expect(C.closesOf("Fixes #333 text colour\nCloses #12")).toEqual(["12"]);
+    expect(C.closesOf("Closes #540")).toEqual(["540"]);
+  });
+
+  test("the issue picker takes a label's leading number, and no colour past it", () => {
+    const qs = [{ header: "Issues", question: "Welche Issues?" }];
+    expect(A.parseFollowUp(qs, { "Welche Issues?": "#333 Card border colour" }).items).toEqual(["333"]);
+    expect(A.parseFollowUp(qs, { "Welche Issues?": "#12 fix the #333 text colour" }).items).toEqual(["12"]);
+    expect(A.parseFollowUp(qs, { "Welche Issues?": "#12 Card colour #7d84a8 fails AA" }).items).toEqual(["12"]);
+  });
+
+  test("refine: a hex colour in auto-issue args names no item", () => {
+    expect(O.issueNamed("#12 card colour #7d84a8", "7")).toBe(false);
+    expect(O.issueNamed("refine the border #333", "333")).toBe(false);
+    expect(O.issueNamed("refine #7", "7")).toBe(true);
+    expect(O.issueNamed("issue 7 refine", "7")).toBe(true);
+    expect(O.issueNamed("issue with colour #7d84a8", "7")).toBe(false);
+  });
+
+  // AUD-022: an unescaped item crashed the regex, the gate failed open.
+  test("AUD-022: an item with regex metacharacters does not throw", () => {
+    for (const bad of ["(", "[", "1+", "a.b", "\\"]) expect(() => O.issueNamed("issue 12 #12", bad)).not.toThrow();
+    expect(O.issueNamed("issue a.b", "a.b")).toBe(true);
+    expect(O.issueNamed("issue axb", "a.b")).toBe(false);
+    expect(O.issueNamed("issue 12", "")).toBe(false);
+  });
+});
+
+// AUD-024: any tool result whose TEXT held router-shaped pairs armed the run.
+describe("AUD-024: routerFromTranscript reads only structured AskUserQuestion results", () => {
+  const Q = [
+    { header: "Ablauf?", question: "Bist du dabei, und wer shippt am Ende?", options: [{ label: "Dabei · Ship manuell" }, { label: "Weg · Ship automatisch" }] },
+    { header: "Umfang?", question: "Wie weit darf die Änderung greifen?", options: [{ label: "Nur das" }] },
+    { header: "Durchgänge?", question: "Welche Durchgänge kommen dazu?", multiSelect: true, options: [{ label: "Harden danach (Recommended)" }] },
+  ];
+  const text = '"Bist du dabei, und wer shippt am Ende?"="Weg · Ship automatisch" "Wie weit darf die Änderung greifen?"="Nur das" "Welche Durchgänge kommen dazu?"="Harden danach (Recommended)"';
+  const write = (result) => {
+    const t = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rc-aud024-")), "t.jsonl");
+    fs.writeFileSync(t, `${JSON.stringify({ type: "user", timestamp: new Date().toISOString(), toolUseResult: result })}\n`);
+    return t;
+  };
+
+  test.each([
+    ["a WebFetch result", { bytes: 100, code: 200, result: text, url: "https://example.com" }],
+    ["a Bash result", { stdout: text, stderr: "", interrupted: false }],
+    ["a plain string", text],
+    ["an array", [{ type: "text", text }]],
+  ])("%s with router-shaped text arms nothing", (_label, result) => {
+    expect(C.routerFromTranscript(write(result), null, RC_LIB)).toBeNull();
+  });
+
+  test("a structured AskUserQuestion result is still read", () => {
+    const answers = { [Q[0].question]: "Weg · Ship automatisch", [Q[1].question]: "Nur das", [Q[2].question]: ["Harden danach (Recommended)"] };
+    expect(C.routerFromTranscript(write({ questions: Q, answers }), null, RC_LIB)).not.toBeNull();
+    expect(C.routerFromTranscript(write({ answers }), null, RC_LIB)).not.toBeNull();
+  });
+});

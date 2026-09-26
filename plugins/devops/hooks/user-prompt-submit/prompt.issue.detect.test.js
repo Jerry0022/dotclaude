@@ -133,3 +133,39 @@ describe("prompt.issue.detect — the list is keyed by the harness session id", 
     expect(tracked("detect-other")).toEqual(["12", "7"]);
   });
 });
+
+// B010 (AUD-011): branch names were matched against the RAW prompt — a date
+// path asked "Current branch references issue #2026", a branch inside a code
+// fence was asked about too.
+describe("prompt.issue.detect — a branch named in the prompt", () => {
+  test("a date path is no branch", () => {
+    const r = run("Lies bitte docs/2026-09-26-plan.md", "w1-date-path");
+    expect(r.stdout).not.toContain("#2026");
+    expect(asked("w1-date-path")).toBeNull();
+  });
+
+  test("a branch inside a code fence is not asked about", () => {
+    const r = run("Log:\n```\ngit checkout feat/42-card\n```\nwas ist da los?", "w1-fenced-branch");
+    expect(r.stdout).not.toContain("#42");
+    expect(asked("w1-fenced-branch")).toBeNull();
+  });
+
+  test("a branch in the prose is asked about, worded as named by the prompt", () => {
+    const r = run("schau dir mal feat/42-card an.", "w1-prose-branch");
+    expect(r.stdout).toContain("The prompt names branch feat/42-card, which references issue #42.");
+    expect(r.stdout).not.toContain("Current branch");
+    expect(asked("w1-prose-branch")).toEqual(["42"]);
+  });
+
+  test("a digit-only colour beside a colour word is not tracked", () => {
+    const r = run("fix the #333 text colour", "w1-colour");
+    expect(r.stdout).not.toContain("#333");
+    expect(tracked("w1-colour")).toBeNull();
+  });
+
+  test("a list led by a work verb is tracked in full", () => {
+    const r = run("fix #12, #13 and #14", "w1-list");
+    expect(r.stdout).toContain("User asked to work on issue #12, #13, #14");
+    expect(tracked("w1-list")).toEqual(["12", "13", "14"]);
+  });
+});

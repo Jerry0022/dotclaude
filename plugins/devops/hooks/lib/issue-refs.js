@@ -1,6 +1,6 @@
 /**
  * @module issue-refs
- * @version 0.1.1
+ * @version 0.1.2
  * @description Which issue numbers in a prompt ask for work — for
  *   prompt.issue.detect. Every `#N` used to count as "the user referenced
  *   issue #N": the numbers were tracked, set In Progress, and every card of
@@ -22,7 +22,19 @@
  *        "merge #490"), a milestone ("Meilenstein #14") or an item of another
  *        list ("Punkt #2", "retry #3") is no issue. Numbers joined only by `,`
  *        `/` `&` `and` `und` … form one list, and a list of 3+ is an
- *        enumeration, not a work item — a range ("#19–#24") included.
+ *        enumeration, not a work item — a range ("#19–#24") included —
+ *        unless a work verb leads it: "fix #12, #13 and #14" and "arbeite
+ *        #19–#24 ab" track every number of it.
+ *     2a. A digit-only `#333` / `#123456` (3, 4, 6 or 8 digits) is a hex
+ *        colour when a colour word (color, Farbe, Rahmenfarbe, background,
+ *        border, fill, rgb, hex, …) stands within 20 characters before or
+ *        after it in the same clause, or a hyphenated CSS property with a
+ *        colon precedes it (`border-top-color: #333`). "fix the #333 text
+ *        colour" and "setze #999 als Rahmenfarbe" tracked #333 and #999
+ *        (2026-09-26). `hashRefs` / `isColourRef` are the one copy of this
+ *        rule: closesOf (run-contract-calls), the run's issue picker
+ *        (run-contract-answers) and refine matching (run-contract-obligations)
+ *        use them too.
  *     3. A number (or a pair) is `track` when a work verb leads it ("fix #12",
  *        "arbeite an #12", "mach Issue #12 fertig", "closes #12"), a German
  *        infinitive follows it ("#12 bitte umsetzen") or it opens the prompt
@@ -60,6 +72,60 @@ const BRACKET_RES = [/\([^()\n]*\)/g, /\[[^[\]\n]*\]/g];
  *  `#000080`) or `Issue 12` / `Issue #12`. Issue numbers never start with 0. */
 const REF_RE =
   /(?<![\p{L}\p{N}_/&#:])#([1-9]\d{0,6})(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?:issues?|tickets?)[ \t]*#?([1-9]\d{0,6})(?![\p{L}\p{N}_])/giu;
+
+/** `#N` as a token of its own — the `#` form of REF_RE, for the shared helpers. */
+const HASH_RE = /(?<![\p{L}\p{N}_/&#:])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
+
+/** Hex colour lengths: #RGB, #RGBA, #RRGGBB, #RRGGBBAA. */
+const COLOUR_LENGTHS = new Set([3, 4, 6, 8]);
+/** Colour words, German compounds included (Rahmenfarbe, Textfarbe, Hintergrundbild). */
+const COLOUR_WORD_RE = /(?<![\p{L}\p{N}_])(?:\p{L}*(?:farbe|farben|color|colors|colour|colours|hintergrund)\p{L}*|background|backgrounds|bg|border|borders|fill|stroke|solid|rgba?|hex|hsla?|shade|tint|palette|accent|akzent|farbton|outline)(?![\p{L}\p{N}_])/giu;
+/** Ends a clause, or names an issue: a colour word past it describes something else. */
+const CLAUSE_BREAK_RE = /[,;!?\n]|\.\s|(?<![\p{L}])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|issues?|tickets?|schließ\p{L}*|behebe?)(?![\p{L}])/iu;
+/** `border-top-color: #333`, `--accent: #333` — a CSS property before the value. */
+const CSS_PROP_BEFORE_RE = /(?<![\p{L}\p{N}_-])-*[\p{L}][\p{L}\p{N}]*(?:-[\p{L}\p{N}]+)+\s*:\s*$|(?<![\p{L}\p{N}_-])--[\p{L}\p{N}-]+\s*:\s*$/u;
+const COLOUR_REACH = 20;
+
+/**
+ * Whether the `#N` at `text[index, end)` is a hex colour, not an issue.
+ * @param {string} text
+ * @param {number} index  position of the `#`
+ * @param {number} end    position after the last digit
+ * @returns {boolean}
+ */
+function isColourRef(text, index, end) {
+  const s = String(text);
+  const digits = s.slice(index + 1, end);
+  if (!/^\d+$/.test(digits) || !COLOUR_LENGTHS.has(digits.length)) return false;
+  const before = s.slice(Math.max(0, index - 80), index);
+  if (CSS_PROP_BEFORE_RE.test(before)) return true;
+  for (const m of before.matchAll(COLOUR_WORD_RE)) {
+    const gap = before.slice(m.index + m[0].length);
+    if (gap.length <= COLOUR_REACH && !CLAUSE_BREAK_RE.test(gap)) return true;
+  }
+  const after = s.slice(end, end + 80);
+  for (const m of after.matchAll(COLOUR_WORD_RE)) {
+    const gap = after.slice(0, m.index);
+    if (gap.length <= COLOUR_REACH && !CLAUSE_BREAK_RE.test(gap)) return true;
+  }
+  return false;
+}
+
+/**
+ * Every `#N` token of `text` that is no hex colour — the shared reading of a
+ * `#N` for closesOf, the issue picker and refine matching.
+ * @param {string} text
+ * @returns {{n:string, index:number, end:number}[]}
+ */
+function hashRefs(text) {
+  if (typeof text !== 'string' || !text) return [];
+  const out = [];
+  for (const m of text.matchAll(HASH_RE)) {
+    const end = m.index + m[0].length;
+    if (!isColourRef(text, m.index, end)) out.push({ n: m[1], index: m.index, end });
+  }
+  return out;
+}
 
 /** What may sit between two numbers of one list. */
 const LIST_SEP_RE = /^[\s,/&+]*(?:(?:and|und|or|oder|sowie|bzw\.?)[\s,]*)?$/i;
@@ -136,6 +202,8 @@ const SUBJECT_BEFORE_RE = /^[\s#*_-]*$/;
 const WINDOW = 120;
 const MIN_LIST = 3;
 const MAX_ASK = 2;
+/** A range longer than this is no work list — only its ends are named. */
+const MAX_RANGE = 30;
 
 /**
  * The prompt with every non-prose span replaced by a mask.
@@ -161,10 +229,16 @@ function numberRuns(prose) {
     const n = m[1] || m[2];
     const start = m.index;
     const end = start + m[0].length;
+    if (m[1] && isColourRef(prose, start, end)) continue;
     const last = runs[runs.length - 1];
     const between = last ? prose.slice(last.end, start) : '';
     if (last && RANGE_SEP_RE.test(between)) {
-      last.size += Math.max(1, Math.abs(Number(n) - Number(last.items[last.items.length - 1])));
+      const from = Number(last.items[last.items.length - 1]);
+      last.size += Math.max(1, Math.abs(Number(n) - from));
+      // "#19–#24" asks for 20–23 too; a reversed or huge span stays its ends.
+      if (Number(n) > from && Number(n) - from <= MAX_RANGE) {
+        for (let k = from + 1; k < Number(n); k++) last.items.push(String(k));
+      }
       last.items.push(n);
       last.end = end;
     } else if (last && LIST_SEP_RE.test(between)) {
@@ -189,10 +263,15 @@ function issueRefs(message) {
   const track = [];
   const mentioned = [];
   for (const run of numberRuns(prose)) {
-    if (run.size >= MIN_LIST) continue;
     const before = prose.slice(Math.max(0, run.start - WINDOW), run.start);
     const after = prose.slice(run.end, run.end + WINDOW);
     if (NOT_ISSUE_BEFORE_RE.test(before) || NOT_ISSUE_AFTER_RE.test(after)) continue;
+    // A list of 3+ is an enumeration — unless a work verb leads it (R5).
+    if (run.size >= MIN_LIST) {
+      if (!LEAD_RE.test(before)) continue;
+      for (const n of run.items) if (!track.includes(n)) track.push(n);
+      continue;
+    }
     const opensPrompt = run.items.length === 1 && SUBJECT_BEFORE_RE.test(prose.slice(0, run.start));
     const requested = opensPrompt || LEAD_RE.test(before) || TRAIL_RE.test(after);
     const into = requested ? track : mentioned;
@@ -203,4 +282,4 @@ function issueRefs(message) {
   return { track, ask };
 }
 
-module.exports = { issueRefs, maskNonProse };
+module.exports = { issueRefs, maskNonProse, hashRefs, isColourRef };

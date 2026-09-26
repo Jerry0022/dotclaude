@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.5.1
+ * @version 0.5.2
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect issue references in user messages. Only a request to
@@ -9,10 +9,12 @@
  *   number ("fix #12", "arbeite an #12", "mach Issue #12 fertig"), a German
  *   infinitive after it ("#12 bitte umsetzen") or the number opening the
  *   prompt ("#12", "Issue #12: …"). A number only mentioned in prose, a
- *   branch named in the message and the current branch (feat/42-*) are asked
+ *   branch named in the prose (not in code, not a date path like
+ *   docs/2026-09-26-plan.md) and the current branch (feat/42-*) are asked
  *   about first. Numbers in quotes, code, brackets, pasted log lines or a
- *   list of 3+ are no reference at all, nor is a hex colour (`#7d84a8`,
- *   `color:#123456`, `#000080`) (lib/issue-refs.js) — a task-chip
+ *   list of 3+ without a leading work verb are no reference at all, nor is
+ *   a hex colour (`#7d84a8`, `color:#123456`, "the #333 text colour")
+ *   (lib/issue-refs.js) — a task-chip
  *   prompt that quoted "[issue-status] Tracked issues this session: #530, …"
  *   as an example put four unrelated issues on the In Progress → Done/Todo +
  *   comment track (2026-09-26).
@@ -25,9 +27,13 @@ require('../lib/plugin-guard');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
-const { issueRefs } = require('../lib/issue-refs');
+const { issueRefs, maskNonProse } = require('../lib/issue-refs');
 
-const BRANCH_ISSUE_RE = /\b(?:feat|fix|chore|docs)\/(\d+)[-/]/i;
+/** The current branch: feat/42-x. A date-named branch (docs/2026-09-26-x) names no issue. */
+const BRANCH_ISSUE_RE = /^(?:feat|fix|chore|docs)\/(?!\d{4}-\d{2}-)(\d+)[-/]/;
+/** A branch named in the prose — its own token, not a path segment
+ *  (plugins/devops/docs/…) and not a date (docs/2026-09-26-plan.md). */
+const PROMPT_BRANCH_RE = /(?<![\p{L}\p{N}_./\\-])((?:feat|fix|chore|docs)\/(?!\d{4}-\d{2}-)([1-9]\d*)[-/][\p{L}\p{N}_./-]*)/iu;
 
 function readList(file) {
   try {
@@ -65,12 +71,16 @@ process.stdin.on('end', () => {
   let askNumbers = refs.ask;
   let askSource = 'mention';
 
-  // Branch name in message — feat/42-something
+  // Branch name in the prose — feat/42-something. Code, quotes and pasted
+  // output are masked first, and a date path (docs/2026-09-26-plan.md) is
+  // no branch (B010).
+  let branchName = '';
   if (trackNumbers.length === 0 && askNumbers.length === 0) {
-    const branchMatch = message.match(BRANCH_ISSUE_RE);
+    const branchMatch = maskNonProse(message).match(PROMPT_BRANCH_RE);
     if (branchMatch) {
-      askNumbers = [branchMatch[1]];
-      askSource = 'branch';
+      askNumbers = [branchMatch[2]];
+      askSource = 'prompt-branch';
+      branchName = branchMatch[1].replace(/[./-]+$/, '');
     }
   }
 
@@ -82,7 +92,7 @@ process.stdin.on('end', () => {
         timeout: 5000,
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
-      const branchIssue = branch.match(/^(?:feat|fix|chore|docs)\/(\d+)[-/]/);
+      const branchIssue = branch.match(BRANCH_ISSUE_RE);
       if (branchIssue) {
         askNumbers = [branchIssue[1]];
         askSource = 'branch';
@@ -151,7 +161,9 @@ process.stdin.on('end', () => {
   const unaskedList = unasked.map(n => `#${n}`).join(', ');
   const lead = askSource === 'mention'
     ? `The prompt mentions issue ${unaskedList} but does not ask to work on it.`
-    : `Current branch references issue ${unaskedList}.`;
+    : askSource === 'prompt-branch'
+      ? `The prompt names branch ${branchName}, which references issue ${unaskedList}.`
+      : `Current branch references issue ${unaskedList}.`;
   process.stdout.write(
     `${lead} ` +
     `Ask the user: "Arbeitest du an Issue ${unaskedList}?" ` +
