@@ -440,7 +440,9 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
    (`node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" clear`), then act by
    shutdown choice. **Never** auto-shutdown while the aggregate run status is
    BLOCKED. Write `BACKLOG-DONE.flag` for every terminal status so the watchdog
-   stands down.
+   stands down, then remove its task:
+   `node "{PLUGIN_ROOT}/scripts/autonomous-watchdog.js" unregister` (a fired
+   one-shot task is never removed by Task Scheduler itself — #544).
 6. **Close the run contract** — the queue is done (every item shipped, parked
    or skipped), not just this issue's segment:
    ```bash

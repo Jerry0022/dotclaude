@@ -53,6 +53,14 @@
  *   status [task-name]             Check if the task still exists.
  *                                  → { ok, taskName, active }
  *
+ *   reap [--apply] [--cooldown-hours=N]
+ *                                  List (dry run) or delete expired watchdog
+ *                                  tasks: our exact name, root folder, not
+ *                                  running, no future run. --apply also removes
+ *                                  their leftover helper script and sentinel.
+ *                                  With a cooldown, at most one sweep per N h.
+ *                                  → { ok, apply, remove, removed, keep }
+ *
  * Platform: Windows-only. Registration uses the PowerShell ScheduledTasks module
  * (Register-ScheduledTask); query/delete use schtasks.exe. No-op on other platforms.
  */
@@ -203,10 +211,11 @@ function isValidWatchdogScriptPath(scriptPath) {
  * @returns {string} PowerShell script body, written to a self-deleting .ps1.
  */
 function buildRecoveryScript({
-  action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt,
+  action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt, taskName,
 }) {
   const flagPs = flagPath.replace(/'/g, "''");
   const stalledPs = String(stalledPath || '').replace(/'/g, "''");
+  const taskPs = String(taskName || '').replace(/'/g, "''");
 
   // Shared visible stalled marker — notify AND resume both surface it, so a hang
   // is never invisible even when a relaunch is impossible.
@@ -223,7 +232,9 @@ function buildRecoveryScript({
   // Recovery action when the flag is missing — differs by mode.
   let recoveryPs;
   if (action === 'shutdown') {
+    // The task goes first: nothing after shutdown.exe is sure to run.
     recoveryPs = `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — forcing shutdown"
+  Remove-WatchdogTask
   & "$env:SystemRoot\\System32\\shutdown.exe" /s /t 0 /c "Claude autonomous watchdog: session unresponsive after ${hours}h, forcing shutdown"`;
   } else if (action === 'resume') {
     const recoveryFlagPs = String(recoveryFlagPath || '').replace(/'/g, "''");
@@ -255,18 +266,110 @@ ${notifyMarker(' A one-shot resume was attempted (see watchdog log).')}
     recoveryPs = `  Add-Content -Path $logPath -Value "[$ts] flag MISSING at $flag — writing stalled marker (notify mode)"
 ${notifyMarker(' Nothing was shut down.')}`;
   }
+  // A one-shot task is NOT removed by Task Scheduler after it fired (#544):
+  // every run left a dead ClaudeAutonomousWatchdog-* entry behind. The script
+  // deletes its own task on every exit path; a second delete is a no-op.
   return `$ErrorActionPreference = 'Continue'
 $flag = '${flagPs}'
+$taskName = '${taskPs}'
 $logPath = Join-Path $env:TEMP 'claude-autonomous-watchdog.log'
 $ts = (Get-Date -Format 'o')
+function Remove-WatchdogTask {
+  if (-not $taskName) { return }
+  try { & "$env:SystemRoot\\System32\\schtasks.exe" /Delete /TN $taskName /F *> $null } catch {}
+}
 if (Test-Path $flag) {
   Add-Content -Path $logPath -Value "[$ts] flag present at $flag — no action"
 } else {
 ${recoveryPs}
 }
-# Self-delete this script after run
+# Remove this run's task, then self-delete this script
+Remove-WatchdogTask
 try { Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue } catch {}
 `;
+}
+
+// --- Sweep of expired watchdog tasks (#544) ---
+// Tasks registered before the self-delete above existed, or whose run was
+// killed before the script could remove it, stay in Task Scheduler forever.
+// `reap` removes the ones that can never fire again. Tasks come from
+// buildReapQueryPs() as { name, path, state, next, args }.
+
+/** Pure: which tasks are expired watchdog leftovers. */
+function classifyWatchdogTasks(tasks, now = Date.now()) {
+  const remove = [];
+  const keep = [];
+  for (const t of Array.isArray(tasks) ? tasks : []) {
+    if (!t || !isValidWatchdogTaskName(t.name)) continue; // never ours to touch
+    const next = t.next ? Date.parse(t.next) : NaN;
+    let reason = null;
+    if (t.path && t.path !== '\\') reason = 'not in the root folder';
+    else if (String(t.state) === 'Running') reason = 'running';
+    else if (Number.isFinite(next) && next > now) reason = 'armed for a future run';
+    if (reason) keep.push({ name: t.name, reason });
+    else remove.push({ name: t.name, script: scriptPathFromArgs(t.args) });
+  }
+  return { remove, keep };
+}
+
+/** The helper script a task runs: `-File "<path>"` in its action arguments. */
+function scriptPathFromArgs(args) {
+  const m = /-File\s+"([^"]+)"/i.exec(String(args || ''));
+  return m ? m[1] : null;
+}
+
+/** Pure: whether a sweep is due — at most one per cooldown window. */
+function reapDue(stamp, now = Date.now(), cooldownHours = 24) {
+  const at = stamp && Date.parse(stamp.at);
+  return !Number.isFinite(at) || now - at >= cooldownHours * 3600_000;
+}
+
+/** PowerShell that lists our tasks as JSON — states and dates culture-free. */
+function buildReapQueryPs() {
+  return [
+    `$ErrorActionPreference = 'Stop'`,
+    `$out = @(Get-ScheduledTask -TaskPath '\\' -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like '${TASK_PREFIX}-*' } | ForEach-Object {`,
+    `  $i = $_ | Get-ScheduledTaskInfo`,
+    `  [pscustomobject]@{ name = $_.TaskName; path = $_.TaskPath; state = [string]$_.State;`,
+    `    next = $(if ($i.NextRunTime) { $i.NextRunTime.ToUniversalTime().ToString('o') } else { $null });`,
+    `    args = ($_.Actions | Select-Object -First 1).Arguments }`,
+    `})`,
+    `ConvertTo-Json -InputObject $out -Compress`,
+  ].join('\n');
+}
+
+const REAP_STAMP = path.join(os.tmpdir(), 'claude-autonomous-watchdog-reap.json');
+
+function runReap(args) {
+  const apply = args.includes('--apply');
+  const cdArg = args.find((a) => a.startsWith('--cooldown-hours='));
+  const cooldownHours = cdArg ? Number(cdArg.split('=')[1]) : 0;
+  if (cooldownHours > 0) {
+    let stamp = null;
+    try { stamp = JSON.parse(fs.readFileSync(REAP_STAMP, 'utf8')); } catch { /* first sweep */ }
+    if (!reapDue(stamp, Date.now(), cooldownHours)) ok({ skipped: true, reason: 'cooldown', last: stamp.at });
+  }
+  const res = spawnSync('powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', buildReapQueryPs()],
+    { encoding: 'utf8', timeout: 30_000 });
+  if (res.status !== 0) fail(`task query failed: ${(res.stderr || res.stdout || '').trim()}`);
+  let tasks = [];
+  try { tasks = JSON.parse((res.stdout || '').trim() || '[]'); } catch { fail('task query returned no JSON'); }
+  const { remove, keep } = classifyWatchdogTasks(Array.isArray(tasks) ? tasks : [tasks]);
+  const removed = [];
+  if (apply) {
+    for (const r of remove) {
+      const del = spawnSync('schtasks.exe', ['/Delete', '/TN', r.name, '/F'], { encoding: 'utf8' });
+      if (del.status !== 0) continue;
+      if (r.script && isValidWatchdogScriptPath(r.script)) {
+        try { fs.unlinkSync(r.script); } catch { /* already gone */ }
+      }
+      try { fs.unlinkSync(sentinelFileFor(r.name)); } catch { /* none */ }
+      removed.push(r.name);
+    }
+    try { fs.writeFileSync(REAP_STAMP, JSON.stringify({ at: new Date().toISOString(), removed })); } catch { /* best effort */ }
+  }
+  ok({ apply, remove: remove.map((r) => r.name), removed, keep });
 }
 
 /**
@@ -366,7 +469,7 @@ function runRegister(args) {
     `claude-autonomous-watchdog-${Date.now()}.ps1`);
   fs.writeFileSync(scriptPath,
     buildRecoveryScript({
-      action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt,
+      action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt, taskName,
     }), 'utf8');
 
   // Register via the PowerShell ScheduledTasks module rather than `schtasks /SD /ST`:
@@ -508,15 +611,20 @@ if (require.main === module) {
   else if (subcmd === 'flag') runFlag(args);
   else if (subcmd === 'unregister') runUnregister(args);
   else if (subcmd === 'status') runStatus(args);
+  else if (subcmd === 'reap') runReap(args);
   else {
     fail(`Unknown subcommand: ${subcmd || '(empty)'}. ` +
-      `Use: register | flag | unregister | status`);
+      `Use: register | flag | unregister | status | reap`);
   }
 }
 
 module.exports = {
   buildRegisterPsCommand,
   buildRecoveryScript,
+  buildReapQueryPs,
+  classifyWatchdogTasks,
+  scriptPathFromArgs,
+  reapDue,
   isValidWatchdogTaskName,
   isValidWatchdogScriptPath,
   pickSentinel,
