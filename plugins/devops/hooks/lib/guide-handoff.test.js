@@ -359,3 +359,51 @@ describe("pending hand-off (card turns)", () => {
     expect(hint).not.toMatch(/MANDATORY/);
   });
 });
+
+// AUD-C042 / AUD-C059: both directions as tables.
+describe("AUD-C042: web hand-offs that must be detected", () => {
+  test.each([
+    ["DE imperative erstelle", "Erstelle in Cloudflare einen API-Token mit Zone:Read.", "Cloudflare"],
+    ["DE separable leg … an", "Bitte leg im Upstash-Dashboard einen API-Key an und kopier ihn mir hier rein.", "Upstash"],
+    ["DE separable richte … ein, dotted domain", "Richte bei cron-job.org einen Cron-Job ein, der alle 5 Minuten /api/tick aufruft.", "cron-job.org"],
+    ["DE separable gib … ein", "Gib im Stripe-Dashboard unter Webhooks das Secret ein.", "Stripe"],
+    ["EN bot token", "You need to create a bot in the Discord Developer Portal and paste its token into .env.", "Discord Developer Portal"],
+  ])("chat: %s", (_label, text, service) => {
+    expect(detectWebHandoff(text)).toEqual({ service });
+  });
+
+  test.each([
+    ["open item, arrow chain", { open: ["Vercel → Settings → Environment Variables → `UPSTASH_REDIS_REST_URL` eintragen"] }, "Vercel"],
+    ["userFinalTest numbered lines across items", { userFinalTest: ["1. Supabase-Dashboard öffnen", "2. Authentication → Providers → Google aktivieren"] }, "Supabase"],
+    ["open item, DE imperative", { open: ["Leg im Supabase-Dashboard einen API-Key an"] }, "Supabase"],
+    ["object with nested steps", { open: [{ title: "Upstash", steps: ["1. Upstash-Console öffnen", "2. Create Database klicken"] }] }, "Upstash"],
+    ["a single string instead of a list", { open: "Erstelle in Cloudflare einen API-Token" }, "Cloudflare"],
+  ])("card payload: %s", (_label, card, service) => {
+    expect(detectCardHandoff(card)).toEqual({ service });
+  });
+});
+
+describe("AUD-C059: local-code answers and offers must not trigger", () => {
+  test.each([
+    ["local numbered steps + a docs link", "Fix ist drin. Zum Testen:\n1. Öffne `src/config.ts` und setze `debug: true`.\n2. Starte `npm run dev`.\nDoku: https://vitejs.dev/config/"],
+    ["local file steps naming the Stripe SDK", "Nächste Schritte im Code:\n1. Create a new file `src/payments.ts`\n2. Copy the handler below into it\nDer Handler nutzt das Stripe-SDK."],
+    ["offer question", "Soll ich für Stripe noch einen Webhook-Handler erstellen?"],
+    ["EN offer question", "Want me to create the Supabase API key handler as well?"],
+    ["npm link + local steps", "1. Select the new `retry` option in `client.ts`\n2. Enable it via `RETRY=1`\nSiehe https://www.npmjs.com/package/p-retry"],
+    ["self-performed report", "Ich habe in Cloudflare einen API-Token erstellt und in `.env` hinterlegt."],
+    ["'leg' plus a word ending in -an", "Leg den Plan in Supabase-Notizen ab."],
+  ])("%s", (_label, text) => {
+    expect(detectWebHandoff(text)).toBeNull();
+  });
+});
+
+// AUD-C060: the card's "Web-Guide starten" button sends this German prompt —
+// it must route to auto-guide through the skill's own triggers.
+describe("AUD-C060: the guide-button prompt routes to auto-guide", () => {
+  test.each(["Führ mich per Web-Guide durch Upstash", "Führ mich per Web-Guide durch Discord Developer Portal"])("%s", async (prompt) => {
+    const { routeMessage } = await import("./skill-trigger-router.js");
+    const { loadAllSkills } = await import("./skill-meta.js");
+    const skills = loadAllSkills(path.join(__dirname, "..", "..", "skills"));
+    expect(routeMessage(prompt, skills).map((e) => e.skill)).toContain("auto-guide");
+  });
+});

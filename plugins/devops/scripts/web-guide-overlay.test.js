@@ -14,7 +14,10 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // copy[], checklist[], heartbeat, sessionStorage-persisted queue, FAB icon).
 // Raised again from 34 KB for #529 (pendingWaiter staleness tracking) and
 // #516 (the "Guide ausblenden" edge tab + its docking logic).
-const MAX_BYTES = 37 * 1024;
+// Raised from 37 KB for the audit fixes (AUD-C007 frozen global + channel
+// token, AUD-C008 same-step re-send, AUD-C036 panel keys, AUD-C037 secret-free
+// queue, AUD-C063/C064 clipboard + labels).
+const MAX_BYTES = 46 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -194,9 +197,9 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.9.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.9.0["']/);
-    expect(SRC).toMatch(/window.claudeGuide\s*=/);
+  test("defines VERSION 1.10.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.10.0["']/);
+    expect(SRC).toMatch(/defineProperty\(window, "claudeGuide"/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
     expect(SRC).toMatch(/state\s*:/);
@@ -226,7 +229,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.9.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.10.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -243,7 +246,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.9.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.10.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -467,6 +470,30 @@ describe("web-guide-overlay — execution", () => {
     }
   });
 
+  // AUD-C038: a click delivered to a live wait() means Claude has it and is
+  // working — never "Claude hört gerade nicht zu", however long that takes.
+  test("no 'not listening' message after an event reached a live wait()", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      const pending = sb.window.claudeGuide.wait(30000);
+      await vi.advanceTimersByTimeAsync(20000); // a normal long-poll, 20 s in
+      findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0].click();
+      expect((await pending).type).toBe("next");
+      await vi.advanceTimersByTimeAsync(30000); // Claude authors the next step
+      expect(findAll(host, (e) => e._text === "Warte auf Claude…")[0]).toBeTruthy();
+      expect(findAll(host, (e) => /hört gerade nicht zu/.test(e._text || ""))[0]).toBeFalsy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // #513: every wait() call is a poll — it resets the heartbeat's staleness
   // clock even when it immediately resolves from the persisted queue.
   test("wait() resets the heartbeat clock (a poll is a poll, even a queued one)", async () => {
@@ -639,8 +666,8 @@ describe("web-guide-overlay — execution", () => {
   });
 
   // #514: location block, copy chips, checklist.
-  test("renders a location block, copy chips with a working clipboard button, and a checklist", () => {
-    sandbox.navigator.clipboard.writeText = vi.fn();
+  test("renders a location block, copy chips with a working clipboard button, and a checklist", async () => {
+    sandbox.navigator.clipboard.writeText = vi.fn(() => Promise.resolve());
     run(sandbox);
     sandbox.window.claudeGuide.setStep({
       id: "1", index: 1, total: 1, title: "T", text: "go",
@@ -658,6 +685,7 @@ describe("web-guide-overlay — execution", () => {
     const copyBtn = findAll(host, (e) => e.tagName === "BUTTON" && e._text.indexOf("Kopieren") !== -1)[0];
     copyBtn.click();
     expect(sandbox.navigator.clipboard.writeText).toHaveBeenCalledWith("web-guide-test");
+    await Promise.resolve();
     expect(copyBtn.textContent).toBe("Kopiert!");
 
     const checklistItems = findAll(host, (e) => e.tagName === "LI");
@@ -823,7 +851,8 @@ describe("web-guide-overlay — execution", () => {
 
     sandbox.window.claudeGuide.destroy();
 
-    expect(sandbox.window.claudeGuide).toBeUndefined();
+    // AUD-C007: the global is non-configurable now — destroy() unmounts it.
+    expect(sandbox.window.claudeGuide.state().destroyed).toBe(true);
     expect(getHost(sandbox)).toBeUndefined();
     expect(sandbox.window._listenerCount("resize", false)).toBe(0);
     expect(sandbox.window._listenerCount("keydown", true)).toBe(0);

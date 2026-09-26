@@ -1,6 +1,6 @@
 /**
  * @module guide-handoff
- * @version 0.5.0
+ * @version 0.6.0
  * @description Detection + pending-hint state for stop.guide.handoff —
  *   decides whether the turn's own final answer hands the user a manual,
  *   click-through job on an external website/dashboard instead of invoking
@@ -99,6 +99,8 @@ const CREDENTIAL_NOUN_RE_SRC = [
   String.raw`api[-\s]?tokens?`, String.raw`api[-\s]?keys?`,
   String.raw`buckets?`, String.raw`secrets?`, String.raw`oauth[-\s]?apps?`,
   String.raw`webhooks?`, String.raw`cron[-\s]?jobs?`,
+  // AUD-C042: a bot token ("paste its token") is a credential, too.
+  String.raw`tokens?`,
 ];
 
 /** User-directed creation verbs (de+en, incl. zu-infinitives) — signal (c). */
@@ -108,6 +110,14 @@ const CREATION_VERB_RE_SRC = [
   String.raw`create`, String.raw`creating`,
   String.raw`set\s+up`, String.raw`setting\s+up`,
   String.raw`generate`, String.raw`generating`,
+  // AUD-C042: German imperatives, incl. separable verbs split around the
+  // object ("leg … an", "richte … ein", "gib … ein"). A dot inside a word
+  // ("cron-job.org") does not end the clause.
+  String.raw`erstelle`, String.raw`erzeuge`, String.raw`erzeugen`,
+  String.raw`generiere`, String.raw`generieren`,
+  String.raw`leg(?:e)?\s(?:[^.!?\n]|\.(?=\S))*?\san`,
+  String.raw`richte?\s(?:[^.!?\n]|\.(?=\S))*?\sein`,
+  String.raw`gib\s(?:[^.!?\n]|\.(?=\S))*?\sein`,
 ];
 
 /** Unicode-aware whole-word alternative (JS `\b` is ASCII-only, so
@@ -127,8 +137,10 @@ const IMPERATIVE_RE = new RegExp(
     String.raw`öffnen?`, String.raw`klick(?:e|en)?`, String.raw`w[äa]hlen?`,
     String.raw`autorisier(?:e|en)`, String.raw`authentifizier(?:e|en)`,
     String.raw`durchlaufen`, String.raw`anlegen`, String.raw`erstell(?:e|en)`,
-    String.raw`leg(?:e)?\s+[^\n]*?an`,
-    String.raw`eintragen`, String.raw`trag(?:e)?\s+[^\n]*?ein`, String.raw`einloggen`,
+    // AUD-C042: the particle must be its own word ("leg … an", not "…Plan").
+    String.raw`leg(?:e)?\s+[^\n]*?\san`, String.raw`richte?\s+[^\n]*?\sein`,
+    String.raw`gib\s+[^\n]*?\sein`,
+    String.raw`eintragen`, String.raw`trag(?:e)?\s+[^\n]*?\sein`, String.raw`einloggen`,
     String.raw`anmelden`, String.raw`kopier(?:e|en)`, String.raw`einfügen`,
     String.raw`aktivier(?:e|en)`, String.raw`navigier(?:e|en)`,
     // English
@@ -160,6 +172,38 @@ const SELF_PERFORMED_RE = new RegExp(
   'iu'
 );
 
+/**
+ * AUD-C059: an offer question ("Soll ich für Stripe einen Webhook-Handler
+ * erstellen?", "Want me to create …?") asks whether CLAUDE should do
+ * something — it is not a hand-off to the user.
+ */
+const OFFER_RE = new RegExp(
+  wordAlt(['soll', 'sollen', 'kann', 'darf', 'shall', 'should', 'can', 'may'].join('|')) + String.raw`\s+` +
+    wordAlt(['ich', 'i'].join('|')) +
+  '|' + wordAlt(String.raw`want\s+me\s+to`) +
+  '|' + wordAlt(String.raw`möchtest\s+du,?\s+dass\s+ich`),
+  'iu'
+);
+
+function isOfferQuestion(sentence) {
+  return /\?\s*$/.test(sentence) && OFFER_RE.test(sentence);
+}
+
+/**
+ * AUD-C059: a step line that works on a LOCAL artefact — a backticked path,
+ * file name or `KEY=value`, or a file/editor/terminal/code noun — is local
+ * code work, not a web click-through ("1. Öffne `src/config.ts`").
+ */
+const BACKTICK_LOCAL_RE = /`(?!https?:)[^`]*(?:[\\/]|\.[a-z0-9]{1,5}(?![\p{L}\p{N}])|=)[^`]*`/u;
+const LOCAL_TARGET_RE = new RegExp(
+  BACKTICK_LOCAL_RE.source +
+  '|' + wordAlt([
+    'file', 'files', 'datei', 'dateien', 'ordner', 'folder', 'terminal', 'editor', 'handler',
+    'snippet', 'function', 'funktion', 'npm', 'npx', 'node', 'git',
+  ].join('|')),
+  'iu'
+);
+
 /** Split into rough sentences on sentence-ending punctuation or newlines. */
 function splitSentences(text) {
   return String(text).split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
@@ -175,7 +219,7 @@ function splitSentences(text) {
 function hasHandoffSentence(text) {
   if (typeof text !== 'string' || !text) return null;
   for (const sentence of splitSentences(text)) {
-    if (SELF_PERFORMED_RE.test(sentence)) continue;
+    if (SELF_PERFORMED_RE.test(sentence) || isOfferQuestion(sentence)) continue;
     const service = matchService(sentence);
     if (!service || !service.named) continue;
     if (!CREDENTIAL_NOUN_RE.test(sentence)) continue;
@@ -229,9 +273,9 @@ function matchService(text) {
   return null;
 }
 
-/** Numbered list with a UI verb in at least one item. */
+/** Numbered list with a UI verb in at least one item that is not local work. */
 function hasNumberedUiSteps(text) {
-  return String(text).split('\n').some(l => STEP_LINE_RE.test(l) && IMPERATIVE_RE.test(l));
+  return String(text).split('\n').some(l => STEP_LINE_RE.test(l) && IMPERATIVE_RE.test(l) && !LOCAL_TARGET_RE.test(l));
 }
 
 /** Two or more `→` arrows. */
@@ -255,11 +299,24 @@ function detectWebHandoff(lastAssistantText) {
   return hasHandoffSentence(body);
 }
 
-/** A card `open`/`userFinalTest` item as plain text, whatever shape it was passed in. */
+/**
+ * A card `open`/`userFinalTest` item as plain text, whatever shape it was
+ * passed in (AUD-C042: also `label`/`title`/`description` and nested `steps`).
+ */
 function itemText(item) {
   if (typeof item === 'string') return item;
-  if (item && typeof item === 'object') return String(item.text || item.action || '');
+  if (Array.isArray(item)) return item.map(itemText).filter(Boolean).join('\n');
+  if (item && typeof item === 'object') {
+    const head = String(item.text || item.action || item.label || item.title || item.description || '');
+    const steps = Array.isArray(item.steps) ? item.steps.map(itemText).filter(Boolean) : [];
+    return [head, ...steps].filter(Boolean).join('\n');
+  }
   return '';
+}
+
+function asList(value) {
+  if (Array.isArray(value)) return value;
+  return typeof value === 'string' || (value && typeof value === 'object') ? [value] : [];
 }
 
 /**
@@ -272,12 +329,11 @@ function itemText(item) {
  * @returns {{service:string}|null}
  */
 function detectCardHandoff(card) {
-  const items = [
-    ...(Array.isArray(card && card.userFinalTest) ? card.userFinalTest : []),
-    ...(Array.isArray(card && card.open) ? card.open : []),
-  ];
-  for (const item of items) {
-    const hit = hasHandoffSentence(itemText(item));
+  // AUD-C042: each list is read as one block, so a numbered list split over
+  // items or a `→` chain in one item hits the same shapes as in chat.
+  for (const list of [asList(card && card.userFinalTest), asList(card && card.open)]) {
+    const text = list.map(itemText).filter(Boolean).join('\n');
+    const hit = text ? detectWebHandoff(text) : null;
     if (hit) return hit;
   }
   return null;
@@ -307,6 +363,7 @@ module.exports = {
   IMPERATIVE_RE,
   CREDENTIAL_NOUN_RE,
   CREATION_VERB_RE,
+  LOCAL_TARGET_RE,
   PENDING_PREFIX,
   stripCompletionCard,
   containsCompletionCard,

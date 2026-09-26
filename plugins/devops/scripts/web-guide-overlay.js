@@ -1,13 +1,13 @@
 /**
  * @script web-guide-overlay
- * @version 1.9.0
+ * @version 1.10.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
  *   draggable FAB + panel in a closed Shadow DOM host, collects one event
  *   per step (next/help/abort/timeout), exposes window.claudeGuide per
  *   plugins/devops/skills/auto-guide/deep-knowledge/protocol.md. Idempotent
- *   (same version -> "already-injected"; newer -> tear down + replace). No
+ *   (same version -> "already-injected"; frozen global, see protocol.md). No
  *   imports/eval/network — last expression is the IIFE call, so
  *   Runtime.evaluate returns "injected"/"already-injected".
  */
@@ -15,12 +15,26 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.9.0";
+  var VERSION = "1.10.0";
+  // AUD-C007: per-guide channel token, substituted by `web-guide.js payload
+  // inject` (32 hex chars). setStep()/wait() must pass it and every event
+  // echoes it, so a page script can neither push steps nor steal events.
+  // The unsubstituted placeholder (raw source in unit tests) disables the check.
+  var TOKEN = "__WG_TOKEN__";
+  var TOKEN_REQUIRED = /^[0-9a-f]{32}$/.test(TOKEN);
 
-  if (window.claudeGuide && window.claudeGuide.version === VERSION) return "already-injected";
-  if (window.claudeGuide && typeof window.claudeGuide.destroy === "function") {
+  // AUD-C007: the global is non-writable + non-configurable once defined, so
+  // a page cannot replace it after injection. A same-version global is ours
+  // (or a spoof — the skill treats "already-injected" on a fresh document as
+  // hostile); one we cannot replace means "reload-needed" (older frozen build)
+  // or "blocked" (a page-owned non-configurable property).
+  var prior = Object.getOwnPropertyDescriptor(window, "claudeGuide");
+  if (prior) {
+    var priorApi = window.claudeGuide;
+    if (priorApi && priorApi.version === VERSION) return "already-injected";
+    if (!prior.configurable) return priorApi && typeof priorApi.version === "string" ? "reload-needed" : "blocked";
     try {
-      window.claudeGuide.destroy();
+      if (priorApi && typeof priorApi.destroy === "function") priorApi.destroy();
     } catch {}
   }
 
@@ -28,7 +42,7 @@
   var POS_STORAGE_KEY = "__wg.pos";
   var QUEUE_STORAGE_KEY = "__wg.queue";
   var STEP_TTL_MS = 30 * 60 * 1000;
-  var HEARTBEAT_STALE_MS = 10000;
+  var HEARTBEAT_STALE_MS = 10000; // AUD-C038: counted from the last live listener
   var HEARTBEAT_TICK_MS = 2000;
   var INPUT_TYPES = ["text", "secret", "choice", "confirm"];
 
@@ -43,6 +57,7 @@
   // reads. lastEventId/lastDeliveredId let the skill detect a stranded event.
   var CALLER_TIMEOUT_MS = 44000;
   var pendingWaiterArmedAt = 0, lastEventId = 0, lastDeliveredId = null;
+  var destroyed = false, secretLost = false, enterSubmit = null;
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
@@ -88,8 +103,8 @@
     if (input.type === "choice") {
       if (!Array.isArray(input.options) || input.options.some((o) => typeof o !== "string")) return null;
       opts = input.options.slice();
-    } else if (input.options !== undefined) {
-      return null;
+    } else if (input.options !== undefined && !(Array.isArray(input.options) && input.options.length === 0)) {
+      return null; // AUD-C062: `options: []` on a non-choice input is legal (protocol example)
     }
     out.input = { type: input.type, name: input.name };
     if (input.label !== undefined) out.input.label = input.label;
@@ -128,19 +143,38 @@
 
   // #513: a queued event (help/next/abort waiting for Claude's next wait())
   // survives a reload instead of being dropped from an in-memory array.
+  // AUD-C037: a secret value is never written to page-readable storage. The
+  // persisted copy keeps only a `secretDropped` marker; on restore that marker
+  // is removed and the panel asks for the value again.
   function loadQueue() {
     try {
       var q = JSON.parse(sessionStorage.getItem(QUEUE_STORAGE_KEY) || "[]");
       if (Array.isArray(q)) {
         eventQueue = q.filter((e) => e && typeof e === "object" && typeof e.type === "string" && typeof e.stepId === "string");
+        secretLost = eventQueue.some((e) => e.secretDropped === true);
+        eventQueue = eventQueue.filter((e) => e.secretDropped !== true && e.encoding === undefined);
+        eventQueue.forEach((e) => { e.restored = true; });
       }
     } catch {}
   }
 
   function saveQueue() {
+    var safe = eventQueue.map(function (e) {
+      if (e.encoding === undefined) return e;
+      return { type: e.type, stepId: e.stepId, name: e.name, secretDropped: true, id: e.id, ts: e.ts };
+    });
     try {
-      sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(eventQueue));
+      sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(safe));
     } catch {}
+  }
+
+  // AUD-C007: the token is added on delivery only — never persisted.
+  function stamp(event) {
+    if (!TOKEN_REQUIRED || !event || typeof event !== "object") return event;
+    var out = {};
+    for (var k in event) out[k] = event[k];
+    out.token = TOKEN;
+    return out;
   }
 
   function escapeHtml(value) {
@@ -195,6 +229,7 @@
     ".primary:disabled{opacity:.5;cursor:not-allowed}",
     ".secondary{background:#eee;color:#333}",
     ".tertiary{background:transparent;color:#a33}",
+    ".lbl{display:block;font-size:12px;font-weight:600;margin:0 0 4px}",
     "input.f,textarea.f{width:100%;font:inherit;padding:8px;border:1px solid #ccc;border-radius:8px;margin-bottom:8px}",
     ".status{font-size:12px;color:#777;display:flex;align-items:center;gap:6px;padding:0 12px 10px}",
     ".spin{width:12px;height:12px;border-radius:50%;border:2px solid #ccc;border-top-color:#6d28d9;animation:wgs .8s linear infinite}",
@@ -288,7 +323,6 @@
   });
   fabButton.addEventListener("blur", hideFabTip);
   fabButton.addEventListener("pointerdown", hideFabTip);
-  fabButton.addEventListener("keydown", function (e) { if (e.key === "Escape") hideFabTip(); });
 
   var panel = mk("div", "panel");
   panel.setAttribute("role", "dialog");
@@ -308,7 +342,6 @@
   });
   shadow.appendChild(edgeTabBtn);
 
-  document.documentElement.appendChild(host);
 
   function clampPosition() {
     var vw = window.innerWidth || 800;
@@ -410,7 +443,6 @@
     if (edgeTab) applyEdgeTabPosition();
     else applyPosition();
   }
-  window.addEventListener("resize", onResize);
 
   function clearHeartbeat() {
     clearTimeout(heartbeatTimer);
@@ -424,9 +456,18 @@
   // never touched, so it stays exactly as the user left it. This is also the
   // visible "paused" message #526 asks for instead of a silently disabled
   // panel once Claude's turn ends — reused rather than duplicated.
+  // AUD-C038: "not listening" only when an event of this step is still
+  // undelivered, no wait() is live, and the last live listener ended more
+  // than HEARTBEAT_STALE_MS ago — never during a normal long-poll.
+  function listenerLive() {
+    return !!pendingWaiter && Date.now() - pendingWaiterArmedAt < CALLER_TIMEOUT_MS;
+  }
   function tickHeartbeat() {
     if (waitLabelEl) {
-      waitLabelEl.textContent = Date.now() - lastPoll > HEARTBEAT_STALE_MS
+      var undelivered = !!currentStep && eventQueue.some((e) => e.stepId === currentStep.id);
+      var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
+      var lastLive = listenerLive() ? Date.now() : Math.max(lastPoll, deadAt);
+      waitLabelEl.textContent = undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS
         ? "Claude hört gerade nicht zu — schreib im Chat „weiter“."
         : "Warte auf Claude…";
     }
@@ -453,8 +494,9 @@
       var queued = eventQueue.shift();
       saveQueue();
       lastDeliveredId = queued.id;
-      waiterFn(queued);
+      waiterFn(stamp(queued));
     }
+    secretLost = false;
     disableActiveButtons();
     armHeartbeat();
   }
@@ -499,13 +541,15 @@
     var textarea = mk("textarea", "f");
     textarea.rows = 2;
     textarea.placeholder = "Was hakt?";
+    textarea.setAttribute("aria-label", "Was hakt?");
     wrap.appendChild(textarea);
-    wrap.appendChild(
-      makeButton("Senden", "primary", function () {
-        emit("help", undefined, textarea.value || undefined);
-        helpOpen = false;
-      })
-    );
+    var sendBtn = makeButton("Senden", "primary", function () {
+      if (sendBtn.disabled) return;
+      sendBtn.disabled = true; // AUD-C008: one help event per click, not per double-click
+      emit("help", undefined, textarea.value || undefined);
+      helpOpen = false;
+    });
+    wrap.appendChild(sendBtn);
     container.appendChild(wrap);
     try {
       textarea.focus();
@@ -518,6 +562,7 @@
     statusEl = null;
     spinnerEl = null;
     waitLabelEl = null;
+    enterSubmit = null;
     abortConfirm = false;
     clearTimeout(abortResetTimer);
     abortResetTimer = null;
@@ -630,14 +675,25 @@
           var chip = mk("div", "chip");
           chip.appendChild(mk("code", null, c.value));
           var copyLabel = c.label ? "Kopieren: " + c.label : "Kopieren";
+          // AUD-C063: "Kopiert!" only once the clipboard write succeeded.
           var copyBtn = makeButton(copyLabel, "chipbtn", function () {
+            var flash = function (text) {
+              copyBtn.textContent = text;
+              setTimeout(function () {
+                copyBtn.textContent = copyLabel;
+              }, 1500);
+            };
+            var done;
             try {
-              navigator.clipboard.writeText(c.value);
-            } catch {}
-            copyBtn.textContent = "Kopiert!";
-            setTimeout(function () {
-              copyBtn.textContent = copyLabel;
-            }, 1500);
+              done = navigator.clipboard.writeText(c.value);
+            } catch {
+              done = null;
+            }
+            if (done && typeof done.then === "function") {
+              done.then(function () { flash("Kopiert!"); }, function () { flash("Kopieren fehlgeschlagen"); });
+            } else {
+              flash("Kopieren fehlgeschlagen");
+            }
           });
           chip.appendChild(copyBtn);
           copyWrap.appendChild(chip);
@@ -673,7 +729,12 @@
         inputEl = mk("input", "f");
         inputEl.type = input.type === "secret" ? "password" : "text";
         if (input.placeholder) inputEl.placeholder = input.placeholder;
-        if (input.label) inputEl.setAttribute("aria-label", input.label);
+        // AUD-C064: a visible label, tied to the field, not only an aria-label.
+        inputEl.id = "wg-in-" + stepId;
+        var fieldLabel = mk("label", "lbl", input.label || input.name);
+        fieldLabel.htmlFor = inputEl.id;
+        body.appendChild(fieldLabel);
+        inputEl.setAttribute("aria-label", input.label || input.name);
         body.appendChild(inputEl);
         readValue = function () {
           return inputEl.value;
@@ -708,6 +769,7 @@
       }
 
       if (input && input.type === "choice") {
+        if (input.label) body.appendChild(mk("p", "lbl", input.label)); // AUD-C064
         (input.options || []).forEach(function (option) {
           var optBtn = makeButton(String(option), "primary", function () {
             emit("next", input.name, option);
@@ -730,9 +792,9 @@
         updateSubmitEnabled();
         if (inputEl) {
           inputEl.addEventListener("input", updateSubmitEnabled);
-          inputEl.addEventListener("keydown", function (e) {
-            if (e.key === "Enter" && !submitBtn.disabled) submitBtn.click();
-          });
+          // AUD-C036: Enter is handled by panelKey() — the window-capture key
+          // stopper runs first and would swallow a listener on the field.
+          enterSubmit = { input: inputEl, btn: submitBtn };
         }
         if (!focusTarget) focusTarget = submitBtn;
       }
@@ -769,6 +831,18 @@
       waitLabelEl = mk("span", null, "Warte auf Claude…");
       statusEl.appendChild(waitLabelEl);
       panel.appendChild(statusEl);
+
+      // AUD-C008: a restored, still-undelivered click keeps the panel in its
+      // "sent" state instead of inviting a second click.
+      if (eventQueue.some((e) => e.stepId === stepId)) {
+        disableActiveButtons();
+        armHeartbeat();
+      } else if (secretLost && input && input.type === "secret") {
+        // AUD-C037: the secret was not kept across the reload — ask again.
+        statusEl.style.display = "flex";
+        spinnerEl.style.display = "none";
+        waitLabelEl.textContent = "Bitte den Wert erneut eingeben – er wird nicht zwischengespeichert.";
+      }
     }
 
     if (focus && focusTarget && focusTarget.focus) {
@@ -778,10 +852,16 @@
     }
   }
 
-  makeDraggable(fabButton, function () {
+  function toggleFab() {
     collapsed = !collapsed;
     render(true);
     saveState();
+  }
+  makeDraggable(fabButton, toggleFab);
+  // AUD-C036: Enter/Space on the focused FAB fire a click with detail 0 — a
+  // pointer click (detail >= 1) is already handled by makeDraggable.
+  fabButton.addEventListener("click", function (e) {
+    if (e && e.detail === 0) toggleFab();
   });
 
   var KEY_TYPES = ["keydown", "keypress", "keyup"];
@@ -795,8 +875,14 @@
     return !ae || ae === document.body || ae === host;
   }
 
-  function onHostKey(e) {
-    if (e.type === "keydown" && e.key === "Escape") {
+  // AUD-C036: the panel's own keys. Called from the window-capture stopper
+  // (which keeps every overlay key away from page hotkeys and therefore also
+  // from listeners inside the shadow root) or, without composedPath(), from
+  // the host listener — exactly one of the two runs per event.
+  function panelKey(e) {
+    if (e.type !== "keydown") return;
+    if (e.key === "Escape") {
+      hideFabTip();
       if (edgeTab) {
         edgeTab = false; // #516: Escape restores from the edge tab, too
         render();
@@ -806,29 +892,69 @@
         render();
         saveState();
       }
+    } else if (e.key === "Enter" && enterSubmit && shadow.activeElement === enterSubmit.input) {
+      if (typeof e.preventDefault === "function") e.preventDefault();
+      if (!enterSubmit.btn.disabled) enterSubmit.btn.click();
     }
+  }
+  function onHostKey(e) {
+    panelKey(e);
     e.stopPropagation();
   }
   function onWinKeyCap(e) {
     var path = typeof e.composedPath === "function" ? e.composedPath() : null;
-    if (path && path.indexOf(host) !== -1) e.stopPropagation();
+    if (path && path.indexOf(host) !== -1) {
+      e.stopPropagation();
+      panelKey(e);
+    }
   }
   KEY_TYPES.forEach(function (type) {
     host.addEventListener(type, onHostKey);
-    window.addEventListener(type, onWinKeyCap, true);
   });
+
+  function mount() {
+    destroyed = false;
+    document.documentElement.appendChild(host);
+    window.addEventListener("resize", onResize);
+    KEY_TYPES.forEach(function (type) {
+      window.addEventListener(type, onWinKeyCap, true);
+    });
+  }
+
+  function authorized(token) {
+    return !TOKEN_REQUIRED || token === TOKEN;
+  }
+
+  function sameStepContent(a, b) {
+    var sa = sanitizeStep(a), sb = sanitizeStep(b);
+    return !!sa && !!sb && JSON.stringify(sa) === JSON.stringify(sb);
+  }
 
   var api = {
     version: VERSION,
-    setStep: function (step) {
+    setStep: function (step, token) {
+      if (!authorized(token)) return "bad-token"; // AUD-C007
+      if (destroyed) mount();
       // A re-send/re-inject of the SAME step id must not force the panel
       // open again or steal focus — only a genuinely new step does (#516/#507).
       var isNewStep = !currentStep || !step || currentStep.id !== step.id;
+      // AUD-C008: the skill's recovery re-sends the same step after a
+      // re-inject; an unchanged re-send keeps the panel (and a click the
+      // #513 queue preserved) exactly as it is.
+      if (!isNewStep && sameStepContent(step, currentStep)) {
+        saveState();
+        return "ok";
+      }
       currentStep = step;
-      if (isNewStep) collapsed = false;
+      if (isNewStep) {
+        collapsed = false;
+        secretLost = false;
+      }
       helpOpen = false;
       abortConfirm = false;
-      eventQueue = [];
+      // AUD-C008: drop only events of another step — a queued click on this
+      // very step is still the user's answer.
+      eventQueue = eventQueue.filter((e) => !!step && e.stepId === step.id);
       saveQueue();
       clearHeartbeat();
       // Only steal focus for a genuinely new step, and only when the user
@@ -837,7 +963,10 @@
       saveState();
       return "ok";
     },
-    wait: function (ms) {
+    wait: function (ms, token) {
+      // AUD-C007: a caller without the token neither supersedes Claude's
+      // wait() nor receives an event.
+      if (!authorized(token)) return Promise.resolve({ type: "bad-token" });
       lastPoll = Date.now(); // #513: heartbeat — every wait() records a poll.
       // #529: a new wait() call proves the previous call's caller has moved
       // on (the protocol never runs two wait()s from one live loop). Give any
@@ -846,21 +975,21 @@
       if (pendingWaiter) {
         var stale = pendingWaiter;
         pendingWaiter = null;
-        stale({ type: "superseded" });
+        stale(stamp({ type: "superseded" }));
       }
       return new Promise(function (resolve) {
         if (eventQueue.length) {
           var queued = eventQueue.shift();
           saveQueue();
           lastDeliveredId = queued.id;
-          resolve(queued);
+          resolve(stamp(queued));
           return;
         }
         // #529: ms=0 is the "drain" call — it must resolve right away even in
         // a hidden tab (the whole point is a cheap, immediate check), never
         // wait for a visibilitychange that may not come for minutes.
         if (ms === 0) {
-          resolve({ type: "timeout" });
+          resolve(stamp({ type: "timeout" }));
           return;
         }
         var timer = null;
@@ -868,12 +997,14 @@
         var waiter = function (event) {
           clearTimeout(timer);
           if (onVisible) document.removeEventListener("visibilitychange", onVisible);
+          lastPoll = Date.now();
           resolve(event);
         };
         var armTimer = function () {
           timer = setTimeout(function () {
             if (pendingWaiter === waiter) pendingWaiter = null;
-            resolve({ type: "timeout" });
+            lastPoll = Date.now();
+            resolve(stamp({ type: "timeout" }));
           }, ms);
         };
         // A hidden tab throttles timers to one wake-up per minute, which
@@ -908,8 +1039,11 @@
         // lastDeliveredId is the id of the most recently delivered event.
         pendingWaiter: !!pendingWaiter,
         lastDeliveredId,
+        destroyed,
       };
     },
+    // The global cannot be deleted any more (AUD-C007): destroy() unmounts
+    // and clears storage; a later setStep() mounts the same overlay again.
     destroy: function () {
       if (host.parentNode) host.parentNode.removeChild(host);
       window.removeEventListener("resize", onResize);
@@ -918,6 +1052,9 @@
       });
       clearHeartbeat();
       clearTimeout(abortResetTimer);
+      currentStep = null;
+      eventQueue = [];
+      destroyed = true;
       try {
         sessionStorage.removeItem(STORAGE_KEY);
       } catch {}
@@ -927,10 +1064,20 @@
       try {
         localStorage.removeItem(POS_STORAGE_KEY);
       } catch {}
-      delete window.claudeGuide;
     },
   };
-  window.claudeGuide = api;
+
+  try {
+    Object.defineProperty(window, "claudeGuide", {
+      value: Object.freeze(api),
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+  } catch {
+    return "blocked";
+  }
+  mount();
 
   try {
     loadState();

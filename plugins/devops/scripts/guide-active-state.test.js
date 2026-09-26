@@ -6,6 +6,7 @@ import {
   guideActiveFilePath,
   markGuideActive,
   clearGuideActive,
+  readGuideToken,
   isGuideActive,
 } from "./guide-active-state.js";
 
@@ -60,6 +61,27 @@ describe("guide-active-state", () => {
     markGuideActive(dir);
     clearGuideActive(dir);
     expect(isGuideActive(dir)).toBe(false);
+  });
+
+  test("the marker carries a channel token that survives a refresh and dies with clear/expiry (AUD-C007)", () => {
+    const dir = makeTmpDir();
+    const now = Date.now();
+    markGuideActive(dir, now);
+    const token = readGuideToken(dir, now);
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+    markGuideActive(dir, now + 1000);
+    expect(readGuideToken(dir, now + 1000)).toBe(token);
+    expect(readGuideToken(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).toBeNull();
+    markGuideActive(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1);
+    expect(readGuideToken(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).not.toBe(token);
+    clearGuideActive(dir);
+    expect(readGuideToken(dir)).toBeNull();
+  });
+
+  test("clearGuideActive throws when the marker cannot be removed (AUD-C061)", () => {
+    const dir = makeTmpDir();
+    fs.mkdirSync(guideActiveFilePath(dir), { recursive: true });
+    expect(() => clearGuideActive(dir)).toThrow();
   });
 
   test("clearGuideActive on a never-created marker does not throw", () => {

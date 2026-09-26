@@ -419,7 +419,7 @@ describe("CLI: payload step", () => {
   test("valid step via stdin prints window.claudeGuide.setStep(...)", () => {
     const r = run(["payload", "step", "-"], { input: JSON.stringify(validStep()) });
     expect(r.code).toBe(0);
-    expect(r.stdout.startsWith("window.claudeGuide.setStep(")).toBe(true);
+    expect(r.stdout.startsWith("(window.claudeGuide ? window.claudeGuide.setStep(")).toBe(true);
     expect(r.stdout).toContain(JSON.stringify(validStep()));
   });
 
@@ -429,13 +429,13 @@ describe("CLI: payload step", () => {
     fs.writeFileSync(file, JSON.stringify(validStep()));
     const r = run(["payload", "step", file]);
     expect(r.code).toBe(0);
-    expect(r.stdout.startsWith("window.claudeGuide.setStep(")).toBe(true);
+    expect(r.stdout.startsWith("(window.claudeGuide ? window.claudeGuide.setStep(")).toBe(true);
   });
 
   test("valid step via stdin with a trailing heredoc newline still parses", () => {
     const r = run(["payload", "step", "-"], { input: `${JSON.stringify(validStep())}\n` });
     expect(r.code).toBe(0);
-    expect(r.stdout.startsWith("window.claudeGuide.setStep(")).toBe(true);
+    expect(r.stdout.startsWith("(window.claudeGuide ? window.claudeGuide.setStep(")).toBe(true);
   });
 
   test("invalid JSON exits 1 with nothing on stdout", () => {
@@ -463,13 +463,13 @@ describe("CLI: payload wait", () => {
   test("default 30000ms", () => {
     const r = run(["payload", "wait"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(30000))");
+    expect(r.stdout).toBe("JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(30000) : { type: \"reinject-needed\" })");
   });
 
   test("custom ms within bounds", () => {
     const r = run(["payload", "wait", "5000"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(5000))");
+    expect(r.stdout).toBe("JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(5000) : { type: \"reinject-needed\" })");
   });
 
   test("below minimum bound rejected", () => {
@@ -483,7 +483,7 @@ describe("CLI: payload wait", () => {
   test("0 (drain) is accepted despite being below the minimum bound", () => {
     const r = run(["payload", "wait", "0"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe("JSON.stringify(await window.claudeGuide.wait(0))");
+    expect(r.stdout).toBe("JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(0) : { type: \"reinject-needed\" })");
   });
 
   test("above maximum bound rejected", () => {
@@ -785,5 +785,42 @@ describe("CLI: usage", () => {
     const r = run(["frobnicate"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("usage:");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Audit: channel token (AUD-C007), missing channel (AUD-C041), clear (AUD-C061)
+// ---------------------------------------------------------------------------
+
+describe("CLI: channel token and missing channel", () => {
+  test("with an active guide, inject bakes the token and step/wait pass it", () => {
+    const dir = makeTmpDir();
+    expect(run(["guide", "active"], { cwd: dir }).code).toBe(0);
+    const { token } = JSON.parse(fs.readFileSync(path.join(dir, ".claude", "auto-guide-active.json"), "utf8"));
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+    expect(run(["payload", "inject"], { cwd: dir }).stdout).toContain(`var TOKEN = "${token}";`);
+    expect(run(["payload", "step", "-"], { cwd: dir, input: JSON.stringify(validStep()) }).stdout).toContain(`, "${token}")`);
+    expect(run(["payload", "wait", "5000"], { cwd: dir }).stdout).toContain(`wait(5000, "${token}")`);
+    // A resumed turn refreshes the marker but keeps the token.
+    run(["guide", "active"], { cwd: dir });
+    expect(JSON.parse(fs.readFileSync(path.join(dir, ".claude", "auto-guide-active.json"), "utf8")).token).toBe(token);
+  });
+
+  test("step/wait against a page without the overlay report reinject-needed, not a TypeError", async () => {
+    const step = run(["payload", "step", "-"], { input: JSON.stringify(validStep()) }).stdout;
+    const wait = run(["payload", "wait", "0"]).stdout;
+    const ctx = vm.createContext({ window: {}, JSON });
+    expect(vm.runInContext(step, ctx)).toBe("reinject-needed");
+    const out = await vm.runInContext(`(async () => ${wait})()`, ctx);
+    expect(JSON.parse(out)).toEqual({ type: "reinject-needed" });
+  });
+
+  test("guide clear reports a failed unlink instead of success", () => {
+    const dir = makeTmpDir();
+    fs.mkdirSync(path.join(dir, ".claude", "auto-guide-active.json"), { recursive: true });
+    const r = run(["guide", "clear"], { cwd: dir });
+    expect(r.code).toBe(1);
+    expect(r.stdout).not.toContain("guide-cleared");
+    expect(r.stderr).toContain("guide-clear-failed");
   });
 });

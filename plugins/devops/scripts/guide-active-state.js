@@ -20,9 +20,20 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const GUIDE_ACTIVE_REL = path.join('.claude', 'auto-guide-active.json');
 const GUIDE_ACTIVE_TTL_MS = 30 * 60 * 1000;
+const TOKEN_RE = /^[0-9a-f]{32}$/;
+
+function readMarker(cwd) {
+  try {
+    const data = JSON.parse(fs.readFileSync(guideActiveFilePath(cwd), 'utf8'));
+    return data && typeof data === 'object' ? data : null;
+  } catch {
+    return null;
+  }
+}
 
 function guideActiveFilePath(cwd) {
   return path.join(cwd || process.cwd(), GUIDE_ACTIVE_REL);
@@ -35,22 +46,43 @@ function guideActiveFilePath(cwd) {
  */
 function markGuideActive(cwd, now = Date.now()) {
   const file = guideActiveFilePath(cwd);
+  // AUD-C007: the marker also carries the guide's channel token (overlay
+  // setStep/wait). A live guide keeps its token; an expired or missing marker
+  // starts a new one.
+  const prev = readMarker(cwd);
+  const keep = prev && typeof prev.ts === 'number' && now - prev.ts <= GUIDE_ACTIVE_TTL_MS
+    && typeof prev.token === 'string' && TOKEN_RE.test(prev.token);
+  const token = keep ? prev.token : crypto.randomBytes(16).toString('hex');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify({ ts: now }));
+  fs.writeFileSync(tmp, JSON.stringify({ ts: now, token }));
   fs.renameSync(tmp, file);
   return file;
 }
 
-/** Remove the marker (guide ended: done, aborted, or closed tab). */
+/**
+ * Remove the marker (guide ended: done, aborted, or closed tab). An absent
+ * marker is success; any other unlink failure throws (AUD-C061) so the CLI
+ * can report it instead of claiming the guide was cleared.
+ */
 function clearGuideActive(cwd) {
   const file = guideActiveFilePath(cwd);
   try {
     fs.unlinkSync(file);
-  } catch {
-    /* already gone */
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
   }
   return file;
+}
+
+/**
+ * The live guide's channel token (AUD-C007), or null when no fresh marker
+ * with a token exists.
+ */
+function readGuideToken(cwd, now = Date.now()) {
+  const data = readMarker(cwd);
+  if (!data || typeof data.ts !== 'number' || now - data.ts > GUIDE_ACTIVE_TTL_MS) return null;
+  return typeof data.token === 'string' && TOKEN_RE.test(data.token) ? data.token : null;
 }
 
 /**
@@ -75,5 +107,6 @@ module.exports = {
   guideActiveFilePath,
   markGuideActive,
   clearGuideActive,
+  readGuideToken,
   isGuideActive,
 };

@@ -32,7 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { markGuideActive, clearGuideActive } = require('./guide-active-state');
+const { markGuideActive, clearGuideActive, readGuideToken } = require('./guide-active-state');
 
 // All file operations here are synchronous and local (no network, no child
 // processes), so no explicit timeout wrapper is needed per CONVENTIONS.md
@@ -125,6 +125,24 @@ function leanSource(src) {
   return result;
 }
 
+const TOKEN_LINE = 'var TOKEN = "__WG_TOKEN__";';
+
+/**
+ * AUD-C007: bake the guide's channel token into the overlay source. Without a
+ * token the placeholder stays and the overlay runs unauthenticated.
+ * @param {string} src
+ * @param {string|null} token 32 hex chars
+ */
+function withToken(src, token) {
+  if (!token || !/^[0-9a-f]{32}$/.test(token)) return src;
+  return src.replace(TOKEN_LINE, `var TOKEN = "${token}";`);
+}
+
+function tokenArg() {
+  const token = readGuideToken(process.cwd());
+  return token ? `, "${token}"` : '';
+}
+
 function payloadInject(args) {
   const file = overlayPath();
   let source;
@@ -136,7 +154,12 @@ function payloadInject(args) {
     return;
   }
   const raw = Array.isArray(args) && args.includes('--raw');
-  process.stdout.write(raw ? source : leanSource(source));
+  const token = readGuideToken(process.cwd());
+  if (!token) {
+    process.stderr.write('warning: no active guide marker (run `guide active` first) - injecting without a channel token\n');
+  }
+  const tokened = withToken(source, token);
+  process.stdout.write(raw ? tokened : leanSource(tokened));
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +372,11 @@ function payloadStep(arg) {
     return;
   }
 
-  process.stdout.write(`window.claudeGuide.setStep(${JSON.stringify(step)})`);
+  // AUD-C041: after a navigation the channel is gone - say so instead of a
+  // TypeError the skill would route to "aborted".
+  process.stdout.write(
+    `(window.claudeGuide ? window.claudeGuide.setStep(${JSON.stringify(step)}${tokenArg()}) : "reinject-needed")`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +394,9 @@ function payloadWait(msArg) {
     process.exitCode = 1;
     return;
   }
-  process.stdout.write(`JSON.stringify(await window.claudeGuide.wait(${ms}))`);
+  process.stdout.write(
+    `JSON.stringify(window.claudeGuide ? await window.claudeGuide.wait(${ms}${tokenArg()}) : { type: "reinject-needed" })`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -580,8 +609,14 @@ function main(argv) {
       return;
     }
     if (sub === 'clear') {
-      const file = clearGuideActive(process.cwd());
-      process.stdout.write(`guide-cleared ${file}\n`);
+      // AUD-C061: a failed unlink is a failure, not "guide-cleared".
+      try {
+        const file = clearGuideActive(process.cwd());
+        process.stdout.write(`guide-cleared ${file}\n`);
+      } catch (err) {
+        process.stderr.write(`guide-clear-failed: ${err.message}\n`);
+        process.exitCode = 1;
+      }
       return;
     }
     process.stderr.write(`${USAGE}\n`);
@@ -603,6 +638,7 @@ module.exports = {
   overlayPath,
   leanSource,
   gitStatusOf,
+  withToken,
 };
 
 if (require.main === module) {
