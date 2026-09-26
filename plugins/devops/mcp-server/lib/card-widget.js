@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.9.0
+ * @version 0.10.0
  */
 
 import { writeFileSync } from "node:fs";
