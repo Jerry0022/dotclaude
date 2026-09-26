@@ -123,6 +123,25 @@ describe("AUD-012: an `analysis` card closes an AUDIT run without being gated", 
     postMod.recordCard(dir, "analysis", false, RC, {});
     expect(RC.readContract(dir)).not.toBeNull();
   });
+
+  // #548: a paused run is not over — the card may not be refused for passes
+  // that are still to come, and it may not close the contract either.
+  test("a paused card is neither refused with obligations open nor closes the run", () => {
+    RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual", passes: ["harden", "polish"] });
+    RC.record(dir, { k: "edit" });
+    const hook = {
+      cwd: dir, session_id: "s1", hook_event_name: "PreToolUse",
+      tool_name: "mcp__plugin_devops_dotclaude-completion__render_completion_card",
+      tool_input: { variant: "paused" },
+    };
+    const res = require("node:child_process").spawnSync(process.execPath, [require.resolve("../pre-tool-use/pre.run.contract.js")], {
+      input: JSON.stringify(hook), cwd: dir, encoding: "utf8",
+    });
+    expect(res.status).toBe(0);
+    expect(res.stderr || "").toBe("");
+    postMod.recordCard(dir, "paused", false, RC, {});
+    expect(RC.readContract(dir)).not.toBeNull();
+  });
 });
 
 // ── AUD-025 ──────────────────────────────────────────────────────────────

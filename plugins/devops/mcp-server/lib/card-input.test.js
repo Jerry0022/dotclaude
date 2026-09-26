@@ -131,7 +131,7 @@ describe("variant contract (#406)", () => {
   test("CARD_VARIANTS is the enum the MCP schema and the CLI share", () => {
     expect(CARD_VARIANTS).toEqual([
       "ship-successful", "ready", "released", "ship-blocked", "test",
-      "test-minimal", "analysis", "aborted", "fallback", "ready-files",
+      "test-minimal", "analysis", "aborted", "fallback", "ready-files", "paused",
     ]);
     for (const v of CARD_VARIANTS) expect(validateCardInput({ ...BASE, variant: v, state: { pushed: true, merged: "main" } }).ok).toBe(true);
   });

@@ -503,6 +503,11 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
       de: /^## 🔧 Erledigt — noch etwas\?$/m, en: /^## 🔧 Done — anything else\?$/m,
     },
     {
+      name: "paused",
+      params: { variant: "paused", changes: [{ area: "Concept", description: "Bridge und Crons gestoppt" }] },
+      de: /^## ⏸️ Pausiert — weiter, wann du willst$/m, en: /^## ⏸️ Paused — pick it up whenever you like$/m,
+    },
+    {
       name: "pending override",
       params: { variant: "ready", pending: [{ name: "devops:frontend", doing: "Farbstil" }] },
       de: /^## ⏳ Noch nicht fertig — .+$/m, en: /^## ⏳ Not done yet — .+$/m,
@@ -524,6 +529,22 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
       expect(text).toMatch(c.en);
     });
   }
+
+  // #548: paused work ended on the fallback card — "🔧 Erledigt — noch
+  // etwas?" — although nothing was done. The paused card states the pause,
+  // says how to continue, and asks nothing.
+  test("paused: a resume hint instead of a question, the stopped/kept lines as results", async () => {
+    for (const [lang, hint] of [["de", "› Schreib hier, um weiterzumachen."], ["en", "› Write here to continue."]]) {
+      const text = await cardText({
+        variant: "paused", summary: "PC-Aufräumen pausiert", lang, session_id: "test-paused-" + lang,
+        changes: [{ area: "Concept", description: "Bridge, Pulser und Crons gestoppt" }, { area: "Concept", description: "Seite und Entscheidungen behalten" }],
+      });
+      expect(text).toContain(hint);
+      expect(text).toContain("Bridge, Pulser und Crons gestoppt");
+      expect(text).toContain("Seite und Entscheidungen behalten");
+      expect(text).not.toMatch(/noch etwas\?|anything else\?/);
+    }
+  });
 
   test("V&V unverified: ⚠ Ungeprüft shippen? — evidence carries the ungeprüft post", async () => {
     // Simulated indirectly: without the Light-verification flag files the gate

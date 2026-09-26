@@ -105,11 +105,20 @@ describe("titlePrefixFor", () => {
     expect(titlePrefixFor({ variant: "aborted" }, deps)).toBe(SESSION_PREFIX.aborted);
     expect(titlePrefixFor({ variant: "analysis" }, deps)).toBe(SESSION_PREFIX.analysis);
     expect(titlePrefixFor({ variant: "fallback" }, deps)).toBe(SESSION_PREFIX.fallback);
+    expect(titlePrefixFor({ variant: "paused" }, deps)).toBe(SESSION_PREFIX.paused);
     expect(titlePrefixFor({ variant: "no-such-variant" }, deps)).toBe("");
     expect(Object.keys(VARIANT_TITLE_PREFIX).sort()).toEqual([
-      "aborted", "analysis", "fallback", "ready", "ready-files", "released",
+      "aborted", "analysis", "fallback", "paused", "ready", "ready-files", "released",
       "ship-blocked", "ship-successful", "test", "test-minimal",
     ]);
+  });
+
+  // #548: paused work read "🔧 Done" in the sidebar. The pause prefix is its
+  // own, and it is stripped like every other one — never stacked.
+  test("a paused card titles the session ⏸️ Paused, and the prefix strips cleanly", () => {
+    expect(SESSION_PREFIX.paused).toBe("⏸️ Paused – ");
+    expect(stripTitlePrefix("⏸️ Paused – PC cleanup")).toBe("PC cleanup");
+    expect(stripTitlePrefix("⏳ ⏸️ Paused – PC cleanup")).toBe("PC cleanup");
   });
 
   test("a ship lands as Shipped — final and intermediate alike", () => {

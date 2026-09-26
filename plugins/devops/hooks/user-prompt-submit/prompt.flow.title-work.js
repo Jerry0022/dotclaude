@@ -85,7 +85,7 @@ const MODE_PREFIX_EMOJI = [CONCEPT_EMOJI, BATCH_EMOJI];
  *  included, so an already-marked title is recognised). The instruction
  *  names them so a title never stacks two. Together with MODE_PREFIX_EMOJI
  *  this mirrors `STRIPPABLE` in mode-state.js (the test pins the lists). */
-const OUTCOME_PREFIX_EMOJI = ['\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '\u{1F4E6}', '⛔', '\u{1F6AB}', '\u{1F4CB}', '⏳', '\u{1F527}'];
+const OUTCOME_PREFIX_EMOJI = ['\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '\u{1F4E6}', '⛔', '\u{1F6AB}', '\u{1F4CB}', '⏳', '\u{1F527}', '⏸️'];
 
 /** Every leading marker the card / skills may have left. */
 const KNOWN_PREFIX_EMOJI = [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI];

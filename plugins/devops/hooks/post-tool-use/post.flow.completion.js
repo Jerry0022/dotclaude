@@ -755,7 +755,7 @@ function cardContractLines(hook, scheduledTask) {
     'Variant: ship-successful=ship pipeline ran+merged to remote/main, ship-blocked=ship pipeline ran+NOT merged,',
     '  released=a channel promotion ran (also right after a ship in the same run: ONE released card, never ship-successful first),',
     '  aborted=task aborted/infeasible/rate-limited, test=code edits+app/service startable (ANY project type: web, CLI, API, desktop, game),',
-    '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), fallback=other.',
+    '  test-minimal=user started app via prompt no edits yet, ready=code/doc changes (>=1 edit) no app, analysis=no file changes (explanation/investigation), paused=user pauses the work to continue later, fallback=other.',
     'IMPORTANT: The render_completion_card tool result is hidden inside a collapsed',
     'tool call. When it returns card markdown (terminal), you MUST copy it and output',
     'it VERBATIM as your own text response — do NOT rely on the tool result being',
