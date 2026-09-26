@@ -199,7 +199,11 @@ but no matching Light check passed this turn, the turn is blocked.
   (non-zero exit, interrupted, or an unambiguous failure summary) does **not**
   satisfy the gate — it must be fixed and re-run green. Outcome is read
   best-effort from the tool response; an unparseable-but-likely-green run is
-  never falsely blocked.
+  never falsely blocked. The runner's own summary decides: passed counts and no
+  failure count are green, even when a passing test's title or a log line says
+  "fail". A run started in the background verifies nothing at launch: its
+  outcome is read from its task-notification (exit code + output file) once it
+  ends, and while it is still running (30 min at most) the gate does not block.
 - **Order.** A new qualifying edit invalidates a prior verification, so the
   check must run *after* the last code change — testing early then editing does
   not count.

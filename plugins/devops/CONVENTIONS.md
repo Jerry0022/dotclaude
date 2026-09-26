@@ -103,6 +103,10 @@ A failed Bash/PowerShell call does not reach PostToolUse: the harness fires
 `is_interrupt`; PostToolUse only sees successes (`tool_response` without an exit code).
 Normalize any `tool_response` with `normalizeToolResponse()` from
 `hooks/lib/browsertest-guard.js`.
+A call the harness runs in the background (`run_in_background`, or moved there
+at its timeout) returns only a launch report carrying `backgroundTaskId`, never
+the command's output. Its result arrives later as a task notification; read it
+with `taskEnds()` from `hooks/lib/pending-tasks.js`.
 
 ### Project-Rooted State
 

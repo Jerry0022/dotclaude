@@ -176,6 +176,13 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(buttonsFor("vv-unverified", "de").map((a) => a.label)).toEqual(["Tests laufen lassen", "Trotzdem shippen"]);
   });
 
+  // A background test run is still going: waiting is the default and needs no
+  // button (its notification brings the result) — only shipping early does.
+  test("vv-running offers only Jetzt shippen — no test run to start", () => {
+    expect(buttonsFor("vv-running", "de").map((a) => a.label)).toEqual(["Jetzt shippen"]);
+    expect(buttonsFor("vv-running", "en").map((a) => a.label)).toEqual(["Ship now"]);
+  });
+
   // Live 2026-09-23: the Desktop host refuses a prefill that starts with "/"
   // (leading space too); plain text lands. A slash prompt is a dead button.
   test("no button prompt starts with a slash — in any key, in any language", () => {

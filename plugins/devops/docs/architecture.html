@@ -398,7 +398,7 @@
 <details>
   <summary><span class="badge b-hook">PROMPT</span> prompt.issue.detect.js &mdash; Issue Reference Detector</summary>
   <div class="detail-body">
-    <p>Scans the user's message for GitHub issue references (<code>#NNN</code>). Updates issue status to "In Progress" if work on that issue is detected.</p>
+    <p>Scans the user's message for GitHub issue references (<code>#NNN</code>). Sets an issue "In Progress" only when the prompt asks for work on it: a work verb before the number ("fix #12", "arbeite an #12"), a German infinitive after it ("#12 bitte umsetzen") or the number opening the prompt. A number only mentioned is asked about first; numbers in quotes, code, brackets, pasted log lines, lists of 3+ and PR or milestone numbers are no reference (<code>lib/issue-refs.js</code>).</p>
   </div>
 </details>
 
