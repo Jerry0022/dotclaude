@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.10.0
+ * @version 0.10.1
  */
 
 import { writeFileSync } from "node:fs";
@@ -178,9 +178,9 @@ export const CONCLUDE = {
  * (guide-handoff.detectCardHandoff) and, on a hit, names the service here.
  * The button's prompt is self-sufficient like every other one (§ above):
  * it names the service so `auto-guide` starts on the right one. Rendered
- * on EVERY card that carries a hand-off, independent of `buttonsKey` — a
- * `ready-files` or `test-minimal` card with nothing else to click can still
- * offer the guide.
+ * on EVERY widget card that carries a hand-off, independent of `buttonsKey` —
+ * a `ready-files` card with nothing else to click can still offer the guide.
+ * (`test-minimal` never draws the widget at all, see cardWidgetInstruction.)
  */
 export const GUIDE_HANDOFF_BUTTON = {
   de: { label: "Web-Guide starten", icon: "compass", tooltip: "Führt dich live im Browser durch die Einrichtung.", prompt: (service) => `Führ mich per Web-Guide durch ${service}` },
@@ -285,11 +285,11 @@ export const OPEN_URL_PREFIX = {
 /** Texts of the open button: its tooltip and its status after a click. */
 const OPEN_TEXT = {
   de: {
-    tooltip: "Öffnet die Seite im Standardbrowser: Der Klick legt den Befehl ins Eingabefeld, Enter öffnet sie ohne Turn.",
+    tooltip: "Öffnet die Seite im Standardbrowser: Der Klick legt den Befehl ins Eingabefeld, Enter öffnet sie direkt, ohne Claude — kostet keine Tokens.",
     sent: "Im Eingabefeld, Enter öffnet die Seite",
   },
   en: {
-    tooltip: "Opens the page in your default browser: the click puts the command in the input box, Enter opens it without a turn.",
+    tooltip: "Opens the page in your default browser: the click puts the command in the input box, Enter opens it directly, without Claude — costs no tokens.",
     sent: "In the input box, Enter opens the page",
   },
 };
@@ -334,7 +334,7 @@ function openButtonHtml(url, lang) {
  * not open popups. So an https URL stays an anchor, and a loopback page
  * (concept page, dev server) becomes an open button: it prefills
  * `Im Standardbrowser öffnen: <url>`, and prompt.flow.open-url opens the page
- * on Enter without a turn. Any other http URL stays an anchor — dead on the
+ * on Enter directly — the hook answers the prompt, Claude never runs. Any other http URL stays an anchor — dead on the
  * Desktop app, but still a visible, copyable address.
  */
 function linkifyHtml(s, lang = "de") {
@@ -382,10 +382,11 @@ function glyphColor(glyph) {
   return COLOR.green;
 }
 
-/** One evidence post as a `<span>` with an app-styled Info tooltip (`data-tip`). */
+/** One evidence post as a `<span>` with an app-styled Info tooltip (`data-tip`).
+ *  A post with a tooltip is focusable, so the keyboard reaches it (focusin). */
 function evidencePostHtml(post) {
   const color = glyphColor(post.glyph);
-  const tip = post.tooltip ? ` data-tip="${escapeHtml(post.tooltip)}"` : "";
+  const tip = post.tooltip ? ` tabindex="0" data-tip="${escapeHtml(post.tooltip)}"` : "";
   return `<span class="card-post" style="color:${color}"${tip}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
 }
 
@@ -396,8 +397,10 @@ function budgetBarHtml(bar) {
   const markerColor = bar.level === "red" ? COLOR.markerRed : bar.level === "yellow" ? COLOR.markerYellow : COLOR.markerWhite;
   return [
     // Label tier: the bar is a graphic, its tooltip is the only place that
-    // names the value the user is inspecting (ui-defaults.md R1).
-    `<span class="card-budget" data-tip="${escapeHtml(bar.tooltip || "")}" data-tip-tier="label" style="display:inline-flex;align-items:center;gap:8px">`,
+    // names the value the user is inspecting (ui-defaults.md R1). Focusable
+    // and labelled "<label>: <tooltip>" (role img hides the inner label text
+    // from assistive tech): the usage % lives nowhere else.
+    `<span class="card-budget" tabindex="0" role="img" aria-label="${escapeHtml([bar.label, bar.tooltip].filter(Boolean).join(": "))}" data-tip="${escapeHtml(bar.tooltip || "")}" data-tip-tier="label" style="display:inline-flex;align-items:center;gap:8px">`,
     `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
     // Track: time fill with the sweep clipped INSIDE it (the glint runs over
     // elapsed time only — never over time that has not passed), watermark in
@@ -507,17 +510,25 @@ function evidenceHtml(evidence) {
     : "";
 }
 
-/** The budget-bar row plus the optional context-health watermark, or '' when omitted. */
+/** The budget-bar row plus the optional context-health watermark, or '' when
+ *  omitted. Stale usage data (`expiredNote`, index.js#buildBudgetModel) has no
+ *  bars: the note itself is the row, dim, as the terminal shows it. */
 function budgetRowHtml(budget) {
+  if (budget && budget.expiredNote) {
+    return `<div class="card-budget-row" style="font-size:13px;color:${COLOR.dim};padding:4px 0 2px">${escapeHtml(budget.expiredNote)}${budget.contextHealth ? `<span style="font-size:11px;margin-left:16px">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`;
+  }
   return budget && !budget.omitted
     ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(Array.isArray(budget.bars) ? budget.bars : []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.dim}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
     : "";
 }
 
-/** The pipeline line (commit → push → PR → merge), or '' without one. */
+/** The pipeline line (commit → push → PR → merge), or '' without one. The
+ *  first `#<n>` becomes the PR link — never an escaped entity (`&#39;`), and
+ *  left as it is when the card knows no PR. */
 function pipelineHtml(pipeline, pipelinePr, repoUrl) {
+  const hasPr = !!(pipelinePr && pipelinePr.number);
   return pipeline
-    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.dim};padding:4px 0">${escapeHtml(pipeline).replace(/#(\d+)/, () => pipelinePrHtml(pipelinePr, repoUrl))}</div>`
+    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.dim};padding:4px 0">${escapeHtml(pipeline).replace(/(?<!&)#(\d+)/, (m) => (hasPr ? pipelinePrHtml(pipelinePr, repoUrl) : m))}</div>`
     : "";
 }
 
@@ -840,6 +851,19 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
   );
 }
 
+/**
+ * A session id that is safe to join into a file name (AUD-010): only
+ * `[A-Za-z0-9_-]{1,128}` — the harness UUID, "self", Desktop "local_<uuid>".
+ * Anything else (a path separator, `..`, empty, a non-string) maps to
+ * "unknown", so no caller-supplied id can steer a write out of tmpdir.
+ *
+ * @param {unknown} id
+ * @returns {string}
+ */
+export function safeSessionId(id) {
+  return typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : "unknown";
+}
+
 /** Prefix of the per-session widget file (tmpdir). The Stop gate reads it as
  *  "a widget is owed this turn" and names it in its block reason (#451). */
 export const WIDGET_FILE_PREFIX = "dotclaude-devops-card-widget";
@@ -857,7 +881,7 @@ export function writeCardWidgetFile(model, repoUrl, sessionId, dir, env = proces
   if (!model || model.variant === "test-minimal") return "";
   const html = cardWidgetHtml(model, repoUrl);
   if (!html) return "";
-  const file = join(dir, `${WIDGET_FILE_PREFIX}-${sessionId || "unknown"}`);
+  const file = join(dir, `${WIDGET_FILE_PREFIX}-${safeSessionId(sessionId)}`);
   try {
     writeFileSync(file, html);
   } catch {

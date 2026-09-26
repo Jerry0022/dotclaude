@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.29.2
+ * @version 0.29.3
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -82,31 +82,48 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
-const { projectRoot, inOwnWorkTree } = require('../lib/project-root');
-const { gitRun } = require('../lib/git-timeout');
-const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
-const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
-const { getLocale, t } = require('../lib/locale');
-const { responseLaunch, responseTaskId, labelFor, isConceptInfra } = require('../lib/pending-tasks');
-const { BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = require('../lib/light-bgrun');
-const { SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = require('../lib/task-chips');
-const {
-  decideCardTurnEnd,
-  blockedLines: cardTurnBlockedLines,
-  STOP_REASON: CARD_STOP_REASON,
-} = require('../lib/card-turn-end');
-const { isGuideActive } = require('../../scripts/guide-active-state');
-const {
-  classifyProfile,
-  carveOutsFromProfile,
-  domPathsFromProfile,
-  resolveVerificationKind,
-  isCodeChange,
-  isBrowserTool,
-  isTestRunnerTool,
-  testRunOutcome,
-} = require('../lib/browsertest-guard');
+// AUD-028: these sibling lib requires sat unguarded at module scope, outside
+// runHook's try — a half-written lib during a plugin update made EVERY
+// PostToolUse call error. Guarded the way post.agent.nudge.js does it: a load
+// error makes main() a silent no-op, same as every other failure path.
+let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, gitRun,
+  isMcpServerAlive, NO_OUTPUT_NUDGE_REPLY, getLocale, t,
+  responseLaunch, responseTaskId, labelFor, isConceptInfra,
+  BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns,
+  SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder,
+  decideCardTurnEnd, cardTurnBlockedLines, CARD_STOP_REASON, isGuideActive,
+  classifyProfile, carveOutsFromProfile, domPathsFromProfile, resolveVerificationKind,
+  isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome;
+let loadError = false;
+try {
+  ({ sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id'));
+  ({ projectRoot, inOwnWorkTree } = require('../lib/project-root'));
+  ({ gitRun } = require('../lib/git-timeout'));
+  ({ isMcpServerAlive } = require('../lib/mcp-heartbeat'));
+  ({ NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard'));
+  ({ getLocale, t } = require('../lib/locale'));
+  ({ responseLaunch, responseTaskId, labelFor, isConceptInfra } = require('../lib/pending-tasks'));
+  ({ BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = require('../lib/light-bgrun'));
+  ({ SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = require('../lib/task-chips'));
+  ({
+    decideCardTurnEnd,
+    blockedLines: cardTurnBlockedLines,
+    STOP_REASON: CARD_STOP_REASON,
+  } = require('../lib/card-turn-end'));
+  ({ isGuideActive } = require('../../scripts/guide-active-state'));
+  ({
+    classifyProfile,
+    carveOutsFromProfile,
+    domPathsFromProfile,
+    resolveVerificationKind,
+    isCodeChange,
+    isBrowserTool,
+    isTestRunnerTool,
+    testRunOutcome,
+  } = require('../lib/browsertest-guard'));
+} catch {
+  loadError = true;
+}
 
 // Offline card renderer — the same module that backs the MCP tool, invoked as a
 // CLI. Named in the reminder so a session whose MCP servers never connected
@@ -679,13 +696,21 @@ function completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTas
   return { lines, cardContract };
 }
 
+/** 2a. Holds where an orchestrator has work after the card (card-turn-end holdReason). */
+const ORCHESTRATOR_HOLDS = new Set(['autonomous-lockout', 'ship-queue', 'autonomous-run']);
+const ORCHESTRATOR_HOLD_LINE =
+  "[devops] Card shown — continue with the orchestrator's next step; no recap of the card.";
+
 /**
  * 2a. The card widget ends the turn itself (lib/card-turn-end.js): the
  * plugin's Stop hooks run here, and when none of them blocks, `continue:
  * false` stops the loop before another model call — nothing can land under
  * the card, and the app's no-output nudge never comes. A blocking Stop hook
- * hands Claude its reason instead; an orchestrator working past its cards
- * keeps the old reminder.
+ * hands Claude its reason instead. An orchestrator hold (an autonomous run,
+ * its lockout, a ship queue) keeps the turn because the orchestrator has
+ * work after this card — Claude is told to go on with it, not to end the
+ * response (AUD-019). Every other hold (opt-out, budget, spawn failure, no
+ * Stop hooks) keeps the "turn is over" reminder.
  * @returns {string|{context: string}|null} the hook's whole reply
  */
 function cardWidgetReply(hook) {
@@ -693,6 +718,7 @@ function cardWidgetReply(hook) {
   try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
   if (end.end) return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
   if (end.reason) return contextOf(cardTurnBlockedLines(end));
+  if (ORCHESTRATOR_HOLDS.has(end.hold)) return contextOf([ORCHESTRATOR_HOLD_LINE]);
   return contextOf([
     '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
     'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
@@ -928,6 +954,7 @@ function appendIssueStatusInstruction(hook, lines, cardContract) {
  * @returns {string|{context: string}|null}
  */
 function main(hook) {
+  if (loadError) return null;
   if (isSilentTurn(hook)) return null;
 
   // Subagent call: hooks fire for it with the PARENT's session_id, and all

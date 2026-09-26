@@ -1,4 +1,7 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 // Density-specific assertions for the "one page, three lines, one decision"
 // card (§ 2.4 budget line, § 2.6 points cap, test-minimal's minimal form).
@@ -24,13 +27,14 @@ vi.mock("zod", () => {
   return { z };
 });
 
-let render, renderBudgetLineMd, buildBudgetModel;
+let render, renderBudgetLineMd, buildBudgetModel, sanitizeSessionId;
 
 beforeAll(async () => {
   const mod = await import("./index.js");
   render = captured.handlers["render_completion_card"];
   renderBudgetLineMd = mod.renderBudgetLineMd;
   buildBudgetModel = mod.buildBudgetModel;
+  sanitizeSessionId = mod.sanitizeSessionId;
   await render({ variant: "analysis", summary: "warmup", lang: "en", session_id: "test-compact-warmup" });
 }, 60_000);
 
@@ -147,5 +151,45 @@ describe("budget line — omission and glyph-bar fallback (§ 2.4)", () => {
     const line = renderBudgetLineMd(model);
     expect(line).toMatch(/▰/);
     expect(line).toMatch(/│/);
+  });
+});
+
+describe("AUD-035 — the budget tooltip speaks the card's language", () => {
+  const usage = () => ({ timestamp: new Date().toISOString(), session: { pct: 62, resetInMinutes: 30 }, weekly: { pct: 70, resetInMinutes: 50 } });
+
+  test("en card → English tooltips", () => {
+    const model = buildBudgetModel(usage(), 0, 0, "", "en");
+    for (const b of model.bars) {
+      expect(b.tooltip).toMatch(/^\d+% used · resets in /);
+      expect(b.tooltip).not.toContain("verbraucht");
+    }
+  });
+
+  test("de card (and the default) keep the German tooltip", () => {
+    expect(buildBudgetModel(usage(), 0, 0, "", "de").bars[0].tooltip).toMatch(/^62% verbraucht · Reset in /);
+    expect(buildBudgetModel(usage(), 0, 0, "").bars[0].tooltip).toMatch(/^62% verbraucht · Reset in /);
+  });
+});
+
+describe("AUD-010 — the session id never steers a file write out of tmpdir", () => {
+  const RUN = `${process.pid}-${Date.now().toString(36)}`;
+
+  test("sanitizeSessionId keeps real ids and maps anything else to 'unknown'", () => {
+    expect(sanitizeSessionId({ session_id: "local_3f2a9c1e-0b4d-4a33-8ae3-7bdac9359d4c" }).session_id)
+      .toBe("local_3f2a9c1e-0b4d-4a33-8ae3-7bdac9359d4c");
+    expect(sanitizeSessionId({ session_id: "self" }).session_id).toBe("self");
+    expect(sanitizeSessionId({ session_id: "w3-1/../../x" }).session_id).toBe("unknown");
+    expect(sanitizeSessionId({ session_id: ".." }).session_id).toBe("unknown");
+    expect(sanitizeSessionId({}).session_id).toBeUndefined();
+  });
+
+  test("the MCP handler sanitises before writing the card-rendered flag", async () => {
+    const escaped = `w3-escape-${RUN}`;
+    const params = { variant: "analysis", summary: "x", lang: "en", session_id: `w3-2/../../${escaped}` };
+    await render(params);
+    expect(params.session_id).toBe("unknown");
+    // The unsanitised join would have landed one level ABOVE tmpdir.
+    expect(existsSync(join(tmpdir(), "..", escaped))).toBe(false);
+    expect(existsSync(join(tmpdir(), escaped))).toBe(false);
   });
 });

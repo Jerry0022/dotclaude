@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.12.1
+ * @version 0.12.2
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -53,7 +53,7 @@ import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePendin
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, writeCardWidgetFile } from "./lib/card-widget.js";
+import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -791,7 +791,14 @@ function omitWindow(pct, resetMinutes) {
   return (pct || 0) < 50 && (resetMinutes == null || resetMinutes > 60);
 }
 
-function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
+/** The bar tooltip in the card's language (AUD-035 — it was German on English cards). */
+const BUDGET_TOOLTIP = {
+  de: (pct, reset) => pct + '% verbraucht · Reset in ' + reset,
+  en: (pct, reset) => pct + '% used · resets in ' + reset,
+};
+
+function buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang = 'de') {
+  const tooltipFor = BUDGET_TOOLTIP[lang] || BUDGET_TOOLTIP.de;
   if (!usageData || !usageData.session) return null;
   const freshness = assessFreshness(usageData, Date.now());
   if (freshness.expired) {
@@ -810,7 +817,7 @@ function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
     bars.push({
       label: '5h', pct: s.pct, elapsedPct: elapsed5h, level,
       watermark: formatResetSpaced(s.resetInMinutes),
-      tooltip: Math.round(s.pct) + '% verbraucht · Reset in ' + formatResetSpaced(s.resetInMinutes),
+      tooltip: tooltipFor(Math.round(s.pct), formatResetSpaced(s.resetInMinutes)),
     });
   }
   if (w) {
@@ -821,7 +828,7 @@ function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
       bars.push({
         label: 'Wk', pct: w.pct, elapsedPct: elapsedWk, level,
         watermark: formatResetSpaced(w.resetInMinutes),
-        tooltip: Math.round(w.pct) + '% verbraucht · Reset in ' + formatResetSpaced(w.resetInMinutes),
+        tooltip: tooltipFor(Math.round(w.pct), formatResetSpaced(w.resetInMinutes)),
       });
     }
   }
@@ -1558,7 +1565,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     // Unclamped — the widget wraps; the 120-char ellipsis is a terminal budget.
     resultLines: buildResultLines(input, lang, { clamp: false }),
     evidence: buildEvidencePosts(input, lang, key),
-    budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine),
+    budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang),
     pipeline: renderPipelineLine(input, lang, buildId),
     pipelinePr: state.pr || null,
     runContract: renderRunContractLine(input, lang),
@@ -1617,7 +1624,7 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     if (runContractLine) parts.push(runContractLine);
     const ladderLine = renderChannelLadderMd(buildChannelLadder(input), lang);
     if (ladderLine) parts.push(ladderLine);
-    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));
+    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang));
     if (budgetLine) parts.push(budgetLine);
   } else if (resultLines[0]) {
     parts.push('› ' + resultLines[0]);
@@ -1846,7 +1853,21 @@ function normalizeCardParams(raw, { strictVariant = false } = {}) {
   // them; on the CLI path this is what turns a guessed payload into readable
   // text instead of three empty '*  → ' bullets (#396).
   coerceCardInput(params);
+  sanitizeSessionId(params);
 
+  return params;
+}
+
+/**
+ * AUD-010: the session id is joined into tmp file names (card-rendered and
+ * attestation flags, the widget file, the local-ship and guide-pending flags).
+ * Both entry points normalise it HERE, before any of those joins: a real id
+ * (harness UUID, "self", Desktop "local_<uuid>") stays, anything else — a
+ * path separator, `..`, a non-string — becomes "unknown". An absent id stays
+ * absent (every reader already falls back to "unknown").
+ */
+function sanitizeSessionId(params) {
+  if (params && params.session_id !== undefined) params.session_id = safeSessionId(params.session_id);
   return params;
 }
 
@@ -2356,6 +2377,7 @@ server.registerTool(
     }),
   },
   async (params) => {
+    sanitizeSessionId(params);
     withDetectedRepoMode(params);
     const localShip = localShipInstruction(params);
     if (localShip) return { content: [{ type: 'text', text: localShip }] };
@@ -2371,7 +2393,7 @@ server.registerTool(
 // directly (column grid, bar semantics) without driving the whole card.
 export {
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
-  buildBudgetModel, renderBudgetLineMd, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
+  buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   resolveCardKey, buildDecisionBlock, buildCardModel,
 };
 
