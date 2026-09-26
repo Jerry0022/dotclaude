@@ -16,6 +16,7 @@ const plugin = join(here, "..", "..");
 const read = (...p) => readFileSync(join(plugin, ...p), "utf8").replace(/\r\n/g, "\n");
 
 const router = read("skills", "do-run", "SKILL.md");
+const routerQuestions = read("skills", "do-run", "deep-knowledge", "questions.md");
 const burn = read("skills", "do-run", "modes", "burn.md");
 const scheduler = read("skills", "do-run", "modes", "burn", "deep-knowledge", "burn-scheduler.md");
 const composite = read("skills", "do-run", "modes", "burn", "deep-knowledge", "composite-prompt.md");
@@ -73,7 +74,7 @@ describe("limit stops: asked on a manual nudge, policy on an automatic resume", 
 
   test("the router routes BURN_RESUME and asks F7", () => {
     expect(router).toContain("| `BURN_RESUME:` | `modes/burn.md` Step 0.6");
-    expect(router).toMatch(/F7 {2}header: "Burn-Resume"/);
+    expect(routerQuestions).toMatch(/F7 {2}header: "Burn-Resume"/);
   });
 
   test("autonomous Step 0.2 sends BURN_RESUME to burn worktrees and never messages itself", () => {

@@ -11,8 +11,9 @@
  * - The follow-up obeys the same label rules, and the questions the folded
  *   skills used to ask are gone from their mode files.
  *
- * The router renders its questions from fenced blocks in SKILL.md; this test
- * parses those blocks the same way a reader of the skill would.
+ * The router renders its questions from fenced blocks — the base call in
+ * SKILL.md, the follow-up in deep-knowledge/questions.md; this test parses
+ * those blocks the same way a reader of the skill would.
  */
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -20,8 +21,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const skill = readFileSync(join(here, "SKILL.md"), "utf8").replace(/\r\n/g, "\n");
-const mode = (name) => readFileSync(join(here, "modes", `${name}.md`), "utf8").replace(/\r\n/g, "\n");
+const read = (...p) => readFileSync(join(here, ...p), "utf8").replace(/\r\n/g, "\n");
+const skill = read("SKILL.md");
+// Question and execution detail extracted from SKILL.md (content-conventions.md).
+const questions = read("deep-knowledge", "questions.md");
+const execution = read("deep-knowledge", "execution.md");
+const mode = (name) => read("modes", `${name}.md`);
 
 const REC = " (Recommended)";
 
@@ -62,7 +67,7 @@ function parseQuestions(sectionText) {
 }
 
 const base = parseQuestions(section(skill, "## Step 3 — Base call", "## Step 4"));
-const followUp = parseQuestions(section(skill, "## Step 4 — Follow-up", "## Step 5"));
+const followUp = parseQuestions(section(questions, "## Follow-up questions"));
 const byId = (list, id) => list.find((q) => q.id === id);
 
 describe("base call: the four spec questions in one AskUserQuestion", () => {
@@ -99,8 +104,8 @@ describe("base call: fixed option order", () => {
   });
 
   test("the skill forbids reordering and names click-through as a valid run", () => {
-    expect(skill).toMatch(/nothing ever moves one/);
-    expect(skill).toMatch(/Click-through is a valid run/);
+    expect(questions).toMatch(/nothing ever moves one/);
+    expect(questions).toMatch(/Click-through is a valid run/);
   });
 });
 
@@ -131,8 +136,8 @@ describe("base call: conditional options", () => {
     const q1 = byId(base, "Q1");
     expect(q1.options.at(-1).label).toBe("Backlog");
     expect(q1.options.at(-1).note).toMatch(/only when open issues exist/);
-    expect(skill).toMatch(/gh issue list --state open --limit 1/);
-    expect(skill).toMatch(/omit it silently/);
+    expect(questions).toMatch(/gh issue list --state open --limit 1/);
+    expect(questions).toMatch(/omit it silently/);
   });
 
   test("Budget verbrennen is last, gated on burn-plan.js offer (not on > 80 % used)", () => {
@@ -140,9 +145,9 @@ describe("base call: conditional options", () => {
     const budget = q4.options.at(-1);
     expect(budget.label).toBe("Budget verbrennen");
     expect(budget.note).toMatch(/only when burn-plan\.js offer says so/);
-    expect(skill).toMatch(/get_usage/);
-    expect(skill).toContain('scripts/burn-plan.js" offer');
-    expect(skill).toMatch(/"offer": true/);
+    expect(questions).toMatch(/get_usage/);
+    expect(questions).toContain('scripts/burn-plan.js" offer');
+    expect(questions).toMatch(/"offer": true/);
   });
 
   test("Q1 is skipped when started from do-batch", () => {
@@ -152,12 +157,13 @@ describe("base call: conditional options", () => {
 
 describe("base call: Q3 default = last choice, without reordering", () => {
   test("the last choice is a description suffix, never a marker or position change", () => {
-    expect(skill).toMatch(/" · zuletzt gewählt"/);
-    expect(skill).toMatch(/Label, marker and order stay unchanged/);
+    expect(questions).toMatch(/" · zuletzt gewählt"/);
+    expect(questions).toMatch(/Label, marker and order stay unchanged/);
   });
 
   test("Strikt arms the existing strict machinery, not a reimplementation", () => {
-    const umfang = section(skill, "## Step 5 — Umfang", "## Step 6");
+    expect(section(skill, "## Step 5 — Umfang", "## Step 6")).toContain("`deep-knowledge/execution.md` § Strikt");
+    const umfang = section(execution, "## Strikt", "## Run contract");
     expect(umfang).toMatch(/hooks\/lib\/strict-state\.js/);
     // One CLI call that arms AND prints the contract only on success — no
     // `node -e` with process.env.CLAUDE_PLUGIN_ROOT (red-team R6).
@@ -171,14 +177,14 @@ describe("base call: Q3 default = last choice, without reordering", () => {
 
 describe("base call: empty multi-select answer", () => {
   test("nothing ticked in Q4 = the recommended set; 'keine' = no passes", () => {
-    const reading = section(skill, "**Reading Q4", "## Step 4");
+    const reading = section(questions, "**Reading Q4", "## Resume question");
     expect(reading).toMatch(/Nothing ticked\*\* → the recommended set/);
     expect(reading).toMatch(/"keine" \/ "none"/);
   });
 
   test("Q4's question names the set an empty answer runs (no pre-tick exists)", () => {
     expect(skill).toMatch(/Leer lassen = Harden \+ Polish\)/);
-    expect(skill).toMatch(/no pre-selection: an option can be\s+marked, never pre-ticked/);
+    expect(questions).toMatch(/no pre-selection: an option can be\s+marked, never pre-ticked/);
   });
 });
 
@@ -229,17 +235,17 @@ describe("label rules (base call and follow-up)", () => {
     expect(f7.multi).toBe(false);
     expect(f7.options.map((o) => o.label)).toEqual(["Burn fortsetzen", "Burn abschalten"]);
     expect(f7.options[0].recommended).toBe(true);
-    const step4 = section(skill, "## Step 4 — Follow-up", "## Step 5");
-    expect(step4).toMatch(/only with Budget verbrennen/);
-    expect(step4).toMatch(/Gilt nur mit »PC an · mit Resume«/);
+    const followUpQuestions = section(questions, "## Follow-up questions");
+    expect(followUpQuestions).toMatch(/only with Budget verbrennen/);
+    expect(followUpQuestions).toMatch(/Gilt nur mit »PC an · mit Resume«/);
   });
 
   test("F8 collects burn task sources (multi-select, empty = only the prompt); backlog skips it", () => {
     const f8 = byId(followUp, "F8");
     expect(f8.multi).toBe(true);
     expect(f8.options.map((o) => o.label)).toEqual(["Issues", "TODO/FIXME", "Lint & Typen", "Coverage-Lücken"]);
+    expect(section(questions, "## Follow-up questions")).toMatch(/Leer lassen = nur dein Prompt/);
     const step4 = section(skill, "## Step 4 — Follow-up", "## Step 5");
-    expect(step4).toMatch(/Leer lassen = nur dein Prompt/);
     expect(step4).toContain("| Budget verbrennen with Backlog | additionally F6 (if not already asked) + F7; no F8");
   });
 
@@ -279,9 +285,10 @@ describe("folded questions are answered by the router, not asked by the modes", 
   });
 
   test("a stopped burn is resumed without burning on silently", () => {
-    const step2 = section(skill, "## Step 2 — Resume before anything else", "## Step 3");
-    expect(step2).toContain('"Ohne Burn fortsetzen (Recommended)"');
-    expect(step2).toContain('"Mit Burn fortsetzen"');
+    expect(section(skill, "## Step 2 — Resume before anything else", "## Step 3")).toContain("`deep-knowledge/questions.md` § Resume question");
+    const resume = section(questions, "## Resume question", "## Follow-up questions");
+    expect(resume).toContain('"Ohne Burn fortsetzen (Recommended)"');
+    expect(resume).toContain('"Mit Burn fortsetzen"');
     expect(skill).toContain("| `BURN_RESUME:` | `modes/burn.md` Step 0.6");
   });
 
@@ -306,7 +313,11 @@ describe("folded questions are answered by the router, not asked by the modes", 
 });
 
 describe("Step 7 ship lockout (red-team R5)", () => {
-  const step7 = () => section(skill, "## Step 7", "## Rules");
+  const step7 = () => section(execution, "## Autonom ship lockout", "## Mode files");
+
+  test("Step 7 points at the lockout procedure", () => {
+    expect(section(skill, "## Step 7", "## Rules")).toContain("`deep-knowledge/execution.md` § Autonom ship lockout");
+  });
 
   test("arms the do-run lockout and clears it on every exit path", () => {
     const s = step7();
