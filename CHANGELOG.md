@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.211.3] — 2026-09-26
+
+### Fixed
+- **The issue-status check leaves an issue alone that this session never worked on.** At the end of a turn the completion flow told Claude to set every tracked issue Done or Todo on the project board and to comment on it — there was no way to leave one untouched. Tracking now follows the prompt's wording (0.211.1), but a pattern can still read a cited number as a request, and the step that writes to GitHub is the one that has to hold: it now asks first whether this session worked on the issue, and one the prompt only cited gets no status change and no comment. A new test also pins that the tracked list is keyed by the session: another session's list is neither read nor changed.
+
+## [0.211.2] — 2026-09-26
+
+### Fixed
+- **A sent round keeps its grey veil across a reload.** After "Nächste Iteration", "Feedback implementieren" or "Alles ausführen", a reload dropped the content dimmer and the "sent" panel state although Claude was still working on that round. The page now asks the bridge (or its offline queue) on load: a pending iterate/implement payload for the live round brings back the veil, the sent panel and its progress steps; dismissing the veil by click or Escape still works. The payload carries its round number, so a new round loaded before the bridge reset stays clear. Existing concept pages pick this up with the next appended round (engine anchor, validation gate 30c).
+- **A running close-out survives a reload in a concept with earlier rounds.** The finalize restore bailed on the `_processed_at` stamp every earlier reset leaves behind, so it never applied after round 1; it now checks the pending finalize payload and its round instead, and restores the veil too.
+- **The final-report close-out sheet fits on a Full HD screen.** The panel foot reserved a gutter for the 💬 button, which is hidden while the panel is open — the sheet scrolled with empty space below it. The gutter is gone, and so is the "Iterationen ansehen" link: the 🕘 rounds chip in the panel head does the same.
+
+## [0.211.1] — 2026-09-26
+
+### Fixed
+- **An issue number is tracked only when the prompt asks for work on it.** `prompt.issue.detect` read every `#N` as "the user referenced issue #N": the issue went In Progress, and every card of the session told Claude to set it Done or Todo and comment on it. A task-chip prompt that quoted "[issue-status] Tracked issues this session: #530, #409, #431, #469" as an example put four unrelated issues on that track. Now a work verb before the number ("fix #12", "arbeite an #12", "mach Issue #12 fertig", "closes #12"), a German infinitive after it ("#12 bitte umsetzen") or the number opening the prompt tracks it; one or two numbers only mentioned are asked about first ("Arbeitest du an Issue #12?"), like a branch name. Numbers in quotes, code, brackets, pasted log or hook lines and lists or ranges of three or more are no reference, and neither are pull requests, milestones or list items ("PR #471", "merge #490", "Meilenstein #14", "Punkt #2"). Replayed over the 31 real prompts with issue numbers in the local transcripts: none is tracked any more (before: all 31), four draw a question.
+
+## [0.211.0] — 2026-09-26
+
+### Fixed
+- **A green test run stays green when a test title says "fail".** The V&V gate matched `FAIL` case-insensitively, so a passing vitest run with a test named "… must not fail" was reported as "A test ran this session but FAILED". The runner's own summary now decides: "Tests 1 failed | 56 passed" and a `FAIL src/x.test.js` line are red, "56 passed" and node's "ℹ fail 0" are green. ✗, `AssertionError` and a capital `FAIL` count only in output without a summary, passing test lines (✓, √, `ok N`) are never read as signals, and ANSI colours are stripped first.
+- **A test run started in the background no longer verifies at its launch.** The launch report of a `run_in_background` command says nothing about the result, yet it satisfied the Light-verification gate. The launch is now recorded, and the result comes from the run's task notification and output file when it arrives: green verifies, red marks the run red. While the run is in flight (at most 30 minutes) the stop gate waits instead of blocking; an edit after the launch drops the record.
+
+### Added
+- **The completion card names a test that is still running.** Instead of "⚠ ungeprüft — kein Test lief" it shows "◐ Test läuft noch im Hintergrund" (en: "test still running in the background") under the heading "⏳ Test läuft noch — Ergebnis abwarten?". Its one button, "Jetzt shippen" / "Ship now", ships without waiting; waiting needs no button, the notification brings the result.
+
 ## [0.210.1] — 2026-09-26
 
 ### Fixed

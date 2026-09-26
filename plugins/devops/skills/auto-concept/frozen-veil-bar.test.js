@@ -140,7 +140,7 @@ describe("frozen veil + floating bar — CSS", () => {
 describe("frozen veil + floating bar — JS contract", () => {
   test("showIteration relocks past rounds, hides the dimmer on the live one, and drives the bar", () => {
     const fn = fnSource("showIteration");
-    expect(fn).toContain("if (isLive) hideContentDimmer(); else lockFrozenView();");
+    expect(fn).toContain("if (isLive && !submitted) hideContentDimmer(); else lockFrozenView();");
     expect(fn).toContain("frozenBar.hidden = !!isLive");
     expect(fn).toContain("[data-frozen-bar-title]");
   });
@@ -321,5 +321,21 @@ describe("frozen veil + floating bar — behaviour (reference JS on a DOM stub)"
     r.showIteration("3");
     expect(r.ready.style.display).toBe("block");
     expect(r.submitted.style.display).toBe("none");
+  });
+
+  // A sent live round is veiled like a past one: submitWithAction() and, after
+  // a reload, restoreInFlightRound() put the veil up; a detour into a past tab
+  // and back must not silently lift it.
+  test("a sent live round is relocked on re-entry; a ready one is not", () => {
+    const r = loadRuntime();
+    r.body.classList.add("concept-submitted");
+    r.showIteration("1");
+    r.showIteration("3");
+    expect(veiled(r)).toBe(true);
+    expect(r.bar.hidden).toBe(true);
+    r.body.classList.remove("concept-submitted");
+    r.showIteration("1");
+    r.showIteration("3");
+    expect(veiled(r)).toBe(false);
   });
 });

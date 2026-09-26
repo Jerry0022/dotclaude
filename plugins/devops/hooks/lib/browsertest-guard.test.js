@@ -17,6 +17,11 @@ import {
   normalizeToolResponse,
   testRunOutcome,
   hasRunnerOutput,
+  BG_RUN_MAX_MS,
+  parseBackgroundRuns,
+  formatBackgroundRuns,
+  backgroundRunOutcome,
+  settleBackgroundRuns,
   hasSkipJustification,
   decideLightTest,
   buildLightTestReason,
@@ -644,6 +649,89 @@ describe("testRunOutcome", () => {
 });
 
 // ---------------------------------------------------------------------------
+// testRunOutcome — the runner's summary decides, not a test title
+// ---------------------------------------------------------------------------
+
+// The Bash PostToolUse tool_response carries no exit code, so the text decides.
+// The case-insensitive \bFAIL\b signal used to match the lowercase word in a
+// PASSING test's title ("✓ … must not fail") and the gate reported a green
+// vitest run (2 files / 57 tests passed) as "A test ran this session but FAILED".
+describe("testRunOutcome — summary decides (Bash response, no exit code)", () => {
+  const bash = (stdout) => ({ stdout, stderr: "", interrupted: false, isImage: false });
+  const ESC = "\x1b";
+
+  const greenVitest = [
+    " ✓ plugins/devops/hooks/stop/stop.flow.guard.test.js (31 tests) 812ms",
+    "   ✓ R2 Q10: a defensive `done` without an active contract must not fail > keeps the card gate  412ms",
+    " ✓ plugins/devops/hooks/lib/card-guard.test.js (26 tests) 40ms",
+    "",
+    " Test Files  2 passed (2)",
+    "      Tests  57 passed (57)",
+  ].join("\n");
+
+  test("green vitest run whose passing test title says 'must not fail' → pass", () => {
+    expect(testRunOutcome(bash(greenVitest))).toBe("pass");
+  });
+
+  test("the same run as vitest really prints it, in colour → pass", () => {
+    const coloured = [
+      ` ${ESC}[32m✓${ESC}[39m plugins/devops/hooks/lib/card-guard.test.js ${ESC}[2m(${ESC}[22m${ESC}[2m57 tests${ESC}[22m${ESC}[2m)${ESC}[22m`,
+      `   ${ESC}[33m${ESC}[2m✓${ESC}[22m${ESC}[39m degraded inputs must not fail open${ESC}[2m > ${ESC}[22mconfig is not JSON ${ESC}[33m 1694${ESC}[2mms${ESC}[22m${ESC}[39m`,
+      "",
+      `${ESC}[2m Test Files ${ESC}[22m ${ESC}[1m${ESC}[32m2 passed${ESC}[39m${ESC}[22m${ESC}[90m (2)${ESC}[39m`,
+      `${ESC}[2m      Tests ${ESC}[22m ${ESC}[1m${ESC}[32m57 passed${ESC}[39m${ESC}[22m${ESC}[90m (57)${ESC}[39m`,
+    ].join("\n");
+    expect(testRunOutcome(bash(coloured))).toBe("pass");
+    expect(hasRunnerOutput(coloured)).toBe(true);
+  });
+
+  test("a non-zero failure count in the summary → fail", () => {
+    expect(testRunOutcome(bash(" Test Files  1 failed | 1 passed (2)\n      Tests  1 failed | 56 passed (57)"))).toBe("fail");
+    expect(testRunOutcome(bash("Tests  1 failed | 56 passed"))).toBe("fail");
+    // In colour the count sits right after an escape code: "[31m1 failed".
+    expect(testRunOutcome(bash(`${ESC}[2m      Tests ${ESC}[22m ${ESC}[1m${ESC}[31m1 failed${ESC}[39m${ESC}[22m${ESC}[2m | ${ESC}[22m${ESC}[1m${ESC}[32m56 passed${ESC}[39m`))).toBe("fail");
+  });
+
+  test("a runner's capital FAIL line → fail", () => {
+    expect(testRunOutcome(bash("FAIL plugins/x.test.js"))).toBe("fail");
+    expect(testRunOutcome(bash(` ${ESC}[41m${ESC}[1m FAIL ${ESC}[22m${ESC}[49m plugins/x.test.js > suite > case`))).toBe("fail");
+    // A file that failed to load: every collected test passed, the file did not.
+    expect(testRunOutcome(bash(" FAIL  src/x.test.js [ src/x.test.js ]\n\n Test Files  1 failed | 1 passed (2)\n      Tests  57 passed (57)"))).toBe("fail");
+  });
+
+  test("node:test spec summary 'ℹ fail 0' → pass", () => {
+    expect(testRunOutcome(bash("✔ must not fail (1.2ms)\nℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0"))).toBe("pass");
+  });
+
+  test("a failure count anywhere beats a green summary elsewhere", () => {
+    // cargo prints one summary per test binary; the old global "0 failed"
+    // excuse let the first green line hide the second red one.
+    expect(testRunOutcome(bash("test result: ok. 10 passed; 0 failed; 0 ignored\n\ntest result: FAILED. 5 passed; 1 failed; 0 ignored"))).toBe("fail");
+  });
+
+  test("with a green summary, loose signals in titles or logs do not redden", () => {
+    expect(testRunOutcome(bash("stderr | x.test.js > rejects bad input\nAssertionError [ERR_ASSERTION]: expected\n\n Test Files  1 passed (1)\n      Tests  4 passed (4)"))).toBe("pass");
+    expect(testRunOutcome(bash(" ✓ prints FAIL when the build breaks\n\n Tests  3 passed (3)"))).toBe("pass");
+    expect(testRunOutcome(bash("  suite\n    √ does not fail\n\n  1 passing (4ms)"))).toBe("pass");
+  });
+
+  test("without a summary, loose signals still redden", () => {
+    expect(testRunOutcome(bash("✗ smoke check"))).toBe("fail");
+    expect(testRunOutcome(bash("AssertionError [ERR_ASSERTION]: expected 1 to equal 2"))).toBe("fail");
+  });
+
+  test("unittest: failures=N is red, expected failures are not", () => {
+    expect(testRunOutcome(bash("Ran 5 tests in 0.1s\n\nFAILED (failures=1)"))).toBe("fail");
+    expect(testRunOutcome(bash("[py] FAILED (failures=2, errors=1)"))).toBe("fail");
+    expect(testRunOutcome(bash("Ran 5 tests in 0.1s\n\nOK (expected failures=1)"))).toBe("pass");
+  });
+
+  test("a non-zero exit whose text only says 'fail' in prose stays unknown (#409)", () => {
+    expect(testRunOutcome({ exit_code: 1, stderr: "patch.py: hunk 2 did not apply, the build will fail" })).toBe("unknown");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // hasSkipJustification — explicit skip token
 // ---------------------------------------------------------------------------
 
@@ -798,5 +886,124 @@ describe("needsLightVerification stays consistent with resolveVerificationKind",
     // Backend under a DOM profile now DOES owe verification (as a test run),
     // where the old surface-scoped boolean returned false.
     expect(needsLightVerification("dom", "scripts/build.js")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Background runs — a launch report is no run
+// ---------------------------------------------------------------------------
+
+// A test command started with run_in_background returned the empty launch
+// report { stdout: "", …, backgroundTaskId }; normalizeToolResponse fell back
+// to its JSON, no failure signal matched, and the gate recorded a PASS for a
+// run that had not produced a single result yet.
+describe("testRunOutcome — a background launch verifies nothing", () => {
+  const LAUNCH = { stdout: "", stderr: "", interrupted: false, isImage: false, backgroundTaskId: "b68oycrr6" };
+
+  test("run_in_background launch → unknown", () => {
+    expect(testRunOutcome(LAUNCH)).toBe("unknown");
+  });
+
+  test("a run moved to the background at its timeout (#530) → unknown, whatever it printed so far", () => {
+    const moved = { stdout: " ✓ a.test.js (3 tests) 12ms", stderr: "", interrupted: false, backgroundTaskId: "bad36w5pu", timedOutAfterMs: 120000 };
+    expect(testRunOutcome(moved)).toBe("unknown");
+  });
+
+  test("the launch sentence as a plain-string response → unknown", () => {
+    expect(testRunOutcome("Command running in background with ID: b123abc. Output is being written to: x.output")).toBe("unknown");
+  });
+
+  test("a foreground green run still passes", () => {
+    expect(testRunOutcome({ stdout: " Test Files  1 passed (1)\n      Tests  3 passed (3)", stderr: "", interrupted: false, isImage: false })).toBe("pass");
+  });
+});
+
+describe("backgroundRunOutcome — the result of a background run", () => {
+  const done = (code) => ({ status: "completed", summary: `Background command "Run the suite" completed (exit code ${code})` });
+  const failed = (code) => ({ status: "failed", summary: `Background command "Run the suite" failed with exit code ${code}` });
+  const GREEN = " Test Files  2 passed (2)\n      Tests  57 passed (57)";
+  const RED = " Test Files  1 failed | 1 passed (2)\n      Tests  1 failed | 56 passed (57)";
+
+  test("exit 0 with a green summary → pass", () => {
+    expect(backgroundRunOutcome(done(0), GREEN)).toBe("pass");
+  });
+
+  test("exit 0 with no output to read → pass", () => {
+    expect(backgroundRunOutcome(done(0), "")).toBe("pass");
+  });
+
+  test("exit 0 but a red summary (`npm test | tail` hides the exit code) → fail", () => {
+    expect(backgroundRunOutcome(done(0), RED)).toBe("fail");
+  });
+
+  test("non-zero exit with the runner's summary → fail", () => {
+    expect(backgroundRunOutcome(failed(1), RED)).toBe("fail");
+  });
+
+  test("non-zero exit without a runner summary → unknown (#409: died before the runner)", () => {
+    expect(backgroundRunOutcome(failed(1), "Traceback (most recent call last):\nKeyError: 'x'")).toBe("unknown");
+    expect(backgroundRunOutcome(failed(127), "")).toBe("unknown");
+  });
+
+  test("a killed or stopped task produced no result → unknown", () => {
+    expect(backgroundRunOutcome({ status: "killed", summary: 'Task "Run the suite" was stopped by the user' }, GREEN)).toBe("unknown");
+    expect(backgroundRunOutcome({ status: "stopped", summary: "Background shell command didn't finish before the previous session ended" }, GREEN)).toBe("unknown");
+    expect(backgroundRunOutcome(null, GREEN)).toBe("unknown");
+  });
+});
+
+describe("settleBackgroundRuns / light-bgrun records", () => {
+  const NOW = 1_800_000_000_000;
+  const end = { status: "completed", summary: 'Background command "t" completed (exit code 0)', outputFile: "C:\\Temp\\tasks\\b1.output" };
+
+  test("a run whose notification arrived settles from its output file", () => {
+    const read = [];
+    const { outcomes, running } = settleBackgroundRuns(
+      [{ id: "b1", at: NOW - 1000 }],
+      new Map([["b1", end]]),
+      (file) => { read.push(file); return " Tests  4 passed (4)"; },
+      NOW,
+    );
+    expect(outcomes).toEqual(["pass"]);
+    expect(running).toEqual([]);
+    expect(read).toEqual(["C:\\Temp\\tasks\\b1.output"]);
+  });
+
+  test("a run without a notification is still running — until BG_RUN_MAX_MS, then dropped unverified", () => {
+    const runs = [{ id: "fresh", at: NOW - 60_000 }, { id: "stale", at: NOW - BG_RUN_MAX_MS - 1 }];
+    const { outcomes, running } = settleBackgroundRuns(runs, new Map(), () => "", NOW);
+    expect(outcomes).toEqual([]);
+    expect(running).toEqual([{ id: "fresh", at: NOW - 60_000 }]);
+  });
+
+  test("records round-trip; a malformed line is dropped", () => {
+    const runs = [{ id: "b68oycrr6", at: 1 }, { id: "bad36w5pu", at: 2 }];
+    expect(parseBackgroundRuns(formatBackgroundRuns(runs))).toEqual(runs);
+    expect(parseBackgroundRuns("b1 5\r\nnot a record\n\nb2 x\nb3 7")).toEqual([{ id: "b1", at: 5 }, { id: "b3", at: 7 }]);
+    expect(parseBackgroundRuns(undefined)).toEqual([]);
+  });
+});
+
+describe("decideLightTest — a background run still in flight", () => {
+  const owed = { pending: true, verified: false, stopHookActive: false, kind: "runner", blockCount: 0 };
+
+  test("owed + in flight → no block, flags kept, nothing counted", () => {
+    const d = decideLightTest({ ...owed, inFlight: true });
+    expect(d.action).toBe("pass");
+    expect(d.resetFlags).toBe(false);
+    expect(d.incrementBlock).toBeUndefined();
+    expect(d.markSkipped).toBeUndefined();
+  });
+
+  test("an earlier red run does not block while a rerun is in flight", () => {
+    expect(decideLightTest({ ...owed, red: true, inFlight: true }).action).toBe("pass");
+  });
+
+  test("nothing owed → reset as before, in flight or not", () => {
+    expect(decideLightTest({ ...owed, verified: true, inFlight: true }).resetFlags).toBe(true);
+  });
+
+  test("owed and nothing in flight → blocks as before", () => {
+    expect(decideLightTest({ ...owed, inFlight: false }).action).toBe("block");
   });
 });

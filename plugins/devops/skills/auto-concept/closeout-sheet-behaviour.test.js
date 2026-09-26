@@ -614,11 +614,41 @@ describe("close-out sheet — a finalize that outlives its tab", () => {
   });
 
   test("a processed finalize does not freeze a fresh sheet", async () => {
+    // /reset replaces the payload, so a processed finalize reads back as
+    // `submitted: false` with the reset's stamp.
     const p = await pageWithBridge(
-      { submitted: true, action: "finalize", _processed_at: new Date().toISOString() },
+      { submitted: false, _processed_at: new Date().toISOString() },
       { items: ITEMS }
     );
     expect(p.sheet().dataset.frozen).not.toBe("true");
+    expect(p.window.__stub.dim).toBe(false);
+  });
+
+  test("an earlier round's reset stamp does not hide a running finalize", async () => {
+    // The bridge keeps `_processed_at` from the LAST /reset across new
+    // submissions — every concept that had a round before its final report
+    // carries one. Treating it as "this finalize is done" skipped the
+    // restore on exactly the reload it exists for.
+    const p = await pageWithBridge(
+      { submitted: true, action: "finalize", iteration: "2", _processed_at: "2026-09-01T10:00:00Z" },
+      { items: ITEMS }
+    );
+    expect(p.sheet().dataset.frozen).toBe("true");
+    // …and the content veil comes back with it.
+    expect(p.window.__stub.dim).toBe(true);
+    expect(p.document.body.classList.contains("content-dimmed")).toBe(true);
+  });
+
+  test("a finalize payload naming another round is left alone", async () => {
+    const p = await pageWithBridge(
+      { submitted: true, action: "finalize", iteration: "1" },
+      { items: ITEMS }
+    );
+    expect(p.sheet().dataset.frozen).not.toBe("true");
+  });
+
+  test("a submitted finalize names its round", () => {
+    expect(CLOSEOUT_JS).toContain("iteration: active ? active.dataset.iteration : null,");
   });
 
   test("an iterate submission on the bridge is none of the sheet's business", async () => {

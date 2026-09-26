@@ -474,6 +474,23 @@ describe("post.flow.completion — reaches the model, and only when it changes s
     cleanup(dir);
   });
 
+  // Its own list is no work order either: prompt.issue.detect tracks every #N
+  // a prompt names, including one it only cites. Without a way out, each of
+  // them was owed a board move and a comment — the same foreign-issue writes.
+  test("an issue the session only cited is left untouched before any write", () => {
+    const dir = project();
+    const sid = "s-issues-cited";
+    fs.writeFileSync(flag(dir, "tracked-issues", sid), '["290"]');
+    const out = runHook(dir, sid, "Read");
+    expect(out).toContain("[issue-status] Tracked issues this session: #290");
+    expect(out).toContain("Did this session work on it?");
+    const untouched = out.indexOf("leave it untouched — no status change, no comment");
+    expect(untouched).toBeGreaterThan(-1);
+    expect(untouched).toBeLessThan(out.indexOf("gh issue view"));
+    expect(untouched).toBeLessThan(out.indexOf('"Done"'));
+    cleanup(dir);
+  });
+
   test("a running /auto-guide loop gets a waiver instead of the contract (#526)", () => {
     const dir = project();
     const marker = path.join(dir, ".claude", "auto-guide-active.json");
@@ -611,6 +628,93 @@ describe("post.flow.completion — a chained command that died before the runner
     });
     expect(fs.existsSync(flag(dir, "light-verified", sid))).toBe(true);
     expect(fs.existsSync(flag(dir, "light-red", sid))).toBe(false);
+    cleanup(dir);
+  });
+});
+
+// A test run started with run_in_background returned the empty launch report
+// { stdout: "", …, backgroundTaskId }. No failure signal in it, so it read as a
+// PASS and verified a run that had not produced a single result yet. The launch
+// now only records the run (light-bgrun); its task-notification settles it.
+describe("post.flow.completion — a background test run verifies only by its result", () => {
+  const flag = (dir, name, sid) => path.join(dir, ".tmp", `dotclaude-devops-${name}-${sid}`);
+  const has = (dir, name, sid) => fs.existsSync(flag(dir, name, sid));
+  const LAUNCH = { stdout: "", stderr: "", interrupted: false, isImage: false, backgroundTaskId: "b68oycrr6" };
+  const GREEN = " Test Files  2 passed (2)\n      Tests  57 passed (57)";
+  const launch = (dir, sid) => runHook(dir, sid, "Bash", {
+    tool_input: { command: "npx vitest run", description: "Run the suite", run_in_background: true },
+    tool_response: LAUNCH,
+  });
+  // The notification the harness enqueues when the task ends, and the output
+  // file it names — written the way the transcript carries them.
+  const finish = (dir, status, summary, output) => {
+    const out = path.join(dir, "b68oycrr6.output");
+    fs.writeFileSync(out, output);
+    const transcript = path.join(dir, "transcript.jsonl");
+    fs.writeFileSync(transcript, JSON.stringify({
+      type: "queue-operation",
+      operation: "enqueue",
+      content: `<task-notification>\n<task-id>b68oycrr6</task-id>\n<output-file>${out}</output-file>\n` +
+        `<status>${status}</status>\n<summary>${summary}</summary>\n</task-notification>`,
+    }) + "\n");
+    return transcript;
+  };
+
+  test("the launch verifies nothing — the run is recorded instead", () => {
+    const dir = project();
+    const sid = "s-bg-launch";
+    launch(dir, sid);
+    expect(has(dir, "light-verified", sid)).toBe(false);
+    expect(has(dir, "light-red", sid)).toBe(false);
+    expect(fs.readFileSync(flag(dir, "light-bgrun", sid), "utf8")).toMatch(/^b68oycrr6 \d+$/);
+    cleanup(dir);
+  });
+
+  test("a foreground green run verifies, as before", () => {
+    const dir = project();
+    const sid = "s-bg-foreground";
+    runHook(dir, sid, "Bash", {
+      tool_input: { command: "npx vitest run", description: "Run the suite" },
+      tool_response: { stdout: GREEN, stderr: "", interrupted: false, isImage: false },
+    });
+    expect(has(dir, "light-verified", sid)).toBe(true);
+    expect(has(dir, "light-bgrun", sid)).toBe(false);
+    cleanup(dir);
+  });
+
+  test("the first call after its notification settles it — a green run verifies", () => {
+    const dir = project();
+    const sid = "s-bg-green";
+    launch(dir, sid);
+    const transcript = finish(dir, "completed", 'Background command "Run the suite" completed (exit code 0)', GREEN);
+    runHook(dir, sid, "Read", { transcript_path: transcript });
+    expect(has(dir, "light-verified", sid)).toBe(true);
+    expect(has(dir, "light-bgrun", sid)).toBe(false);
+    cleanup(dir);
+  });
+
+  test("a red background run writes light-red and verifies nothing", () => {
+    const dir = project();
+    const sid = "s-bg-red";
+    launch(dir, sid);
+    const transcript = finish(dir, "failed", 'Background command "Run the suite" failed with exit code 1',
+      " Test Files  1 failed | 1 passed (2)\n      Tests  1 failed | 56 passed (57)");
+    runHook(dir, sid, "Read", { transcript_path: transcript });
+    expect(has(dir, "light-red", sid)).toBe(true);
+    expect(has(dir, "light-verified", sid)).toBe(false);
+    cleanup(dir);
+  });
+
+  test("a code edit after the launch drops the run — its result tested the old code", () => {
+    const dir = project();
+    const sid = "s-bg-edit";
+    launch(dir, sid);
+    runHook(dir, sid, "Edit");
+    expect(has(dir, "light-bgrun", sid)).toBe(false);
+    const transcript = finish(dir, "completed", 'Background command "Run the suite" completed (exit code 0)', GREEN);
+    runHook(dir, sid, "Read", { transcript_path: transcript });
+    expect(has(dir, "light-verified", sid)).toBe(false);
+    expect(has(dir, "light-pending", sid)).toBe(true);
     cleanup(dir);
   });
 });

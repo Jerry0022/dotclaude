@@ -21,7 +21,7 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.8.0
+ * @version 0.9.0
  */
 
 import { writeFileSync } from "node:fs";
@@ -103,6 +103,10 @@ export const BUTTONS = {
       { label: "Tests laufen lassen", icon: "player-play", prompt: "Führ jetzt npm test (bzw. die passenden Checks) aus, bevor wir shippen.", primary: true, tooltip: "Holt die fehlende Verifikation nach, bevor geshippt wird." },
       { label: "Trotzdem shippen", icon: "rocket", prompt: "Ship trotzdem ungeprüft — mit skipChecks falls nötig.", tooltip: "Ship ohne Verifikation — bewusstes Risiko." },
     ],
+    // Waiting needs no button: the test run's notification brings the result.
+    "vv-running": [
+      { label: "Jetzt shippen", icon: "rocket", prompt: "Ship jetzt, ohne das Ergebnis des laufenden Testlaufs abzuwarten — mit skipChecks falls nötig.", tooltip: "Ship, bevor der Testlauf endet — bewusstes Risiko." },
+    ],
   },
   en: {
     ready: [
@@ -148,6 +152,10 @@ export const BUTTONS = {
     "vv-unverified": [
       { label: "Run tests", icon: "player-play", prompt: "Run npm test (or the matching checks) now, before we ship.", primary: true, tooltip: "Catches up on the missing verification before shipping." },
       { label: "Ship anyway", icon: "rocket", prompt: "Ship anyway, unverified — with skipChecks if needed.", tooltip: "Ships without verification — a deliberate risk." },
+    ],
+    // Waiting needs no button: the test run's notification brings the result.
+    "vv-running": [
+      { label: "Ship now", icon: "rocket", prompt: "Ship now without waiting for the running test's result — with skipChecks if needed.", tooltip: "Ships before the test run ends — a deliberate risk." },
     ],
   },
 };

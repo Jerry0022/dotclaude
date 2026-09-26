@@ -382,9 +382,11 @@ describe("panel anatomy — markup (both skeletons)", () => {
     expect(panelRule.body).toMatch(/min-height:\s*0/);
     expect(panelRule.body).toMatch(/flex:\s*1 1 auto/);
     expect(jsSource).toContain("panelFinal.style.display = isFinal ? 'flex' : 'none'");
-    const pinnedSiblings = rulesFor(/^#panel-final-report #view-iterations-btn$/)[0];
-    expect(pinnedSiblings, "#view-iterations-btn pinned").toBeTruthy();
-    expect(pinnedSiblings.body).toMatch(/flex:\s*none/);
+    // Nothing sits below the sheet: the "Iterationen ansehen" link is gone —
+    // the head's 🕘 rounds chip already opens earlier rounds, and the link
+    // only cost the rows region a line of height.
+    expect(md).not.toContain("view-iterations-btn");
+    expect(md).not.toContain("final.view_iterations");
 
     // 4. .closeout-sheet is a flex ITEM of #panel-final-report now (no more
     //    height: 100%, which only worked against a definite-height ancestor
@@ -488,21 +490,17 @@ describe("panel anatomy — CSS", () => {
     }
   });
 
-  test("every template reserves the 💬 FAB's row under the foot — derived from the FAB's own geometry", () => {
-    // Unscoped since #399: the 💬 FAB floats over the panel's bottom-right
-    // corner in every template, so the gutter is page chrome like the FAB.
-    expect(rulesFor(/^\[data-template="design"\] \.concept-layout\.design \.panel-cta$/).length,
-      "no design-scoped gutter left behind").toBe(0);
-    const gutter = rulesFor(/^\.panel-cta$/).find((r) => /padding-bottom:\s*calc\(/.test(r.body));
-    expect(gutter, "unscoped .panel-cta gutter rule").toBeTruthy();
-    const m = /padding-bottom:\s*calc\((\d+)px \+ ([\d.]+)rem\)/.exec(gutter.body);
-    expect(m, "padding-bottom: calc(<fab>px + <offset>rem)").toBeTruthy();
-    const fab = RULES.find((r) => r.selectors.some((s) => norm(s) === ".feedback-fab") && /height:\s*\d+px/.test(r.body));
-    const fabH = /height:\s*(\d+)px/.exec(fab.body)[1];
-    const anchor = RULES.find((r) => r.selectors.some((s) => norm(s) === ".feedback-fab") && /bottom:\s*[\d.]+rem/.test(r.body));
-    const fabBottom = /bottom:\s*([\d.]+)rem/.exec(anchor.body)[1];
-    expect(m[1], "gutter must equal the FAB's height").toBe(fabH);
-    expect(m[2], "…plus the FAB's bottom offset").toBe(fabBottom);
+  test("the foot reserves no 💬 FAB gutter — the FAB hides while the panel is open", () => {
+    // `.panel-cta { padding-bottom: calc(60px + 2rem) }` kept ~92px free for
+    // the 💬 FAB's row, but `body.panel-open .feedback-fab` hides the FAB
+    // whenever the panel is visible. On the final report that dead strip sat
+    // under the close-out sheet while its rows region scrolled on a Full HD
+    // screen for want of exactly that height.
+    const hideFab = rulesFor(/^body\.panel-open \.feedback-fab$/)[0];
+    expect(hideFab, "body.panel-open .feedback-fab").toBeTruthy();
+    expect(hideFab.body).toMatch(/opacity:\s*0/);
+    const gutter = rulesFor(/^\.panel-cta$/).find((r) => /padding-bottom/.test(r.body));
+    expect(gutter, "no .panel-cta padding-bottom gutter").toBeUndefined();
   });
 
   test("mobile needs no panel variant and no head fold of its own", () => {
