@@ -4,7 +4,7 @@ When multiple agents work on sub-branches of a feature branch:
 
 ```
 feat/42-video-filters              ← feature branch (integration)
-├── feat/42-video-filters/core     ← sub-branch (Core agent)
+├── feat/42-video-filters-core     ← sub-branch (Core agent)
 ├── feat/42-video-filters/frontend ← sub-branch (Frontend agent)
 └── feat/42-video-filters/ai       ← sub-branch (AI agent)
 ```
@@ -12,7 +12,7 @@ feat/42-video-filters              ← feature branch (integration)
 Each sub-agent ships independently via `/do-ship`. The pipeline
 auto-detects the parent:
 
-1. **Core finishes** → `/do-ship` on `feat/42-video-filters/core`
+1. **Core finishes** → `/do-ship` on `feat/42-video-filters-core`
    - Preflight detects base: `feat/42-video-filters`
    - Squash-merges into feature branch, no tag/version
 2. **Frontend finishes** → `/do-ship` on `feat/42-video-filters/frontend`
@@ -24,7 +24,7 @@ auto-detects the parent:
      published GitHub Release are owned by `/do-ship promote`.
 
 This requires no manual `base` parameter — detection is automatic based
-on branch naming convention (`<parent>/<role>`).
+on branch naming convention (`<parent>-<role>`).
 
 ## Cleanup in worktrees
 

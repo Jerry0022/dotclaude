@@ -5,7 +5,7 @@
 | Type | Pattern | Example |
 |---|---|---|
 | Feature | `feat/<issue>-<short-desc>` | `feat/42-video-filters` |
-| Agent sub-branch | `feat/<issue>/<role>` | `feat/42/core` |
+| Agent sub-branch | `<parent>-<role>` | `feat/42-core` |
 | Bugfix | `fix/<issue>-<short-desc>` | `fix/55-startup-crash` |
 | Chore | `chore/<issue>-<short-desc>` | `chore/60-cleanup-imports` |
 
@@ -14,7 +14,7 @@
 ```
 main
  └── feat/42-video-filters          ← integration branch
-      ├── feat/42/core               ← agent worktree
+      ├── feat/42-core               ← agent worktree
       ├── feat/42/frontend            ← agent worktree
       └── feat/42/windows             ← agent worktree
 ```

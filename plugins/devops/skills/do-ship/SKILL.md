@@ -299,7 +299,7 @@ this diff touches that a code merge will NOT deploy (#243). **Carry this value
 forward to Step 4d.** It is informational, never a hard gate (`ready` is unaffected).
 
 The tool **auto-detects** the correct base branch:
-- If on a sub-branch like `feat/42-video-filters/core`, it detects `feat/42-video-filters` as the parent and uses it as base.
+- If on a sub-branch like `feat/42-video-filters-core`, it detects `feat/42-video-filters` as the parent and uses it as base.
 - Otherwise it uses the repository's default branch (resolves `origin/HEAD` — typically `main`, but `master` or any other name works too). Falls back to `main` if `origin/HEAD` is not set.
 - You can override by passing an explicit base: `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
 
@@ -978,7 +978,7 @@ ship_cleanup({ branch: "claude/feature-branch", base: "main", cwd: "<cwd>" })
 
 For intermediate merges:
 ```
-ship_cleanup({ branch: "feat/42-video-filters/core", base: "feat/42-video-filters", cwd: "<cwd>" })
+ship_cleanup({ branch: "feat/42-video-filters-core", base: "feat/42-video-filters", cwd: "<cwd>" })
 ```
 
 The tool deletes the sub-branch but **preserves the feature branch** for further sub-branch merges or final ship to main.
@@ -1364,5 +1364,5 @@ open point.
   completion card): see `deep-knowledge/data-flow.md` for the direct-ship
   and intermediate-ship diagrams.
 - **Hierarchical merges** (sub-branch → feature branch → main, automatic
-  parent detection via `<parent>/<role>` naming): see
+  parent detection via `<parent>-<role>` naming): see
   `deep-knowledge/hierarchical-merge.md`.

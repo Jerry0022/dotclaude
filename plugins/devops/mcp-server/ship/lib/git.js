@@ -380,14 +380,27 @@ export function getConfig(key, opts) {
   return git(`config --get ${key}`, opts);
 }
 
+/** Roles an agent sub-branch name ends in (`<parent>-<role>`, agents/*.md). */
+export const SUB_BRANCH_ROLES = Object.freeze(["ai", "core", "design", "designer", "frontend", "windows", "feature", "qa"]);
+
 /**
  * Detect parent branch from sub-branch naming convention.
- * Convention: sub-branches are `<parent>/<role>` (e.g. feat/42-video-filters/core).
- * Strips the last path segment and checks if the remainder exists as a branch.
+ * Convention: sub-branches are `<parent>-<role>` (e.g.
+ * feat/42-video-filters-core) — a slash-nested `<parent>/<role>` cannot be
+ * created while the parent exists (git holds no refs/heads/a next to
+ * refs/heads/a/core), so it is only read as a legacy form (a parent that
+ * lives on origin only). Only a known role suffix counts: `feat/login-v2` is
+ * never a sub-branch of `feat/login`.
  * Returns { parent, source } or null if no parent found.
  */
 export function detectParentBranch(branch, opts) {
   if (!branch) return null;
+  const dash = branch.lastIndexOf("-");
+  if (dash > 0 && SUB_BRANCH_ROLES.includes(branch.slice(dash + 1))) {
+    const candidate = branch.slice(0, dash);
+    const source = branchExists(candidate, opts);
+    if (source) return { parent: candidate, source };
+  }
   const lastSlash = branch.lastIndexOf("/");
   if (lastSlash <= 0) return null;
 

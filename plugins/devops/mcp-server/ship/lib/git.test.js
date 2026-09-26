@@ -21,6 +21,7 @@ import {
   worktreePathForBranch,
   syncLocalBranch,
   treeOf,
+  detectParentBranch,
 } from "./git.js";
 
 beforeEach(() => {
@@ -497,5 +498,38 @@ describe("syncLocalBranch", () => {
     const r = syncLocalBranch("main");
     expect(r).toEqual({ updated: true, method: "fetch-refspec" });
     expect(calls.some((c) => c.includes("fetch origin main:main"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectParentBranch — the sub-branch convention (AUD-C024)
+// ---------------------------------------------------------------------------
+
+describe("detectParentBranch", () => {
+  /** Local branches that exist; rev-parse --verify fails for anything else. */
+  const withBranches = (names) => route((cmd) => {
+    const m = cmd.match(/rev-parse --verify refs\/heads\/(\S+)/);
+    if (m && names.includes(m[1])) return "abc\n";
+    throw new Error("fatal: Needed a single revision");
+  });
+
+  test("<parent>-<role> finds its parent", () => {
+    withBranches(["claude/audit-x"]);
+    expect(detectParentBranch("claude/audit-x-core")).toEqual({ parent: "claude/audit-x", source: "local" });
+  });
+
+  test("a dash suffix that is no agent role is never a sub-branch", () => {
+    withBranches(["feat/login"]);
+    expect(detectParentBranch("feat/login-v2")).toBeNull();
+  });
+
+  test("a role suffix without an existing parent is no sub-branch either", () => {
+    withBranches([]);
+    expect(detectParentBranch("feat/login-core")).toBeNull();
+  });
+
+  test("the legacy <parent>/<role> form still resolves", () => {
+    withBranches(["feat/42"]);
+    expect(detectParentBranch("feat/42/core")).toEqual({ parent: "feat/42", source: "local" });
   });
 });

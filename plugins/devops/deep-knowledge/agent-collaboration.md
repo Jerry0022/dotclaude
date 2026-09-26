@@ -155,7 +155,7 @@ conflicts per `deep-knowledge/merge-safety.md`.
 ### Hierarchical ship (separate, optional)
 
 The ship pipeline can also auto-detect a parent from a **slash-nested** branch name
-(`detectParentBranch`: `feat/42/core` → base `feat/42` → intermediate merge; full release
+(`detectParentBranch`: `feat/42-core` → base `feat/42` → intermediate merge; full release
 only on the final ship to main). This is a distinct capability for genuine multi-stage
 feature branches, with a hard precondition: the parent must exist **on origin only** and
 NOT be checked out as a local branch — otherwise the slash-nested child cannot be created
