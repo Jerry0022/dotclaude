@@ -55,9 +55,13 @@ in the guide-active marker; `payload inject` bakes it into the overlay,
 `payload step`/`payload wait`/`payload destroy` pass it as the last argument.
 Every `payload` call also touches the marker (Finding 6, #526+): the TTL is
 extended and the token is kept — not rotated — so a guide running longer than
-the marker's TTL inside a single turn never drops its channel mid-loop;
-`guide active` itself keeps an existing live token rather than minting a new
-one. `setStep`, `wait`, and `destroy` all refuse a call without a matching
+the marker's TTL inside a single turn never drops its channel mid-loop. The
+token also outlives the TTL itself: `guide active` and every `payload` call
+keep whatever token the marker names until `guide clear` removes it — the
+TTL only decides "a guide is active" for `stop.flow.guard`. A guide resumed
+after a long pause therefore still reaches the overlay already in the page
+(a new token there would force a tab reload that can lose what the user had
+typed on the site). `setStep`, `wait`, and `destroy` all refuse a call without a matching
 token (`"bad-token"` / `{"type":"bad-token"}`), so a page script can neither
 push a step, supersede Claude's `wait()` to read the user's event, nor wipe
 queued answers via `destroy()`. Every event Claude receives echoes the token
@@ -188,8 +192,11 @@ Anything else is dropped and the same step is re-sent.
 consumes it, and the queue is mirrored to `sessionStorage["__wg.queue"]`, so
 a reload between the click and the next `wait()` no longer drops it (#513).
 Every `wait()` call and every `wait()` resolution stamps a heartbeat
-(`lastPoll`). The panel swaps its "Warte auf Claude…" status for "Claude hört
-gerade nicht zu — schreib im Chat „weiter"." only when a click of this step
+(`lastPoll`). After a send the status line says what went out — "Gesendet –
+Claude prüft den Schritt …", "Frage gesendet – Claude antwortet gleich hier im
+Panel …" or "Abbruch gesendet – Claude beendet den Guide …". It swaps that for
+"Claude hört gerade nicht zu — schreib im Chat „weiter"." (after an abort:
+„Guide beenden“) only when a click of this step
 is still undelivered, no `wait()` is live (one armed less than ~44 s ago),
 and the last live listener ended more than 10 s ago (AUD-C038) — never
 during a normal long-poll, and never after the click reached a live
@@ -213,14 +220,17 @@ forever — it always gets a definitive (if unobserved) resolution.
 ### State
 
 ```json
-{ "version": "1.10.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null, "destroyed": false }
+{ "version": "1.12.0", "stepId": "3", "collapsed": false, "edgeTab": false, "queued": 0, "url": "https://…", "pendingWaiter": false, "lastDeliveredId": null, "lastDeliveredStepId": null, "sent": false, "destroyed": false }
 ```
 
 `pendingWaiter` is `true` while a `wait()` call is currently armed (waiting
 for a timer, a visibility change, or an event). `lastDeliveredId` is the id
 of the most recently delivered event (`null` before the first one) — the
 skill can compare it against an expected id to detect a stranded event after
-a CDP timeout.
+a CDP timeout. `sent` is `true` while the panel shows a click of the current
+step as sent (buttons disabled); with `queued: 0` and `lastDeliveredStepId`
+equal to `stepId`, that click went to a `wait()` nobody read — re-sending the
+same step re-arms it and asks the user to click once more.
 
 ## UI state persistence
 

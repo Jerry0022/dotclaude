@@ -1,6 +1,6 @@
 /**
  * @script web-guide-overlay
- * @version 1.11.1
+ * @version 1.12.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
@@ -27,7 +27,7 @@
   var nativeObjectCreate = Object.create;
   var nativeDefineProperty = Object.defineProperty;
 
-  var VERSION = "1.11.0";
+  var VERSION = "1.12.0";
   // AUD-C007: per-guide channel token, substituted by `web-guide.js payload
   // inject` (32 hex chars). setStep()/wait() must pass it and every event
   // echoes it, so a page script can neither push steps nor steal events.
@@ -77,8 +77,8 @@
   // dead: its event stays queued instead of resolving into a promise nobody
   // reads. lastEventId/lastDeliveredId let the skill detect a stranded event.
   var CALLER_TIMEOUT_MS = 44000;
-  var pendingWaiterArmedAt = 0, lastEventId = 0, lastDeliveredId = null;
-  var destroyed = false, secretLost = false, enterSubmit = null;
+  var pendingWaiterArmedAt = 0, lastEventId = 0, lastDeliveredId = null, lastDeliveredStepId = null;
+  var destroyed = false, secretLost = false, clickAgain = false, enterSubmit = null;
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
@@ -509,14 +509,29 @@
   function listenerLive() {
     return !!pendingWaiter && Date.now() - pendingWaiterArmedAt < CALLER_TIMEOUT_MS;
   }
+  // What the user just sent decides what the status line promises: a bare
+  // "Warte auf Claude…" after "Abbrechen" or a help question left them unsure
+  // whether anything had happened. Claude drains any queued event on its next
+  // turn, so "weiter" in the chat resumes every case — only the abort case
+  // names the end instead.
+  var SENT_TEXT = {
+    next: "Gesendet – Claude prüft den Schritt …",
+    help: "Frage gesendet – Claude antwortet gleich hier im Panel …",
+    abort: "Abbruch gesendet – Claude beendet den Guide …",
+  };
+  var lastSentType = "next";
   function tickHeartbeat() {
     if (waitLabelEl) {
-      var undelivered = !!currentStep && eventQueue.some((e) => e.stepId === currentStep.id);
+      var mine = currentStep ? eventQueue.filter((e) => e.stepId === currentStep.id) : [];
+      var undelivered = mine.length > 0;
+      var sent = undelivered ? mine[mine.length - 1].type : lastSentType;
       var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
       var lastLive = listenerLive() ? Date.now() : Math.max(lastPoll, deadAt);
       var text = undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS
-        ? "Claude hört gerade nicht zu — schreib im Chat „weiter“."
-        : "Warte auf Claude…";
+        ? (sent === "abort"
+          ? "Claude hört gerade nicht zu — schreib im Chat „Guide beenden“."
+          : "Claude hört gerade nicht zu — schreib im Chat „weiter“.")
+        : (SENT_TEXT[sent] || "Warte auf Claude…");
       // The status line is a live region: rewrite it only on a change, or
       // the 2 s tick would re-announce it to a screen reader.
       if (waitLabelEl.textContent !== text) waitLabelEl.textContent = text;
@@ -544,11 +559,14 @@
       var queued = eventQueue.shift();
       saveQueue();
       lastDeliveredId = queued.id;
+      lastDeliveredStepId = queued.stepId;
       // Finding 7: hand the raw event to the waiter — it stamps+stringifies
       // itself (via the natives captured at injection) right before resolving.
       waiterFn(queued);
     }
     secretLost = false;
+    clickAgain = false;
+    lastSentType = event.type;
     disableActiveButtons();
     armHeartbeat();
   }
@@ -921,6 +939,12 @@
         statusEl.style.display = "flex";
         spinnerEl.style.display = "none";
         waitLabelEl.textContent = "Bitte den Wert erneut eingeben – er wird nicht zwischengespeichert.";
+      } else if (clickAgain) {
+        // The last click reached a wait() nobody read (an interrupted turn,
+        // a dropped event): the step is answerable again — say so.
+        statusEl.style.display = "flex";
+        spinnerEl.style.display = "none";
+        waitLabelEl.textContent = "Claude hat deinen letzten Klick nicht erhalten – bitte noch einmal.";
       }
     }
 
@@ -1033,6 +1057,9 @@
         saveState();
         return "ok";
       }
+      // Same step, unchanged, shown as sent, nothing queued: the click went to
+      // a wait() nobody read — re-arm and ask for it once more.
+      clickAgain = !isNewStep && !queuedHere && sentShown && sameStepContent(step, currentStep);
       currentStep = step;
       if (isNewStep) {
         collapsed = false;
@@ -1073,6 +1100,7 @@
           var queued = eventQueue.shift();
           saveQueue();
           lastDeliveredId = queued.id;
+          lastDeliveredStepId = queued.stepId;
           finish(queued);
           return;
         }
@@ -1139,6 +1167,11 @@
         // lastDeliveredId is the id of the most recently delivered event.
         pendingWaiter: !!pendingWaiter,
         lastDeliveredId,
+        lastDeliveredStepId,
+        // A click of the current step is shown as sent (buttons disabled).
+        // With queued 0 and lastDeliveredStepId === stepId it went to a wait()
+        // nobody read: the skill re-sends the step, which re-arms it.
+        sent: !!statusEl && statusEl.style.display !== "none" && activeBtns.some((b) => b.disabled),
         destroyed,
       };
     },

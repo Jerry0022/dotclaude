@@ -206,8 +206,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.11.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.11.0["']/);
+  test("defines VERSION 1.12.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.12.0["']/);
     expect(SRC).toMatch(/defineProperty\(window, "claudeGuide"/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -238,7 +238,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.11.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.12.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -255,7 +255,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.11.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.12.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -496,7 +496,7 @@ describe("web-guide-overlay — execution", () => {
       findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0].click();
       expect((await pending).type).toBe("next");
       await vi.advanceTimersByTimeAsync(30000); // Claude authors the next step
-      expect(findAll(host, (e) => e._text === "Warte auf Claude…")[0]).toBeTruthy();
+      expect(findAll(host, (e) => e._text === "Gesendet – Claude prüft den Schritt …")[0]).toBeTruthy();
       expect(findAll(host, (e) => /hört gerade nicht zu/.test(e._text || ""))[0]).toBeFalsy();
     } finally {
       vi.useRealTimers();
@@ -519,7 +519,7 @@ describe("web-guide-overlay — execution", () => {
       primary.click();
       await sb.window.claudeGuide.wait(1000); // resolves immediately from the queue, still a poll
       await vi.advanceTimersByTimeAsync(2000);
-      const label = findAll(host, (e) => e._text === "Warte auf Claude…")[0];
+      const label = findAll(host, (e) => e._text === "Gesendet – Claude prüft den Schritt …")[0];
       expect(label).toBeTruthy();
     } finally {
       vi.useRealTimers();

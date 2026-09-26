@@ -86,7 +86,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
     expect(d.configurable).toBe(false);
     expect(Object.isFrozen(a.api())).toBe(true);
     a.w.eval('window.claudeGuide = { version: "x" }; try { window.claudeGuide.wait = function () {}; } catch (e) {}');
-    expect(a.api().version).toBe("1.11.0");
+    expect(a.api().version).toBe("1.12.0");
     expect(a.api().wait.length).toBe(2);
   });
 
@@ -107,7 +107,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   });
 
   test("a page-predefined same-version global yields already-injected (hostile on a fresh document)", () => {
-    const a = page({ pageScript: 'window.claudeGuide = { version: "1.11.0" };' });
+    const a = page({ pageScript: 'window.claudeGuide = { version: "1.12.0" };' });
     expect(a.result).toBe("already-injected");
     expect(a.w.document.querySelector("[id^=wg-host-]")).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   test("a page-defined configurable global of another version is replaced", () => {
     const a = page({ pageScript: 'window.claudeGuide = { version: "0.0.1", destroy: function () {} };' });
     expect(a.result).toBe("injected");
-    expect(a.api().version).toBe("1.11.0");
+    expect(a.api().version).toBe("1.12.0");
   });
 
   test("the token never reaches page-readable storage", () => {
@@ -345,6 +345,7 @@ describe("polish pass: a same-step re-send after a delivered click", () => {
     expect(btn(a, "Weiter").disabled).toBe(true); // still shows "sent"
     expect(a.api().setStep(STEP, TOKEN)).toBe("ok"); // Claude asks again (SKILL.md 5c)
     expect(btn(a, "Weiter").disabled).toBe(false);
+    expect(a.shadow().querySelector(".status").textContent).toContain("bitte noch einmal");
   });
 
   test("an unchanged re-send while the click is still queued keeps the sent state", () => {
@@ -354,5 +355,47 @@ describe("polish pass: a same-step re-send after a delivered click", () => {
     expect(a.api().setStep(STEP, TOKEN)).toBe("ok");
     expect(btn(a, "Weiter").disabled).toBe(true);
     expect(a.api().state().queued).toBe(1);
+  });
+});
+
+describe("the status line says what was sent (web-guide deep check)", () => {
+  const status = (p) => p.shadow().querySelector(".status").textContent;
+
+  test("a help question and a confirmed abort each get their own promise", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    btn(a, "Ich komme nicht weiter").click();
+    a.shadow().querySelector("textarea.f").value = "Ich finde den Button nicht";
+    btn(a, "Senden").click();
+    expect(status(a)).toContain("Frage gesendet");
+
+    const b = page();
+    b.api().setStep(STEP, TOKEN);
+    btn(b, "Abbrechen").click();
+    btn(b, "Wirklich abbrechen?").click();
+    expect(status(b)).toContain("Abbruch gesendet");
+  });
+
+  test("a plain Weiter says it was sent", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    btn(a, "Weiter").click();
+    expect(status(a)).toContain("Gesendet");
+  });
+});
+
+describe("a click that reached a wait() nobody read (interrupted turn)", () => {
+  test("state() shows it as sent with nothing queued, so the skill can re-arm the step", async () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    const lost = a.api().wait(30000, TOKEN); // the calling turn dies; nobody reads this promise
+    btn(a, "Weiter").click();
+    await lost;
+    const st = a.api().state();
+    expect(st).toMatchObject({ stepId: "3", queued: 0, sent: true, lastDeliveredStepId: "3" });
+    a.api().setStep(STEP, TOKEN); // SKILL.md: resume → re-send the same step
+    expect(btn(a, "Weiter").disabled).toBe(false);
+    expect(a.api().state().sent).toBe(false);
+    expect(a.shadow().querySelector(".status").textContent).toContain("bitte noch einmal");
   });
 });

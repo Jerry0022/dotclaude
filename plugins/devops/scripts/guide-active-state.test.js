@@ -64,7 +64,7 @@ describe("guide-active-state", () => {
     expect(isGuideActive(dir)).toBe(false);
   });
 
-  test("the marker carries a channel token that survives a refresh and dies with clear/expiry (AUD-C007)", () => {
+  test("the marker carries a channel token that survives refreshes and expiry, and dies with clear (AUD-C007, deep check)", () => {
     const dir = makeTmpDir();
     const now = Date.now();
     markGuideActive(dir, now);
@@ -72,9 +72,12 @@ describe("guide-active-state", () => {
     expect(token).toMatch(/^[0-9a-f]{32}$/);
     markGuideActive(dir, now + 1000);
     expect(readGuideToken(dir, now + 1000)).toBe(token);
-    expect(readGuideToken(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).toBeNull();
+    // A guide resumed after a long pause still reaches the overlay in the page:
+    // the token outlives the "active" TTL (no tab reload that loses the site form).
+    expect(readGuideToken(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).toBe(token);
+    expect(isGuideActive(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).toBe(false);
     markGuideActive(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1);
-    expect(readGuideToken(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).not.toBe(token);
+    expect(readGuideToken(dir, now + 1000 + GUIDE_ACTIVE_TTL_MS + 1)).toBe(token);
     clearGuideActive(dir);
     expect(readGuideToken(dir)).toBeNull();
   });
@@ -131,14 +134,16 @@ describe("guide-active-state", () => {
       expect(readGuideToken(dir, t)).toBe(token);
     });
 
-    test("touchGuideToken returns null and touches nothing when there is no live token", () => {
+    test("touchGuideToken returns null without a marker, and revives an expired marker with its own token", () => {
       const dir = makeTmpDir();
       expect(touchGuideToken(dir)).toBeNull();
       expect(fs.existsSync(guideActiveFilePath(dir))).toBe(false);
 
       const now = Date.now();
       markGuideActive(dir, now - GUIDE_ACTIVE_TTL_MS - 1); // already expired
-      expect(touchGuideToken(dir, now)).toBeNull();
+      const token = readGuideToken(dir, now);
+      expect(touchGuideToken(dir, now)).toBe(token);
+      expect(isGuideActive(dir, now)).toBe(true);
     });
 
     test("a stray touchGuideToken call never mints a new token, only extends the existing one", () => {
