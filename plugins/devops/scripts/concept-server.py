@@ -1508,35 +1508,50 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             err = None
             seq = None
             version = None
+            dup = False
             with _lock:
-                next_version = _version + 1
-                try:
-                    seq = _journal_append({
-                        'type': 'submission',
-                        'version': next_version,
-                        'payload': body,
-                    })
-                    _state_write(_snapshot(body, next_version, _processed_at, '', ''))
-                    if _is_submitted(body):
-                        _set_unprocessed_marker(next_version, 'submitted')
-                except OSError as exc:
-                    err = str(exc)
-                if err is None:
-                    _decisions = body
-                    _version = next_version
-                    version = next_version
-                    # A new submission supersedes any prior pickup/phase
-                    # state. Keeping _picked_up_at would make the new
-                    # submission's progress list show "Claude verarbeitet"
-                    # before Claude's cron had actually noticed it.
-                    _picked_up_at = ''
-                    _phase = ''
-                    # Only remember an id once it is actually on disk — a
-                    # non-durable accept (store unwritable) has nothing on
-                    # the journal to derive it from on restart, and the page
-                    # keeps its local copy and retries until it IS durable.
-                    if sid is not None and seq is not None:
-                        _remember_submission_id(sid)
+                # Checked again inside the append's critical section: two
+                # POSTs of one id that both passed the fast check above (the
+                # page's retry racing its own still-running first POST) must
+                # not both reach the journal.
+                if sid is not None and sid in _accepted_submission_ids_set:
+                    dup = True
+                else:
+                    next_version = _version + 1
+                    try:
+                        seq = _journal_append({
+                            'type': 'submission',
+                            'version': next_version,
+                            'payload': body,
+                        })
+                        _state_write(_snapshot(body, next_version, _processed_at, '', ''))
+                        if _is_submitted(body):
+                            _set_unprocessed_marker(next_version, 'submitted')
+                    except OSError as exc:
+                        err = str(exc)
+                    if err is None:
+                        _decisions = body
+                        _version = next_version
+                        version = next_version
+                        # A new submission supersedes any prior pickup/phase
+                        # state. Keeping _picked_up_at would make the new
+                        # submission's progress list show "Claude verarbeitet"
+                        # before Claude's cron had actually noticed it.
+                        _picked_up_at = ''
+                        _phase = ''
+                        # Only remember an id once it is actually on disk — a
+                        # non-durable accept (store unwritable) has nothing on
+                        # the journal to derive it from on restart, and the page
+                        # keeps its local copy and retries until it IS durable.
+                        if sid is not None and seq is not None:
+                            _remember_submission_id(sid)
+            if dup:
+                self._json_response({
+                    "ok": True,
+                    "durable": True,
+                    "duplicate": True,
+                })
+                return
             if err is not None:
                 self._error_response(507, {
                     "ok": False,
