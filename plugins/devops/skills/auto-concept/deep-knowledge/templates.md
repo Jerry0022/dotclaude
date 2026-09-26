@@ -145,7 +145,6 @@ must see their own language. The locale hint is authoritative.
 | `final.dispose_move_label`     | Move to (optional):            | Verschieben nach (optional): |
 | `final.dispose_move_placeholder` | e.g. docs/architecture/      | z.B. docs/architecture/ |
 | `final.ship_hint`              | Runs the full ship pipeline (build, version bump, release, merge). | Startet die komplette Ship-Pipeline (Build, Version-Bump, Release, Merge). |
-| `final.view_iterations`        | Review iterations              | Iterationen ansehen |
 | `final.closeout_heading`       | Close-out                      | Abschluss |
 | `final.followups_q`            | Open points                    | Offene Punkte |
 | `final.closeout_ship_q`        | Ship this now?                 | Jetzt shippen? |
@@ -815,8 +814,6 @@ the `[ui-locale: ...]` hint produced.
             <span aria-hidden="true">⚠</span> {{final.closeout_stalled}}
           </p>
         </div>
-
-        <button type="button" id="view-iterations-btn" class="link-btn">{{final.view_iterations}}</button>
       </div>
       </div><!-- /.panel-cta -->
     </aside>
@@ -1150,11 +1147,12 @@ html:not([data-template="design"]) body.panel-open { overflow: hidden; }
    open, exactly like the design switcher does. */
 body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
 
-/* The 💬 FAB (60px circle, bottom: 2rem — see .panel-fab/.feedback-fab) floats
-   over the panel's bottom-right corner in EVERY template now, so the pinned
-   foot reserves its row under the call to action everywhere — this used to
-   be a design-scoped rule, back when only a design round had the FAB. */
-.panel-cta { padding-bottom: calc(60px + 2rem); }
+/* No FAB gutter under the pinned foot. The foot used to reserve
+   `padding-bottom: calc(60px + 2rem)` for the 💬 FAB's row, but the FAB
+   hides whenever the panel is open (`body.panel-open .feedback-fab` above)
+   and the panel is only ever visible open — so the reserve was ~92px of dead
+   space under the close-out sheet, while its rows region scrolled on a Full
+   HD screen for want of exactly that height. */
 
 /* ── One-shot attention pulse on the 💬 FAB ──
    The dock is where every note is written, and an unlabelled emoji circle in
@@ -3234,8 +3232,8 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
           </ol>
         </details>
       </div>
-      <!-- CTA foot — pinned, ≤120px, and it reserves the 💬 FAB's row below
-           it (§ Panel Chrome CSS: padding-bottom: calc(60px + 2rem)). -->
+      <!-- CTA foot — pinned, ≤120px, no FAB gutter below it: the 💬 FAB
+           hides while the panel is open (§ Panel Chrome CSS). -->
       <div class="panel-cta">
       <div id="panel-ready">
         <div class="submit-split">
@@ -7588,9 +7586,6 @@ body.viewing-final .panel-cta {
   min-height: 0;
   flex: 1 1 auto;
 }
-#panel-final-report #view-iterations-btn {
-  flex: none;
-}
 /* The final report has no status line: the sheet's one button carries the
    submission state itself (running/done/stalled — setCloseoutButtonState())
    and the disconnected case as its "wird zwischengespeichert" label
@@ -8323,12 +8318,6 @@ html[data-template="design"] .frozen-bar {
   text-decoration: underline;
 }
 .link-btn:hover { opacity: 0.8; }
-/* Transient highlight when "Review iterations" nudges the tab bar into view. */
-.iteration-tabs.tabs-nudge { animation: tabs-nudge 1.2s ease; }
-@keyframes tabs-nudge {
-  0%, 100% { box-shadow: none; }
-  30% { box-shadow: 0 0 0 2px var(--accent-color, #58a6ff); }
-}
 
 .closeout-sheet #closeout-followups-none {
   color: var(--warning-color, #d29922);
@@ -13017,11 +13006,9 @@ function markCloseoutStalled() {
   setCloseoutButtonState('stalled');
 }
 
-// "Iterationen ansehen" is wired in wireCloseout() below — non-committal,
-// client-only: it scrolls the iteration tab bar into view and flashes it so
-// the user can revisit earlier rounds without leaving the final report. The
-// sheet stays put; the whole point of the persistent panel is that there is
-// nothing to re-open.
+// No "Iterationen ansehen" link under the sheet: earlier rounds are one click
+// away through the panel head's rounds chip (🕘 N, `#panel-here-rounds-btn`)
+// and the tab bar, so a third way only cost the sheet a row of height.
 
 // Recompute whenever an input the plan summarises changes — the open-questions
 // checkboxes in the body, a follow-up route, the ship choice, the disposition
@@ -13059,14 +13046,6 @@ function wireCloseout() {
     const head = e.target.closest('[data-closeout-row]');
     if (!head) return;
     closeoutRowClick(head.closest('.closeout-block'));
-  });
-  document.getElementById('view-iterations-btn')?.addEventListener('click', () => {
-    const tabs = document.querySelector('.iteration-tabs');
-    if (!tabs) return;
-    tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    tabs.classList.remove('tabs-nudge');
-    void tabs.offsetWidth;  // force reflow so the animation restarts
-    tabs.classList.add('tabs-nudge');
   });
   refreshCloseout({ reset: true });
   restoreInFlightCloseout();
@@ -14435,7 +14414,7 @@ The right-side panel automatically switches to `panel-final-report` mode
 when `showIteration()` detects `data-final-report` on the active section
 — no iterate / implement buttons, **no status line and no pipeline recap**:
 the foot is the **close-out sheet** (`#closeout-sheet`) and nothing else,
-with a non-committal "Iterationen ansehen" link below it. The panel's
+and nothing below it — earlier rounds are the head's 🕘 rounds chip. The panel's
 `.panel-status` line ("Gespeichert · verbunden") is hidden on this tab
 (`body.viewing-final .panel-status`), and the persistent status channel
 that used to sit above the sheet is gone — both said things the sheet's one
@@ -14450,8 +14429,7 @@ present because the section carries `data-final-report`, so it survives
 reloads and stays fully visible even when the Claude heartbeat is stale —
 the close-out affordance must never vanish just because the connection
 flickered. Reviewing earlier iterations (via the ever-present tab bar or the
-"Iterationen ansehen" nudge) never hides it, so there is nothing to
-"re-open".
+head's 🕘 rounds chip) never hides it, so there is nothing to "re-open".
 
 **A final report is a document round.** Append it with
 `data-iteration-template="free"` — never leave the attribute off (see
