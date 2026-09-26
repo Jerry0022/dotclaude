@@ -267,6 +267,6 @@ function unsetValue(fullKey, scope, cwd, opts = {}) {
 
 module.exports = {
   SCHEMA, FILE_NAME,
-  listKeys, specOf, parseValue, readValue,
+  listKeys, specOf, parseValue,
   mainCheckoutRoot, configPaths, load, setValue, unsetValue,
 };

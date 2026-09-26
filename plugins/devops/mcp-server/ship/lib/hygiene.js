@@ -87,7 +87,7 @@ const TOOLING_ROOT_ENTRY = new RegExp("^(?:AUTONOMOUS-(?:LOG\\.md|REPORT\\.html|
 const CLAUDE_RUNTIME = [
   /^\.claude\/\.ship-(?:watcher\/|in-progress$|lockout$|queue$)/,
   /^\.claude\/batch-(?:activity|mode\.json|watchdog\.lock|handoff\.json)$/,
-  /^\.claude\/(?:strict-mode|concept-active|session-opened-files|token-config|auto-guide-active|devops-config|graphify)\.json$/,
+  /^\.claude\/(?:strict-mode|concept-active|session-opened-files|token-config|auto-guide-active|devops-config)\.json$/,
   /^\.claude\/run-contract\./,
   /^\.claude\/(?:project-map\.md|scheduled_tasks\.lock|settings\.local\.json)$/,
   /^\.claude\/(?:\.cache|devops-livebrief|devops-concept|handoffs|skill-usage)\//,
@@ -361,7 +361,7 @@ function sameInMain(wtPath, mainPath, rel) {
  * checkout. A link counts as own content (never followed). Null when the
  * entry is too big to verify.
  */
-export function ownClaudeFiles(wtPath, mainPath, entry) {
+function ownClaudeFiles(wtPath, mainPath, entry) {
   const own = [];
   const budget = { files: VERIFY_MAX_FILES, bytes: VERIFY_MAX_BYTES };
   const walk = (rel) => {
@@ -391,7 +391,7 @@ export function ownClaudeFiles(wtPath, mainPath, entry) {
  * file that is neither regenerable build output, tooling state, nor — under
  * `.claude/` — a byte-identical copy of the main checkout's (`mainPath`).
  */
-export function worktreeContentReason(wtPath, mainPath = null) {
+function worktreeContentReason(wtPath, mainPath = null) {
   let out;
   try {
     out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching"], {
@@ -420,7 +420,7 @@ export function worktreeContentReason(wtPath, mainPath = null) {
 }
 
 /** A registered worktree (or the current checkout) inside `wtPath` — removing it would take that one along. */
-export function nestedCheckout(wtPath, paths, current) {
+function nestedCheckout(wtPath, paths, current) {
   const root = `${normPath(wtPath)}/`;
   return [...(paths || []), current].find((p) => p && normPath(p).startsWith(root)) || null;
 }
