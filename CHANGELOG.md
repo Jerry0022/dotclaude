@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.216.0] — 2026-09-27
+
+### Added
+- **Requirement gaps get closed before the turn ends.** A `validation` item can now carry `waitsOn: user | deploy | external | pending` together with evidence. Any requirement that is not met and has no such reason, or has no status at all, is Claude's own gap. The new `stop.flow.guard` Gate 4b blocks the turn once, so Claude closes the gap or asks the user instead of reporting done. `waitsOn: "pending"` is valid only while the transcript still shows open background work.
+- **`ship_release` refuses to merge over the gaps Claude owns.** The new `validation` parameter makes the tool return `reason: "validation-gaps"` with nothing pushed. Only an explicit `acceptGaps: true` from the user lets a ship through anyway.
+
+### Changed
+- **The requirements count says who a requirement waits on.** The card used to show "◐ 0/3 Anforderungen" on an otherwise green card. It now shows, for example, "✓ 2/3 Anforderungen · 1 wartet auf dich". ◐ and ✗ appear only for Claude's own gaps, and requirements that wait on someone else no longer turn the card red.
+
 ## [0.215.1] — 2026-09-27
 
 ### Changed

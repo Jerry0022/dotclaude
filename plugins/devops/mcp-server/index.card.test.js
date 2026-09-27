@@ -117,6 +117,43 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(text).toContain("Anforderungen  ✓"); // two spaces between posts
   });
 
+  test("requirements that wait on someone else count honestly: 2/3 · 1 wartet auf dich, no ◐", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Wartet-Test", lang: "de", session_id: "test-anatomy-waits",
+      validation: [
+        { requirement: "R1", status: "met", evidence: "ok" },
+        { requirement: "R2", status: "met", evidence: "ok" },
+        { requirement: "R3", status: "partial", evidence: "Anhören steht aus", waitsOn: "user" },
+      ],
+    });
+    expect(text).toContain("✓ 2/3 Anforderungen · 1 wartet auf dich");
+    expect(text).not.toContain("◐");
+    expect(text).not.toContain("**Nicht erreicht:**");
+  });
+
+  test("an own gap (partial, waits on nobody) keeps ◐ next to the waiting count", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Eigene-Lücke", lang: "en", session_id: "test-anatomy-owngap",
+      validation: [
+        { requirement: "R1", status: "met", evidence: "ok" },
+        { requirement: "R2", status: "partial", evidence: "half done" },
+        { requirement: "R3", status: "partial", evidence: "after ship", waitsOn: "deploy" },
+      ],
+    });
+    expect(text).toContain("◐ 1/3 Requirements · 1 verifiable after deploy");
+  });
+
+  test("own background work still running keeps ◐ — in progress is not done", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Pending-Lücke", lang: "de", session_id: "test-anatomy-pending",
+      validation: [
+        { requirement: "R1", status: "met", evidence: "ok" },
+        { requirement: "R2", status: "partial", evidence: "Red-Team läuft", waitsOn: "pending" },
+      ],
+    });
+    expect(text).toContain("◐ 1/2 Anforderungen · 1 in Arbeit");
+  });
+
   test("deviation-only posts (lint/build/review) render only when they carry a finding", async () => {
     const clean = await cardText({
       variant: "ready", summary: "Sauber", lang: "de", session_id: "test-anatomy-6a",

@@ -259,7 +259,15 @@ const CARD_FLAG_PREFIXES = [
   'dotclaude-devops-validation-attested',
   'dotclaude-devops-pending-attested',
   'dotclaude-devops-card-widget',
+  'dotclaude-devops-validation-open',
 ];
+
+/**
+ * Flags whose ABSENCE is a statement too: the MCP deletes validation-open when
+ * a re-render closed every gap, so an already-adopted copy under the real id
+ * must go with it — or Gate 4b blocks on gaps the card no longer reports.
+ */
+const MIRROR_ABSENCE_PREFIXES = new Set(['dotclaude-devops-validation-open']);
 
 /**
  * The session key the completion MCP writes card flags under. Twin of
@@ -302,7 +310,12 @@ function adoptCardFlags(hook) {
       if (prefix === 'dotclaude-devops-card-widget') fs.copyFileSync(from, to);
       else fs.renameSync(from, to);
       moved++;
-    } catch { /* not written for this card */ }
+    } catch {
+      // Not written for this card.
+      if (MIRROR_ABSENCE_PREFIXES.has(prefix) && !fs.existsSync(from)) {
+        try { fs.unlinkSync(to); } catch { /* nothing adopted earlier */ }
+      }
+    }
   }
   return moved;
 }
