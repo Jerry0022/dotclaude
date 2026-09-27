@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.220.1] — 2026-09-27
+
+### Changed
+- **Post-ship cleanup is back on the age gate, 30/30 days.** It runs only after a ship and only once a removable leftover is older than `autoCleanGateDays` (30). It then removes every removable leftover older than `autoCleanMinAgeDays`, whose default is back to 30 (was 7). This reverts the immediate removal from 0.217.0 (#571). A session worktree now keeps its intermediate state for a month. Worktree removal never touches conversations: transcripts follow Claude Code's own `cleanupPeriodDays`. The sub-agent branch detection via merged PR heads and the same-commit remote twin from 0.217.0 stay (#572).
+
+### Removed
+- **The daily SessionStart background cleanup (`ss.git.hygiene`, `hygiene-bg.js`).** The unlanded-work warning on the ship card stays: it still names gone-upstream branches and abandoned session worktrees with commits that have no PR (#573).
+
 ## [0.220.0] — 2026-09-27
 
 ### Added

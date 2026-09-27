@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
-  minIdleDays, reachableFromMerged,
+  reachableFromMerged,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -127,16 +127,24 @@ describe("scanRepo — what counts as a leftover", () => {
   });
 });
 
-describe("auto-clean — how long a leftover waits (#571)", () => {
-  test("no leftover at all → no network call, nothing removed", () => {
+describe("auto-clean — the age gate", () => {
+  test("nothing older than the gate → nothing removed", () => {
+    const { dir, c2, c3 } = makeRepo();
+    git(dir, "branch", "b10", c2);
+    git(dir, "branch", "b3", c3);
+    const plan = planAutoClean(scanRepo(dir, NOW), SETTINGS, { cwd: dir, fetchMerged: offline });
+    expect(plan.gateOpen).toBe(false);
+    expect(plan.remove).toEqual([]);
+  });
+
+  test("no leftover at all → no network call", () => {
     const { dir } = makeRepo();
     let called = 0;
-    const plan = planAutoClean(scanRepo(dir, NOW), SETTINGS, { cwd: dir, fetchMerged: () => { called++; return null; } });
-    expect(plan.gateOpen).toBe(false);
+    planAutoClean(scanRepo(dir, NOW), SETTINGS, { cwd: dir, fetchMerged: () => { called++; return null; } });
     expect(called).toBe(0);
   });
 
-  test("a leftover that did NOT land stays, however old", () => {
+  test("an old leftover that did NOT land keeps the gate closed", () => {
     const { dir, c1 } = makeRepo();
     branchWithCommit(dir, "unshipped", c1, "b.txt", "mine\n", daysAgo(35));
     const plan = planAutoClean(scanRepo(dir, NOW), SETTINGS, { cwd: dir, fetchMerged: offline });
@@ -144,7 +152,7 @@ describe("auto-clean — how long a leftover waits (#571)", () => {
     expect(plan.keep.map((u) => [u.branch, u.reason])).toEqual([["unshipped", "not-landed"]]);
   });
 
-  test("every landed branch goes at once, however young; unshipped ones stay", () => {
+  test("gate open → every landed leftover older than the minimum age goes, younger and unshipped ones stay", () => {
     const { dir, c1, c2, c3 } = makeRepo();
     git(dir, "branch", "old-landed", c1);
     git(dir, "branch", "mid-landed", c2);
@@ -152,32 +160,18 @@ describe("auto-clean — how long a leftover waits (#571)", () => {
     branchWithCommit(dir, "unshipped", c1, "b.txt", "mine\n", daysAgo(35));
     const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
     expect(res.autoClean.ran).toBe(true);
-    expect(res.autoClean.removed.map((r) => r.name).sort()).toEqual(["mid-landed", "old-landed", "young-landed"]);
+    expect(res.autoClean.removed.map((r) => r.name).sort()).toEqual(["mid-landed", "old-landed"]);
     expect(res.autoClean.removed.every((r) => /^[0-9a-f]{40}$/.test(r.sha))).toBe(true);
-    expect(branches(dir)).toEqual(["main", "unshipped"]);
-    expect(res.leftover).toBe(1);
-    expect(res.card.tests).toEqual({ method: "Aufräumen (auto)", result: "3 Branches entfernt" });
+    expect(branches(dir)).toEqual(["main", "unshipped", "young-landed"]);
+    expect(res.leftover).toBe(2);
+    expect(res.card.tests).toEqual({ method: "Aufräumen (auto)", result: "2 Branches entfernt" });
   });
 
-  test("a Desktop session worktree waits autoCleanMinAgeDays idle; a sub-agent worktree only LIVE_SESSION_MS", () => {
-    const { dir, c1 } = makeRepo();
-    const session = sessionWorktree(dir, "wt-session", c1, 1);
-    const agent = sessionWorktree(dir, "agent-a0123456789abcdef", c1, 1);
-    const fresh = sessionWorktree(dir, "agent-afedcba9876543210", c1, 0);
-    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline, projectsDir: null });
-    expect(fs.existsSync(agent)).toBe(false);
-    expect(fs.existsSync(session), "a day idle is no reason to close a Desktop session's worktree").toBe(true);
-    expect(fs.existsSync(fresh), "an agent may still be working in it").toBe(true);
-    expect(minIdleDays({ kind: "branch" }, SETTINGS)).toBe(0);
-    expect(minIdleDays({ kind: "worktree", agent: false }, SETTINGS)).toBe(7);
-  });
-
-  test("the session trigger cleans like a ship; promote never does", () => {
-    const { dir, c1 } = makeRepo();
-    git(dir, "branch", "old-landed", c1);
-    const res = runHygiene({ cwd: dir, trigger: "session", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
-    expect(res.autoClean.ran).toBe(true);
-    expect(branches(dir)).toEqual(["main"]);
+  test("the defaults wait 30 days for both the gate and the minimum age", () => {
+    const { dir, c2 } = makeRepo();
+    git(dir, "branch", "ten-days", c2);
+    const plan = planAutoClean(scanRepo(dir, NOW), { ...SETTINGS, autoCleanMinAgeDays: 30 }, { cwd: dir, fetchMerged: offline });
+    expect(plan.remove).toEqual([]);
   });
 });
 
@@ -209,7 +203,7 @@ describe("auto-clean — sub-agent branches of a squash-merged PR (#572)", () =>
     git(bare, "init", "-q", "--bare");
     git(dir, "remote", "add", "origin", bare);
     git(dir, "push", "-q", "origin", `${c3}:refs/heads/main`);
-    const tip = branchWithCommit(dir, "worktree-agent-a2", c1, "q.txt", "Q\n", daysAgo(2));
+    const tip = branchWithCommit(dir, "worktree-agent-a2", c1, "q.txt", "Q\n", daysAgo(35));
     git(dir, "push", "-q", "origin", "worktree-agent-a2");
     git(dir, "branch", "moved-there", c1);
     git(dir, "push", "-q", "origin", `${c3}:refs/heads/moved-there`);
