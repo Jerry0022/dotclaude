@@ -453,6 +453,24 @@ describe("state transitions", () => {
     expect(s.queue[0]).toMatchObject({ branch: "burn/t-core-1", requeues: 1 });
   });
 
+  test("requeue with excluded stamps the queue item, its event, and the next spawn's task", () => {
+    let s = bp.claimTask(s0(), "p0", NOW, { branch: "burn/t-core-1" });
+    s = bp.requeueTask(s, "p0", { branch: "burn/t-core-1", excluded: [".env"] }, NOW + 1);
+    expect(s.queue[0]).toMatchObject({ id: "p0", excluded: [".env"] });
+    expect(s.events[s.events.length - 1]).toMatchObject({ type: "requeue", excluded: [".env"] });
+    const g = bp.gate(s, u0, NOW + 2, null);
+    expect(g.task).toMatchObject({ id: "p0", excluded: [".env"] });
+  });
+
+  test("requeue without excluded (or an empty list) adds no excluded field", () => {
+    let s = bp.claimTask(s0(), "p0", NOW, { branch: "burn/t-core-1" });
+    let r = bp.requeueTask(s, "p0", { branch: "burn/t-core-1" }, NOW + 1);
+    expect(r.queue[0]).not.toHaveProperty("excluded");
+    s = bp.claimTask(s0(), "p0", NOW, { branch: "burn/t-core-1" });
+    r = bp.requeueTask(s, "p0", { branch: "burn/t-core-1", excluded: [] }, NOW + 1);
+    expect(r.queue[0]).not.toHaveProperty("excluded");
+  });
+
   test("events are capped and every transition beats the heartbeat", () => {
     let s = s0();
     for (let i = 0; i < 250; i++) s = bp.setResumePolicy(s, { auto: i % 2 ? "off" : "continue" }, NOW + i);
@@ -479,5 +497,153 @@ describe("classifyInFlight — resume actions (K2)", () => {
     expect(bp.classifyInFlight({ ...base, commitsAhead: 2 }).action).toBe("merge");
     expect(bp.classifyInFlight({ ...base, commitsAhead: 2, wip: true }).action).toBe("requeue-with-branch");
     expect(bp.classifyInFlight(base).action).toBe("requeue");
+  });
+});
+
+describe("2026-09-26 audit — blind mode keeps the checks that need no reading (AUD-C019)", () => {
+  const u0 = usage({ weeklyUsed: 40, weeklyResetMin: 30 * 60, sessionUsed: 20, sessionResetMin: 120 });
+  const q = [task("p0", "M", "P0"), task("i1"), task("i2")];
+  const p = bp.derivePlan({ usage: u0, queue: q, plan: "Max 20x" });
+  const blind = { ok: false, reason: "cached: scraper profile not logged in" };
+
+  test("the weekly reset ends the burn even while usage is unreadable", () => {
+    const s = stateFor(p, q, u0);
+    const after = Date.parse(s.weekResetAt) + 10 * 60000;
+    const g = bp.gate(s, blind, after, null);
+    expect(g.decision).toBe("finish");
+    expect(g.reason).toBe("week-reset");
+    expect(g.state.inFlight).toHaveLength(0);
+  });
+
+  test("a window the last reading saw at 97 % pauses until its reset instead of spawning blind", () => {
+    const t1 = NOW + 50 * 60000;
+    let s = stateFor(p, q, u0);
+    // the last good reading: window at 97 %, 70 min to its reset
+    s = bp.gate(s, bp.normalizeUsage({ ...raw({ weeklyUsed: 43, sessionUsed: 97, sessionResetMin: 70 }), timestamp: new Date(t1).toISOString() }, t1, 2), t1, null, { claim: false }).state;
+    s.status = "running";
+    delete s.pause;
+    expect(s.budgetAt.sessionResetAt).toBe(new Date(t1 + 70 * 60000).toISOString());
+    s.holds = bp.HOLD_LIMIT - 1;
+    const g = bp.gate(s, blind, t1 + 5 * 60000, null);
+    expect(g.decision).toBe("pause");
+    expect(g.reason).toBe("window");
+    expect(g.blind).toBe(true);
+    expect(Date.parse(g.resumeAt)).toBe(t1 + (70 + bp.RESUME_BUFFER_MIN) * 60000);
+    // after that window's reset the blind gate may spawn again (capped)
+    s.holds = bp.HOLD_LIMIT - 1;
+    const g2 = bp.gate(s, blind, t1 + 75 * 60000, null);
+    expect(g2.decision).toBe("spawn");
+    expect(g2.blind).toBe(true);
+  });
+
+  test("2026-09-26 finding 11: blind spend accumulates across tasks in the same window, so the third of three (each alone fits) pauses", () => {
+    const q5 = [task("p0", "S", "P0"), task("p1", "S", "P0"), task("p2", "S", "P0"), task("p3", "S", "P0")];
+    const p5 = bp.derivePlan({ usage: u0, queue: q5, plan: "Max 20x" });
+    const t1 = NOW + 50 * 60000;
+    let s = stateFor(p5, q5, u0);
+    // last good reading: window at 78 %, 250 min to its reset — plenty of
+    // room for any one small task, not for three in a row.
+    s = bp.gate(s, bp.normalizeUsage({ ...raw({ weeklyUsed: 43, sessionUsed: 78, sessionResetMin: 250 }), timestamp: new Date(t1).toISOString() }, t1, 2), t1, null, { claim: false }).state;
+    s.status = "running";
+    delete s.pause;
+
+    const decisions = [];
+    for (let i = 0; i < 3; i++) {
+      s.holds = bp.HOLD_LIMIT - 1;
+      const g = bp.gate(s, blind, t1 + (i + 1) * 60000, null);
+      decisions.push(g.decision);
+      s = g.state;
+      if (g.decision === "spawn") s = bp.landTask(s, g.task.id, {}, t1 + (i + 1) * 60000 + 30000);
+      else break;
+    }
+    expect(decisions).toEqual(["spawn", "spawn", "pause"]);
+  });
+
+  test("finding: a fresh (< FRESH_WINDOW_PCT) last reading still enforces the window cap via the running blind total, and a reset restarts the total exactly once", () => {
+    const q20 = Array.from({ length: 20 }, (_, i) => task(`t${i}`, "S", "P0"));
+    const p20 = bp.derivePlan({ usage: u0, queue: q20, plan: "Max 20x" });
+    const t1 = NOW + 50 * 60000;
+    let s = stateFor(p20, q20, u0);
+    // last good reading: window nearly empty (5 %, under FRESH_WINDOW_PCT),
+    // 250 min to its reset — the old bug let every blind task through
+    // forever because the shortcut only ever looked at the stale 5 %.
+    s = bp.gate(s, bp.normalizeUsage({ ...raw({ weeklyUsed: 43, sessionUsed: 5, sessionResetMin: 250 }), timestamp: new Date(t1).toISOString() }, t1, 2), t1, null, { claim: false }).state;
+    s.status = "running";
+    delete s.pause;
+
+    let spawns = 0;
+    let last;
+    for (let i = 0; i < 20; i++) {
+      s.holds = bp.HOLD_LIMIT - 1;
+      const g = bp.gate(s, blind, t1 + (i + 1) * 60000, null);
+      last = g;
+      s = g.state;
+      if (g.decision !== "spawn") break;
+      spawns++;
+      s = bp.landTask(s, g.task.id, {}, t1 + (i + 1) * 60000 + 30000);
+    }
+    // the cap now bites well before the queue runs out
+    expect(spawns).toBeGreaterThan(0);
+    expect(spawns).toBeLessThan(20);
+    expect(last.decision).toBe("pause");
+    const windowResetAt = s.blind.windowResetAt;
+
+    // simulate the window's own reset (no sighted reading arrives — still blind)
+    s.status = "running";
+    delete s.pause;
+    const winResetMs = t1 + 250 * 60000;
+    let g2 = bp.gate(s, blind, winResetMs + 10 * 60000, null);
+    expect(g2.decision).toBe("spawn");
+    expect(g2.state.blind.windowSpentPct).toBeLessThan(s.blind.windowSpentPct);
+    expect(g2.state.blind.windowResetAt).not.toBe(windowResetAt);
+    s = bp.landTask(g2.state, g2.task.id, {}, winResetMs + 11 * 60000);
+    const spentAfterFirst = s.blind.windowSpentPct;
+    const resetAtAfterFirst = s.blind.windowResetAt;
+
+    // the next call in the SAME new window must accumulate, not zero again
+    const g3 = bp.gate(s, blind, winResetMs + 12 * 60000, null);
+    expect(g3.state.blind.windowResetAt).toBe(resetAtAfterFirst);
+    expect(g3.state.blind.windowSpentPct).toBeGreaterThan(spentAfterFirst);
+  });
+});
+
+describe("2026-09-26 audit — strict parsing (AUD-C049/C050)", () => {
+  test("parseResumeAuto: continue|on → continue, off → off, absent → continue, else error", () => {
+    expect(bp.parseResumeAuto(undefined)).toBe("continue");
+    expect(bp.parseResumeAuto("on")).toBe("continue");
+    expect(bp.parseResumeAuto("Continue")).toBe("continue");
+    expect(bp.parseResumeAuto("off")).toBe("off");
+    for (const bad of ["of", "no", "false", "", true]) expect(() => bp.parseResumeAuto(bad)).toThrow(/continue\|on\|off/);
+    expect(() => bp.setResumePolicy({ resume: {}, events: [] }, { auto: "aus" }, NOW)).toThrow();
+  });
+
+  test("parseNumberOpt: absent → fallback, out of range / not a number → error", () => {
+    const o = { min: 1, max: 16, integer: true };
+    expect(bp.parseNumberOpt("lane-cap", undefined, 4, o)).toBe(4);
+    expect(bp.parseNumberOpt("lane-cap", "3", 4, o)).toBe(3);
+    for (const bad of ["0", "17", "2.5", "x", "", true]) expect(() => bp.parseNumberOpt("lane-cap", bad, 4, o)).toThrow(/--lane-cap/);
+  });
+});
+
+describe("2026-09-26 audit — burn docs (AUD-C024, AUD-C054)", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.join(__dirname, "..");
+  const read = (...p) => fs.readFileSync(path.join(root, ...p), "utf8");
+  const burnDocs = ["burn-scheduler.md", "composite-prompt.md"].map((f) => read("skills", "do-run", "modes", "burn", "deep-knowledge", f));
+
+  test("sub-branches are dash-joined <parent>-<role>, never slash-nested", () => {
+    const orch = read("deep-knowledge", "agent-orchestration.md");
+    expect(orch).toMatch(/dash-joined `<parent>-<role>`/);
+    for (const text of [orch, ...burnDocs]) {
+      expect(text).not.toMatch(/<parent[-_a-z]*>\/<role>|\{slug\}\/\{?role|<slug>\/<role>/);
+    }
+    expect(burnDocs[0]).toMatch(/burn\/<slug>-<role>-<n>/);
+  });
+
+  test("the composite prompt pushes only when the repo has a remote", () => {
+    const composite = burnDocs[1];
+    expect(composite).toMatch(/Push nur, wenn das Repo ein Remote hat/);
+    expect(composite).toMatch(/--pushed=false/);
   });
 });

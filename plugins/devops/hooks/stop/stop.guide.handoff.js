@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.guide.handoff
- * @version 0.4.0
+ * @version 0.5.0
  * @event Stop
  * @plugin devops
  * @description Offer the auto-guide skill when Claude's own answer hands the user a manual click-through on an external website.
@@ -32,7 +32,10 @@
  *   Never acts when: stop_hook_active (loop guard), the turn is silent /
  *   machine-driven (session flag OR the turn's opening prompt in the
  *   transcript — the flag alone races stop.flow.guard deleting it), the
- *   turn already invoked auto-guide (or web-guide), or input is malformed.
+ *   turn already invoked auto-guide (or web-guide), a guide is already
+ *   running (guide-active-state.isGuideActive(hook.cwd) — a turn that
+ *   resumes an in-flight guide never re-invokes the skill, so the marker is
+ *   the only signal a guide is still live), or input is malformed.
  */
 
 require('../lib/plugin-guard');
@@ -46,6 +49,7 @@ const {
 const { lastUserPromptText, turnAssistantTexts } = require('../lib/skill-invocations');
 const { isMachinePrompt } = require('../lib/batch-state');
 const { isSilent, isMachineTurn, isScheduledTask } = require('../user-prompt-submit/prompt.flow.silent-turn');
+const { isGuideActive } = require('../../scripts/guide-active-state');
 
 const FLAG_PREFIX = 'dotclaude-devops-guide-handoff-services';
 
@@ -97,6 +101,11 @@ function main(inputData) {
   const sessionId = hook.session_id;
 
   if (readSessionFile('dotclaude-devops-silent-turn', sessionId, { exact: true }) !== null) return;
+
+  // A guide already running (or just resumed) never re-invokes the skill in
+  // the resuming turn — webGuideInvokedThisTurn below would miss it. The
+  // marker is the only signal left that a guide is still live.
+  if (isGuideActive(hook.cwd)) return;
 
   const transcript = safeReadTranscript(hook.transcript_path, TRANSCRIPT_TAIL_BYTES);
   if (!transcript) return;

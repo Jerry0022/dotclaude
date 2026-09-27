@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.3.2
+ * @version 0.3.4
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -22,6 +22,7 @@
 
 const { canonicalSkillName } = require('./skill-names');
 const { LIB_PATH, strList } = require('./run-contract-store');
+const { hashRefs } = require('./issue-refs');
 
 /** Current skill name of a raw invocation name (`devops:tune-harden` → `auto-harden`). */
 function skillName(raw) {
@@ -94,9 +95,19 @@ function codeFilesOf(seg, ctx) {
   const m = measureOf(seg || []);
   return m && typeof m.codeFiles === 'number' ? m.codeFiles : null;
 }
+/** Whether auto-issue args name item `n`: a `#n` read as issue-refs.js reads
+ *  it (`#7d84a8` and "#333 border" name no #7 / #333), or `n` / `#n` as a
+ *  token of its own after the word issue ("refine issue #412 — card border"
+ *  names 412, red-team R3). AUD-022: `n` is escaped — an item holding a
+ *  regex metacharacter used to throw and fail the card gate open. */
 function issueNamed(args, n) {
-  const re = new RegExp(`#${n}(?!\\d)|\\bissues?\\b[^\\n]*?(?<!\\d)${n}(?!\\d)`, 'i');
-  return re.test(args);
+  const text = typeof args === 'string' ? args : String(args == null ? '' : args);
+  const item = String(n == null ? '' : n).trim();
+  if (!item) return false;
+  if (hashRefs(text).some(r => r.n === item)) return true;
+  const esc = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // "issue #412 — card border": the `#` form right after the word, too.
+  return new RegExp(`\\bissues?\\b(?:[ \\t]*:?[ \\t]*#|[^\\n]*?(?<![\\p{L}\\p{N}_#]))${esc}(?![\\p{L}\\p{N}_])`, 'iu').test(text);
 }
 
 // AUD-020: an unrelated Agent call (e.g. an Explore search) used to satisfy
@@ -396,5 +407,5 @@ module.exports = {
   skillName, segments, currentSegment, segmentHasWork, segmentHasEditWork, openObligations,
   formatBlock, chosenLine, summaryForCard,
   // shared with the sibling modules (not part of the facade's public list)
-  isSkill, isEditWork, obState, skipOf, GATE_OBS, AUDIT_OBS, fixFor, short,
+  isSkill, isEditWork, obState, skipOf, GATE_OBS, AUDIT_OBS, fixFor, short, issueNamed,
 };

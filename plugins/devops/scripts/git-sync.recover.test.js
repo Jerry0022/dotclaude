@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from "vitest";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -189,6 +189,52 @@ describe("releaseKilledIndexLock — only the killed child's lock", () => {
     const { gitDir } = makeRepo({ "a.txt": "a\n" }, { "a.txt": "A\n" });
     expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now(), timedOut: true })).toBe("absent");
   });
+
+  // AUD-039: a lock the session's own git took in the kill gap is newer than
+  // the merge start too — only one that sits still is the killed child's.
+  // The settle wait blocks this thread, so the live writer is a child process.
+  const liveWriter = (lock, script) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["-e", script, lock], { stdio: ["ignore", "pipe", "ignore"] });
+    child.stdout.once("data", () => resolve(child));
+    child.on("error", reject);
+  });
+
+  test("a lock still being written during the settle window → held, left in place (AUD-039)", async () => {
+    const { gitDir, lock } = withLock();
+    const child = await liveWriter(lock, `
+      const fs = require("fs"); const lock = process.argv[1];
+      process.stdout.write("go");
+      const t = setInterval(() => { try { fs.appendFileSync(lock, "x"); } catch {} }, 40);
+      setTimeout(() => { clearInterval(t); process.exit(0); }, 3000);`);
+    try {
+      expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, settleMs: 400 })).toBe("held");
+      expect(fs.existsSync(lock)).toBe(true);
+    } finally {
+      child.kill();
+    }
+  });
+
+  test("a lock that vanishes during the settle window → held, not reported free (AUD-039)", async () => {
+    const { gitDir, lock } = withLock();
+    const child = await liveWriter(lock, `
+      const fs = require("fs"); const lock = process.argv[1];
+      process.stdout.write("go");
+      setTimeout(() => { try { fs.unlinkSync(lock); } catch {} process.exit(0); }, 100);`);
+    try {
+      expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, settleMs: 600 })).toBe("held");
+    } finally {
+      child.kill();
+    }
+  });
+
+  test("the default settle window is ~1.5 s and a still lock is removed after it (AUD-039)", () => {
+    expect(R.LOCK_SETTLE_MS).toBe(1500);
+    const { gitDir, lock } = withLock();
+    const t0 = Date.now();
+    expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true })).toBe("removed");
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
+    expect(fs.existsSync(lock)).toBe(false);
+  });
 });
 
 describe("headState", () => {
@@ -231,5 +277,35 @@ describe("firstErrorLine", () => {
     expect(R.firstErrorLine("just a line\r\n")).toBe("just a line");
     expect(R.firstErrorLine("")).toBe("");
     expect(R.firstErrorLine(`error: ${"x".repeat(400)}`)).toHaveLength(160);
+  });
+});
+
+describe("gitRunner — env forwarding (AUD-C059)", () => {
+  test("passes a custom env through to the child, not just process.env", () => {
+    // Two independent repos. Pointing GIT_DIR at the SECOND repo while running
+    // in the FIRST repo's directory only succeeds if the runner's env option
+    // actually reached execFileSync — proof positive, not an assertion on a
+    // call spy. This is the same plumbing git-sync.js relies on to pin
+    // LC_ALL=C/LANGUAGE=C on every call (isMissingUpstream and firstErrorLine
+    // match git's English wording).
+    const a = makeRepo({ "a.txt": "a" }, { "a.txt": "a2" });
+    const b = makeRepo({ "b.txt": "b" }, { "b.txt": "b2" });
+    const runWithEnv = R.gitRunner({
+      cwd: a.dir,
+      timeoutMs: 60_000,
+      env: { ...GIT_ENV, GIT_DIR: b.gitDir, LC_ALL: "C", LANGUAGE: "C" },
+    });
+    const res = runWithEnv(["rev-parse", "HEAD"]);
+    expect(res.ok).toBe(true);
+    expect(res.out.trim()).toBe(b.preHead);
+    expect(res.out.trim()).not.toBe(a.preHead);
+  });
+
+  test("omitting env falls back to process.env, unchanged behaviour", () => {
+    const a = makeRepo({ "a.txt": "a" }, { "a.txt": "a2" });
+    const run = R.gitRunner({ cwd: a.dir, timeoutMs: 60_000 });
+    const res = run(["rev-parse", "HEAD"]);
+    expect(res.ok).toBe(true);
+    expect(res.out.trim()).toBe(a.preHead);
   });
 });

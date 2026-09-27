@@ -34,8 +34,11 @@ auto-agents mit --burn={project root}/BURN-STATE.json — Conveyor statt Waves
    burn-plan.js state agent <id> --agent-id=… --branch=… --worktree=…
 3. Agent committet `wip(burn): …` nach jedem grünen Teilschritt (mind. alle ~10 Tool-Calls)
 4. passes aus dem Gate (redteam) für substanzielle Diffs
-5. gezielte Tests → Merge in burn/{slug} → git push -u origin burn/{slug}
-   (non-force, nie main, kein PR, kein Ship) → burn-plan.js state land <id> --sha=…
+5. gezielte Tests → Merge in burn/{slug} → Push nur, wenn das Repo ein Remote hat
+   (`git remote` nicht leer): git push -u origin burn/{slug} (non-force, nie main,
+   kein PR, kein Ship) → burn-plan.js state land <id> --sha=…
+   Ohne Remote (oder Session auf main): Merge bleibt lokal, kein Push-Versuch →
+   burn-plan.js state land <id> --sha=… --pushed=false
 6. pause → Cron aus dem Gate armen (state resume-cron), Report „pausiert bis …", Turn beenden
 7. finish → voller QA-Lauf als letzter Task (kein Gate), dann Report
 

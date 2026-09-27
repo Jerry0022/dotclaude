@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { processPidFile, legacyPidFile, unregister } from "./heartbeat.js";
+import { processPidFile, flatPidFile, legacyPidFile, unregister, writeHeartbeat, pruneDead, heartbeatDir } from "./heartbeat.js";
 
 const require = createRequire(import.meta.url);
 const reader = require("../../hooks/lib/mcp-heartbeat.js");
@@ -33,8 +33,7 @@ function withTmp(fn) {
 
 /** What register() writes for a server process `pid` in `dir`. */
 function registerAs(pid, dir) {
-  fs.writeFileSync(processPidFile(NAME, pid, dir), String(pid));
-  fs.writeFileSync(legacyPidFile(NAME, dir), String(pid));
+  writeHeartbeat(NAME, pid, dir);
 }
 
 // The completion server lost its register call in #93 ("unused import"), so
@@ -110,3 +109,65 @@ describe("heartbeat — one file per server process", () => {
     });
   });
 });
+
+// AUD-C043: ~170 stale per-process files piled up in TEMP while any server of
+// the name lived, and every liveness check listed all ~146 k TEMP entries.
+describe("heartbeat — subdir layout, pruning, cheap reads (AUD-C043)", () => {
+  test("register writes into the dedicated subdir, not TEMP itself", () => {
+    withTmp((dir) => {
+      registerAs(process.pid, dir);
+      expect(fs.existsSync(path.join(heartbeatDir(dir), `${NAME}-${process.pid}.pid`))).toBe(true);
+      expect(fs.existsSync(flatPidFile(NAME, process.pid, dir))).toBe(false);
+      expect(reader.processPidFileFor(NAME, process.pid)).toBe(processPidFile(NAME, process.pid, dir));
+    });
+  });
+
+  test("pruneDead removes dead files of this name in both layouts, keeps live ones and other names", () => {
+    withTmp((dir) => {
+      const gone = spawnSync(process.execPath, ["-e", "0"]).pid;
+      writeHeartbeat(NAME, gone, dir);
+      writeHeartbeat(NAME, other.pid, dir);
+      fs.writeFileSync(flatPidFile(NAME, gone, dir), String(gone));
+      fs.writeFileSync(flatPidFile(NAME, other.pid, dir), String(other.pid));
+      writeHeartbeat("dotclaude-ship", gone, dir);
+      const alive = (pid) => pid === other.pid;
+      expect(pruneDead(NAME, dir, alive)).toBe(2);
+      expect(fs.existsSync(processPidFile(NAME, gone, dir))).toBe(false);
+      expect(fs.existsSync(flatPidFile(NAME, gone, dir))).toBe(false);
+      expect(fs.existsSync(processPidFile(NAME, other.pid, dir))).toBe(true);
+      expect(fs.existsSync(flatPidFile(NAME, other.pid, dir))).toBe(true);
+      expect(fs.existsSync(processPidFile("dotclaude-ship", gone, dir))).toBe(true);
+    });
+  });
+
+  test("unregister also removes this process's flat pre-0.3.0 file", () => {
+    withTmp((dir) => {
+      fs.writeFileSync(flatPidFile(NAME, other.pid, dir), String(other.pid));
+      writeHeartbeat(NAME, other.pid, dir);
+      unregister(NAME, other.pid, dir);
+      expect(fs.existsSync(flatPidFile(NAME, other.pid, dir))).toBe(false);
+      expect(fs.existsSync(processPidFile(NAME, other.pid, dir))).toBe(false);
+    });
+  });
+
+  test("a flat-layout file of an older server still counts (one-release compat)", () => {
+    withTmp((dir) => {
+      fs.writeFileSync(flatPidFile(NAME, process.pid, dir), String(process.pid));
+      expect(reader.isMcpServerAlive(NAME)).toBe(true);
+      expect(reader.heartbeatState(NAME).alive).toEqual([process.pid]);
+    });
+  });
+
+  test("a live subdir heartbeat skips the TEMP scan; isMcpServerAlive stops at the first live PID", () => {
+    withTmp((dir) => {
+      registerAs(process.pid, dir);
+      const gone = spawnSync(process.execPath, ["-e", "0"]).pid;
+      fs.writeFileSync(flatPidFile(NAME, gone, dir), String(gone));
+      const st = reader.heartbeatState(NAME);
+      expect(st.dead.map((d) => d.file)).not.toContain(flatPidFile(NAME, gone, dir));
+      expect(reader.heartbeats(NAME, { stopAtLive: true })).toHaveLength(1);
+      expect(reader.isMcpServerAlive(NAME)).toBe(true);
+    });
+  });
+});
+

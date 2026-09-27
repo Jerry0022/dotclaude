@@ -117,6 +117,30 @@ design round has: the three row builders and the ordering of stash → rebuild
     return it ? it.querySelector('section[data-view][data-view-active="true"]:not([hidden])') : null;
   }
 
+  // Label + note marker of one screen-nav row, built as DOM nodes. Never
+  // innerHTML: `dataset.navLabel` hands back the DECODED attribute, so a label
+  // Claude escaped correctly (`data-nav-label="Login &lt;img …&gt;"`) would be
+  // parsed as markup again — a script sink on the concept page. textContent
+  // keeps it text, exactly like buildSectionNav().
+  function navRowLabel(row, label, idx) {
+    const span = document.createElement('span');
+    if (idx !== null) {
+      const num = document.createElement('span');
+      num.className = 'screen-idx';
+      num.textContent = idx;
+      span.appendChild(num);
+    }
+    span.appendChild(document.createTextNode(label));
+    row.appendChild(span);
+  }
+  // `key` is the camelCase dataset key (`noteMarker` → data-note-marker).
+  function navRowMarker(row, key, value) {
+    const marker = document.createElement('span');
+    marker.className = 'has-notes';
+    marker.dataset[key] = value;
+    row.appendChild(marker);
+  }
+
   // Build screen-nav (two-level: design heading + nested pages), the design
   // switcher ghost bar, and per-screen textareas — all scoped to the
   // VISIBLE iteration (may be a frozen tab the user clicked back to, not
@@ -178,8 +202,8 @@ design round has: the three row builders and the ordering of stash → rebuild
       btn.className = 'screen-nav-view-item';
       btn.type = 'button';
       btn.dataset.viewId = v.dataset.view;
-      btn.innerHTML = `<span>${v.dataset.navLabel || v.dataset.view}</span>
-        <span class="has-notes" data-view-note-marker="${v.dataset.view}"></span>`;
+      navRowLabel(btn, v.dataset.navLabel || v.dataset.view, null);
+      navRowMarker(btn, 'viewNoteMarker', v.dataset.view);
       btn.addEventListener('click', () => { showView(v.dataset.view); closePanel(); });
       return btn;
     };
@@ -192,8 +216,8 @@ design round has: the three row builders and the ordering of stash → rebuild
       heading.type = 'button';
       heading.dataset.designId = d.dataset.design;
       heading.dataset.active = String(d === active);
-      heading.innerHTML = `<span>${d.dataset.navLabel || d.dataset.design}</span>
-        <span class="has-notes" data-design-note-marker="${d.dataset.design}"></span>`;
+      navRowLabel(heading, d.dataset.navLabel || d.dataset.design, null);
+      navRowMarker(heading, 'designNoteMarker', d.dataset.design);
       heading.addEventListener('click', () => { showDesign(d.dataset.design); closePanel(); });
       group.appendChild(heading);
 
@@ -210,8 +234,8 @@ design round has: the three row builders and the ordering of stash → rebuild
         btn.type = 'button';
         btn.dataset.screenId = sec.id;
         btn.dataset.designId = d.dataset.design;
-        btn.innerHTML = `<span><span class="screen-idx">${idx + 1}.</span>${sec.dataset.navLabel || sec.id}</span>
-          <span class="has-notes" data-note-marker></span>`;
+        navRowLabel(btn, sec.dataset.navLabel || sec.id, `${idx + 1}.`);
+        navRowMarker(btn, 'noteMarker', '');
         btn.addEventListener('click', () => {
           // Resolve the active design at CLICK time. buildDesignUI() only
           // runs on iteration:changed / DOMContentLoaded, never on a design

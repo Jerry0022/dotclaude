@@ -278,6 +278,7 @@ function page(rounds) {
     fnSource("buildRoundsChip"),
     fnSource("computeSelectedVariant"),
     fnSource("applyNavOverflow"),
+    fnSource("navOverflowFloor"),
     fnSource("makeNavMoreToggle"),
     "const NAV_WINDOW_MAX = 3;",
     fnSource("applyNavWindow"),
@@ -610,6 +611,10 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     nav.querySelector(".section-nav-item").classList.add("is-active");
     Object.defineProperty(box, "scrollHeight", { value: 500, configurable: true });
     Object.defineProperty(box, "clientHeight", { value: 200, configurable: true });
+    // The reading line on the first entry — the tail below it is what the cut
+    // may hide (#541: never the active entry or anything above it).
+    for (const el of nav.querySelectorAll(".section-nav-item.is-active")) el.classList.remove("is-active");
+    nav.querySelector(".section-nav-item").classList.add("is-active");
     p.window.applyNavOverflow(nav, box);
     const toggle = p.document.querySelector(".nav-more-toggle");
     expect(toggle).not.toBeNull();
@@ -619,6 +624,30 @@ describe("Kompass tree — behaviour (reference JS on jsdom)", () => {
     toggle.dispatchEvent(new p.window.MouseEvent("click", { bubbles: true }));
     expect(nav.querySelectorAll("[data-nav-overflow-hidden]").length).toBe(0);
     expect(p.document.querySelector(".nav-more-toggle")).toBeNull();
+  });
+
+  // #541: a box that stays overflowing (one group taller than the panel) used
+  // to lose EVERY child, active group included, leaving only "+N weitere".
+  test("+N weitere never hides the entry under the reading line or anything above it", () => {
+    const p = page([R(1, { live: true, selected: true, entries: 6 })]);
+    p.window.buildSectionNav();
+    const nav = p.document.getElementById("section-nav");
+    const box = p.document.querySelector(".panel-nav-scroll");
+    Object.defineProperty(box, "scrollHeight", { value: 900, configurable: true });
+    Object.defineProperty(box, "clientHeight", { value: 200, configurable: true });
+    const kids = () => [...nav.children].filter((el) => !el.classList.contains("nav-more-toggle"));
+    const ids = kids().map((el) => el.dataset.sectionId);
+
+    for (const el of nav.querySelectorAll(".section-nav-item.is-active")) el.classList.remove("is-active");
+    nav.querySelector(`[data-section-id="${ids[2]}"]`).classList.add("is-active");
+    p.window.applyNavOverflow(nav, box);
+    expect(kids().filter((el) => !el.hidden).map((el) => el.dataset.sectionId)).toEqual(ids.slice(0, 3));
+    expect(nav.querySelector(".nav-more-toggle").textContent).toBe(`+${ids.length - 3} nav.more_entries`);
+
+    // Nothing active yet: the first entry stays.
+    for (const el of nav.querySelectorAll(".section-nav-item.is-active")) el.classList.remove("is-active");
+    p.window.applyNavOverflow(nav, box);
+    expect(kids().filter((el) => !el.hidden).map((el) => el.dataset.sectionId)).toEqual(ids.slice(0, 1));
   });
 
   // #541: the open group alone was taller than the box (667 px in 444 px), so

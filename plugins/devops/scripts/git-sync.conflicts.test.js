@@ -4,6 +4,7 @@ import path from "path";
 import {
   git,
   runSync,
+  runSyncExplain,
   write,
   read,
   commitAll,
@@ -205,5 +206,34 @@ describe("branch hierarchy", () => {
     expect(report).toContain("✓ origin/main → claude/x: 1 commit(s)");
     expect(report).not.toContain("claude →");
     expect(report).not.toContain("✗");
+  });
+
+  test("a missing-upstream fetch stays quiet under a German locale (AUD-C059)", async () => {
+    const { root, primary, other } = await makeWorld();
+
+    // A real parent branch that existed, was fetched once (so a tracking ref
+    // survives), and is then deleted upstream — the "couldn't find remote
+    // ref" case isMissingUpstream must recognise regardless of the machine's
+    // locale, or every fetch of it reads as a genuine failure instead of the
+    // quiet "stale ref, nothing new to report" it actually is.
+    await git(other, ["checkout", "--quiet", "-b", "feat"]);
+    write(other, "feat.txt", "feat\n");
+    await commitAll(other, "feat base");
+    await git(other, ["push", "--quiet", "origin", "feat"]);
+    await git(other, ["checkout", "--quiet", "main"]);
+
+    const sub = path.join(root, "sub");
+    await git(primary, ["fetch", "--quiet", "origin", "feat"]);
+    await git(primary, ["worktree", "add", "--quiet", "-b", "feat/auth", sub, "origin/feat"]);
+    await git(other, ["push", "--quiet", "origin", "--delete", "feat"]);
+
+    const report = await runSyncExplain(sub, { LANG: "de_DE.UTF-8", LC_ALL: "de_DE.UTF-8", LANGUAGE: "de_DE" });
+
+    // git-sync pins LC_ALL=C/LANGUAGE=C on every git call it makes (AUD-C059),
+    // so the parent env's locale must not change the outcome: the deleted
+    // branch's stale tracking ref is still usable and reports quietly.
+    expect(report).not.toContain("failed");
+    expect(report).not.toContain("skipped: fetch");
+    expect(report).toMatch(/already in|origin\/feat/);
   });
 });

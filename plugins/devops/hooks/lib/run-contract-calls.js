@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-calls
- * @version 0.5.4
+ * @version 0.5.8
  * @plugin devops
  * @description What a tool call MEANS for the run contract — shared by
  *   pre.run.contract (gates) and post.run.contract (recording) so both read a
@@ -51,6 +51,7 @@ const path = require('path');
 // The git helpers moved to git-timeout.js (harden scan 2026-09-26); gitOut /
 // gitLines stay in this module's exports for its existing callers and tests.
 const { gitBudget, gitOut, gitLines } = require('./git-timeout');
+const { isColourRef } = require('./issue-refs');
 
 // R11: post.run.contract's hook timeout is 10 s (hooks.json); baseBranch can
 // make 2 unbudgeted GIT_TIMEOUT_MS (5 s) calls, 10 s worst case, killing the
@@ -829,7 +830,7 @@ function mergeFacts(out, f) {
  * H-B1: the work-tree roots a call's contract may live in, in lookup order —
  * the session root, then (MCP tools only: ship_release and the card act on
  * it) `tool_input.cwd`'s root. `projectRoot` is passed in so this module
- * stays dependency-free. Pre (gates) and post (recording) both use it.
+ * needs no project-root lookup of its own. Pre (gates) and post (recording) both use it.
  * @returns {{root:string, inputRoot:string|null, roots:string[]}}
  */
 function contractRoots(hook, projectRoot) {
@@ -934,15 +935,16 @@ function isItemBranch(facts, hook, current) {
  * @returns {{commit:boolean, itemBranch:boolean, branchName:string|null,
  *   card:{readable:boolean, variant:string|null, final:boolean}|null, release:boolean}}
  */
-function shellCallFacts(hook, root, cwd, { after = false } = {}) {
+function shellCallFacts(hook, root, cwd, { after = false, budget: callerBudget } = {}) {
   // RT3-R5: the tool decides the dialect (PowerShell: `` ` `` escapes, no backtick substitution).
   const f = commandFacts(toolInput(hook).command, { tool: hook && hook.tool_name });
   let itemBranch = false;
   if (f.branch) {
     const plain = !(hook.agent_id || f.worktree || f.detach);
-    // R11: only the post path (`after`) needs a shared budget — pre's single
-    // HEAD read never chains a second call.
-    const budget = after ? gitBudget(POST_BASE_BRANCH_BUDGET_MS) : undefined;
+    // R11: the post path (`after`) chains two reads under its own budget;
+    // pre hands in its invocation budget so this HEAD read counts against
+    // the same 15 s deadline as the rest of the gate (AUD-025).
+    const budget = callerBudget || (after ? gitBudget(POST_BASE_BRANCH_BUDGET_MS) : undefined);
     itemBranch = isItemBranch(f, hook, plain ? baseBranch(root, f.branchName, after, budget) : null);
   }
   let card = null;
@@ -987,12 +989,17 @@ function isGatedEdit(tool, input, root, cwd) {
   return EDIT_TOOLS.has(tool) && isGatedPath(root, cwd, toolFilePath(tool, input));
 }
 
-/** Issue numbers a PR body closes. `#N` must end its token, as in
- *  issue-refs.js: "Fixes #8fae8f contrast" closes no issue #8. */
+/** Issue numbers a PR body closes. `#N` is read as issue-refs.js reads it:
+ *  "Fixes #8fae8f contrast" closes no issue #8, "fix: #999 border" no #999 —
+ *  but the keyword right before `#N` beats a colour word ("Closes #412 —
+ *  border radius" closes #412, as GitHub would). */
 function closesOf(body) {
   const out = [];
   if (typeof body !== 'string') return out;
-  for (const m of body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#([1-9]\d*)(?![\p{L}\p{N}_])/giu)) out.push(m[1]);
+  for (const m of body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+(#([1-9]\d*))(?![\p{L}\p{N}_])/giu)) {
+    const at = m.index + m[0].length - m[1].length;
+    if (!isColourRef(body, at, at + m[1].length)) out.push(m[2]);
+  }
   return [...new Set(out)];
 }
 
@@ -1174,6 +1181,18 @@ function* linesBackward(file, { chunk = TAIL_BYTES, max = MAX_BACK_BYTES, budget
  *   treat the result (found or not) as the complete transcript in that case.
  * @returns {{questions, answers, followUps:object[], earlier:{questions, answers}[]}|null}
  */
+/**
+ * AUD-024: only a structured AskUserQuestion result may carry router
+ * answers — one with a `questions` array or an `answers` object. A WebFetch,
+ * Bash or Read result whose TEXT holds router-shaped `"<question>"="<answer>"`
+ * pairs used to arm passes, flow and ship while a do-run marker was pending.
+ */
+function isAskResult(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+  if (Array.isArray(r.questions)) return true;
+  return !!(r.answers && typeof r.answers === 'object' && !Array.isArray(r.answers));
+}
+
 function routerFromTranscript(transcriptPath, sinceIso, RC, budget, info) {
   if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
   const since = sinceIso ? Date.parse(sinceIso) - 5000 : NaN;
@@ -1184,9 +1203,12 @@ function routerFromTranscript(transcriptPath, sinceIso, RC, budget, info) {
     if (!line.includes('toolUseResult')) continue;
     let obj;
     try { obj = JSON.parse(line); } catch { continue; }
-    if (!obj || !obj.toolUseResult || typeof obj.toolUseResult !== 'object') continue;
+    if (!obj) continue;
+    // Any tool result older than the marker ends the walk — checked before the
+    // AskUserQuestion filter, or every other result sent it on to 32 MB.
     const t = Date.parse(obj.timestamp);
     if (Number.isFinite(since) && Number.isFinite(t) && t < since) break;
+    if (!isAskResult(obj.toolUseResult)) continue;
     const { questions, answers } = RC.extractAnswers(obj.toolUseResult, {});
     if (RC.isRouterCall(questions)) {
       seen.push({ questions, answers });

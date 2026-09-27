@@ -65,6 +65,17 @@ function afterStop(state, evidence) {
   return false;
 }
 
+// Same clock as burn-plan.js: DEVOPS_BURN_NOW pins it for dry runs, so the
+// hook and the script it tells Claude to run agree on "now".
+function clockMs() {
+  const fixed = process.env.DEVOPS_BURN_NOW;
+  if (fixed) {
+    const n = /^\d+$/.test(fixed) ? Number(fixed) : Date.parse(fixed);
+    if (Number.isFinite(n)) return n;
+  }
+  return Date.now();
+}
+
 function weekRolled(state, nowMs) {
   return !!(state.weekResetAt && nowMs >= Date.parse(state.weekResetAt));
 }
@@ -160,7 +171,7 @@ if (require.main === module) {
         evidence: limitEvidence(hook.transcript_path),
         sessionId,
         root,
-        nowMs: Date.now(),
+        nowMs: clockMs(),
         askedThisSession: asked,
       });
       if (!block) process.exit(0);

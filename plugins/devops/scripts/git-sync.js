@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script git-sync
- * @version 0.6.0
+ * @version 0.8.1
  * @plugin devops
  * @description Core git sync logic — fetch remote, merge parent chain into
  *   current branch. Supports branch hierarchy (feat/auth/login merges
@@ -12,6 +12,8 @@
  *   `--explain` (do-batch merge): every no-merge exit names its reason.
  *   A merge that dies mid-checkout (its timeout, or its own error) never
  *   stays half-applied: what it wrote is put back (hooks/lib/git-sync-recover.js).
+ *   A sync that never happened — a failed fetch, a failed behind-count probe,
+ *   a session on a local main behind its remote — is "– skipped:", never "=".
  */
 
 const { execFileSync } = require('child_process');
@@ -57,10 +59,36 @@ const GIT_TIMEOUT_MS = (() => {
   return Number.isFinite(n) && n > 0 ? Math.min(Math.max(n, 1000), 300000) : 15000;
 })();
 
+// Every git call below runs with the C locale (AUD-C059). `isMissingUpstream`
+// and `firstErrorLine` match git's stderr against its ENGLISH wording
+// ("couldn't find remote ref", "fatal:"/"error:"). A session whose git speaks
+// the OS locale (German on this machine, per LANG/LC_ALL inherited from the
+// parent shell) never matches that text: every fetch of a not-yet-existing
+// parent then reads as a genuine failure instead of the quiet "no such
+// branch upstream" it is, and the batch-collect turn is told main's state is
+// UNBEKANNT on every single sync. `LC_ALL` overrides every other locale
+// category (LANG, LC_MESSAGES, …); `LANGUAGE` additionally overrides gettext's
+// translation search on systems where it is set. Both to `C` — plain,
+// untranslated — pins git's stderr to the English text this file parses.
+const GIT_ENV = { ...process.env, LC_ALL: 'C', LANGUAGE: 'C' };
+
+// Fetches (network, credential manager on Windows) get their own budget,
+// separate from local reads (AUD-C060). See the arithmetic comment above
+// `FETCH_TIMEOUT_MS` below — this default (no caller override) has no outer
+// kill racing it: nobody waits on the background spawner, so it can afford
+// the ~30 s a loaded Windows credential manager sometimes takes (see
+// mcp-server/ship/lib/git.js). A caller under an outer deadline — batch-collect
+// — sets DEVOPS_GIT_SYNC_FETCH_TIMEOUT_MS lower to keep the whole run under it.
+const FETCH_TIMEOUT_MS = (() => {
+  const n = Number(process.env.DEVOPS_GIT_SYNC_FETCH_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.max(n, 1000), 300000) : 30000;
+})();
+
 function git(args) {
   try {
     return execFileSync('git', args, {
       cwd,
+      env: GIT_ENV,
       encoding: 'utf8',
       timeout: GIT_TIMEOUT_MS,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -79,7 +107,42 @@ function git(args) {
 // killed one costs the user's worktree. The result keeps stderr and whether
 // the timeout fired — the failure path below needs both.
 const WRITE_TIMEOUT_MS = writeTimeoutMs(process.env, GIT_TIMEOUT_MS);
-const gitWrite = gitRunner({ cwd, timeoutMs: WRITE_TIMEOUT_MS });
+const gitWrite = gitRunner({ cwd, timeoutMs: WRITE_TIMEOUT_MS, env: GIT_ENV });
+
+// A caller that kills this process itself (do-batch waits 45 s) passes its
+// deadline (epoch ms). A merge starts only while the merge AND one recovery
+// write (commit, abort or restore) still fit before it — otherwise the outer
+// kill could land mid-merge or mid-restore, whatever the per-call budgets say.
+const DEADLINE_MS = (() => {
+  const n = Number(process.env.DEVOPS_GIT_SYNC_DEADLINE_MS);
+  return Number.isFinite(n) && n > 0 ? n : null;
+})();
+const MERGE_HEADROOM_MS = 2 * WRITE_TIMEOUT_MS + 3000;
+const outOfTime = () => DEADLINE_MS !== null && DEADLINE_MS - Date.now() < MERGE_HEADROOM_MS;
+
+// Reads whose FAILURE matters (the behind-count probe): git() folds a
+// failure into null, and null used to read as "0 behind" — a timed-out probe
+// then reported "= already in" for a sync that never ran. Local only — no
+// network — so it stays on the short read budget, not the fetch one.
+const gitRead = gitRunner({ cwd, timeoutMs: GIT_TIMEOUT_MS, env: GIT_ENV });
+
+// Fetches specifically (network): their own budget (FETCH_TIMEOUT_MS), so a
+// slow credential manager cannot eat the local-read budget meant for cheap
+// plumbing calls, and a caller under a hard deadline (batch-collect) can bound
+// fetch time independently of everything else. See FETCH_TIMEOUT_MS above.
+const gitFetch = gitRunner({ cwd, timeoutMs: FETCH_TIMEOUT_MS, env: GIT_ENV });
+
+/** One-line cause of a failed read: its timeout, else git's own error line. */
+/** `timeoutMs` is the runner's own budget — a fetch reports FETCH_TIMEOUT_MS. */
+function readFailure(res, timeoutMs = GIT_TIMEOUT_MS) {
+  if (res.timedOut) return `timed out after ${Math.round(timeoutMs / 1000)} s`;
+  return firstErrorLine(res.err) || 'git error';
+}
+
+/** A fetch refused because the branch does not exist upstream — not a failure. */
+function isMissingUpstream(res) {
+  return !res.timedOut && /couldn't find remote ref|could not find remote ref/i.test(res.err);
+}
 
 // Only run in a git repo
 if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') {
@@ -117,7 +180,19 @@ const MAIN = (() => {
 // an exotic one.
 const branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
 if (!branch) quit('detached HEAD — check out a branch first');
-if (branch === MAIN) quit(`on ${MAIN} itself`, { nothingToDo: true });
+if (branch === MAIN) {
+  // Nothing to merge INTO main — but "=" would claim the session sees current
+  // main. Under --explain say whether the local branch trails its remote.
+  if (EXPLAIN) {
+    const f = gitFetch(['fetch', origin, `+refs/heads/${MAIN}:refs/remotes/${origin}/${MAIN}`, '--quiet']);
+    if (!f.ok) quit(`on ${MAIN} itself; fetch of ${MAIN} failed (${readFailure(f, FETCH_TIMEOUT_MS)}) — stale ref, ${origin}/${MAIN} may be ahead`);
+    const b = gitRead(['rev-list', '--count', `HEAD..refs/remotes/${origin}/${MAIN}`]);
+    if (!b.ok) quit(`on ${MAIN} itself; behind-count probe failed (${readFailure(b)})`);
+    const n = parseInt(b.out.trim(), 10) || 0;
+    if (n > 0) quit(`on ${MAIN} itself, ${n} commit(s) behind ${origin}/${MAIN} — pull first`);
+  }
+  quit(`on ${MAIN} itself`, { nothingToDo: true });
+}
 
 // An unfinished merge/rebase/cherry-pick/revert/bisect owns the index. A merge
 // attempted on top of one fails without conflicts of its own, and the recovery
@@ -413,7 +488,7 @@ function undoFailedMerge({ source, count, merge, lock, preHead }) {
   // and a repair that gives up leaves the half-applied tree behind.
   const topRes = gitWrite(['rev-parse', '--show-toplevel']);
   const top = topRes.ok ? topRes.out.trim() : '';
-  const run = gitRunner({ cwd: top || cwd, timeoutMs: WRITE_TIMEOUT_MS });
+  const run = gitRunner({ cwd: top || cwd, timeoutMs: WRITE_TIMEOUT_MS, env: GIT_ENV });
 
   const head = headState(run, preHead, source);
   // Stopped after its ref update: the merge is in, only its epilogue was cut.
@@ -453,10 +528,12 @@ function undoFailedMerge({ source, count, merge, lock, preHead }) {
 // warn only for genuinely ambiguous conflicts that need semantic resolution.
 // See deep-knowledge/merge-safety.md for the full resolution protocol.
 function tryMerge(source) {
-  const behind = git(['rev-list', '--count', `HEAD..${source}`]);
-  if (!behind || parseInt(behind) === 0) return null; // already up to date
-
-  const count = parseInt(behind);
+  const probe = gitRead(['rev-list', '--count', `HEAD..${source}`]);
+  // A failed probe is not "0 behind" — it is "unknown", and says so.
+  if (!probe.ok) return { source, skipped: `behind-count probe failed (${readFailure(probe)})` };
+  const count = parseInt(probe.out.trim(), 10);
+  if (!Number.isFinite(count)) return { source, skipped: `behind-count probe unreadable (${JSON.stringify(probe.out.trim().slice(0, 40))})` };
+  if (count === 0) return null; // already up to date
 
   // Work in progress on a file the merge would rewrite → not now, and silently.
   const overlap = dirtyOverlap(source);
@@ -467,6 +544,7 @@ function tryMerge(source) {
   // invisible to them, so ask again with the index about to be written.
   if (repoBusy()) return { source, skipped: 'another git operation started meanwhile' };
   if (shipInFlight()) return { source, skipped: 'a /do-ship run started meanwhile' };
+  if (outOfTime()) return { source, skipped: 'the caller\'s time budget is nearly spent — the next sync retries' };
 
   // What a merge that dies half-way is put back to, and when it started (an
   // index.lock written after this moment is the merge's own).
@@ -572,29 +650,73 @@ function tryMerge(source) {
 // for weeks while origin/main moved. refs/remotes/<origin>/<x> is never checked
 // out and can therefore always be updated.
 const sources = [];
+/** source → why its fetch failed: its tracking ref is stale, "=" would lie. */
+const staleFetch = new Map();
+/** --explain lines for parents whose fetch failed with no ref to fall back on. */
+const fetchSkips = [];
 for (const p of getParentChain(branch)) {
   const tracking = `refs/remotes/${origin}/${p}`;
-  git(['fetch', origin, `+refs/heads/${p}:${tracking}`, '--quiet']);
-  // Skips parents that do not exist upstream (e.g. the "claude" segment of
-  // claude/some-branch). A failed fetch with a tracking ref left from an
-  // earlier run is fine: those commits are real, merging them is the job.
-  if (git(['rev-parse', '--verify', '--quiet', tracking]) === null) continue;
+  // A parent candidate other than MAIN is a path SEGMENT of the current
+  // branch name (getParentChain("claude/foo/bar") → [MAIN, "claude",
+  // "claude/foo"]) — never necessarily a branch of its own. git cannot hold
+  // refs/heads/claude next to refs/heads/claude/foo (or the same under
+  // refs/remotes/<origin>/…) — one occupies the namespace the other needs —
+  // so a segment nothing has ever fetched or checked out before can only be
+  // exactly that: a namespace prefix, not a branch. Fetching it wastes a full
+  // network round trip (AUD-C060) to learn what the ref layout already
+  // proves. A segment that DOES already have a local branch or a
+  // remote-tracking ref from an earlier run is a real parent branch (the
+  // hierarchy feature's normal case, e.g. "feat/auth" under
+  // "feat/auth/login") and is fetched as before — silently skipping it would
+  // stop merging its real commits.
+  if (p !== MAIN) {
+    const hasLocal = git(['rev-parse', '--verify', '--quiet', `refs/heads/${p}`]) !== null;
+    const hasTracking = git(['rev-parse', '--verify', '--quiet', tracking]) !== null;
+    if (!hasLocal && !hasTracking) continue; // quiet: not a "fetch failed" — never a real candidate
+  }
+  const f = gitFetch(['fetch', origin, `+refs/heads/${p}:${tracking}`, '--quiet']);
+  const missing = !f.ok && isMissingUpstream(f);
+  // A stale-ref parent that lost its earlier tracking ref (rare — a fetch
+  // cannot delete one it does not write) or whose fetch failed with none ever
+  // written falls back to the same "no tracking ref" report as before.
+  if (git(['rev-parse', '--verify', '--quiet', tracking]) === null) {
+    if (!f.ok && !missing) fetchSkips.push(`– skipped: fetch of ${p} failed (${readFailure(f, FETCH_TIMEOUT_MS)}) — no tracking ref`);
+    continue;
+  }
+  if (!f.ok && !missing) staleFetch.set(`${origin}/${p}`, readFailure(f, FETCH_TIMEOUT_MS));
   sources.push(`${origin}/${p}`);
 }
 
-if (!sources.length) quit('no parent branch exists upstream', { nothingToDo: true });
+if (!sources.length) {
+  if (fetchSkips.length) quit(fetchSkips.map(l => l.replace(/^– skipped: /, '')).join(' | '));
+  quit('no parent branch exists upstream', { nothingToDo: true });
+}
 
 // Best effort, never load-bearing: keep the local main ref in step for repos
 // where nothing has it checked out. Fails silently in the layout above.
-git(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
+// Capped at 5 s regardless of FETCH_TIMEOUT_MS: this fetch is pure convenience
+// (the merges below read origin/MAIN, never local MAIN), so it must never be
+// the call that pushes a deadline-bound caller (batch-collect) over its
+// budget — see the arithmetic comment on SYNC_WRITE_TIMEOUT_MS in
+// prompt.batch.collect.js.
+gitRunner({ cwd, timeoutMs: Math.min(FETCH_TIMEOUT_MS, 5000), env: GIT_ENV })(['fetch', origin, `${MAIN}:${MAIN}`, '--quiet']);
 
 // Merge each parent into current branch (root → closest parent)
-const messages = [];
+const messages = EXPLAIN ? [...fetchSkips] : [];
 for (const parent of sources) {
   const result = tryMerge(parent);
+  const stale = staleFetch.get(parent);
+  const staleNote = stale ? `fetch of ${parent.slice(origin.length + 1)} failed (${stale}) — stale ref` : '';
   if (!result) {
-    if (EXPLAIN) messages.push(`= ${parent} already in ${branch}`);
+    if (EXPLAIN) {
+      messages.push(stale
+        ? `– ${parent} → ${branch}: skipped: ${staleNote}, ${parent} may be ahead`
+        : `= ${parent} already in ${branch}`);
+    }
     continue;
+  }
+  if (stale && EXPLAIN && !result.skipped) {
+    messages.push(`– ${parent} → ${branch}: skipped: ${staleNote} — merged what the old ref had, more may be pending`);
   }
   if (result.skipped) {
     // Background mode stays silent: the next window finds the same commits.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.run.contract
- * @version 0.3.0
+ * @version 0.3.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Arm, refresh or pre-arm the do-run RUN CONTRACT from the prompt
@@ -90,8 +90,8 @@ function main(hook) {
   const cmds = commandsIn(text);
   const hasAutoConcept = cmds.some(c => c.name === 'auto-concept');
   const recorded = cmds.filter(c => RECORDED_COMMANDS.has(c.name));
-  // H-A5: run-contract-calls is dependency-free (fs / path), so the fast
-  // path stays free of the run-contract lib load. Required inside main (the
+  // H-A5: run-contract-calls needs only fs / path / git-timeout — no
+  // run-contract lib — so the fast path stays free of that load (AUD-029). Required inside main (the
   // stdin handler's try/catch), like the pre / post hooks (H-B17).
   const { MACHINE_ARM_RE } = require('../lib/run-contract-calls');
   if (slashArgs === null && !hasAutoConcept && !recorded.length && !MACHINE_ARM_RE.test(text)) return;

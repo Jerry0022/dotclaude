@@ -91,10 +91,18 @@ the agent starts). Order:
    (each call retries the refresh). From the third on: **blind mode** — one
    lane, at most half of what was spendable at the last reading, every
    estimate counted 1.5×; when that allowance is used up → drain
-   (`usage-unknown`). A fresh reading ends blind mode. The first version
-   acted on whatever number was cached and ran the account into the limit.
+   (`usage-unknown`). Blind mode still honours the checks that need no
+   fresh number: a passed week reset drains, and while the 5-hour window of
+   the last reading has not reset, a task that would overrun it pauses until
+   that reset — the projection adds up every blind task claimed since that
+   reading (not just the one about to spawn), reset on the next fresh
+   reading or on the window itself rolling over while still blind; several
+   blind tasks in a row that each fit alone can still exceed the window
+   together, and this is what catches that. A fresh reading ends blind
+   mode. The first version acted on whatever number was cached and ran the
+   account into the limit.
 3. **Week reset** since the start → drain (`week-reset`): the budget being
-   burned is gone.
+   burned is gone — checked with or without a usage reading.
 4. **Reserve** reached → drain (`reserve`).
 5. **Recalibration** — observed weekly spend per hour vs the plan's required
    rate, one step per 30 min: under-burning (< 0.6×) raises the profile
@@ -140,8 +148,9 @@ its own targeted tests green, meaningful without a later item. Per task:
 5. Merge the sub-branch into `burn/<slug>`; `git push -u origin burn/<slug>`
    (non-force, no PR, no ship — `autonomous-execution.md` § Safety
    Guardrails). No remote, or the integration branch is the session's own
-   `main` → the merge stays local and `state land` gets `--pushed=false`. `init` and `state integration` refuse `main`, `master` and
-   the remote's default branch as the integration branch, and a salvage never
+   `main` → the merge stays local and `state land` gets `--pushed=false`. `init` and `state integration` refuse `main`, `master`, `trunk`,
+   every remote's default branch (under any spelling — `Main`, `heads/main`,
+   `refs/heads/main`) and the parent of a sub-branch session as the integration branch, and a salvage never
    commits onto them — unless the session itself works on that branch (no
    feature branch, by necessity). From a feature branch, `main` is reached
    only through `/do-ship`.
@@ -156,7 +165,9 @@ The full QA run is an ordinary queue task at the end, not a gate.
   `run_in_background: true`, and only one merge at a time.
 - **Never remove a burn worktree without `burn-plan.js prune-check
   --branch=<b> --worktree=<w>`** — exit 0 only when the branch has nothing the
-  integration branch lacks AND the worktree is clean. `git merge-base
+  integration branch lacks AND the worktree is clean AND the worktree's HEAD
+  is contained in the integration branch. Unknown is keep: no branch, an
+  unreadable `git status`, a detached or moved HEAD → exit 1. `git merge-base
   --is-ancestor` alone called a worktree with no commits "safe" while it held
   the only copy of an agent's uncommitted work.
 
@@ -184,7 +195,21 @@ paused and the tasks in `inFlight`. Who decides what happens next:
 
 Then `resume-check --apply` for the in-flight tasks: a dirty worktree is
 salvaged as a `wip(burn):` commit on its own branch (a refusing pre-commit
-hook → `BURN-SALVAGE-<id>.patch`; hooks are never skipped); then
+hook → `BURN-SALVAGE-<id>.patch`; hooks are never skipped). Secret-shaped
+files (`.env*`, keys, certificates, credential and token files — matched
+case-insensitively) never enter the salvage, even when the agent had already
+staged them; a failed `git add` salvages nothing and says so. The filter also
+catches real source files that happen to be secret-shaped (a `secrets.ts`, a
+committed `.npmrc`): `salvageWorktree` returns every path it left out as
+`excluded`, carried onto the requeued task and into `resume-check`'s printed
+actions, so the requeue is never silently missing files. Every `gate`/`state`
+write holds `BURN-STATE.json.lock` — written with the holder's PID and
+timestamp, taken over once that PID is dead or the lock is older than
+`LOCK_STALE_MS`, and only by renaming the stale lock to a unique name first
+(the loser of that race retries instead of also holding it) before creating a
+fresh one with `wx` — so parallel calls never claim one task twice and a
+holder killed mid-lock is never stuck blocking every waiter for the full
+stale window. Then
 `continue-agent` (same session, agent id known → `SendMessage`, context
 intact) · `merge` · `requeue-with-branch` (a fresh agent continues the wip
 branch — it re-reads, it does not redo) · `requeue`.

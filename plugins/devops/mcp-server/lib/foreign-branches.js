@@ -1,4 +1,5 @@
 /**
+ * @version 0.2.0
  * Keep other sessions' branches out of a card's open points.
  *
  * Several sessions work (and ship) the same repo in parallel, each in its own
@@ -9,8 +10,8 @@
  * worktree belongs to the session living there; that session ships it, and
  * leftovers are ship_hygiene's nudge and the auto-cleanup page's job.
  *
- * So the card drops every open point that names such a branch or its worktree
- * folder. Local git only, fail-open: when git cannot be read, nothing is
+ * So the card drops every open point that names such a branch (full name) or
+ * its session worktree folder, as a whole word (AUD-C016). Local git only, fail-open: when git cannot be read, nothing is
  * dropped.
  *
  * Extracted from index.js so it is unit-testable without booting the MCP
@@ -20,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 
 const PROTECTED = new Set(["main", "master", "HEAD", "origin", "develop"]);
-/** A bare segment shorter than this is too generic to match on its own ("fix", "ui"). */
+/** A slash-less branch or folder name shorter than this is too generic to match ("beta", "docs"). */
 const MIN_TOKEN = 8;
 
 function normPath(p) {
@@ -47,8 +48,8 @@ export function parseWorktreeList(output) {
 }
 
 /**
- * The words that identify the other worktrees' work: full branch name, its
- * last segment and the worktree folder name — the forms a card writes.
+ * The words that identify the other worktrees' work: the full branch name
+ * and the session worktree folder name — the forms a card writes.
  * @param {{path:string, branch:string|null}[]} worktrees
  * @param {string} ownPath  top level of the card's own work tree
  * @returns {string[]} lower-cased tokens
@@ -60,10 +61,13 @@ export function foreignTokens(worktrees, ownPath) {
   for (const w of worktrees) {
     if (normPath(w.path) === own) continue;
     const branch = w.branch;
-    if (branch && branch !== ownBranch && !PROTECTED.has(branch)) {
+    // AUD-C016 / AUD-031: only the FULL branch name — its last segment
+    // ("generator", "refactor-card") is an ordinary word of an unrelated
+    // point far too often — and a slash-less name only when it is specific
+    // enough ("beta", "docs" named the card's own topics).
+    if (branch && branch !== ownBranch && !PROTECTED.has(branch)
+      && (branch.includes("/") || branch.length >= MIN_TOKEN)) {
       tokens.add(branch.toLowerCase());
-      const tail = branch.split("/").pop();
-      if (tail && tail.length >= MIN_TOKEN) tokens.add(tail.toLowerCase());
     }
     // A session worktree's folder is as telling as its branch; the main
     // checkout's folder is the project name and names nothing foreign.
@@ -73,6 +77,30 @@ export function foreignTokens(worktrees, ownPath) {
     }
   }
   return [...tokens];
+}
+
+/** A character that continues a branch/folder name ("claude/foo-bar_2"). */
+function isNameChar(ch) {
+  return !!ch && /[a-z0-9_\-/]/.test(ch);
+}
+
+/**
+ * `token` occurs in `text` as a whole name: not inside a longer branch or
+ * word ("claude/foo" never matches "claude/foo-v2"). A "/" may precede it
+ * (`origin/<branch>`); a "." may follow only as punctuation, not as part of
+ * a name ("foo.bar").
+ */
+export function containsWord(text, token) {
+  if (!token) return false;
+  for (let i = text.indexOf(token); i !== -1; i = text.indexOf(token, i + 1)) {
+    const before = i > 0 ? text[i - 1] : "";
+    const end = i + token.length;
+    const after = text[end] || "";
+    const beforeOk = !before || before === "/" || !isNameChar(before) && before !== ".";
+    const afterOk = after === "." ? !isNameChar(text[end + 1] || "") : !isNameChar(after);
+    if (beforeOk && afterOk) return true;
+  }
+  return false;
 }
 
 /**
@@ -86,7 +114,7 @@ export function dropForeignOpenItems(open, tokens) {
   const names = (it) => {
     const text = typeof it === "string" ? it : `${(it && it.text) || ""}\n${(it && it.reply) || ""}`;
     const lower = text.toLowerCase();
-    return tokens.some((t) => lower.includes(t));
+    return tokens.some((t) => containsWord(lower, t));
   };
   const kept = open.filter((it) => !names(it));
   return { open: kept, dropped: open.length - kept.length };

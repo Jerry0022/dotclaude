@@ -306,10 +306,10 @@ describe("R2 Q2: parseFollowUp maps the exact do-run 'Ergebnis' labels to auditR
   test.each([
     ["Audit umsetzen (Recommended)", "implement"], // do-run questions.md F1
     ["Audit als Concept", "concept"], // do-run questions.md F1
-    ["Audit + Umsetzung (Recommended)", "implement"], // modes/audit.md Q2 (de)
-    ["Audit + implementation (Recommended)", "implement"], // modes/audit.md Q2 (en)
-    ["Audit als DevOps-Concept", "concept"], // modes/audit.md Q2 (de)
-    ["Audit as DevOps concept", "concept"], // modes/audit.md Q2 (en)
+    ["Audit + Umsetzung (Recommended)", "implement"], // legacy modes/audit.md Q2 label (pre AUD-036), still accepted
+    ["Audit + implementation (Recommended)", "implement"], // legacy modes/audit.md Q2 label (pre AUD-036), still accepted
+    ["Audit als DevOps-Concept", "concept"], // legacy modes/audit.md Q2 label (pre AUD-036), still accepted
+    ["Audit as DevOps concept", "concept"], // legacy modes/audit.md Q2 label (pre AUD-036), still accepted
   ])("%s → %s", (label, expected) => {
     const patch = A.parseFollowUp(q, { Ergebnis: label });
     expect(patch.auditResult).toBe(expected);

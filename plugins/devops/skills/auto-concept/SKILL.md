@@ -1,6 +1,6 @@
 ---
 name: auto-concept
-version: 0.2.1
+version: 0.2.2
 description: >-
   Generate an interactive HTML page for analysis, plans, concepts, prototypes,
   comparisons, or creative work — open it in the browser and monitor user

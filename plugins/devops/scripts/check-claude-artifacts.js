@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script check-claude-artifacts
+ * @version 0.2.0
  * @description Fail when the plugin writes a PROJECT-rooted `.claude/` file that
  *   the runtime ignore list does not cover (issue #292). The list is
  *   hooks/lib/runtime-ignores.js; ss.project.setup writes it into every
@@ -47,6 +48,8 @@ const PROSE_DECLARED = ['.ship-lockout', '.ship-queue'];
 const NOT_RUNTIME = new Set([
   'settings.json', 'settings.local.json', 'graphify.json', 'CLAUDE.md',
   'project-map.md', 'agents.json', 'launch.json',
+  // Read-only user setting (hooks/lib/delegation.js), never written by the plugin.
+  'delegation.json',
   'skills', 'commands', 'hooks', 'agents', 'deep-knowledge',
 ]);
 
@@ -99,6 +102,11 @@ function scanArtifacts(pluginRoot) {
   const projectJoin = /claudeDir\([^)]*\)\s*,\s*['"]([^'"]+)['"]/g;
   const cwdJoin = /join\(\s*cwd\s*,\s*['"]\.claude['"]\s*,\s*['"]([^'"]+)['"]/g;
   const rootJoin = /join\(\s*projectRoot\([^)]*\)\s*,\s*['"]\.claude['"]\s*,\s*['"]([^'"]+)['"]/g;
+  // AUD-C023: two shapes the scan used to miss — a relative constant
+  // (a `join` of the literal `.claude` and a file name, rooted later) and a template
+  // name after claudeDir(…) (`batch-${stamp}.md`), whose ${…} parts become `*`.
+  const relJoin = /join\(\s*['"]\.claude['"]\s*,\s*['"]([^'"]+)['"]/g;
+  const templJoin = /claudeDir\([^)]*\)\s*,\s*`([^`]+)`/g;
 
   const walk = dir => {
     let entries;
@@ -108,11 +116,16 @@ function scanArtifacts(pluginRoot) {
       if (e.isDirectory()) { walk(p); continue; }
       if (!e.name.endsWith('.js') || e.name.endsWith('.test.js')) continue;
       const src = fs.readFileSync(p, 'utf8');
-      for (const re of [projectJoin, cwdJoin, rootJoin]) {
+      for (const re of [projectJoin, cwdJoin, rootJoin, relJoin, templJoin]) {
         re.lastIndex = 0;
         let m;
         while ((m = re.exec(src)) !== null) {
-          const name = m[1].replace(/\/$/, '');
+          let name = m[1].replace(/\/$/, '');
+          if (re === templJoin) {
+            if (name.includes('/')) continue;
+            name = name.replace(/\$\{[^}]*\}/g, '*');
+            if (/^\**$/.test(name)) continue;
+          }
           if (!name || name.includes('${') || NOT_RUNTIME.has(name)) continue;
           if (!found.has(name)) found.set(name, path.relative(pluginRoot, p));
         }

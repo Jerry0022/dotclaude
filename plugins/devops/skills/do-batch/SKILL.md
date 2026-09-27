@@ -1,6 +1,6 @@
 ---
 name: do-batch
-version: 0.8.0
+version: 0.9.0
 description: >-
   Collect mode — a UserPromptSubmit hook parks each prompt in
   `.claude/batch.md` instead of executing it (no model turn), until an
@@ -282,8 +282,12 @@ if it were live.
 
 ## Step 4 — Fire the merge
 
-Reached either by `/do-batch go` or automatically: the collect hook injects
-the full note set into the turn when the user sends a marker-prefixed prompt.
+Reached either by `/do-batch go` or by a marker-prefixed prompt. Both fire the
+SAME hook merge: the collect hook syncs main, matches late images to their notes,
+injects the full note set and arms the hand-off gate — the `go` route is no
+longer a separate, weaker path. Only when that context is absent (no
+`[do-batch] Der Nutzer hat N Notiz(en)` block in the turn — hook disabled, or
+the prompt carried an attachment) do the steps below run by hand.
 In both cases the procedure is identical. On the `go` route the Step 1 marker
 pre-check runs first — a `markerFallback` is repaired before the merge, so the
 next collection window starts with a marker that actually fires.
@@ -304,8 +308,9 @@ plan rebuilds what main already has or collides with it at ship time.
   conflict or failure — resolve it (merge-safety.md: never `--ours`/`--theirs`)
   before Step 4.1. "Der Sync konnte im Hook nicht laufen" means: run it yourself
   now.
-- `/do-batch go` path (also `los`, `merge`): run it yourself, synchronously,
-  before anything else, and report the line:
+- `/do-batch go` (also `los`, `merge`) runs through the same hook and gets the
+  same "SCHRITT 0". Only without an injected merge context: run it yourself,
+  synchronously, before anything else, and report the line:
 
   ```bash
   node "{PLUGIN_ROOT}/scripts/git-sync.js" --explain
@@ -431,7 +436,8 @@ recoverable; a merge must never be the only record of what the user actually
 wrote. The archived path travels with the hand-off (4.9). Image copies in
 `.claude/batch-assets/` stay where they are — their names carry the note's
 timestamp, so the archived notes still point at them. `archiveNotes` removes
-copies older than 30 days, so only long-finished collections lose their images.
+copies older than 30 days that no note in `batch.md` or any archived
+`batch-*.md` still names — an archive keeps its images.
 
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/do-batch go` path
@@ -574,7 +580,7 @@ The dependency is soft. Resolve the plugin path and skip silently if absent —
   ask the user to send `/do-batch on` afterwards. A re-activation while
   collecting is absorbed by the hook (`rearm`), never a turn.
 - **Firing starts with main.** Step 4.0 runs before any note is judged — on the
-  marker path the hook did it, on the `go` path you do. A plan built on a stale
+  marker and `go` paths the hook did it; without its context you do. A plan built on a stale
   branch is not a plan.
 - **A question in the queue is a defect, not content.** If a note is clearly a
   question the user expected an answer to, answer it first, then continue with

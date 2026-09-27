@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.7.2
+ * @version 0.7.4
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -30,15 +30,27 @@
  *   (GIT_TIMEOUT_MS; it had no timeout before).
  */
 
-require('../lib/plugin-guard');
-
 const fs = require('fs');
-const { gitOut } = require('../lib/git-timeout');
-const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
-const { parseShipRequest } = require('../lib/ship-intent');
-const { hasUnshippedWork } = require('../lib/ship-unshipped');
-const { currentContextTokens } = require('../lib/context-size');
-const { shipCompactAdvice } = require('../lib/ship-compact');
+
+// A lib that fails to load (half-written during a plugin update, version skew)
+// makes this hook a silent no-op instead of a hook error on every prompt
+// (AUD-028).
+let gitOut, sessionFile, readSessionFile, writeSessionFile, parseShipRequest,
+  hasUnshippedWork, currentContextTokens, shipCompactAdvice;
+try {
+  require('../lib/plugin-guard');
+  ({ gitOut } = require('../lib/git-timeout'));
+  ({ sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id'));
+  ({ parseShipRequest } = require('../lib/ship-intent'));
+  ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
+  ({ currentContextTokens } = require('../lib/context-size'));
+  ({ shipCompactAdvice } = require('../lib/ship-compact'));
+} catch (err) {
+  // Silent to the user and the model (exit 0), but not traceless: the line
+  // lands in the hook log, so a persistent load error can be found (AUD-068).
+  process.stderr.write(`[prompt.ship.detect] off — a lib failed to load: ${(err && err.message) || err}\n`);
+  process.exit(0);
+}
 
 /** Set when a ship prompt got the compact advice; the next ship prompt of
  *  the same session consumes it and runs — never the advice twice in a row. */

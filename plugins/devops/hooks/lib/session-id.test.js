@@ -120,3 +120,25 @@ describe("readSessionFile — { exact: true }", () => {
     }
   });
 });
+
+describe("AUD-027: writeSessionFile uses a unique temp name", () => {
+  test("an obstructed fixed `<file>.tmp` no longer breaks the write; no temp is left behind", () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "w2-sid-"));
+    try {
+      const file = path.join(d, "dotclaude-w2-test-w2-1");
+      fs.mkdirSync(`${file}.tmp`); // the old fixed temp name, occupied
+      for (let i = 0; i < 5; i++) writeSessionFile(file, `v${i}`);
+      expect(fs.readFileSync(file, "utf8")).toBe("v4");
+      expect(fs.readdirSync(d).filter(n => n.endsWith(".tmp") && n !== path.basename(file) + ".tmp")).toEqual([]);
+    } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  });
+
+  test("the glob fallback never returns an in-flight temp file", () => {
+    const prefix = `dotclaude-w2-fallback-${process.pid}`;
+    const tmp = path.join(os.tmpdir(), `${prefix}-w2-2.123.abc.tmp`);
+    fs.writeFileSync(tmp, "partial");
+    try {
+      expect(readSessionFile(prefix, "w2-none")).toBeNull();
+    } finally { fs.rmSync(tmp, { force: true }); }
+  });
+});

@@ -139,6 +139,38 @@ describe("post.design.remind (hook)", () => {
     expect(context).toContain("R6 platform matrix");
   });
 
+  test("a UI file inside <repo>/.claude/worktrees/<name>/ gets the reminder (AUD-012)", () => {
+    // Every Desktop session works in such a worktree; the blanket `.claude/`
+    // exclude silenced the reminder there.
+    const dir = project();
+    const context = runHook(dir, {
+      filePath: path.join(dir, ".claude", "worktrees", "feat-x", "src", "App.tsx"),
+      sessionId: nextSid(),
+    });
+    expect(context).toContain("[ui-defaults]");
+  });
+
+  test("a Windows backslash worktree path gets the reminder too (AUD-012)", () => {
+    const dir = project();
+    const context = runHook(dir, {
+      filePath: "C:\\repo\\app\\.claude\\worktrees\\feat-x\\src\\App.tsx",
+      sessionId: nextSid(),
+    });
+    expect(context).toContain("[ui-defaults]");
+  });
+
+  test("a worktree's own .claude/ files and bare .claude/ files stay excluded (AUD-012)", () => {
+    const dir = project();
+    for (const filePath of [
+      path.join(dir, ".claude", "worktrees", "feat-x", ".claude", "skills", "x", "page.html"),
+      path.join(dir, ".claude", "templates", "card.html"),
+      path.join(dir, ".claude", "worktrees", "stray.html"),
+      "C:\\repo\\app\\.claude\\worktrees\\feat-x\\.claude\\page.css",
+    ]) {
+      expect(runHookRaw(dir, { filePath, sessionId: nextSid() })).toBe("");
+    }
+  });
+
   test("the reminder names ui-defaults.md by its absolute plugin path, never a bare relative one", () => {
     // A bare `deep-knowledge/ui-defaults.md` does not exist in a consumer
     // project; the model then searched the filesystem root for it (2026-09-24).

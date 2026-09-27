@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..", "..");
 const {
-  STOP_REASON, BLOCKED_TAG, stopHookScripts, holdReason, blockedEarlierThisTurn,
+  STOP_REASON, BLOCKED_TAG, stopHookScripts, gatesFirst, holdReason, blockedEarlierThisTurn,
   stopPayload, blockReason, decideCardTurnEnd, blockedLines,
 } = require("./card-turn-end.js");
 
@@ -31,6 +31,17 @@ describe("stopHookScripts — the plugin's own Stop hooks, in hooks.json order",
 
   test("an unreadable plugin root yields no scripts", () => {
     expect(stopHookScripts(path.join(os.tmpdir(), "no-such-plugin-root-xyz"))).toEqual([]);
+  });
+
+  // Redteam R4: a gate that keeps the turn going must not find a detached
+  // git-sync merge (or a released strict mode) already started before it.
+  test("gatesFirst runs every gate before the turn-end side effects", () => {
+    const names = gatesFirst(stopHookScripts(pluginRoot)).map((s) => path.basename(s));
+    const lastGate = Math.max(...["stop.flow.browsertest.js", "stop.flow.guard.js", "stop.guide.handoff.js"].map((n) => names.indexOf(n)));
+    for (const sideEffect of ["stop.git.sync.js", "stop.mcp.reap.js", "stop.strict.release.js", "stop.flow.selfcalibration.js"]) {
+      expect(names.indexOf(sideEffect), sideEffect).toBeGreaterThan(lastGate);
+    }
+    expect(names).toHaveLength(stopHookScripts(pluginRoot).length);
   });
 });
 
@@ -83,6 +94,27 @@ describe("holdReason — orchestrators that work past their cards keep the turn"
     fs.writeFileSync(path.join(dir, "AUTONOMOUS-LOCKOUT.flag"), JSON.stringify({ owner: "backlog-runner", since: new Date().toISOString() }));
     expect(holdReason({ cwd: dir }, {})).toBe("autonomous-lockout");
   });
+
+  // Red-team (2026-09-26): the do-run lockout spans only the ship, so the
+  // Step 7 card widget of an autonomous run ended the turn before the report,
+  // the fail-safe cancel and the done-flag. The run's own live contract is the
+  // "still finalizing" signal — bound to the session that armed it, so another
+  // session in the checkout (or this one once Step 8 closed the run) is not held.
+  test("this session's open autonomous run — and only that one", () => {
+    const RC = require("./run-contract.js");
+    RC.arm(dir, { mode: "audit", flow: "autonomous", ship: "manual", passes: [], sessionId: "s-auto" });
+    expect(holdReason({ cwd: dir, session_id: "s-auto" }, {})).toBe("autonomous-run");
+    expect(holdReason({ cwd: dir, session_id: "s-other" }, {})).toBe("");
+    expect(holdReason({ cwd: dir }, {})).toBe("");
+    RC.close(dir, "done");
+    expect(holdReason({ cwd: dir, session_id: "s-auto" }, {})).toBe("");
+  });
+
+  test("an interactive run is not held", () => {
+    const RC = require("./run-contract.js");
+    RC.arm(dir, { mode: "prompt", flow: "interactive", ship: "manual", passes: [], sessionId: "s-int" });
+    expect(holdReason({ cwd: dir, session_id: "s-int" }, {})).toBe("");
+  });
 });
 
 describe("decideCardTurnEnd — run the Stop hooks, then end or hand over", () => {
@@ -133,6 +165,21 @@ describe("decideCardTurnEnd — run the Stop hooks, then end or hand over", () =
     let t = 0;
     const d = decideCardTurnEnd(hook(), { pluginRoot: root, env: {}, now: () => (t += 30000), run: () => ({ status: 0, stdout: "" }) });
     expect(d).toEqual({ end: false, hold: "budget" });
+  });
+
+  // Redteam R8: a hook started late in the chain may only use what is left of
+  // the budget, so the whole PostToolUse hook stays inside its 60 s limit.
+  test("each hook's timeout is clamped to the budget left", () => {
+    let t = 0;
+    const timeouts = [];
+    const d = decideCardTurnEnd(hook(), {
+      pluginRoot: root, env: {},
+      now: () => t,
+      run: (_s, _input, timeout) => { timeouts.push(timeout); t += 32000; return { status: 0, stdout: "" }; },
+    });
+    // stop.a starts with the full 40 s budget, stop.b with the 8 s left.
+    expect(timeouts).toEqual([15000, 8000]);
+    expect(d).toEqual({ end: true });
   });
 
   test("the payload the hooks receive is a Stop event", () => {

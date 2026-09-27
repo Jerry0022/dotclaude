@@ -1,6 +1,6 @@
 /**
  * @module session-id
- * @version 0.4.0
+ * @version 0.4.2
  * @description Stable session-scoped temp file paths for cross-hook state.
  *
  * Claude Code passes a `session_id` (UUID) in every hook's stdin JSON.
@@ -39,13 +39,21 @@ function sessionFile(prefix, sessionId) {
 }
 
 /**
- * Atomic write: write to .tmp file then rename to prevent
- * partial reads from parallel sessions.
+ * Atomic write: write to a temp file then rename to prevent
+ * partial reads from parallel sessions. AUD-027: the temp name is unique
+ * per call (`<file>.<pid>.<rand>.tmp`) — a fixed `<file>.tmp` let two
+ * parallel hooks rename / truncate each other's temp file (ENOENT / EPERM,
+ * a dropped write). A failed write removes its own temp file and rethrows.
  */
 function writeSessionFile(filePath, content) {
-  const tmp = filePath + '.tmp';
-  fs.writeFileSync(tmp, content, 'utf8');
-  fs.renameSync(tmp, filePath);
+  const tmp = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* never created / already renamed */ }
+    throw err;
+  }
 }
 
 /**
@@ -87,7 +95,8 @@ function readSessionFile(prefix, sessionId, opts) {
     const maxAgeMs = 2 * 60 * 60 * 1000; // 2 hours
     const now = Date.now();
     const files = fs.readdirSync(tmpdir)
-      .filter(f => f.startsWith(prefix + '-'))
+      // AUD-027: an in-flight writeSessionFile() temp is never session state.
+      .filter(f => f.startsWith(prefix + '-') && !f.endsWith('.tmp'))
       .map(f => ({
         name: f,
         full: path.join(tmpdir, f),

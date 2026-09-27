@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.agent.nudge
- * @version 0.3.1
+ * @version 0.3.3
  * @event PostToolUse
  * @plugin devops
  * @matcher Write|Edit|NotebookEdit
@@ -53,6 +53,15 @@
  *   (e.g. `graphify`) never silences the nudge (Q8); the nudge already
  *   fired this turn (R14d); or the delegation kill switch
  *   (`lib/delegation.js`) resolves to `off`.
+ *
+ *   AUD-026 (perf): one backward pass over the turn (`scanTurn()`) yields
+ *   both the distinct edited files and the opening prompt entry's identity;
+ *   the once-per-turn marker is checked right after it and before anything
+ *   else, and the machine-turn / devops-skill checks (their own transcript
+ *   walks) run only once the count has reached 6 — at most once per turn.
+ *   Lines that can be neither a prompt nor a tool_use are skipped before
+ *   JSON.parse. Before, every Edit/Write parsed the 1 MB tail up to four
+ *   times (82-161 ms per call).
  *
  *   Never blocks: every failure path exits 0 silently. Stdin and parsing go
  *   through lib/hook-input.js's runHook (parseHookInput — a BOM-prefixed
@@ -109,25 +118,33 @@ function editedPathOf(toolName, input) {
 
 const EDIT_TOOL_RE = /^(?:.*__)?(Edit|Write|NotebookEdit)$/;
 
+/** The opening prompt entry's identity (Q8: uuid, else timestamp, never text). */
+function promptEntryId(entry) {
+  if (typeof entry.uuid === 'string' && entry.uuid) return entry.uuid;
+  if (entry.timestamp) return String(entry.timestamp);
+  return '';
+}
+
 /**
- * Distinct absolute paths edited by Edit/Write/NotebookEdit tool_use blocks
- * so far THIS turn, walking the transcript backward to (not including) the
- * turn's opening user-prompt entry — same walk as
- * `skill-invocations.js#skillInvokedThisTurn` / `card-guard.js#showWidgetCalledThisTurn`.
- * @returns {Set<string>}
+ * AUD-026: ONE backward pass over the current turn — the distinct files
+ * edited so far (as editedFilesThisTurn()) and the turn's opening prompt
+ * entry's identity (as lastUserPromptEntryId()). A line that mentions
+ * neither `"user"` nor `"tool_use"` cannot matter and is not parsed.
+ * @returns {{files: Set<string>, promptId: string}}
  */
-function editedFilesThisTurn(transcriptContent, cwd) {
-  const out = new Set();
-  if (typeof transcriptContent !== 'string' || !transcriptContent) return out;
+function scanTurn(transcriptContent, cwd) {
+  const files = new Set();
+  let promptId = '';
+  if (typeof transcriptContent !== 'string' || !transcriptContent) return { files, promptId };
   const lines = transcriptContent.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
-    const raw = lines[i].trim();
-    if (!raw) continue;
+    const raw = lines[i];
+    if (!raw || (raw.indexOf('"user"') === -1 && raw.indexOf('"tool_use"') === -1)) continue;
     let entry;
     try { entry = JSON.parse(raw); } catch { continue; }
     if (!entry || typeof entry !== 'object') continue;
     if (entry.type === 'user') {
-      if (isPromptEntry(entry)) break;
+      if (isPromptEntry(entry)) { promptId = promptEntryId(entry); break; }
       continue;
     }
     if (entry.type !== 'assistant') continue;
@@ -142,13 +159,21 @@ function editedFilesThisTurn(transcriptContent, cwd) {
       if (!p) continue;
       let abs;
       try { abs = path.resolve(cwd || process.cwd(), String(p)); } catch { continue; }
-      // R14a: a memory / scratchpad / out-of-repo path must not count toward
-      // the 6, same rule as the CURRENT call's own file below.
       if (!inOwnWorkTree(abs, cwd)) continue;
-      out.add(abs);
+      files.add(abs);
     }
   }
-  return out;
+  return { files, promptId };
+}
+
+/**
+ * Distinct absolute paths edited by Edit/Write/NotebookEdit tool_use blocks
+ * so far THIS turn — a thin wrapper over `scanTurn()`'s single backward pass
+ * (AUD-026: the two walks used to be separate; now the logic lives once).
+ * @returns {Set<string>}
+ */
+function editedFilesThisTurn(transcriptContent, cwd) {
+  return scanTurn(transcriptContent, cwd).files;
 }
 
 function buildNudge() {
@@ -211,30 +236,18 @@ function anyDevopsSkillInvokedThisTurn(transcript) {
 /** Identity of the turn's opening user-prompt entry: its `uuid`, or its
  *  `timestamp` when no `uuid` is recorded. Q8: text is deliberately NOT used
  *  — a later turn that repeats the same short prompt ("weiter", "continue")
- *  must still get its own marker, not silently reuse an earlier turn's. */
+ *  must still get its own marker, not silently reuse an earlier turn's. A
+ *  thin wrapper over `scanTurn()`'s single backward pass (AUD-026). */
 function lastUserPromptEntryId(transcriptContent) {
-  if (typeof transcriptContent !== 'string' || !transcriptContent) return '';
-  const lines = transcriptContent.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const raw = lines[i].trim();
-    if (!raw) continue;
-    let entry;
-    try { entry = JSON.parse(raw); } catch { continue; }
-    if (!entry || entry.type !== 'user' || !isPromptEntry(entry)) continue;
-    if (typeof entry.uuid === 'string' && entry.uuid) return entry.uuid;
-    if (entry.timestamp) return String(entry.timestamp);
-    return '';
-  }
-  return '';
+  return scanTurn(transcriptContent).promptId;
 }
 
-/** R14d: has the nudge already fired this turn? Keyed by session + cwd + the
- *  turn's opening prompt entry's identity (Q8: uuid, falling back to
- *  timestamp — never its text), so a fresh turn (new prompt entry) always
- *  gets a fresh marker even though the 1 MB transcript tail can make the
- *  running distinct-file count dip back below 6 and cross it again later. */
-function firedMarkerKey(hook, transcript) {
-  const id = lastUserPromptEntryId(transcript);
+/** R14d marker key: session + cwd + the turn's opening prompt entry's
+ *  identity (Q8: uuid, falling back to timestamp — never its text), so a
+ *  fresh turn (new prompt entry) always gets a fresh marker even though the
+ *  1 MB transcript tail can make the running distinct-file count dip back
+ *  below 6 and cross it again later. */
+function markerKeyFor(hook, id) {
   const raw = `${hook.session_id || ''}|${hook.cwd || ''}|${id}`;
   return crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20);
 }
@@ -274,15 +287,16 @@ function run(hook) {
     if (delegation.mode === 'off') return '';
 
     const transcript = safeReadTranscript(hook.transcript_path, TRANSCRIPT_TAIL_BYTES);
+    // AUD-026: one pass → count + turn identity; marker first, then the
+    // count, and only then the costlier machine-turn / skill walks.
+    const { files, promptId } = scanTurn(transcript, cwd);
+    const key = markerKeyFor(hook, promptId);
+    if (alreadyFiredThisTurn(key)) return '';
+    files.add(path.resolve(cwd, String(filePath)));
+    if (files.size < NUDGE_AT) return '';
     if (isMachineDrivenTurn(transcript)) return '';
     if (anyDevopsSkillInvokedThisTurn(transcript)) return '';
 
-    const files = editedFilesThisTurn(transcript, cwd);
-    files.add(path.resolve(cwd, String(filePath)));
-    if (files.size < NUDGE_AT) return '';
-
-    const key = firedMarkerKey(hook, transcript);
-    if (alreadyFiredThisTurn(key)) return '';
     markFiredThisTurn(key);
     return buildNudge();
   } catch {
@@ -298,5 +312,5 @@ if (require.main === module) {
 
 module.exports = {
   run, editedPathOf, editedFilesThisTurn, inOwnWorkTree, isSubagentCall, buildNudge, NUDGE_AT,
-  firedMarkerKey, lastUserPromptEntryId, devopsSkillDirNames, anyDevopsSkillInvokedThisTurn,
+  scanTurn, lastUserPromptEntryId, devopsSkillDirNames, anyDevopsSkillInvokedThisTurn,
 };

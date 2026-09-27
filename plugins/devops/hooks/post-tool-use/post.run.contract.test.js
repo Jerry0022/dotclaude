@@ -370,7 +370,9 @@ describe("red-team pass 3 (RT3-*)", () => {
     const first = ctxOf(run("Write", { file_path: path.join(dir, ".claude/x.md") }));
     expect(first).toContain("expired after 12 h");
     expect(first).toContain("arm --mode");
-    expect(first).toContain("--replace"); // R16: every re-arm line carries it
+    // AUD-040: no live contract of this session — the plain arm line, never --replace
+    expect(first).toContain(" arm --mode ");
+    expect(first).not.toContain("--replace");
     expect(run("Write", { file_path: path.join(dir, ".claude/x.md") }).stdout).toBe("");
   });
 
@@ -416,3 +418,4 @@ test("no contract: Edit/Bash are a no-op and write nothing", () => {
   run("Bash", { command: "git commit -m x" });
   expect(fs.readdirSync(path.join(dir, ".claude"))).toEqual([]);
 });
+

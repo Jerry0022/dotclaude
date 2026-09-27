@@ -51,7 +51,7 @@ const usage = (weeklyUsed, sessionUsed, sessionResetMin = 200) => fs.writeFileSy
   weekly: { pct: weeklyUsed, resetInMinutes: 30 * 60 }, session: { pct: sessionUsed, resetInMinutes: sessionResetMin },
 }));
 const hook = (prompt) => spawnSync(process.execPath, [HOOK], {
-  input: JSON.stringify({ prompt, cwd: repo, session_id: SESSION, transcript_path: transcript }), encoding: "utf8", cwd: repo,
+  input: JSON.stringify({ prompt, cwd: repo, session_id: SESSION, transcript_path: transcript }), encoding: "utf8", cwd: repo, env: env(),
 }).stdout;
 
 beforeAll(() => {

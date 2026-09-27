@@ -43,8 +43,11 @@
  *                                  multiple (parallel sessions) → the one whose
  *                                  flagPath directory contains the current cwd.
  *                                  Ambiguous → hard fail (never writes into
- *                                  another session's project).
- *                                  → { ok, flagPath }
+ *                                  another session's project). A written flag
+ *                                  leaves the watchdog nothing to do, so the
+ *                                  task(s) registered for that flag path are
+ *                                  removed with their script and sentinel.
+ *                                  → { ok, flagPath, unregistered }
  *
  *   unregister [task-name]         Delete the scheduled task + helper script.
  *                                  Resolves sentinel like `flag` if omitted.
@@ -80,6 +83,12 @@ const SENTINEL_SUFFIX = '.json';
 // task fired and its recovery script self-deleted. Prune it so it can never
 // shadow a live registration in the pick logic.
 const SENTINEL_EXPIRY_MS = 48 * 3600_000;
+// The longest watchdog window a registration accepts.
+const MAX_HOURS = 24;
+// Every child process is bounded — a hung schtasks/PowerShell must never
+// wedge the autonomous run it is meant to guard.
+const SPAWN_TIMEOUT_MS = 30_000;
+const REGISTER_TIMEOUT_MS = 60_000;
 
 function fail(msg) {
   process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
@@ -198,6 +207,47 @@ function isValidWatchdogScriptPath(scriptPath) {
   if (!basename.startsWith(SCRIPT_PREFIX)) return false;
   if (!basename.endsWith(SCRIPT_SUFFIX)) return false;
   return true;
+}
+
+const SPAWN_OPTS = { encoding: 'utf8', timeout: SPAWN_TIMEOUT_MS, windowsHide: true };
+
+/** schtasks answered "no such task" — the task is gone either way. */
+// German schtasks says "Das System kann die angegebene Datei nicht finden".
+function taskNotFound(result) {
+  return /cannot find|nicht gefunden|nicht finden|does not exist/i.test(
+    ((result && result.stderr) || '') + ((result && result.stdout) || ''));
+}
+
+/**
+ * Remove every registration whose sentinel names `flagPath`: its scheduled
+ * task, helper script and sentinel. Used before a new registration for the
+ * same project and once its done-flag is written — the task then has nothing
+ * left to do (#544). Sentinels are untrusted (same-user TEMP): names and
+ * paths are validated before anything is deleted.
+ * @param {string} flagPath
+ * @param {{spawn?: Function, sentinels?: Array<{file:string, data:object}>}} [deps]
+ * @returns {string[]} task names whose task is gone now
+ */
+function removeRegistrationsFor(flagPath, { spawn = spawnSync, sentinels = listSentinels() } = {}) {
+  const flagN = path.resolve(flagPath).toLowerCase();
+  const removed = [];
+  for (const prev of sentinels) {
+    const prevFlag = typeof prev.data?.flagPath === 'string'
+      ? path.resolve(prev.data.flagPath).toLowerCase() : null;
+    if (prevFlag !== flagN) continue;
+    if (prev.data.taskName && isValidWatchdogTaskName(prev.data.taskName)) {
+      let del = null;
+      try { del = spawn('schtasks.exe', ['/Delete', '/TN', prev.data.taskName, '/F'], SPAWN_OPTS); }
+      catch { /* spawn failed: the task may still be armed, the flag still disarms it */ }
+      if (del && (del.status === 0 || taskNotFound(del))) removed.push(prev.data.taskName);
+    }
+    if (prev.data.scriptPath && isValidWatchdogScriptPath(prev.data.scriptPath) &&
+        fs.existsSync(prev.data.scriptPath)) {
+      try { fs.unlinkSync(prev.data.scriptPath); } catch { /* ignore */ }
+    }
+    try { fs.unlinkSync(prev.file); } catch { /* ignore */ }
+  }
+  return removed;
 }
 
 /**
@@ -421,8 +471,8 @@ function runRegister(args) {
     fail('Usage: register <flag-path> <hours> [shutdown|notify|resume] [resume-prompt]');
   }
   const hours = Number(hoursRaw);
-  if (!Number.isFinite(hours) || hours < 0.1 || hours > 24) {
-    fail('hours must be 0.1..24');
+  if (!Number.isFinite(hours) || hours < 0.1 || hours > MAX_HOURS) {
+    fail(`hours must be 0.1..${MAX_HOURS}`);
   }
   const action = actionRaw || 'shutdown';
   if (action !== 'shutdown' && action !== 'notify' && action !== 'resume') {
@@ -444,21 +494,14 @@ function runRegister(args) {
   // Parallel autonomous sessions in other projects keep their watchdogs —
   // the old global "only one active at a time" takeover deleted the sibling
   // session's task and let its sentinel shadow ours (2026-07-05 incident).
-  // Sentinels are untrusted (same-user TEMP); validate before destructive ops.
-  const flagN = path.resolve(flagPath).toLowerCase();
-  for (const prev of listSentinels()) {
-    const prevFlag = typeof prev.data?.flagPath === 'string'
-      ? path.resolve(prev.data.flagPath).toLowerCase() : null;
-    if (prevFlag !== flagN) continue;
-    if (prev.data.taskName && isValidWatchdogTaskName(prev.data.taskName)) {
-      spawnSync('schtasks.exe', ['/Delete', '/TN', prev.data.taskName, '/F'],
-        { encoding: 'utf8' });
-    }
-    if (prev.data.scriptPath && isValidWatchdogScriptPath(prev.data.scriptPath) &&
-        fs.existsSync(prev.data.scriptPath)) {
-      try { fs.unlinkSync(prev.data.scriptPath); } catch { /* ignore */ }
-    }
-    try { fs.unlinkSync(prev.file); } catch { /* ignore */ }
+  removeRegistrationsFor(flagPath);
+
+  // A registration starts a new run: the done-flag and the one-shot relaunch
+  // guard of an earlier run in this directory would otherwise disarm the new
+  // watchdog from its first second (flag present → "no action") and make the
+  // resume scan skip the new run as finished.
+  for (const stale of [flagPath, recoveryFlagPath]) {
+    try { fs.unlinkSync(stale); } catch { /* absent */ }
   }
 
   const taskName = `${TASK_PREFIX}-${Date.now()}`;
@@ -478,10 +521,15 @@ function runRegister(args) {
   const psCommand = buildRegisterPsCommand({ taskName, scriptPath, fireAt });
   const result = spawnSync('powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand],
-    { encoding: 'utf8' });
+    { ...SPAWN_OPTS, timeout: REGISTER_TIMEOUT_MS });
 
   if (result.status !== 0) {
-    fail(`watchdog task registration failed: ${(result.stderr || result.stdout || '').trim()}`);
+    // No task means no use for its script. A timed-out Register call may
+    // still land a task: without its script it does nothing when it fires,
+    // and the session-start reap removes it afterwards.
+    try { fs.unlinkSync(scriptPath); } catch { /* ignore */ }
+    const why = result.error ? result.error.message : (result.stderr || result.stdout || '').trim();
+    fail(`watchdog task registration failed: ${why}`);
   }
 
   fs.writeFileSync(sentinelFileFor(taskName), JSON.stringify({
@@ -525,7 +573,9 @@ function runFlag(args) {
     doneAt: new Date().toISOString(),
     note: 'Autonomous session reached completion (Step 8c).',
   }, null, 2));
-  ok({ flagPath });
+  // The flag disarms the watchdog; its task would only log "no action" when
+  // it fires, so it goes now instead of piling up in Task Scheduler (#544).
+  ok({ flagPath, unregistered: removeRegistrationsFor(flagPath) });
 }
 
 function resolveSentinelOrFail(sentinels, what) {
@@ -557,12 +607,10 @@ function runUnregister(args) {
   }
 
   const result = spawnSync('schtasks.exe',
-    ['/Delete', '/TN', taskName, '/F'], { encoding: 'utf8' });
+    ['/Delete', '/TN', taskName, '/F'], SPAWN_OPTS);
 
   // Not-found is acceptable — the task may have already fired or never existed.
-  const notFound = /cannot find|nicht gefunden/i.test(
-    (result.stderr || '') + (result.stdout || '')
-  );
+  const notFound = taskNotFound(result);
   if (result.status !== 0 && !notFound) {
     fail(`schtasks /Delete failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
@@ -592,7 +640,7 @@ function runStatus(args) {
     taskName = sentinel.data.taskName;
   }
   const result = spawnSync('schtasks.exe',
-    ['/Query', '/TN', taskName], { encoding: 'utf8' });
+    ['/Query', '/TN', taskName], SPAWN_OPTS);
   ok({
     taskName,
     active: result.status === 0,
@@ -628,5 +676,6 @@ module.exports = {
   isValidWatchdogTaskName,
   isValidWatchdogScriptPath,
   pickSentinel,
+  removeRegistrationsFor,
   sentinelFileFor,
 };

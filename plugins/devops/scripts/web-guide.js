@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script web-guide
+ * @version 0.2.0
  * @description CLI helper for the `/auto-guide` skill. Builds the three
  *   `javascript_tool` payloads exchanged with `web-guide-overlay.js` (inject /
  *   step / wait) and manages the `store` command that upserts a secret the
@@ -16,23 +17,53 @@
  *     relative to this file's directory). Test-only escape hatch.
  *
  * Commands:
- *   payload inject [--raw]            → prints the overlay source, lean by
- *     default (see leanSource below); --raw prints it byte-for-byte
+ *   payload inject [--raw] [--allow-untokened]
+ *                                      → prints the overlay source, lean by
+ *     default (see leanSource below); --raw prints it byte-for-byte. Without
+ *     an active guide marker this now exits 1 with nothing on stdout — an
+ *     untokened overlay drops every click the skill sends it — unless
+ *     --allow-untokened is passed (repo tests / debugging only).
  *   payload step <step.json>|-        → prints window.claudeGuide.setStep(<json>)
+ *     and best-effort records the step on the guide marker for `guide status`
  *   payload wait [ms]                 → prints the wait() eval snippet
+ *   payload destroy                   → prints the tokened destroy() eval
+ *     snippet (Finding 7: destroy() now requires the channel token, same as
+ *     step/wait)
+ *   pause <seconds>                   → sleeps 1-55s, then prints "paused Ns";
+ *     used between hidden-tab drains instead of a bare shell `sleep` (the
+ *     Bash tool forbids that; `Bash(node *)` is allowed)
  *   store --file <path> --key <KEY> [--b64 <value>]
  *                                      → upserts KEY=<value> into a dotenv
- *     file; value is base64-decoded from --b64 or read from stdin.
+ *     file; value is base64-decoded from --b64 or read from stdin. Inside a
+ *     git work tree, refuses (exit 1, nothing written) unless the target is
+ *     gitignored — an untracked secret file is exactly what the next
+ *     /do-ship stages and commits.
  *   guide active                      → marks a guide run active in
  *     <project>/.claude/auto-guide-active.json (#526) so stop.flow.guard
  *     does not force the completion card that would end the wait() loop.
+ *   guide status                      → prints JSON {active, ageMinutes,
+ *     lastStep} (never the token) so a resumed/compacted turn can recover
+ *     which step the overlay was showing.
  *   guide clear                       → clears that marker (guide ended).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { markGuideActive, clearGuideActive } = require('./guide-active-state');
+const {
+  markGuideActive, clearGuideActive, touchGuideToken, readGuideToken, recordGuideStep, getGuideStatus,
+} = require('./guide-active-state');
+
+// touchGuideToken writes the marker to disk (extends its TTL); a write
+// failure (EPERM on rename, two payload calls racing) must not cost the
+// caller its token — fall back to a read-only lookup instead.
+function touchGuideTokenSafe() {
+  try {
+    return touchGuideToken(process.cwd());
+  } catch {
+    return readGuideToken(process.cwd());
+  }
+}
 
 // All file operations here are synchronous and local (no network, no child
 // processes), so no explicit timeout wrapper is needed per CONVENTIONS.md
@@ -42,13 +73,19 @@ const { markGuideActive, clearGuideActive } = require('./guide-active-state');
 const WAIT_DEFAULT_MS = 30000;
 const WAIT_MIN_MS = 1000;
 const WAIT_MAX_MS = 35000;
+const PAUSE_MIN_S = 1;
+const PAUSE_MAX_S = 55;
 
 const USAGE = `usage:
-  node web-guide.js payload inject [--raw]
+  node web-guide.js payload inject [--raw] [--allow-untokened]
   node web-guide.js payload step <step.json>|-
   node web-guide.js payload wait [ms]                  (0 drains a stranded
                                                         event without a real
                                                         wait, see #529)
+  node web-guide.js payload destroy                    (tokened destroy(),
+                                                        Finding 7)
+  node web-guide.js pause <seconds>                    (1-55, prints
+                                                        "paused Ns")
   node web-guide.js store --file <path> --key <KEY> [--b64 <value>]
                                                         (value read from
                                                         stdin if --b64 is
@@ -57,13 +94,18 @@ const USAGE = `usage:
                                                         run active so
                                                         stop.flow.guard does
                                                         not force the card)
+  node web-guide.js guide status                       (JSON {active,
+                                                        ageMinutes, lastStep},
+                                                        never the token)
   node web-guide.js guide clear                        (clear that marker)
   node web-guide.js --help
 
 payload inject prints the overlay source lean by default (strips full-line
 // comments, the leading /** JSDoc header and /* global */ directive block
 comments, and per-line indentation, to cut token cost on re-injection); pass
---raw to print it byte-for-byte instead.`;
+--raw to print it byte-for-byte instead. Without an active guide marker it
+now exits 1 with nothing on stdout (pass --allow-untokened to bypass, repo
+tests only).`;
 
 // ---------------------------------------------------------------------------
 // payload inject
@@ -125,6 +167,27 @@ function leanSource(src) {
   return result;
 }
 
+const TOKEN_LINE = 'var TOKEN = "__WG_TOKEN__";';
+
+/**
+ * AUD-C007: bake the guide's channel token into the overlay source. Without a
+ * token the placeholder stays and the overlay runs unauthenticated.
+ * @param {string} src
+ * @param {string|null} token 32 hex chars
+ */
+function withToken(src, token) {
+  if (!token || !/^[0-9a-f]{32}$/.test(token)) return src;
+  return src.replace(TOKEN_LINE, `var TOKEN = "${token}";`);
+}
+
+// Finding 6: touch (not just read) the marker on every payload call so a
+// guide running longer than the marker TTL inside one turn keeps its token
+// instead of falling back to "reinject-needed" and losing what the user typed.
+function tokenArg() {
+  const token = touchGuideTokenSafe();
+  return token ? `, "${token}"` : '';
+}
+
 function payloadInject(args) {
   const file = overlayPath();
   let source;
@@ -135,8 +198,21 @@ function payloadInject(args) {
     process.exitCode = 1;
     return;
   }
-  const raw = Array.isArray(args) && args.includes('--raw');
-  process.stdout.write(raw ? source : leanSource(source));
+  const list = Array.isArray(args) ? args : [];
+  const raw = list.includes('--raw');
+  const allowUntokened = list.includes('--allow-untokened');
+  const token = touchGuideTokenSafe();
+  // An untokened overlay accepts events from ANY page script, not just this
+  // channel — the skill then drops every click because it never sees a
+  // matching token back. Refuse instead of injecting a dead overlay, unless
+  // the caller explicitly opted into the old (test/debug-only) behavior.
+  if (!token && !allowUntokened) {
+    process.stderr.write('no active guide marker - run `web-guide.js guide active` first (or pass --allow-untokened for tests)\n');
+    process.exitCode = 1;
+    return;
+  }
+  const tokened = withToken(source, token);
+  process.stdout.write(raw ? tokened : leanSource(tokened));
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +425,19 @@ function payloadStep(arg) {
     return;
   }
 
-  process.stdout.write(`window.claudeGuide.setStep(${JSON.stringify(step)})`);
+  // Resume support: best-effort only — a failed write here must never break
+  // the payload the skill is about to send to the page.
+  try {
+    recordGuideStep(process.cwd(), step);
+  } catch {
+    // never fail `payload step` over the resume marker
+  }
+
+  // AUD-C041: after a navigation the channel is gone - say so instead of a
+  // TypeError the skill would route to "aborted".
+  process.stdout.write(
+    `(window.claudeGuide ? window.claudeGuide.setStep(${JSON.stringify(step)}${tokenArg()}) : "reinject-needed")`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +455,56 @@ function payloadWait(msArg) {
     process.exitCode = 1;
     return;
   }
-  process.stdout.write(`JSON.stringify(await window.claudeGuide.wait(${ms}))`);
+  // Finding 7: serialize with the overlay's OWN native-captured stringify
+  // (window.claudeGuide.stringify) instead of the page's global
+  // JSON.stringify — a page that patches the global after injection to read
+  // the token/event out of the serialization never sees this call.
+  process.stdout.write(
+    `(window.claudeGuide ? window.claudeGuide.stringify(await window.claudeGuide.wait(${ms}${tokenArg()})) : JSON.stringify({ type: "reinject-needed" }))`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// payload destroy
+// ---------------------------------------------------------------------------
+
+// Finding 7: destroy() now requires the channel token, same as step/wait —
+// a page script (which never has the token) can no longer wipe the overlay's
+// queued answers/state out from under Claude by calling destroy() itself.
+function payloadDestroy() {
+  process.stdout.write(
+    `(window.claudeGuide ? window.claudeGuide.destroy(${tokenArg().replace(/^, /, '')}) : "reinject-needed")`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// pause — blocking sleep for the skill's hidden-tab drain loop
+// ---------------------------------------------------------------------------
+
+/**
+ * Block synchronously for `ms` milliseconds. Node has no sync sleep built in
+ * except Atomics.wait on a SharedArrayBuffer — used here instead of a busy
+ * loop so the wait costs no CPU.
+ * @param {number} ms
+ */
+function sleepSync(ms) {
+  const sab = new SharedArrayBuffer(4);
+  const ia = new Int32Array(sab);
+  Atomics.wait(ia, 0, 0, ms);
+}
+
+// The skill drains a hidden tab in a loop and needs a pause between drains —
+// the Bash tool forbids a bare `sleep`, but `Bash(node *)` is allowed, so
+// this fills the same role.
+function pause(arg) {
+  const sec = Number(arg);
+  if (!Number.isInteger(sec) || sec < PAUSE_MIN_S || sec > PAUSE_MAX_S) {
+    process.stderr.write(`seconds must be an integer between ${PAUSE_MIN_S} and ${PAUSE_MAX_S}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  sleepSync(sec * 1000);
+  process.stdout.write(`paused ${sec}s\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +603,25 @@ function gitStatusOf(file, cwd, runner = execFileSync) {
   }
 }
 
+/**
+ * Is `cwd` inside a git work tree at all? `gitStatusOf`'s 'untracked' result
+ * is ambiguous on its own — both "inside a repo, not ignored" and "no repo
+ * here" make `ls-files`/`check-ignore` fail with a defined exit status. This
+ * distinguishes them so `store` only refuses to write outside a git repo
+ * when there IS a repo to gitignore the file in.
+ * @param {string} cwd
+ * @param {Function} [runner] injectable execFileSync-alike, for tests
+ * @returns {boolean}
+ */
+function isInsideGitWorkTree(cwd, runner = execFileSync) {
+  try {
+    runner('git', ['rev-parse', '--is-inside-work-tree'], { cwd, stdio: 'pipe', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function store(argv) {
   const { file, key, b64 } = parseStoreArgs(argv);
 
@@ -526,8 +682,17 @@ function store(argv) {
     process.exitCode = 1;
     return;
   }
-  if (gitStatus === 'untracked') {
-    process.stderr.write(`warning: ${rel} is not gitignored\n`);
+  // CRITICAL: an untracked, non-ignored secret file is exactly what the next
+  // /do-ship stages and commits/pushes (it stages every untracked
+  // non-ignored file). Refuse instead of warning, but only when there is a
+  // repo to gitignore the file in at all — outside any git repo the guard
+  // has nothing to check against, so keep writing (unchanged behavior).
+  if (gitStatus === 'untracked' && isInsideGitWorkTree(cwd)) {
+    process.stderr.write(
+      `${rel} is not gitignored — add it to .gitignore first (e.g. \`echo ${rel} >> .gitignore\`), then store again\n`
+    );
+    process.exitCode = 1;
+    return;
   }
 
   let existing = '';
@@ -564,10 +729,13 @@ function main(argv) {
     if (sub === 'inject') return payloadInject(rest);
     if (sub === 'step') return payloadStep(rest[0]);
     if (sub === 'wait') return payloadWait(rest[0]);
+    if (sub === 'destroy') return payloadDestroy();
     process.stderr.write(`${USAGE}\n`);
     process.exitCode = 2;
     return;
   }
+
+  if (cmd === 'pause') return pause(sub);
 
   if (cmd === 'store') {
     return store([sub, ...rest].filter((v) => v !== undefined));
@@ -579,9 +747,20 @@ function main(argv) {
       process.stdout.write(`guide-active ${file}\n`);
       return;
     }
+    if (sub === 'status') {
+      const status = getGuideStatus(process.cwd());
+      process.stdout.write(`${JSON.stringify(status)}\n`);
+      return;
+    }
     if (sub === 'clear') {
-      const file = clearGuideActive(process.cwd());
-      process.stdout.write(`guide-cleared ${file}\n`);
+      // AUD-C061: a failed unlink is a failure, not "guide-cleared".
+      try {
+        const file = clearGuideActive(process.cwd());
+        process.stdout.write(`guide-cleared ${file}\n`);
+      } catch (err) {
+        process.stderr.write(`guide-clear-failed: ${err.message}\n`);
+        process.exitCode = 1;
+      }
       return;
     }
     process.stderr.write(`${USAGE}\n`);
@@ -603,6 +782,15 @@ module.exports = {
   overlayPath,
   leanSource,
   gitStatusOf,
+  isInsideGitWorkTree,
+  withToken,
+  payloadDestroy,
+  payloadStep,
+  tokenArg,
+  payloadInject,
+  pause,
+  sleepSync,
+  store,
 };
 
 if (require.main === module) {

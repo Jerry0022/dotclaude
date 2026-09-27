@@ -773,6 +773,20 @@ describe("post.flow.completion — card flags follow the real session id", () =>
     cleanup(dir);
   });
 
+  // AUD-065: the MCP writes under safeSessionId (card-widget.js) — "self.x"
+  // is stored as "unknown"; the hook looked it up under the raw name.
+  test("an id the MCP sanitised to 'unknown' is adopted from 'unknown'", () => {
+    for (const given of ["self.x", "../evil", "a b"]) {
+      const dir = project();
+      const sid = "real-uuid-san";
+      fs.writeFileSync(flag(dir, "card-rendered", "unknown"), "t");
+      runHook(dir, sid, RENDER, { tool_input: { variant: "ready", session_id: given } });
+      expect(fs.existsSync(flag(dir, "card-rendered", sid))).toBe(true);
+      expect(fs.existsSync(flag(dir, "card-rendered", "unknown"))).toBe(false);
+      cleanup(dir);
+    }
+  });
+
   test("other tools never touch foreign card flags", () => {
     const dir = project();
     fs.writeFileSync(flag(dir, "card-rendered", "self"), "t");
@@ -1168,13 +1182,27 @@ describe("post.flow.completion — the card widget ends the turn", () => {
     cleanup(dir); cleanup(root);
   });
 
-  test("an active ship queue keeps the turn: the old reminder, no Stop hook run", () => {
+  // AUD-019: an orchestrator hold keeps the turn because the orchestrator has
+  // work after the card — "the turn is over, end your response" contradicted it.
+  test("an active ship queue keeps the turn: continue with the orchestrator, no Stop hook run", () => {
     const dir = project();
     fs.writeFileSync(path.join(dir, ".claude", ".ship-queue"), JSON.stringify({ owner: "auto-cleanup", since: new Date().toISOString() }));
     const { root, ran } = fakeRoot();
     const out = runHook(dir, "s-hard-3", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root });
-    expect(out).toContain("Card shown");
+    expect(out).toContain("[devops] Card shown — continue with the orchestrator's next step; no recap of the card.");
+    expect(out).not.toMatch(/the turn is over/);
+    expect(out).not.toMatch(/End your response now/);
+    expect(ran()).toEqual([]);
+    cleanup(dir); cleanup(root);
+  });
+
+  test("AUD-019: a non-orchestrator hold (opt-out) keeps the 'turn is over' reminder", () => {
+    const dir = project();
+    const { root, ran } = fakeRoot();
+    const out = runHook(dir, "s-hard-5", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root, DOTCLAUDE_CARD_HARD_STOP: "0" });
+    expect(out).toContain("Card shown — the turn is over. End your response now");
     expect(out).toMatch(/reply to it with nothing/);
+    expect(out).not.toContain("orchestrator");
     expect(ran()).toEqual([]);
     cleanup(dir); cleanup(root);
   });
@@ -1187,4 +1215,53 @@ describe("post.flow.completion — the card widget ends the turn", () => {
     expect(ran()).toEqual([]);
     cleanup(dir); cleanup(root);
   });
+});
+
+// AUD-028: a lib that fails to load (half-written during a plugin update) used
+// to throw at module scope, outside runHook's try, and error EVERY PostToolUse
+// call. Now the hook stays a silent exit 0.
+describe("post.flow.completion — a broken lib never errors the hook (AUD-028)", () => {
+  test("a half-written sibling lib → exit 0, no output", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "completion-broken-lib-"));
+    const src = path.resolve(__dirname, "..", "..");
+    const skipTests = (f) => !/\.test\.js$|__snapshots__/.test(f);
+    fs.cpSync(path.join(src, "hooks"), path.join(root, "hooks"), { recursive: true, filter: skipTests });
+    fs.cpSync(path.join(src, "scripts"), path.join(root, "scripts"), { recursive: true, filter: skipTests });
+    fs.writeFileSync(path.join(root, "hooks", "lib", "task-chips.js"), "module.exports = { broken: (");
+    const dir = project();
+    const res = spawnSync(process.execPath, [path.join(root, "hooks", "post-tool-use", "post.flow.completion.js")], {
+      cwd: dir,
+      input: JSON.stringify({ tool_name: "Read", tool_input: { file_path: path.join(dir, "a.js") }, session_id: "w3-broken", cwd: dir }),
+      encoding: "utf8",
+      env: { ...process.env, TMPDIR: path.join(dir, ".tmp"), TEMP: path.join(dir, ".tmp"), TMP: path.join(dir, ".tmp"), CLAUDE_PLUGIN_ROOT: root },
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toBe("");
+    cleanup(dir); cleanup(root);
+  }, 30_000);
+});
+
+// AUD-068: a lib that fails to load keeps the hook a silent no-op for the
+// model, but leaves one stderr line naming the module.
+describe("post.flow.completion — lib load failure leaves a trace", () => {
+  test("a broken lib → exit 0, empty stdout, stderr names the module", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pfc-load-"));
+    try {
+      const src = path.join(__dirname, "..");
+      fs.cpSync(src, path.join(root, "hooks"), { recursive: true, filter: (f) => !f.endsWith(".test.js") });
+      fs.cpSync(path.join(src, "..", "scripts"), path.join(root, "scripts"), { recursive: true, filter: (f) => !f.endsWith(".test.js") });
+      fs.writeFileSync(path.join(root, "hooks", "lib", "light-bgrun.js"), "module.exports = {{ half-written");
+      const res = spawnSync(process.execPath, [path.join(root, "hooks", "post-tool-use", "post.flow.completion.js")], {
+        cwd: root,
+        input: JSON.stringify({ tool_name: "Read", tool_input: { file_path: "x" }, session_id: "s-load", cwd: root }),
+        encoding: "utf8",
+      });
+      expect(res.status).toBe(0);
+      expect(res.stdout).toBe("");
+      expect(res.stderr).toContain("[post.flow.completion] lib load failed (../lib/light-bgrun)");
+      expect(res.stderr.split("lib load failed").length - 1).toBe(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }, 60000);
 });

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-answers
- * @version 0.1.2
+ * @version 0.1.3
  * @plugin devops
  * @description Run-contract answer extraction: the do-run router / follow-up
  *   AskUserQuestion parsing (spec B) and the machine-prompt parsing
@@ -19,6 +19,7 @@
 
 const { MACHINE_ARM_RE, BACKLOG_AUTOSTART_RE } = require('./run-contract-calls');
 const { readContract, update, nowOf } = require('./run-contract-store');
+const { hashRefs } = require('./issue-refs');
 
 const MERGE_WINDOW_MS = 30 * 60_000;
 
@@ -406,9 +407,14 @@ function parseFollowUp(questions, answers) {
     } else if (ISSUES_HEADER_RE.test(h)) {
       hit = true;
       const nums = [];
-      // `#N` as a token of its own (issue-refs.js): a title that names a hex
-      // colour ("#12 Card colour #7d84a8 fails AA") picks no issue #7.
-      for (const t of tokens) for (const m of t.matchAll(/(?<![\p{L}\p{N}_/&#:])#([1-9]\d*)(?![\p{L}\p{N}_])/gu)) nums.push(m[1]);
+      // A label opens with its issue ("#333 Card border"); past it, `#N` is
+      // read as issue-refs.js reads it: "#12 Card colour #7d84a8" and
+      // "#12 fix the #333 text colour" pick only #12.
+      for (const t of tokens) {
+        const lead = /^\s*#([1-9]\d*)(?![\p{L}\p{N}_])/u.exec(t);
+        if (lead) nums.push(lead[1]);
+        for (const r of hashRefs(lead ? t.slice(lead[0].length) : t)) nums.push(r.n);
+      }
       if (nums.length) patch.items = [...new Set([...(patch.items || []), ...nums])];
     } else if (/^pc danach$/i.test(h)) {
       hit = true;

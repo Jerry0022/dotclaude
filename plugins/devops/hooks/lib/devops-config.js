@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module devops-config
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Plugin settings a user can change in plain words, per project
  *   or for every project on the machine.
@@ -22,8 +22,11 @@
  *     global   ~/.claude/devops-config.json — every project on this machine.
  *
  *   Both files hold the same shape: { "<section>": { "<key>": value } }.
- *   Reads never throw: an unreadable or malformed file counts as absent, and
- *   a stored value that fails validation falls through to the next layer.
+ *   Reads never throw: an unreadable or malformed file counts as absent. A
+ *   hand-edited value in the wrong JSON type ("false", "80") is read the way
+ *   `set` parses it — ignoring it fell back to the default, so
+ *   `"autoClean": "false"` still cleaned. Anything unreadable falls through
+ *   to the next layer.
  *   Pure fs — no git spawn (the main checkout is found via the `.git` file
  *   and `commondir` of a linked worktree).
  */
@@ -101,6 +104,28 @@ function isValid(spec, value) {
   return false;
 }
 
+const TRUE_WORDS = ['true', 'on', 'yes', 'ja', 'an', '1'];
+const FALSE_WORDS = ['false', 'off', 'no', 'nein', 'aus', '0'];
+
+/**
+ * `raw` as the typed value `spec` wants, or undefined: a valid value as is,
+ * a string (or number) parsed the way `set` parses it, anything else
+ * undefined.
+ */
+function readValue(spec, raw) {
+  if (isValid(spec, raw)) return raw;
+  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined;
+  const text = String(raw).trim().toLowerCase();
+  let value;
+  if (spec.type === 'boolean') {
+    if (TRUE_WORDS.includes(text)) value = true;
+    else if (FALSE_WORDS.includes(text)) value = false;
+  } else if (spec.type === 'integer' && /^-?\d+$/.test(text)) {
+    value = Number(text);
+  }
+  return value !== undefined && isValid(spec, value) ? value : undefined;
+}
+
 /**
  * Parse a CLI/user string into the typed value for `fullKey`.
  * @returns {boolean|number}
@@ -110,15 +135,8 @@ function parseValue(fullKey, raw) {
   const hit = specOf(fullKey);
   if (!hit) throw new Error(`unknown setting "${fullKey}" — valid: ${listKeys().join(', ')}`);
   const { spec } = hit;
-  const text = String(raw).trim().toLowerCase();
-  let value;
-  if (spec.type === 'boolean') {
-    if (['true', 'on', 'yes', 'ja', 'an', '1'].includes(text)) value = true;
-    else if (['false', 'off', 'no', 'nein', 'aus', '0'].includes(text)) value = false;
-  } else if (spec.type === 'integer' && /^-?\d+$/.test(text)) {
-    value = Number(text);
-  }
-  if (value === undefined || !isValid(spec, value)) {
+  const value = readValue(spec, raw);
+  if (value === undefined) {
     const range = spec.type === 'integer'
       ? `an integer${spec.min !== undefined ? ` ≥ ${spec.min}` : ''}${spec.max !== undefined ? ` and ≤ ${spec.max}` : ''}`
       : 'true or false';
@@ -186,8 +204,9 @@ function load(cwd, opts = {}) {
       let source = 'default';
       for (const [name, data] of layers) {
         const sec = data && data[section];
-        if (sec && typeof sec === 'object' && isValid(spec, sec[key])) {
-          value = sec[key];
+        const read = sec && typeof sec === 'object' ? readValue(spec, sec[key]) : undefined;
+        if (read !== undefined) {
+          value = read;
           source = name;
           break;
         }

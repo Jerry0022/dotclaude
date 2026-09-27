@@ -359,12 +359,7 @@ function applyNavOverflow(nav, scrollBox) {
   }
   if (!scrollBox || scrollBox.scrollHeight <= scrollBox.clientHeight) return;
   const items = [...nav.children];
-  // Floor: the top-level child holding the active entry (the first child
-  // when none is active) is never hidden. An open group taller than the box
-  // would otherwise keep the loop going until every child is hidden and the
-  // panel shows nothing but the toggle (#541); the box scrolls the rest.
-  const active = nav.querySelector('.section-nav-item.is-active');
-  const floor = Math.max(0, active ? items.findIndex(el => el === active || el.contains(active)) : 0);
+  const floor = navOverflowFloor(nav, items);
   let hiddenCount = 0;
   for (let i = items.length - 1; i > floor && scrollBox.scrollHeight > scrollBox.clientHeight; i--) {
     items[i].hidden = true;
@@ -373,6 +368,15 @@ function applyNavOverflow(nav, scrollBox) {
   }
   if (!hiddenCount) return;
   nav.appendChild(makeNavMoreToggle(nav, hiddenCount));
+}
+// The overflow cut never hides the child that holds the active entry — or,
+// with nothing active yet, the first child — nor anything above it. When that
+// group alone is taller than the scroll box, hiding used to go on until the
+// panel showed nothing but "+N weitere" (#541); now the box scrolls instead.
+function navOverflowFloor(nav, items) {
+  const active = nav.querySelector('.section-nav-item.is-active');
+  const i = active ? items.findIndex(el => el === active || el.contains(active)) : -1;
+  return i < 0 ? 0 : i;
 }
 function makeNavMoreToggle(nav, hiddenCount) {
   const toggle = document.createElement('button');

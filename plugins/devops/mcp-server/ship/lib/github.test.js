@@ -262,6 +262,33 @@ describe("watchPRChecks", () => {
       expect(plainProbeCalls).toBeGreaterThanOrEqual(2);
     });
 
+    test("the grace wait is deducted from the --watch ceiling (AUD-C045)", () => {
+      const checksJson = JSON.stringify([{ bucket: "pass", state: "SUCCESS", name: "build", workflow: "CI" }]);
+      let clock = 0;
+      let probes = 0;
+      let watchTimeout = null;
+      execFileSync.mockImplementation((bin, args, o) => {
+        if (args[1] === "view") throw new Error("not found");
+        if (args.includes("--watch")) { watchTimeout = o.timeout; return ""; }
+        probes++;
+        if (probes <= 3) {
+          const err = new Error("no checks");
+          err.stderr = Buffer.from("no checks reported");
+          throw err;
+        }
+        return checksJson;
+      });
+      watchPRChecks(42, undefined, {
+        timeoutSec: 600,
+        noChecksGraceMs: 120_000,
+        noChecksGraceIntervalMs: 40_000,
+        sleep: (ms) => { clock += ms; },
+        now: () => clock,
+      });
+      // three 40 s grace sleeps before the checks appeared → 600 s − 120 s
+      expect(watchTimeout).toBe(480_000);
+    });
+
     test("concludes no-checks with a noChecksReason after the grace window elapses with nothing appearing", () => {
       execFileSync.mockImplementation((bin, args) => {
         if (bin === "gh" && args[0] === "pr" && args[1] === "view") {

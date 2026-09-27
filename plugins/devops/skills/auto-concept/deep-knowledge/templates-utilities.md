@@ -632,6 +632,13 @@ function checkClaudeConnection() {
   // own label instead, so it has to follow the heartbeat too.
   if (typeof updateCloseoutButton === 'function') updateCloseoutButton();
 
+  // Deliver a queued payload BEFORE the submitted-panel return below: an
+  // offline submit leaves exactly that panel up, and pollProcessedState() only
+  // releases it once Claude stamps _processed_at — which a payload that never
+  // reached the bridge cannot produce. retryPendingSubmission() is idempotent
+  // (one at a time, never beside submitWithAction), so every beat may call it.
+  if (isConnected) retryPendingSubmission();
+
   // While the submitted panel is up, leave the ready-panel BUTTONS alone —
   // only the button handling below is skipped, never the line above.
   if (panelSubmitted && panelSubmitted.style.display !== 'none') return;
@@ -644,8 +651,6 @@ function checkClaudeConnection() {
   // user knows the click will be queued rather than lost.
   _setCacheHints(state === 'disconnected');
   btns.forEach(b => { b.disabled = false; });
-
-  if (isConnected) retryPendingSubmission();
 }
 
 // Kick an immediate heartbeat poll on load so the pill resolves to

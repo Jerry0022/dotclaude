@@ -596,10 +596,16 @@ this session:
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" abort --reason "<status>: <why>"
 ```
 
-Call `render_completion_card` (variant per status: "ship-successful" for COMPLETED,
-"ship-blocked" for BLOCKED, "ready" for INTERRUPTED,
-"analysis" for analyze-mode COMPLETED; pushed: false, pr: null).
+Call `render_completion_card` (variant per status: "ready" for COMPLETED and
+INTERRUPTED — or the variant the work unit's own table names, e.g. audit
+mode's Step 8 —, "aborted" for BLOCKED, "analysis" for analyze-mode
+COMPLETED; "ship-successful" only when the router's Step 7 do-ship merged —
+without `state.pushed` + `merged` the card's variant guard downgrades it).
 **Capture the full card output** — it will be embedded in the HTML report.
+On the Desktop app do NOT show the card widget yet: the widget ends the turn
+(`hooks/lib/card-turn-end.js`), so it is the run's very last action, after
+Step 8. The hard stop also holds on its own while this session's autonomous
+run contract is open — Step 8 closes it.
 
 **Always forward `userFinalTest` items** collected during Step 5 Live Testing
 (packaged Electron/Tauri without takeover, 3rd-party integrations). The card
@@ -638,8 +644,9 @@ node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" track \
 See `{PLUGIN_ROOT}/deep-knowledge/browser-file-urls.md` for the full rule.
 
 The completion card is still rendered in the CLI as the last visible output
-(VERBATIM relay as always). The HTML report is the **primary deliverable** —
-the CLI card is the quick confirmation.
+(VERBATIM relay as always) — on the Desktop app as the widget shown after
+Step 8. The HTML report is the **primary deliverable** — the CLI card is the
+quick confirmation.
 
 ## Step 8 — Shutdown / Finalization
 
@@ -661,7 +668,7 @@ Harmless no-op if nothing was scheduled. Then proceed by `$WATCHDOG_ACTION`:
 - **notify mode** (shutdown=no): the PC stays on. No fail-safe was armed; skip
   8.0/8a/8b; run only **8c** —
   write `AUTONOMOUS-DONE.flag` for every terminal status (COMPLETED / INTERRUPTED
-  / BLOCKED), then `autonomous-watchdog.js unregister`. Reaching Step 8 proves the
+  / BLOCKED); `flag` also removes the run's task. Reaching Step 8 proves the
   run is not wedged, so the health-watchdog is no longer needed (no
   `AUTONOMOUS-STALLED.txt`, no dead task left in Task Scheduler).
 - **shutdown mode** (shutdown=yes), status COMPLETED or INTERRUPTED:
@@ -669,9 +676,9 @@ Harmless no-op if nothing was scheduled. Then proceed by `$WATCHDOG_ACTION`:
      project/worktree; exclude our own tree). Never cut off another session.
   2. **8b** — `shutdown.exe /s /t 60` via absolute-path PowerShell; capture
      `$SHUTDOWN_EXIT`.
-  3. **8c** — write the flag per the decision matrix: flag + `unregister` on
-     8b-success or BLOCKED; **NO** flag and no unregister if 8b failed, so the
-     watchdog fires as the fallback.
+  3. **8c** — write the flag per the decision matrix: flag (which also removes
+     the task) on 8b-success or BLOCKED; **NO** flag if 8b failed, so the task
+     stays armed and the watchdog fires as the fallback.
 - **BLOCKED** in shutdown mode: skip 8b, jump to 8c (never auto-shutdown a
   blocked run — data integrity may be at risk). INTERRUPTED is safe to shut down
   — progress is saved in `AUTONOMOUS-RESUME.json`.
@@ -681,8 +688,8 @@ on resume).
 
 **Close the run contract, if still open.** COMPLETED already closed it (7a's
 abort branch does not apply); a run that reaches here without having called
-`abort` or `done` yet closes it now, after the card, so a leftover contract
-never gates the next unrelated session:
+`abort` or `done` yet closes it now — before the Desktop card widget, which
+ends the turn — so a leftover contract never gates the next unrelated session:
 
 ```bash
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done

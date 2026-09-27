@@ -43,14 +43,20 @@ function pluginRoot() {
     const versions = readdirSync(cacheParent).filter(
       v => existsSync(join(cacheParent, v, "scripts", "build-id.js"))
     );
-    if (versions.length > 0) {
-      // Pick the latest version (lexicographic sort works for semver with same digit count)
-      versions.sort();
-      return join(cacheParent, versions[versions.length - 1]);
-    }
+    const latest = latestCacheVersion(versions);
+    if (latest) return join(cacheParent, latest);
   } catch { /* cacheParent doesn't exist or isn't readable */ }
   // 4. Give up — return stale path, caller will get existsSync guard
   return staticRoot;
+}
+/**
+ * Newest cache folder name by numeric semver (lexicographic order put 0.183.9
+ * above 0.183.12 — AUD-C047). Non-semver names only win when no semver one exists.
+ */
+export function latestCacheVersion(names) {
+  const semver = names.filter((v) => /^\d+\.\d+\.\d+$/.test(v));
+  if (semver.length > 0) return [...semver].sort(compareVersions).pop();
+  return names.length > 0 ? [...names].sort().pop() : null;
 }
 function scriptPath(name) { return join(pluginRoot(), "scripts", name); }
 

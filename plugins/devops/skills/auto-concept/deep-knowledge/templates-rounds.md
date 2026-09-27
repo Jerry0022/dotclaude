@@ -860,16 +860,26 @@ cleanup** — and the order is not negotiable:
 - Cleanup last, because `discard` deletes the concept HTML — doing that before
   the outward-facing steps would destroy the record while it is still needed.
 
-**Replay protection is client-side, and it has to be.** The `_version`
+**Replay protection is on the bridge, not just the page.** The `_version`
 mismatch guard people reach for here only exists on `POST /reset` and
-`POST /status` — `POST /decisions` has no such guard, it just creates a new
-version and flips `/pending` to true. So a finalize whose response was lost
-in transit after the bridge had already fsynced it sits in BOTH places, and
-the offline queue would happily deliver it again: duplicate `gh issue create`,
-a second real release, `discard` applied twice. That is why every finalize
-carries a `submission_id` and `retryPendingSubmission()` compares it against
-what `/decisions` already holds before re-POSTing (see § Offline Submit
-Queue). Do not drop that field, and do not "simplify" the retry.
+`POST /status` — `POST /decisions` has no such guard on its own, it just
+creates a new version and flips `/pending` to true. So a finalize whose
+response was lost in transit after the bridge had already fsynced it sits in
+BOTH places, and the offline queue would happily deliver it again: duplicate
+`gh issue create`, a second real release, `discard` applied twice. That is
+why every payload — finalize, iterate, implement — carries a `submission_id`.
+Two layers use it: `retryPendingSubmission()` compares it against what
+`/decisions` already holds before re-POSTing (see § Offline Submit Queue) —
+but that check alone only survives until Claude's `POST /reset` clears
+`/decisions`, which is exactly the window a lost-response retry lands in. The
+bridge itself closes that gap: `concept-server.py`'s `POST /decisions`
+remembers every `submission_id` it has journalled (a bounded ring, derived
+from `journal.jsonl` on restart too) and answers a repeat of an already-seen
+id with `{"ok": true, "durable": true, "duplicate": true}` WITHOUT touching
+`_decisions`, `_version` or the pending marker — so a retry that beats the
+page's own check can never make Claude re-process a finalize it already ran.
+Do not drop the `submission_id` field, do not "simplify" the retry, and do
+not treat the client-side check as sufficient on its own.
 
 ## Design System
 

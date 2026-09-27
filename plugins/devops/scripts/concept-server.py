@@ -29,6 +29,14 @@ Replaces `python -m http.server` with a custom server that adds:
   fetch — drives the "Claude verarbeitet" step in the progress list), and
   `_phase` (free-form string Claude sets via /status — drives the
   "Implementierung abgeschlossen" step).
+  POST is idempotent on `submission_id` (#finding-10): a payload whose id was
+  already journalled — the page's own offline-queue retry of a POST that
+  fsynced but lost its response, arriving AFTER Claude processed it and
+  reset — is answered `{"ok": true, "durable": true, "duplicate": true}`
+  WITHOUT touching `_decisions`/`_version`/the pending marker, so Claude
+  never re-picks it up. The last 500 accepted ids are kept in memory,
+  rebuilt from the journal at startup. Payloads without a submission_id
+  (older page builds) keep the unconditional-accept behaviour.
 - GET /pending — Deterministic signal for Claude's cron (`?waker=<id>` names the
   polling waker; `prev_waker` in the answer is the previous poller, so a
   superseded waker can step down — see concept-watch.js). Returns
@@ -140,6 +148,7 @@ Example:
 
 import argparse
 import base64
+import collections
 import errno
 import hashlib
 import http.server
@@ -213,6 +222,24 @@ _picked_up_at = ''
 # for `implemented` (after the implement-branch finished its code changes,
 # before /reload). Cleared on /decisions POST and /reset.
 _phase = ''
+# Submission-id de-dup ring (#finding-10). The offline queue's own check
+# (GET /decisions, compare submission_id) only works until Claude POSTs
+# /reset — that clears `_decisions`, so a payload that was already fsynced
+# but whose HTTP response the page never saw (tab closed, the page's 15 s
+# AbortController deadline hit on a slow disk) gets re-POSTed AFTER Claude
+# already ran its side effects (issues, a release) and reset. Without this,
+# the retry looks like a brand-new submission and runs everything twice.
+# So the durability gate below is itself idempotent: every submission_id it
+# has ever journalled is kept here (bounded — a ring of the last 500, plenty
+# for any realistic retry window) and a POST carrying an id already in the
+# ring is acknowledged as a duplicate WITHOUT touching `_decisions`,
+# `_version` or the pending marker. Payloads without a submission_id (older
+# page builds) keep today's unconditional-accept behaviour — there is no id
+# to de-dup on. Rebuilt from the journal at startup so a bridge restart does
+# not forget IDs it already accepted (see `_load_accepted_submission_ids`).
+MAX_ACCEPTED_SUBMISSION_IDS = 500
+_accepted_submission_ids = collections.deque(maxlen=MAX_ACCEPTED_SUBMISSION_IDS)
+_accepted_submission_ids_set = set()
 # Reload counter — bumped by Claude via POST /reload after the HTML file is
 # rewritten (new iteration appended, content refreshed, etc). The browser
 # polls GET /reload and issues location.reload() when the counter advances.
@@ -569,6 +596,72 @@ def _is_submitted(raw):
         return bool(isinstance(obj, dict) and obj.get('submitted') is True)
     except (ValueError, TypeError):
         return False
+
+
+def _submission_id_of(raw):
+    """Extract `submission_id` from a decisions payload, or None.
+
+    None covers both "no id on this payload" (older page builds — keep the
+    unconditional-accept behaviour) and a malformed body, which the normal
+    POST /decisions path rejects/accepts on its own terms further down."""
+    try:
+        obj = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    sid = obj.get('submission_id')
+    return sid if isinstance(sid, str) and sid else None
+
+
+def _remember_submission_id(sid):
+    """Record an accepted submission_id in the bounded de-dup ring.
+
+    Call ONLY after the payload is durably journalled — an id remembered
+    for a submission that failed to reach disk would make a legitimate
+    retry look like a duplicate and silently drop it."""
+    if sid is None:
+        return
+    if sid in _accepted_submission_ids_set:
+        return
+    if len(_accepted_submission_ids) == _accepted_submission_ids.maxlen:
+        evicted = _accepted_submission_ids[0]
+        _accepted_submission_ids_set.discard(evicted)
+    _accepted_submission_ids.append(sid)
+    _accepted_submission_ids_set.add(sid)
+
+
+def _load_accepted_submission_ids():
+    """Rebuild the de-dup ring from the journal at startup (#finding-10).
+
+    Only 'submission' records carry a payload (and thus a submission_id);
+    replaying them in journal order and feeding each id through the same
+    bounded ring as the live path naturally keeps only the most recent
+    MAX_ACCEPTED_SUBMISSION_IDS — exactly what a resumed process needs to
+    catch a retry of the LAST thing it accepted before it died or restarted.
+    """
+    if not _store_ok or not os.path.exists(_journal_path):
+        return
+    try:
+        with open(_journal_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(rec, dict) or rec.get('type') != 'submission':
+                    continue
+                payload = rec.get('payload')
+                if not isinstance(payload, str):
+                    continue
+                sid = _submission_id_of(payload)
+                if sid is not None:
+                    _remember_submission_id(sid)
+    except OSError:
+        pass
 
 
 def _set_unprocessed_marker(version, reason=''):
@@ -1382,6 +1475,28 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(413, "decisions payload too large")
                 return
             body = self.rfile.read(length).decode()
+            # ---- DUPLICATE GATE (#finding-10) --------------------------
+            # A submission_id already in the accepted ring means this exact
+            # payload was journalled before — most likely the offline
+            # queue's retry of a POST whose response never made it back to
+            # the page (tab closed, its 15 s deadline hit) AFTER Claude had
+            # already processed it and called /reset. Answer as a durable
+            # duplicate WITHOUT touching `_decisions`, `_version` or the
+            # pending marker, so Claude never re-picks-up a submission it
+            # already finished — that is what stops a finalize's issues /
+            # release from running twice. `_decisions`/`_version` reads
+            # below happen under `_lock` for a consistent view.
+            sid = _submission_id_of(body)
+            if sid is not None:
+                with _lock:
+                    is_dup = sid in _accepted_submission_ids_set
+                if is_dup:
+                    self._json_response({
+                        "ok": True,
+                        "durable": True,
+                        "duplicate": True,
+                    })
+                    return
             # ---- DURABILITY GATE (#284) --------------------------------
             # The browser is told "ok" only after the payload is on disk.
             # Accepting in RAM and acking optimistically is exactly what
@@ -1393,29 +1508,50 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             err = None
             seq = None
             version = None
+            dup = False
             with _lock:
-                next_version = _version + 1
-                try:
-                    seq = _journal_append({
-                        'type': 'submission',
-                        'version': next_version,
-                        'payload': body,
-                    })
-                    _state_write(_snapshot(body, next_version, _processed_at, '', ''))
-                    if _is_submitted(body):
-                        _set_unprocessed_marker(next_version, 'submitted')
-                except OSError as exc:
-                    err = str(exc)
-                if err is None:
-                    _decisions = body
-                    _version = next_version
-                    version = next_version
-                    # A new submission supersedes any prior pickup/phase
-                    # state. Keeping _picked_up_at would make the new
-                    # submission's progress list show "Claude verarbeitet"
-                    # before Claude's cron had actually noticed it.
-                    _picked_up_at = ''
-                    _phase = ''
+                # Checked again inside the append's critical section: two
+                # POSTs of one id that both passed the fast check above (the
+                # page's retry racing its own still-running first POST) must
+                # not both reach the journal.
+                if sid is not None and sid in _accepted_submission_ids_set:
+                    dup = True
+                else:
+                    next_version = _version + 1
+                    try:
+                        seq = _journal_append({
+                            'type': 'submission',
+                            'version': next_version,
+                            'payload': body,
+                        })
+                        _state_write(_snapshot(body, next_version, _processed_at, '', ''))
+                        if _is_submitted(body):
+                            _set_unprocessed_marker(next_version, 'submitted')
+                    except OSError as exc:
+                        err = str(exc)
+                    if err is None:
+                        _decisions = body
+                        _version = next_version
+                        version = next_version
+                        # A new submission supersedes any prior pickup/phase
+                        # state. Keeping _picked_up_at would make the new
+                        # submission's progress list show "Claude verarbeitet"
+                        # before Claude's cron had actually noticed it.
+                        _picked_up_at = ''
+                        _phase = ''
+                        # Only remember an id once it is actually on disk — a
+                        # non-durable accept (store unwritable) has nothing on
+                        # the journal to derive it from on restart, and the page
+                        # keeps its local copy and retries until it IS durable.
+                        if sid is not None and seq is not None:
+                            _remember_submission_id(sid)
+            if dup:
+                self._json_response({
+                    "ok": True,
+                    "durable": True,
+                    "duplicate": True,
+                })
+                return
             if err is not None:
                 self._error_response(507, {
                     "ok": False,
@@ -2555,6 +2691,7 @@ if __name__ == '__main__':
         )
         sys.exit(1)
 
+    _load_accepted_submission_ids()
     restored = _store_restore()
     if restored:
         _resume_note = (

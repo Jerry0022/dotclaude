@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.214.0] — 2026-09-27
+
+### Added
+- **`guide status` resumes a web guide after a compaction.** The guide protocol reads the live overlay state (step, channel, pending events) instead of guessing, and a hidden tab pauses the guide instead of burning waits. One recovery reference in `auto-guide/deep-knowledge/protocol.md` names every result and failure and what Claude does next.
+
+### Fixed
+- **The web guide works on hardened pages and never loses input.** The overlay is Trusted-Types-safe (Google/Firebase consoles) and styles itself through constructable stylesheets under a strict CSP. Typed help text and the collapsed state survive re-renders, the panel stays clamped to the viewport right above its button, and events never pass through page-patched built-ins. The overlay answers only to Claude's channel token, which lives as long as the guide; inject requires it. Secrets are written only to a gitignored store, and a live guide is not offered again.
+- **Audit sweep over the last days' changes (46 commits).** Burn: state writes are locked and the lock is released only by its owner, blind spend adds up per window from fresh readings, salvage never commits secrets. Ship hygiene never deletes what only a worktree holds and keeps batch notes, concept stores and nested checkouts. The run contract arms under a lock and id-checks its write-backs. Concept: duplicate submissions are answered as duplicates (also after `/reset`), the offline retry has a deadline, nav labels are built as text. Cards: `session_id` never reaches a path unchecked, a manual web step keeps its guide button. Issue refs read real issue numbers over nearby colour words. Guards whose lib fails to load say so on stderr; mcp-health no longer reports an older live server as down. UI polish: hover styles only on hover devices, dark-mode counterparts, focus hand-off and screen-reader wiring on overlay and card controls.
+- **The burn resume e2e test no longer expires.** `prompt.burn.resume` used the real clock while `burn-plan.js` honours `DEVOPS_BURN_NOW`, and the test spawned the hook without its pinned environment; once the real date passed the test's synthetic weekly reset, the hook answered "off".
+
 ## [0.213.3] — 2026-09-26
 
 ### Changed
@@ -484,7 +494,7 @@
 ## [0.192.6] — 2026-09-24
 
 ### Fixed
-- **`/setup-cleanup` finishes a half-removed worktree instead of handing it off.** A `git worktree remove` on a checkout with a large `node_modules` was killed after 120 s. That left three SC-Web worktree folders on disk (~40k files each) with no `.git` and no registration, and they were handed to the user to "delete manually" although their content was in main. `git-hygiene.md` § *A half-done worktree removal is Claude's to finish* now covers this. The removal runs in the background. An orphan that is unregistered, has no `.git`, is named by no process, and holds only main content plus gitignored build artifacts is deleted by Claude. Any other entry keeps the folder and gets named. `setup-cleanup` 0.6.1 points there from its *Worktree Removal Safety* rules.
+- **`/setup-cleanup` finishes a half-removed worktree instead of handing it off.** A `git worktree remove` on a checkout with a large `node_modules` was killed after 120 s. That left three worktree folders of a consumer repo on disk (~40k files each) with no `.git` and no registration, and they were handed to the user to "delete manually" although their content was in main. `git-hygiene.md` § *A half-done worktree removal is Claude's to finish* now covers this. The removal runs in the background. An orphan that is unregistered, has no `.git`, is named by no process, and holds only main content plus gitignored build artifacts is deleted by Claude. Any other entry keeps the folder and gets named. `setup-cleanup` 0.6.1 points there from its *Worktree Removal Safety* rules.
 
 ## [0.192.5] — 2026-09-23
 

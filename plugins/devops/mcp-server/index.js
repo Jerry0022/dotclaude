@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.12.0
+ * @version 0.13.1
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -47,13 +47,14 @@ import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { register as registerHeartbeat } from "./lib/heartbeat.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, writeCardWidgetFile } from "./lib/card-widget.js";
+import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -350,6 +351,36 @@ function remoteNames(cwd) {
 }
 
 /**
+ * Is `cwd` inside a git work tree? `false` only on git's own "not a git
+ * repository" answer; `null` whenever nothing can be concluded:
+ *  - no `cwd`: the server's own cwd is the plugin directory
+ *    (${CLAUDE_PLUGIN_ROOT} in .mcp.json), never the project — probing it
+ *    made every cwd-less card file-only and downgraded a real ship;
+ *  - the directory is gone — a ship card is often rendered after
+ *    ship_cleanup removed the worktree it names;
+ *  - git did not answer in time (ship/lib/repo-mode.js draws the same line),
+ *    is missing, or refused the repo ("dubious ownership").
+ * The probe runs under LC_ALL=C so git's refusal is matched in English.
+ */
+function insideWorkTree(cwd) {
+  if (!cwd) return null;
+  try {
+    if (!statSync(cwd).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  try {
+    const out = execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd, encoding: 'utf8', timeout: GIT_PROBE_OPTS.timeout, windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, LC_ALL: 'C', LANGUAGE: 'C' },
+    });
+    return String(out).trim() === 'true';
+  } catch (err) {
+    return /not a git repository/i.test(String((err && err.stderr) || '')) ? false : null;
+  }
+}
+
+/**
  * Card callers outside /do-ship never ran ship_preflight, so they rarely pass
  * `state.mode`. Without it a local-only repo still got the Ship button and the
  * push → PR → merge track (#500). Fill it in the way repo-mode.js decides it:
@@ -359,6 +390,15 @@ function remoteNames(cwd) {
 function withDetectedRepoMode(params) {
   const state = params.state || {};
   if (state.mode) return;
+  // No work tree at all — a network share, a scratch folder: there is no
+  // commit, branch, PR or merge to draw, no build id to compute and nothing to
+  // ship, so the card takes the file-only form (audit 2026-09-26: such a card
+  // showed "○ commit → ○ push → ○ PR → ○ merge · Build no-build-id" and a Ship
+  // button). A probe that timed out proves nothing and changes nothing.
+  if (insideWorkTree(params.cwd) === false) {
+    params.state = { ...state, mode: 'file-only' };
+    return;
+  }
   const names = remoteNames(params.cwd);
   if (state.delivered === 'local-commit-only' || (names && !names.includes('origin'))) {
     params.state = { ...state, mode: 'git-no-remote' };
@@ -398,6 +438,15 @@ function localShipInstruction(params) {
     if (resolveCardKey({ ...params, vv: readVVState(params.session_id) }) !== 'ready') return null;
     const { isActive } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-sentinel.js'));
     if (isActive(cwd)) return null;
+    // AUD-C002: a run contract with "Ship manuell" is the user's explicit
+    // answer to "ship?" — never merge into the local base behind it. A
+    // self-marker id ("self", "local_…", none) reads leniently, the same way
+    // mode-state.js#readRunContractLine does; a real id reads strictly.
+    const sid = params.session_id;
+    const selfMarker = !sid || sid === 'self' || String(sid).startsWith('local_');
+    const { readContractForCard } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'run-contract.js'));
+    const contract = readContractForCard(cwd, selfMarker ? {} : { sessionId: sid });
+    if (contract && !contract.closedAt && contract.ship !== 'auto') return null;
     const { hasUnshippedWork, defaultBranchRef } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-unshipped.js'));
     const git = (dir, args) => execFileSync('git', args, { ...GIT_PROBE_OPTS, cwd: dir });
     // No base branch yet (a repo without a first commit): nothing to land on.
@@ -564,10 +613,21 @@ function firstCount(text) {
   return m ? m[0] : '';
 }
 
+/**
+ * The test count of a freeform result: the number standing next to "Tests"
+ * ("248 Dateien · 7286 Tests grün" → 7286 — the first integer there is the
+ * FILE count), else the first integer ("3464 grün · 3 skipped" → 3464).
+ */
+function testCount(text) {
+  const r = String(text || '');
+  const m = /(\d[\d.]*)\s*tests?\b/i.exec(r) || /\btests?\s*:?\s*(\d[\d.]*)/i.exec(r);
+  return m ? m[1] : firstCount(r);
+}
+
 /** "3464 Tests grün" / "2 Tests rot" — number + noun + state (§ 2.3). */
 function testsPostText(result, glyph, lang) {
   const r = String(result || '');
-  const n = firstCount(r);
+  const n = testCount(r);
   if (!n) return r;
   const noun = lang === 'en' ? 'tests' : 'Tests';
   if (glyph === '✗') {
@@ -762,7 +822,14 @@ function omitWindow(pct, resetMinutes) {
   return (pct || 0) < 50 && (resetMinutes == null || resetMinutes > 60);
 }
 
-function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
+/** The bar tooltip in the card's language (AUD-035 — it was German on English cards). */
+const BUDGET_TOOLTIP = {
+  de: (pct, reset) => pct + '% verbraucht · Reset in ' + reset,
+  en: (pct, reset) => pct + '% used · resets in ' + reset,
+};
+
+function buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang = 'de') {
+  const tooltipFor = BUDGET_TOOLTIP[lang] || BUDGET_TOOLTIP.de;
   if (!usageData || !usageData.session) return null;
   const freshness = assessFreshness(usageData, Date.now());
   if (freshness.expired) {
@@ -781,7 +848,7 @@ function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
     bars.push({
       label: '5h', pct: s.pct, elapsedPct: elapsed5h, level,
       watermark: formatResetSpaced(s.resetInMinutes),
-      tooltip: Math.round(s.pct) + '% verbraucht · Reset in ' + formatResetSpaced(s.resetInMinutes),
+      tooltip: tooltipFor(Math.round(s.pct), formatResetSpaced(s.resetInMinutes)),
     });
   }
   if (w) {
@@ -792,7 +859,7 @@ function buildBudgetModel(usageData, delta5h, deltaWk, healthLine) {
       bars.push({
         label: 'Wk', pct: w.pct, elapsedPct: elapsedWk, level,
         watermark: formatResetSpaced(w.resetInMinutes),
-        tooltip: Math.round(w.pct) + '% verbraucht · Reset in ' + formatResetSpaced(w.resetInMinutes),
+        tooltip: tooltipFor(Math.round(w.pct), formatResetSpaced(w.resetInMinutes)),
       });
     }
   }
@@ -819,10 +886,13 @@ function renderPipelineLine(input, lang, buildId) {
   const delivery = input.delivery || {};
 
   if (state.mode === 'file-only') {
-    const n = state.filesModified || 0;
+    const n = state.filesModified;
     const noun = lang === 'en' ? (n === 1 ? 'file changed' : 'files changed') : 'Dateien geändert';
     const noRepo = lang === 'en' ? 'no repo' : 'kein Repo';
-    return '📂 ' + n + ' ' + noun + ' · ' + noRepo + (input.cwd ? ' · ' + input.cwd : '');
+    // A count only when the caller knows it — a detected file-only mode
+    // (withDetectedRepoMode) must not claim "0 files changed".
+    const count = typeof n === 'number' ? n + ' ' + noun + ' · ' : '';
+    return '📂 ' + count + noRepo + (input.cwd ? ' · ' + input.cwd : '');
   }
   if (input.variant === 'analysis') {
     const none = lang === 'en' ? 'no changes to repo' : 'keine Änderungen im Repo';
@@ -1195,7 +1265,9 @@ function resolveCardKey(input) {
 
   if (variant === 'ready') {
     if (input.vv && input.vv.unverified) return input.vv.running ? 'vv-running' : 'vv-unverified';
-    return evidenceHasDeviation(input) ? 'ready-red' : 'ready';
+    if (evidenceHasDeviation(input)) return 'ready-red';
+    // Without a repo the work is done on disk — nothing to ship (ready-files).
+    return state.mode === 'file-only' ? 'ready-files' : 'ready';
   }
   if (variant === 'ship-blocked') return 'ship-blocked';
   if (variant === 'ship-successful') {
@@ -1250,7 +1322,9 @@ function decisionContext(input, key, delivery, state, lang) {
   const strictlyUnmet = validation.filter(v => v.status === 'unmet').length;
   return {
     version: String(version || '').replace(/^v/, ''),
-    ring: !!delivery.promote,
+    // AUD-C015: a ship without a remote has no channel tags to move —
+    // promote.js needs origin — so no ring heading and no Promote buttons.
+    ring: !!delivery.promote && state.mode !== 'git-no-remote',
     base: (delivery.ship && delivery.ship.base) || state.merged || 'main',
     reservation: headingReservation(input.open, lang),
     n: redCount || unmetCount || 1,
@@ -1359,6 +1433,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     };
   }
   const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
+  // A manual web step in the card payload keeps its guide button on the
+  // concept, batch and pending cards too (AUD-C042) — only the compact stop
+  // above is the one decision of its card.
+  const guideHandoff = detectGuideHandoff(input);
 
   if (hasConcept(input.concept)) {
     const url = conceptUrl(input.cwd, input.concept);
@@ -1368,11 +1446,11 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null };
+    return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null, guideHandoff };
   }
   if (batch) {
     const guide = batchGuide(batch, lang);
-    return { heading: T.batch({ n: batch.notes || 0 }), context: guide.context, points: guide.points, buttonsKey: null };
+    return { heading: T.batch({ n: batch.notes || 0 }), context: guide.context, points: guide.points, buttonsKey: null, guideHandoff };
   }
   if (hasPending(input.pending)) {
     const what = pendingWhat(input.pending, lang);
@@ -1380,7 +1458,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null };
+    return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null, guideHandoff };
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);
@@ -1388,7 +1466,9 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // test cards stop asking "ship?" and the widget drops their Ship button
   // (#500). The keys that follow a ship attempt (ready-red, ship-blocked,
   // vv-unverified, ship-compact) keep theirs: a local ship still commits.
-  const noShip = state.mode === 'git-no-remote' && (key === 'ready' || key === 'test');
+  // Without any repo (file-only) there is nothing to ship either: the test
+  // card asks only to test.
+  const noShip = (state.mode === 'git-no-remote' || state.mode === 'file-only') && (key === 'ready' || key === 'test');
   const fn = T[noShip ? key + '-local' : key] || T.fallback;
   let heading = fn(ctx);
 
@@ -1407,8 +1487,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
   // The ladder already sits above alpha: beta offers only stable, stable nothing.
   const landed = delivery.promote && delivery.promote.current;
-  if (key === 'ship-successful' && landed === 'beta') buttonsKey = 'released-beta';
+  if (key === 'ship-successful' && ctx.ring && landed === 'beta') buttonsKey = 'released-beta';
   if (key === 'ship-successful' && landed === 'stable') buttonsKey = null;
+  // AUD-C015: without a remote nothing can be promoted — the plain set.
+  if (key === 'ship-successful' && state.mode === 'git-no-remote') buttonsKey = 'ship-successful-plain';
   // Nothing to promote, but open points: Nachbessern alone.
   if (key === 'ship-successful' && !buttonsKey && replies.length) buttonsKey = 'ship-successful-plain';
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
@@ -1417,9 +1499,25 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
-    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip,
-    guideHandoff: detectGuideHandoff(input),
+    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff,
   };
+}
+
+/**
+ * Glob-fallback candidates `<tmp>/<prefix>*`, newest first. AUD-066: skips
+ * the `<file>.<pid>.<rand>.tmp` files writeSessionFile renames into place (an
+ * in-flight or orphaned write is no session value) and stats each entry in
+ * its own try — one file vanishing between readdir and stat used to throw
+ * the whole fallback away.
+ */
+function sessionFileCandidates(tmp, prefix) {
+  const out = [];
+  for (const f of readdirSync(tmp)) {
+    if (!f.startsWith(prefix) || f.endsWith('.tmp')) continue;
+    const full = join(tmp, f);
+    try { out.push({ full, mtime: statSync(full).mtimeMs }); } catch { /* vanished */ }
+  }
+  return out.sort((a, b) => b.mtime - a.mtime);
 }
 
 function readToolCallCount(sessionId) {
@@ -1432,10 +1530,7 @@ function readToolCallCount(sessionId) {
     try {
       const prefix = 'dotclaude-devops-toolcalls-';
       const tmp = tmpdir();
-      const files = readdirSync(tmp)
-        .filter(f => f.startsWith(prefix))
-        .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
-        .sort((a, b) => b.mtime - a.mtime);
+      const files = sessionFileCandidates(tmp, prefix);
       if (files.length > 0) return parseInt(readFileSync(files[0].full, 'utf8'), 10) || 0;
     } catch {}
     return 0;
@@ -1460,11 +1555,8 @@ function readSessionFlagRaw(prefix, sessionId, opts) {
     const p = `${prefix}-`;
     const tmp = tmpdir();
     const now = Date.now();
-    const files = readdirSync(tmp)
-      .filter(f => f.startsWith(p))
-      .map(f => ({ full: join(tmp, f), mtime: statSync(join(tmp, f)).mtimeMs }))
-      .filter(f => (now - f.mtime) < FLAG_MAX_AGE_MS)
-      .sort((a, b) => b.mtime - a.mtime);
+    const files = sessionFileCandidates(tmp, p)
+      .filter(f => (now - f.mtime) < FLAG_MAX_AGE_MS);
     if (files.length > 0) return readFileSync(files[0].full, 'utf8');
   } catch { /* ignore */ }
   return null;
@@ -1527,7 +1619,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     // Unclamped — the widget wraps; the 120-char ellipsis is a terminal budget.
     resultLines: buildResultLines(input, lang, { clamp: false }),
     evidence: buildEvidencePosts(input, lang, key),
-    budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine),
+    budget: buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang),
     pipeline: renderPipelineLine(input, lang, buildId),
     pipelinePr: state.pr || null,
     runContract: renderRunContractLine(input, lang),
@@ -1586,7 +1678,7 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     if (runContractLine) parts.push(runContractLine);
     const ladderLine = renderChannelLadderMd(buildChannelLadder(input), lang);
     if (ladderLine) parts.push(ladderLine);
-    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine));
+    const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang));
     if (budgetLine) parts.push(budgetLine);
   } else if (resultLines[0]) {
     parts.push('› ' + resultLines[0]);
@@ -1815,7 +1907,21 @@ function normalizeCardParams(raw, { strictVariant = false } = {}) {
   // them; on the CLI path this is what turns a guessed payload into readable
   // text instead of three empty '*  → ' bullets (#396).
   coerceCardInput(params);
+  sanitizeSessionId(params);
 
+  return params;
+}
+
+/**
+ * AUD-010: the session id is joined into tmp file names (card-rendered and
+ * attestation flags, the widget file, the local-ship and guide-pending flags).
+ * Both entry points normalise it HERE, before any of those joins: a real id
+ * (harness UUID, "self", Desktop "local_<uuid>") stays, anything else — a
+ * path separator, `..`, a non-string — becomes "unknown". An absent id stays
+ * absent (every reader already falls back to "unknown").
+ */
+function sanitizeSessionId(params) {
+  if (params && params.session_id !== undefined) params.session_id = safeSessionId(params.session_id);
   return params;
 }
 
@@ -1883,7 +1989,9 @@ function buildCompletionCard(params) {
   const healthLine = renderContextHealth(toolCallCount);
 
   // 3. Use pre-computed build-ID if provided, otherwise compute from cwd
-  const buildId = params.buildId || getBuildId(params.cwd);
+  // A file-only project has no build id: its pipeline line names none, and
+  // computing one only logged git's "not a git repository" on every card.
+  const buildId = params.buildId || (params.state && params.state.mode === 'file-only' ? '' : getBuildId(params.cwd));
 
   // 3b. V&V gate — derive the verification state from the Light flags so the
   //     card can stamp ⚠ ungeprüft on an unverified / red finish (evidence
@@ -2323,6 +2431,7 @@ server.registerTool(
     }),
   },
   async (params) => {
+    sanitizeSessionId(params);
     withDetectedRepoMode(params);
     const localShip = localShipInstruction(params);
     if (localShip) return { content: [{ type: 'text', text: localShip }] };
@@ -2337,9 +2446,10 @@ server.registerTool(
 // Exported for unit tests — the usage meter is pure and worth asserting on
 // directly (column grid, bar semantics) without driving the whole card.
 export {
+  insideWorkTree, withDetectedRepoMode,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
-  buildBudgetModel, renderBudgetLineMd, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
-  resolveCardKey, buildDecisionBlock, buildCardModel,
+  buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
+  resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
 };
 
 // ---------------------------------------------------------------------------
@@ -2356,11 +2466,10 @@ try {
   process.exit(1);
 }
 bootMs = Math.round(process.uptime() * 1000);
-// The heartbeat the hooks read to tell a live server from a dead one
-// (hooks/lib/mcp-heartbeat.js). Its register call went out with an "unused
-// import" cleanup in #93, so every hook reported this server as dead and told
-// Claude to render the card offline first. Only the server path registers —
-// the --render-card CLI exits long before this point.
-const { register: registerHeartbeat } = await import("./lib/heartbeat.js");
-registerHeartbeat(SERVER_NAME);
+// AUD-C011: the heartbeat the hooks read (card-guard, stop.flow.guard,
+// post.flow.completion) — lost in #93, so every hook called this live server
+// "dead" and steered the model to the offline renderer. Same call as the ship
+// and issues servers. Not under vitest: the card tests import this module,
+// and a worker must not register itself (or its SIGINT exit) as the server.
+if (!process.env.VITEST) registerHeartbeat(SERVER_NAME);
 console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`);

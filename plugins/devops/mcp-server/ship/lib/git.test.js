@@ -21,11 +21,24 @@ import {
   worktreePathForBranch,
   syncLocalBranch,
   treeOf,
+  detectParentBranch,
 } from "./git.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
 });
+
+// Branch/ref-interpolating helpers run git with an argv array (execFileSync,
+// no shell — AUD-C014); the rest still go through execSync. Route both to one
+// string-matching fake so a test reads "git <args joined>".
+function route(impl) {
+  execSync.mockImplementation(impl);
+  execFileSync.mockImplementation((file, args, o) => impl(`git ${args.join(" ")}`, o));
+}
+function routeValue(v) {
+  execSync.mockReturnValue(v);
+  execFileSync.mockReturnValue(v);
+}
 
 // ---------------------------------------------------------------------------
 // git / gitStrict — base wrappers
@@ -99,20 +112,20 @@ describe("gitArgs", () => {
 
 describe("treeOf", () => {
   test("returns the tree id of a ref", () => {
-    execSync.mockReturnValue("3bcc2a7727a1ef4c53626a7b61f413985a27b0ca\n");
+    routeValue("3bcc2a7727a1ef4c53626a7b61f413985a27b0ca\n");
     expect(treeOf("origin/main")).toBe("3bcc2a7727a1ef4c53626a7b61f413985a27b0ca");
   });
 
   test("REGRESSION: command contains no caret (cmd.exe eats ^ on Windows → guard fired null/false on every ship)", () => {
-    execSync.mockReturnValue("tree123\n");
+    routeValue("tree123\n");
     treeOf("HEAD");
-    const cmd = execSync.mock.calls[0][0];
-    expect(cmd).not.toContain("^");
-    expect(cmd).toContain("--format=%T");
+    const args = execFileSync.mock.calls[0][1];
+    expect(args.join(" ")).not.toContain("^");
+    expect(args).toContain("--format=%T");
   });
 
   test("returns null for unknown ref", () => {
-    execSync.mockImplementation(() => {
+    route(() => {
       throw new Error("fatal: bad revision");
     });
     expect(treeOf("nope")).toBeNull();
@@ -142,6 +155,15 @@ describe("dirtyState", () => {
     expect(state.untracked).toEqual([]);
     expect(state.modified).toEqual([]);
     expect(state.lines).toEqual([]);
+  });
+
+  test("a failed or timed-out status is never clean", () => {
+    execSync.mockImplementation(() => {
+      throw Object.assign(new Error("spawnSync git ETIMEDOUT"), { code: "ETIMEDOUT" });
+    });
+    const state = dirtyState();
+    expect(state.dirty).toBe(true);
+    expect(state.error).toMatch(/ETIMEDOUT/);
   });
 
   test("modified and untracked files (-z format)", () => {
@@ -186,12 +208,13 @@ describe("dirtyState", () => {
     expect(state.modified).toEqual(["new.js", "other.js"]);
   });
 
-  test("returns empty on git failure", () => {
+  test("a git failure lists nothing but says why, and counts as dirty", () => {
     execSync.mockImplementation(() => {
       throw new Error("not a git repo");
     });
     const state = dirtyState();
-    expect(state.dirty).toBe(false);
+    expect(state.dirty).toBe(true);
+    expect(state.error).toBe("not a git repo");
     expect(state.lines).toEqual([]);
   });
 });
@@ -202,12 +225,12 @@ describe("dirtyState", () => {
 
 describe("commitsAhead", () => {
   test("parses count", () => {
-    execSync.mockReturnValue("5\n");
+    routeValue("5\n");
     expect(commitsAhead("main")).toBe(5);
   });
 
   test("returns 0 on failure", () => {
-    execSync.mockImplementation(() => {
+    route(() => {
       throw new Error("fatal");
     });
     expect(commitsAhead("main")).toBe(0);
@@ -318,12 +341,12 @@ describe("getWorktreeBranches", () => {
 
 describe("branchExists", () => {
   test("returns 'local' when local ref exists", () => {
-    execSync.mockReturnValueOnce("abc1234\n"); // local verify succeeds
+    execFileSync.mockReturnValueOnce("abc1234\n"); // local verify succeeds
     expect(branchExists("feat/test")).toBe("local");
   });
 
   test("returns 'remote' when only remote ref exists", () => {
-    execSync
+    execFileSync
       .mockImplementationOnce(() => {
         throw new Error("fatal");
       }) // local fails
@@ -332,7 +355,7 @@ describe("branchExists", () => {
   });
 
   test("returns null when branch does not exist", () => {
-    execSync.mockImplementation(() => {
+    route(() => {
       throw new Error("fatal");
     });
     expect(branchExists("nonexistent")).toBeNull();
@@ -407,7 +430,7 @@ describe("syncLocalBranch", () => {
   ].join("\n");
 
   test("no-op when local base already equals origin/base", () => {
-    execSync.mockImplementation((cmd) => {
+    route((cmd) => {
       if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "aaa\n";
       if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
       return "";
@@ -416,7 +439,7 @@ describe("syncLocalBranch", () => {
   });
 
   test("warns (no force) when origin/base is missing", () => {
-    execSync.mockImplementation((cmd) => {
+    route((cmd) => {
       if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) throw new Error("bad rev");
       return "";
     });
@@ -428,7 +451,7 @@ describe("syncLocalBranch", () => {
 
   test("fast-forwards via merge --ff-only in the worktree that owns the branch", () => {
     const calls = [];
-    execSync.mockImplementation((cmd, optsArg) => {
+    route((cmd, optsArg) => {
       calls.push({ cmd, cwd: optsArg?.cwd });
       if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
       if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
@@ -446,7 +469,7 @@ describe("syncLocalBranch", () => {
 
   test("targets the OTHER worktree when base is checked out away from cwd", () => {
     const calls = [];
-    execSync.mockImplementation((cmd, optsArg) => {
+    route((cmd, optsArg) => {
       calls.push({ cmd, cwd: optsArg?.cwd });
       if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
       if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
@@ -460,7 +483,7 @@ describe("syncLocalBranch", () => {
   });
 
   test("warns instead of forcing when the checked-out branch cannot fast-forward", () => {
-    execSync.mockImplementation((cmd) => {
+    route((cmd) => {
       if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
       if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
       if (cmd.includes("worktree list --porcelain")) return wtListMainHere;
@@ -475,7 +498,7 @@ describe("syncLocalBranch", () => {
 
   test("updates the bare ref directly when no worktree owns the branch", () => {
     const calls = [];
-    execSync.mockImplementation((cmd) => {
+    route((cmd) => {
       calls.push(cmd);
       if (cmd.includes("rev-parse --verify refs/remotes/origin/main")) return "bbb\n";
       if (cmd.includes("rev-parse --verify refs/heads/main")) return "aaa\n";
@@ -485,5 +508,38 @@ describe("syncLocalBranch", () => {
     const r = syncLocalBranch("main");
     expect(r).toEqual({ updated: true, method: "fetch-refspec" });
     expect(calls.some((c) => c.includes("fetch origin main:main"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectParentBranch — the sub-branch convention (AUD-C024)
+// ---------------------------------------------------------------------------
+
+describe("detectParentBranch", () => {
+  /** Local branches that exist; rev-parse --verify fails for anything else. */
+  const withBranches = (names) => route((cmd) => {
+    const m = cmd.match(/rev-parse --verify refs\/heads\/(\S+)/);
+    if (m && names.includes(m[1])) return "abc\n";
+    throw new Error("fatal: Needed a single revision");
+  });
+
+  test("<parent>-<role> finds its parent", () => {
+    withBranches(["claude/audit-x"]);
+    expect(detectParentBranch("claude/audit-x-core")).toEqual({ parent: "claude/audit-x", source: "local" });
+  });
+
+  test("a dash suffix that is no agent role is never a sub-branch", () => {
+    withBranches(["feat/login"]);
+    expect(detectParentBranch("feat/login-v2")).toBeNull();
+  });
+
+  test("a role suffix without an existing parent is no sub-branch either", () => {
+    withBranches([]);
+    expect(detectParentBranch("feat/login-core")).toBeNull();
+  });
+
+  test("the legacy <parent>/<role> form still resolves", () => {
+    withBranches(["feat/42"]);
+    expect(detectParentBranch("feat/42/core")).toEqual({ parent: "feat/42", source: "local" });
   });
 });

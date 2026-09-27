@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module runtime-ignores
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description The one list of PROJECT-rooted `.claude/` paths git must never
  *   see: Claude Code's own session state, everything this plugin writes into a
@@ -48,8 +48,16 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/batch-mode.json',
   '.claude/batch-watchdog.lock',
   '.claude/batch.md',
+  // AUD-C023: archived collections (batch-state archiveNotes) and the
+  // web-guide's active flag (scripts/guide-active-state.js).
+  '.claude/batch-*.md',
+  '.claude/auto-guide-active.json',
   '.claude/strict-mode.json',
   '.claude/run-contract.json',
+  // AUD-016: the store's siblings of the header — the `.lock` mutex, its
+  // `.lock.stale-<pid>-<rand>` takeover leftovers, the quarantined
+  // `.corrupt-<ts>-<pid>-<rand>` copies and the `.corrupt.pending` marker.
+  '.claude/run-contract.json.*',
   '.claude/run-contract.events.jsonl',
   '.claude/run-contract.prev.json',
   '.claude/run-contract.pending',

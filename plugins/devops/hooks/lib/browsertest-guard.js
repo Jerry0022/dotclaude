@@ -1,6 +1,6 @@
 /**
  * @module browsertest-guard
- * @version 0.7.0
+ * @version 0.8.2
  * @description Pure decision logic for the Light-verification enforcement gate
  *   (the "V" in the V&V gate). Split out of stop.flow.browsertest.js so the
  *   rules can be unit-tested without mocking stdin or temp files.
@@ -339,9 +339,9 @@ function isLightVerification(profileClass, toolName, command) {
 // ---------------------------------------------------------------------------
 
 // The Bash tool_response carries no exit code, so a run's outcome is usually
-// read from its text alone. Conservative on purpose: anything not matching
-// stays a pass, so a green run we cannot parse is never falsely blocked. Only
-// obvious red runs are caught.
+// read from its text alone. Only obvious red runs are caught, so a green run
+// is never falsely blocked; text with no verdict at all (a runner that crashed
+// before its summary) is 'unknown' — it neither verifies nor reddens (AUD-015).
 //
 // Runners colour that text even when it is captured (vitest does under a
 // colour TERM). The escape codes would push a ✓ or a FAIL off the line start
@@ -353,7 +353,8 @@ const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
 // of it, TAP prints `ok N`. The title after it is free text — "must not fail"
 // names what the test guards, it is no verdict — so these lines are dropped
 // before any signal is read.
-const PASSING_TEST_LINE_RE = /^\s*(?:[✓✔√]|ok\s+\d+\b)/;
+// go test -v prints `--- PASS: TestX (0.00s)` / `--- SKIP: TestX` the same way.
+const PASSING_TEST_LINE_RE = /^\s*(?:[✓✔√]|ok\s+\d+\b|---\s+(?:PASS|SKIP):\s)/;
 // A runner's own failure count, red whatever else the output says. Only a
 // non-zero count matches, so "0 failed" or "ℹ fail 0" needs no excuse:
 //   vitest `Tests  1 failed | 56 passed`   jest `Tests: 1 failed, 56 passed`
@@ -363,18 +364,47 @@ const PASSING_TEST_LINE_RE = /^\s*(?:[✓✔√]|ok\s+\d+\b)/;
 //   unittest `failures=1` — but not `expected failures=1`: those passed
 const FAIL_COUNT_RE =
   /\b[1-9]\d*\s+(?:failed|failing|failures?)\b|^\s*[ℹ#]\s+fail(?:ed)?\s+[1-9]|(?<!expected )\bfailures=[1-9]/im;
+// The same count written `Label: N`, case-sensitive in each runner's own casing:
+//   maven/surefire `Tests run: 5, Failures: 1, Errors: 0`
+//   dotnet legacy `Failed!  - Failed:     1, Passed: 2`   dotnet 8+ `Test summary: total: 3, failed: 1`
+const COLON_FAIL_COUNT_RE = /\b(?:Failures|Errors|Failed):\s*[1-9]|\bTest summary:.*\bfailed:\s*[1-9]/m;
+/** @param {string} s @returns {boolean} a non-zero failure count in s */
+function hasFailCount(s) {
+  return FAIL_COUNT_RE.test(s) || COLON_FAIL_COUNT_RE.test(s);
+}
 // A runner's own red marker at the start of a line: vitest/jest `FAIL  x.test.js`,
 // go `FAIL pkg` / `--- FAIL: TestX`, unittest `FAIL: test_x` / `FAILED (failures=1)`,
-// pytest `FAILED t.py::t`, phpunit `FAILURES!`. Case-sensitive: runners print
-// the capitals, the lowercase word is prose.
-const FAIL_MARKER_RE = /^\s*(?:(?:---\s+)?FAIL(?:ED)?\b|FAILURES!)/m;
+// pytest `FAILED t.py::t`, phpunit `FAILURES!`, gradle `FAILURE: Build failed`,
+// maven `[INFO] BUILD FAILURE`, gradle `BUILD FAILED in 3s`. Case-sensitive:
+// runners print the capitals, the lowercase word is prose.
+const FAIL_MARKER_RE = /^\s*(?:(?:---\s+)?FAIL(?:ED)?\b|FAILURES!|FAILURE:|(?:\[[A-Z]+\]\s+)?BUILD FAIL(?:URE|ED)\b)/m;
 // A runner summary with passed counts. With one present and no failure count
 // or marker, the summary decides: the run passed.
-const PASS_SUMMARY_RE = /\b\d+\s+(?:passed|passing)\b|^\s*[ℹ#]\s+pass\s+\d+|\bOK \(\d+ tests?\b/m;
+const PASS_SUMMARY_RE = /\b\d+\s+(?:passed|passing)\b|^\s*[ℹ#]\s+pass\s+\d+|\bOK \(\d+ tests?\b|(?<!expected )\bfailures=0\b/m;
 // Loose failure signals, read only when no summary decides — a test title or a
 // log line may contain them too: a ✗/✖ result glyph, an AssertionError, a
 // capital FAIL inside a line.
 const LOOSE_FAIL_RE = /✗|✖|\bAssertionError\b|\bFAIL\b/;
+// A runner's own summary line — when the text carries one, failure counts are
+// read from these lines only (AUD-015). One anchored form per runner family:
+//   vitest/jest `Tests  1 failed | 2 passed` / `Test Files …` / `Tests: …`
+//   node:test `ℹ fail 1`, TAP `# fail 1`   mocha `  1 failing`
+//   pytest `=== 1 failed, 2 passed in 0.1s ===` or -q `1 failed, 2 passed in 0.1s`
+//   rspec `5 examples, 1 failure`   cargo `test result: FAILED. …`
+//   dotnet `Failed! - Failed: 1` / 8+ `Test summary: total: 3, failed: 0, …`
+//   unittest `Ran 5 tests in 0.01s`, `OK`, `OK (skipped=1)`, `FAILED (failures=1)`
+//   go `ok  \tpkg\t0.01s` / `ok  \tpkg\t(cached)`, a bare `PASS` / `FAIL`
+//   maven `[INFO] Tests run: 5, Failures: 0, …`, `[INFO] BUILD SUCCESS`
+//   gradle `BUILD SUCCESSFUL in 3s`, `5 tests completed, 1 failed`
+const SUMMARY_LINE_RE =
+  /^\s*Tests?(?:\s+Files)?:?\s+\d+\s+(?:passed|failed|skipped|todo|total)\b|^\s*[ℹ#]\s+(?:tests|pass|fail(?:ed)?|suites)\s+\d+|^\s*\d+\s+(?:passing|failing|pending)\b|^\s*=+\s.*\b\d+\s+(?:passed|failed|errors?)\b.*=+\s*$|^\s*\d+\s+(?:passed|failed|errors?)\b(?:,\s*\d+\s+\w+)*\s+in\s+[\d.]+\s*s|^\s*\d+\s+examples?,\s+\d+\s+failures?\b|^\s*test result:\s|\b(?:Passed|Failed)!\s+-\s+Failed:\s+\d+|^\s*(?:OK|FAILED)\s+\(|^\s*OK\s*$|^\s*Ran\s+\d+\s+tests?\s+in\s|^\s*Test summary:\s+total:\s*\d+|^ok\s+\S+\s+(?:[\d.]+m?s\b|\(cached\))|^(?:PASS|FAIL)\s*$|^\s*(?:\[[A-Z]+\]\s+)?Tests run:\s*\d+,\s+Failures:\s*\d+|^\s*(?:\[[A-Z]+\]\s+)?BUILD (?:SUCCESS(?:FUL)?|FAILURE|FAILED)\b|^\s*\d+\s+tests?\s+completed,\s+\d+\s+failed\b/;
+// Where a runner echoes a test's own log output: vitest `stdout | file > test`
+// / `stderr | …`, jest a bare `console.log` header. The block runs to the next
+// blank line; what a test logs there is no verdict.
+const CONSOLE_BLOCK_START_RE = /^\s*(?:stdout|stderr)\s+\|\s|^\s*console\.(?:log|info|warn|error|debug|trace)\s*$/;
+// A failure the package manager reports when the runner printed no summary.
+const EXPLICIT_FAIL_RE =
+  /^\s*npm (?:ERR!|error) (?:Test failed|code ELIFECYCLE|Lifecycle script [`'"]?test)|^\s*ERR_PNPM_\w+|^\s*error Command failed with exit code [1-9]/m;
 
 // Did a test runner actually RUN? A command string that matches TEST_RUNNER_RE
 // only says the runner was named; a chain like `python patch.py && npm test`
@@ -386,6 +416,14 @@ const LOOSE_FAIL_RE = /✗|✖|\bAssertionError\b|\bFAIL\b/;
 //   mocha      N passing / N failing / N pending    go test      ok|FAIL|---
 //   cargo      test result:                          dotnet       Passed!|Failed!
 //   phpunit    OK (N tests / Tests: N               rspec        N examples
+//   unittest   Ran N tests in                        dotnet 8+    Test summary: total:
+//   maven      Tests run: N / BUILD SUCCESS|FAILURE  gradle       BUILD SUCCESSFUL|FAILED, N tests completed
+//   go         a bare PASS / FAIL line
+// The unittest / dotnet 8+ / maven / gradle / go-bare forms are matched
+// case-sensitively: "Build failed" from a build step or a stray "pass" line is
+// no runner summary, and must keep a dead chain at #409's `unknown`.
+const RUNNER_OUTPUT_CS_RE =
+  /^\s*Ran\s+\d+\s+tests?\s+in\s|\bTest summary:\s+total:\s*\d+|^\s*(?:\[[A-Z]+\]\s+)?Tests run:\s*\d+,|^\s*(?:\[[A-Z]+\]\s+)?BUILD (?:SUCCESS(?:FUL)?|FAILURE|FAILED)\b|^\s*\d+\s+tests?\s+completed,|^(?:PASS|FAIL)\s*$/m;
 const RUNNER_OUTPUT_RE =
   /ℹ\s+(?:tests|pass|fail|suites)\s+\d+|\bTests?(?:\s+Files)?:?\s+\d+\s+(?:passed|failed|skipped|total)|\bTests?\s+\d+\s+(?:passed|failed)\b|^(?:ok|not ok)\s+\d+|^1\.\.\d+\s*$|\b\d+\s+(?:passed|failed|errors?|skipped)\b|\b\d+\s+(?:passing|failing|pending)\b|^(?:ok|FAIL|---\s+(?:PASS|FAIL))\s+\S|\btest result:\s+(?:ok|FAILED)\b|\b(?:Passed|Failed)!\s+-\s+Failed:\s+\d+|\bOK \(\d+ tests?\b|\b\d+ examples?,\s+\d+ failures?\b/im;
 
@@ -397,7 +435,8 @@ const RUNNER_OUTPUT_RE =
  */
 function hasRunnerOutput(text) {
   if (!text) return false;
-  return RUNNER_OUTPUT_RE.test(String(text).replace(ANSI_RE, ''));
+  const s = String(text).replace(ANSI_RE, '');
+  return RUNNER_OUTPUT_CS_RE.test(s) || RUNNER_OUTPUT_RE.test(s);
 }
 
 /**
@@ -433,24 +472,65 @@ function normalizeToolResponse(toolResponse) {
   return { text, exitCode, interrupted };
 }
 
+/** @param {string[]} lines @returns {string[]} lines outside console blocks */
+function dropConsoleBlocks(lines) {
+  const out = [];
+  let inBlock = false;
+  for (const line of lines) {
+    if (CONSOLE_BLOCK_START_RE.test(line)) { inBlock = true; continue; }
+    if (inBlock) {
+      if (line.trim() === '') inBlock = false;
+      continue;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
 /**
- * Outcome read from a run's text alone. A runner's own failure count or red
- * marker is 'fail'. Otherwise a summary with passed counts decides: the run is
- * green even when a passing test's title or a log line says "fail". Only
- * without such a summary do the loose signals (✗, AssertionError, …) decide.
+ * Verdict read from a run's text alone, or 'none' when it carries none. A
+ * runner's red marker is 'fail'. When the text carries a runner's own summary
+ * line, only those lines count: a non-zero failure count on one is 'fail',
+ * else 'pass' — a passing test's title or a logged "1 failed attempt" is no
+ * verdict (AUD-015). Without a recognised summary line a failure count
+ * anywhere, then a passed-count summary, then the loose signals (✗,
+ * AssertionError, …) and package-manager failure lines (`npm ERR! Test
+ * failed`) decide. With no red signal, text that shows the runner ran (a
+ * passing test's line, a runner's own output line) is 'pass'; text that
+ * shows no runner at all — a crash before anything ran, an empty response —
+ * is 'none'.
+ * @param {string} text — normalized tool_response text
+ * @returns {'pass'|'fail'|'none'}
+ */
+function verdictFromText(text) {
+  if (!text) return 'none';
+  const all = String(text).replace(ANSI_RE, '').split(/\r\n|\r|\n/);
+  const lines = dropConsoleBlocks(all.filter(line => !PASSING_TEST_LINE_RE.test(line)));
+  // A passing test's own line (✓ title, TAP `ok 5`) shows the runner ran.
+  const sawPassingTest = lines.length < all.length && all.some(line => PASSING_TEST_LINE_RE.test(line));
+  const body = lines.join('\n');
+  if (FAIL_MARKER_RE.test(body)) return 'fail';
+  const summaryLines = lines.filter(line => SUMMARY_LINE_RE.test(line));
+  if (summaryLines.length > 0) {
+    return summaryLines.some(hasFailCount) ? 'fail' : 'pass';
+  }
+  if (hasFailCount(body)) return 'fail';
+  if (PASS_SUMMARY_RE.test(body)) return 'pass';
+  if (LOOSE_FAIL_RE.test(body) || EXPLICIT_FAIL_RE.test(body)) return 'fail';
+  // The runner ran (a passing test's line, a runner's own output line) and
+  // nothing above says red: a pass. Only text showing no runner at all — a
+  // crash before anything ran, an empty response — carries no verdict.
+  return sawPassingTest || RUNNER_OUTPUT_CS_RE.test(body) || RUNNER_OUTPUT_RE.test(body) ? 'pass' : 'none';
+}
+
+/**
+ * Outcome read from a run's text alone, for a run whose exit code said it
+ * ended cleanly (a background task that exited 0): no verdict stays a pass.
  * @param {string} text — normalized tool_response text
  * @returns {'pass'|'fail'}
  */
 function outcomeFromText(text) {
-  if (!text) return 'pass';
-  const body = String(text)
-    .replace(ANSI_RE, '')
-    .split(/\r\n|\r|\n/)
-    .filter(line => !PASSING_TEST_LINE_RE.test(line))
-    .join('\n');
-  if (FAIL_COUNT_RE.test(body) || FAIL_MARKER_RE.test(body)) return 'fail';
-  if (PASS_SUMMARY_RE.test(body)) return 'pass';
-  return LOOSE_FAIL_RE.test(body) ? 'fail' : 'pass';
+  return verdictFromText(text) === 'fail' ? 'fail' : 'pass';
 }
 
 /**
@@ -461,8 +541,8 @@ function outcomeFromText(text) {
  * summary is 'unknown' (#409): the command named a runner but died before it
  * — `python patch.py && npm test` failing in patch.py — and neither verifies
  * nor reddens the session. Without an exit code (the Bash tool reports none)
- * the text decides — see outcomeFromText. Everything else → 'pass', so a
- * green run we cannot parse is never falsely blocked.
+ * the text decides — see verdictFromText; text with no verdict in it is
+ * 'unknown', never a pass (AUD-015).
  *
  * A run the harness put in the background — launched with run_in_background,
  * or moved there when it outlived its timeout (#530) — is 'unknown' too: its
@@ -481,7 +561,10 @@ function testRunOutcome(toolResponse) {
     return 'unknown';
   }
   if (interrupted) return 'fail';
-  return outcomeFromText(text);
+  // No exit code (the Bash tool reports none): text without any verdict — a
+  // runner that crashed before its summary — verifies nothing (AUD-015).
+  const verdict = verdictFromText(text);
+  return verdict === 'none' ? 'unknown' : verdict;
 }
 
 // ---------------------------------------------------------------------------

@@ -601,3 +601,19 @@ describe("--render-card CLI — V&V while a background test run is in flight", (
     expect(out).not.toContain("ungeprüft");
   });
 });
+
+describe("AUD-010 — CLI path sanitises the session id before any file write", () => {
+  test("a traversal session id writes no flag outside tmpdir", async () => {
+    const escaped = `w3-cli-escape-${RUN}`;
+    await renderCard({
+      variant: "analysis",
+      summary: "Traversal-Probe",
+      lang: "en",
+      session_id: `w3-3/../../${escaped}`,
+      changes: [{ area: "Card", description: "session id sanitised" }],
+    });
+    // The unsanitised join resolved one level ABOVE tmpdir.
+    expect(existsSync(join(tmpdir(), "..", escaped))).toBe(false);
+    expect(existsSync(join(tmpdir(), escaped))).toBe(false);
+  });
+});

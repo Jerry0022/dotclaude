@@ -11,7 +11,8 @@ vi.mock("zod", () => {
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
   NETWORK_TIMEOUT: 60_000,
-  gitStrict: vi.fn(() => ""),
+  gitArgs: vi.fn(() => ""),
+  gitTry: vi.fn(),
   isWorktree: vi.fn(() => false),
   getWorktreeBranches: vi.fn(() => new Set()),
 }));
@@ -33,7 +34,7 @@ vi.mock("../lib/repo-mode.js", () => ({
 }));
 
 import { handler } from "./cleanup.js";
-import { git, gitStrict, isWorktree, getWorktreeBranches } from "../lib/git.js";
+import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 
@@ -45,6 +46,8 @@ beforeEach(() => {
   isWorktree.mockReturnValue(false);
   getWorktreeBranches.mockReturnValue(new Set());
   dirtySessionWorktrees.mockReturnValue([]);
+  // branch/base-interpolating reads use the argv form; route them to the same fake
+  gitTry.mockImplementation((args, o) => git(args.join(" "), o));
   // On base branch already, no remote branch left → minimal happy path.
   git.mockImplementation((cmd) => {
     if (cmd.includes("rev-parse --abbrev-ref HEAD")) return "main";
@@ -85,7 +88,7 @@ describe("ship_cleanup — session-worktree final-gate invariant", () => {
     // current === base ("main"), so the legacy checkout path is skipped — the
     // unconditional sync must still fast-forward local main to origin/main.
     await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
-    expect(gitStrict).toHaveBeenCalledWith("pull --ff-only origin main", expect.objectContaining({ cwd: CWD }));
+    expect(gitArgs).toHaveBeenCalledWith(["pull", "--ff-only", "origin", "main"], expect.objectContaining({ cwd: CWD }));
   });
 
   test("local main sync: warns when local base stays behind origin after sync", async () => {
@@ -110,7 +113,7 @@ describe("repo-mode gate", () => {
     expect(result.reason).toBe("git-probe-timeout");
     expect(result.cleaned).toEqual([]);
     expect(result.error).toMatch(/ETIMEDOUT/);
-    expect(gitStrict).not.toHaveBeenCalled();
+    expect(gitArgs).not.toHaveBeenCalled();
   });
 
   test("file-only mode: refuses every destructive git call, still clears the sentinel", async () => {
@@ -122,7 +125,7 @@ describe("repo-mode gate", () => {
     expect(result.reason).toBe("file-only-mode");
     expect(result.cleaned).toEqual(["sentinel"]);
     // The pre-fix behaviour was a raw `fatal: not a git repository` from these.
-    expect(gitStrict).not.toHaveBeenCalled();
+    expect(gitArgs).not.toHaveBeenCalled();
   });
 
   test("foreign repo root: refuses rather than operating on the ancestor's repo", async () => {
@@ -134,7 +137,7 @@ describe("repo-mode gate", () => {
     expect(result.reason).toBe("foreign-repo-root");
     // This is the destructive case: `checkout <base>` + `pull --ff-only origin
     // <base>` used to run against a repository the user never targeted.
-    expect(gitStrict).not.toHaveBeenCalled();
+    expect(gitArgs).not.toHaveBeenCalled();
     expect(result.warnings.some((w) => /does not own/i.test(w))).toBe(true);
   });
 
@@ -142,5 +145,24 @@ describe("repo-mode gate", () => {
     detectRepoMode.mockReturnValue("git");
     const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
     expect(result.skipped).toBeUndefined();
+  });
+});
+
+describe("ship_cleanup — branch names never reach a shell (AUD-C014)", () => {
+  test("a legal branch with cmd.exe metacharacters is passed as one argv element", async () => {
+    const evil = "feat/x&whoami";
+    git.mockImplementation((cmd) => {
+      if (cmd.includes("rev-parse --abbrev-ref HEAD")) return "main";
+      if (cmd.includes("ls-remote")) return `abc	refs/heads/${evil}`;
+      return "";
+    });
+    const result = await handler({ branch: evil, base: "main", cwd: CWD, keep: false });
+    expect(result.success).toBe(true);
+    expect(gitArgs).toHaveBeenCalledWith(["branch", "-D", evil], expect.anything());
+    expect(gitArgs).toHaveBeenCalledWith(["push", "origin", "--delete", evil], expect.anything());
+    expect(gitTry).toHaveBeenCalledWith(["ls-remote", "--heads", "origin", evil], expect.anything());
+    // no shell-string git call carries the branch name
+    expect(git.mock.calls.filter((c) => !gitTry.mock.calls.some((t) => t[0].join(" ") === c[0]))
+      .some((c) => String(c[0]).includes(evil))).toBe(false);
   });
 });

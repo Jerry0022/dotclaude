@@ -16,7 +16,7 @@ vi.mock("node:fs", () => ({
   readdirSync: vi.fn(() => []),
 }));
 
-import { handler } from "./build.js";
+import { handler, latestCacheVersion } from "./build.js";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -192,5 +192,17 @@ describe("ship_build — README roster generator (stale MCP server regression)",
     expect(calls).toHaveLength(1);
     expect(calls[0]).toContain(`"${BUNDLED_GEN}" "${SRC}"`);
     expect(res.warnings).toEqual([]);
+  });
+});
+
+describe("latestCacheVersion (AUD-C047)", () => {
+  test("numeric semver order, not lexicographic", () => {
+    expect(latestCacheVersion(["0.183.9", "0.183.12", "0.99.40"])).toBe("0.183.12");
+    expect(latestCacheVersion(["0.9.0", "0.10.0"])).toBe("0.10.0");
+  });
+  test("non-semver names only when nothing else exists", () => {
+    expect(latestCacheVersion(["zzz-temp", "0.2.0"])).toBe("0.2.0");
+    expect(latestCacheVersion(["b", "a"])).toBe("b");
+    expect(latestCacheVersion([])).toBeNull();
   });
 });

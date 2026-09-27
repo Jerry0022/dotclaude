@@ -149,3 +149,29 @@ describe("check-claude-artifacts — runtime state is anchored at the repo root"
     fs.rmSync(fake, { recursive: true, force: true });
   });
 });
+
+describe("AUD-C023 — the scan sees relative and template-named artifacts", () => {
+  test("a relative .claude join and a claudeDir template name are found and must be covered", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "cca-"));
+    try {
+      fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
+      fs.writeFileSync(path.join(root, "scripts", "w.js"),
+        "const REL = path.join('.claude', 'flag-x.json');\n" +
+        "const d = path.join(claudeDir(cwd), `arch-${stamp}.md`);\n");
+      const found = scanArtifacts(root);
+      expect(found.has("flag-x.json")).toBe(true);
+      expect(found.has("arch-*.md")).toBe(true);
+      expect(isCovered("arch-*.md", ["arch-*.md"])).toBe(true);
+      expect(isCovered("arch-*.md", ["batch.md"])).toBe(false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("the real tree: archived collections and the guide flag are seen and covered", () => {
+    const found = scanArtifacts(PLUGIN_ROOT);
+    expect(found.has("batch-*.md")).toBe(true);
+    expect(found.has("auto-guide-active.json")).toBe(true);
+    const covered = readCoveredEntries(LIST);
+    expect(isCovered("batch-*.md", covered)).toBe(true);
+    expect(isCovered("auto-guide-active.json", covered)).toBe(true);
+  });
+});

@@ -343,6 +343,9 @@ export function watchPRChecks(prNumber, opts, {
     return { kind: "checks", checks };
   }
 
+  // timeoutSec bounds the WHOLE call: the no-checks grace wait below is
+  // deducted from the --watch ceiling, or a ship could wait ~2x (AUD-C045).
+  const startedAt = now();
   let probe = probeOnce();
   if (probe.kind === "probe-error") {
     return { status: "probe-error", error: probe.error };
@@ -382,6 +385,7 @@ export function watchPRChecks(prNumber, opts, {
   }
 
   // Block on gh's own --watch loop. Wrap with our own timeout to bound it hard.
+  const watchTimeoutMs = Math.max(1_000, timeoutSec * 1000 - Math.max(0, now() - startedAt));
   let watchErr = null;
   try {
     execFileSync(
@@ -390,7 +394,7 @@ export function watchPRChecks(prNumber, opts, {
       {
         cwd: opts?.cwd || process.cwd(),
         encoding: "utf8",
-        timeout: timeoutSec * 1000,
+        timeout: watchTimeoutMs,
         stdio: ["pipe", "pipe", "pipe"],
       },
     );

@@ -1,6 +1,6 @@
 /**
  * @module batch-state
- * @version 0.6.0
+ * @version 0.7.0
  * @description State and classification for the `/do-batch` collect mode.
  *
  * Collect mode batches user prompts into `.claude/batch.md` instead of acting
@@ -78,6 +78,13 @@ const MACHINE_PATTERNS = [
   /^\s*AUTONOMOUS_AUTOSTART\s*:/i,
   /^\s*AUTONOMOUS_RESUME\s*:/i,
   /^\s*RUN_BACKLOG_AUTOSTART\s*:/i,
+  // Copies of prompt.flow.silent-turn's SCHEDULED_TASK_PATTERN and
+  // MACHINE_TURN_PATTERN (parity test in batch-state.test.js). Without them a
+  // background agent's completion notice was collected as a note — blocked,
+  // so the session never learned the agent finished — and with the mode off a
+  // notice quoting "/do-batch …" drew the activation guard (AUD-051).
+  /^\s*<scheduled-task\b/i,
+  /^\s*\[SYSTEM NOTIFICATION|<task-notification>|<channel\s+source=/i,
 ];
 
 /**
@@ -323,7 +330,9 @@ function readNotes(cwd) {
   let raw;
   try { raw = fs.readFileSync(notesPath(cwd), 'utf8').replace(/\r\n?/g, '\n'); } catch { return []; }
   const out = [];
-  const re = /<!--\s*(\S+?)\s*-->\n([\s\S]*?)(?=\n<!--\s*\S+?\s*-->\n|$)/g;
+  // The separator is a DATE stamp, not any one-word comment: a note quoting
+  // `<!-- todo -->` on its own line used to split into two notes (AUD-C056).
+  const re = /<!--\s*(\d{4}-\d{2}-\d{2}T[^\s>]*?)\s*-->\n([\s\S]*?)(?=\n<!--\s*\d{4}-\d{2}-\d{2}T[^\s>]*?\s*-->\n|$)/g;
   for (const m of raw.matchAll(re)) {
     const text = m[2].trim();
     if (text) out.push({ at: m[1], text });
@@ -539,12 +548,29 @@ function pruneAssets(cwd, { maxAgeDays = ASSET_MAX_AGE_DAYS, now = Date.now() } 
   try { names = fs.readdirSync(dir); } catch { return []; }
   const cutoff = now - maxAgeDays * 86_400_000;
   const removed = [];
+  // AUD-C031: an image a note still names — in the live queue or in any
+  // archived collection — is never old enough to go. An archive is the record
+  // of what was asked for; its "[Anhang-Datei]" line must keep resolving.
+  let referenced = null;
+  const isReferenced = (name) => {
+    if (referenced === null) {
+      referenced = '';
+      try {
+        for (const f of fs.readdirSync(claudeDir(cwd))) {
+          if (f === 'batch.md' || /^batch-.+\.md$/.test(f)) {
+            try { referenced += fs.readFileSync(path.join(claudeDir(cwd), f), 'utf8'); } catch { /* unreadable */ }
+          }
+        }
+      } catch { /* no .claude dir */ }
+    }
+    return referenced.includes(name);
+  };
   for (const name of names) {
     if (name === 'captured.json' || !IMAGE_EXT.test(name)) continue;
     const file = path.join(dir, name);
     try {
       const st = fs.lstatSync(file);
-      if (st.isFile() && st.mtimeMs < cutoff) { fs.unlinkSync(file); removed.push(file); }
+      if (st.isFile() && st.mtimeMs < cutoff && !isReferenced(name)) { fs.unlinkSync(file); removed.push(file); }
     } catch { /* vanished */ }
   }
   if (removed.length) {
@@ -977,6 +1003,9 @@ function classify({ text, hookInput, marker, modeActive }) {
   if (parseOpenUrlPrompt(text)) return 'passthrough';
   const inv = parseBatchCommand(text);
   if (inv) {
+    // `/do-batch go` fires the SAME merge as the marker (AUD-C027): late image
+    // matching, the main sync and the hand-off gate all live in the hook.
+    if (inv.route === 'go' && !hasAttachment(text, hookInput)) return 'execute';
     if (modeActive && REARM_ROUTES.has(inv.route) && !hasAttachment(text, hookInput)) return 'rearm';
     return 'passthrough';
   }

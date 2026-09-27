@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.4.0
+ * @version 0.4.1
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
@@ -42,9 +42,12 @@ const DEFAULT_UI_BASENAME_PATTERNS = [/\.styled\./i, /\.component\./i];
 
 // Never UI: dependencies and Claude's own config. Concept pages are NOT
 // excluded — the rules apply to them like to any other page.
+// `.claude/worktrees/<name>/` is the container every Desktop session works
+// in, not config: a `.claude/` segment followed by `worktrees/<name>/` does
+// not exclude, while a worktree's own `.claude/…` still does.
 const HARD_EXCLUDE_PATTERNS = [
   /(^|\/)node_modules\//,
-  /(^|\/)\.claude\//,
+  /(^|\/)\.claude\/(?!worktrees\/[^/]+\/)/,
 ];
 // Plugin source docs are not UI by default; an override `files:` glob that
 // names one (the plugin's own concept templates, say) opts it back in.

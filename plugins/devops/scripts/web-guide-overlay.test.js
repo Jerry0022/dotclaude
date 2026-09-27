@@ -14,7 +14,23 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // copy[], checklist[], heartbeat, sessionStorage-persisted queue, FAB icon).
 // Raised again from 34 KB for #529 (pendingWaiter staleness tracking) and
 // #516 (the "Guide ausblenden" edge tab + its docking logic).
-const MAX_BYTES = 37 * 1024;
+// Raised from 37 KB for the audit fixes (AUD-C007 frozen global + channel
+// token, AUD-C008 same-step re-send, AUD-C036 panel keys, AUD-C037 secret-free
+// queue, AUD-C063/C064 clipboard + labels).
+// Raised from 46 KB for Finding 7 (native-captured JSON.stringify/Object.create/
+// defineProperty, Object.create(null)-built events, tokened destroy(), exposed
+// stringify()).
+// Raised from 48.5 KB for the harden pass (state styles, focus hand-off after
+// collapse, a live-region status line, labelled choice options).
+// Raised from 49.5 KB for the polish pass (hover only under (hover:hover),
+// dark hover/tertiary colours, Escape dismissing an open tooltip first, a
+// same-step re-send that re-arms a delivered step).
+// Raised from 52 KB for the robustness pass (#530): Trusted-Types-safe DOM
+// building (no innerHTML), field/help-box/sent-state preservation across a
+// re-render, FAB-relative clamped panel positioning, adoptedStyleSheets CSP
+// fallback, and the two new heartbeat/status texts. The injected payload is
+// the lean form (comments and indentation stripped) — about two thirds of this.
+const MAX_BYTES = 64 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -79,6 +95,12 @@ function makeElement(tag) {
       if (!opts || opts.mode !== "closed") this.shadowRoot = sr;
       return sr;
     },
+    // Trusted-Types-safe clearing/replacement, used instead of innerHTML.
+    replaceChildren(...nodes) {
+      this.children.forEach((c) => { c.parentNode = null; });
+      this.children = [];
+      nodes.forEach((n) => this.appendChild(n));
+    },
   };
   Object.defineProperty(el, "innerHTML", {
     get() { return this._html; },
@@ -89,6 +111,11 @@ function makeElement(tag) {
     set(v) { this._text = v; },
   });
   return el;
+}
+
+// A minimal text node — enough for appendFormatted()'s createTextNode() calls.
+function makeTextNode(value) {
+  return { nodeType: 3, textContent: String(value), parentNode: null, children: [] };
 }
 
 function childrenOf(el) {
@@ -122,6 +149,8 @@ function makeSandbox({ setTimeoutFn, clearTimeoutFn } = {}) {
   const document = {
     documentElement,
     createElement: makeElement,
+    createElementNS: (_ns, tag) => makeElement(tag),
+    createTextNode: makeTextNode,
     addEventListener(type, fn) { (docListeners[type] = docListeners[type] || []).push(fn); },
     removeEventListener(type, fn) {
       const arr = docListeners[type];
@@ -194,9 +223,9 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.9.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.9.0["']/);
-    expect(SRC).toMatch(/window.claudeGuide\s*=/);
+  test("defines VERSION 1.13.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.13.0["']/);
+    expect(SRC).toMatch(/defineProperty\(window, "claudeGuide"/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
     expect(SRC).toMatch(/state\s*:/);
@@ -226,7 +255,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.9.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.13.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -243,7 +272,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.9.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.13.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -258,7 +287,10 @@ describe("web-guide-overlay — execution", () => {
     expect(host.shadowRoot).toBeFalsy(); // closed: not publicly reachable
   });
 
-  test("escapes HTML and applies only bold/code/br marks", () => {
+  // Fix 1 (Trusted Types): **bold**/`code`/newline formatting is built from
+  // text + element nodes, never an innerHTML string — no HTML injection is
+  // possible and no escaping step is needed.
+  test("renders bold/code/br as real nodes, never as an HTML string", () => {
     run(sandbox);
     sandbox.window.claudeGuide.setStep({
       id: "1",
@@ -268,14 +300,14 @@ describe("web-guide-overlay — execution", () => {
       text: "<script>alert(1)</script> **bold** `code` line1\nline2",
     });
     const host = getHost(sandbox);
-    const texts = findAll(host, (e) => e._html && e._html.indexOf("bold") !== -1);
-    expect(texts.length).toBeGreaterThan(0);
-    const html = texts[0]._html;
-    expect(html).not.toContain("<script>");
-    expect(html).toContain("&lt;script&gt;");
-    expect(html).toContain("<b>bold</b>");
-    expect(html).toContain("<code>code</code>");
-    expect(html).toContain("line1<br>line2");
+    const bold = findAll(host, (e) => e.tagName === "B" && e._text === "bold")[0];
+    const code = findAll(host, (e) => e.tagName === "CODE" && e._text === "code")[0];
+    const br = findAll(host, (e) => e.tagName === "BR");
+    expect(bold).toBeTruthy();
+    expect(code).toBeTruthy();
+    expect(br.length).toBeGreaterThan(0);
+    const raw = findAll(host, (e) => e.nodeType === 3 && String(e.textContent).indexOf("<script>") !== -1);
+    expect(raw.length).toBeGreaterThan(0); // literal text node, never parsed as markup
   });
 
   test("wait() delivers a queued event before waiting for a new one", async () => {
@@ -445,7 +477,7 @@ describe("web-guide-overlay — execution", () => {
   // queued (and now sessionStorage-backed), so the UI stays disabled — no
   // false invitation to resubmit — but the label distinguishes "Claude simply
   // isn't polling right now" from a lost event.
-  test("shows the heartbeat message after 10s without a poll, without re-enabling buttons", async () => {
+  test("shows the heartbeat message after 45s without a poll, without re-enabling buttons", async () => {
     vi.useFakeTimers();
     try {
       const sb = makeSandbox({
@@ -458,10 +490,60 @@ describe("web-guide-overlay — execution", () => {
       const primary = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0];
       primary.click();
       expect(primary.disabled).toBe(true);
-      await vi.advanceTimersByTimeAsync(13000); // past a 2s heartbeat tick beyond the 10s stale mark
+      await vi.advanceTimersByTimeAsync(47000); // past a 2s heartbeat tick beyond the 45s stale mark
       expect(primary.disabled).toBe(true);
       const label = findAll(host, (e) => e._text === "Claude hört gerade nicht zu — schreib im Chat „weiter“.")[0];
       expect(label).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #530 Fix 8: a click that reached Claude (delivered, not queued) and gets
+  // no new setStep/wait for 90s switches to a distinct "braucht länger"
+  // message — never the "not listening" one, which only concerns an
+  // undelivered click.
+  test("shows the 'braucht länger' message 90s after a delivered click with no follow-up wait()", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      const pending = sb.window.claudeGuide.wait(30000); // Claude is listening
+      findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0].click();
+      expect((await pending).type).toBe("next"); // delivered — Claude has it now
+      await vi.advanceTimersByTimeAsync(93000); // past a 2s heartbeat tick beyond the 90s stale mark
+      const label = findAll(host, (e) => /braucht länger/.test(e._text || ""))[0];
+      expect(label).toBeTruthy();
+      expect(findAll(host, (e) => /hört gerade nicht zu/.test(e._text || ""))[0]).toBeFalsy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // AUD-C038: a click delivered to a live wait() means Claude has it and is
+  // working — never "Claude hört gerade nicht zu", however long that takes.
+  test("no 'not listening' message after an event reached a live wait()", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      const pending = sb.window.claudeGuide.wait(30000);
+      await vi.advanceTimersByTimeAsync(20000); // a normal long-poll, 20 s in
+      findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0].click();
+      expect((await pending).type).toBe("next");
+      await vi.advanceTimersByTimeAsync(30000); // Claude authors the next step
+      expect(findAll(host, (e) => e._text === "Gesendet – Claude prüft den Schritt …")[0]).toBeTruthy();
+      expect(findAll(host, (e) => /hört gerade nicht zu/.test(e._text || ""))[0]).toBeFalsy();
     } finally {
       vi.useRealTimers();
     }
@@ -483,7 +565,7 @@ describe("web-guide-overlay — execution", () => {
       primary.click();
       await sb.window.claudeGuide.wait(1000); // resolves immediately from the queue, still a poll
       await vi.advanceTimersByTimeAsync(2000);
-      const label = findAll(host, (e) => e._text === "Warte auf Claude…")[0];
+      const label = findAll(host, (e) => e._text === "Gesendet – Claude prüft den Schritt …")[0];
       expect(label).toBeTruthy();
     } finally {
       vi.useRealTimers();
@@ -509,12 +591,14 @@ describe("web-guide-overlay — execution", () => {
     expect(sb2.window.claudeGuide.state().queued).toBe(1);
   });
 
-  // #513: the FAB carries a visible glyph, not just the step badge.
+  // #513: the FAB carries a visible glyph, not just the step badge. Fix 1:
+  // built with createElementNS, never an innerHTML SVG string.
   test("the FAB has an icon glyph, not an empty circle", () => {
     run(sandbox);
     const host = getHost(sandbox);
-    const icon = findAll(host, (e) => e._html && e._html.indexOf("<svg") !== -1)[0];
-    expect(icon).toBeTruthy();
+    const svg = findAll(host, (e) => e.tagName === "SVG")[0];
+    expect(svg).toBeTruthy();
+    expect(findAll(host, (e) => e.tagName === "CIRCLE").length).toBe(1);
   });
 
   // Fix 5 / #529: a new wait() call supersedes an older, still-registered
@@ -639,8 +723,8 @@ describe("web-guide-overlay — execution", () => {
   });
 
   // #514: location block, copy chips, checklist.
-  test("renders a location block, copy chips with a working clipboard button, and a checklist", () => {
-    sandbox.navigator.clipboard.writeText = vi.fn();
+  test("renders a location block, copy chips with a working clipboard button, and a checklist", async () => {
+    sandbox.navigator.clipboard.writeText = vi.fn(() => Promise.resolve());
     run(sandbox);
     sandbox.window.claudeGuide.setStep({
       id: "1", index: 1, total: 1, title: "T", text: "go",
@@ -658,6 +742,7 @@ describe("web-guide-overlay — execution", () => {
     const copyBtn = findAll(host, (e) => e.tagName === "BUTTON" && e._text.indexOf("Kopieren") !== -1)[0];
     copyBtn.click();
     expect(sandbox.navigator.clipboard.writeText).toHaveBeenCalledWith("web-guide-test");
+    await Promise.resolve();
     expect(copyBtn.textContent).toBe("Kopiert!");
 
     const checklistItems = findAll(host, (e) => e.tagName === "LI");
@@ -823,7 +908,8 @@ describe("web-guide-overlay — execution", () => {
 
     sandbox.window.claudeGuide.destroy();
 
-    expect(sandbox.window.claudeGuide).toBeUndefined();
+    // AUD-C007: the global is non-configurable now — destroy() unmounts it.
+    expect(sandbox.window.claudeGuide.state().destroyed).toBe(true);
     expect(getHost(sandbox)).toBeUndefined();
     expect(sandbox.window._listenerCount("resize", false)).toBe(0);
     expect(sandbox.window._listenerCount("keydown", true)).toBe(0);

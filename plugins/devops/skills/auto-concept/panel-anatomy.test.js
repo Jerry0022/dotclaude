@@ -799,7 +799,9 @@ describe("panel anatomy — status line behaviour (reference JS on jsdom)", () =
     expect(p.document.getElementById("connection-status").dataset.state).toBe("connected");
     expect(p.status()).toBe("submitted");
     expect(btn.disabled, "button handling is skipped while submitted").toBe(true);
-    expect(p.window.retried, "the retry stays behind the early return").toBe(0);
+    // AUD-020: the queued payload of an offline submit is what keeps this very
+    // panel up — the retry must run BEFORE the early return, or it never lands.
+    expect(p.window.retried, "the retry runs ahead of the early return").toBe(1);
     // …and a stale heartbeat is reflected there too, not frozen at submit time
     // (a FRESH sample carrying a stale claude_ts, confirmed on a second check).
     p.window._lastHeartbeatTs = Date.now() - 10 * 60 * 1000;

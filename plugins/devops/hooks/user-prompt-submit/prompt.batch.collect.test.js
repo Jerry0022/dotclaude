@@ -190,7 +190,10 @@ describe("mode on — firing the merge", () => {
     const r = runHook({ prompt: ">> leg los" });
     expect(r.stdout).toContain("Sag dem Nutzer NICHT, es gebe keine Notizen");
     expect(r.stdout).toContain("Lies die Datei roh");
-    expect(isModeActive(cwd)).toBe(true);
+    // AUD-C029: the turn merges the raw file — collection ends, so its
+    // follow-up is not swallowed as a note.
+    expect(r.stdout).toContain("Sammelmodus ist mit diesem Prompt BEENDET");
+    expect(isModeActive(cwd)).toBe(false);
   });
 
   test("a marker prompt carrying an image still fires the merge", () => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.29.2
+ * @version 0.29.5
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -77,36 +77,61 @@
  *   reads use lib/git-timeout.js's gitRun (harden scan 2026-09-26).
  */
 
-require('../lib/plugin-guard');
-
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
-const { projectRoot, inOwnWorkTree } = require('../lib/project-root');
-const { gitRun } = require('../lib/git-timeout');
-const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
-const { NO_OUTPUT_NUDGE_REPLY } = require('../lib/card-guard');
-const { getLocale, t } = require('../lib/locale');
-const { responseLaunch, responseTaskId, labelFor, isConceptInfra } = require('../lib/pending-tasks');
-const { BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = require('../lib/light-bgrun');
-const { SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = require('../lib/task-chips');
-const {
-  decideCardTurnEnd,
-  blockedLines: cardTurnBlockedLines,
-  STOP_REASON: CARD_STOP_REASON,
-} = require('../lib/card-turn-end');
-const { isGuideActive } = require('../../scripts/guide-active-state');
-const {
-  classifyProfile,
-  carveOutsFromProfile,
-  domPathsFromProfile,
-  resolveVerificationKind,
-  isCodeChange,
-  isBrowserTool,
-  isTestRunnerTool,
-  testRunOutcome,
-} = require('../lib/browsertest-guard');
+// AUD-028: these sibling lib requires sat unguarded at module scope, outside
+// runHook's try — a half-written lib during a plugin update made EVERY
+// PostToolUse call error. Guarded the way post.agent.nudge.js does it: a load
+// error makes main() a silent no-op, same as every other failure path.
+let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, gitRun,
+  isMcpServerAlive, NO_OUTPUT_NUDGE_REPLY, getLocale, t,
+  responseLaunch, responseTaskId, labelFor, isConceptInfra,
+  BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns,
+  SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder,
+  decideCardTurnEnd, cardTurnBlockedLines, CARD_STOP_REASON, isGuideActive,
+  classifyProfile, carveOutsFromProfile, domPathsFromProfile, resolveVerificationKind,
+  isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome;
+let loadError = false;
+let loadingModule = '';
+const guardedRequire = (m) => { loadingModule = m; return require(m); };
+try {
+  // plugin-guard loads project-root itself — inside the guard, like the pre/prompt hooks.
+  guardedRequire('../lib/plugin-guard');
+  ({ sessionFile, readSessionFile, writeSessionFile } = guardedRequire('../lib/session-id'));
+  ({ projectRoot, inOwnWorkTree } = guardedRequire('../lib/project-root'));
+  ({ gitRun } = guardedRequire('../lib/git-timeout'));
+  ({ isMcpServerAlive } = guardedRequire('../lib/mcp-heartbeat'));
+  ({ NO_OUTPUT_NUDGE_REPLY } = guardedRequire('../lib/card-guard'));
+  ({ getLocale, t } = guardedRequire('../lib/locale'));
+  ({ responseLaunch, responseTaskId, labelFor, isConceptInfra } = guardedRequire('../lib/pending-tasks'));
+  ({ BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = guardedRequire('../lib/light-bgrun'));
+  ({ SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder } = guardedRequire('../lib/task-chips'));
+  ({
+    decideCardTurnEnd,
+    blockedLines: cardTurnBlockedLines,
+    STOP_REASON: CARD_STOP_REASON,
+  } = guardedRequire('../lib/card-turn-end'));
+  ({ isGuideActive } = guardedRequire('../../scripts/guide-active-state'));
+  ({
+    classifyProfile,
+    carveOutsFromProfile,
+    domPathsFromProfile,
+    resolveVerificationKind,
+    isCodeChange,
+    isBrowserTool,
+    isTestRunnerTool,
+    testRunOutcome,
+  } = guardedRequire('../lib/browsertest-guard'));
+} catch (err) {
+  loadError = true;
+  // AUD-068: still a no-op, but one stderr line names the failed module, so a
+  // persistent load error (half-copied cache, bad merge) leaves a trace.
+  try {
+    const first = String((err && err.message) || err || 'unknown error').split('\n')[0];
+    process.stderr.write(`[post.flow.completion] lib load failed (${loadingModule || '?'}), hook inactive: ${first}\n`);
+  } catch { /* stderr closed */ }
+}
 
 // Offline card renderer — the same module that backs the MCP tool, invoked as a
 // CLI. Named in the reminder so a session whose MCP servers never connected
@@ -237,6 +262,17 @@ const CARD_FLAG_PREFIXES = [
 ];
 
 /**
+ * The session key the completion MCP writes card flags under. Twin of
+ * mcp-server/lib/card-widget.js#safeSessionId (ESM, not requirable from a
+ * hook) — keep both rules identical.
+ * @param {unknown} id
+ * @returns {string}
+ */
+function safeCardSessionId(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : 'unknown';
+}
+
+/**
  * Move the card flags the MCP just wrote under the model-supplied key onto
  * this session's real id. The MCP only knows what the model passes — and the
  * model passes `"self"` (the ccd_session convention), the Desktop
@@ -251,8 +287,11 @@ function adoptCardFlags(hook) {
   const realId = hook.session_id;
   if (!realId) return 0;
   const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
-  const given = typeof input.session_id === 'string' && input.session_id ? input.session_id : 'unknown';
-  if (given === realId || /[\\/]|\.\./.test(given)) return 0;
+  // AUD-065: the MCP wrote the flags under the SANITISED id — mirror it, or
+  // "self.x" was looked up under its raw name while the flag sat under
+  // "-unknown". The rule also keeps path characters out of the source path.
+  const given = safeCardSessionId(input.session_id);
+  if (given === realId) return 0;
   let moved = 0;
   for (const prefix of CARD_FLAG_PREFIXES) {
     const from = sessionFile(prefix, given);
@@ -679,13 +718,21 @@ function completionCardLines(hook, toolName, isCodeEdit, editCount, scheduledTas
   return { lines, cardContract };
 }
 
+/** 2a. Holds where an orchestrator has work after the card (card-turn-end holdReason). */
+const ORCHESTRATOR_HOLDS = new Set(['autonomous-lockout', 'ship-queue', 'autonomous-run']);
+const ORCHESTRATOR_HOLD_LINE =
+  "[devops] Card shown — continue with the orchestrator's next step; no recap of the card.";
+
 /**
  * 2a. The card widget ends the turn itself (lib/card-turn-end.js): the
  * plugin's Stop hooks run here, and when none of them blocks, `continue:
  * false` stops the loop before another model call — nothing can land under
  * the card, and the app's no-output nudge never comes. A blocking Stop hook
- * hands Claude its reason instead; an orchestrator working past its cards
- * keeps the old reminder.
+ * hands Claude its reason instead. An orchestrator hold (an autonomous run,
+ * its lockout, a ship queue) keeps the turn because the orchestrator has
+ * work after this card — Claude is told to go on with it, not to end the
+ * response (AUD-019). Every other hold (opt-out, budget, spawn failure, no
+ * Stop hooks) keeps the "turn is over" reminder.
  * @returns {string|{context: string}|null} the hook's whole reply
  */
 function cardWidgetReply(hook) {
@@ -693,6 +740,7 @@ function cardWidgetReply(hook) {
   try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
   if (end.end) return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
   if (end.reason) return contextOf(cardTurnBlockedLines(end));
+  if (ORCHESTRATOR_HOLDS.has(end.hold)) return contextOf([ORCHESTRATOR_HOLD_LINE]);
   return contextOf([
     '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
     'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
@@ -931,6 +979,7 @@ function appendIssueStatusInstruction(hook, lines, cardContract) {
  * @returns {string|{context: string}|null}
  */
 function main(hook) {
+  if (loadError) return null;
   if (isSilentTurn(hook)) return null;
 
   // Subagent call: hooks fire for it with the PARENT's session_id, and all

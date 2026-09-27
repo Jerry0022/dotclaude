@@ -402,6 +402,9 @@ async function submitWithAction(action) {
     showSubmitWarning('{{panel.submit_collect_failed}}: ' + ((e && e.message) || e));
     return;
   }
+  // The offline queue's replay guard (§ Offline Submit Queue): a round the
+  // bridge stored before its answer was lost must not be POSTed a second time.
+  if (typeof newSubmissionId === 'function') data.submission_id = newSubmissionId();
   const container = document.getElementById('concept-decisions');
   container.textContent = JSON.stringify(data);
   // design template only: the feedback dock is a single overlay shared by
@@ -462,8 +465,10 @@ async function submitWithAction(action) {
       showSubmitWarning('{{panel.submit_queued_offline}}');
     } else {
       // The bridge answered but could not persist (disk full, store gone).
-      // Nothing retries this on its own, so do NOT leave a "sent" panel
-      // standing over it: hand control back and say why.
+      // The heartbeat retry keeps offering the local copy, but nothing says
+      // when the store recovers — so do NOT leave a "sent" panel standing
+      // over it: hand control back and say why (a later delivery veils the
+      // round again, _pendingDelivered()).
       restorePanelToReady();
       showSubmitWarning('{{panel.submit_not_durable}}');
     }
@@ -485,9 +490,10 @@ wireSubmit('submit-implement-btn', 'implement');
 // onto the NEXT round must come back ready. But a manual reload while Claude
 // is still working on THIS round used to drop the sent state with it — the
 // grey veil over the content was gone and the submit buttons were live again
-// over a round already in flight. So ask the bridge (and, offline, the local
-// queue) whether a payload for the live round is still pending, and if so put
-// the round back exactly as submitWithAction() left it. The veil is then
+// over a round already in flight. So ask the bridge (and, ONLY when the bridge
+// cannot be reached, the local queue) whether a payload for the live round is
+// still pending, and if so put the round back exactly as submitWithAction()
+// left it. The veil is then
 // click/Escape-dismissable as always — only a reload brings it back.
 // A payload without `iteration` (a page generated before it carried one) is
 // never restored: it cannot be told apart from the previous round's payload,
@@ -498,11 +504,18 @@ async function restoreInFlightRound() {
   if (!live || live.hasAttribute('data-final-report')) return;
   if (_submittedAt || _submitInFlight) return;
   let data = null;
+  let bridgeThrew = false;
   try {
     const res = await fetch('/decisions', { cache: 'no-store' });
     if (res.ok) data = await res.json();
-  } catch (e) { /* bridge unreachable — the local queue below still knows */ }
-  if (!(data && data.submitted === true)) {
+  } catch (e) { bridgeThrew = true; }
+  // The local queue speaks only for an UNREACHABLE bridge. A bridge that
+  // answers and reports nothing pending is the truth: a `-pending` copy next
+  // to it is a payload that never arrived (or one already processed), and
+  // veiling the round over it promised "Claude arbeitet" for a round Claude
+  // never received. retryPendingSubmission() delivers that copy on the next
+  // connected heartbeat instead.
+  if (bridgeThrew) {
     try { data = JSON.parse(localStorage.getItem(STORAGE_KEY + '-pending') || 'null'); }
     catch (e) { data = null; }
   }
@@ -1555,37 +1568,72 @@ if (document.readyState === 'loading') {
 }
 
 // --- Offline Submit Queue ---
+// Runs on EVERY connected heartbeat — also while the submitted panel is up,
+// because that is exactly when an offline submit sits queued. So it must be
+// idempotent: one retry at a time (a slow POST outlives the 5 s heartbeat),
+// and never alongside submitWithAction()'s own POST of the same payload.
+let _pendingRetryInFlight = false;
 async function retryPendingSubmission() {
+  if (_pendingRetryInFlight || _submitInFlight) return;
   const pendingKey = STORAGE_KEY + '-pending';
   const pending = localStorage.getItem(pendingKey);
   if (!pending) return;
-  // Did this exact payload already land? `fetch` can throw after the bridge
-  // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
-  // that is already being processed. Re-POSTing a finalize that way runs its
-  // side effects — issue creation, a real release, file deletion — a second
-  // time. Payloads without a submission_id (iterate/implement, legacy pages)
-  // keep the old unconditional-retry behaviour.
+  _pendingRetryInFlight = true;
+  try { await _deliverPending(pendingKey, pending); }
+  finally { _pendingRetryInFlight = false; }
+  // Images that never made it up get another attempt on the same trigger.
+  if (typeof restoreAttachments === 'function') restoreAttachments();
+}
+// A bridge that accepts the connection and never answers must not hold the
+// retry forever: _pendingRetryInFlight is released only when this settles, so
+// every later heartbeat would skip the queued payload until a reload. One
+// deadline covers the whole attempt, body reads included.
+const PENDING_RETRY_TIMEOUT_MS = 15000;
+async function _deliverPending(pendingKey, pending) {
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), PENDING_RETRY_TIMEOUT_MS) : null;
+  const signal = ctl ? ctl.signal : undefined;
   try {
-    const id = JSON.parse(pending).submission_id;
-    if (id) {
-      const cur = await fetch('/decisions', { cache: 'no-store' });
-      const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
-      if (seen.submission_id === id) { localStorage.removeItem(pendingKey); return; }
-    }
-  } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
-  try {
+    // Did this exact payload already land? `fetch` can throw after the bridge
+    // has fsynced (tab closed, Wi-Fi drop mid-response), which queues a payload
+    // that is already being processed. Re-POSTing a finalize that way runs its
+    // side effects — issue creation, a real release, file deletion — a second
+    // time, and an iterate/implement round twice. Every payload carries a
+    // submission_id (submitWithAction, submitFinalize); only a payload from a
+    // page generated before that keeps the old unconditional retry.
+    try {
+      const id = JSON.parse(pending).submission_id;
+      if (id) {
+        const cur = await fetch('/decisions', { cache: 'no-store', signal });
+        const seen = cur.ok ? await cur.json().catch(() => ({})) : {};
+        if (seen.submission_id === id) { _pendingDelivered(pendingKey); return; }
+      }
+    } catch (e) { /* unparseable or bridge unreachable — fall through and retry */ }
     const res = await fetch('/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: pending
+      body: pending,
+      signal
     });
     const body = res.ok ? await res.json().catch(() => ({})) : {};
     // Drop the local copy ONLY once the bridge confirms it reached disk.
-    // `res.ok` alone is not that confirmation — see submitWithAction.
-    if (res.ok && body.durable !== false) localStorage.removeItem(pendingKey);
-  } catch (e) { /* still offline */ }
-  // Images that never made it up get another attempt on the same trigger.
-  if (typeof restoreAttachments === 'function') restoreAttachments();
+    // `res.ok` alone is not that confirmation — see submitWithAction — and
+    // neither is a body the deadline cut off.
+    if (res.ok && body.durable !== false && !(signal && signal.aborted)) _pendingDelivered(pendingKey);
+  } catch (e) { /* still offline, or the deadline hit */ }
+  finally { if (timer) clearTimeout(timer); }
+}
+// The queued round reached the bridge: drop the local copy, retire the
+// "bridge unreachable, will retry" note (only the attachments note can still
+// hold), and veil the round again — a reload while it sat in the queue came
+// back unveiled, because the bridge had nothing yet (restoreInFlightRound
+// does nothing while the round is already shown as sent).
+function _pendingDelivered(pendingKey) {
+  localStorage.removeItem(pendingKey);
+  if (typeof clearSubmitWarning === 'function') clearSubmitWarning();
+  if (typeof unsyncedAttachmentCount === 'function' && unsyncedAttachmentCount() > 0
+      && typeof showSubmitWarning === 'function') showSubmitWarning('{{panel.attachments_not_synced}}');
+  if (typeof restoreInFlightRound === 'function') restoreInFlightRound();
 }
 ```
 

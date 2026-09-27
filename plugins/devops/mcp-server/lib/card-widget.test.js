@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
@@ -16,6 +16,7 @@ import {
   NO_OUTPUT_NUDGE_REPLY,
   OPEN_URL_PREFIX,
   isLoopbackHttpUrl,
+  safeSessionId,
 } from "./card-widget.js";
 
 const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
@@ -519,7 +520,7 @@ describe("cardWidgetHtml", () => {
     expect(html).not.toMatch(/\stitle="/);
     expect(html).toContain('data-tip="npm test · 41s"');
     expect(html, "the bar names its value only in the tip → Label tier")
-      .toContain('class="card-budget" data-tip="40% verbraucht" data-tip-tier="label"');
+      .toContain('class="card-budget" tabindex="0" role="img" aria-label="5h: 40% verbraucht" data-tip="40% verbraucht" data-tip-tier="label"');
     expect(html).toContain("var TIP = { info: 1500, label: 500 }, SKIP = 300;");
     expect(html, "drawn from the host tokens").toMatch(/\.card-tip\{[^}]*var\(--surface-popover/);
     expect(html, "absolute inside the card, never fixed").not.toMatch(/\.card-tip\{[^}]*position:fixed/);
@@ -841,5 +842,71 @@ describe("writeCardWidgetFile (#451)", () => {
 
   test("a failed write returns '' instead of throwing", () => {
     expect(writeCardWidgetFile(baseModel(), "", "s", join(tmp(), "missing", "dir"), desktop)).toBe("");
+  });
+
+  // AUD-010: a session id with a path in it wrote the widget outside the dir.
+  test("AUD-010: a traversal session id never leaves the dir — it maps to 'unknown'", () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "inner"));
+    const file = writeCardWidgetFile(baseModel(), "", "x/../../w3-escape", join(dir, "inner"), desktop);
+    expect(file).toBe(join(dir, "inner", `${WIDGET_FILE_PREFIX}-unknown`).split(String.fromCharCode(92)).join("/"));
+    expect(existsSync(join(dir, "w3-escape"))).toBe(false);
+  });
+});
+
+describe("safeSessionId (AUD-010)", () => {
+  test("real ids pass unchanged: harness UUID, self, Desktop local_<uuid>", () => {
+    for (const id of ["3f2a9c1e-0b4d-4a33-8ae3-7bdac9359d4c", "self", "local_3f2a9c1e-0b4d-4a33-8ae3-7bdac9359d4c", "w3-1"]) {
+      expect(safeSessionId(id)).toBe(id);
+    }
+  });
+
+  test("anything else maps to 'unknown'", () => {
+    for (const id of ["../x", "a/b", `a${String.fromCharCode(92)}b`, "..", "a.b", "", " ", "x".repeat(129), null, undefined, 42, {}, `a${String.fromCharCode(10)}b`]) {
+      expect(safeSessionId(id)).toBe("unknown");
+    }
+    expect(safeSessionId("x".repeat(128))).toBe("x".repeat(128));
+  });
+});
+
+describe("AUD-032/033/034/037 widget fixes", () => {
+  test("AUD-032: an escaped apostrophe is never taken for a PR number", () => {
+    const html = cardWidgetHtml(baseModel({ pipeline: "✓ commit · O'Brien #12 · feat/x", pipelinePr: { number: 12 } }), "https://github.com/o/r");
+    expect(html).toContain("O&#39;Brien");
+    expect(html).toContain('href="https://github.com/o/r/pull/12"');
+  });
+
+  test("AUD-032: '#12' without a PR stays '#12'", () => {
+    const html = cardWidgetHtml(baseModel({ pipeline: "✓ commit · fixes #12 · feat/x", pipelinePr: null }), "");
+    expect(html).toContain("fixes #12 · feat/x");
+    expect(html).not.toContain('class="card-pr-link"');
+  });
+
+  test("AUD-033: evidence posts with a tooltip are focusable; without one they are not", () => {
+    const html = cardWidgetHtml(baseModel({
+      evidence: [{ glyph: "✓", text: "ok", tooltip: "npm test · 41s" }, { glyph: "✓", text: "plain" }],
+    }), "");
+    expect(html).toContain('tabindex="0" data-tip="npm test · 41s"');
+    expect(html.match(/class="card-post"[^>]*>/g).filter((t) => t.includes("tabindex"))).toHaveLength(1);
+  });
+
+  test("AUD-034: stale usage data renders the expired note as a dim budget row", () => {
+    const note = "⚠ Keine aktuellen Usage-Daten — letzter Stand vor 2 h";
+    const html = cardWidgetHtml(baseModel({ budget: { omitted: false, expiredNote: note, bars: [], contextHealth: "🧠 12 Calls" } }), "");
+    const row = html.match(/<div class="card-budget-row" style="([^"]*)">(.*?)<\/div>/);
+    expect(row).not.toBeNull();
+    expect(row[1]).toContain(`color:${DIM}`);
+    expect(row[1]).toContain("font-size:13px");
+    expect(row[2]).toContain(note);
+    expect(row[2]).toContain("🧠 12 Calls");
+  });
+
+  test("AUD-037: the open-button tooltip says what Enter does, without jargon", () => {
+    const de = cardWidgetHtml(baseModel({ resultLines: ["Seite: http://localhost:5173/"] }), "");
+    expect(de).toContain("Enter öffnet sie direkt, ohne Claude — kostet keine Tokens.");
+    expect(de).not.toContain("ohne Turn");
+    const en = cardWidgetHtml(baseModel({ lang: "en", resultLines: ["Page: http://localhost:5173/"] }), "");
+    expect(en).toContain("Enter opens it directly, without Claude — costs no tokens.");
+    expect(en).not.toContain("without a turn");
   });
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script burn-plan
- * @version 0.1.0
+ * @version 0.2.2
  * @plugin devops
  * @description The deterministic core of `/do-run burn`. Everything the burn
  *   mode used to ask the model to compute or remember lives here, as code
@@ -38,11 +38,18 @@
  *   burn-plan.js gate   [--peek]
  *   burn-plan.js state  start|agent|checkpoint|land|requeue|fail|drain|pause|
  *                       finish|burn-off|resume-policy|resume-cron|integration <id?> [--k=v]
- *   (init and state integration refuse main, master and origin's default branch —
- *    unless the session itself works on that branch)
+ *   (init and state integration refuse main, master, trunk and every remote's default
+ *    branch under any spelling (Main, heads/main, refs/heads/main), the parent of a
+ *    sub-branch session, and any branch outside a git repo — unless the session
+ *    itself works on that branch)
  *   burn-plan.js resumed --trigger=manual|auto|router --choice=continue|off|end
  *   burn-plan.js resume-check [--apply] [--session=ID]
- *   burn-plan.js prune-check --branch=B [--worktree=W] [--integration=I]   (exit 1 = keep)
+ *   burn-plan.js prune-check --branch=B [--worktree=W] [--integration=I]   (exit 1 = keep;
+ *                       unknown — no branch, unreadable status, a worktree HEAD
+ *                       not in I — is keep)
+ *   gate, state, resumed, resume-check and init hold <state>.lock while they
+ *   read-modify-write the state; --lane-cap (1–16), --reserve (0–50) and
+ *   --resume-auto (continue|on|off) are validated — a bad value is an error.
  *   burn-plan.js status
  *   burn-plan.js simulate [--scenario=NAME | --all] [--text]
  *   Common: --state=<path> (default <project root>/BURN-STATE.json),
@@ -445,8 +452,13 @@ function newState({ slug, integrationBranch, plan, queue, usage, nowMs, sessionI
     },
     weekResetAt: usage.weeklyResetMin != null ? iso(nowMs + usage.weeklyResetMin * 60000) : null,
     sessionId: sessionId || null,
-    resume: { auto: resumeAuto === 'off' ? 'off' : 'continue', autoArmed: !!autoArmed, cronFor: null },
-    budgetAt: { remainingPct: usage.weeklyRemaining, sessionPct: usage.sessionUsed, checkedAt: iso(nowMs) },
+    resume: { auto: parseResumeAuto(resumeAuto), autoArmed: !!autoArmed, cronFor: null },
+    budgetAt: {
+      remainingPct: usage.weeklyRemaining,
+      sessionPct: usage.sessionUsed,
+      checkedAt: iso(nowMs),
+      ...(usage.sessionResetMin != null ? { sessionResetAt: iso(nowMs + usage.sessionResetMin * 60000) } : {}),
+    },
     readings: [],
     holds: 0,
     lastAdjustAt: null,
@@ -518,7 +530,7 @@ function landTask(state, id, { sha, pushed = true }, nowMs) {
   return s;
 }
 
-function requeueTask(state, id, { branch, note, salvage } = {}, nowMs) {
+function requeueTask(state, id, { branch, note, salvage, excluded } = {}, nowMs) {
   const s = clone(state);
   const i = findIndex(s.inFlight, id);
   if (i === -1) throw new Error(`task ${id} is not in flight`);
@@ -529,11 +541,14 @@ function requeueTask(state, id, { branch, note, salvage } = {}, nowMs) {
     ...(branch || task.branch ? { branch: branch || task.branch } : {}),
     ...(note ? { note } : {}),
     ...(salvage ? { salvage } : {}),
+    // Paths the salvage refused as secret-shaped: the requeued task starts
+    // without them, so it needs to know rather than find out silently.
+    ...(excluded && excluded.length ? { excluded } : {}),
     requeues: (task.requeues || 0) + 1,
   };
   s.queue.unshift(back);
   s.queue = sortQueue(s.queue);
-  pushEvent(s, nowMs, 'requeue', { id, branch: back.branch || null, salvage: salvage || null });
+  pushEvent(s, nowMs, 'requeue', { id, branch: back.branch || null, salvage: salvage || null, excluded: back.excluded || null });
   return s;
 }
 
@@ -581,10 +596,41 @@ function finishState(state, status, nowMs) {
   return s;
 }
 
+/**
+ * The F7 answer. `continue` / `on` → continue, `off` → off, absent → the
+ * default `continue`; anything else is an error — a typo must not silently
+ * arm an automatic burn the user switched off.
+ */
+function parseResumeAuto(value) {
+  if (value === undefined || value === null) return 'continue';
+  const v = String(value).trim().toLowerCase();
+  if (v === 'continue' || v === 'on') return 'continue';
+  if (v === 'off') return 'off';
+  throw new Error(`resume policy must be continue|on|off, got "${value}"`);
+}
+
+function parseYesNo(name, value) {
+  if (value === undefined) return undefined;
+  const v = String(value).trim().toLowerCase();
+  if (v === 'yes') return true;
+  if (v === 'no') return false;
+  throw new Error(`--${name} must be yes|no, got "${value}"`);
+}
+
+/** A numeric CLI knob: absent → fallback; present → a number in range, else an error. */
+function parseNumberOpt(name, value, fallback, { min, max, integer = false }) {
+  if (value === undefined) return fallback;
+  const n = value === true ? NaN : Number(String(value).trim() === '' ? NaN : value);
+  if (!Number.isFinite(n) || n < min || n > max || (integer && !Number.isInteger(n))) {
+    throw new Error(`--${name} must be ${integer ? 'an integer' : 'a number'} from ${min} to ${max}, got "${value}"`);
+  }
+  return n;
+}
+
 function setResumePolicy(state, { auto, autoArmed }, nowMs) {
   const s = clone(state);
   s.resume = { ...(s.resume || {}) };
-  if (auto) s.resume.auto = auto === 'off' ? 'off' : 'continue';
+  if (auto !== undefined) s.resume.auto = parseResumeAuto(auto);
   if (autoArmed !== undefined) s.resume.autoArmed = !!autoArmed;
   pushEvent(s, nowMs, 'resume-policy', { auto: s.resume.auto, autoArmed: s.resume.autoArmed });
   return s;
@@ -697,7 +743,7 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
   const spawnOut = (pick, profile, extra) => {
     if (claim) Object.assign(s, claimTask(s, pick.id, nowMs, { profile }));
     return out('spawn', {
-      task: { id: pick.id, task: pick.task, size: pick.size, priority: pick.priority, branch: pick.branch || null, note: pick.note || null, salvage: pick.salvage || null },
+      task: { id: pick.id, task: pick.task, size: pick.size, priority: pick.priority, branch: pick.branch || null, note: pick.note || null, salvage: pick.salvage || null, excluded: pick.excluded || null },
       taskProfile: profile,
       models: modelOverrides(profile),
       passes: PROFILES[profile].passes,
@@ -713,6 +759,8 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
 
   // --- usage unknown: hold, then a capped blind mode, then drain ---
   if (!usage || !usage.ok) {
+    // The week reset needs no reading: the budget being burned is gone.
+    if (s.weekResetAt && nowMs >= Date.parse(s.weekResetAt)) return drainOut('week-reset');
     s.holds = (s.holds || 0) + 1;
     pushEvent(s, nowMs, 'hold', { reason: usage && usage.reason, holds: s.holds });
     if (s.holds < HOLD_LIMIT) return out('hold', { reason: 'usage-unknown', detail: usage && usage.reason, holds: s.holds });
@@ -729,10 +777,59 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
     const allowance = BLIND_FRACTION * (known - reserveNow());
     if (s.inFlight.length >= 1) return out('wait', { reason: 'blind-lane-busy', blind: true });
     const left = allowance - BLIND_SAFETY * s.blind.estSpentPct;
-    const pick = s.queue.find((t) => !conflicts(t) && BLIND_SAFETY * taskCost(t.size, taskProfile(t, runProfile), cal) <= left);
-    if (!pick) return drainOut('usage-unknown');
+    const fitsBlindBudget = (t) => BLIND_SAFETY * taskCost(t.size, taskProfile(t, runProfile), cal) <= left;
+    // The 5-hour window from the last reading: until its known reset the
+    // window is the same one, and a task that would overrun it waits for
+    // the reset exactly like a sighted gate would.
+    const lastWin = s.budgetAt && typeof s.budgetAt.sessionPct === 'number' ? s.budgetAt.sessionPct : null;
+    const checkedMs = s.budgetAt && s.budgetAt.checkedAt ? Date.parse(s.budgetAt.checkedAt) : NaN;
+    const winResetMs = s.budgetAt && s.budgetAt.sessionResetAt
+      ? Date.parse(s.budgetAt.sessionResetAt)
+      : (Number.isFinite(checkedMs) ? checkedMs + 5 * 3600000 : NaN);
+    const sameWindow = lastWin !== null && !(nowMs >= winResetMs);
+    // Running total of every blind task's projected window spend since the
+    // last good reading (or since the window itself rolled over while still
+    // blind): without it, several blind tasks each fit alone but together
+    // overrun the 5-hour cap. The reset happens exactly once per window
+    // (tracked by windowResetAt, keyed on winResetMs) — winResetMs itself
+    // stays fixed for as long as the run is blind (budgetAt does not move
+    // until a sighted reading lands), so re-deriving "is this a new window"
+    // from sameWindow alone would otherwise zero the total on every call
+    // after the reset instead of accumulating within it.
+    if (!sameWindow) {
+      if (s.blind.windowResetAt !== winResetMs) {
+        s.blind.windowSpentPct = 0;
+        s.blind.windowResetAt = winResetMs;
+      } else {
+        s.blind.windowSpentPct = s.blind.windowSpentPct || 0;
+      }
+    } else {
+      s.blind.windowSpentPct = s.blind.windowSpentPct || 0;
+    }
+    const { rate: blindRate } = sessionRatePerLane(s, s.profile, cal);
+    // Same-window baseline is the last known session %; past a reset the
+    // window is unread (blind), so it starts from 0 and windowSpentPct alone
+    // tracks what has been spent in it since.
+    const winBase = sameWindow ? lastWin : 0;
+    const fitsBlindWindow = (t) => winBase + s.blind.windowSpentPct < FRESH_WINDOW_PCT
+      || winBase + s.blind.windowSpentPct + BLIND_SAFETY * blindRate * taskHours(t.size, taskProfile(t, runProfile), cal) <= 100 - SESSION_RESERVE_PCT;
+    const pick = s.queue.find((t) => !conflicts(t) && fitsBlindBudget(t) && fitsBlindWindow(t));
+    if (!pick) {
+      if (sameWindow && s.queue.some(fitsBlindBudget) && Number.isFinite(winResetMs)) {
+        const resumeAtMs = winResetMs + RESUME_BUFFER_MIN * 60000;
+        const armed = !!(s.resume && s.resume.autoArmed);
+        Object.assign(s, pauseState(s, { reason: 'window', resumeAtMs }, nowMs));
+        return out('pause', {
+          reason: 'window', blind: true, windowUsedPct: lastWin,
+          resumeAt: iso(resumeAtMs), resumeAtLocal: localStamp(resumeAtMs),
+          resumeCron: armed ? toCronExpression(resumeAtMs) : null,
+        });
+      }
+      return drainOut('usage-unknown');
+    }
     const profile = taskProfile(pick, runProfile);
     s.blind.estSpentPct = round2(s.blind.estSpentPct + taskCost(pick.size, profile, cal));
+    s.blind.windowSpentPct = round2(s.blind.windowSpentPct + BLIND_SAFETY * blindRate * taskHours(pick.size, profile, cal));
     return spawnOut(pick, profile, { blind: true, blindLeftPct: round1(left) });
   }
   s.holds = 0;
@@ -740,7 +837,12 @@ function gate(state, usage, nowMs, calibration, { claim = true } = {}) {
     pushEvent(s, nowMs, 'blind-end', { estSpentPct: s.blind.estSpentPct });
     delete s.blind;
   }
-  s.budgetAt = { remainingPct: usage.weeklyRemaining, sessionPct: usage.sessionUsed, checkedAt: iso(nowMs) };
+  s.budgetAt = {
+    remainingPct: usage.weeklyRemaining,
+    sessionPct: usage.sessionUsed,
+    checkedAt: iso(nowMs),
+    ...(usage.sessionResetMin != null ? { sessionResetAt: iso(nowMs + usage.sessionResetMin * 60000) } : {}),
+  };
   s.readings = [...(s.readings || []), {
     at: iso(nowMs), weeklyRemaining: usage.weeklyRemaining, sessionUsed: usage.sessionUsed, lanesBusy: s.inFlight.length,
   }].slice(-MAX_READINGS);
@@ -931,31 +1033,74 @@ function recordCalibration(calibration, plan, sample) {
 // Git checks — resume-check and prune-check
 // ---------------------------------------------------------------------------
 
-function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+/**
+ * Every git call is bounded: a hung credential helper, a locked index or a
+ * slow hook must not freeze the conveyor, and a big diff must not die with
+ * ENOBUFS at Node's 1 MiB default buffer.
+ */
+const GIT_TIMEOUT_MS = 30_000;
+const GIT_COMMIT_TIMEOUT_MS = 120_000; // commit runs the repo's hooks
+const GIT_MAX_BUFFER = 64 * 1024 * 1024;
+
+function git(cwd, args, { timeout = GIT_TIMEOUT_MS } = {}) {
+  return execFileSync('git', args, {
+    cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout, maxBuffer: GIT_MAX_BUFFER, windowsHide: true,
+  }).trim();
 }
 
-function tryGit(cwd, args) {
-  try { return git(cwd, args); } catch { return null; }
+function tryGit(cwd, args, opts) {
+  try { return git(cwd, args, opts); } catch { return null; }
 }
 
 /**
- * `main`, `master` and the remote's default branch. While the session works
- * on a feature / worktree branch they are reached only through /do-ship —
- * never by a checkpoint, a salvage or the conveyor's merge + push. When the
- * session itself works on one of them (no feature branch, by necessity), that
- * branch IS the session branch and may be written (`mayWrite`).
+ * A branch name as the user or a state file wrote it, reduced to its short
+ * form: `refs/heads/main`, `heads/main` and `main` are one branch.
+ */
+function shortBranch(branch) {
+  return String(branch || '').trim().replace(/^refs\/heads\//, '').replace(/^heads\//, '');
+}
+
+/**
+ * Do two branch names name the same ref? On Windows (and any repo with
+ * core.ignorecase) loose refs live on a case-insensitive filesystem, so
+ * "Main" resolves to — and writes — main.
+ */
+function sameBranch(repo, a, b) {
+  const x = shortBranch(a);
+  const y = shortBranch(b);
+  if (x === y) return true;
+  const icase = process.platform === 'win32'
+    || (repo && tryGit(repo, ['config', '--get', 'core.ignorecase']) === 'true');
+  return icase && x.toLowerCase() === y.toLowerCase();
+}
+
+/**
+ * `main`, `master`, `trunk`, the configured init default and every remote's
+ * default branch (read offline from `refs/remotes/<remote>/HEAD`). While the
+ * session works on a feature / worktree branch they are reached only through
+ * /do-ship — never by a checkpoint, a salvage or the conveyor's merge + push.
+ * When the session itself works on one of them (no feature branch, by
+ * necessity), that branch IS the session branch and may be written (`mayWrite`).
  */
 function protectedBranches(repo) {
-  const names = new Set(['main', 'master']);
-  const head = repo ? tryGit(repo, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']) : null;
-  if (head) names.add(head.replace(/^origin\//, ''));
+  const names = new Set(['main', 'master', 'trunk']);
+  if (!repo) return names;
+  const init = tryGit(repo, ['config', '--get', 'init.defaultBranch']);
+  if (init) names.add(shortBranch(init));
+  const heads = tryGit(repo, ['for-each-ref', '--format=%(refname) %(symref)', 'refs/remotes']);
+  for (const line of (heads || '').split(/\r?\n/)) {
+    const [ref, target] = line.trim().split(' ');
+    const m = ref && target && ref.match(/^refs\/remotes\/([^/]+)\/HEAD$/);
+    if (m && target.startsWith(`refs/remotes/${m[1]}/`)) names.add(target.slice(`refs/remotes/${m[1]}/`.length));
+  }
   return names;
 }
 
+/** Protected under any spelling: case variants and ref prefixes included. */
 function isProtectedBranch(repo, branch) {
   if (!branch) return false;
-  return protectedBranches(repo).has(String(branch).replace(/^refs\/heads\//, ''));
+  const b = shortBranch(branch).toLowerCase();
+  return [...protectedBranches(repo)].some((p) => p.toLowerCase() === b);
 }
 
 /** The branch the session's own worktree is on; null outside git or detached. */
@@ -965,12 +1110,24 @@ function sessionBranch(dir) {
 }
 
 /**
- * May the burn write to `branch`? Any non-protected branch; a protected one
- * only when the session itself works on it — never above the session branch.
+ * May the burn write to `branch`? Never outside a git repo (no repo, no
+ * commits) and never above the session branch: not a protected branch the
+ * session does not itself work on, and not the parent of a sub-branch
+ * session (`<parent>-<role>` or `<parent>/<role>` → `<parent>`). Any other
+ * branch may be written.
  */
 function mayWrite(sessionDir, branch) {
-  if (!isProtectedBranch(sessionDir, branch)) return true;
-  return sessionBranch(sessionDir) === String(branch).replace(/^refs\/heads\//, '');
+  if (!branch || !shortBranch(branch)) return false;
+  if (!sessionDir || tryGit(sessionDir, ['rev-parse', '--git-dir']) === null) return false;
+  const session = sessionBranch(sessionDir);
+  if (session && sameBranch(sessionDir, session, branch)) return true;
+  if (isProtectedBranch(sessionDir, branch)) return false;
+  if (session) {
+    const s = shortBranch(session).toLowerCase();
+    const b = shortBranch(branch).toLowerCase();
+    if (s.startsWith(`${b}-`) || s.startsWith(`${b}/`)) return false;
+  }
+  return true;
 }
 
 function branchExists(repo, branch) {
@@ -1036,34 +1193,98 @@ function classifyInFlight(info, { sessionId } = {}) {
  * (commit-conventions.md § Rules).
  */
 const SALVAGE_EXCLUDES = [
-  '.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', 'id_ed25519*',
-  'credentials.json', '*.credentials', 'secrets.*',
+  '.env', '.env.*', '*.env', '*.pem', '*.key', '*.p12', '*.pfx', '*.jks', '*.keystore', '*.ppk',
+  '*.tfvars', '*.tfvars.json', 'id_rsa*', 'id_dsa*', 'id_ecdsa*', 'id_ed25519*',
+  'credentials', 'credentials.json', '*.credentials', '*service-account*.json', 'secrets.*',
+  '.git-credentials', '.netrc', '_netrc', '.npmrc', '.pypirc', 'token.txt', '*.token',
 ];
+
+/** Basename glob (`*` only) → case-insensitive RegExp. */
+const SALVAGE_EXCLUDE_RES = SALVAGE_EXCLUDES.map((p) => new RegExp(
+  `^${p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`, 'i',
+));
+
+/** Would the salvage refuse to commit this repo-relative path? */
+function isSalvageSecret(rel) {
+  const base = String(rel).split(/[\\/]/).pop();
+  return SALVAGE_EXCLUDE_RES.some((re) => re.test(base));
+}
+
+const firstLine = (err) => String((err && (err.stderr || err.message)) || err).trim().split('\n')[0];
+
+function stagedPaths(worktree) {
+  const out = git(worktree, ['diff', '--cached', '--name-only', '--no-renames', '-z']);
+  return out.split('\0').filter(Boolean);
+}
+
+/** Every changed path in the worktree (tracked + untracked), git-ignored ones aside. */
+function dirtyPaths(worktree) {
+  const tracked = tryGit(worktree, ['diff', '--name-only', '--no-renames', '-z', 'HEAD']);
+  const untracked = tryGit(worktree, ['ls-files', '--others', '--exclude-standard', '-z']);
+  const all = [tracked, untracked].filter((s) => s != null).join('\0');
+  return [...new Set(all.split('\0').filter(Boolean))];
+}
 
 /**
  * Commit a dirty worktree's diff as wip on its own branch. Hooks stay on
  * (no --no-verify): when a pre-commit hook refuses the wip commit, the diff
  * is saved as a patch next to the state file instead.
+ *
+ * Secret-shaped paths are kept out three ways: the `add` excludes them
+ * (case-insensitive — Windows writes `.ENV` and `.env` to one file), a
+ * `reset` unstages whatever the cut-off agent had ALREADY staged, and the
+ * final staged list is checked again before anything is committed.
  */
 function salvageWorktree(info, { stateDir }) {
   const msg = `wip(burn): salvage ${info.id} after a hard stop`;
-  const current = tryGit(info.worktree, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  const wt = info.worktree;
+  const current = tryGit(wt, ['rev-parse', '--abbrev-ref', 'HEAD']);
   if (!current || current === 'HEAD') return { ok: false, error: 'detached HEAD — not salvaged' };
   if (!mayWrite(stateDir, current)) return { ok: false, error: `on ${current} — never salvaged onto a protected branch above the session branch` };
+  // Taken before `add`: the excludes keep secret-shaped paths out of the
+  // index entirely, so diffing the final staged set against everything that
+  // was dirty is the only way to know what got left behind — including
+  // false positives like a real `secrets.ts` or a committed `.npmrc`.
+  const before = dirtyPaths(wt);
+  const excludes = SALVAGE_EXCLUDES.map((p) => `:(exclude,glob,icase)**/${p}`);
   try {
-    git(info.worktree, ['add', '-A', '--', '.', ...SALVAGE_EXCLUDES.map((p) => `:(exclude,glob)**/${p}`)]);
-    const staged = tryGit(info.worktree, ['diff', '--cached', '--name-only']);
-    if (!staged) return { ok: false, error: 'nothing but excluded files to salvage' };
-    git(info.worktree, ['commit', '-m', msg]);
-    return { ok: true, method: 'commit', sha: git(info.worktree, ['rev-parse', '--short', 'HEAD']) };
+    git(wt, ['add', '-A', '--', '.', ...excludes]);
   } catch (err) {
+    // Nothing is staged reliably after a failed add (a stale index.lock, a
+    // timeout): a patch now would be empty or partial. Say so, keep the
+    // worktree as it is — it is the only copy.
+    return { ok: false, error: `git add failed — nothing salvaged, worktree left as is: ${firstLine(err)}`, excluded: [] };
+  }
+  let staged;
+  try {
+    const secrets = stagedPaths(wt).filter(isSalvageSecret);
+    if (secrets.length) git(wt, ['reset', '-q', '--', ...secrets.map((f) => `:(literal)${f}`)]);
+    staged = stagedPaths(wt);
+    const left = staged.filter(isSalvageSecret);
+    if (left.length) throw new Error(`secret-shaped path(s) still staged: ${left.join(', ')}`);
+  } catch (err) {
+    tryGit(wt, ['reset', '-q']);
+    return { ok: false, error: `could not unstage secret-shaped files — nothing salvaged: ${firstLine(err)}`, excluded: before };
+  }
+  const stagedSet = new Set(staged);
+  const excluded = before.filter((f) => !stagedSet.has(f));
+  if (!staged.length) return { ok: false, error: 'nothing but excluded files to salvage', excluded };
+  try {
+    git(wt, ['commit', '-q', '-m', msg], { timeout: GIT_COMMIT_TIMEOUT_MS });
+    return { ok: true, method: 'commit', sha: git(wt, ['rev-parse', '--short', 'HEAD']), excluded };
+  } catch (err) {
+    const file = path.join(stateDir, `BURN-SALVAGE-${info.id}.patch`);
     try {
-      const patch = execFileSync('git', ['diff', '--cached', 'HEAD'], { cwd: info.worktree, encoding: 'utf8' });
-      const file = path.join(stateDir, `BURN-SALVAGE-${info.id}.patch`);
-      fs.writeFileSync(file, patch);
-      return { ok: true, method: 'patch', file, error: String(err.message || err).split('\n')[0] };
+      // --output streams to the file: no pipe buffer for a big diff.
+      git(wt, ['diff', '--cached', '--binary', `--output=${file}`, 'HEAD']);
+      const bytes = fs.existsSync(file) ? fs.statSync(file).size : 0;
+      if (!bytes) {
+        try { fs.unlinkSync(file); } catch { /* never written */ }
+        return { ok: false, error: `commit failed and the patch came out empty — nothing salvaged: ${firstLine(err)}`, excluded };
+      }
+      return { ok: true, method: 'patch', file, bytes, error: firstLine(err), excluded };
     } catch (err2) {
-      return { ok: false, error: String(err2.message || err2).split('\n')[0] };
+      return { ok: false, error: firstLine(err2), excluded };
     }
   }
 }
@@ -1076,12 +1297,26 @@ function salvageWorktree(info, { stateDir }) {
  */
 function pruneCheck({ repo, branch, worktree, integrationBranch }) {
   const ahead = branch && integrationBranch ? commitsAhead(repo, integrationBranch, branch) : null;
+  const worktreeExists = !!(worktree && fs.existsSync(worktree));
   const dirty = isDirty(worktree);
   const reasons = [];
   if (ahead === null && branch && branchExists(repo, branch)) reasons.push('integration branch unknown — cannot prove merged');
   if (ahead > 0) reasons.push(`${ahead} commit(s) not in ${integrationBranch}`);
   if (dirty === true) reasons.push('uncommitted changes in the worktree');
-  return { safe: reasons.length === 0, commitsAhead: ahead, dirty, reasons };
+  // Unknown is never safe: an unreadable status, a worktree HEAD (detached,
+  // or on another branch than the recorded one) that the integration branch
+  // does not contain, or nothing named at all.
+  let headMerged = null;
+  if (worktreeExists) {
+    if (dirty === null) reasons.push('worktree status unreadable — cannot prove clean');
+    const head = tryGit(worktree, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+    headMerged = !!(head && integrationBranch && branchExists(repo, integrationBranch)
+      && tryGit(repo, ['merge-base', '--is-ancestor', head, `refs/heads/${integrationBranch}`]) !== null);
+    if (!headMerged) reasons.push(`worktree HEAD ${head ? head.slice(0, 7) : '(unreadable)'} not proven in ${integrationBranch || 'the integration branch'}`);
+  } else if (!branch) {
+    reasons.push('no --branch and no worktree — nothing to prove merged');
+  }
+  return { safe: reasons.length === 0, commitsAhead: ahead, dirty, headMerged, reasons };
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,6 +1343,98 @@ function writeJsonAtomic(file, data) {
   const tmp = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n');
   fs.renameSync(tmp, file);
+}
+
+const LOCK_WAIT_MS = 15_000;
+const LOCK_STALE_MS = 60_000;     // a holder dead this long (crash, kill) is taken over
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** True if `pid` names a live process (or one we can't signal but that still exists). */
+function isPidAlive(pid) {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err && err.code === 'EPERM';
+  }
+}
+
+/**
+ * Run `fn` under an exclusive lock on the state file: read → decide/claim →
+ * write is one step. Two parallel `gate` calls (two free lanes, batched tool
+ * calls) otherwise read the same queue and claim the same task. The lock is
+ * a sibling `<state>.lock` created with 'wx', holding the holder's PID and
+ * timestamp. It is taken over once its PID is confirmed dead, or once its
+ * PID cannot be read at all (mid-write / corrupt) and it is older than
+ * LOCK_STALE_MS — by renaming it aside first (rename is atomic; only one
+ * concurrent waiter can win a given name), so two waiters can never both
+ * believe they cleared it and both end up holding a lock at once. A LIVE
+ * holder is never taken over just for being old — age alone is not a crash
+ * signal (a long-running burn is normal) — a waiter behind a live holder
+ * instead rides out waitMs and fails loudly.
+ */
+function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS), staleMs = LOCK_STALE_MS } = {}) {
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + waitMs;
+  const giveUpOrRetry = () => {
+    if (Date.now() > deadline) throw new Error(`burn state is locked (${lock}) — another burn-plan call is running`);
+    sleepMs(25 + Math.floor(Math.random() * 50));
+  };
+  let fd = null;
+  while (fd === null) {
+    try {
+      fd = fs.openSync(lock, 'wx');
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      let stat = null;
+      try { stat = fs.statSync(lock); } catch { continue; /* released meanwhile */ }
+      const age = Date.now() - stat.mtimeMs;
+      let holderPid = NaN;
+      try { holderPid = parseInt(fs.readFileSync(lock, 'utf8').trim().split(/\s+/)[0], 10); } catch { /* mid-write, or gone */ }
+      const pidKnown = Number.isFinite(holderPid);
+      // A live PID is never taken over by age alone; only a dead PID, or an
+      // unreadable/unknown one that has also sat past staleMs (a holder that
+      // crashed before it could even write its PID).
+      const staleByDeadPid = pidKnown && !isPidAlive(holderPid);
+      const staleByUnknownPid = !pidKnown && age > staleMs;
+      if (staleByDeadPid || staleByUnknownPid) {
+        // Rename-first takeover: only the waiter whose rename succeeds
+        // proceeds; the rest loop back and retry 'wx' against a lock that no
+        // longer exists (or a fresh one the winner just created). A rename
+        // that keeps failing (e.g. antivirus/indexer holding the file on
+        // Windows) must still respect the deadline and back off between
+        // attempts instead of spinning at full CPU.
+        const graveyard = `${lock}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        try {
+          fs.renameSync(lock, graveyard);
+          try { fs.unlinkSync(graveyard); } catch { /* best-effort cleanup */ }
+        } catch { /* another waiter already took it over, the holder released it, or the rename itself failed */ }
+        giveUpOrRetry();
+        continue;
+      }
+      giveUpOrRetry();
+    }
+  }
+  const owner = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    fs.writeSync(fd, `${process.pid} ${new Date().toISOString()} ${owner}\n`);
+    fs.closeSync(fd);
+    fd = -1;
+    return fn();
+  } finally {
+    if (fd > 0) try { fs.closeSync(fd); } catch { /* closed */ }
+    // Only unlink the lock if it still holds our token: a run that took
+    // longer than staleMs may have already been taken over by another
+    // waiter, whose lock we must not delete out from under them.
+    try {
+      const held = fs.readFileSync(lock, 'utf8');
+      if (held.trim().endsWith(owner)) fs.unlinkSync(lock);
+    } catch { /* already gone */ }
+  }
 }
 
 /** Best-effort headless refresh — never opens a login window, bounded. */
@@ -1207,163 +1534,127 @@ function cli(argv) {
       return 0;
     }
     case 'plan': {
+      const knobs = planKnobs(opts);
+      const queue = parseQueueArg(opts.queue);
       const usage = readUsage(opts, PLAN_USAGE_MAX_AGE_MIN);
-      print(derivePlan({
-        usage, queue: parseQueueArg(opts.queue), calibration: readJson(CALIBRATION_FILE()),
-        laneCap: opts['lane-cap'] ? Number(opts['lane-cap']) : LANE_CAP,
-        reservePct: opts.reserve ? Number(opts.reserve) : RESERVE_PCT,
-      }));
+      print(derivePlan({ usage, queue, calibration: readJson(CALIBRATION_FILE()), ...knobs }));
       return 0;
     }
     case 'init': {
       const file = resolveStatePath(opts);
-      const existing = readStateFile(file);
-      if (existing && isOpenRun(existing) && !opts.force) {
-        print({ ok: false, reason: 'open-run-exists', state: file, ...tally(existing) });
-        return 1;
-      }
-      if (!mayWrite(path.dirname(file), opts['integration-branch'])) {
-        print({ ok: false, reason: 'integration-branch-protected', branch: opts['integration-branch'] });
-        return 1;
-      }
-      if (existing && fs.existsSync(file)) fs.copyFileSync(file, path.join(path.dirname(file), PREV_STATE_FILE));
-      const usage = readUsage(opts, PLAN_USAGE_MAX_AGE_MIN);
+      // Validate every argument before anything is read or written.
+      const knobs = planKnobs(opts);
+      const resumeAuto = parseResumeAuto(opts['resume-auto']);
+      const autoArmed = !!parseYesNo('auto-armed', opts['auto-armed']);
       const queue = parseQueueArg(opts.queue);
-      const plan = derivePlan({
-        usage, queue, calibration: readJson(CALIBRATION_FILE()),
-        laneCap: opts['lane-cap'] ? Number(opts['lane-cap']) : LANE_CAP,
-        reservePct: opts.reserve ? Number(opts.reserve) : RESERVE_PCT,
-      });
+      if (!mayWrite(path.dirname(file), opts['integration-branch'])) {
+        print({ ok: false, reason: 'integration-branch-protected', branch: opts['integration-branch'] || null });
+        return 1;
+      }
+      const usage = readUsage(opts, PLAN_USAGE_MAX_AGE_MIN);
+      const plan = derivePlan({ usage, queue, calibration: readJson(CALIBRATION_FILE()), ...knobs });
       if (!plan.ok) { print({ ok: false, plan }); return 1; }
-      const s = newState({
-        slug: opts.slug, integrationBranch: opts['integration-branch'], plan, queue, usage, nowMs: now,
-        sessionId: sessionOf(opts), resumeAuto: opts['resume-auto'], autoArmed: opts['auto-armed'] === 'yes',
+      return withStateLock(file, () => {
+        const existing = readStateFile(file);
+        if (existing && isOpenRun(existing) && !opts.force) {
+          print({ ok: false, reason: 'open-run-exists', state: file, ...tally(existing) });
+          return 1;
+        }
+        if (existing && fs.existsSync(file)) fs.copyFileSync(file, path.join(path.dirname(file), PREV_STATE_FILE));
+        const s = newState({
+          slug: opts.slug, integrationBranch: opts['integration-branch'], plan, queue, usage, nowMs: now,
+          sessionId: sessionOf(opts), resumeAuto, autoArmed,
+        });
+        writeJsonAtomic(file, s);
+        ensureGitExcluded(path.dirname(file));
+        print({ ok: true, state: file, plan });
+        return 0;
       });
-      writeJsonAtomic(file, s);
-      ensureGitExcluded(path.dirname(file));
-      print({ ok: true, state: file, plan });
-      return 0;
     }
     case 'gate': {
       const file = resolveStatePath(opts);
-      const s = requireState(file);
+      requireState(file);
+      // Usage may take a headless refresh — read it before the lock.
       const usage = readUsage(opts, USAGE_FRESH_MIN);
-      const result = gate(s, usage, now, readJson(CALIBRATION_FILE()), { claim: !opts.peek });
-      if (!opts.peek) writeJsonAtomic(file, result.state);
-      print(withoutState(result));
-      return 0;
+      const calibration = readJson(CALIBRATION_FILE());
+      const run = () => {
+        const result = gate(requireState(file), usage, now, calibration, { claim: !opts.peek });
+        if (!opts.peek) writeJsonAtomic(file, result.state);
+        print(withoutState(result));
+        return 0;
+      };
+      return opts.peek ? run() : withStateLock(file, run);
     }
     case 'state': {
       const [op, id] = pos;
       const file = resolveStatePath(opts);
-      let s = requireState(file);
-      switch (op) {
-        case 'start':
-        case 'agent': {
-          const patch = {};
-          for (const k of ['agent', 'branch', 'worktree']) if (opts[k]) patch[k] = opts[k];
-          if (opts['agent-id']) patch.agentId = opts['agent-id'];
-          const sid = sessionOf(opts);
-          if (sid) patch.sessionId = sid;
-          if (s.queue.some((t) => t.id === id)) s = claimTask(s, id, now, patch);
-          else s = updateInFlight(s, id, patch, now, 'agent');
-          break;
-        }
-        case 'checkpoint': {
-          const cur = s.inFlight.find((t) => t.id === id);
-          s = updateInFlight(s, id, { checkpoints: ((cur && cur.checkpoints) || 0) + 1, lastCheckpointAt: iso(now), ...(opts.sha ? { lastCheckpointSha: opts.sha } : {}) }, now, 'checkpoint');
-          break;
-        }
-        case 'land': s = landTask(s, id, { sha: opts.sha, pushed: opts.pushed !== 'false' }, now); break;
-        case 'requeue': s = requeueTask(s, id, { branch: opts.branch, note: opts.note, salvage: opts.salvage }, now); break;
-        case 'fail': s = failTask(s, id, { reason: opts.reason }, now); break;
-        case 'drain': s = clone(s); enterDrain(s, opts.reason || 'manual', now); break;
-        case 'pause': s = pauseState(s, { reason: opts.reason, resumeAtMs: opts['resume-at'] ? Date.parse(opts['resume-at']) : null }, now); break;
-        case 'burn-off': s = burnOff(s, opts.reason || 'user', now); break;
-        case 'resume-policy': s = setResumePolicy(s, { auto: opts.auto, autoArmed: opts['auto-armed'] === undefined ? undefined : opts['auto-armed'] === 'yes' }, now); break;
-        case 'integration': {
-          if (!opts.branch) throw new Error('state integration needs --branch=<branch>');
-          if (!mayWrite(path.dirname(file), opts.branch)) {
-            print({ ok: false, reason: 'integration-branch-protected', branch: opts.branch });
-            return 1;
-          }
-          s = clone(s);
-          s.integrationBranch = opts.branch;
-          pushEvent(s, now, 'integration', { branch: opts.branch });
-          break;
-        }
-        case 'resume-cron': {
-          s = clone(s);
-          s.resume = { ...(s.resume || {}), cronFor: opts.for || null, cronJob: opts.job || null };
-          pushEvent(s, now, 'resume-cron', { for: s.resume.cronFor });
-          break;
-        }
-        case 'finish': {
-          const usage = readUsage(opts, PLAN_USAGE_MAX_AGE_MIN);
-          const sample = usage.ok ? calibrationSamples(s, usage.weeklyRemaining, now) : null;
-          if (sample) {
-            const planName = (s.plan && s.plan.planName) || usage.plan;
-            writeJsonAtomic(CALIBRATION_FILE(), recordCalibration(readJson(CALIBRATION_FILE()), planName, sample));
-          }
-          s = finishState(s, opts.status, now);
-          writeJsonAtomic(file, s);
-          print({ ok: true, op, result: s.result, calibration: sample, ...tally(s) });
-          return 0;
-        }
-        default:
-          throw new Error(`unknown state op: ${op}`);
-      }
-      writeJsonAtomic(file, s);
-      print({ ok: true, op, id: id || null, status: s.status, burnActive: !!(s.burn && s.burn.active), profile: s.profile, lanes: s.lanes, ...tally(s) });
-      return 0;
+      requireState(file);
+      const finishUsage = op === 'finish' ? readUsage(opts, PLAN_USAGE_MAX_AGE_MIN) : null;
+      return withStateLock(file, () => stateOp(op, id, file, opts, now, finishUsage));
     }
     case 'resumed': {
       const file = resolveStatePath(opts);
-      const s = requireState(file);
+      requireState(file);
       const usage = readUsage(opts, PLAN_USAGE_MAX_AGE_MIN);
-      const r = applyResume(s, {
-        trigger: opts.trigger, choice: opts.choice, usage, nowMs: now,
-        calibration: readJson(CALIBRATION_FILE()), sessionId: sessionOf(opts),
+      const calibration = readJson(CALIBRATION_FILE());
+      return withStateLock(file, () => {
+        const r = applyResume(requireState(file), {
+          trigger: opts.trigger, choice: opts.choice, usage, nowMs: now, calibration, sessionId: sessionOf(opts),
+        });
+        writeJsonAtomic(file, r.state);
+        print({
+          ok: true, requested: r.requested, applied: r.applied, why: r.why,
+          burnActive: !!(r.state.burn && r.state.burn.active), profile: r.state.profile, lanes: r.state.lanes,
+          skipped: r.state.skipped.length, plan: r.plan, ...tally(r.state),
+        });
+        return 0;
       });
-      writeJsonAtomic(file, r.state);
-      print({
-        ok: true, requested: r.requested, applied: r.applied, why: r.why,
-        burnActive: !!(r.state.burn && r.state.burn.active), profile: r.state.profile, lanes: r.state.lanes,
-        skipped: r.state.skipped.length, plan: r.plan, ...tally(r.state),
-      });
-      return 0;
     }
     case 'resume-check': {
       const file = resolveStatePath(opts);
-      let s = requireState(file);
+      const s0 = requireState(file);
       const repo = opts.repo || path.dirname(file);
-      const actions = s.inFlight.map((e) => classifyInFlight(inspectInFlight(e, { repo, integrationBranch: s.integrationBranch }), { sessionId: sessionOf(opts) }));
-      if (opts.apply) {
+      const actions = s0.inFlight.map((e) => classifyInFlight(inspectInFlight(e, { repo, integrationBranch: s0.integrationBranch }), { sessionId: sessionOf(opts) }));
+      if (!opts.apply) {
+        print({ ok: true, applied: false, actions, ...tally(s0) });
+        return 0;
+      }
+      for (const a of actions) {
+        // Never salvage in the run's own worktree: that is the integration
+        // branch, and a wip commit there would land half a task.
+        const own = a.worktree && path.resolve(a.worktree).toLowerCase() === path.dirname(file).toLowerCase();
+        if (a.salvage && a.worktreeExists && !own) a.salvaged = salvageWorktree(a, { stateDir: path.dirname(file) });
+        else if (a.salvage && own) a.salvaged = { ok: false, error: 'integration worktree — not salvaged' };
+      }
+      // Salvage runs git (hooks, commits) — outside the lock; the requeues
+      // are one short read-modify-write against the state as it is now.
+      return withStateLock(file, () => {
+        let s = requireState(file);
         for (const a of actions) {
-          // Never salvage in the run's own worktree: that is the integration
-          // branch, and a wip commit there would land half a task.
-          const own = a.worktree && path.resolve(a.worktree).toLowerCase() === path.dirname(file).toLowerCase();
-          if (a.salvage && a.worktreeExists && !own) a.salvaged = salvageWorktree(a, { stateDir: path.dirname(file) });
-          else if (a.salvage && own) a.salvaged = { ok: false, error: 'integration worktree — not salvaged' };
-          if (a.action === 'requeue' || a.action === 'requeue-with-branch') {
+          if ((a.action === 'requeue' || a.action === 'requeue-with-branch') && s.inFlight.some((t) => t.id === a.id)) {
             s = requeueTask(s, a.id, {
               branch: a.action === 'requeue-with-branch' ? a.branch : undefined,
               salvage: a.salvaged && a.salvaged.method === 'patch' ? a.salvaged.file : undefined,
+              excluded: a.salvaged && a.salvaged.excluded,
               note: 'after a hard stop',
             }, now);
             a.applied = true;
           }
         }
         writeJsonAtomic(file, s);
-      }
-      print({ ok: true, applied: !!opts.apply, actions, ...tally(s) });
-      return 0;
+        print({ ok: true, applied: true, actions, ...tally(s) });
+        return 0;
+      });
     }
     case 'prune-check': {
       const file = opts.state ? path.resolve(opts.state) : null;
       const s = file ? readStateFile(file) : null;
       const repo = opts.repo || (file ? path.dirname(file) : process.cwd());
-      const r = pruneCheck({ repo, branch: opts.branch, worktree: opts.worktree, integrationBranch: opts.integration || (s && s.integrationBranch) });
+      const r = pruneCheck({
+        repo, branch: typeof opts.branch === 'string' ? opts.branch : null,
+        worktree: typeof opts.worktree === 'string' ? opts.worktree : null,
+        integrationBranch: opts.integration || (s && s.integrationBranch),
+      });
       print(r);
       return r.safe ? 0 : 1;
     }
@@ -1392,6 +1683,78 @@ function cli(argv) {
   }
 }
 
+/** --lane-cap (1–16 lanes) and --reserve (0–50 % of the week), validated. */
+function planKnobs(opts) {
+  return {
+    laneCap: parseNumberOpt('lane-cap', opts['lane-cap'], LANE_CAP, { min: 1, max: 16, integer: true }),
+    reservePct: parseNumberOpt('reserve', opts.reserve, RESERVE_PCT, { min: 0, max: 50 }),
+  };
+}
+
+/** One `state <op>` transition; runs under the state lock. */
+function stateOp(op, id, file, opts, now, finishUsage) {
+      let s = requireState(file);
+      switch (op) {
+        case 'start':
+        case 'agent': {
+          const patch = {};
+          for (const k of ['agent', 'branch', 'worktree']) if (opts[k]) patch[k] = opts[k];
+          if (opts['agent-id']) patch.agentId = opts['agent-id'];
+          const sid = sessionOf(opts);
+          if (sid) patch.sessionId = sid;
+          if (s.queue.some((t) => t.id === id)) s = claimTask(s, id, now, patch);
+          else s = updateInFlight(s, id, patch, now, 'agent');
+          break;
+        }
+        case 'checkpoint': {
+          const cur = s.inFlight.find((t) => t.id === id);
+          s = updateInFlight(s, id, { checkpoints: ((cur && cur.checkpoints) || 0) + 1, lastCheckpointAt: iso(now), ...(opts.sha ? { lastCheckpointSha: opts.sha } : {}) }, now, 'checkpoint');
+          break;
+        }
+        case 'land': s = landTask(s, id, { sha: opts.sha, pushed: opts.pushed !== 'false' }, now); break;
+        case 'requeue': s = requeueTask(s, id, { branch: opts.branch, note: opts.note, salvage: opts.salvage }, now); break;
+        case 'fail': s = failTask(s, id, { reason: opts.reason }, now); break;
+        case 'drain': s = clone(s); enterDrain(s, opts.reason || 'manual', now); break;
+        case 'pause': s = pauseState(s, { reason: opts.reason, resumeAtMs: opts['resume-at'] ? Date.parse(opts['resume-at']) : null }, now); break;
+        case 'burn-off': s = burnOff(s, opts.reason || 'user', now); break;
+        case 'resume-policy': s = setResumePolicy(s, { auto: opts.auto, autoArmed: parseYesNo('auto-armed', opts['auto-armed']) }, now); break;
+        case 'integration': {
+          if (!opts.branch) throw new Error('state integration needs --branch=<branch>');
+          if (!mayWrite(path.dirname(file), opts.branch)) {
+            print({ ok: false, reason: 'integration-branch-protected', branch: opts.branch });
+            return 1;
+          }
+          s = clone(s);
+          s.integrationBranch = opts.branch;
+          pushEvent(s, now, 'integration', { branch: opts.branch });
+          break;
+        }
+        case 'resume-cron': {
+          s = clone(s);
+          s.resume = { ...(s.resume || {}), cronFor: opts.for || null, cronJob: opts.job || null };
+          pushEvent(s, now, 'resume-cron', { for: s.resume.cronFor });
+          break;
+        }
+        case 'finish': {
+          const usage = finishUsage || { ok: false };
+          const sample = usage.ok ? calibrationSamples(s, usage.weeklyRemaining, now) : null;
+          if (sample) {
+            const planName = (s.plan && s.plan.planName) || usage.plan;
+            writeJsonAtomic(CALIBRATION_FILE(), recordCalibration(readJson(CALIBRATION_FILE()), planName, sample));
+          }
+          s = finishState(s, opts.status, now);
+          writeJsonAtomic(file, s);
+          print({ ok: true, op, result: s.result, calibration: sample, ...tally(s) });
+          return 0;
+        }
+        default:
+          throw new Error(`unknown state op: ${op}`);
+      }
+      writeJsonAtomic(file, s);
+      print({ ok: true, op, id: id || null, status: s.status, burnActive: !!(s.burn && s.burn.active), profile: s.profile, lanes: s.lanes, ...tally(s) });
+      return 0;
+}
+
 
 module.exports = {
   STATE_VERSION, RESERVE_PCT, LANE_CAP, SESSION_RESERVE_PCT, MIN_SPENDABLE_PCT, MIN_OFFER_PCT,
@@ -1402,8 +1765,9 @@ module.exports = {
   newState, claimTask, updateInFlight, landTask, requeueTask, failTask, pauseState, burnOff,
   finishState, setResumePolicy, enterDrain, recalibrate, gate, applyResume,
   calibrationSamples, recordCalibration,
-  inspectInFlight, classifyInFlight, salvageWorktree, pruneCheck, SALVAGE_EXCLUDES,
-  protectedBranches, isProtectedBranch, sessionBranch, mayWrite,
+  inspectInFlight, classifyInFlight, salvageWorktree, pruneCheck, SALVAGE_EXCLUDES, isSalvageSecret,
+  protectedBranches, isProtectedBranch, sessionBranch, mayWrite, shortBranch, sameBranch,
+  parseResumeAuto, parseNumberOpt, withStateLock, GIT_TIMEOUT_MS, GIT_MAX_BUFFER,
   toCronExpression, cli,
 };
 

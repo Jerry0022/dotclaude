@@ -17,7 +17,7 @@
 
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { git, dirtyState } from "./git.js";
+import { git, gitTry, dirtyState } from "./git.js";
 
 /** Skip anything larger — a marker inside a multi-megabyte blob is not this guard's case. */
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -100,9 +100,9 @@ export function candidateFiles(cwd, base) {
   let scope = "worktree";
 
   for (const ref of [base && `origin/${base}`, base].filter(Boolean)) {
-    const mergeBase = git(`merge-base HEAD ${ref}`, opts);
+    const mergeBase = gitTry(["merge-base", "HEAD", ref], opts);
     if (!mergeBase) continue;
-    const raw = git(`diff --name-only ${mergeBase} HEAD`, opts) || "";
+    const raw = gitTry(["diff", "--name-only", mergeBase, "HEAD"], opts) || "";
     for (const f of raw.split("\n").filter(Boolean)) files.add(f);
     scope = "diff+worktree";
     break;

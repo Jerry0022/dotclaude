@@ -168,7 +168,7 @@ unambiguous source confirms it exists under exactly that name and location:
 minutes on Windows. A synchronous call with a short timeout (120 s) kills git
 mid-delete. The registration is gone after the next `worktree prune`, and a
 directory is left on disk with no `.git` file and tens of thousands of files
-(observed 2026-09-23: three SC-Web worktrees, ~40k files each).
+(observed 2026-09-23: three worktrees of a consumer repo, ~40k files each).
 
 - **Run the removal so it can finish:** in the background or with a timeout of
   at least 15 min, never under a 120 s ceiling.

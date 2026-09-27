@@ -259,6 +259,52 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  // Audit 2026-09-26: a card in a folder without any repo (a network share, a
+  // scratch folder) drew the git track, "Build no-build-id" and a Ship button.
+  test("no repo at all is detected from cwd: file-only form, no build id, nothing to ship", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { spawnSync } = await import("node:child_process");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "card-no-repo-"));
+    try {
+      // A machine whose TEMP sits inside a work tree cannot host this case.
+      const inside = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: dir, encoding: "utf8" });
+      if (String(inside.stdout).trim() === "true") return;
+      const ready = await cardText({ variant: "ready", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-a", cwd: dir });
+      expect(ready).toMatch(/^## 📂 Fertig auf der Platte — noch etwas\?$/m);
+      expect(ready).toContain("📂 kein Repo · " + dir);
+      expect(ready).not.toContain("0 Dateien geändert");
+      expect(ready).not.toMatch(/Build|no-build-id|○ push/);
+      const test = await cardText({ variant: "test", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-b", cwd: dir, userTest: ["Öffne die Datei"] });
+      expect(test).toMatch(/^## 🧪 Erst testen\?$/m);
+      // An explicit count still shows.
+      const counted = await cardText({ variant: "ready-files", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-c", cwd: dir, state: { mode: "file-only", filesModified: 3 } });
+      expect(counted).toContain("📂 3 Dateien geändert · kein Repo");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Redteam R2: the server's own cwd is ${CLAUDE_PLUGIN_ROOT} — for an
+  // installed plugin a cache dir outside any repo. A cwd-less card must never
+  // probe it: that turned every such card file-only and downgraded a real
+  // ship-successful to ready-files.
+  test("without a cwd, or with one git cannot judge, the card never turns file-only", async () => {
+    const mod = await import("./index.js");
+    expect(mod.insideWorkTree(undefined)).toBeNull();
+    expect(mod.insideWorkTree("")).toBeNull();
+    expect(mod.insideWorkTree(join(tmpdir(), `card-gone-${process.pid}-${Date.now()}`))).toBeNull();
+    const params = { variant: "ready", state: {} };
+    mod.withDetectedRepoMode(params);
+    expect(params.state.mode).toBeUndefined();
+    const shipped = await cardText({
+      variant: "ship-successful", summary: "Shipped", lang: "de", session_id: "test-anatomy-norepo-d",
+      state: { pushed: true, merged: "main", commit: "abc1234" },
+    });
+    expect(shipped).not.toMatch(/kein Repo|ready-files|Fertig auf der Platte/);
+  });
+
   test("no remote + unshipped work: no card, the caller is told to ship locally", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
@@ -312,6 +358,102 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     }
   });
 
+  // AUD-C002: "Ship manuell" in the run contract is the user's explicit no —
+  // the local-ship order merged into main behind it.
+  test("no remote + run contract ship manual: the normal card, never the local-ship order", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const makeRepo = () => {
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), "card-local-ship-rc-"));
+      const g = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+      g("init", "-q", "-b", "main");
+      g("config", "user.email", "t@example.com");
+      g("config", "user.name", "t");
+      fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+      g("add", "a.txt");
+      g("commit", "-q", "-m", "init");
+      fs.writeFileSync(path.join(repo, "a.txt"), "two\n");
+      return repo;
+    };
+    const arm = (repo, ship, sessionId) => RC.arm(repo, {
+      source: "cli", mode: "prompt", modeFrom: "cli", flow: "interactive", ship,
+      passes: [], strict: false, items: [], sessionId,
+    });
+    const stamp = `${process.pid}-${Date.now()}`;
+    const manual = makeRepo();
+    const auto = makeRepo();
+    try {
+      const sid = `test-localship-manual-${stamp}`;
+      expect(arm(manual, "manual", sid)).toBeTruthy();
+      const text = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: sid, cwd: manual });
+      expect(text).not.toContain("LOCAL SHIP");
+      // The model's self marker reads the same contract (lenient, like the run line).
+      const self = await cardText({ variant: "ready", summary: "Lokal", lang: "de", session_id: "self", cwd: manual });
+      expect(self).not.toContain("LOCAL SHIP");
+
+      const sidAuto = `test-localship-auto-${stamp}`;
+      expect(arm(auto, "auto", sidAuto)).toBeTruthy();
+      const res = await render({ variant: "ready", summary: "Lokal", lang: "de", session_id: sidAuto, cwd: auto });
+      expect(res.content.map(c => c.text).join("\n")).toContain("LOCAL SHIP");
+    } finally {
+      for (const id of [`test-localship-manual-${stamp}`, "self", `test-localship-auto-${stamp}`]) {
+        try { fs.rmSync(path.join(os.tmpdir(), `dotclaude-devops-local-ship-${id}`), { force: true }); } catch {}
+      }
+      fs.rmSync(manual, { recursive: true, force: true });
+      fs.rmSync(auto, { recursive: true, force: true });
+    }
+  });
+
+  // AUD-066: writeSessionFile renames `<file>.<pid>.<rand>.tmp` into place; the
+  // glob fallbacks read such in-flight/orphaned writes as the session value.
+  test("session-file glob fallback skips .tmp writes and keeps the rest", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const mod = await import("./index.js");
+    const dir = mkdtempSync(join(tmpdir(), "card-glob-"));
+    const saved = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR };
+    try {
+      const prefix = "dotclaude-devops-auditflag";
+      const tmpWrite = path.join(dir, `${prefix}-sess.1234.abcd.tmp`);
+      fs.writeFileSync(tmpWrite, "half-written");
+      expect(mod.sessionFileCandidates(dir, `${prefix}-`)).toEqual([]);
+      process.env.TEMP = dir; process.env.TMP = dir; process.env.TMPDIR = dir;
+      expect(mod.readSessionFlagRaw(prefix, "other-session")).toBeNull();
+      fs.writeFileSync(path.join(dir, `${prefix}-sess`), "real");
+      const later = new Date(Date.now() + 5000);
+      fs.utimesSync(tmpWrite, later, later); // the .tmp is the newest entry
+      expect(mod.sessionFileCandidates(dir, `${prefix}-`).map(f => path.basename(f.full))).toEqual([`${prefix}-sess`]);
+      expect(mod.readSessionFlagRaw(prefix, "other-session")).toBe("real");
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // AUD-C015: promote.js needs origin — a remote-less ship must not offer
+  // "Promote beta/stable" buttons (or a "promote to beta?" heading).
+  test("no remote: ship-successful falls back to the plain button set, no promote", async () => {
+    const mod = await import("./index.js");
+    const { buttonsFor } = await import("./lib/card-widget.js");
+    const input = { variant: "ship-successful", summary: "Lokal" };
+    const state = { mode: "git-no-remote", merged: "main", delivered: "local-merge" };
+    for (const current of ["alpha", "beta"]) {
+      const delivery = { ship: { version: "1.2.3", base: "main" }, promote: { current, channels: { [current]: "1.2.3" } } };
+      const d = mod.buildDecisionBlock(input, "de", "ship-successful", delivery, state);
+      expect(d.buttonsKey).toBe("ship-successful-plain");
+      expect(d.heading).not.toMatch(/promot/i);
+      const labels = buttonsFor(d.buttonsKey, "de", { version: d.version, replies: d.replies }).map(b => b.label);
+      expect(labels.join(" ")).not.toMatch(/Promote/);
+    }
+    // With a remote the ladder keeps its promote offer.
+    const withRemote = mod.buildDecisionBlock(input, "de", "ship-successful",
+      { ship: { version: "1.2.3", base: "main" }, promote: { current: "alpha", channels: { alpha: "1.2.3" } } },
+      { mode: "git", merged: "main", pushed: true });
+    expect(withRemote.buttonsKey).toBe("ship-successful");
+  });
+
   test("a local merge counts as the ship: ship-successful stays, the track shows the merge", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8h",
@@ -339,10 +481,12 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
   });
 
   test("no run-contract on the project → no line, byte-identical to a card without cwd", async () => {
-    const withoutCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0a", buildId: "abc1234" });
+    // The repo mode is pinned: a bare temp dir is no work tree and would
+    // otherwise render the file-only form (withDetectedRepoMode).
+    const withoutCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0a", buildId: "abc1234", state: { mode: "git" } });
     const dir = mkdtempSync(join(tmpdir(), "rc-card-none-"));
     try {
-      const withCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0b", buildId: "abc1234", cwd: dir });
+      const withCwd = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-rc-0b", buildId: "abc1234", cwd: dir, state: { mode: "git" } });
       expect(withCwd).toBe(withoutCwd);
       expect(withCwd).not.toContain("🧾 Run");
     } finally {
@@ -775,6 +919,20 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(text).toMatch(/^## 📦 Shippen trotz 2 Vorbehalten\?$/m);
   });
 
+  test("the count is the one next to 'Tests', not a file count before it", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Zählung", lang: "de", session_id: "test-ev-count",
+      tests: [{ method: "npm test", result: "248 Dateien · 7286 Tests grün" }],
+    });
+    expect(text).toContain("✓ 7286 Tests grün");
+    expect(text).not.toContain("✓ 248 Tests grün");
+    const summary = await cardText({
+      variant: "ready", summary: "Zählung", lang: "en", session_id: "test-ev-count-en",
+      tests: [{ method: "vitest", result: "Test Files 248 passed · Tests 7286 passed" }],
+    });
+    expect(summary).toContain("✓ 7286 tests green");
+  });
+
   test("'0 rot' is green; '2 rot' is ✗ 2 Tests rot and routes to the ⚠ heading", async () => {
     const green = await cardText({
       variant: "ready", summary: "Null rot", lang: "de", session_id: "test-ev-2a",
@@ -895,6 +1053,17 @@ describe("render_completion_card — web hand-off in the card payload (#506)", (
       open: ["Noch einen Supabase-Bucket für Assets anlegen"],
     });
     expect(consumePendingHandoff("test-guide-handoff-open")).toBe("Supabase");
+  });
+
+  test("a pending card keeps the hand-off (AUD-C042)", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-pending",
+      open: ["Noch einen Supabase-Bucket für Assets anlegen"],
+      pending: [{ name: "devops:qa", kind: "agent", doing: "volle Testsuite" }],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-pending")).toBe("Supabase");
   });
 
   test("no hand-off signal → nothing recorded", async () => {

@@ -73,7 +73,7 @@ Every agent that writes code — `core`, `frontend`, `ai`, `windows`,
   - **No git repo** (e.g. files on a network share): no branches, no
     commits — the agent edits the files and reports `branch: none`.
   - **The session works on a feature / worktree branch** (the normal case):
-    checkpoints go on the agent's own sub-branch (`<parent>/<role>`) or on
+    checkpoints go on the agent's own sub-branch (`<parent>-<role>`) or on
     that feature branch — **never on `main`, `master` or the remote's
     default branch, local or remote.** From there, `main` is reached only
     through `/do-ship`.
