@@ -128,6 +128,22 @@ describe("Quiet style — a resume is never a quiet tick", () => {
   });
 });
 
+// A skill-usage analysis ending in five improvement proposals went out as a
+// static artifact instead of a concept page: the style offered "a
+// `/auto-concept` page or an artifact" as equals, and the artifact was quicker
+// to publish. An analysis that leaves the user something to pick needs the
+// concept page's decision loop; an artifact is only for read-only reports.
+describe("Quiet style — an analysis with decisions goes to a concept page", () => {
+  const flat = fs.readFileSync(path.join(REPO_PLUGIN, TEMPLATE_REL), "utf8").replace(/\s+/g, " ");
+
+  test("decisions → auto-concept always, artifact only when nothing is left to decide", () => {
+    expect(flat).toContain("ends in something for the user to pick");
+    expect(flat).toContain("→ a `/auto-concept` page, always, even when an artifact would be quicker to publish");
+    expect(flat).toContain("An artifact only for a read-only report that leaves nothing to decide");
+    expect(flat).not.toContain("`/auto-concept` page or an artifact");
+  });
+});
+
 // A German session got English three times: "No response requested." to the
 // app's English resume prompt, a ship-verify hook block relayed "exactly as
 // returned", and a wrap-up written after a run of English tool results and
