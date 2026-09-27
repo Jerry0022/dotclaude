@@ -58,6 +58,27 @@ git push origin alpha/v<X.Y.Z>
 - Verify tag exists: `git ls-remote --tags origin | grep "alpha/v<X.Y.Z>"`
 - Published tags are immutable — never move or delete them
 
+### When the session cannot push the tag — owner hand-off (#566)
+
+A push the remote refuses for permission reasons (403, `Permission … denied`,
+a protected-tag rule, `GH013`) is not retried — it fails the same way every
+time. `ship_release` drops the unpushed local tag and returns
+`tagHandoff: { tag, target, permanent, reason, commands, gates, note }`; a push
+that kept failing on transient errors carries the same block with
+`permanent: false`. `commands` is the copy-ready sequence the owner runs:
+
+```bash
+git fetch origin main
+git tag -a alpha/v<X.Y.Z> <merge sha> -m '{"channel":"alpha","version":"<X.Y.Z>"}'
+git push origin alpha/v<X.Y.Z>
+git ls-remote --tags origin alpha/v<X.Y.Z>
+```
+
+Done only when `ls-remote` lists the tag — "Everything up-to-date" proves
+nothing. Never GitHub's web release form: it creates a lightweight tag.
+This block is the single source of the manual tag step; the manual ship
+checklist (#567) points here instead of restating it.
+
 ## GitHub Release — at PROMOTION, not at ship
 
 Ship creates NO GitHub Release (alpha ships on every merge — a Release per

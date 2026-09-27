@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.227.0] — 2026-09-27
+
+### Added
+- **The owner gets the release tag when the session cannot push it** (#566). A tag push the remote refuses for permission reasons (403, `Permission … denied`, a protected-tag rule, `GH013`, failed authentication) is no longer retried: `ship_release` drops the unpushed local tag and returns `tagHandoff` with the copy-ready commands — fetch, `git tag -a alpha/vX.Y.Z <merge sha>` with the channel message, push, `ls-remote` — plus what the tag gates and the warning that GitHub's web release form makes a lightweight tag. A push that kept failing on transient errors, and a merge whose base could not be fetched, carry the same block. do-ship puts it on the card as the first owner action instead of "Promotion ausgesetzt"; `release-flow.md` § owner hand-off is the one place the manual tag step is written down.
+
 ## [0.226.0] — 2026-09-27
 
 ### Added
