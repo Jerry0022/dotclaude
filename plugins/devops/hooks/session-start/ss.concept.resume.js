@@ -107,9 +107,9 @@ function deleteState() {
  * server's own derivation in `concept-server.py` __main__ — the HTML basename
  * without its extension, under `.claude/concepts/` in the project root.
  */
-function storeDirFor(htmlPath) {
+function storeDirFor(htmlPath, root = cwd) {
   const base = path.basename(String(htmlPath || '')).replace(/\.html$/i, '');
-  return path.join(cwd, '.claude', 'concepts', base);
+  return path.join(root, '.claude', 'concepts', base);
 }
 
 /**
@@ -539,6 +539,9 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
     `Bash tasks (run_in_background: true), and re-arm the backstop cron: CronCreate with cron "*/15 * * * *" ` +
     `(recurring: true) and prompt: '${buildCronBody(state.port, statePath, state.owner || '')}'. The page reconnects on its own ` +
     `once the heartbeat is back — the user does not have to reload.`,
+    `Finally rewrite ${statePath} in place (read-modify-write, keep every other field): \`started_at\` = now ` +
+    `(ISO), \`server_pid\` = the relaunched bridge's PID, \`cron_id\` = the new backstop cron's id. Until then ` +
+    `the file still describes the dead bridge, and a state opened more than 24 h ago reads as abandoned (#563).`,
   ].join(' ');
 }
 

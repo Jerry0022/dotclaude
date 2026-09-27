@@ -257,7 +257,10 @@ export function titleInstruction(prefix) {
 export function conceptUrl(cwd, concept) {
   const explicit = concept && typeof concept === "object" ? concept.url : "";
   if (typeof explicit === "string" && /^https?:\/\//.test(explicit.trim())) return explicit.trim();
-  const state = readConceptState(cwd);
+  // A `concept` field is the caller asserting the page is open: resolve the
+  // link whatever the age of the open (#563). Only the fallback without one
+  // has to tell a live concept from a corpse.
+  const state = readConceptState(cwd, { skipStale: Boolean(concept) });
   if (!state) return "";
   const htmlPath = String(state.html_path).replace(/\\/g, "/").replace(/^\.?\//, "");
   return `http://localhost:${state.port}/${htmlPath}`;
@@ -275,10 +278,16 @@ export function conceptUrl(cwd, concept) {
  * sidebar. Live concepts pass the card their `concept` field anyway; this
  * fallback only has to be right about dead files.
  *
+ * Abandonment is the hook's last-activity rule (#426): the durable store of
+ * `cwd` is passed along, so a concept opened days ago but saved or drafted
+ * recently stays live. `skipStale` drops the check for a card that carries a
+ * `concept` field (#563).
+ *
  * @param {string|undefined} cwd
+ * @param {{ skipStale?: boolean }} [opts]
  * @returns {{ port: number, html_path: string }|null}
  */
-export function readConceptState(cwd) {
+export function readConceptState(cwd, { skipStale = false } = {}) {
   if (!cwd) return null;
   try {
     const state = JSON.parse(readFileSync(join(cwd, ".claude", "concept-active.json"), "utf8"));
@@ -287,7 +296,7 @@ export function readConceptState(cwd) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
     const R = hookRequire("session-start", "ss.concept.resume.js");
     if (!R.isValidHtmlPath(state.html_path)) return null;
-    if (R.isStale(state)) return null;
+    if (!skipStale && R.isStale(state, R.readStore(R.storeDirFor(state.html_path, cwd)))) return null;
     return { port, html_path: state.html_path };
   } catch {
     return null;

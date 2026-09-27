@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
-import { isStale, readStore } from "./ss.concept.resume.js";
+import { isStale, readStore, storeDirFor } from "./ss.concept.resume.js";
 
 // #426 — a concept opened 2026-09-20 11:32 with a draft saved at 22:03 and a
 // journal restore at 14:50 the next day vanished on a session restart at
@@ -130,5 +130,14 @@ describe("dead bridge, old open — the hook keeps a live concept and announces 
     expect(r.stdout).toContain("port 1");
     expect(r.stdout).toContain(p.store);
     expect(r.stdout).toContain("no activity for more than 24 h");
+  });
+});
+
+// #563: the completion card resolves the store from the card's cwd, not from
+// the hook's own process.cwd().
+describe("storeDirFor honours an explicit project root", () => {
+  test("root wins over the process cwd", () => {
+    const root = path.join(os.tmpdir(), "some-project");
+    expect(storeDirFor("docs/concepts/2026-09-25-x.html", root)).toBe(path.join(root, ".claude", "concepts", "2026-09-25-x"));
   });
 });
