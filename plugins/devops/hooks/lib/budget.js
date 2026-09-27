@@ -362,8 +362,31 @@ function budgetSummary(b) {
   };
 }
 
+// Defer to the reset (deep-knowledge/defer-to-reset.md): a nearly
+// full 5 h window that resets soon is cheaper to wait out than to hit
+// mid-change — a half-done edit across contract logic and tests is worse
+// than 40 minutes of waiting.
+const DEFER_AT_PCT = 85;
+const DEFER_MAX_WAIT_MIN = 60;
+
+/** Pure: minutes to wait when deferring multi-file work pays off; null otherwise. */
+function deferMinutes(b) {
+  if (!b || b.override || b.fivePct == null || b.resetInMinutes == null) return null;
+  if (b.fivePct < DEFER_AT_PCT || b.resetInMinutes <= 0 || b.resetInMinutes > DEFER_MAX_WAIT_MIN) return null;
+  return b.resetInMinutes;
+}
+
+function deferSuffix(b) {
+  const min = deferMinutes(b);
+  return min == null ? '' : ` · defer: window ${b.fivePct}%, resets in ${min} min → before multi-file work ask once: after the reset (resume timer) / now inline / park as issue — deep-knowledge/defer-to-reset.md`;
+}
+
 /** Short suffix for the per-prompt nudge; empty when nothing changes. */
 function nudgeSuffix(b) {
+  return classSuffix(b) + deferSuffix(b);
+}
+
+function classSuffix(b) {
   if (b.cls === 'sonnet-only') {
     const reset = b.binding === 'week'
       ? (b.weeklyResetInMinutes != null ? `, week resets in ${Math.round(b.weeklyResetInMinutes / 60)} h` : ', week is the binding limit')
@@ -378,7 +401,7 @@ function nudgeSuffix(b) {
 
 module.exports = {
   RULES, CLASSES, planTier, tierLabel, classify, bindingWindow, refreshDueMinutes, readBudget, maybeRefreshUsage,
-  budgetLine, budgetSummary, nudgeSuffix,
+  budgetLine, budgetSummary, nudgeSuffix, deferMinutes, DEFER_AT_PCT, DEFER_MAX_WAIT_MIN,
   STALE_MS, REFRESH_COOLDOWN_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER, RESET_IMMINENT_MIN, WINDOW_FILL_MIN, WEEK_TO_WINDOW,
   RECENT_RESET_5H_MIN, RECENT_RESET_WEEK_MIN,
 };

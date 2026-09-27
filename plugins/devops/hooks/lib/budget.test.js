@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { planTier, classify, refreshDueMinutes, readBudget, maybeRefreshUsage, budgetLine, budgetSummary, nudgeSuffix, STALE_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER } = require("./budget.js");
+const { planTier, classify, refreshDueMinutes, readBudget, maybeRefreshUsage, budgetLine, budgetSummary, nudgeSuffix, deferMinutes, STALE_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER } = require("./budget.js");
 
 /**
  * The budget class is the delegation policy's fourth input. What must hold
@@ -427,5 +427,36 @@ describe("budgetSummary — the block get_usage returns", () => {
     const b = readBudget({ home: h, nowMs: NOW, env: {}, snapshot: null });
     expect(b.fivePct).toBe(null);
     expect(b.cls).toBe("ask-before-parallel"); // not the disk file's sonnet-only
+  });
+});
+
+describe("defer to the reset — a nearly full window that resets soon", () => {
+  const win = (pct, reset, weekly = 20) => read(home({
+    "usage-live.json": { timestamp: iso(NOW), session: { pct, resetInMinutes: reset }, weekly: { pct: weekly, resetInMinutes: 5000 }, plan: "Max 20x" },
+  }));
+
+  test("91 % with 46 min left: the suffix offers the resume timer and names the doc", () => {
+    const b = win(91, 46);
+    expect(deferMinutes(b)).toBe(46);
+    expect(nudgeSuffix(b)).toContain("defer: window 91%, resets in 46 min");
+    expect(nudgeSuffix(b)).toContain("deep-knowledge/defer-to-reset.md");
+    expect(nudgeSuffix(b)).toContain("ask-before-parallel"); // the class suffix stays first
+  });
+
+  test("85 % is the floor even while the class is still free", () => {
+    const b = win(85, 30);
+    expect(b.cls).toBe("free");
+    expect(nudgeSuffix(b)).toMatch(/^ · defer: window 85%/);
+  });
+
+  test("below 85 %, or more than 60 min to wait: no defer", () => {
+    expect(deferMinutes(win(84, 30))).toBeNull();
+    expect(deferMinutes(win(95, 61))).toBeNull();
+    expect(nudgeSuffix(win(80, 30))).toBe("");
+  });
+
+  test("an env override or an unknown window never defers", () => {
+    expect(deferMinutes({ ...win(95, 20), override: "free" })).toBeNull();
+    expect(deferMinutes({ fivePct: null, resetInMinutes: 20 })).toBeNull();
   });
 });
