@@ -267,3 +267,44 @@ describe("prompt.ship.detect — target channel", () => {
     });
   });
 });
+
+// A ship stopped half-way (usage limit, crash): "weiter" — not "ship" — is
+// what the user types next, and it must pick the ship up at the step that did
+// not finish, delegated on a large context, never from scratch.
+describe("prompt.ship.detect — resume an interrupted ship", () => {
+  async function checkpoint(extra = {}) {
+    const cp = (await import("../lib/ship-checkpoint.js")).default;
+    cp.recordShipStep("ship_preflight", { cwd }, { ready: true, branch: "feat/x", base: "main" });
+    cp.recordShipStep("ship_version_bump", { cwd }, { success: true, bump: "minor", vOld: "1.0.0", vNew: "1.1.0" });
+    if (extra.brief) cp.setBrief(cwd, extra.brief);
+    if (extra.decision) cp.addDecision(cwd, "Bump?", extra.decision);
+  }
+
+  test("'weiter' resumes it inline on a small context — progress named, no fresh ship", async () => {
+    await checkpoint();
+    const r = runHook({ prompt: "weiter", transcript_path: transcript(90_000) });
+    expect(r.stdout).toContain("[ship-resume]");
+    expect(r.stdout).toContain("bump 1.0.0 → 1.1.0 ✓");
+    expect(r.stdout).toContain('with args "--resume"');
+    expect(r.stdout).not.toContain(INLINE + " to execute the full shipping pipeline");
+    expect(r.stdout).toContain("🚀 Shipping – ");
+  });
+
+  test("a large context resumes it in the subagent with the stored brief and decisions", async () => {
+    await checkpoint({ brief: "Intent: X", decision: "minor" });
+    const r = runHook({ prompt: "Continue from where you left off.", transcript_path: transcript(434_000) });
+    expect(r.stdout).toContain('with args "--delegated --resume"');
+    expect(r.stdout).toContain("The brief is stored in the ship checkpoint.");
+    expect(r.stdout).toContain('"Bump?" → minor');
+  });
+
+  test("a ship prompt resumes too; other work does not touch it", async () => {
+    await checkpoint();
+    expect(runHook({ prompt: "/do-ship", transcript_path: transcript(90_000) }).stdout).toContain("[ship-resume]");
+    expect(runHook({ prompt: "erklär mir cache reads", transcript_path: transcript(90_000) }).stdout).toBe("");
+  });
+
+  test("without a checkpoint 'weiter' is no ship at all", () => {
+    expect(runHook({ prompt: "weiter", transcript_path: transcript(90_000) }).stdout).toBe("");
+  });
+});

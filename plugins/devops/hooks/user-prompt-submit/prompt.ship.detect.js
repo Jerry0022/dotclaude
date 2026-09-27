@@ -34,7 +34,7 @@
 // makes this hook a silent no-op instead of a hook error on every prompt
 // (AUD-028).
 let gitOut, readSessionFile, parseShipRequest,
-  hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction;
+  hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction, shipResumeInstruction, shipResumeFor;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
@@ -42,7 +42,8 @@ try {
   ({ parseShipRequest } = require('../lib/ship-intent'));
   ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
   ({ currentContextTokens } = require('../lib/context-size'));
-  ({ shouldDelegate, shipDelegateInstruction } = require('../lib/ship-delegate'));
+  ({ shouldDelegate, shipDelegateInstruction, shipResumeInstruction } = require('../lib/ship-delegate'));
+  ({ shipResumeFor } = require('../lib/ship-resume'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -122,6 +123,18 @@ process.stdin.on('end', () => {
         isAffirmationAfterCompletion = true;
       }
     }
+  }
+
+  // --- An interrupted ship waits here (lib/ship-checkpoint.js): "weiter",
+  // "continue", an affirmation or a ship prompt picks it up at the step that
+  // did not finish — delegated when the context is large, as a new ship is.
+  const rawPrompt = hook.prompt || hook.user_message || hook.message || '';
+  const resume = shipResumeFor(rawPrompt, hook.cwd || process.cwd());
+  if (resume) {
+    const delegate = shouldDelegate({ tokens: currentContextTokens(hook.transcript_path), prompt: rawPrompt });
+    process.stdout.write([...(cacheWarning ? [cacheWarning, ''] : []),
+      shipResumeInstruction({ resume, delegate, pluginRoot: PLUGIN_ROOT })].join('\n') + '\n');
+    process.exit(0);
   }
 
   if (!isDirectShipIntent && !isAffirmationAfterCompletion) {

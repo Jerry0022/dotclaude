@@ -53,4 +53,17 @@ describe("ss.ship.resume", () => {
     fs.writeFileSync(path.join(dir, ".claude", ".ship-in-progress"), "not json");
     expect(sentinelAgeMin(dir)).toBeNull();
   });
+
+  test("an open checkpoint wins over the sentinel's 60-min expiry and names the next step", async () => {
+    const { execFileSync } = await import("node:child_process");
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    const cp = (await import("../lib/ship-checkpoint.js")).default;
+    cp.recordShipStep("ship_preflight", { cwd: dir }, { ready: true, branch: "feat/x", base: "main" });
+    cp.recordShipStep("ship_build", { cwd: dir }, { success: true, buildId: "b" });
+    sentinel(Date.now() - SENTINEL_MAX_AGE_MS - 60000); // a usage limit outlasts the sentinel
+    const out = buildResumeInstruction({ cwd: dir, source: "resume" });
+    expect(out).toContain("interrupted /do-ship of branch feat/x");
+    expect(out).toContain("preflight ✓ · build ✓ · bump ← next");
+    expect(out).toContain("[ship-resume]");
+  });
 });

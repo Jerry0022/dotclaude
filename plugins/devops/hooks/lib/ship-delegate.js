@@ -110,7 +110,41 @@ function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, env = pro
   ].join('\n');
 }
 
+/**
+ * The mandate for a prompt that resumes an interrupted ship
+ * (lib/ship-resume.js): pick up at the step that did not finish, delegated
+ * when the context is large, never from scratch.
+ * @param {{ resume: { checkpoint: object, next: string, summary: string }, delegate: boolean, pluginRoot: string, now?: number }} o
+ * @returns {string}
+ */
+function shipResumeInstruction({ resume, delegate, pluginRoot, now = Date.now() }) {
+  const cp = resume.checkpoint;
+  const ageMin = typeof cp.updatedAt === 'number' ? Math.max(0, Math.round((now - cp.updatedAt) / 60000)) : null;
+  const root = String(pluginRoot).replace(/\\/g, '/');
+  const decisions = Array.isArray(cp.decisions) && cp.decisions.length
+    ? `Decisions the user already made (never ask them again): ${cp.decisions.map((d) => `"${d.question}" → ${d.answer}`).join('; ')}.`
+    : '';
+  const how = delegate
+    ? [
+      'Resume it in a fresh-context subagent, exactly as [ship-delegate] describes (decision / done JSON, card rendered here):',
+      `  Agent({ subagent_type: "general-purpose", run_in_background: false, description: "Ship fortsetzen",`,
+      `    prompt: 'Use Skill("devops:do-ship") with args "--delegated --resume".${cp.brief ? " The brief is stored in the ship checkpoint." : "\\nBrief:\\n<brief>"}' })`,
+      cp.brief ? '' : '  No brief is stored yet — write one from this conversation as [ship-delegate] step 2 describes.',
+      `  Details: ${root}/skills/do-ship/modes/delegated.md`,
+    ].filter(Boolean)
+    : ['MANDATORY: Use Skill("devops:do-ship") with args "--resume".'];
+  return [
+    `[ship-resume] An interrupted /do-ship of branch ${cp.branch || '?'} is waiting here${ageMin == null ? '' : ` (last step ${ageMin} min ago)`}.`,
+    `Progress: ${resume.summary}`,
+    'This prompt continues it. Do NOT start the ship over and do NOT rebuild context from the conversation:',
+    'the checkpoint and git/gh are the truth. Steps marked ✓ are never repeated (no second bump, PR or tag).',
+    ...how,
+    decisions,
+    'The session title stays "🚀 Shipping – " and the turn ends with the ship\'s own card (Shipped / Blocked).',
+  ].filter(Boolean).join('\n');
+}
+
 module.exports = {
   DEFAULT_THRESHOLD, SUBAGENT_FLOOR, INLINE,
-  threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction,
+  threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction, shipResumeInstruction,
 };

@@ -56,6 +56,9 @@ The pipeline is the normal SKILL.md. Only these points differ:
 | Step | Delegated behavior |
 |---|---|
 | Pre-Step 0 | Does not apply. You already are the delegated run. |
+| Right after `ship_preflight` | Save the brief for a possible resume: `node "{PLUGIN_ROOT}/scripts/ship-checkpoint.js" brief --cwd "<cwd>"` with the brief on stdin (a heredoc). A checkpoint that already holds a brief keeps it. |
+| `--resume` | Run Pre-Step R. The brief comes from `checkpoint.brief` when the prompt carries none. |
+| An answer arrives by `SendMessage` | Record it first: `ship-checkpoint.js decision --cwd "<cwd>" --question "<q>" --answer "<a>"`. Then continue from the gate. A resumed run never asks the same question again. |
 | Pre-Step A | Unchanged. If a lockout is active, its BLOCK and RECORD rules win over the decision return below. |
 | Pre-Step B, Pre-Step C | Skip them. The parent owns both. |
 | Every `AskUserQuestion` gate (1b(e) rebase conflict, 1d purpose alignment, Codex finding, major bump, the promotion question in `modes/promote.md`) | Do not call `AskUserQuestion`: it cannot reach the user from a subagent. Stop at the gate with nothing half-done: abort a rebase, leave nothing pushed that the answer could change. End your message with the `decision` JSON (`question`, `options` as short labels, `recommended`). The answer comes back as a `SendMessage`; continue from that same gate. |

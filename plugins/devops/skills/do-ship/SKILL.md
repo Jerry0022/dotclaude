@@ -91,6 +91,7 @@ that safe; a plain `/do-ship` with no arguments behaves exactly as before.
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
 
 | `--delegated` | This run is the fresh-context subagent of a delegated ship (Pre-Step 0). Follow `modes/delegated.md` → *Subagent*: gates return a decision instead of asking, the card comes back as JSON. |
+| `--resume` | Continue an interrupted ship from its checkpoint (Pre-Step R). Sent by `prompt.ship.detect`'s `[ship-resume]` block when the user continues ("weiter", "continue", a ship prompt) and a ship stopped half-way. |
 | `--inline` (old: `--no-compact`) | Keep this one ship in the main context even when the context is large (Pre-Step 0). Parsed and dropped — it changes nothing else. |
 
 Parse these from the skill arguments first; then continue with Pre-Step A.
@@ -119,6 +120,15 @@ auto-cleanup) never see the block, because the hook only reads user prompts.
 A **promotion-only** prompt ("promote stable" with nothing unshipped) never
 sees it either: that run is about 4 calls, so delegating would save nothing. A
 promotion that has to ship first is a ship and is delegated like any other.
+
+## Pre-Step R — Resume an interrupted ship (`--resume`)
+
+The ship MCP server keeps a checkpoint of every step
+(`.claude/.ship-checkpoint.json`), so a ship stopped by a usage limit or a
+crash continues at the first step that did not finish. It never starts over,
+and it never repeats a bump, PR or tag. With `--resume`, follow
+`modes/resume.md`: read the checkpoint, check it against git/gh, skip what
+landed, and end with the normal ship card.
 
 ## Pre-Step A — Autonomous Lockout Detection
 
