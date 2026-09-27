@@ -164,7 +164,11 @@ export function validateCardInput(params) {
   if (params.variant === "ship-successful") {
     const s = isObj(params.state) ? params.state : null;
     if (s && s.mode === "file-only") issues.push({ path: "variant", message: 'a file-only project has no merge to report — use "ready-files"' });
-    else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
+    // No remote: ship_release merges LOCALLY, so `merged` is the whole proof
+    // and there is nothing to push (variant-guard accepts the same, #500).
+    else if (s && s.mode === "git-no-remote") {
+      if (!isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'a git-no-remote ship-successful requires the local merge proof state.merged: "<base>" (e.g. "main")' });
+    } else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
   }
   // `merged` names the base branch; the card prints it ("✓ merge main", the
   // track's base). A boolean read "merge true" and "Shipped v → true" (audit
