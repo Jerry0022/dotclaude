@@ -32,7 +32,7 @@ const HOOKS = [
 
 const BROKEN_LIBS = [
   "git-timeout", "ship-sentinel", "session-id", "ship-intent",
-  "ship-unshipped", "context-size", "ship-compact",
+  "ship-unshipped", "context-size", "ship-delegate",
 ];
 
 function harness(rel, brokenLib) {

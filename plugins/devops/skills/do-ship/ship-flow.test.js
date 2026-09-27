@@ -63,10 +63,30 @@ describe("do-ship — target channel (promote folded in)", () => {
     expect(card).toMatch(/ONE\s+`released` card — never a `ship-successful` card first/);
   });
 
-  test("the promotion-only run is spared the compact stop, a ship-first promotion is not", () => {
-    const compact = section(SKILL, "## Pre-Step 0", "## Pre-Step A");
-    expect(compact).toMatch(/promotion-only/);
-    expect(compact).toMatch(/has to ship first is a ship/);
+  test("the promotion-only run stays inline, a ship-first promotion is delegated", () => {
+    const delegate = section(SKILL, "## Pre-Step 0", "## Pre-Step A");
+    expect(delegate).toMatch(/promotion-only/);
+    expect(delegate).toMatch(/has to ship first is a ship/);
+  });
+
+  test("a large-context ship runs in a subagent — no /compact stop, the card comes back to the parent", () => {
+    const delegate = section(SKILL, "## Pre-Step 0", "## Pre-Step A");
+    expect(delegate).toContain("[ship-delegate]");
+    expect(delegate).toMatch(/--delegated/);
+    expect(delegate).toContain("modes/delegated.md");
+    expect(delegate).not.toContain("/compact");
+    const mode = fs.readFileSync(path.join(__dirname, "modes", "delegated.md"), "utf8");
+    // a subagent cannot ask the user, rename the session or exit the parent's worktree
+    expect(mode).toMatch(/"status": "decision"/);
+    expect(mode).toMatch(/"status": "done"/);
+    expect(mode).toMatch(/Do not call `AskUserQuestion`/);
+    // The subagent renders (a finalizer after the render may mark MCP stale),
+    // the parent only shows it — and only the parent can decide keep-mode.
+    expect(mode).toContain("**Never call `show_widget` or rename the session**");
+    expect(mode).toMatch(/Do not call\s+`render_completion_card` again/);
+    expect(mode).toMatch(/Do not evaluate signals 1–3/);
+    expect(mode).toMatch(/Add `--keep`/);
+    expect(mode).toMatch(/Never call it/);
   });
 
 // Red-team R2(a)/(d): a named version is promotion-only (a stale card

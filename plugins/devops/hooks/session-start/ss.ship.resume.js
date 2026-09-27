@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.ship.resume
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
  * @description Keep a running /do-ship stable across a compaction or a resume.
@@ -17,6 +17,10 @@
  *   (ship-sentinel.js ages it out after 60 min — a crashed ship, not a
  *   paused one; ss.git.check covers that checkout as usual).
  *   Reads one small file; no git, no network — boot-window safe.
+ *   Since 0.2.0 the ship checkpoint (lib/ship-checkpoint.js) wins over the
+ *   sentinel: it has no 60-min expiry — a usage limit lasts hours — and it
+ *   names the steps that already landed, so the resumed run starts at the
+ *   first unfinished one instead of re-deriving everything.
  */
 
 require('../lib/plugin-guard');
@@ -24,6 +28,7 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 const { isActive, sentinelPath } = require('../lib/ship-sentinel');
+const { openCheckpoint, describeCheckpoint } = require('../lib/ship-checkpoint');
 
 /**
  * Minutes since the sentinel was written, or null when unreadable.
@@ -46,7 +51,22 @@ function sentinelAgeMin(cwd) {
  * @returns {string|null}
  */
 function buildResumeInstruction({ cwd, source }) {
-  if (!cwd || !isActive(cwd)) return null;
+  if (!cwd) return null;
+  const cp = openCheckpoint(cwd);
+  if (cp) {
+    const when = source === 'compact' ? 'the context was just compacted'
+      : source === 'resume' ? 'this session was just resumed'
+        : 'this session just started';
+    return [
+      `[ss.ship.resume] An interrupted /do-ship of branch ${cp.branch || '?'} is waiting in ${cwd} and ${when}.`,
+      `Progress: ${describeCheckpoint(cp)}`,
+      'The next "weiter" / "continue" / ship prompt resumes it at the step marked next (prompt.ship.detect sends a',
+      '[ship-resume] block — follow it; the title stays "🚀 Shipping – " and the turn ends with the ship card).',
+      'Never start that ship over and never repeat a step marked ✓. If the user asks for something else first,',
+      'do that — but mention in one line that a ship is waiting to be resumed.',
+    ].join('\n');
+  }
+  if (!isActive(cwd)) return null;
   const age = sentinelAgeMin(cwd);
   const when = source === 'compact' ? 'the context was just compacted'
     : source === 'resume' ? 'this session was just resumed'

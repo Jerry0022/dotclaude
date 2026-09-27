@@ -105,7 +105,6 @@ const WINDOW_WK_MIN          = 10080;
 // 561 calls) — a note that is always there is not a signal. A ship session is
 // long by nature; nudge only when the context is genuinely deep.
 const HEALTH_WARN_THRESHOLD  = 1000;
-const HEALTH_CRIT_THRESHOLD  = 2000;
 
 // Card body budget (characters). The summary/title is clamped on a word
 // boundary (see lib/soft-limits.js#clampText); result-line and evidence-post
@@ -118,6 +117,18 @@ const PACE_WARN_PP           = 20;
 /** Safely parse a JSON string; returns the original value on failure. */
 function tryParse(v) {
   try { return JSON.parse(v); } catch { return v; }
+}
+
+// `cta` is an object of placeholders, but the hook text lists it beside plain
+// fields, so callers pass `cta: "Umsetzen?"` — which used to fail the whole
+// card with invalid_type. A JSON string still parses; any other string becomes
+// the free-text `info` placeholder instead of an error.
+function ctaInput(v) {
+  if (typeof v !== 'string') return v;
+  const parsed = tryParse(v);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  const text = v.trim();
+  return text ? { info: text } : undefined;
 }
 
 // Resolved at CALL time, not module load: a mid-session plugin-cache rebuild
@@ -770,9 +781,6 @@ function promotionPosts(input, lang) {
 
 /** Ordered evidence posts: deviations (✗ / ◐ / ⚠) first, dim green after. */
 function buildEvidencePosts(input, lang, key) {
-  // The compact stop ran nothing — no tests, no gates; an "unverified" post
-  // there would blame a ship that never started.
-  if (shipCompactInfo(input.compact, lang)) return [];
   const tests = Array.isArray(input.tests) ? input.tests : [];
   const validation = Array.isArray(input.validation) ? input.validation : [];
 
@@ -816,10 +824,12 @@ function renderEvidenceRowMd(posts) {
 // is omitted. Context health (§ old renderContextHealth) sits dim at the end.
 // ---------------------------------------------------------------------------
 
+// A depth indicator only: it used to append "/compact" (or "/clear"), but a
+// long session no longer has to compact before shipping — a large-context
+// ship runs in a fresh subagent (hooks/lib/ship-delegate.js).
 function renderContextHealth(toolCallCount) {
   if (toolCallCount <= HEALTH_WARN_THRESHOLD) return '';
-  const cmd = toolCallCount <= HEALTH_CRIT_THRESHOLD ? '/compact' : '/clear';
-  return '🧠 ' + toolCallCount + ' Calls · ' + cmd;
+  return '🧠 ' + toolCallCount + ' Calls';
 }
 
 const BUDGET_BAR_WIDTH = 14;
@@ -1123,7 +1133,6 @@ const HEADINGS = {
     batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
     'vv-unverified': () => '⚠ Ungeprüft shippen?',
     'vv-running': () => '⏳ Test läuft noch — Ergebnis abwarten?',
-    'ship-compact': (c) => `🗜 Kontext ${c.size} Tokens — vor dem Ship kompaktieren?`,
   },
   en: {
     ready: (c) => c.reservation ? `📦 Ship anyway despite ${c.reservation}?` : '📦 Ship?',
@@ -1154,7 +1163,6 @@ const HEADINGS = {
     batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
     'vv-unverified': () => '⚠ Ship unverified?',
     'vv-running': () => '⏳ Test still running — wait for its result?',
-    'ship-compact': (c) => `🗜 Context ${c.size} tokens — compact before the ship?`,
   },
 };
 
@@ -1399,37 +1407,6 @@ function buildContextLine(input, key, delivery, lang) {
   return '';
 }
 
-/**
- * The careful-compact stop before /do-ship (hooks/lib/ship-compact.js) as a
- * decision block: heading with the context size, the saving as context line,
- * and the full `/compact` command as a point. No button can carry /compact —
- * the host refuses a prefill that starts with "/" — so the command is text in
- * both clients; the widget adds the one "Ohne Kompaktieren shippen" button
- * (`widgetPoints` drops the terminal's "just /do-ship again" line it replaces).
- * Numbers and focus come from the hook's own lib, so the card and the hook can
- * never disagree. null when the field is absent or carries no usable count.
- */
-function shipCompactInfo(compact, lang) {
-  if (!compact || typeof compact !== 'object') return null;
-  const tokens = Number(compact.tokens);
-  if (!Number.isFinite(tokens) || tokens <= 0) return null;
-  let lib = null;
-  try { lib = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-compact.js')); } catch { /* fallbacks below */ }
-  const focus = (typeof compact.focus === 'string' && compact.focus.trim()) || (lib && lib.COMPACT_FOCUS) || '';
-  const size = `${Math.round(tokens / 1000)} k`;
-  const saving = lib && lib.shipSavingEstimate ? lib.shipSavingEstimate(tokens) : '';
-  const en = lang === 'en';
-  const context = saving
-    ? (en ? `› Compacting first saves ${saving} tokens on the ship` : `› Kompaktieren spart beim Ship ${saving} Tokens`)
-    : '';
-  const command = `/compact ${focus}`.trim();
-  const points = [
-    '`' + command + '`',
-    en ? 'Without compacting: just `/do-ship` again' : 'Ohne Kompaktieren: einfach nochmal `/do-ship`',
-  ];
-  return { size, context, points, widgetPoints: [command] };
-}
-
 /** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
 const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback', 'paused']);
 
@@ -1440,9 +1417,7 @@ const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
  * The whole decision block: heading (already carrying any "+N weitere" tail),
  * optional context line, ≤3 points, and the button-table key for the widget.
  * Handles the concept / batch / pending overrides, which replace the block
- * of every OTHER variant (§ 2.6, § 3). The careful-compact stop outranks them
- * all: the ship halted before it started and only the user can compact, so
- * that is the one decision — an open concept page must not hide it.
+ * of every OTHER variant (§ 2.6, § 3).
  */
 /**
  * A manual web hand-off hiding in the card's OWN `userFinalTest`/`open`
@@ -1475,20 +1450,9 @@ function dropChipOpenItems(open, sessionId, cwd) {
 
 function buildDecisionBlock(input, lang, key, delivery, state) {
   const T = HEADINGS[lang] || HEADINGS.de;
-  const compact = shipCompactInfo(input.compact, lang);
-  if (compact) {
-    return {
-      heading: T['ship-compact'](compact),
-      context: compact.context,
-      points: compact.points,
-      widgetPoints: compact.widgetPoints,
-      buttonsKey: 'ship-compact',
-    };
-  }
   const batch = hasConcept(input.concept) ? null : readBatch(input.cwd);
   // A manual web step in the card payload keeps its guide button on the
-  // concept, batch and pending cards too (AUD-C042) — only the compact stop
-  // above is the one decision of its card.
+  // concept, batch and pending cards too (AUD-C042).
   const guideHandoff = detectGuideHandoff(input);
 
   if (hasConcept(input.concept)) {
@@ -1518,7 +1482,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // Without a remote there is nothing to push, PR or merge, so the ready and
   // test cards stop asking "ship?" and the widget drops their Ship button
   // (#500). The keys that follow a ship attempt (ready-red, ship-blocked,
-  // vv-unverified, ship-compact) keep theirs: a local ship still commits.
+  // vv-unverified) keep theirs: a local ship still commits.
   // Without any repo (file-only) there is nothing to ship either: the test
   // card asks only to test.
   const noShip = (state.mode === 'git-no-remote' || state.mode === 'file-only') && (key === 'ready' || key === 'test');
@@ -1679,9 +1643,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     ladder: buildChannelLadder(input),
     heading: decision.heading,
     context: decision.context,
-    // A decision block may carry its own widget points (ship-compact: the
-    // button replaces one of the terminal's lines).
-    points: decision.widgetPoints || decision.points,
+    points: decision.points,
     buttonsKey: decision.buttonsKey,
     promoteVersion: decision.version || null,
     replies: decision.replies || [],
@@ -1889,7 +1851,7 @@ function refreshUsage() {
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
   'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest', 'open',
-  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept', 'compact',
+  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept',
 ];
 
 /** Prefix that carries the relay contract with the card itself. */
@@ -2385,7 +2347,7 @@ server.registerTool(
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
-        v => typeof v === 'string' ? tryParse(v) : v,
+        ctaInput,
         z.object({
           vOld: z.string().optional(),
           vNew: z.string().optional(),
@@ -2395,7 +2357,7 @@ server.registerTool(
           reason: z.string().optional(),
           description: z.string().optional(),
         }).optional(),
-      ).describe("CTA template placeholders"),
+      ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
       userTest: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
@@ -2441,13 +2403,6 @@ server.registerTool(
           }),
         ]).optional(),
       ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich', where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
-      compact: z.preprocess(
-        v => typeof v === 'string' ? tryParse(v) : v,
-        z.object({
-          tokens: z.number().describe("Context size in tokens, from the [ship-compact] block."),
-          focus: z.string().optional().describe("The /compact focus. Omit — the default is the hook's own ship focus."),
-        }).optional(),
-      ).describe("The [ship-compact] stop before /do-ship: replaces the decision block with 'Kontext N k — vor dem Ship kompaktieren?', the saving, the full /compact command as text (no button can carry a slash command), and on Desktop one button, Ohne Kompaktieren shippen (puts 'ship --no-compact' in the input box). Pass it exactly as the [ship-compact] block says, with variant 'ship-blocked'."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -2514,7 +2469,7 @@ export {
   insideWorkTree, withDetectedRepoMode,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
-  resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
+  ctaInput, resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
 };
 
 // ---------------------------------------------------------------------------
