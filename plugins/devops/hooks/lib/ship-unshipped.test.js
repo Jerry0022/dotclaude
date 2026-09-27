@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { hasUnshippedWork } = require("./ship-unshipped.js");
 
 // "promote stable" on a branch with nothing unshipped is a promotion-only
-// do-ship run, and prompt.ship.detect spares it the careful-compact stop.
+// do-ship run, and prompt.ship.detect keeps it inline instead of delegating it.
 // The check compares CONTENT, so a squash-merged branch reads as shipped.
 let root;
 let origin;

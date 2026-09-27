@@ -23,7 +23,7 @@
  *   A `compact_boundary` newer than every assistant line means the session
  *   was just compacted: the newest `usage` predates the compaction and
  *   describes a context that no longer exists. That is unknown (null), not
- *   the old size — reading past the boundary made the ship-compact advice
+ *   the old size — reading past the boundary made the old ship-compact advice
  *   fire again right after the user compacted (3 of 8 fires, 2026-09-22).
  */
 

@@ -16,7 +16,7 @@ let tmp;
  *  (the hook is silent outside a work tree), plugin enabled in its settings
  *  so plugin-guard passes whatever the machine's global state is.
  *
- *  The hook keeps its per-session markers (edit counter, "compact advised")
+ *  The hook keeps its per-session markers (the edit counter)
  *  in `os.tmpdir()`, which honours TMPDIR/TEMP/TMP. On the shared system tmp
  *  dir every concurrent run of this file — another session's test run,
  *  another worktree — used the same fixed session id, so one run consumed or
@@ -28,7 +28,7 @@ function runHook(payload, env) {
     input: JSON.stringify({ cwd, session_id: "ship-detect-test", ...payload }),
     cwd,
     encoding: "utf8",
-    env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp, DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "", ...(env || {}) },
+    env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp, DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "", DOTCLAUDE_SHIP_DELEGATE_THRESHOLD: "", ...(env || {}) },
   });
   return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
 }
@@ -66,64 +66,69 @@ afterEach(() => {
 });
 
 // The ship pipeline re-reads the whole context ~16 times. Above the threshold
-// the hook hands the user the /compact command instead of starting the ship;
+// the hook hands the ship to a fresh-context subagent (do-ship --delegated);
 // below it, and whenever the size is unknown, the ship instruction is unchanged.
-describe("prompt.ship.detect — careful compact", () => {
-  test("small context: the ship instruction, no compact advice", () => {
+const INLINE = 'MANDATORY: Use Skill("devops:do-ship")';
+describe("prompt.ship.detect — delegated ship on a large context", () => {
+  test("small context: the inline ship instruction, no delegation", () => {
     const r = runHook({ prompt: "/do-ship", transcript_path: transcript(90_000) });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Skill("devops:do-ship")');
-    expect(r.stdout).not.toContain("[ship-compact]");
+    expect(r.stdout).toContain(INLINE);
+    expect(r.stdout).not.toContain("[ship-delegate]");
   });
 
-  test("large context: the compact advice replaces the ship instruction", () => {
+  test("large context: the ship goes to a subagent, the user types nothing extra", () => {
     const r = runHook({ prompt: "/do-ship", transcript_path: transcript(434_000) });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("[ship-compact]");
+    expect(r.stdout).toContain("[ship-delegate]");
     expect(r.stdout).toContain("434 k");
-    expect(r.stdout).toContain("/compact ");
-    expect(r.stdout).not.toContain('Skill("devops:do-ship")');
+    expect(r.stdout).toContain('subagent_type: "general-purpose"');
+    expect(r.stdout).toContain('Skill("devops:do-ship") with args "--delegated"');
+    expect(r.stdout).toContain("render_completion_card");
+    expect(r.stdout).toContain("skills/do-ship/modes/delegated.md");
+    expect(r.stdout).not.toContain(INLINE);
+    expect(r.stdout).not.toContain("/compact");
   });
 
-  test("an affirmation after edits is a ship too, and gets the same stop", () => {
+  test("an affirmation after edits is a ship too, and is delegated the same way", () => {
     // the edit counter the affirmation path reads lives in the session file store
     writeSessionFile(privateSessionFile("dotclaude-devops-edits"), "3");
     const r = runHook({ prompt: "ja", transcript_path: transcript(500_000) });
-    expect(r.stdout).toContain("[ship-compact]");
+    expect(r.stdout).toContain("[ship-delegate]");
   });
 
-  test("--no-compact lets the large-context ship through", () => {
-    const r = runHook({ prompt: "/do-ship --no-compact", transcript_path: transcript(434_000) });
-    expect(r.stdout).toContain('Skill("devops:do-ship")');
-    expect(r.stdout).not.toContain("[ship-compact]");
+  test("--inline (and the old --no-compact) keeps the large-context ship here", () => {
+    for (const prompt of ["/do-ship --inline", "/do-ship --no-compact"]) {
+      const r = runHook({ prompt, transcript_path: transcript(434_000) });
+      expect(r.stdout).toContain(INLINE);
+      expect(r.stdout).not.toContain("[ship-delegate]");
+    }
   });
 
-  test("no transcript path (unknown size) never stops a ship", () => {
+  test("no transcript path (unknown size) ships inline", () => {
     const r = runHook({ prompt: "/do-ship" });
-    expect(r.stdout).toContain('Skill("devops:do-ship")');
+    expect(r.stdout).toContain(INLINE);
   });
 
-  test("threshold 0 disables the stop", () => {
-    const r = runHook({ prompt: "/do-ship", transcript_path: transcript(900_000) }, { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" });
-    expect(r.stdout).toContain('Skill("devops:do-ship")');
+  test("threshold 0 disables delegation — the new and the old variable", () => {
+    for (const env of [{ DOTCLAUDE_SHIP_DELEGATE_THRESHOLD: "0" }, { DOTCLAUDE_SHIP_COMPACT_THRESHOLD: "0" }]) {
+      const r = runHook({ prompt: "/do-ship", transcript_path: transcript(900_000) }, env);
+      expect(r.stdout).toContain(INLINE);
+    }
   });
 
-  test("never twice in a row: the next ship prompt runs, the one after that is asked again", () => {
+  test("delegation needs no second prompt: every large ship prompt is delegated", () => {
     const t = transcript(434_000);
-    expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-compact]");
-    const second = runHook({ prompt: "ship", transcript_path: t });
-    expect(second.stdout).toContain('Skill("devops:do-ship")');
-    expect(second.stdout).not.toContain("[ship-compact]");
-    // the marker was consumed — a later ship on a big context is asked again
-    expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-compact]");
+    expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-delegate]");
+    expect(runHook({ prompt: "ship", transcript_path: t }).stdout).toContain("[ship-delegate]");
   });
 
-  test("right after /compact the stale pre-compact size does not stop the ship", () => {
+  test("right after /compact the stale pre-compact size ships inline", () => {
     const t = transcript(469_000);
     fs.appendFileSync(t, JSON.stringify({ type: "system", subtype: "compact_boundary", compactMetadata: { trigger: "manual", preTokens: 469_000 } }) + "\n");
     const r = runHook({ prompt: "ship", transcript_path: t });
-    expect(r.stdout).toContain('Skill("devops:do-ship")');
-    expect(r.stdout).not.toContain("[ship-compact]");
+    expect(r.stdout).toContain(INLINE);
+    expect(r.stdout).not.toContain("[ship-delegate]");
   });
 
   test("a non-ship prompt is untouched", () => {
@@ -140,7 +145,7 @@ describe("prompt.ship.detect — affirmation reads only this session's edits", (
     writeSessionFile(path.join(tmp, "dotclaude-devops-edits-other-session"), "3");
     const r = runHook({ prompt: "ja" });
     expect(r.stdout).not.toContain('Skill("devops:do-ship")');
-    expect(r.stdout).not.toContain("[ship-compact]");
+    expect(r.stdout).not.toContain("[ship-delegate]");
   });
 
   test("this session's own edit counter still does", () => {
@@ -203,7 +208,7 @@ describe("prompt.ship.detect — target channel", () => {
     expect(runHook({ prompt: "promote the idea to the team" }).stdout).toBe("");
   });
 
-  describe("careful compact vs. a promotion", () => {
+  describe("delegated ship vs. a promotion", () => {
     /** Turn the test cwd into a clone whose main is in sync with its origin. */
     function syncedWithOrigin() {
       const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ship-detect-origin-"));
@@ -218,43 +223,44 @@ describe("prompt.ship.detect — target channel", () => {
       return origin;
     }
 
-    test("promotion-only (nothing unshipped): no compact stop on a large context", () => {
+    test("promotion-only (nothing unshipped): stays inline on a large context", () => {
       const origin = syncedWithOrigin();
       try {
         const r = runHook({ prompt: "promote stable", transcript_path: transcript(600_000) });
         expect(r.stdout).toContain('Skill("devops:do-ship") with args "stable"');
-        expect(r.stdout).not.toContain("[ship-compact]");
+        expect(r.stdout).not.toContain("[ship-delegate]");
       } finally {
         fs.rmSync(origin, { recursive: true, force: true });
       }
     });
 
-    test("a promotion that has to ship first is a ship — the stop applies", () => {
+    test("a promotion that has to ship first is a ship — delegated, channel passed on", () => {
       const origin = syncedWithOrigin();
       try {
         fs.writeFileSync(path.join(cwd, "a.txt"), "two\n");
         const r = runHook({ prompt: "promote stable", transcript_path: transcript(600_000) });
-        expect(r.stdout).toContain("[ship-compact]");
+        expect(r.stdout).toContain("[ship-delegate]");
+        expect(r.stdout).toContain('with args "--delegated stable"');
       } finally {
         fs.rmSync(origin, { recursive: true, force: true });
       }
     });
 
-    test("a promotion naming its version never gets the stop — even with unshipped work (it ships nothing)", () => {
+    test("a promotion naming its version is never delegated — even with unshipped work (it ships nothing)", () => {
       const origin = syncedWithOrigin();
       try {
         fs.writeFileSync(path.join(cwd, "a.txt"), "two\n");
         const r = runHook({ prompt: "promote stable 0.193.0", transcript_path: transcript(600_000) });
-        expect(r.stdout).not.toContain("[ship-compact]");
+        expect(r.stdout).not.toContain("[ship-delegate]");
         expect(r.stdout).toContain('with args "stable 0.193.0"');
       } finally {
         fs.rmSync(origin, { recursive: true, force: true });
       }
     });
-    test("a plain ship on a synced branch still gets the stop (only promotions are spared)", () => {
+    test("a plain ship on a synced branch is still delegated (only promotions are spared)", () => {
       const origin = syncedWithOrigin();
       try {
-        expect(runHook({ prompt: "ship", transcript_path: transcript(600_000) }).stdout).toContain("[ship-compact]");
+        expect(runHook({ prompt: "ship", transcript_path: transcript(600_000) }).stdout).toContain("[ship-delegate]");
       } finally {
         fs.rmSync(origin, { recursive: true, force: true });
       }

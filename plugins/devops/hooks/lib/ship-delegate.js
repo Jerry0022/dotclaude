@@ -1,0 +1,116 @@
+/**
+ * @module ship-delegate
+ * @version 1.0.0
+ * @plugin devops
+ * @description The "ship in a fresh-context subagent" instruction, shared by
+ *   `prompt.ship.detect` (which emits it instead of the plain
+ *   Skill('devops:do-ship') mandate) and its test.
+ *
+ *   Why: a /do-ship runs ~16 API calls, each re-reading the WHOLE context, and
+ *   it runs at the end of a session when that context is largest. Measured
+ *   over 10 sessions (2026-09-21): Ø 434 k tokens per ship call, ~24 % of
+ *   the session's tokens for a step that produces ~10 k output tokens.
+ *   No hook or skill can compact the context, so the old answer (v0.4 of the
+ *   former lib/ship-compact.js) stopped the ship and made the user type
+ *   `/compact` plus a new ship prompt. The pipeline does not need the
+ *   conversation, only a brief of it: the main session writes that brief
+ *   once and a general-purpose subagent runs do-ship on a fresh context
+ *   (`--delegated`, skills/do-ship/modes/delegated.md). The user types
+ *   nothing extra; the main session renders the card from the payload the
+ *   subagent returns.
+ *
+ *   - Threshold `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (tokens; `0` disables;
+ *     the old `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` is still read as a
+ *     fallback), default 200 k. Delegating costs no user prompt, so the bar
+ *     is lower than the old stop's 350 k: a subagent starts at roughly
+ *     50 k (system prompt, tool schemas, brief), so at 200 k one ship
+ *     already saves ≈ 2.4 M cache reads.
+ *   - `--inline` (or the old `--no-compact`) keeps one ship in the main
+ *     context.
+ *   - Never for a promotion-only run (`promotionOnly`): ~4 calls, not ~16.
+ *   - Only user prompts reach the hook, so an orchestrator's Skill-tool ship
+ *     (`/do-run backlog`, auto-cleanup) always runs where it was invoked.
+ */
+
+const { formatTokens } = require('./context-size');
+
+const DEFAULT_THRESHOLD = 200_000;
+
+/** What a fresh subagent carries before its first ship call: system prompt,
+ *  tool schemas, the skill and the brief. */
+const SUBAGENT_FLOOR = 50_000;
+
+/** `/do-ship --inline`, `ship it --no-compact` — one-shot opt-out. */
+const INLINE = /(^|\s)--(inline|no-compact)\b/i;
+
+/**
+ * Threshold in tokens; 0 = disabled.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {number}
+ */
+function threshold(env = process.env) {
+  const raw = env.DOTCLAUDE_SHIP_DELEGATE_THRESHOLD || env.DOTCLAUDE_SHIP_COMPACT_THRESHOLD;
+  if (raw === undefined || raw === '') return DEFAULT_THRESHOLD;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_THRESHOLD;
+}
+
+/**
+ * What delegating saves on one ship: the context above the subagent's own
+ * floor, re-read ~16 times.
+ * @param {number} tokens
+ * @returns {string} "≈ 5.3 M"
+ */
+function shipSavingEstimate(tokens) {
+  const m = (Math.max(0, tokens - SUBAGENT_FLOOR) * 16) / 1_000_000;
+  return m >= 10 ? `≈ ${Math.round(m)} M` : `≈ ${m.toFixed(1)} M`;
+}
+
+/**
+ * Whether this ship prompt goes to a subagent.
+ * @param {{ tokens: number|null, prompt: string, promotionOnly?: boolean, env?: NodeJS.ProcessEnv }} o
+ * @returns {boolean}
+ */
+function shouldDelegate({ tokens, prompt, promotionOnly = false, env = process.env }) {
+  const limit = threshold(env);
+  if (!limit || tokens == null || tokens < limit) return false;
+  if (promotionOnly) return false;
+  return !INLINE.test(prompt || '');
+}
+
+/**
+ * The instruction block that replaces the inline ship mandate.
+ * @param {{ tokens: number, skillArgs?: string, pluginRoot: string, env?: NodeJS.ProcessEnv }} o
+ *   skillArgs — the do-ship argument the inline mandate would have passed
+ *   ("stable", "promote 0.193.0", …); `--delegated` is prepended.
+ * @returns {string}
+ */
+function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, env = process.env }) {
+  const args = ['--delegated', skillArgs].filter(Boolean).join(' ');
+  const mode = `${String(pluginRoot).replace(/\\/g, '/')}/skills/do-ship/modes/delegated.md`;
+  return [
+    `[ship-delegate] Context is ${formatTokens(tokens)} tokens (threshold ${formatTokens(threshold(env))}). The ship runs in a`,
+    `fresh-context subagent instead of here: it saves ${shipSavingEstimate(tokens)} cache-read tokens and the user types nothing extra.`,
+    'Do NOT run the pipeline in this context: no ship_* call, no git push/merge — even if the do-ship skill is already loaded.',
+    '',
+    '1. If this session still has its OWN background agents or commands running, ask the user first (wait / ship anyway / cancel).',
+    '2. Write the brief from this conversation — the subagent sees nothing else:',
+    '   intent (the user\'s key prompts, verbatim) · what changed, as ≤ 3 functional changes (area → description) ·',
+    '   tests that ran + results · validation (requirement → how met → how confirmed) · open points · issue refs ·',
+    '   anything the ship must know (bump hint, risks, files not to commit).',
+    '3. Agent({ subagent_type: "general-purpose", run_in_background: false, description: "Ship im Subagenten",',
+    `   prompt: 'Use Skill("devops:do-ship") with args "${args}". Brief:\\n<brief>' })`,
+    '4. The agent ends with ONE fenced json block:',
+    '   { "status": "decision", "question", "options", "recommended" } → AskUserQuestion, then SendMessage the answer',
+    '     to the same agent and wait for its next result.',
+    '   { "status": "done", "card": {…}, "exitWorktree": bool } → exitWorktree true: ExitWorktree({ action: "remove" }) first.',
+    '     Then render_completion_card with the card fields plus lang, cwd and session_id, and deliver it like every card',
+    '     (SESSION TITLE block, then the widget / markdown last). No text of your own.',
+    `Details (read only on trouble): ${mode}`,
+  ].join('\n');
+}
+
+module.exports = {
+  DEFAULT_THRESHOLD, SUBAGENT_FLOOR, INLINE,
+  threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction,
+};

@@ -338,7 +338,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### ship — enforce the shipping pipeline
 
 - `pre.ship.guard` — Block manual PR/merge via Bash *(PreToolUse)*
-- `prompt.ship.detect` — Detect ship intent, enforce /do-ship skill; above `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (200 k tokens) hands the user a `/compact` command instead *(UserPromptSubmit)*
+- `prompt.ship.detect` — Detect ship intent, enforce /do-ship skill; above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (200 k tokens) runs the ship in a fresh-context subagent instead *(UserPromptSubmit)*
 - `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
 - `ss.ship.resume` — Re-enter a ship that was mid-pipeline when the context compacted or the session paused: verify git/gh state first, never a second PR or tag *(SessionStart)*
 

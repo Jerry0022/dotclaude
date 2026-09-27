@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.7.4
+ * @version 0.8.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -10,10 +10,10 @@
  *   card ("ja", "yes", "mach", "go", "do it"). The keyword list lives in
  *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
  *   is marked `🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
- *   Above a context threshold the hook emits the careful-compact advice from
- *   lib/ship-compact.js INSTEAD of the ship instruction: the ship would
- *   re-read that context ~16 times, and only the user can compact. The
- *   ship prompt right after an advice runs — never the advice twice in a row.
+ *   Above a context threshold the mandate becomes the delegate instruction
+ *   from lib/ship-delegate.js: the ship would re-read that context ~16
+ *   times, so the main session briefs a fresh-context subagent that runs
+ *   do-ship --delegated and hands the card back. `--inline` opts out once.
  *   Target channel (promote folded into do-ship, skill restructure PR 2):
  *   "ship stable", "promote to beta", "release beta", "auf stable heben",
  *   `/promote stable` — lib/ship-intent.js parses the channel and the hook
@@ -22,7 +22,7 @@
  *   "promote" passes `promote` (do-ship asks which promotion). This hook
  *   owns every do-ship prompt; the trigger router stays silent on them.
  *   A promotion-only prompt (nothing unshipped, lib/ship-unshipped.js) never
- *   gets the compact advice — the run is ~4 calls, not ~16.
+ *   is delegated — the run is ~4 calls, not ~16.
  *   A promotion that names a version ("promote stable 0.193.0", the card's
  *   promote buttons) is promotion-only by definition: the mandate forbids
  *   shipping new work, so a stale button click never ships later edits.
@@ -30,21 +30,19 @@
  *   (GIT_TIMEOUT_MS; it had no timeout before).
  */
 
-const fs = require('fs');
-
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every prompt
 // (AUD-028).
-let gitOut, sessionFile, readSessionFile, writeSessionFile, parseShipRequest,
-  hasUnshippedWork, currentContextTokens, shipCompactAdvice;
+let gitOut, readSessionFile, parseShipRequest,
+  hasUnshippedWork, currentContextTokens, shouldDelegate, shipDelegateInstruction;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
-  ({ sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id'));
+  ({ readSessionFile } = require('../lib/session-id'));
   ({ parseShipRequest } = require('../lib/ship-intent'));
   ({ hasUnshippedWork } = require('../lib/ship-unshipped'));
   ({ currentContextTokens } = require('../lib/context-size'));
-  ({ shipCompactAdvice } = require('../lib/ship-compact'));
+  ({ shouldDelegate, shipDelegateInstruction } = require('../lib/ship-delegate'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -52,9 +50,10 @@ try {
   process.exit(0);
 }
 
-/** Set when a ship prompt got the compact advice; the next ship prompt of
- *  the same session consumes it and runs — never the advice twice in a row. */
-const ADVISED_PREFIX = 'dotclaude-devops-ship-compact-advised';
+const path = require('path');
+
+/** The installed plugin root, for the delegated mode's doc path. */
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 
 /**
  * Returns true if cwd is inside a git work tree.
@@ -138,32 +137,6 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  // --- Careful compact before ship: measure the context, stop before the
-  // pipeline pays for it (lib/ship-compact.js has the numbers and the why).
-  // Only user prompts reach this hook, so a ship an orchestrator invokes via
-  // the Skill tool is never held up here. `--no-compact` skips it once, and
-  // the ship prompt right after an advice runs: the marker is this session's
-  // alone (exact read), set by an advice and consumed by the next ship prompt.
-  const advisedFile = sessionFile(ADVISED_PREFIX, hook.session_id);
-  const advisedBefore = !!readSessionFile(ADVISED_PREFIX, hook.session_id, { exact: true });
-  if (advisedBefore) { try { fs.unlinkSync(advisedFile); } catch {} }
-  let advice = shipCompactAdvice({
-    tokens: currentContextTokens(hook.transcript_path),
-    prompt: hook.prompt || hook.user_message || hook.message || '',
-    advisedBefore,
-  });
-  // A promotion with nothing to ship first is cheap — no stop. A promotion
-  // that names its version never ships (promotion-only by definition). The
-  // git probe runs only here, when the advice would otherwise fire.
-  if (advice && isDirectShipIntent && request.promote && (request.version || !hasUnshippedWork(process.cwd()))) {
-    advice = null;
-  }
-  if (advice) {
-    try { writeSessionFile(advisedFile, String(Date.now())); } catch {}
-    process.stdout.write([...(cacheWarning ? [cacheWarning, ''] : []), advice].join('\n') + '\n');
-    process.exit(0);
-  }
-
   // --- Inject ship instruction (soft guidance, no flag files) ---
   const reason = isDirectShipIntent
     ? `Ship intent detected: "${userMessage}"`
@@ -183,9 +156,25 @@ process.stdin.on('end', () => {
   } else {
     promoteNote = 'A promotion without a channel: do-ship asks which promotion (skills/do-ship/modes/promote.md).';
   }
-  const mandate = promoteArgs
+  let mandate = promoteArgs
     ? [`MANDATORY: Use Skill("devops:do-ship") with args "${promoteArgs}".`, promoteNote]
     : ['MANDATORY: Use Skill("devops:do-ship") to execute the full shipping pipeline.'];
+
+  // --- Large context: the ship runs in a fresh-context subagent
+  // (lib/ship-delegate.js has the numbers and the why). Only user prompts
+  // reach this hook, so an orchestrator's Skill-tool ship is never
+  // redirected. A promotion with nothing to ship first is cheap, and one
+  // that names its version never ships — both stay inline; the git probe
+  // runs only when delegation would otherwise apply.
+  const tokens = currentContextTokens(hook.transcript_path);
+  const prompt = hook.prompt || hook.user_message || hook.message || '';
+  if (shouldDelegate({ tokens, prompt })
+    && !(isDirectShipIntent && request.promote && (request.version || !hasUnshippedWork(process.cwd())))) {
+    mandate = [
+      shipDelegateInstruction({ tokens, skillArgs: promoteArgs, pluginRoot: PLUGIN_ROOT }),
+      ...(promoteArgs ? ['', promoteNote] : []),
+    ];
+  }
 
   const instruction = [
     ...(cacheWarning ? [cacheWarning, ''] : []),
