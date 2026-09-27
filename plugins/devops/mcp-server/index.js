@@ -601,7 +601,12 @@ function glyphForResult(result) {
   const r = String(result || '').toLowerCase();
   // "0 rot" / "0 failed" is a green result that merely names the count.
   const zeroed = r.replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/g, '');
-  if (/\b(rot|red|fail\w*|fehler|errors?|fehlgeschlagen|konflikt\w*|conflict\w*|blockiert|blocked)\b/.test(zeroed)) return '✗';
+  // A verdict word next to a count is the verdict: "3 rot" fails, while
+  // "7663 grün · 1 Flake (auch auf main rot) behoben" stays green — a failure
+  // word elsewhere in the prose never overrides the counted verdict.
+  if (/\b[1-9][\d.]*\s*(tests?\s+)?(rot|red|fail\w*|fehler|errors?|fehlgeschlagen)\b/.test(zeroed)) return '✗';
+  const countedGreen = /\b[1-9][\d.]*\s*(tests?\s+)?(grün|green|passed|pass|bestanden|ok)(?![\p{L}\d])/u.test(r);
+  if (!countedGreen && /\b(rot|red|fail\w*|fehler|errors?|fehlgeschlagen|konflikt\w*|conflict\w*|blockiert|blocked)\b/.test(zeroed)) return '✗';
   // Skipped tests are detail for the tooltip, never a deviation on their own.
   if (/nicht live|not live|teilweise|partial|warnung|warning/.test(r)) return '◐';
   return '✓';

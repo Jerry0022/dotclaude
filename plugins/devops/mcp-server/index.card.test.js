@@ -948,6 +948,17 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(red).toMatch(/^› \*\*Nicht erreicht:\*\* 2 Tests rot \(npm test\)$/m);
   });
 
+  // Observed 2026-09-27: "rot" inside the prose overrode the counted "7663 grün".
+  test("the verdict next to the count wins over a failure word elsewhere in the line", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Suite grün", lang: "de", session_id: "test-ev-prose-rot",
+      tests: [{ method: "Volle Suite", result: "7663 grün · 1 Datums-Zeitzünder (auch auf main rot) behoben · 3 skipped" }],
+    });
+    expect(text).toContain("✓ 7663 Tests grün");
+    expect(text).not.toContain("7663 Tests rot");
+    expect(text).not.toContain("Nicht erreicht");
+  });
+
   // An unmet requirement routes to ready-red as well, but it is no red test —
   // the heading names what is actually red (observed 2026-09-21: "Trotzdem
   // shippen mit 1 roten Tests?" over a green suite).
