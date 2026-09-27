@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.214.3] — 2026-09-27
+
+### Fixed
+- **A concept resumed after more than a day keeps its link on the card.** A card with a `concept` field now resolves the page link whatever the age of the open, because the caller asserts the page is open. Without the field, the card and the skill router measure staleness the way the resume hook does (#426): from the durable store's last save or draft, not from `started_at` alone. The dead-bridge relaunch now tells Claude to refresh `started_at`, `server_pid` and `cron_id` in `concept-active.json`, so the state file stops describing the dead bridge (#563).
+
 ## [0.214.2] — 2026-09-27
 
 ### Changed

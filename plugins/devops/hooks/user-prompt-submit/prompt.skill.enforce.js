@@ -224,7 +224,9 @@ function conceptActive(cwd) {
   const live = (dir) => {
     try {
       const state = JSON.parse(fs.readFileSync(path.join(dir, rel), 'utf8'));
-      return R.isValidState(state) && !R.isStale(state);
+      // Last activity from the durable store, as the resume hook and the
+      // card measure it (#426, #563) — not the age of the open alone.
+      return R.isValidState(state) && !R.isStale(state, R.readStore(R.storeDirFor(state.html_path, dir)));
     } catch {
       return false;
     }
