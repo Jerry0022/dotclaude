@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import {
   computeResumeDelayMinutes,
   isCacheFresh,
+  parseBufferArg,
   toCronExpression,
   WINDOW_MAX_MIN,
   RESET_BUFFER_MIN,
@@ -140,5 +141,24 @@ describe("toCronExpression — local-time 5-field one-shot", () => {
     const local = new Date(2026, 0, 31, 23, 55, 0); // Jan 31 23:55 local
     const fireAt = local.getTime() + 30 * 60000; // +30 min → Feb 1 00:25
     expect(toCronExpression(fireAt)).toBe("25 0 1 2 *");
+  });
+});
+
+describe("--buffer — an interactive defer lands 5 min past the reset", () => {
+  test("a custom buffer replaces the 15-min default", () => {
+    expect(computeResumeDelayMinutes(atNow(42), NOW, 5).delayMinutes).toBe(47);
+  });
+
+  test("the flat-5h fallback ignores the buffer", () => {
+    expect(computeResumeDelayMinutes(null, NOW, 5).delayMinutes).toBe(WINDOW_MAX_MIN);
+  });
+
+  test("parseBufferArg takes an integer 0-60, anything else keeps the default", () => {
+    expect(parseBufferArg(["--buffer", "5"])).toBe(5);
+    expect(parseBufferArg(["--buffer", "0"])).toBe(0);
+    expect(parseBufferArg([])).toBe(RESET_BUFFER_MIN);
+    expect(parseBufferArg(["--buffer"])).toBe(RESET_BUFFER_MIN);
+    expect(parseBufferArg(["--buffer", "90"])).toBe(RESET_BUFFER_MIN);
+    expect(parseBufferArg(["--buffer", "2.5"])).toBe(RESET_BUFFER_MIN);
   });
 });
