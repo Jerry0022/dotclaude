@@ -199,7 +199,10 @@ function onRelease({ hook, input, roots, sessionId, s, RC, C }) {
 }
 
 /** H-B1: the MCP card takes `cwd` too — recorded and closed where pre gated it. */
-function onCard({ input, roots, sessionId, s, RC, C }) {
+function onCard({ hook, input, roots, sessionId, s, RC, C }) {
+  // A call refused by the card pre-check (lib/card-pregate) rendered nothing —
+  // it must not count as the run's final card.
+  if (/\[card-pregate\] Not rendered/.test(C.responseText(hook && hook.tool_response))) return;
   const cf = C.cardFacts(input);
   recordCard(contractRootOf(roots, RC, sessionId), cf.variant, cf.final, RC, s, { pending: cf.pending, concept: cf.concept });
 }

@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 /**
  * @hook ss.knowledge.index
- * @version 0.7.0
+ * @version 0.8.0
  * @event SessionStart
  * @plugin devops
- * @description Inject deep-knowledge INDEX.md into context at session start,
- *   plus the always-on policy docs in full (ALWAYS_ON below). The index gives
+ * @description Inject the always-on policy docs in full (ALWAYS_ON below)
+ *   plus a compact deep-knowledge index at session start. Order and size
+ *   follow lib/context-cap: plugin root, delegation switch and budget class
+ *   first, then the policy, the index last and only in the richest form that
+ *   keeps the whole payload under the harness limit (file + topic, else file
+ *   names, else a pointer to INDEX.md). Before 0.8.0 the full index table
+ *   came first and the payload reached 15.9 KB — the harness showed a 2 KB
+ *   preview and the policy never arrived. The index gives
  *   Claude awareness of all reference docs before message #1; the always-on
  *   docs are behavioral rules that must hold on every prompt — a pull-only
  *   reference would never flip the harness default they override (e.g. the
@@ -26,6 +32,7 @@ const { runOnce } = require('../lib/run-once');
 const { readBudget, maybeRefreshUsage, budgetLine } = require('../lib/budget');
 const { readDelegation, delegationLine } = require('../lib/delegation');
 const { pluginRootLine } = require('../lib/plugin-root');
+const { fits } = require('../lib/context-cap');
 const fs = require('fs');
 const path = require('path');
 
@@ -53,17 +60,20 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
   const indexPath = path.join(dkDir, 'INDEX.md');
   if (!fs.existsSync(indexPath)) return null;
 
-  const blocks = [
-    '[deep-knowledge] The following reference docs are available.',
-    'Read individual files from deep-knowledge/ when a topic is relevant to the task.',
-    pluginRootLine(pluginRoot),
-    '',
-    fs.readFileSync(indexPath, 'utf8').trim(),
-  ];
+  // What always holds comes first (context-cap: a payload past the harness
+  // limit shows only its head): the literal plugin root, the kill-switch
+  // state and the budget class — the policy's inputs — then the policy.
+  const head = [pluginRootLine(pluginRoot), delegationLine(delegation)];
+  try {
+    const budget = readBudget({ sessionId });
+    budget.refreshing = maybeRefreshUsage(budget, { pluginRoot });
+    head.push(budgetLine(budget));
+  } catch { /* never let the budget probe break the index injection */ }
 
+  const blocks = [...head];
   let bytes = 0;
   for (const file of ALWAYS_ON) {
-    if (delegation.mode === 'off') break; // the switch line below replaces the policy
+    if (delegation.mode === 'off') break; // the switch line above replaces the policy
     const filePath = path.join(dkDir, file);
     let content;
     try { content = fs.readFileSync(filePath, 'utf8').trim(); }
@@ -79,19 +89,33 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
     );
   }
 
-  // Kill-switch state, then budget class — the policy's fourth input (see
-  // lib/budget.js). One line each, always present, so "off" and "unknown"
-  // are visible rather than silently assumed. A snapshot past its reset
-  // (the morning-after Desktop session) starts a detached refresh, like the
-  // completion card would — the per-prompt line then carries the live class.
-  blocks.push('', delegationLine(delegation));
-  try {
-    const budget = readBudget({ sessionId });
-    budget.refreshing = maybeRefreshUsage(budget, { pluginRoot });
-    blocks.push(budgetLine(budget));
-  } catch { /* never let the budget probe break the index injection */ }
+  // The index last, in the richest form that still fits: file + topic, then
+  // file names only, then the pointer alone. The one-line summaries stay in
+  // INDEX.md — prompt.knowledge.dispatch injects the matching doc per prompt.
+  const rows = indexRows(fs.readFileSync(indexPath, 'utf8'));
+  const root = String(pluginRoot).replace(/\\/g, '/');
+  const pointer = `[deep-knowledge] Reference docs in ${root}/deep-knowledge/ — read one when its topic comes up; ${root}/deep-knowledge/INDEX.md has a one-line summary of each.`;
+  const variants = [
+    rows.map(r => `${r.file} (${r.topic})`).join(' · '),
+    rows.map(r => r.file).join(' · '),
+    '',
+  ];
+  const base = blocks.join('\n');
+  for (const list of variants) {
+    const candidate = [base, '', pointer, ...(list ? [list] : [])].join('\n');
+    if (fits(candidate) || !list) return candidate;
+  }
+  return base;
+}
 
-  return blocks.join('\n');
+/** `| [file.md](file.md) | Topic | Summary |` rows of INDEX.md → { file, topic }. */
+function indexRows(markdown) {
+  const rows = [];
+  for (const line of String(markdown).split('\n')) {
+    const m = line.match(/^\|\s*\[([^\]]+)\]\([^)]*\)\s*\|\s*([^|]*?)\s*\|/);
+    if (m) rows.push({ file: m[1].replace(/\.md$/, ''), topic: m[2] });
+  }
+  return rows;
 }
 
 /**
@@ -153,4 +177,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { buildContext, buildResumeContext, ALWAYS_ON, MAX_ALWAYS_ON_BYTES };
+module.exports = { buildContext, buildResumeContext, indexRows, ALWAYS_ON, MAX_ALWAYS_ON_BYTES };

@@ -9,7 +9,7 @@ description: >-
 model: sonnet
 effort: medium
 color: blue
-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot", "local_generate", "local_status"]
+tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "preview_screenshot", "preview_snapshot"]
 ---
 
 # Frontend Agent
@@ -68,7 +68,6 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
   then the element that needs it. `/do-ship` measures the static halves on
   every UI diff; writing to the rules is cheaper than fixing the findings.
 - Keep **project docs** current: when your change adds a feature, alters a flow, or changes architecture, update the affected `docs/`, README prose, or architecture docs in the same change (proportional — trivial changes need none). See `{PLUGIN_ROOT}/deep-knowledge/documentation-maintenance.md`. Project docs only, not code comments (code-defaults.md still applies).
-- For mechanical UI boilerplate (prop-typed components, form scaffolds, barrel exports, repeated variants, >20 lines): read `{PLUGIN_ROOT}/deep-knowledge/local-llm-delegation.md` and delegate to `local_generate` when the gate is green.
 - Always verify visual output in a real browser (follow
   `{PLUGIN_ROOT}/deep-knowledge/test-strategy.md` § Web Tech → Always Browser-Test).
   Mocks for missing backends/APIs are expected. For Electron/Tauri renderers,

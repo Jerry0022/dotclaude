@@ -859,6 +859,18 @@ describe("post.flow.completion — quiet after the card itself", () => {
     cleanup(dir);
   });
 
+  test("the after-card warning comes once per render, not after every later call", () => {
+    const dir = project();
+    fs.writeFileSync(flag(dir, "card-rendered", "s-once"), "2026-09-27T10:00:00.000Z");
+    expect(runHook(dir, "s-once", "Read")).toContain("already rendered this turn");
+    expect(runHook(dir, "s-once", "Grep")).not.toContain("already rendered this turn");
+    expect(runHook(dir, "s-once", "Bash", { tool_input: { command: "git status" } })).not.toContain("already rendered this turn");
+    // A new render (new timestamp) earns the warning again.
+    fs.writeFileSync(flag(dir, "card-rendered", "s-once"), "2026-09-27T10:05:00.000Z");
+    expect(runHook(dir, "s-once", "Read")).toContain("already rendered this turn");
+    cleanup(dir);
+  });
+
   test("the reminder states the widget-only contract, not the old widget-before-markdown order", () => {
     const dir = project();
     const out = runHook(dir, "s-contract");

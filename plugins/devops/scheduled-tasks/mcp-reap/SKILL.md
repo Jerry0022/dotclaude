@@ -17,7 +17,7 @@ accumulating RAM. Driven by two hooks so it runs both once per session
 - **`hooks/stop/stop.mcp.reap.js`** — fires on `Stop` (end of a response
   turn), gated by a ~20-minute per-worktree cooldown so it doesn't scan
   every turn. The cooldown marker uses the same atomic write-temp-then-
-  rename pattern as `self-calibration`, keyed to an md5 hash of
+  rename pattern as `hooks/lib/session-id.js`, keyed to an md5 hash of
   `process.cwd()` in `os.tmpdir()`.
 
 Both hooks spawn `scripts/mcp-reap.js --apply --json` **detached,

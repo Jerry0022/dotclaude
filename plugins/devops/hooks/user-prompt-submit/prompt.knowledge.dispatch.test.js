@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 /**
  * The per-prompt delegation nudge. Measured 2026-09-14 with `claude plugin
@@ -236,5 +237,71 @@ describe("prompt.knowledge.dispatch — pointers for the retired skills (PR 3)",
     const ctx = runSession("refresh usage und dann strikt: nur den knowledge graph erklären", `vitest-pointer-b-${process.pid}-${Date.now()}`, h);
     for (const doc of ["usage.md", "strict.md", "graphify.md"]) expect(ctx).toContain(`deep-knowledge/${doc}`);
     expect(ctx).not.toMatch(/Skill\(/);
+  });
+});
+
+describe("prompt.knowledge.dispatch — the payload stays under the harness limit (context-cap)", () => {
+  const { SAFE_CONTEXT_CHARS } = createRequire(import.meta.url)("../lib/context-cap.js");
+
+  /** A plugin root with the real hooks' deep-knowledge replaced by given docs. */
+  function fakeRoot(docs) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-root-"));
+    fs.mkdirSync(path.join(root, "deep-knowledge"));
+    for (const [name, body] of Object.entries(docs)) fs.writeFileSync(path.join(root, "deep-knowledge", name), body);
+    return root;
+  }
+
+  function run(prompt, { root = PLUGIN_ROOT, sid, home } = {}) {
+    const h = home || proHome();
+    const cwd = emptyProject();
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: root, HOME: h, USERPROFILE: h, TMPDIR: h, TEMP: h, TMP: h };
+    const r = spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ session_id: sid || `vitest-cap-${process.pid}-${Math.random()}`, prompt, cwd }), cwd, env, encoding: "utf8",
+    });
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : "";
+  }
+
+  test("two large real docs: the payload fits, each doc names its full path", () => {
+    // ui-defaults.md (~18 KB) and test-strategy.md (~9.7 KB): before the cap
+    // the first went in whole, the harness showed 2 KB and marked it delivered.
+    const ctx = run("welche test strategie für die tooltip ui regeln — und wann test ausführen?");
+    expect(ctx.length).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
+    const root = PLUGIN_ROOT.replace(/\\/g, "/");
+    for (const doc of ["ui-defaults.md", "test-strategy.md"]) {
+      expect(ctx).toContain(`${root}/deep-knowledge/${doc}`);
+    }
+    // The first doc arrives as a real head, not only a pointer.
+    expect(ctx).toContain("--- deep-knowledge/ui-defaults.md ---");
+    expect(ctx).toMatch(/\[… ui-defaults\.md continues — read the full file before acting on its topic: /);
+  });
+
+  test("a small doc still goes in whole, with no pointer", () => {
+    const body = "# Tool Selection\n\nUse the Grep tool.\n";
+    const ctx = run("which tool selection rule applies on windows tools?", { root: fakeRoot({ "tool-selection.md": body }) });
+    expect(ctx).toContain(body.trim());
+    expect(ctx).not.toContain("continues — read the full file");
+    expect(ctx).not.toContain("too large to inject");
+  });
+
+  test("the head is cut at a section boundary, never mid-paragraph", () => {
+    const section = (n) => `## Section ${n}\n\n${"word ".repeat(300).trim()}.\n`;
+    const body = `# Big\n\n${Array.from({ length: 12 }, (_, i) => section(i)).join("\n")}`;
+    const ctx = run("which tool selection rule applies on windows tools?", { root: fakeRoot({ "tool-selection.md": body }) });
+    expect(ctx.length).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
+    const inject = ctx.slice(ctx.indexOf("--- deep-knowledge/tool-selection.md ---"));
+    const head = inject.split("\n[… tool-selection.md continues")[0];
+    expect(head.trimEnd().endsWith("word.")).toBe(true); // a whole section ends here
+    expect(head).toContain("## Section 0");
+  });
+
+  test("the one-shot marker is set for a pointed-at doc too — no pointer spam on the next prompt", () => {
+    const sid = `vitest-cap-once-${process.pid}-${Date.now()}`;
+    const root = fakeRoot({ "tool-selection.md": "x\n".repeat(20000) });
+    const home = proHome();
+    const first = run("which tool selection rule applies on windows tools?", { root, sid, home });
+    expect(first).toMatch(/tool-selection\.md/);
+    expect(first.length).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
+    const second = run("and which tool selection applies for windows tools now?", { root, sid, home });
+    expect(second).not.toMatch(/tool-selection\.md/);
   });
 });

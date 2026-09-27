@@ -168,7 +168,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->68<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->14<!--/devops:count:skills--> skills, <!--devops:count:agents-->13<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->67<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->14<!--/devops:count:skills--> skills, <!--devops:count:agents-->13<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -179,13 +179,13 @@
 
 <div class="card-grid">
   <div class="card">
-    <h4><!--devops:count:hooks-->68<!--/devops:count:hooks--> Hooks</h4>
+    <h4><!--devops:count:hooks-->67<!--/devops:count:hooks--> Hooks</h4>
     <p style="color:var(--text2);font-size:.85rem">Lifecycle guards across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop</p>
     <span class="badge b-hook">SessionStart &times;<!--devops:count:hooks:ss-->18<!--/devops:count:hooks:ss--></span>
     <span class="badge b-hook">Prompt &times;<!--devops:count:hooks:prompt-->15<!--/devops:count:hooks:prompt--></span>
     <span class="badge b-hook">Pre &times;<!--devops:count:hooks:pre-->15<!--/devops:count:hooks:pre--></span>
     <span class="badge b-hook">Post &times;<!--devops:count:hooks:post-->11<!--/devops:count:hooks:post--></span>
-    <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->8<!--/devops:count:hooks:stop--></span>
+    <span class="badge b-hook">Stop &times;<!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--></span>
   </div>
   <div class="card">
     <h4><!--devops:count:skills-->14<!--/devops:count:skills--> Skills</h4>
@@ -220,7 +220,7 @@
 │   ├── user-prompt-submit/    <span style="color:var(--purple)"># <!--devops:count:hooks:prompt-->15<!--/devops:count:hooks:prompt--> hooks (prompt.*)</span>
 │   ├── pre-tool-use/          <span style="color:var(--purple)"># <!--devops:count:hooks:pre-->15<!--/devops:count:hooks:pre--> hooks (pre.*)</span>
 │   ├── post-tool-use/         <span style="color:var(--purple)"># <!--devops:count:hooks:post-->11<!--/devops:count:hooks:post--> hooks (post.*)</span>
-│   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->8<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
+│   └── stop/                  <span style="color:var(--purple)"># <!--devops:count:hooks:stop-->7<!--/devops:count:hooks:stop--> hooks (stop.*)</span>
 ├── mcp-server/
 │   ├── index.js               <span style="color:var(--orange)"># dotclaude-completion MCP</span>
 │   └── ship/
@@ -228,7 +228,6 @@
 │       ├── lib/               <span style="color:var(--text2)"># git.js, version.js, github.js</span>
 │       └── tools/             <span style="color:var(--orange)"># 5 tool implementations</span>
 ├── scheduled-tasks/
-│   ├── self-calibration/      <span style="color:var(--teal)"># 30-min recurring cron</span>
 │   └── stale-changes-check/   <span style="color:var(--teal)"># SessionStart trigger</span>
 ├── scripts/
 │   ├── render-card.js         <span style="color:var(--warn)"># Completion card template engine</span>
@@ -332,18 +331,6 @@
   </div>
 </details>
 
-<details>
-  <summary><span class="badge b-hook">SS</span> ss.flow.selfcalibration.js &mdash; Self-Calibration Scheduler</summary>
-  <div class="detail-body">
-    <p>Registers a 30-minute recurring cron task for self-calibration and executes it immediately on first run. The cron task reviews feedback rules, reads deep-knowledge files in rotating batches, and ensures Claude stays aligned with plugin conventions.</p>
-    <table>
-      <tr><th>Trigger</th><td>Session start</td></tr>
-      <tr><th>Guard</th><td><code>runOnce()</code></td></tr>
-      <tr><th>Creates</th><td>CronCreate instruction (30-min recurring)</td></tr>
-    </table>
-  </div>
-</details>
-
 <h3>PreToolUse (1 hook)</h3>
 
 <details>
@@ -440,8 +427,7 @@
 <span class="hl">SESSION START</span>
   │
   ├─ ss.tokens.scan.js ──────── Scan project size
-  ├─ ss.git.check.js ────────── Check stale changes
-  └─ ss.flow.selfcalibration.js  Register + run cron
+  └─ ss.git.check.js ────────── Check stale changes
   │
   ▼
 <span class="hl">USER TYPES A PROMPT</span>
@@ -837,20 +823,6 @@
 <h2>Scheduled Tasks</h2>
 
 <details>
-  <summary><span class="badge b-cron">CRON</span> self-calibration &mdash; 30-min Recurring</summary>
-  <div class="detail-body">
-    <p>Registered by <code>ss.flow.selfcalibration.js</code> hook at session start. Runs every 30 minutes.</p>
-    <ol class="step-list">
-      <li><strong>Self-Audit</strong> &mdash; Review feedback rules, check session behavior. Completion flow is mandatory after every task (no discretionary skips).</li>
-      <li><strong>Learn</strong> &mdash; Scan for new feedback patterns, save as <code>feedback_*.md</code> memory files</li>
-      <li><strong>Proactive Check</strong> &mdash; Prepare for upcoming actions (completion cards, ship flow, browser tasks)</li>
-      <li><strong>Skill Internalization</strong> &mdash; Read deep-knowledge files in rotating batches (25% per cycle, alphabetically)</li>
-    </ol>
-    <p><strong>Token budget:</strong> 5K-15K per cycle</p>
-  </div>
-</details>
-
-<details>
   <summary><span class="badge b-cron">SS</span> stale-changes-check &mdash; Session Start Trigger</summary>
   <div class="detail-body">
     <p>Not a cron task &mdash; triggered by the <code>ss.git.check.js</code> SessionStart hook.</p>
@@ -1033,7 +1005,6 @@
 
 <h3>Hook &rarr; Hook Chains</h3>
 <div class="interaction-matrix">
-  <span class="from">ss.flow.selfcalibration</span> <span class="to">&rarr; creates CronCreate &rarr; self-calibration task (30-min loop)</span>
   <span class="from">post.flow.completion</span> <span class="to">&rarr; accumulates changes count &rarr; feeds into completion card</span>
   <span class="from">pre.tokens.guard</span> <span class="to">&rarr; may block tool &rarr; prompts user for budget decision</span>
 </div>

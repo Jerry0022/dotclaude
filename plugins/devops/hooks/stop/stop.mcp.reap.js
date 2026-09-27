@@ -10,7 +10,7 @@
  *
  *   Cooldown-gated to ~20 minutes, per-worktree, using the exact same
  *   atomic write-temp-then-rename marker pattern as
- *   stop.flow.selfcalibration.js: the marker file is keyed to an md5 hash
+ *   the retired self-calibration hook: the marker file is keyed to an md5 hash
  *   of process.cwd() in os.tmpdir(), so parallel worktrees each get their
  *   own independent cooldown clock.
  *
@@ -23,7 +23,7 @@
  *   Degrades safely if os.tmpdir() is unwritable: the marker write fails
  *   silently (best-effort, non-fatal) and the cooldown check simply never
  *   finds a marker, so the hook fires every turn instead of crashing —
- *   same documented degrade as self-calibration's cooldown.
+ *   the same degrade the retired self-calibration cooldown documented.
  */
 
 require('../lib/plugin-guard');

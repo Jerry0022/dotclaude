@@ -60,7 +60,7 @@ const QUEUE_STALE_MS = 6 * 60 * 60 * 1000;
  * detached merge holding index.lock under the session's next git call, or a
  * strict mode released mid-turn (redteam R4, 2026-09-26).
  */
-const AFTER_GATES_RE = /[\\/]stop\.(git\.sync|mcp\.reap|flow\.selfcalibration|strict\.release)\.js$/;
+const AFTER_GATES_RE = /[\\/]stop\.(git\.sync|mcp\.reap|strict\.release)\.js$/;
 
 /**
  * The Stop hooks in the order the card runs them: gates first (hooks.json

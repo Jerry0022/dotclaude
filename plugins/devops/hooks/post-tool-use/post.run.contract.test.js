@@ -108,6 +108,13 @@ describe("recording", () => {
     expect(RC.readContractForCard(dir).closeReason).toContain("final card");
   });
 
+  test("a card the pre-check refused is not the final card — the contract stays", () => {
+    run(CARD, { variant: "ship-successful" }, [{ type: "text", text: "[card-pregate] Not rendered — this card would be blocked by stop.flow.guard after the turn." }]);
+    expect(RC.readContract(dir)).not.toBeNull();
+    run(CARD, { variant: "ship-successful" });
+    expect(RC.readContract(dir)).toBeNull();
+  });
+
   test("offline renderer payload is recorded as a card", () => {
     const p = path.join(dir, ".claude", "c.json");
     fs.writeFileSync(p, JSON.stringify({ variant: "ready" }));

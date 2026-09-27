@@ -38,7 +38,7 @@ describe("stopHookScripts — the plugin's own Stop hooks, in hooks.json order",
   test("gatesFirst runs every gate before the turn-end side effects", () => {
     const names = gatesFirst(stopHookScripts(pluginRoot)).map((s) => path.basename(s));
     const lastGate = Math.max(...["stop.flow.browsertest.js", "stop.flow.guard.js", "stop.guide.handoff.js"].map((n) => names.indexOf(n)));
-    for (const sideEffect of ["stop.git.sync.js", "stop.mcp.reap.js", "stop.strict.release.js", "stop.flow.selfcalibration.js"]) {
+    for (const sideEffect of ["stop.git.sync.js", "stop.mcp.reap.js", "stop.strict.release.js"]) {
       expect(names.indexOf(sideEffect), sideEffect).toBeGreaterThan(lastGate);
     }
     expect(names).toHaveLength(stopHookScripts(pluginRoot).length);
