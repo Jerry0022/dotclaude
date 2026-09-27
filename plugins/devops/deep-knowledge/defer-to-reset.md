@@ -1,30 +1,34 @@
 # Defer to the Reset — Resume Timer for a Nearly Full Window
 
-When the 5 h window is almost full and resets soon, larger work waits for the reset: a one-shot resume timer picks it up again in the same session.
+When the 5 h window is almost full, larger work can wait for the reset: a one-shot resume timer picks it up again in the same session.
 
 The per-prompt delegation nudge carries a `· defer: window N%, resets in M min`
-suffix when the 5 h window is ≥ 85 % and resets within 60 min
-(`hooks/lib/budget.js` `deferMinutes`). Waiting out the reset is then cheaper
-than a limit hit mid-change: a half-done edit across logic and tests is worse
-than a short wait.
+suffix when the 5 h window reaches the plan's threshold
+(`hooks/lib/budget.js` `deferInfo`): Max 20x 90 %, Max 5x 80 %, Pro 70 %
+(unknown plan → Max 5x). The fill alone triggers it. The time to the reset
+only picks the recommended answer. A limit hit mid-change leaves a half-done
+edit across logic and tests. That is worse than a wait, and when the wait
+is long, the timer still resumes the work on its own after a limit stop.
 
-## When
+No suffix while the week is the tight limit (the plan's weekly sonnet-only
+threshold, e.g. Max 20x ≥ 99 %): the 5 h reset brings nothing back then.
 
-- Only before work that would not finish in one small turn: several files,
-  contract logic plus tests, a ship.
-- A Q&A, a one-file fix or a pure analysis runs now. No question.
-- Never above the user: a hard stop, an explicit "jetzt" / "sofort" / "now",
-  or an unattended run (`AUTONOMOUS_*`: the hooks drop the suffix there, and
-  the autonomous and burn modes own their resume via `autoResume`) wins.
+**Not the card's yellow marker.** The card colours a budget bar by pace,
+usage minus elapsed time (yellow from +10 points, red from +25). 90 % with
+30 min left is on pace, white, and still may not hold one large change.
+The two signals answer different questions and stay separate.
 
 ## Ask once
 
 One `AskUserQuestion`, localized per `[ui-locale]`, first = default. The
 question names the window % and the minutes until the reset:
 
-1. *after the reset (Recommended)* — arm the resume timer, pause.
-2. *start now, inline* — accept that the limit may stop the work half-done.
-3. *park as issue* — findings and plan into an issue via `auto-issue`.
+- Reset within 60 min (the suffix reads `after the reset (Recommended)`):
+  1. *after the reset (Recommended)* — arm the resume timer, pause.
+  2. *start now, inline* — accept that the limit may stop the work half-done.
+  3. *park as issue* — findings and plan into an issue via `auto-issue`.
+- Reset further away (`now inline (Recommended)`): the same three options,
+  *start now* first. *After the reset* names the fire time (HH:MM).
 
 ## Arm the resume timer
 

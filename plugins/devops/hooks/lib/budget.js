@@ -362,23 +362,33 @@ function budgetSummary(b) {
   };
 }
 
-// Defer to the reset (deep-knowledge/defer-to-reset.md): a nearly
-// full 5 h window that resets soon is cheaper to wait out than to hit
-// mid-change — a half-done edit across contract logic and tests is worse
-// than 40 minutes of waiting.
-const DEFER_AT_PCT = 85;
-const DEFER_MAX_WAIT_MIN = 60;
+// Defer to the reset (deep-knowledge/defer-to-reset.md): a nearly full 5 h
+// window may not hold one more multi-file change — a limit hit mid-change
+// leaves a half-done edit across logic and tests. The trigger is the fill
+// alone, plan-scaled like RULES (Pro's askAt is 0 %, so its sonnet step):
+// the time to the reset only picks the recommended answer. It is not the
+// card's yellow marker, which measures pace (usage ahead of elapsed time):
+// 90 % with 30 min left is on pace and still may not hold a large change.
+const DEFER_AT = { pro: 70, max5: 80, max20: 90 };
+const DEFER_SOON_MIN = 60;
 
-/** Pure: minutes to wait when deferring multi-file work pays off; null otherwise. */
-function deferMinutes(b) {
-  if (!b || b.override || b.fivePct == null || b.resetInMinutes == null) return null;
-  if (b.fivePct < DEFER_AT_PCT || b.resetInMinutes <= 0 || b.resetInMinutes > DEFER_MAX_WAIT_MIN) return null;
-  return b.resetInMinutes;
+/**
+ * Pure: `{ minutes, soon }` when the defer question pays off, else null.
+ * A tight week wins — waiting for the 5 h reset brings nothing back then.
+ */
+function deferInfo(b) {
+  if (!b || b.override || b.fivePct == null || b.resetInMinutes == null || b.resetInMinutes <= 0) return null;
+  const tier = RULES[b.tier] ? b.tier : 'max5';
+  if (b.fivePct < DEFER_AT[tier]) return null;
+  if (b.weeklyPct != null && b.weeklyPct >= RULES[tier].sonnetAt[1]) return null;
+  return { minutes: b.resetInMinutes, soon: b.resetInMinutes <= DEFER_SOON_MIN };
 }
 
 function deferSuffix(b) {
-  const min = deferMinutes(b);
-  return min == null ? '' : ` · defer: window ${b.fivePct}%, resets in ${min} min → before multi-file work ask once: after the reset (resume timer) / now inline / park as issue — deep-knowledge/defer-to-reset.md`;
+  const d = deferInfo(b);
+  if (!d) return '';
+  const pick = d.soon ? 'after the reset (Recommended) / now inline' : 'now inline (Recommended) / after the reset';
+  return ` · defer: window ${b.fivePct}%, resets in ${d.minutes} min → before multi-file work ask once: ${pick} / park as issue — deep-knowledge/defer-to-reset.md`;
 }
 
 /** Short suffix for the per-prompt nudge; empty when nothing changes. */
@@ -401,7 +411,7 @@ function classSuffix(b) {
 
 module.exports = {
   RULES, CLASSES, planTier, tierLabel, classify, bindingWindow, refreshDueMinutes, readBudget, maybeRefreshUsage,
-  budgetLine, budgetSummary, nudgeSuffix, deferMinutes, DEFER_AT_PCT, DEFER_MAX_WAIT_MIN,
+  budgetLine, budgetSummary, nudgeSuffix, deferInfo, DEFER_AT, DEFER_SOON_MIN,
   STALE_MS, REFRESH_COOLDOWN_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER, RESET_IMMINENT_MIN, WINDOW_FILL_MIN, WEEK_TO_WINDOW,
   RECENT_RESET_5H_MIN, RECENT_RESET_WEEK_MIN,
 };
