@@ -5,7 +5,9 @@
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
  *
- *   Stacked gates, all one-block (stop_hook_active yields):
+ *   Stacked gates, all one-block (stop_hook_active yields). Gates 1–2 return
+ *   on the first hit (no card / card not shown); gates 3–5 are collected and
+ *   reported together in one block, so one re-render can fix all of them:
  *     1. Completion card — block when work happened but no card was rendered.
  *        1b. (#449) block when the card was rendered but never shown after
  *        its last render (no ✨ marker text, no card widget). Output AFTER a
@@ -25,6 +27,12 @@
  *        `validation` field rides on the card; the MCP sets the attested flag
  *        when it is populated. This is the "did we build the RIGHT thing" half;
  *        the test gate (stop.flow.browsertest) is the "did we build it right".
+ *        4b. Validation gaps — once a card exists, block when a requirement
+ *        is still Claude's own work: no status, or partial/unmet without a
+ *        `waitsOn` (user · deploy · external · pending), or `waitsOn: pending`
+ *        while no background task is open any more (the result is in, the
+ *        gap is owed). "0/3 Anforderungen" on an otherwise green card was the
+ *        norm before — nothing looked at the status (lib/validation-gaps.js).
  *     5. Pending — once a card exists, block when background subagents / tasks
  *        are still running and the card did not declare them (`pending`). Open
  *        work is proven from the transcript (lib/pending-tasks.js), so the card
@@ -106,6 +114,7 @@ function isSubstantialAnswer(transcriptContent, threshold = SUBSTANTIAL_CHARS) {
 /** A user-role entry that opens a new turn — shared with the other transcript
  *  walkers in lib/skill-invocations.js. */
 const { isPromptEntry } = require('./skill-invocations');
+const { classify } = require('./validation-gaps');
 
 /** The Desktop widget tool — loaded as `mcp__visualize__show_widget`, or under
  *  a connector-id namespace when it arrives deferred. */
@@ -388,6 +397,10 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     not the user. Never enforce the card.
  * @param {boolean} [s.validationPending]  — a code change owes a validation attestation
  * @param {boolean} [s.validationAttested] — the card was rendered with a `validation` field
+ * @param {Array<{requirement, status, waitsOn, evidence}>} [s.validationOpen] — the card's not-met
+ *                                     requirements (MCP flag); aborted/paused cards write none
+ * @param {boolean} [s.openTasksKnown] — false when the transcript could not be read, so
+ *                                     `openTaskNames` says nothing about background work
  * @param {string[]} [s.openTaskNames] — background subagents / tasks still running at
  *                                     turn end (names only — ids stay internal)
  * @param {boolean} [s.pendingAttested] — the card was rendered with a `pending` field
@@ -425,7 +438,7 @@ function lastUserEntryIsNotification(transcriptContent) {
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
-  validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
+  validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
   widgetFile, widgetCalled, guideActive,
@@ -525,38 +538,45 @@ function decideAction({
     }
   }
 
+  // Gates 3–5 are collected, not returned one by one: the Stop hook blocks
+  // only once per turn (stop_hook_active yields), so a first failing gate used
+  // to hide every later one — a card blocked for its title then passed with
+  // an undeclared background task or an open requirement gap.
+  const failures = [];
+
   // Gate 3 — card content quality (design § 5.1 - § 5.3): title status
   // words, result-line count/subject, points count. Only checked once a card
   // exists and its text is available.
   if (cardRendered && cardText) {
     const title = extractCardTitle(cardText);
     const statusWord = titleStatusWordViolation(title);
-    if (statusWord) {
-      return { action: 'block', resetFlags: false, reason: buildTitleStatusWordReason(statusWord) };
-    }
+    if (statusWord) failures.push(buildTitleStatusWordReason(statusWord));
 
     const resultLines = extractResultLines(cardText);
     const resultViolation = resultLinesViolation(resultLines);
-    if (resultViolation) {
-      return { action: 'block', resetFlags: false, reason: buildResultLinesReason(resultViolation) };
-    }
+    if (resultViolation) failures.push(buildResultLinesReason(resultViolation));
 
     const heading = (cardText.match(/^##\s+.*$/m) || [])[0] || '';
     const points = extractPoints(cardText);
     const pointViolation = pointsViolation(points, heading);
-    if (pointViolation) {
-      return { action: 'block', resetFlags: false, reason: buildPointsReason(pointViolation) };
-    }
+    if (pointViolation) failures.push(buildPointsReason(pointViolation));
   }
 
   // Gate 4 — validation must be attested for a code-change turn. Only checked
   // once a card exists, since the `validation` field is part of the card.
   if (cardRendered && active && validationPending && !validationAttested) {
-    return {
-      action: 'block',
-      resetFlags: false,
-      reason: buildValidationReason(),
-    };
+    failures.push(buildValidationReason());
+  }
+
+  // Gate 4b — a requirement that waits on nobody is Claude's own gap: close
+  // it now instead of reporting it. The open-task count is transcript-proven,
+  // so `waitsOn: "pending"` cannot outlive the work it names.
+  if (cardRendered && Array.isArray(validationOpen) && validationOpen.length > 0) {
+    // An unreadable transcript proves nothing about background work — then
+    // `pending` is taken at its word instead of declared finished.
+    const openTasks = openTasksKnown === false ? null : (openTaskNames || []).length;
+    const { gaps } = classify(validationOpen, { openTasks });
+    if (gaps.length > 0) failures.push(buildValidationGapsReason(gaps, openTaskNames || []));
   }
 
   // Gate 5 — a card rendered while background subagents / tasks are STILL
@@ -566,11 +586,11 @@ function decideAction({
   // talked out of. Independent of `active`: launching an agent is itself work.
   const open = openTaskNames || [];
   if (cardRendered && open.length > 0 && !pendingAttested) {
-    return {
-      action: 'block',
-      resetFlags: false,
-      reason: buildPendingReason(open),
-    };
+    failures.push(buildPendingReason(open));
+  }
+
+  if (failures.length > 0) {
+    return { action: 'block', resetFlags: false, reason: combineReasons(failures) };
   }
 
   // Line budget (design § 2.4 / § 5.4) — reported, never enforced here.
@@ -611,7 +631,7 @@ function offlineRendererPath(pluginRoot) {
  */
 const CARD_FIELD_REFERENCE =
   'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
-  'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
+  'validation: [{ requirement, status: met|partial|unmet, evidence, waitsOn?: user|deploy|external|pending }] · ' +
   'userFinalTest: [string | { action, afterDeployment }] · open: [string | { text, reply }] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 
@@ -745,6 +765,46 @@ function buildWidgetSkippedReason(widgetFile) {
     'verbatim, as the LAST action — no text after it. If the tool does not exist',
     'in this session, output the visible title line instead and end the turn.',
     NO_OUTPUT_NUDGE_REPLY,
+  ].join('\n');
+}
+
+/**
+ * One block reason for several failed gates. A single failure keeps its own
+ * text unchanged; several are numbered under one header so ONE re-render
+ * fixes all of them — the next stop cycle yields and would not ask again.
+ */
+function combineReasons(reasons) {
+  if (reasons.length === 1) return reasons[0];
+  return [
+    `[stop.flow.guard] ${reasons.length} card gates failed — fix ALL of them in ONE re-render (the next stop does not ask again):`,
+    ...reasons.map((r, i) => `\n(${i + 1}/${reasons.length}) ${r}`),
+  ].join('\n');
+}
+
+function buildValidationGapsReason(gaps, openTasks) {
+  const why = {
+    'no-status': 'no status',
+    'open': 'partial/unmet, waits on nobody',
+    'no-evidence': 'waitsOn without evidence — name what exactly it waits for',
+    'pending-done': 'waitsOn "pending", but no background task is open any more — read its result and integrate it',
+  };
+  const lines = gaps.slice(0, 6).map(g => `  - ${g.requirement} (${why[g.reason]})`);
+  if (gaps.length > 6) lines.push(`  - +${gaps.length - 6} more`);
+  return [
+    '[stop.flow.guard] Requirement gaps — the card reports requirements that are still your own work:',
+    ...lines,
+    '',
+    'Do not end the turn on them. Close each gap NOW (implement, test, integrate',
+    'the finished background result), then re-render the card with the real status.',
+    'A requirement may stay partial/unmet only with `waitsOn`:',
+    '  user     — the user must act or decide (listen, click, approve, choose)',
+    '  deploy   — verifiable only after ship / deploy / restart',
+    '  external — a third party (service down, quota, a review by others)',
+    '  pending  — your own background agent/workflow is still running' +
+      (openTasks.length ? ` (open now: ${openTasks.slice(0, 3).join(', ')})` : ' (none is open now)'),
+    'Every item needs a status. If the user explicitly narrowed the scope, drop the',
+    'requirement or set waitsOn "user" and say so in the evidence. If the gap truly',
+    'cannot be closed, ask the user (AskUserQuestion) instead of reporting done.',
   ].join('\n');
 }
 

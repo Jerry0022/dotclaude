@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.219.0] — 2026-09-27
+
+### Changed
+- **One Stop block names every card fault.** When the title, content, validation, requirement-gap and pending gates of `stop.flow.guard` fail together, they are reported in one numbered block, so Claude fixes all of them in a single re-render. Before, only the first fault was blocked and the rest passed unseen.
+- **`ship_release` checks requirement gaps even when the caller passes no `validation`.** The completion card now also stores its open requirements per checkout. A ship without `validation` reads that copy (at most 12 h old) and reports `validationSource: "card"`. An explicit `validation` always wins. Git-Bash and native Windows paths map to the same checkout.
+
+## [0.218.0] — 2026-09-27
+
+### Added
+- **Larger work can wait for a near window reset.** Once the 5h window reaches the plan's threshold (Max 20x 90 %, Max 5x 80 %, Pro 70 %), the per-prompt budget nudge carries a `defer:` hint with the minutes to the reset. Before multi-file work Claude then asks once whether to start now, wait for the reset, or park the work as an issue. "After the reset" is the recommended answer when the reset is at most 60 min away. That choice arms a one-shot resume timer 5 min past the reset and pauses. The hint is omitted while the week is the tighter limit. It is separate from the card's pace-based yellow marker (`deep-knowledge/defer-to-reset.md`).
+- **`autonomous-resume-schedule.js --buffer <min>`** sets the minutes past the reset (0–60). The default stays 15 for unattended resumes.
+
+## [0.217.0] — 2026-09-27
+
+### Changed
+- **Leftovers that provably landed are removed on the next ship, not after 30 days.** A branch without a checkout goes at once, a sub-agent worktree (`agent-*`) after 2 hours idle, a Desktop session worktree after `autoCleanMinAgeDays` (7) idle days. `autoCleanGateDays` is deprecated and ignored (#571).
+
+### Fixed
+- **Sub-agent branches of a squash-merged PR count as landed.** Every commit reachable from a merged PR head now proves a branch landed, so branches that were merged into the PR's branch before the squash are removed, together with their same-commit twin on origin (#572).
+
+### Added
+- **Unlanded work is flagged instead of forgotten.** A `[gone]` branch or a detached session worktree with commits that reached neither main nor a merged PR gets a ⚠ open item on the ship card. The new `ss.git.hygiene` hook runs the same cleanup once a day per repo in the background and shows its result at the next session start, so repos without ships get cleaned too (#573).
+
+## [0.216.0] — 2026-09-27
+
+### Added
+- **Requirement gaps get closed before the turn ends.** A `validation` item can now carry `waitsOn: user | deploy | external | pending` together with evidence. Any requirement that is not met and has no such reason, or has no status at all, is Claude's own gap. The new `stop.flow.guard` Gate 4b blocks the turn once, so Claude closes the gap or asks the user instead of reporting done. `waitsOn: "pending"` is valid only while the transcript still shows open background work.
+- **`ship_release` refuses to merge over the gaps Claude owns.** The new `validation` parameter makes the tool return `reason: "validation-gaps"` with nothing pushed. Only an explicit `acceptGaps: true` from the user lets a ship through anyway.
+
+### Changed
+- **The requirements count says who a requirement waits on.** The card used to show "◐ 0/3 Anforderungen" on an otherwise green card. It now shows, for example, "✓ 2/3 Anforderungen · 1 wartet auf dich". ◐ and ✗ appear only for Claude's own gaps, and requirements that wait on someone else no longer turn the card red.
+
 ## [0.215.1] — 2026-09-27
 
 ### Changed

@@ -448,6 +448,79 @@ describe("decideAction — validation gate", () => {
     expect(d.resetFlags).toBe(true);
   });
 
+  describe("Gate 4b — requirement gaps", () => {
+    const base = { workHappened: true, cardRendered: true, stopHookActive: false, substantial: false, validationPending: true, validationAttested: true };
+
+    test("partial without waitsOn → block, names the requirement", () => {
+      const d = decideAction({ ...base, validationOpen: [{ requirement: "Tooltip erscheint", status: "partial", waitsOn: null }] });
+      expect(d.action).toBe("block");
+      expect(d.resetFlags).toBe(false);
+      expect(d.reason).toMatch(/Requirement gaps/);
+      expect(d.reason).toMatch(/Tooltip erscheint/);
+    });
+
+    test("missing status → block", () => {
+      const d = decideAction({ ...base, validationOpen: [{ requirement: "R", status: null, waitsOn: null }] });
+      expect(d.action).toBe("block");
+      expect(d.reason).toMatch(/no status/);
+    });
+
+    test("waitsOn user / deploy / external → pass", () => {
+      const d = decideAction({ ...base, validationOpen: [
+        { requirement: "A", status: "partial", waitsOn: "user", evidence: "Anhören" },
+        { requirement: "B", status: "unmet", waitsOn: "deploy", evidence: "nach Restart" },
+        { requirement: "C", status: "partial", waitsOn: "external", evidence: "Neon down" },
+      ] });
+      expect(d.action).toBe("pass");
+    });
+
+    test("waitsOn pending passes while a background task is open (and declared)", () => {
+      const d = decideAction({ ...base, pendingAttested: true, openTaskNames: ["redteam"],
+        validationOpen: [{ requirement: "Review", status: "partial", waitsOn: "pending", evidence: "redteam läuft" }] });
+      expect(d.action).toBe("pass");
+    });
+
+    test("waitsOn pending with no open task → block: integrate the result", () => {
+      const d = decideAction({ ...base, openTaskNames: [],
+        validationOpen: [{ requirement: "Review", status: "partial", waitsOn: "pending", evidence: "redteam lief" }] });
+      expect(d.action).toBe("block");
+      expect(d.reason).toMatch(/no background task is open any more/);
+    });
+
+    test("waitsOn without evidence → block", () => {
+      const d = decideAction({ ...base, validationOpen: [{ requirement: "R", status: "partial", waitsOn: "user", evidence: "" }] });
+      expect(d.action).toBe("block");
+      expect(d.reason).toMatch(/without evidence/);
+    });
+
+    test("unreadable transcript: pending is taken at its word, not declared finished", () => {
+      const d = decideAction({ ...base, openTasksKnown: false, openTaskNames: [],
+        validationOpen: [{ requirement: "Review", status: "partial", waitsOn: "pending", evidence: "redteam läuft" }] });
+      expect(d.action).toBe("pass");
+    });
+
+    test("several failing gates are reported in ONE block, numbered", () => {
+      const d = decideAction({ ...base, validationAttested: false, openTaskNames: ["redteam"], pendingAttested: false,
+        validationOpen: [{ requirement: "Tooltip", status: "partial", waitsOn: null }] });
+      expect(d.action).toBe("block");
+      expect(d.reason).toMatch(/3 card gates failed/);
+      expect(d.reason).toMatch(/Validation required/);
+      expect(d.reason).toMatch(/Requirement gaps/);
+      expect(d.reason).toMatch(/redteam/);
+      expect(d.reason).toMatch(/\(3\/3\)/);
+    });
+
+    test("a single failing gate keeps its own reason text", () => {
+      const d = decideAction({ ...base, validationOpen: [{ requirement: "R", status: "unmet", waitsOn: null }] });
+      expect(d.reason.startsWith("[stop.flow.guard] Requirement gaps")).toBe(true);
+    });
+
+    test("stop_hook_active yields — the gate blocks only once", () => {
+      const d = decideAction({ ...base, stopHookActive: true, validationOpen: [{ requirement: "R", status: "unmet", waitsOn: null }] });
+      expect(d.action).toBe("pass");
+    });
+  });
+
   test("no card yet → card gate wins over validation gate", () => {
     const d = decideAction({
       workHappened: true,

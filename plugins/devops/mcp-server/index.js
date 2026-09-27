@@ -42,7 +42,7 @@
 // is exactly what the CLI fallback exists for: the session where the MCP server
 // itself never came up.
 import { execSync, execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -70,6 +70,23 @@ const PLUGIN_ROOT = resolve(__dirname, '..');
 // injected the `[budget]` line). Loaded lazily and never fatal: a missing or
 // dangling lib turns the block into null, not the tool into an MCP error.
 const cjsRequire = createRequire(import.meta.url);
+// Which requirements are still Claude's own work (waitsOn) — shared with
+// stop.flow.guard and ship_release so all three read the status the same way.
+const validationGaps = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'validation-gaps.js'));
+
+/**
+ * The validation items Claude itself still owns: everything except a not-met
+ * requirement that waits on the user, a deploy, a third party or running
+ * background work. Only these may turn a card red or name a "fix first" point.
+ */
+function ownedValidation(input) {
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  // A status-less or evidence-less item is owned whatever it claims to wait
+  // on — the Stop gate blocks it too, so the row must not show it as settled.
+  return validation.filter(v => v && !(v.status && v.status !== 'met' && validationGaps.WAITS_ON.includes(v.waitsOn)
+    && typeof v.evidence === 'string' && v.evidence.trim()));
+}
+
 function classifyBudget(snapshot) {
   try {
     const { readBudget, budgetSummary } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'budget.js'));
@@ -532,6 +549,8 @@ const RESULT_LINE_LIMIT = 3;
 
 /** A single free-text deviation, or '' when the turn has none. */
 function deviationText(input, lang) {
+  // Every unmet requirement is named, also one that waits on the user: the
+  // card must say what was not reached, only the red routing is Claude's own.
   const validation = Array.isArray(input.validation) ? input.validation : [];
   const unmet = validation.find(v => v && v.status === 'unmet');
   if (unmet) return unmet.requirement + (unmet.evidence ? ' — ' + unmet.evidence : '');
@@ -655,14 +674,30 @@ function classifyGate(t) {
   return 'other';
 }
 
+const WAITING_LABEL = {
+  de: { user: 'wartet auf dich', deploy: 'erst nach Deploy prüfbar', external: 'wartet extern', pending: 'in Arbeit' },
+  en: { user: 'waits on you', deploy: 'verifiable after deploy', external: 'waits on a third party', pending: 'in progress' },
+};
+
+/**
+ * "2/3 Anforderungen · 1 wartet auf dich" — the met count, then every not-met
+ * requirement by who it waits on. A requirement that waits on nobody is
+ * Claude's own gap: it keeps the row ◐/✗ instead of hiding in "0/3".
+ */
 function requirementsPost(validation, lang) {
   if (!validation.length) return null;
-  const total = validation.length;
-  const unmet = validation.filter(v => v.status === 'unmet').length;
-  const met = validation.filter(v => v.status === 'met').length;
+  const { total, met, waiting } = validationGaps.classify(validation);
+  const owned = ownedValidation({ validation });
+  const unmet = owned.filter(v => v.status === 'unmet').length;
   const noun = lang === 'en' ? 'Requirements' : 'Anforderungen';
-  if (unmet > 0) return { glyph: '✗', text: unmet + (lang === 'en' ? ' unmet' : ' unerfüllt'), dim: false };
-  if (met < total) return { glyph: '◐', text: met + '/' + total + ' ' + noun, dim: false };
+  const labels = WAITING_LABEL[lang === 'en' ? 'en' : 'de'];
+  const waitingText = Object.keys(labels).filter(k => waiting[k] > 0).map(k => waiting[k] + ' ' + labels[k]);
+  const tail = waitingText.length ? ' · ' + waitingText.join(' · ') : '';
+  if (unmet > 0) return { glyph: '✗', text: unmet + (lang === 'en' ? ' unmet' : ' unerfüllt') + tail, dim: false };
+  // ✓ only when nothing is left to Claude: no own gap and no background work
+  // still running (pending is "not done yet", not "done, waiting on you").
+  const ownGap = owned.some(v => v.status !== 'met') || waiting.pending > 0;
+  if (met < total) return { glyph: ownGap ? '◐' : '✓', text: met + '/' + total + ' ' + noun + tail, dim: false };
   return { glyph: '✓', text: total + '/' + total + ' ' + noun, dim: true };
 }
 
@@ -1175,7 +1210,7 @@ function topGateFinding(input, lang) {
 
 /** `ready-red` points — fix these first, named from validation/tests. */
 function redFindings(input) {
-  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const validation = ownedValidation(input);
   const bad = validation.filter(v => v.status === 'unmet' || v.status === 'partial');
   if (bad.length) return bad.map(v => v.requirement + (v.evidence ? ' — ' + v.evidence : ''));
   const tests = Array.isArray(input.tests) ? input.tests : [];
@@ -1269,7 +1304,7 @@ function capPoints(points, lang) {
 
 /** True when the evidence carries a red/partial finding — routes `ready` to `ready-red`. */
 function evidenceHasDeviation(input) {
-  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const validation = ownedValidation(input);
   if (validation.some(v => v.status === 'unmet' || v.status === 'partial')) return true;
   const tests = Array.isArray(input.tests) ? input.tests : [];
   return tests.some(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓');
@@ -1335,7 +1370,7 @@ function decisionContext(input, key, delivery, state, lang) {
       const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(String(t.result || ''));
       return sum + (m ? Number(m[1]) : 1);
     }, 0);
-  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const validation = ownedValidation(input);
   const unmetCount = validation.filter(v => v.status && v.status !== 'met').length;
   const strictlyUnmet = validation.filter(v => v.status === 'unmet').length;
   return {
@@ -2057,6 +2092,17 @@ function buildCompletionCard(params) {
     if (Array.isArray(params.validation) && params.validation.length > 0) {
       writeFileSync(join(tmpdir(), 'dotclaude-devops-validation-attested-' + key), new Date().toISOString());
     }
+    //  - validation-open hands the not-met requirements to Gate 4b, which
+    //    blocks once when one of them is still Claude's own work. Rewritten on
+    //    every render, so the re-render that closes the gaps clears it.
+    const openFile = join(tmpdir(), 'dotclaude-devops-validation-open-' + key);
+    const openItems = validationGaps.GAP_EXEMPT_VARIANTS.has(params.variant) ? [] : validationGaps.openItems(params.validation);
+    if (openItems.length) writeFileSync(openFile, JSON.stringify(openItems));
+    else try { unlinkSync(openFile); } catch { /* none written */ }
+    //  - the same items keyed by the checkout, for ship_release: the ship
+    //    server never sees the session id, and a caller that ships without
+    //    passing `validation` still meets this card's gaps.
+    validationGaps.writeRepoOpen(params.cwd, openItems);
     // pending-attested satisfies the pending gate — set only when the field
     // actually carries items (an empty array declares nothing).
     if (hasPending(params.pending)) {
@@ -2419,8 +2465,9 @@ server.registerTool(
           requirement: z.string().describe("A requirement / acceptance criterion the change had to satisfy — in user-domain language."),
           status: z.enum(["met", "partial", "unmet"]).optional().describe("Whether this change satisfies the requirement."),
           evidence: z.string().optional().describe("How you CONFIRMED it (the test that proves it, the behaviour observed) — not a restatement of the requirement."),
+          waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional().describe("Only for a partial/unmet requirement Claude CANNOT close itself: user = the user must act or decide · deploy = only verifiable after ship/deploy/restart · external = a third party · pending = your own background agent/workflow is still running (checked against the transcript — stale once it finished). waitsOn needs `evidence` naming what exactly it waits for. Without waitsOn a partial/unmet requirement is YOUR gap: stop.flow.guard blocks the turn once to close it, and ship_release refuses to merge over it."),
         })).optional(),
-      ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet, evidence }."),
+      ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet (REQUIRED — a missing status is a gap), evidence, waitsOn? }. Close every gap you can before rendering — partial/unmet is only for what waits on the user, a deploy, a third party or your own still-running background work (waitsOn)."),
       delivery: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({

@@ -22,6 +22,9 @@
  *        without "+N weitere" in the heading (design § 5.1-5.3), OR
  *     4. a card exists but a code change owes validation
  *        (validation-pending set, validation-attested not), OR
+ *     4b. a card reports a requirement that is still Claude's own work — no
+ *        status, partial/unmet without `waitsOn`, or `waitsOn: pending` with
+ *        no background task open any more (validation-open flag), OR
  *     5. a card exists but background subagents / tasks are still running and
  *        the card did not declare them (`pending` field, pending-attested not).
  *        Open work is read from the transcript, not from a flag — completions
@@ -117,6 +120,7 @@ process.stdin.on('end', () => {
   const valPendingResult = readSessionFile('dotclaude-devops-validation-pending', sessionId, EXACT);
   const valAttestedResult = readSessionFile('dotclaude-devops-validation-attested', sessionId, EXACT);
   const pendAttestedResult = readSessionFile('dotclaude-devops-pending-attested', sessionId, EXACT);
+  const valOpenResult = readSessionFile('dotclaude-devops-validation-open', sessionId, EXACT);
   const scheduledResult = readSessionFile('dotclaude-devops-scheduled-task', sessionId, EXACT);
   const shippedResult = readSessionFile('dotclaude-devops-shipped', sessionId, EXACT);
   // Written by the completion MCP next to a Desktop card render (#451): the
@@ -133,6 +137,10 @@ process.stdin.on('end', () => {
   const validationPending = valPendingResult !== null;
   const validationAttested = valAttestedResult !== null;
   const pendingAttested = pendAttestedResult !== null;
+  let validationOpen = [];
+  if (valOpenResult) {
+    try { validationOpen = JSON.parse(String(valOpenResult.content || '[]')); } catch { validationOpen = []; }
+  }
   const stopHookActive = hook.stop_hook_active === true;
   const scheduledTask = scheduledResult !== null;
   const shipped = shippedResult !== null;
@@ -186,6 +194,8 @@ process.stdin.on('end', () => {
     silent,
     validationPending,
     validationAttested,
+    validationOpen,
+    openTasksKnown: silent ? false : Boolean(transcript),
     openTaskNames: openTasks,
     pendingAttested,
     // Active install root — the block reason names the offline renderer under it
@@ -211,6 +221,7 @@ process.stdin.on('end', () => {
     // Validation flags are owned by this gate — clear them at a clean turn end.
     if (valPendingResult) try { fs.unlinkSync(valPendingResult.filePath); } catch {}
     if (valAttestedResult) try { fs.unlinkSync(valAttestedResult.filePath); } catch {}
+    if (valOpenResult) try { fs.unlinkSync(valOpenResult.filePath); } catch {}
     // Same for the pending attestation: it attests THIS turn's card, so the next
     // turn must re-declare any work that is still running.
     if (pendAttestedResult) try { fs.unlinkSync(pendAttestedResult.filePath); } catch {}

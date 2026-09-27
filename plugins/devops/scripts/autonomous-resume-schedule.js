@@ -28,7 +28,8 @@
  * 5h CAP applies to the window estimate, not to the BUFFER on top of it.
  *
  * CLI (stdout: JSON):
- *   (no subcommand)   → { ok, delayMinutes, cron, fireAtLocal, source }
+ *   [--buffer <min>]  → { ok, delayMinutes, cron, fireAtLocal, source }
+ *                       (buffer default 15; 5 for an interactive defer)
  *                       `cron` is a ready-to-use 5-field expression in LOCAL time
  *                       for a one-shot CronCreate — no LLM date math needed.
  *
@@ -54,7 +55,7 @@ const REFRESH_MAX_AGE_MIN = 3; // cache younger than this is fresh enough → sk
  * @param {number} nowMs           Current epoch ms (injected for determinism).
  * @returns {{delayMinutes:number, source:string, effectiveMin?:number}}
  */
-function computeResumeDelayMinutes(usageData, nowMs) {
+function computeResumeDelayMinutes(usageData, nowMs, bufferMin = RESET_BUFFER_MIN) {
   const fallback = { delayMinutes: WINDOW_MAX_MIN, source: 'fallback-5h' };
 
   const resetMin = usageData && usageData.session && usageData.session.resetInMinutes;
@@ -75,7 +76,7 @@ function computeResumeDelayMinutes(usageData, nowMs) {
   // Clamp the window estimate to one full period, then add the buffer ON TOP so
   // we always land after the reset, never on it.
   const windowMin = Math.min(effectiveMin, WINDOW_MAX_MIN);
-  const delayMinutes = Math.round(windowMin) + RESET_BUFFER_MIN;
+  const delayMinutes = Math.round(windowMin) + bufferMin;
   const source = effectiveMin > WINDOW_MAX_MIN ? 'reset-window-capped' : 'reset-window';
 
   return { delayMinutes, source, effectiveMin: Math.round(effectiveMin) };
@@ -133,6 +134,19 @@ function refreshUsageBestEffort() {
   }
 }
 
+/**
+ * `--buffer <min>` — minutes past the reset. The unattended auto-resume keeps
+ * the 15-min default; a user who is still present and deferred work to the
+ * reset (deep-knowledge/defer-to-reset.md) uses 5. Pure — exported
+ * for tests; anything but an integer 0–60 falls back to the default.
+ */
+function parseBufferArg(argv) {
+  const i = argv.indexOf('--buffer');
+  if (i === -1) return RESET_BUFFER_MIN;
+  const n = Number(argv[i + 1]);
+  return Number.isInteger(n) && n >= 0 && n <= 60 ? n : RESET_BUFFER_MIN;
+}
+
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
@@ -144,7 +158,7 @@ if (require.main === module) {
   // Capture `now` AFTER the (possibly ~60s) scrape: a fresh snapshot's timestamp
   // must be ≤ now, else age-correction reads it as future-dated → flat-5h fallback.
   const now = Date.now();
-  const plan = computeResumeDelayMinutes(readUsageJson(), now);
+  const plan = computeResumeDelayMinutes(readUsageJson(), now, parseBufferArg(process.argv.slice(2)));
   const fireAtMs = now + plan.delayMinutes * 60000;
   const f = new Date(fireAtMs);
   const fireAtLocal =
@@ -164,6 +178,7 @@ if (require.main === module) {
 module.exports = {
   computeResumeDelayMinutes,
   isCacheFresh,
+  parseBufferArg,
   toCronExpression,
   WINDOW_MAX_MIN,
   RESET_BUFFER_MIN,
