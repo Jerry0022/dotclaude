@@ -196,3 +196,30 @@ describe("do-ship — every reference stub resolves", () => {
     }
   });
 });
+
+// #567: a session without the ship MCP server follows a checklist instead of
+// improvising — detected before any git action, tag step owned by #566.
+describe("do-ship — manual checklist without the ship MCP server", () => {
+  const step05 = section(SKILL, "## Step 0.5", "## Step 1 ");
+  const MANUAL = fs.readFileSync(path.join(__dirname, "deep-knowledge", "manual-ship.md"), "utf8");
+  const FLOW = fs.readFileSync(path.join(__dirname, "deep-knowledge", "release-flow.md"), "utf8");
+
+  test("Step 0.5 switches to the checklist up front, fail closed, never for deferred tools", () => {
+    expect(step05).toContain("deep-knowledge/manual-ship.md");
+    expect(step05).toMatch(/before any git or GitHub action/);
+    expect(step05).toMatch(/fail closed/);
+    expect(step05).toMatch(/Deferred tools are never absent/);
+  });
+
+  test("the checklist keeps squash merge and the annotated tag on the squash commit", () => {
+    expect(MANUAL).toMatch(/\*\*Squash merge\*\*/);
+    expect(MANUAL).toMatch(/annotated `alpha\/vX\.Y\.Z` on that squash commit/);
+    expect(MANUAL).toMatch(/Nicht gelaufen/);
+  });
+
+  test("the tag step points at the #566 hand-off instead of restating it", () => {
+    expect(MANUAL).toContain("release-flow.md` § owner hand-off");
+    expect(FLOW).toMatch(/### When the session cannot push the tag — owner hand-off/);
+    expect(MANUAL).not.toMatch(/git tag -a/);
+  });
+});
