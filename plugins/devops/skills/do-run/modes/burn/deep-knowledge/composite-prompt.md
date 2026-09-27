@@ -2,7 +2,8 @@
 
 Build the autonomous task prompt as follows, then pass it as `$ARGUMENTS`
 to autonomous mode (`modes/autonomous.md`, same skill). Autonomous mode
-handles permission priming, the 3-minute start confirmation, execution,
+handles permission priming, the start gate (always shown for a burn —
+autonomous Step 4a, reason G3) with its 3-minute autostart, execution,
 reporting and optional shutdown; its Step 5 runs auto-agents with
 `--burn=<project root>/BURN-STATE.json`.
 

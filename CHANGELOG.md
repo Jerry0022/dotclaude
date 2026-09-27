@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.225.0] — 2026-09-27
+
+### Changed
+- **An autonomous run starts directly when nothing is left to confirm.** After the Step 3e checklist, autonomous Step 4a checks three gate reasons: a priming that was not granted (G1), tools that will still prompt during the run (G2: Step 0.7 applied fewer rules than it suggested, or `tamper_protected_writes` is non-empty) and a burn (G3, same test as Step 5). With none, the run says "Alle Berechtigungen erteilt — starte jetzt autonom.", arms the watchdog and the resume cron and starts; the lockout applies from that line. With a reason, the start gate with its 3-minute autostart opens as before and names the reason. A burn always gets the gate, because its plan has no other confirmation. Pinned by `skills/do-run/autonomous-start-gate.test.js`.
+
 ## [0.224.0] — 2026-09-27
 
 ### Added

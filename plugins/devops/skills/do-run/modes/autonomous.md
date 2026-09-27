@@ -2,7 +2,7 @@
 
 # Run Autonomous
 
-User is leaving the PC. Collect the task, prime permissions, confirm, then work independently.
+User is leaving the PC. Collect the task, prime permissions, start (a start gate only when Step 4a finds a reason), then work independently.
 
 ## Step 0 — Load Extensions
 
@@ -15,7 +15,7 @@ Silently check (do not surface "not found"):
 ## Step 0.1 — Auto-Start Prompt Detection
 
 If the incoming user message starts with `AUTONOMOUS_AUTOSTART:`, this is the
-3-minute timeout from Step 4 firing. The user is likely AFK.
+3-minute timeout of the Step 4b start gate firing. The user is likely AFK.
 
 1. **Pending-question guard:** If an `AskUserQuestion` is currently active (the
    Step 4b confirmation, a clarifying question, or anything else), do NOT
@@ -200,12 +200,12 @@ Ask it only when the PC stays on:
 > 2. label: "Nein" — description: "Kein automatischer Resume. Hängengebliebene Worktrees setzt du später selbst fort."
 
 Save the choice as `$AUTO_RESUME` (`yes` if option 1, `no` if option 2). It is armed
-at "Jetzt starten" (Step 4c) — or on auto-start (Step 0.1) — via Step 4e.
+when execution starts — direct start (Step 4a), "Jetzt starten" (Step 4c) or auto-start (Step 0.1) — via Step 4e.
 
 ## Step 3 — Permission Priming (ALL permissions BEFORE confirmation)
 
 **This step MUST complete fully before Step 4.** The user must not be interrupted
-by any permission prompt after confirming "Jetzt starten".
+by any permission prompt once the run has started (Step 4).
 
 Determine which tool categories the task requires based on `$EXEC_MODE` and
 desktop choice, then prime ALL of them now:
@@ -284,13 +284,40 @@ Display a checklist of all primed permissions:
 ```
 Mark tools that weren't needed as `[--] nicht benötigt`.
 
-## Step 4 — Final Confirmation with 3-Minute Auto-Start
+## Step 4 — Start: direct, or through the start gate
 
-**The user may already be walking away.** The confirmation must NOT block autonomous
-execution if the user doesn't answer. Implement the 3-minute auto-start via a
+The user answered "Autonom" in the router and granted every permission Step 3
+asked for. Asking "start now?" on top of that is the same decision twice, so a
+clean run starts at once. The start gate (4b) is kept for the cases where the
+user has something new to look at before walking away.
+
+### 4a — Decide: direct start or start gate
+
+Show the Step 3e checklist first, in both cases. Then open the start gate
+(4b) when **at least one** of these holds, and start directly otherwise:
+
+| # | Reason for the gate | Checked from |
+|---|---|---|
+| G1 | A priming is not granted: a Step 3e line is neither `[OK]` nor `[--]` (computer-use app refused, browser probe found no tool while a web-tech signal applies, an MCP prime errored) | the Step 3e checklist |
+| G2 | Tools will still prompt during the run: Step 0.7 applied fewer rules than it suggested, or `tamper_protected_writes` is non-empty | the Step 0.7 result |
+| G3 | This is a burn: the burn plan (`modes/burn.md` Step 6) was just shown and has no confirmation of its own | the task is burn's composite prompt and `BURN-STATE.json` exists (the same test as Step 5 § Under burn) |
+
+The rule is fixed: no reason → direct start; one reason → gate. Never open
+the gate "to be safe" without a reason from the table, and never skip it
+when one applies. Name the reason in the gate's question (G1: the failed
+line; G2: the tools that will prompt; G3: "Burn-Plan oben").
+
+**Direct start** (no reason). Output one line:
+**"Alle Berechtigungen erteilt — starte jetzt autonom."** Arm no autostart
+cron (there is nothing to wait for). If `$AUTO_RESUME=yes`, arm the resume
+cron now (Step 4e). Arm the watchdog (Step 4d), then go to Step 5. The
+Post-Confirmation Lockout is active from this line on.
+
+### 4b — Start gate (only with a reason from 4a)
+
+**The user may already be walking away.** The gate must NOT block autonomous
+execution if the user doesn't answer. Arm the 3-minute auto-start as a
 one-shot cron BEFORE asking the question.
-
-### 4a — Arm the Auto-Start Timer
 
 Compute `now + 3 minutes` in local time. Derive the 5-field cron expression
 (minute, hour, day-of-month, month, `*`). Example for "today 14:26":
@@ -307,13 +334,10 @@ CronCreate({
 })
 ```
 
-Save the returned `jobId` as `$TIMEOUT_JOB_ID`.
-
-### 4b — Ask Confirmation
-
-Ask via `AskUserQuestion`:
+Save the returned `jobId` as `$TIMEOUT_JOB_ID`. Then ask via `AskUserQuestion`:
 > header: "Start"
-> question: "Alle Berechtigungen erteilt. Soll ich jetzt autonom starten? (Ohne Antwort starte ich nach 3 Minuten automatisch.)"
+> question: "<Grund aus 4a, eine Zeile>. Soll ich trotzdem jetzt autonom starten? (Ohne Antwort starte ich nach 3 Minuten automatisch.)"
+> For G3 alone: "Burn-Plan oben. Soll ich jetzt autonom starten? (Ohne Antwort starte ich nach 3 Minuten automatisch.)"
 > Options (fixed order):
 > 1. label: "Jetzt starten" — description: "Sofort starten, PC kann verlassen werden."
 > 2. label: "Später starten" — description: "Timer um 3 Minuten zurücksetzen — ich kann noch Rückfragen stellen."
@@ -362,7 +386,7 @@ warning and continue.
 
 ### 4e — Auto-Resume Scheduling (only if `$AUTO_RESUME=yes`)
 
-Armed at "Jetzt starten" (Step 4c) or on auto-start (Step 0.1) — the instant execution
+Armed at the direct start (Step 4a), "Jetzt starten" (Step 4c) or on auto-start (Step 0.1) — the instant execution
 begins. A one-shot session cron that, 5h from now (after the rolling token window
 has reset), nudges every still-stalled Claude worktree to continue with `weiter`.
 
@@ -409,7 +433,7 @@ Save the returned `jobId` as `$RESUME_JOB_ID` and log `fireAtLocal` + `source` t
   it fires while the account is *still* capped (a fresh window already exhausted, or
   the **weekly** limit — which does not reset in 5h), that single attempt simply
   errors with no retry. This is an accepted limitation.
-- Session-only (in-memory), like the Step 4 autostart cron: it fires only if this
+- Session-only (in-memory), like the Step 4b autostart cron: it fires only if this
   Claude session is still open and idle at the fire moment. In notify mode the PC
   stays on, so this normally holds — but if the user closes Claude (intentionally,
   e.g. to game), the cron is gone and no resume happens. This is the accepted, even
@@ -424,7 +448,7 @@ Save the returned `jobId` as `$RESUME_JOB_ID` and log `fireAtLocal` + `source` t
 
 ### Post-Confirmation Lockout
 
-**After the user confirms, ZERO user interaction is allowed.**
+**Once the run has started — direct start (Step 4a), "Jetzt starten" or the autostart — ZERO user interaction is allowed.**
 No `AskUserQuestion`, no inline questions, no confirmation prompts, no permission
 requests. The user is AFK — they will not see anything.
 
@@ -435,7 +459,7 @@ If something unexpected happens during autonomous execution:
 - **Shutdown was requested** → always execute shutdown, even if work is incomplete (after saving progress)
 
 This lockout is absolute. There is no exception. The only user interaction points
-after confirmation are the next session (via Resume Detection in Step 0.5)
+after the start are the next session (via Resume Detection in Step 0.5)
 and a burn stopped by a usage limit that the user nudges by hand — then the
 user is demonstrably back, and `prompt.burn.resume` asks its one question
 (`modes/burn.md` Step 0.6).
