@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
+  minIdleDays, reachableFromMerged,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -126,18 +127,16 @@ describe("scanRepo — what counts as a leftover", () => {
   });
 });
 
-describe("auto-clean — the age gate", () => {
-  test("nothing older than the gate → no network call, nothing removed", () => {
-    const { dir, c2, c3 } = makeRepo();
-    git(dir, "branch", "b10", c2);
-    git(dir, "branch", "b3", c3);
+describe("auto-clean — how long a leftover waits (#571)", () => {
+  test("no leftover at all → no network call, nothing removed", () => {
+    const { dir } = makeRepo();
     let called = 0;
     const plan = planAutoClean(scanRepo(dir, NOW), SETTINGS, { cwd: dir, fetchMerged: () => { called++; return null; } });
     expect(plan.gateOpen).toBe(false);
     expect(called).toBe(0);
   });
 
-  test("an old leftover that did NOT land keeps the gate closed", () => {
+  test("a leftover that did NOT land stays, however old", () => {
     const { dir, c1 } = makeRepo();
     branchWithCommit(dir, "unshipped", c1, "b.txt", "mine\n", daysAgo(35));
     const plan = planAutoClean(scanRepo(dir, NOW), SETTINGS, { cwd: dir, fetchMerged: offline });
@@ -145,7 +144,7 @@ describe("auto-clean — the age gate", () => {
     expect(plan.keep.map((u) => [u.branch, u.reason])).toEqual([["unshipped", "not-landed"]]);
   });
 
-  test("gate open → every landed leftover older than 7 days goes, younger and unshipped ones stay", () => {
+  test("every landed branch goes at once, however young; unshipped ones stay", () => {
     const { dir, c1, c2, c3 } = makeRepo();
     git(dir, "branch", "old-landed", c1);
     git(dir, "branch", "mid-landed", c2);
@@ -153,11 +152,115 @@ describe("auto-clean — the age gate", () => {
     branchWithCommit(dir, "unshipped", c1, "b.txt", "mine\n", daysAgo(35));
     const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
     expect(res.autoClean.ran).toBe(true);
-    expect(res.autoClean.removed.map((r) => r.name).sort()).toEqual(["mid-landed", "old-landed"]);
+    expect(res.autoClean.removed.map((r) => r.name).sort()).toEqual(["mid-landed", "old-landed", "young-landed"]);
     expect(res.autoClean.removed.every((r) => /^[0-9a-f]{40}$/.test(r.sha))).toBe(true);
-    expect(branches(dir)).toEqual(["main", "unshipped", "young-landed"]);
-    expect(res.leftover).toBe(2);
-    expect(res.card.tests).toEqual({ method: "Aufräumen (auto)", result: "2 Branches entfernt" });
+    expect(branches(dir)).toEqual(["main", "unshipped"]);
+    expect(res.leftover).toBe(1);
+    expect(res.card.tests).toEqual({ method: "Aufräumen (auto)", result: "3 Branches entfernt" });
+  });
+
+  test("a Desktop session worktree waits autoCleanMinAgeDays idle; a sub-agent worktree only LIVE_SESSION_MS", () => {
+    const { dir, c1 } = makeRepo();
+    const session = sessionWorktree(dir, "wt-session", c1, 1);
+    const agent = sessionWorktree(dir, "agent-a0123456789abcdef", c1, 1);
+    const fresh = sessionWorktree(dir, "agent-afedcba9876543210", c1, 0);
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline, projectsDir: null });
+    expect(fs.existsSync(agent)).toBe(false);
+    expect(fs.existsSync(session), "a day idle is no reason to close a Desktop session's worktree").toBe(true);
+    expect(fs.existsSync(fresh), "an agent may still be working in it").toBe(true);
+    expect(minIdleDays({ kind: "branch" }, SETTINGS)).toBe(0);
+    expect(minIdleDays({ kind: "worktree", agent: false }, SETTINGS)).toBe(7);
+  });
+
+  test("the session trigger cleans like a ship; promote never does", () => {
+    const { dir, c1 } = makeRepo();
+    git(dir, "branch", "old-landed", c1);
+    const res = runHygiene({ cwd: dir, trigger: "session", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
+    expect(res.autoClean.ran).toBe(true);
+    expect(branches(dir)).toEqual(["main"]);
+  });
+});
+
+describe("auto-clean — sub-agent branches of a squash-merged PR (#572)", () => {
+  test("a branch merged into the PR's branch before the squash counts as landed", () => {
+    const { dir, c1 } = makeRepo();
+    const child = branchWithCommit(dir, "worktree-agent-a1", c1, "k.txt", "child\n", daysAgo(2));
+    git(dir, "checkout", "-q", "-b", "parent", c1);
+    execFileSync("git", ["merge", "-q", "--no-ff", "-m", "merge child", "worktree-agent-a1"], { cwd: dir, stdio: "ignore" });
+    const prHead = commitAt(dir, "p.txt", "parent\n", daysAgo(1));
+    git(dir, "checkout", "-q", "main");
+    const merged = { bySha: new Set([prHead]), byName: new Map([["parent", [prHead]]]) };
+    const baseRef = "refs/remotes/origin/main";
+    const viaMerged = reachableFromMerged(dir, merged, baseRef);
+    expect(viaMerged.has(child)).toBe(true);
+    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged, viaMerged })).toBe("pr");
+    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged: null })).toBeNull();
+  });
+
+  test("a PR head missing locally is skipped, not fatal", () => {
+    const { dir } = makeRepo();
+    const merged = { bySha: new Set(["0123456789abcdef0123456789abcdef01234567"]), byName: new Map() };
+    expect(reachableFromMerged(dir, merged, "refs/remotes/origin/main").size).toBe(0);
+  });
+
+  test("a removed branch's same-commit twin on origin goes too; a moved one stays", () => {
+    const { dir, c1, c3 } = makeRepo();
+    const bare = mkTmp("hy-origin-");
+    git(bare, "init", "-q", "--bare");
+    git(dir, "remote", "add", "origin", bare);
+    git(dir, "push", "-q", "origin", `${c3}:refs/heads/main`);
+    const tip = branchWithCommit(dir, "worktree-agent-a2", c1, "q.txt", "Q\n", daysAgo(2));
+    git(dir, "push", "-q", "origin", "worktree-agent-a2");
+    git(dir, "branch", "moved-there", c1);
+    git(dir, "push", "-q", "origin", `${c3}:refs/heads/moved-there`);
+    git(dir, "fetch", "-q", "origin");
+    const merged = { bySha: new Set([tip]), byName: new Map() };
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: () => merged });
+    const kinds = res.autoClean.removed.map((r) => `${r.kind}:${r.name}`).sort();
+    expect(kinds).toEqual(["branch:moved-there", "branch:worktree-agent-a2", "remote:worktree-agent-a2"]);
+    expect(git(bare, "for-each-ref", "--format=%(refname:short)", "refs/heads").split("\n").sort()).toEqual(["main", "moved-there"]);
+    expect(res.card.tests.result).toBe("2 Branches · 1 Remote-Branch entfernt · 1 übersprungen");
+  });
+});
+
+describe("unlanded work at risk (#573)", () => {
+  /** A branch whose upstream was deleted after its PR merged, with one commit on top. */
+  function goneBranchWithExtra(dir, c1) {
+    const prHead = branchWithCommit(dir, "shipped-then-more", c1, "r.txt", "in the PR\n", daysAgo(3));
+    git(dir, "checkout", "-q", "shipped-then-more");
+    commitAt(dir, "r.txt", "after the merge\n", daysAgo(2));
+    git(dir, "checkout", "-q", "main");
+    // git reports `[gone]` only for a configured remote whose ref is missing
+    git(dir, "remote", "add", "origin", mkTmp("hy-no-origin-"));
+    git(dir, "config", "branch.shipped-then-more.remote", "origin");
+    git(dir, "config", "branch.shipped-then-more.merge", "refs/heads/shipped-then-more");
+    return prHead;
+  }
+
+  test("a [gone] branch with commits beyond its merged PR is kept and flagged on the card", () => {
+    const { dir, c1 } = makeRepo();
+    const prHead = goneBranchWithExtra(dir, c1);
+    const merged = { bySha: new Set([prHead]), byName: new Map([["shipped-then-more", [prHead]]]) };
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: () => merged });
+    expect(branches(dir)).toContain("shipped-then-more");
+    expect(res.atRisk).toEqual([expect.objectContaining({ kind: "branch", branch: "shipped-then-more", commits: 1 })]);
+    expect(res.card.risk.text).toBe("⚠ Nicht gelandete Arbeit ohne PR: shipped-then-more (1 Commit) — pushen und mergen oder bewusst verwerfen");
+    expect(cardLines(res, "en").risk.text).toMatch(/^⚠ Unlanded work without a PR: shipped-then-more \(1 commit\)/);
+  });
+
+  test("offline nothing is flagged — a squash-merged branch would look the same", () => {
+    const { dir, c1 } = makeRepo();
+    goneBranchWithExtra(dir, c1);
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
+    expect(res.atRisk).toEqual([]);
+    expect(res.card.risk).toBeUndefined();
+  });
+
+  test("an unlanded branch that still has its upstream is not flagged", () => {
+    const { dir, c1 } = makeRepo();
+    branchWithCommit(dir, "in-progress", c1, "w.txt", "wip\n", daysAgo(2));
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: () => ({ bySha: new Set(), byName: new Map() }) });
+    expect(res.atRisk).toEqual([]);
   });
 });
 
@@ -549,7 +652,7 @@ describe("runHygiene — trigger, switches and the nudge", () => {
   test("at or below the threshold there is no nudge", () => {
     const { dir, c3 } = makeRepo();
     git(dir, "branch", "x1", c3);
-    const res = runHygiene({ cwd: dir, trigger: "ship", settings: { ...SETTINGS, nudgeThreshold: 1 }, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
+    const res = runHygiene({ cwd: dir, trigger: "promote", settings: { ...SETTINGS, nudgeThreshold: 1 }, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: offline });
     expect(res.leftover).toBe(1);
     expect(res.nudge).toBe(false);
     expect(res.card).toEqual({});
