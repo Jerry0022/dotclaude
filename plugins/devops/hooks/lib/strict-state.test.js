@@ -112,6 +112,20 @@ describe("evaluate", () => {
     expect(S.evaluate(cwd)).toMatchObject({ active: false, why: "binding-gone" });
   });
 
+  // #555: a paused concept keeps its state file but stops the bridge on
+  // purpose — strict bound to it is released like a closed concept.
+  test("binding-gone when the bound concept is paused", () => {
+    S.activate(cwd, { reason: "inline" });
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    const file = path.join(cwd, ".claude", "concept-active.json");
+    fs.writeFileSync(file, JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
+    S.bind(cwd, "concept", path.join(".claude", "concept-active.json"));
+    expect(S.evaluate(cwd)).toMatchObject({ active: true });
+    fs.writeFileSync(file, JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", paused_at: new Date().toISOString() }));
+    expect(S.evaluate(cwd)).toMatchObject({ active: false, why: "binding-gone" });
+    expect(S.findBinding(cwd)).toBeNull();
+  });
+
   test("no repo: branch check is skipped, mode counts", () => {
     const plain = fs.mkdtempSync(path.join(os.tmpdir(), "strict-norepo-"));
     try {

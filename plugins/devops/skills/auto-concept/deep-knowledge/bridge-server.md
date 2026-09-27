@@ -560,6 +560,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      `concept-tick.js` only (#348): the consecutive heartbeat-miss count and
      the one-shot marker that makes the relaunch instruction fire once. Both
      are removed by the next successful heartbeat; nothing else reads them.
+   - `paused_at` — ISO-8601 UTC, present only while the user has paused the
+     concept (#555, `pause-resume.md`). Bridge, watchers and cron are stopped
+     on purpose: `ss.concept.resume` prints a hint instead of relaunching, the
+     24 h prune skips the file, the card shows no link and no compass, and
+     strict mode bound to the concept is released. The resume deletes it.
 
    **What survives a Claude restart, and how it comes back (#348).** The
    bridge server, the keepalive pulser and the pickup waker are all

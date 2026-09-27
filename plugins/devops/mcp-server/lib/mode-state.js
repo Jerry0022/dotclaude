@@ -281,7 +281,8 @@ export function conceptUrl(cwd, concept) {
  * Abandonment is the hook's last-activity rule (#426): the durable store of
  * `cwd` is passed along, so a concept opened days ago but saved or drafted
  * recently stays live. `skipStale` drops the check for a card that carries a
- * `concept` field (#563).
+ * `concept` field (#563). A paused concept (#555) reads as none: its bridge
+ * is stopped on purpose, so there is no link to show and no page waiting.
  *
  * @param {string|undefined} cwd
  * @param {{ skipStale?: boolean }} [opts]
@@ -296,6 +297,9 @@ export function readConceptState(cwd, { skipStale = false } = {}) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
     const R = hookRequire("session-start", "ss.concept.resume.js");
     if (!R.isValidHtmlPath(state.html_path)) return null;
+    // A paused concept (#555) has no bridge: no link, no compass. The card of
+    // the pausing turn and every later card show the plain outcome instead.
+    if (R.isPaused(state)) return null;
     if (!skipStale && R.isStale(state, R.readStore(R.storeDirFor(state.html_path, cwd)))) return null;
     return { port, html_path: state.html_path };
   } catch {

@@ -117,7 +117,12 @@ it is the card's footer, not part of the evidence.
 - A light glint (24 px, 12 % white) sweeps once every 4 s across the **filled
   part only** — never over time that has not passed; disabled under
   `prefers-reduced-motion`.
-- **Omitted entirely** while both windows are < 50 % and > 1 h from reset.
+- **When a window shows.** `5h`: from 50 % used or 1 h before reset.
+  `Wk`: once usage runs > 10 pp ahead of elapsed time (the yellow marker
+  threshold — the user must see they are ahead of the linear weekly pace)
+  or in the last 24 h before reset, whatever the pace. Absolute weekly
+  percent alone never shows it. With neither window due, the line is
+  **omitted entirely**.
 - Terminal / markdown fallback: `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 39 m   Wk ▰▰│▱▱▱▱▱▱ 6 d 20 h`
   (▰ = time, │ = usage); a yellow/red condition is written as a leading `⚠`.
 - Context health: from the tool-call threshold on, `🧠 1180 Calls · /compact`

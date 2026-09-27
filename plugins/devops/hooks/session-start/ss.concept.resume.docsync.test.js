@@ -190,3 +190,18 @@ describe("the watchers are a script, not a duplicated shell loop", () => {
     expect(BRIDGE).not.toMatch(/backup pickup path during the brief window/);
   });
 });
+
+// #555: the paused hint points the model at the skill's resume procedure by
+// name, and the procedure names the state field the hook reads. A rename on
+// either side would send a resumed session to a section that no longer exists.
+describe("paused hint ↔ pause-resume.md stay in sync (#555)", () => {
+  const PAUSE = fs.readFileSync(path.join(SKILLDIR, "deep-knowledge", "pause-resume.md"), "utf8");
+  test("the hint's section name and the state field exist in the doc", async () => {
+    const { buildPausedHint } = await import("./ss.concept.resume.js");
+    const hint = buildPausedHint({ port: 1, html_path: "docs/concepts/x.html", slug: "x", paused_at: "2026-09-27T12:00:00Z" });
+    expect(hint).toContain("Resume from pause");
+    expect(PAUSE).toContain("## Resume from pause");
+    expect(PAUSE).toContain("paused_at");
+    expect(BRIDGE).toContain("`paused_at`");
+  });
+});

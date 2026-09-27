@@ -25,8 +25,11 @@ Speak only when:
    default answers are decided, not asked.
 2. **The user asked an explicit question** — answer it, action first,
    at most 5 bullet points.
-3. **Analysis or a comparison exceeds ~8 lines** — put it in a `/auto-concept` page
-   or an artifact and post only the link plus one sentence.
+3. **Analysis or a comparison exceeds ~8 lines** — put it on a page and post
+   only the link plus one sentence. It ends in something for the user to pick
+   (options, proposals, what to do next) → a `/auto-concept` page, always,
+   even when an artifact would be quicker to publish. An artifact only for a
+   read-only report that leaves nothing to decide.
 4. **Something is blocked** — one line: cause + fix.
 
 Tool and hook output is addressed to you, not the user. Relay only the part
