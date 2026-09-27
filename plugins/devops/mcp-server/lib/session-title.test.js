@@ -243,6 +243,21 @@ describe("titlePrefixFor", () => {
     }
   });
 
+  // #555: a paused concept has no bridge — no link, no compass; the card's own
+  // outcome (the `paused` variant of the pausing turn) owns the title.
+  test("a paused concept-active.json neither owns the title nor yields a link", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "devops-title-paused-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString(), paused_at: new Date().toISOString() }));
+      expect(titlePrefixFor({ variant: "paused", cwd }, deps)).toBe(SESSION_PREFIX.paused);
+      expect(conceptUrl(cwd, undefined)).toBe("");
+      expect(conceptUrl(cwd, { phase: "waiting" })).toBe("");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("a fresh concept-active.json (started_at within 24 h) still counts as an open concept", () => {
     const cwd = mkdtempSync(join(tmpdir(), "devops-title-live-"));
     try {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.215.0] — 2026-09-27
+
+### Added
+- **You can pause an open concept page and resume it later.** Say "pausieren" or "machen wir später weiter" and the bridge, the pulser, the waker and the backstop cron stop. The page, your decisions and the durable store stay, and `concept-active.json` records `paused_at`. While a concept is paused, a session start or a compact shows a one-line resume hint and relaunches nothing. The 24 h prune never deletes a paused concept, the card shows no link and no compass, and strict mode bound to the concept is released. "Weiter mit dem Concept" relaunches the bridge on the same port with every decision intact. A submission that arrived right before the pause is still recovered and ends the pause (#555).
+
 ## [0.214.4] — 2026-09-27
 
 ### Changed
