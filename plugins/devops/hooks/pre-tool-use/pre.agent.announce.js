@@ -23,7 +23,8 @@
  *   transcript, because that is the one the user did not choose per agent.
  *
  *   Silent inside a subagent (its context is not the user's chat) and for a
- *   spawn pre.strict.agent-gate is about to refuse — the retry announces.
+ *   spawn pre.strict.agent-gate or pre.agent.model is about to refuse — the
+ *   retry announces.
  *   Never blocks: every failure path exits 0 silently.
  */
 
@@ -205,6 +206,18 @@ function strictWillBlock(cwd, prompt) {
   }
 }
 
+/** True when pre.agent.model refuses this spawn (it runs in parallel). */
+function modelGateWillRefuse(input, cwd, transcriptPath, toolUseId) {
+  try {
+    const file = findAgentFile(input.subagent_type || 'general-purpose', cwd);
+    const fm = (file && readFrontmatter(file)) || {};
+    const text = require('../lib/agent-card-relay').readTail(transcriptPath);
+    return require('../lib/agent-model-gate').wouldRefuse(input, fm.model || null, text, toolUseId);
+  } catch {
+    return false;
+  }
+}
+
 function main() {
   let inputData = '';
   process.stdin.setEncoding('utf8');
@@ -220,6 +233,7 @@ function main() {
       const cwd = hook.cwd || process.cwd();
       const prompt = typeof input.prompt === 'string' ? input.prompt : '';
       if (strictWillBlock(cwd, prompt)) process.exit(0);
+      if (modelGateWillRefuse(input, cwd, hook.transcript_path, hook.tool_use_id)) process.exit(0);
 
       const card = buildCard(input, cwd, hook.transcript_path, hook.tool_use_id, sessionLang(hook.session_id));
       process.stdout.write(JSON.stringify({
@@ -243,4 +257,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard };
+module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse };

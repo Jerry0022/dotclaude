@@ -121,18 +121,17 @@ Choose the model for each sub-agent based on task complexity:
 
 | Complexity | Model | When to use |
 |------------|-------|-------------|
-| **Low** | `model: haiku` | Simple file search, keyword lookup, data gathering, formatting |
+| **Low** | `devops:scout` (sonnet · low) | Simple file search, keyword lookup, data gathering |
 | **Medium** | `model: sonnet` | Code writing, test creation, design specs, UX evaluation, analysis |
 | **High** | `model: opus` | Deep architectural decisions, complex multi-file refactors |
 
-**Default:** `sonnet` (if unsure, use sonnet — it covers most tasks well).
-**Use haiku** when the sub-agent only reads, searches, or summarizes — no code output.
-**Use opus** only when sonnet's output quality is insufficient for the specific task.
+**Default:** `sonnet`, always named — an inheriting spawn is refused once (`pre.agent.model`).
+**Use scout** when the sub-agent only reads, searches, or summarizes — no code output.
+**Use opus** only when sonnet's output quality is insufficient. No `haiku`.
 
 **Effort caveat:** `effort` cannot be overridden at invocation time — it comes from the
-target agent's frontmatter. When downgrading `model` (e.g. research from opus to haiku),
-the frontmatter `effort` still applies. Avoid spawning haiku with agents that define
-`effort: high` (po, research) — either omit the model override or use sonnet instead.
+target agent's frontmatter. When downgrading `model` (e.g. research from opus to sonnet),
+the frontmatter `effort` still applies.
 
 Example: spawning a research agent for a simple lookup:
 ```
