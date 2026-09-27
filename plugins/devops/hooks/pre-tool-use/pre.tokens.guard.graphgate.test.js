@@ -644,7 +644,7 @@ describe("pre.tokens.guard — the graph gate also answers a recursive grep type
     process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoLockDir;
   });
   afterEach(() => {
-    try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch { /* best effort */ }
     if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
     else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
   });

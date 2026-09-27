@@ -110,3 +110,50 @@ git remote prune origin
 - **Only own branch/worktree.** Never delete other branches or worktrees.
 - **Only after confirmed merge.** No cleanup if ship failed at any step.
 - **Traceability lives on GitHub.** The merged PR preserves the full diff and discussion. Local branches are ephemeral.
+
+## Re-open session-opened files (Step 5b Substep 3)
+
+After `ship_cleanup` completes, every file:// URL the session opened from
+inside `$WORKTREE_PATH` is now dead (the worktree directory has been
+pruned). The merged HTML still lives at the equivalent path inside the
+main repo, so re-open every tracked file from there so the user's browser
+tab silently picks up the live version.
+
+Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1 (the ship
+ran directly from the main checkout, no path rewrite needed).
+
+```bash
+node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" reopen-main \
+  --worktree="$WORKTREE_PATH"
+```
+
+The script:
+- Reads `<main-repo>/.claude/session-opened-files.json` (the tracking
+  file is anchored at the main repo root so it survives worktree
+  cleanup — see `scripts/session-open-tracker.js` for the storage
+  contract).
+- Filters tracked entries to those that were under `$WORKTREE_PATH`.
+- Maps each filtered entry to the main-repo equivalent (`relative
+  path within worktree` → `<main-repo>/<relative>`).
+- Opens every still-existing file in Edge via the standard
+  `start "" msedge "file:///…"` pattern.
+- Prints a JSON summary `{ reopened: [...], missing: [...], consumed }`.
+
+Treat the summary as informational. Any entries listed under `missing`
+mean the file did not survive the merge (likely deleted during the
+session) — that is expected and not a ship failure.
+
+**Background — issue #160.** Without this step, `/do-ship` silently
+invalidates every browser tab that was pointing into the worktree. The
+user sees a 404 / blank tab and reasonably concludes the concept page
+itself is broken, when in reality the content is fine at the main path.
+
+## Keep-mode: the remote branch (Step 5c)
+
+The remote branch is gone either way — deleted by the GitHub merge (`--delete-branch`)
+outside a worktree, by `ship_release` itself inside one (`remoteBranchDeleted: true`; it
+also drops the stale remote-tracking ref so the next lease-pinned push is not rejected).
+The next commit + push in this worktree re-creates it via
+`git push --set-upstream origin <branch>` automatically. A `remoteBranchWarning` in the
+release result means the delete failed: surface it as one `open` item on the card
+("Remote-Branch `<branch>` konnte nicht gelöscht werden — »branches aufräumen« öffnet die Aufräum-Seite"), nothing else.

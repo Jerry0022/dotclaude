@@ -120,6 +120,11 @@ gets the cheap, mechanical half of a harden pass on exactly what it lands,
 without the full pass's cost (scout/qa/redteam agents, test plan, coverage
 writing). Mirrors `/auto-polish` § Rules-only path.
 
+**Implemented by `{PLUGIN_ROOT}/scripts/ship-harden.js`** — /do-ship runs the
+script directly, so a ship never loads this skill for it. Invoked here with
+`--invoked-by=ship`, run the same script with the same arguments and return
+its JSON. The steps below are its specification; change both together.
+
 1. **Scope** = the files /do-ship passed, and inside them only the added or
    changed lines: `git -C <cwd> diff -U0 origin/<base>...HEAD -- <files>` plus
    the uncommitted diff of the same files (`<cwd>` = `--cwd`, else the
