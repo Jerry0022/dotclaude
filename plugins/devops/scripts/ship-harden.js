@@ -27,15 +27,31 @@ const SKIP_PATH_RE = /(^|\/)(node_modules|vendor|dist|build|coverage|graphify-ou
 const TEST_FILE_RE = /(\.|_)(test|spec)\.[cm]?[jt]sx?$|(^|\/)__tests__\/|(^|\/)test_[^/]*\.py$|_test\.py$/;
 const CODE_FILE_RE = /\.([cm]?[jt]sx?|py|vue|svelte|astro)$/;
 
+/**
+ * The line with its string literals emptied — a check on code structure must
+ * not fire on a fixture string (`"describe.only(…)"` in a test of this very
+ * check, a regex source naming TODO). Quotes stay so positions keep a shape.
+ */
+function codeOf(text) {
+  return text.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, '$1$1').replace(/\/(?![/*])(?:\\.|[^/\\\n])+\/[gimsuy]*/g, '/r/');
+}
+
+/** The comment part of a line (after //, #, or inside /* … *\/), strings removed first. */
+function commentOf(text) {
+  const code = codeOf(text);
+  const m = code.match(/(\/\/|#|\/\*|^\s*\*)(.*)$/);
+  return m ? m[2] : '';
+}
+
 const CHECKS = [
   {
-    id: 'H1', testOnly: true,
+    id: 'H1', testOnly: true, on: 'code',
     re: /(\b(?:describe|it|test|context|suite)\.only\s*\()|(\bf(?:it|describe)\s*\()/,
     detail: 'focused test left in — it silently disables the rest of the suite',
     fix: (line) => line.replace(/\b(describe|it|test|context|suite)\.only(\s*\()/, '$1$2').replace(/\bf(it|describe)(\s*\()/, '$1$2'),
   },
   {
-    id: 'H2', codeOnly: true,
+    id: 'H2', codeOnly: true, on: 'code',
     re: /^\s*debugger;?\s*$/,
     detail: '`debugger;` statement',
     fix: () => null, // delete the line
@@ -46,17 +62,17 @@ const CHECKS = [
     detail: 'secret-shaped literal — check before it ships',
   },
   {
-    id: 'H4', codeOnly: true,
+    id: 'H4', codeOnly: true, on: 'code',
     re: /catch\s*(\(\s*\w*\s*\))?\s*\{\s*\}|except\s*(\w+\s*)?:\s*pass\b/,
     detail: 'empty catch without a comment — the intent is unknown',
   },
   {
-    id: 'H5', testOnly: true,
+    id: 'H5', testOnly: true, on: 'code',
     re: /\b(describe|it|test)\.skip\s*\(|\bx(it|describe)\s*\(|@pytest\.mark\.skip/,
     detail: 'new skipped test',
   },
   {
-    id: 'H7',
+    id: 'H7', on: 'comment',
     re: /\b(TODO|FIXME|XXX|HACK)\b/,
     detail: 'new TODO/FIXME/XXX/HACK',
   },
@@ -136,14 +152,14 @@ function run(opts) {
       for (const c of CHECKS) {
         if (c.testOnly && !isTest) continue;
         if (c.codeOnly && !isCode) continue;
-        if (!c.re.test(text)) continue;
-        if (c.id === 'H4' && /\/[/*]|#/.test(text.slice(text.search(c.re)))) continue; // commented catch
+        const subject = c.on === 'code' ? codeOf(text) : c.on === 'comment' ? commentOf(text) : text;
+        if (!c.re.test(subject)) continue;
         if (c.fix && !strict) fixes.push({ id: c.id, file, line, text, fix: c.fix });
         else findings.push({ id: c.id, file, line, detail: c.detail });
       }
     }
     // H6 — a timer or listener added without its cleanup anywhere in the file.
-    const body = added.get(file).map((l) => l.text).join('\n');
+    const body = added.get(file).map((l) => codeOf(l.text)).join('\n');
     if (isCode) {
       let content = '';
       try { content = fs.readFileSync(path.join(root, file), 'utf8'); } catch { /* deleted */ }
@@ -200,4 +216,4 @@ if (require.main === module) {
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
 }
 
-module.exports = { run, parseArgs, addedLines, CHECKS };
+module.exports = { run, parseArgs, addedLines, codeOf, commentOf, CHECKS };

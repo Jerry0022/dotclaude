@@ -68,7 +68,7 @@ describe("ship-harden — the auto-harden ship path as a script", () => {
         "// TODO tidy this",
         "try { x(); } catch {}",
         "setInterval(tick, 1000);",
-        "const apiKey = 'abcdefghijklmnopqrstuvwxyz';",
+        "const apiKey = '" + "abcdefghijklmnopqrstuvwxyz" + "';", // split so this fixture is no finding itself
       ].join("\n") + "\n",
       "d.test.js": "test.skip('later', () => {});\n",
     });
@@ -106,5 +106,23 @@ describe("ship-harden — the auto-harden ship path as a script", () => {
   test("addedLines reads -U0 hunks with their new line numbers", () => {
     const diff = "+++ b/x.js\n@@ -1,0 +3,2 @@\n+one\n+two\n";
     expect([...addedLines(diff)]).toEqual([["x.js", [{ line: 3, text: "one" }, { line: 4, text: "two" }]]]);
+  });
+});
+
+describe("ship-harden — fixture strings are no code (first real run, 2026-09-27)", () => {
+  test("a .only / debugger / TODO / setInterval inside a string literal or regex is left alone", () => {
+    commit({
+      "h.test.js": [
+        "const fixture = \"describe.only('x', () => {})\";",
+        "const src = 'debugger;';",
+        "const re = /\b(TODO|FIXME)\b/;",
+        "const code = `setInterval(tick, 1)`;",
+        "it('real', () => {}); // TODO: a real comment",
+      ].join("\n") + "\n",
+    });
+    const r = run({ base: "main", cwd: work, files: [] });
+    expect(r.fixed).toEqual([]);
+    expect(r.findings).toEqual([expect.objectContaining({ id: "H7", line: 5 })]);
+    expect(fs.readFileSync(path.join(work, "h.test.js"), "utf8")).toContain("describe.only('x'");
   });
 });
