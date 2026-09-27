@@ -4,13 +4,11 @@
  *   The interactive half is the auto-cleanup skill (concept page); this module
  *   decides, after a successful ship or promote, two things on its own:
  *
- *   1. Auto-clean (after a ship, or the throttled SessionStart run). Removes
- *      every REMOVABLE leftover at once — a branch without a checkout needs no
- *      waiting period; a sub-agent worktree (`.claude/worktrees/agent-*`)
- *      waits until it was idle for `LIVE_SESSION_MS`; any other session
- *      worktree until it was idle for `autoCleanMinAgeDays` (default 7), since
- *      a Desktop session can sit idle for days and still be open (#571).
- *      "Removable" means nothing can be lost:
+ *   1. Auto-clean (after a ship only). Opens only when a REMOVABLE leftover is
+ *      older than `autoCleanGateDays` (default 30); then it removes every
+ *      removable leftover older than `autoCleanMinAgeDays` (default 30).
+ *      Younger ones are left to the page. "Removable" means nothing can be
+ *      lost:
  *        - branch: its tip is in the default branch — git ancestor, the head
  *          of a merged PR (squash merges), reachable from a merged PR head
  *          (a sub-agent branch merged into the PR's branch, #572), or every
@@ -520,20 +518,6 @@ function keepReason(unit, ctx) {
   return landedVia(unit.head, unit.branch, ctx) ? null : "not-landed";
 }
 
-/**
- * How long a leftover must have been idle before the auto-clean looks at it,
- * in days: a branch without a checkout none (nothing works in it); a
- * sub-agent worktree `LIVE_SESSION_MS` (its agent is long done); any other
- * session worktree `autoCleanMinAgeDays` — the Desktop app keeps a session
- * open for days, and its worktree is the only thing the hygiene cannot ask
- * the app about (#571).
- */
-export function minIdleDays(unit, settings) {
-  if (unit.kind !== "worktree") return 0;
-  if (unit.agent) return LIVE_SESSION_MS / DAY_MS;
-  return settings.autoCleanMinAgeDays;
-}
-
 /** Commits on `sha` that neither `baseRef` nor a merged PR carried (0 when unreadable). */
 function ownCommits(sha, ctx) {
   const out = gitOut(["rev-list", "--no-merges", sha, "--not", ctx.baseRef], ctx.cwd) || "";
@@ -542,15 +526,21 @@ function ownCommits(sha, ctx) {
 
 /**
  * Which leftovers the auto-clean removes, and which unlanded ones are at risk.
+ * Removal waits for the age gate: only once a removable leftover is older
+ * than `autoCleanGateDays`, and then only what is older than
+ * `autoCleanMinAgeDays` (both 30 by default — a month of worktrees to look
+ * back into). The at-risk check ignores age: unpushed work is worth a warning
+ * on the day it is abandoned.
  * @param {{units:object[], defaultBranch:string}} scan
- * @param {{autoCleanMinAgeDays:number}} settings
+ * @param {{autoCleanGateDays:number, autoCleanMinAgeDays:number}} settings
  * @param {{cwd:string, fetchMerged?:Function, projectsDir?:string|null}} io
  * @returns {{gateOpen:boolean, reason:string|null, remove:object[], keep:object[], atRisk:object[], offline:boolean}}
  */
 export function planAutoClean(scan, settings, io) {
-  const due = scan.units.filter((u) => u.ageDays >= minIdleDays(u, settings));
-  if (due.length === 0) {
-    return { gateOpen: false, reason: "nothing idle long enough", remove: [], keep: [], atRisk: [], offline: false };
+  const gate = settings.autoCleanGateDays;
+  const minAge = settings.autoCleanMinAgeDays;
+  if (scan.units.length === 0) {
+    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false };
   }
   const originRef = `refs/remotes/origin/${scan.defaultBranch}`;
   const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
@@ -563,13 +553,13 @@ export function planAutoClean(scan, settings, io) {
   const remove = [];
   const keep = [];
   const atRisk = [];
-  for (const u of due) {
+  for (const u of scan.units) {
     const reason = keepReason(u, ctx);
     if (!reason) {
-      remove.push(u);
+      if (u.ageDays > minAge) remove.push(u);
       continue;
     }
-    keep.push({ ...u, reason });
+    if (u.ageDays > minAge) keep.push({ ...u, reason });
     // Unlanded work nobody looks after: its PR branch is gone, or its session
     // worktree sits detached. Offline, a squash-merged branch looks the same —
     // report nothing rather than a false alarm.
@@ -578,10 +568,11 @@ export function planAutoClean(scan, settings, io) {
       atRisk.push({ kind: u.kind, branch: u.branch, path: u.path, head: u.head, commits: ownCommits(u.head, ctx) });
     }
   }
+  const gateOpen = remove.some((u) => u.ageDays > gate);
   return {
-    gateOpen: remove.length > 0,
-    reason: remove.length ? null : "nothing removable",
-    remove,
+    gateOpen,
+    reason: gateOpen ? null : `nothing removable older than ${gate} days`,
+    remove: gateOpen ? remove : [],
     keep,
     // a detached worktree and the branch it came from are one finding
     atRisk: atRisk.filter((r, i) => atRisk.findIndex((x) => x.head === r.head) === i),

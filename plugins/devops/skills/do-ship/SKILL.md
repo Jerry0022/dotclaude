@@ -1212,9 +1212,9 @@ ship_hygiene({ cwd: "<cwd>", trigger: "ship", lang: "de" })
 
 (`trigger: "promote"` for a promotion-only run — `modes/promote.md` Step 4.)
 The tool removes leftover branches and session worktrees whose content
-provably landed — after a ship only (the SessionStart run does the same once a
-day): branches without a checkout at once, sub-agent worktrees after 2 hours
-idle, Desktop session worktrees after 7 idle days. It flags unlanded work on a
+provably landed — only after a ship, only once one of them is older than the
+age gate (default 30 days), and then every removable one older than 30 days;
+younger leftovers stay for the page. It flags unlanded work on a
 `[gone]` branch or a detached session worktree, and decides whether the
 cleanup page is worth suggesting (more than 50 leftovers, at most once a
 week). Pass its card lines through unchanged: `card.tests` → append to
