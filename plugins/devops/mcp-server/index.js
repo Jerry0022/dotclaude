@@ -105,7 +105,6 @@ const WINDOW_WK_MIN          = 10080;
 // 561 calls) — a note that is always there is not a signal. A ship session is
 // long by nature; nudge only when the context is genuinely deep.
 const HEALTH_WARN_THRESHOLD  = 1000;
-const HEALTH_CRIT_THRESHOLD  = 2000;
 
 // Card body budget (characters). The summary/title is clamped on a word
 // boundary (see lib/soft-limits.js#clampText); result-line and evidence-post
@@ -825,10 +824,12 @@ function renderEvidenceRowMd(posts) {
 // is omitted. Context health (§ old renderContextHealth) sits dim at the end.
 // ---------------------------------------------------------------------------
 
+// A depth indicator only: it used to append "/compact" (or "/clear"), but a
+// long session no longer has to compact before shipping — a large-context
+// ship runs in a fresh subagent (hooks/lib/ship-delegate.js).
 function renderContextHealth(toolCallCount) {
   if (toolCallCount <= HEALTH_WARN_THRESHOLD) return '';
-  const cmd = toolCallCount <= HEALTH_CRIT_THRESHOLD ? '/compact' : '/clear';
-  return '🧠 ' + toolCallCount + ' Calls · ' + cmd;
+  return '🧠 ' + toolCallCount + ' Calls';
 }
 
 const BUDGET_BAR_WIDTH = 14;

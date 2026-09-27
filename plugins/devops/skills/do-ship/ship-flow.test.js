@@ -80,7 +80,12 @@ describe("do-ship — target channel (promote folded in)", () => {
     expect(mode).toMatch(/"status": "decision"/);
     expect(mode).toMatch(/"status": "done"/);
     expect(mode).toMatch(/Do not call `AskUserQuestion`/);
-    expect(mode).toContain("Do **not** call `render_completion_card`");
+    // The subagent renders (a finalizer after the render may mark MCP stale),
+    // the parent only shows it — and only the parent can decide keep-mode.
+    expect(mode).toContain("**Never call `show_widget` or rename the session**");
+    expect(mode).toMatch(/Do not call\s+`render_completion_card` again/);
+    expect(mode).toMatch(/Do not evaluate signals 1–3/);
+    expect(mode).toMatch(/Add `--keep`/);
     expect(mode).toMatch(/Never call it/);
   });
 

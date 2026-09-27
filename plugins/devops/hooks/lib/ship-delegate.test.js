@@ -77,6 +77,15 @@ describe("ship-delegate — the instruction", () => {
     expect(out).toContain("ExitWorktree");
   });
 
+  test("the subagent renders with this session's id; the parent only shows the card and sets keep/no-watch", () => {
+    const withId = shipDelegateInstruction({ tokens: 434_000, pluginRoot: "/p", sessionId: "sess-42", env: {} });
+    expect(withId).toContain("session_id: sess-42");
+    expect(withId).toContain("--keep when the user announced");
+    expect(withId).toContain("--no-watch");
+    expect(withId).toContain('"titlePrefix", "widgetFile" | "markdown"');
+    expect(withId).toContain("no second render_completion_card");
+  });
+
   test("passes the channel on and names the mode doc with forward slashes", () => {
     expect(shipDelegateInstruction({ tokens: 434_000, skillArgs: "stable", pluginRoot: "/p", env: {} }))
       .toContain('with args "--delegated stable"');

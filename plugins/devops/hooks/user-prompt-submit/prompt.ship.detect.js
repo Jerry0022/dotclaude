@@ -76,21 +76,6 @@ process.stdin.on('end', () => {
   const userMessage = (hook.prompt || hook.user_message || hook.message || '').toLowerCase().trim();
   if (!userMessage) process.exit(0);
 
-  // --- Cache-timeout detection (5-minute prompt cache TTL) ---
-  let cacheWarning = '';
-  try {
-    const activityResult = readSessionFile('dotclaude-devops-last-activity', hook.session_id);
-    if (activityResult) {
-      const lastActivity = parseInt(activityResult.content, 10);
-      const gapSeconds = (Date.now() - lastActivity) / 1000;
-      if (gapSeconds > 300) {
-        const gapMin = Math.round(gapSeconds / 60);
-        cacheWarning = `[cache-timeout] ${gapMin} Min. Pause — Prompt-Cache abgelaufen. Erw\u00e4ge /compact vor dem Weiterarbeiten.`;
-      }
-    }
-    // No activityResult = first message in session → no warning
-  } catch {}
-
   // --- Direct ship intent keywords (shared with prompt.flow.title-work) ---
   const request = parseShipRequest(hook.prompt || hook.user_message || hook.message || '');
   const isDirectShipIntent = request.ship;
@@ -132,16 +117,12 @@ process.stdin.on('end', () => {
   const resume = shipResumeFor(rawPrompt, hook.cwd || process.cwd());
   if (resume) {
     const delegate = shouldDelegate({ tokens: currentContextTokens(hook.transcript_path), prompt: rawPrompt });
-    process.stdout.write([...(cacheWarning ? [cacheWarning, ''] : []),
-      shipResumeInstruction({ resume, delegate, pluginRoot: PLUGIN_ROOT })].join('\n') + '\n');
+    process.stdout.write([
+      shipResumeInstruction({ resume, delegate, pluginRoot: PLUGIN_ROOT, sessionId: hook.session_id || '' })].join('\n') + '\n');
     process.exit(0);
   }
 
   if (!isDirectShipIntent && !isAffirmationAfterCompletion) {
-    // No ship intent — but still emit cache-timeout warning if applicable
-    if (cacheWarning) {
-      process.stdout.write(cacheWarning + '\n');
-    }
     process.exit(0);
   }
 
@@ -184,13 +165,12 @@ process.stdin.on('end', () => {
   if (shouldDelegate({ tokens, prompt })
     && !(isDirectShipIntent && request.promote && (request.version || !hasUnshippedWork(process.cwd())))) {
     mandate = [
-      shipDelegateInstruction({ tokens, skillArgs: promoteArgs, pluginRoot: PLUGIN_ROOT }),
+      shipDelegateInstruction({ tokens, skillArgs: promoteArgs, pluginRoot: PLUGIN_ROOT, sessionId: hook.session_id || '' }),
       ...(promoteArgs ? ['', promoteNote] : []),
     ];
   }
 
   const instruction = [
-    ...(cacheWarning ? [cacheWarning, ''] : []),
     `[prompt.ship.detect] ${reason}`,
     '',
     ...mandate,

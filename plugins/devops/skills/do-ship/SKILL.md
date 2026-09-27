@@ -108,9 +108,10 @@ the inline mandate.
 **If that block is in this turn's context and this run is not `--delegated`:
 do not run the pipeline here.** Run no `ship_*` call and no git push or merge.
 Follow the block: write the brief, spawn the general-purpose subagent with
-`--delegated`, relay its decisions through `AskUserQuestion`, and render the
-card it returns. `modes/delegated.md` → *Main session* has the details for
-the case where something goes wrong. The user types nothing extra.
+`--delegated`, and relay its decisions through `AskUserQuestion`. The subagent
+renders the card with this session's id; you set the title and show the card
+it hands back. `modes/delegated.md` → *Main session* has the details for the
+case where something goes wrong. The user types nothing extra.
 
 **`--delegated`:** you are that subagent. Follow `modes/delegated.md` →
 *Subagent* for every step it names. Every other step is unchanged.

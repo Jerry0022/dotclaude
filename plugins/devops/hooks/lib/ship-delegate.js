@@ -85,7 +85,7 @@ function shouldDelegate({ tokens, prompt, promotionOnly = false, env = process.e
  *   ("stable", "promote 0.193.0", …); `--delegated` is prepended.
  * @returns {string}
  */
-function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, env = process.env }) {
+function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, sessionId = '', env = process.env }) {
   const args = ['--delegated', skillArgs].filter(Boolean).join(' ');
   const mode = `${String(pluginRoot).replace(/\\/g, '/')}/skills/do-ship/modes/delegated.md`;
   return [
@@ -100,16 +100,39 @@ function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, env = pro
     '   tests that ran + results · validation (requirement → how met → how confirmed) · open points · issue refs ·',
     '   anything the ship must know (bump hint, risks, files not to commit). The subagent reads the diff itself —',
     '   the brief carries what the diff cannot: the why.',
-    '3. Agent({ subagent_type: "general-purpose", run_in_background: false, description: "Ship im Subagenten",',
-    `   prompt: 'Use Skill("devops:do-ship") with args "${args}". Brief:\\n<brief>' })`,
+    ...spawnAndDeliver({ args, sessionId, description: 'Ship im Subagenten', brief: true }),
+    `Details (read only on trouble): ${mode}`,
+  ].join('\n');
+}
+
+/**
+ * Steps 3–4 of the delegate / resume instruction: flags, spawn, decisions,
+ * delivery. The subagent renders the card itself, with THIS session's id,
+ * and the parent only shows it: a project ship extension may run a finalizer
+ * right after the render that marks the plugin's MCP servers stale (the
+ * dotclaude plugin self-sync), so a render left to the parent would be
+ * blocked. That is the same order the inline pipeline keeps.
+ * @param {{ args: string, sessionId: string, description: string, brief: boolean }} o
+ * @returns {string[]}
+ */
+function spawnAndDeliver({ args, sessionId, description, brief }) {
+  const sid = sessionId || '<this session_id>';
+  const briefPart = brief ? '\\nBrief:\\n<brief>' : '';
+  return [
+    '3. Flags only you can set — the subagent never sees this conversation: add --keep when the user announced',
+    '   follow-up work in this branch (do-ship Step 5a signals), --no-watch when the user asked for no deploy watcher.',
+    `   Agent({ subagent_type: "general-purpose", run_in_background: false, description: "${description}",`,
+    `     prompt: 'Use Skill("devops:do-ship") with args "${args}". session_id: ${sid}. lang: <the user language>.${briefPart}' })`,
     '4. The agent ends with ONE fenced json block:',
     '   { "status": "decision", "question", "options", "recommended" } → AskUserQuestion, then SendMessage the answer',
     '     to the same agent and wait for its next result.',
-    '   { "status": "done", "card": {…}, "exitWorktree": bool } → exitWorktree true: ExitWorktree({ action: "remove" }) first.',
-    '     Then render_completion_card with the card fields plus lang, cwd and session_id, and deliver it like every card',
-    '     (SESSION TITLE block, then the widget / markdown last). No text of your own.',
-    `Details (read only on trouble): ${mode}`,
-  ].join('\n');
+    '   { "status": "done", "titlePrefix", "widgetFile" | "markdown", "exitWorktree" } → the card is already rendered.',
+    '     exitWorktree true: ExitWorktree({ action: "remove" }) first. Set the session title to titlePrefix + the title',
+    '     without its old devops prefix. Desktop: Read widgetFile and pass its content verbatim to show_widget',
+    '     (title "completion_card_body") as the LAST action; terminal: output markdown verbatim. No text of your own,',
+    '     no second render_completion_card.',
+    "   No JSON block or a failed agent: render a ship-blocked card yourself that names the agent's last words.",
+  ];
 }
 
 /**
@@ -119,7 +142,7 @@ function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, env = pro
  * @param {{ resume: { checkpoint: object, next: string, summary: string }, delegate: boolean, pluginRoot: string, now?: number }} o
  * @returns {string}
  */
-function shipResumeInstruction({ resume, delegate, pluginRoot, now = Date.now() }) {
+function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', now = Date.now() }) {
   const cp = resume.checkpoint;
   const ageMin = typeof cp.updatedAt === 'number' ? Math.max(0, Math.round((now - cp.updatedAt) / 60000)) : null;
   const root = String(pluginRoot).replace(/\\/g, '/');
@@ -128,11 +151,9 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, now = Date.now() 
     : '';
   const how = delegate
     ? [
-      'Resume it in a fresh-context subagent, exactly as [ship-delegate] describes (decision / done JSON, card rendered here):',
-      `  Agent({ subagent_type: "general-purpose", run_in_background: false, description: "Ship fortsetzen",`,
-      `    prompt: 'Use Skill("devops:do-ship") with args "--delegated --resume".${cp.brief ? " The brief is stored in the ship checkpoint." : "\\nBrief:\\n<brief>"}' })`,
-      cp.brief ? '' : '  No brief is stored yet — write one from this conversation as [ship-delegate] step 2 describes.',
-      `  Details: ${root}/skills/do-ship/modes/delegated.md`,
+      `Resume it in a fresh-context subagent.${cp.brief ? ' The brief is stored in the ship checkpoint — do not write a new one.' : ' No brief is stored yet — write one from this conversation: intent verbatim · ≤ 3 functional changes · findings and decisions with their why · tests · validation · open points · issue refs · risks.'}`,
+      ...spawnAndDeliver({ args: '--delegated --resume', sessionId, description: 'Ship fortsetzen', brief: !cp.brief }),
+      `Details: ${root}/skills/do-ship/modes/delegated.md`,
     ].filter(Boolean)
     : ['MANDATORY: Use Skill("devops:do-ship") with args "--resume".'];
   return [

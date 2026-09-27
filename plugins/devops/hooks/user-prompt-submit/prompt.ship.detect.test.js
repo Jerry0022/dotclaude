@@ -294,7 +294,7 @@ describe("prompt.ship.detect — resume an interrupted ship", () => {
     await checkpoint({ brief: "Intent: X", decision: "minor" });
     const r = runHook({ prompt: "Continue from where you left off.", transcript_path: transcript(434_000) });
     expect(r.stdout).toContain('with args "--delegated --resume"');
-    expect(r.stdout).toContain("The brief is stored in the ship checkpoint.");
+    expect(r.stdout).toContain("The brief is stored in the ship checkpoint");
     expect(r.stdout).toContain('"Bump?" → minor');
   });
 

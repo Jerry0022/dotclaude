@@ -30,7 +30,7 @@ Two visual blocks. Nothing between them, nothing under the second one.
 › result line 3                            │  (Desktop: top of the one surface)
 ✓ 3/3 Anforderungen  ✓ 3464 Tests grün  ✓ 4 Live-Checks ok     ← evidence row
 ○ commit → ○ push → ○ PR → ○ merge · branch · Build 176c57d       ← pipeline line
-5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls · /compact  ┘ budget (footer)
+5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls  ┘ budget (footer)
 ## 📦 {decision as a question}?            ┐
 › one context line (optional)              │  Block 2 · "what to decide"
 1. reservation / test step                 │  (Desktop: quiet accent-tinted box)
@@ -125,8 +125,10 @@ it is the card's footer, not part of the evidence.
   **omitted entirely**.
 - Terminal / markdown fallback: `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 39 m   Wk ▰▰│▱▱▱▱▱▱ 6 d 20 h`
   (▰ = time, │ = usage); a yellow/red condition is written as a leading `⚠`.
-- Context health: from the tool-call threshold on, `🧠 1180 Calls · /compact`
-  sits dim at the right end of the budget line. Below the threshold nothing.
+- Context health: from the tool-call threshold on, `🧠 1180 Calls` sits dim
+  at the right end of the budget line. Below the threshold nothing. It is a
+  depth indicator, not a `/compact` advice: a large-context ship runs in a
+  fresh subagent, so nothing has to be compacted first.
 
 ### 2.5 Pipeline line ("where it lies")
 
