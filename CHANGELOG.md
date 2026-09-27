@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.229.0] — 2026-09-28
+
+### Added
+- **No reachable bridge is no reason to skip the concept** (#568). `auto-concept` states before Step 0 that a concept request always produces the real page — engine, decision panel, gate, `docs/concepts/` — and that the bridge stays mandatory wherever it can run. Step 3 gains a fallback for sessions whose owner cannot reach localhost (claude.ai cloud or remote container): Steps 0–2 run in full, the page is committed and pushed, and one line hands off file, branch and how a Desktop session resumes the live loop. Never a hand-built look-alike; a slow bridge, a failed first Edge start or saving tokens is no reason to take it. Publishing the page as a claude.ai artifact is tracked separately (#589).
+
 ## [0.228.0] — 2026-09-28
 
 ### Added
