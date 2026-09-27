@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.215.1**
+**Version: 0.219.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -212,7 +212,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 - **<!--devops:count:hooks-->69<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
-- **<!--devops:count:agents-->13<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
+- **<!--devops:count:agents-->13<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Scout, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -520,6 +520,7 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 | **qa** | Test, verify, screenshot |
 | **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
 | **research** | Deep-dive investigations |
+| **scout** | Read-only locator (sonnet · low): "where/how is X?" sweeps, answer + `path:line` evidence |
 | **rethinker** | Code-blind fresh-approach ideation through one lens |
 | **windows** | Platform-specific features |
 
