@@ -113,7 +113,7 @@ table the policy hook applies to prompts that use no skill:
 |---|---|---|
 | **Inline** | 1 domain, quick fix, ≤ ~5 files | The session does the work itself. No agent, no agent card. |
 | **1 agent** | a conclusion whose path would flood the conversation (research, sweep, full test run, redteam, po) | One background agent; the session keeps working. |
-| **Parallel** | two analysis lenses; or implementing agents in parallel | Spawn in one message, ~5–15 tool calls each. Parallel **implementers** need a yes: the caller's invocation is that yes for `do-run`, `auto-concept` (implement click) and `--autonomous` passes; for `auto-fix` and a direct call, offer it in one sentence first. |
+| **Parallel** | two analysis lenses; or implementing agents in parallel | Spawn in one message, ~5–15 tool calls each. Parallel **implementers** need a yes: the caller's invocation is that yes for `do-run`, `auto-concept` (implement click) and `--autonomous` passes; for `auto-fix` and a direct call, offer it in one sentence first. How many per wave: `deep-knowledge/agent-orchestration.md` § Parallel implementers per wave (one per disjoint ownership bundle, ceiling 5 coupled / 10 isolated). |
 | **Full ceremony** | 3+ domains, a feature end-to-end, high-risk change | Steps 3–6 in full. |
 
 Hard stop ("nur", "schnell", "keine Agents") → Inline; hard go ("mit
