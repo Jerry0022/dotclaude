@@ -210,8 +210,9 @@ Merge everything into one queue file (JSON array). Per task:
   coverage filler is spend without quality.
 
 Then Step 2 (`plan`). Present the plan — **no separate confirmation**: the
-router's tick was the burn confirmation, and autonomous Step 4 asks
-"Soll ich jetzt autonom starten?" with its 3-minute autostart:
+router's tick was the burn confirmation, and autonomous Step 4 always opens
+its start gate for a burn (reason G3) — "Soll ich jetzt autonom starten?"
+with its 3-minute autostart:
 
 ```
 ## Burn Plan
@@ -250,8 +251,8 @@ router's tick was the burn confirmation, and autonomous Step 4 asks
 2. Switch to autonomous mode (`modes/autonomous.md`, same skill — no new Skill
    call) with the composite prompt from
    `{PLUGIN_ROOT}/skills/do-run/modes/burn/deep-knowledge/composite-prompt.md`.
-   The autonomous mode handles permission priming, the 3-minute start
-   confirmation, execution, report and shutdown; its desktop and
+   The autonomous mode handles permission priming, the start gate
+   (always shown for a burn, Step 4a reason G3) with its 3-minute autostart, execution, report and shutdown; its desktop and
    shutdown/resume answers come from the router's F5 / F6, and its Step 6.5
    hands `$PASSES` / `$SHIP` back to the router.
 3. Its Step 5 runs auto-agents with **`--burn=<project root>/BURN-STATE.json`**
