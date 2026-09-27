@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.221.0] — 2026-09-27
+
+### Added
+- **A ship in a long session runs in a subagent with a fresh context.** Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0` turns it off), `prompt.ship.detect` emits a `[ship-delegate]` block instead of stopping for `/compact`. The session writes a brief (intent quoted verbatim, changes, findings and decisions with their reasons, tests, validation, open points), and a general-purpose subagent runs `/do-ship --delegated` from it. Gate questions come back to the session as a choice and return by `SendMessage`. The subagent renders the card with the session's id, because the dotclaude self-sync finalizer marks the MCP servers stale right after the render. The session only shows the card. Neither a hook nor a skill can trigger `/compact`, and the Desktop host refuses button prefills that start with "/", so a fresh context is the only automatic lever. Measured: a sandbox subagent ship took 13–19 calls at an average of 126–138 k context (1.5–2.5 M cache reads). The same ship inline in a 275 k session would take about 4.3 M. Ten earlier inline ships took 2.5–14.8 M each. Break-even is about 150 k. Below the threshold the ship stays inline, and `--inline` keeps a single ship inline. The delegated spawn names its model and relays its agent card (the `pre.agent.model` / `pre.agent.relay` gates from 0.220.0).
+- **An interrupted ship resumes where it stopped.** The ship MCP server writes `.claude/.ship-checkpoint.json` (gitignored) after every ship step. After a usage limit or a PC crash, `ss.ship.resume` names the open step, and "weiter" continues from it. The session title stays `🚀 Shipping – ` and the run ends with the ship card. A version bump whose verification failed (for example, because the CHANGELOG lagged) now counts as landed once the files were rewritten, so a resume never bumps twice. A sandbox end-to-end run found that bug.
+
+### Changed
+- **Completion card input is more forgiving.** A plain sentence passed as `cta` no longer breaks the card. A local ship card without a remote (`git-no-remote`) now renders offline through `--render-card`.
+
+### Removed
+- **The `/compact` recommendations.** Removed: the careful-compact ship stop (the `compact` card field, the "Ohne Kompaktieren shippen" button, `lib/ship-compact.js`), the cache-timeout hint and the card hint. `--no-compact` stays as an alias of `--inline`. `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` is still read as a fallback for the delegate threshold.
+
 ## [0.220.1] — 2026-09-27
 
 ### Changed
