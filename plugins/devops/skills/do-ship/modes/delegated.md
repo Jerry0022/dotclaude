@@ -25,6 +25,9 @@ auto-cleanup) never see the block: the hook only reads user prompts.
    - the user's intent, with their key prompts quoted verbatim
    - up to 3 functional changes (area → description, as the card wants them)
    - the tests that ran and their results
+   - the findings and decisions of the session, each with its reason: root
+     causes found and alternatives rejected. They feed the PR body and the
+     CHANGELOG, and the diff alone cannot show them.
    - `validation` (requirement → how met → how confirmed)
    - open points and issue refs
    - anything the ship must know: a bump hint, known risks, files that must

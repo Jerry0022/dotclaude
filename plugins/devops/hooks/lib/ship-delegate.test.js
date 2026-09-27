@@ -63,7 +63,7 @@ describe("ship-delegate — the instruction", () => {
     expect(out).toContain('subagent_type: "general-purpose"');
     expect(out).toContain("run_in_background: false");
     expect(out).toContain('Skill("devops:do-ship") with args "--delegated"');
-    for (const part of ["verbatim", "functional changes", "tests that ran", "validation", "open points"]) {
+    for (const part of ["verbatim", "functional changes", "findings and decisions with their why", "tests that ran", "validation", "open points"]) {
       expect(out).toContain(part);
     }
   });
