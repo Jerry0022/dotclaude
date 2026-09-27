@@ -761,7 +761,15 @@ const CARD_RENDERED_LINES = [
 
 /** 2b. A card was already rendered this turn. */
 function cardRenderedLines(hook) {
-  if (readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true }) === null) return [];
+  const rendered = readSessionFile('dotclaude-devops-card-rendered', hook.session_id, { exact: true });
+  if (rendered === null) return [];
+  // Once per render, not after every later tool call (129× in two days on
+  // 0.214.x): the flag's content is the render's timestamp, so a new render
+  // earns the reminder again. The Stop gate still checks the card itself.
+  const stamp = String(rendered.content || '').trim();
+  const hintFile = sessionFile('dotclaude-devops-card-rendered-hinted', hook.session_id);
+  try { if (fs.readFileSync(hintFile, 'utf8').trim() === stamp) return []; } catch { /* first hint */ }
+  try { writeSessionFile(hintFile, stamp); } catch { /* best effort — hint again next call */ }
   return [
     '[completion-flow] A completion card was already rendered this turn. Render a new one only when the',
     'outcome changed since — then show THAT one; never show the same card twice.',

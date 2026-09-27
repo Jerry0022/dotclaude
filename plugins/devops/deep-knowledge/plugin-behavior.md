@@ -42,9 +42,6 @@ turn end (§ 7 of the design doc).
 
 **Hook architecture:**
 
-- `prompt.flow.selfcalibration` (UserPromptSubmit) — fires on first user prompt;
-  registers the self-calibration cron task and runs it immediately so the
-  completion flow is internalized before the first task begins.
 - `post.flow.completion` (PostToolUse) — fires after every tool call; tracks edit
   count; writes the per-turn `work-happened` flag. It injects the card reminder
   (as `additionalContext`, the only PostToolUse channel that reaches the model)
