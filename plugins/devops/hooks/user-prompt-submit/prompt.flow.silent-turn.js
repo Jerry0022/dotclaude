@@ -29,6 +29,7 @@
 
 require('../lib/plugin-guard');
 
+const fs = require('fs');
 const { sessionFile, writeSessionFile } = require('../lib/session-id');
 
 const SILENT_PATTERNS = [
@@ -88,6 +89,11 @@ if (require.main === module) {
         writeSessionFile(sessionFile('dotclaude-devops-scheduled-task', hook.session_id), '1');
       } catch {}
     }
+
+    // Requirement gaps belong to the card of the turn that rendered it. When
+    // that turn was cut short (Esc after a Gate 4b block), the flag must not
+    // block the next, unrelated turn — a new card writes its own.
+    try { fs.unlinkSync(sessionFile('dotclaude-devops-validation-open', hook.session_id)); } catch {}
 
     if (!isSilent(prompt)) process.exit(0);
 

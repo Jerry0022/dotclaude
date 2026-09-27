@@ -14,6 +14,10 @@ import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js
 import { clampText } from "../../lib/soft-limits.js";
 import { readVersion } from "../lib/version.js";
 import { localMerge, localTag, LocalMergeError } from "../lib/local-merge.js";
+import { createRequire } from "node:module";
+
+// Same reading of `validation` as the completion card and stop.flow.guard.
+const { classify } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
 
 /** Soft budget for the PR title — over-long titles are clamped, never rejected. */
 export const PR_TITLE_MAX = 70;
@@ -32,7 +36,28 @@ export const schema = z.object({
   tagVerifyAttempts: z.number().int().min(1).max(20).default(4).describe("How often to re-query the remote before declaring the pushed channel tag unverified"),
   tagRetryDelayMs: z.number().int().min(0).max(60_000).default(1_000).describe("Base delay for the tag-verify backoff (exponential, ×3 per attempt)"),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
+  validation: z.preprocess(
+    v => { if (typeof v !== "string") return v; try { return JSON.parse(v); } catch { return v; } },
+    z.array(z.object({
+      requirement: z.string(),
+      status: z.enum(["met", "partial", "unmet"]).optional(),
+      evidence: z.string().optional(),
+      waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional(),
+    })).optional(),
+  ).describe("The requirements this ship delivers — the same items the completion card will carry. The merge is REFUSED while one is still your own work (no status, partial/unmet without waitsOn, or waitsOn pending — your background work has not finished). Close the gap and call ship_release again; waitsOn user/deploy/external may ship."),
+  acceptGaps: z.boolean().default(false).describe("Ship despite open own gaps. Only when the USER explicitly asked to ship as-is — never on your own judgement."),
 });
+
+/**
+ * The requirement gaps that block a merge: everything that is still Claude's
+ * own work. `pending` counts too — shipping before the own review / QA pass
+ * returned is exactly the "0/3 but shipped" pattern this gate exists for.
+ */
+export function shipValidationGaps(validation) {
+  if (!Array.isArray(validation) || !validation.length) return [];
+  const { gaps } = classify(validation, { openTasks: 0 });
+  return gaps;
+}
 
 export async function handler(params) {
   const { base, body, releaseNotes, commitMessage, mergeStrategy, skipChecks, checksTimeoutSec } = params;
@@ -47,6 +72,24 @@ export async function handler(params) {
   const cwd = params.cwd;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
+
+  // Requirement gate: no merge over a gap Claude can still close itself.
+  const gaps = params.acceptGaps ? [] : shipValidationGaps(params.validation);
+  if (gaps.length) {
+    return {
+      success: false,
+      skipped: false,
+      reason: "validation-gaps",
+      delivered: "none",
+      gaps,
+      error:
+        `${gaps.length} requirement(s) are still your own work: ` +
+        gaps.map(g => `${g.requirement} (${g.reason})`).join("; ") +
+        ". Close them (implement, test, wait for your background result), then call ship_release again — " +
+        "after any code change run ship_build first, so the merge stays the built and tested tree. " +
+        "Only the user can waive this (acceptGaps: true).",
+    };
+  }
 
   const repoMode = detectRepoMode(cwd)
   // A timed-out probe is NOT file-only: returning the skipped shape here made a

@@ -221,6 +221,17 @@ code-change card without `validation` is blocked once and re-requested. For a
 pure refactor/chore, one item stating the intent and how behaviour was kept
 equivalent suffices.
 
+**Requirement gaps — close, don't report.** Every item needs a `status`. A
+partial/unmet requirement may stay open only with `waitsOn`: `user` (the user
+must act or decide), `deploy` (verifiable only after ship/deploy/restart),
+`external` (a third party) or `pending` (your own background agent/workflow is
+still running — checked against the transcript, stale once it finished), and
+its `evidence` must name what exactly it waits for.
+Anything else is Claude's own gap: `stop.flow.guard` (Gate 4b) blocks the turn
+once to close it, and `ship_release` refuses to merge over it. When a gap truly
+cannot be closed, ask the user instead of reporting done. The card counts
+"2/3 Anforderungen · 1 wartet auf dich" — the ◐/✗ glyph only for own gaps.
+
 **Scope.** Subagent tool calls neither owe nor satisfy either gate, and an edit
 outside the session's own work tree (a sibling checkout, an isolated agent's
 nested worktree) owes nothing. A merge, pull, cherry-pick, rebase, am or revert

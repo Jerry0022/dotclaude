@@ -755,6 +755,18 @@ describe("post.flow.completion — card flags follow the real session id", () =>
     cleanup(dir);
   });
 
+  test('validation-open follows "self" onto the real id; a clean re-render removes the adopted copy', () => {
+    const dir = project();
+    const sid = "real-uuid-vopen";
+    fs.writeFileSync(flag(dir, "validation-open", "self"), '[{"requirement":"R","status":"partial","waitsOn":null}]');
+    runHook(dir, sid, RENDER, { tool_input: { variant: "ready", session_id: "self" } });
+    expect(fs.existsSync(flag(dir, "validation-open", sid))).toBe(true);
+    // Re-render with every gap closed: the MCP wrote no validation-open under "self".
+    runHook(dir, sid, RENDER, { tool_input: { variant: "ready", session_id: "self" } });
+    expect(fs.existsSync(flag(dir, "validation-open", sid))).toBe(false);
+    cleanup(dir);
+  });
+
   test("a card rendered without session_id is picked up from the 'unknown' key", () => {
     const dir = project();
     const sid = "real-uuid-2";
