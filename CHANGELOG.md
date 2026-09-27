@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.220.0] — 2026-09-27
+
+### Added
+- **Agent cards reach the user.** A replay of three days of transcripts found that only 2 of 95 agent cards were shown. `pre.agent.relay` now holds back the first tool call after an agent launch whose card was never relayed, and hands the card back to Claude. `stop.agent.relay` blocks the turn end once for the same case. Both fire once per launch and are silent in subagents. Rendering the completion widget counts as shown, so the Quiet style is unaffected.
+- **`devops:scout` agent (sonnet · low).** A read-only locator for "where/how is X?" sweeps over more than ~10 files. It returns the answer first, then `path:line` evidence. It replaces `Explore` in the delegation policy, skills and evals.
+- **`pre.agent.model` hook.** An Agent spawn that would silently inherit the session model (no `model` of its own, or `model: inherit`) is refused once with the reason. Repeating the identical spawn goes through, so keeping the session model is a deliberate choice. `pre.agent.announce` skips the card for a spawn that will be refused.
+
+### Changed
+- **The delegation policy aims at agents in 30–70 % of implementation sessions.** It names three signs of too little delegation: the suite re-run inline, 10+ files touched, and a continuation redoing sweeps. Every spawn now names its model. `haiku` is no longer recommended: it is cheaper but not better at research. Effort cannot be set per spawn, so `low` lives in the frontmatter of `scout` and `gamer`.
+
 ## [0.219.0] — 2026-09-27
 
 ### Changed
