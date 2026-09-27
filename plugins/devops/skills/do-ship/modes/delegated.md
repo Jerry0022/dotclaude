@@ -42,14 +42,19 @@ auto-cleanup) never see the block: the hook only reads user prompts.
    when the user announced follow-up work in this branch (the Step 5a signals:
    open tasks, "danach", "Phase 2", "ship but keep going"). Add `--no-watch`
    when the user asked for no deploy watcher.
-4. **Spawn.** Call `Agent({ subagent_type: "general-purpose", run_in_background:
-   false, description: "Ship im Subagenten", prompt })`. The `prompt` starts
+4. **Spawn.** Call `Agent({ subagent_type: "general-purpose", model: "<this
+   session's model family>", run_in_background: false, description: "Ship im
+   Subagenten", prompt })`. Name the model even though it equals the
+   session's: `pre.agent.model` refuses an inheriting spawn once. The `prompt` starts
    with `Use Skill("devops:do-ship") with args "--delegated[ <flags>][ <channel
    args>]". session_id: <this session's id>. lang: <the user's language>.` and
    then carries the brief. A title that already starts with `🚀 Shipping – `
    stays. Otherwise apply Pre-Step C here, because a subagent cannot rename the
    session it runs in.
-5. **Result.** The agent's last message ends with one fenced `json` block:
+5. **Result.** First relay the agent card that `pre.agent.announce` handed you
+   for the spawn, verbatim: it is hook output, not text of your own, and
+   `pre.agent.relay` holds the next tool call until it is shown. The agent's
+   last message ends with one fenced `json` block:
    - `{ "status": "decision", "question", "options", "recommended" }`: ask the
      question with `AskUserQuestion` (the recommended option goes first),
      then `SendMessage` the answer to the same agent and wait for its next

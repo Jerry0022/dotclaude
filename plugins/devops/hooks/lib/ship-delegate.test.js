@@ -61,6 +61,7 @@ describe("ship-delegate — the instruction", () => {
 
   test("briefs one foreground general-purpose agent that runs do-ship --delegated", () => {
     expect(out).toContain('subagent_type: "general-purpose"');
+    expect(out).toContain('model: "<this session's model family');
     expect(out).toContain("run_in_background: false");
     expect(out).toContain('Skill("devops:do-ship") with args "--delegated"');
     for (const part of ["verbatim", "functional changes", "findings and decisions with their why", "tests that ran", "validation", "open points"]) {
