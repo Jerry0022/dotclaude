@@ -262,7 +262,7 @@ process.stdin.on('end', () => {
     const filePath = path.join(dkDir, topic.file);
     if (!fs.existsSync(filePath)) continue;
     try { docs.push({ file: topic.file, content: fs.readFileSync(filePath, 'utf8').trim() }); }
-    catch {}
+    catch { /* unreadable doc: skip it */ }
   }
 
   // Pointers for the retired skills' docs (one line each, not the body).
@@ -380,7 +380,7 @@ process.stdin.on('end', () => {
   if (sections.length > 0 || pointers.length > 0) {
     try {
       writeSessionFile(markerFile, [...injected].join('\n'));
-    } catch {}
+    } catch { /* best effort — the next prompt may inject again */ }
   }
 
   if (pointers.length > 0) blocks.push(...pointers);
