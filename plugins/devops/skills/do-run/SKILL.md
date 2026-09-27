@@ -107,7 +107,7 @@ Every answer but "Run neu starten" skips Steps 3–5 and enters the mode's
 resume path with it: `modes/autonomous.md` Step 0.5 "If resuming" or
 `modes/burn.md` Step 0.5. The modes do not ask again.
 
-## Step 3 — Base call: four questions, one `AskUserQuestion`
+## Step 3 — Base call: up to four questions, one `AskUserQuestion`
 
 Before building this call, read `deep-knowledge/questions.md`: the question
 rules, the conditions computed first, and how the answers are read.
@@ -131,12 +131,10 @@ Q3  header: "Umfang?"       multiSelect: false
     1. "Flexibel (Recommended)"         — Zieht Nötiges mit: Aufrufer, Tests, Doku.
     2. "Strikt"                         — Nur was der Prompt nennt; jede offene Wahl wird berichtet.
 
-Q4  header: "Durchgänge?"   multiSelect: true
-    question: "Welche Durchgänge kommen dazu? (Leer lassen = Harden + Polish)"   [name every option marked (Recommended) in this call, e.g. "Harden + Polish + Rethink"]
-    1. "Harden danach (Recommended)"    — Tests, Bugs, Konsistenz über die Änderung.
-    2. "Polish danach (Recommended)"    — UI-Feinschliff über die Änderung.
-    3. "Rethink vorher"                 — Erst frisch neu denken (Concept-Seite), dann umsetzen.   [+ " (Recommended)" when the prompt reads stuck]
-    4. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
+Q4  header: "Durchgänge?"   multiSelect: true   [only when an option below applies, else dropped; one option: questions.md § Reading Q4]
+    question: "Was kommt dazu? (Leer lassen = nichts)"   [with Rethink recommended: "(Leer lassen = Rethink vorher)"]
+    1. "Rethink vorher"                 — Erst frisch neu denken (Concept-Seite), dann umsetzen.   [only for Prompt umsetzen; + " (Recommended)" when the prompt reads stuck]
+    2. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
 ```
 
 ## Step 4 — Follow-up: at most one more call
@@ -177,8 +175,9 @@ siblings as "… mode": switching modes means reading the other file in the
 same run — never a new Skill call to `do-run`. Every mode file and the skill
 it was folded from: `deep-knowledge/execution.md` § Mode files.
 
-**Answers → execution.** `$SHIP` = `auto` / `manual` from Q2, `$PASSES` from
-Q4, `$STRICT` from Q3. Implementation always goes through `auto-agents`,
+**Answers → execution.** `$SHIP` = `auto` / `manual` from Q2, `$STRICT` from
+Q3, `$PASSES` = `harden,polish` always (Polish applies only on UI changes,
+Step 7). Implementation always goes through `auto-agents`,
 the single execution path: `Skill("devops:auto-agents")` with args
 `--from=do-run --mode=<interactive|background> --ship=<auto|manual> <task>`
 (Interaktiv → `interactive`, Autonom → `background`). Inside a do-run run
@@ -196,8 +195,8 @@ in one line, never a shortcut around loading the skill (run-contract's
 | Backlog | Interaktiv / Autonom | `modes/backlog.md` from Step 1.3 with F3/F4 as the selection; shutdown/resume ← F6 (Autonom) or `no`/`no` (Interaktiv); `$BURN_MODE` ← Budget verbrennen, its resume policy ← F7; ship mandate ← `$SHIP`; passes run per issue | backlog Step 1.2 selection, Step 3.2 ship mandate, Step 3.3 shutdown/resume + budget mode |
 
 Combinations without a meaning are dropped with one line, never asked:
-Rethink vorher with Audit or Backlog; Budget verbrennen with Audit; Harden /
-Polish with "Audit als Concept" (the concept page owns what gets built).
+Rethink vorher with Audit or Backlog; Budget verbrennen with Audit. "Audit
+als Concept" runs no passes (the concept page owns what gets built).
 
 ## Step 7 — Passes and ship
 
@@ -207,16 +206,19 @@ backlog runs apply items 1–2 per issue inside its loop and its own ship
 step for item 3.
 
 **Gated.** The run contract (Step 5b) refuses a `ship_release` call, and
-refuses the final completion card, while a chosen pass is still open for the
+refuses the final completion card, while a pass is still open for the
 segment being closed — the block names the exact `Skill(...)` call that
-satisfies it. Ship through `Skill("devops:do-ship")` only, never the
+satisfies it; Polish only when the diff holds UI files. Ship through
+`Skill("devops:do-ship")` only, never the
 `ship_*` MCP tools directly: `do-ship` is what runs the diff passes and the
 Codex review, and the gate cannot see a ship it never ran.
 
-1. **Harden danach** → `Skill("devops:auto-harden")`, args
+1. **Harden, always** → `Skill("devops:auto-harden")`, args
    `--invoked-by=do-run` (Interaktiv) or `--invoked-by=autonomous` (Autonom), plus
    `--strict` under Strikt.
-2. **Polish danach** → `Skill("devops:auto-polish")`, same args.
+2. **Polish, on UI changes** → `Skill("devops:auto-polish")`, same args, when
+   the change touched a UI file (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`
+   § UI file detection, `hooks/lib/ui-files.js`); without one, no call.
 3. **Ship.**
    - `$SHIP=auto`, Interaktiv → `Skill("devops:do-ship")`; it renders the card.
    - `$SHIP=auto`, Autonom → arm the lockout first so no ship gate can wedge the
@@ -241,7 +243,8 @@ before the ship: `deep-knowledge/execution.md` § auto-agents hand-off.
   follows F7.
 - Ship authority lives in this router (Q2) and in backlog mode's per-issue
   loop. The autonomous engine itself still never ships.
-- Every chosen pass runs, or is skipped with a reason that the card shows —
-  never silently dropped (Step 5b, `{PLUGIN_ROOT}/deep-knowledge/run-contract.md`).
+- Harden always, Polish on every UI change — never asked, never silently
+  dropped: a conscious skip goes through `run-contract.js skip <ob> --reason`
+  and shows on the card (Step 5b, `{PLUGIN_ROOT}/deep-knowledge/run-contract.md`).
 - When the request fits no mode and is not an implementation task, say so
   and stop.

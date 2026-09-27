@@ -23,8 +23,9 @@ Rules for every question this router asks (spec § "do-run questions"):
   or the user's history suggests never moves the marker or the order — it
   shows as a description suffix instead (Q3), or as a preset (Step 1).
 - **Click-through is a valid run.** Accepting the first option of every
-  single-select question and submitting Q4 empty runs: Prompt umsetzen ·
-  Interaktiv · Ship manuell · Flexibel · Harden danach + Polish danach.
+  single-select question and submitting Q4 empty (when it is asked at all)
+  runs: Prompt umsetzen · Interaktiv · Ship manuell · Flexibel — Harden
+  after the implementation, Polish when it touched UI files.
 - **Parallel labels.** Short, same shape, the verb in the same place — never
   "Ja" / "Nein".
 
@@ -57,17 +58,24 @@ Rules for every question this router asks (spec § "do-run questions"):
 chat's own work), then "Audit" (over that work) — never just the first
 number read and the rest dropped.
 
-**Reading Q4.** `AskUserQuestion` has no pre-selection: an option can be
-marked, never pre-ticked, so opt-out checkboxes are impossible. The
-question text therefore names the set an empty answer runs — the user sees
-what "leer lassen" means instead of having to untick anything.
+**Reading Q4.** Q4 carries only what changes the run's shape: Rethink
+vorher (Prompt umsetzen only) and Budget verbrennen (only on a
+`burn-plan.js` offer). Harden and Polish are no option — Harden always
+runs after the implementation, Polish whenever the change touched UI files
+(the 48 h session scan of 2026-09-27: the passes were picked in 10 of 13
+runs, and Polish ran on UI-free backlog items for nothing). When neither
+option applies, Q4 is dropped. When only one applies, the tool still needs
+two options: add `"Nichts davon"` — Direkt umsetzen, after it.
 
-- **Nothing ticked** → the recommended set: every option whose label carries
-  `(Recommended)` in this call (Harden danach + Polish danach, plus Rethink
-  vorher when it was marked). This is what makes click-through work.
+`AskUserQuestion` has no pre-selection: an option can be marked, never
+pre-ticked. The question text therefore names what an empty answer runs.
+
+- **Nothing ticked** → every option whose label carries `(Recommended)`
+  (Rethink vorher when the prompt reads stuck), else nothing extra.
 - **Anything ticked** → exactly the ticked options, nothing added.
-- **No passes at all** → the user writes "keine" / "none" in the tool's
-  free-text field. Say so in the question only if the user asks.
+- **A pass that should not run** → not an answer here: a conscious skip goes
+  through `run-contract.js skip harden|polish --reason "<why>"` and shows
+  on the card as ⚠.
 
 ## Resume question
 

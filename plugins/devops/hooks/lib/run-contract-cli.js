@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-cli
- * @version 0.4.1
+ * @version 0.5.0
  * @plugin devops
  * @description Run-contract CLI: `status | skip | park | done | abort |
  *   batch-clear | arm`. Split out of run-contract.js (AUD-016) —
@@ -28,7 +28,7 @@ const { segments, openObligations, short } = require('./run-contract-obligations
 // AUD-010: `status` / `done` used to evaluate obligations against an empty
 // ctx — qa was never measured there, so `done` could close a run while qa
 // was owed. measureQa() is the same helper pre.run.contract.js's gate uses.
-const { measureQa } = require('./run-contract-qa');
+const { measureChanges } = require('./run-contract-qa');
 // R13: share the gate's 15 s git-chain ceiling instead of measureQa()'s own
 // 5 s gitBudget() default — `status` / `done` must not see `qa: null` from a
 // budget the live pre-gate would not have run out of.
@@ -88,10 +88,12 @@ const CLI_COMMANDS = {
     const segs = segments(c, evs);
     // AUD-010: measured exactly like the gate — an unknown count (git
     // failure / expired budget) reports as `qa: null` here, "QA ?" on the card.
-    const codeFilesChanged = measureQa(projectRoot(cwd), 'release', undefined, { totalMs: TOTAL_GIT_BUDGET_MS });
+    const m = measureChanges(projectRoot(cwd), 'release', undefined, { totalMs: TOTAL_GIT_BUDGET_MS });
+    const codeFilesChanged = m ? m.code : null;
+    const uiFilesChanged = m ? m.ui : null;
     write({
       ok: true, active: true, contract: c, segment: segs.length, events: evs.length,
-      qa: codeFilesChanged, open: openObligations(c, evs, 'release', { codeFilesChanged }),
+      qa: codeFilesChanged, ui: uiFilesChanged, open: openObligations(c, evs, 'release', { codeFilesChanged, uiFilesChanged }),
     });
     return 0;
   },
@@ -119,8 +121,9 @@ const CLI_COMMANDS = {
     }
     // AUD-010: measured before deciding — `done` must not close a run while
     // qa is owed just because nobody ever asked git for the diff.
-    const codeFilesChanged = c ? measureQa(projectRoot(cwd), 'card', undefined, { totalMs: TOTAL_GIT_BUDGET_MS }) : null;
-    const open = c ? openObligations(c, eventsOf(cwd, c), 'card', { codeFilesChanged }) : [];
+    const m = c ? measureChanges(projectRoot(cwd), 'card', undefined, { totalMs: TOTAL_GIT_BUDGET_MS }) : null;
+    const ctx = { codeFilesChanged: m ? m.code : null, uiFilesChanged: m ? m.ui : null };
+    const open = c ? openObligations(c, eventsOf(cwd, c), 'card', ctx) : [];
     if (open.length) {
       const names = open.map(o => (o.item ? `${o.ob} #${o.item}` : o.ob)).join(', ');
       if (!reason) {

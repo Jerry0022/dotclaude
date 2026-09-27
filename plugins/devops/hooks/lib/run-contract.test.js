@@ -82,6 +82,48 @@ const obs = (list) => list.map(o => (o.item ? `${o.ob}#${o.item}` : o.ob));
 
 // ── parsing ────────────────────────────────────────────────────────────────
 
+describe("passes without a Q4 answer (Harden always, Polish on UI changes)", () => {
+  const Q4NEW = { header: "Durchgänge?", question: "Was kommt dazu?", options: [
+    { label: "Rethink vorher (Recommended)" }, { label: "Budget verbrennen" }] };
+
+  test("Q4 dropped: the router still arms Harden + Polish", () => {
+    const qs = [Q.was, Q.ablauf, Q.umfang];
+    const r = R.parseRouterAnswers(qs, ans("Prompt umsetzen (Recommended)", "Interaktiv · Ship manuell (Recommended)", "Flexibel (Recommended)"));
+    expect(r.passes).toEqual(["harden", "polish"]);
+    expect(R.isPartialRouterCall(qs)).toBe(false);
+  });
+
+  test("new Q4 (Rethink / Budget only): picking Rethink keeps both passes", () => {
+    const qs = [Q.was, Q.ablauf, Q.umfang, Q4NEW];
+    const r = R.parseRouterAnswers(qs, { ...ans("Prompt umsetzen", "Interaktiv · Ship manuell", "Flexibel"), [Q4NEW.question]: ["Rethink vorher (Recommended)"] });
+    expect(r).toMatchObject({ passes: ["harden", "polish"], rethink: true, burn: false });
+  });
+
+  test("new Q4 left empty: both passes, the recommended Rethink", () => {
+    const qs = [Q.was, Q.ablauf, Q.umfang, Q4NEW];
+    const r = R.parseRouterAnswers(qs, ans("Prompt umsetzen", "Interaktiv · Ship manuell", "Flexibel"));
+    expect(r).toMatchObject({ passes: ["harden", "polish"], rethink: true });
+  });
+
+  test("Flow + Scope alone stays a partial call (H-B13)", () => {
+    expect(R.isPartialRouterCall([Q.ablauf, Q.umfang])).toBe(true);
+  });
+
+  test("polish is owed only when the measure counts UI files", () => {
+    const evs = [sk("auto-agents"), edit, sk("auto-harden", "--invoked-by=do-run")];
+    expect(obs(R.openObligations(C(), evs, "card", { codeFilesChanged: 1, uiFilesChanged: 0 }))).toEqual([]);
+    expect(obs(R.openObligations(C(), evs, "card", { codeFilesChanged: 1, uiFilesChanged: 2 }))).toEqual(["polish"]);
+    // Unknown (git failed / old measure without uiFiles) → still owed.
+    expect(obs(R.openObligations(C(), evs, "card", { codeFilesChanged: 1, uiFilesChanged: null }))).toEqual(["polish"]);
+    expect(obs(R.openObligations(C(), [...evs, { k: "measure", codeFiles: 1, uiFiles: 0 }], "card"))).toEqual([]);
+  });
+
+  test("a conscious polish skip still shows on the card line", () => {
+    const evs = [sk("auto-agents"), edit, sk("auto-harden", "--invoked-by=do-run"), { k: "skip", ob: "polish", reason: "keine UI" }];
+    expect(R.summaryForCard(C(), evs, "de", { uiFilesChanged: 0 })).toContain("Polish ⚠ (keine UI)");
+  });
+});
+
 describe("parseRouterAnswers", () => {
   test("audited backlog run (legacy labels) + doRunArgs backlog", () => {
     const r = R.parseRouterAnswers(AUDIT_QUESTIONS, AUDIT_ANSWERS, { doRunArgs: "backlog" });

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.222.0] — 2026-09-27
+
+### Changed
+- **`/do-run` no longer asks about Harden and Polish.** Harden always runs after an implementation. Polish runs only when the change touches UI files (the `ui-defaults.md` § UI file detection plus the project's `files:` override). Q4 keeps only Rethink and Budget, and the question is dropped when neither applies. The run contract derives both passes without a Q4 answer: it measures UI files alongside code files (`measure` event with `uiFiles`), owes Polish only when UI files changed, and still accepts a deliberate `skip`. `/auto-polish` under do-run returns `{ applicable: false, reason: "no UI files in diff" }` on a diff without UI files. UI detection moved to `hooks/lib/ui-files.js`, shared by the design reminder and the run contract.
+- **`auto-polish` SKILL.md is back within its 250-line budget.** The findings scan, the rules-only ship path, the fix phases and the re-test/concept-page procedures moved verbatim to the skill's `deep-knowledge/`. SKILL.md keeps the decisions: which step, which findings, which approval rule. No behavior change.
+
 ## [0.221.0] — 2026-09-27
 
 ### Added
