@@ -776,8 +776,9 @@ function renderEvidenceRowMd(posts) {
 
 // ---------------------------------------------------------------------------
 // Budget line (§ 2.4) — replaces the fenced usage meter. Bar = elapsed time,
-// marker = usage; omitted entirely while both windows are < 50 % and > 1 h
-// from reset. Context health (§ old renderContextHealth) sits dim at the end.
+// marker = usage. 5h shows from 50 % used or 1 h before reset; Wk shows once
+// usage is > 10 pp ahead of time or 24 h before reset; with neither the line
+// is omitted. Context health (§ old renderContextHealth) sits dim at the end.
 // ---------------------------------------------------------------------------
 
 function renderContextHealth(toolCallCount) {
@@ -827,6 +828,18 @@ function omitWindow(pct, resetMinutes) {
   return (pct || 0) < 50 && (resetMinutes == null || resetMinutes > 60);
 }
 
+/**
+ * The weekly window has its own rule: absolute usage says little over seven
+ * days, being ahead of the linear pace does. It shows once usage runs more
+ * than 10 pp ahead of elapsed time (the yellow marker threshold) or in the
+ * last 24 h before the reset, whatever the pace.
+ */
+const WEEKLY_SHOW_BEFORE_RESET_MIN = 1440;
+function omitWeeklyWindow(pct, elapsedPct, resetMinutes) {
+  if (markerLevel(pct || 0, elapsedPct) !== 'white') return false;
+  return resetMinutes == null || resetMinutes > WEEKLY_SHOW_BEFORE_RESET_MIN;
+}
+
 /** The bar tooltip in the card's language (AUD-035 — it was German on English cards). */
 const BUDGET_TOOLTIP = {
   de: (pct, reset) => pct + '% verbraucht · Reset in ' + reset,
@@ -858,7 +871,7 @@ function buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang = 'de') 
   }
   if (w) {
     const elapsedWk = ((WINDOW_WK_MIN - w.resetInMinutes) / WINDOW_WK_MIN) * 100;
-    if (!omitWindow(w.pct, w.resetInMinutes)) {
+    if (!omitWeeklyWindow(w.pct, elapsedWk, w.resetInMinutes)) {
       const level = markerLevel(w.pct, elapsedWk);
       if (level !== 'white') warn = true;
       bars.push({
