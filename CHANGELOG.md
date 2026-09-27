@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.228.0] — 2026-09-28
+
+### Added
+- **A ship without the ship MCP server follows a checklist instead of improvising** (#567). do-ship Step 0.5 decides before any git or GitHub action: when the `dotclaude-ship` tools are neither loaded nor deferred and the cache diagnosis cannot restore them (a claude.ai cloud session without the plugin's servers is the typical case), it says so in one line and follows `skills/do-ship/deep-knowledge/manual-ship.md` — clean start, the project's gates, version bump + CHANGELOG, PR with `Closes #N`, checks, **squash** merge, the annotated `alpha/vX.Y.Z` on the squash commit (via the #566 owner hand-off), cleanup, and a summary with a "Nicht gelaufen: …" line naming every guard that did not run. Deferred tools never take this path.
+
 ## [0.227.0] — 2026-09-27
 
 ### Added
