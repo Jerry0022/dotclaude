@@ -141,3 +141,49 @@ describe("storeDirFor honours an explicit project root", () => {
     expect(storeDirFor("docs/concepts/2026-09-25-x.html", root)).toBe(path.join(root, ".claude", "concepts", "2026-09-25-x"));
   });
 });
+
+// #555: a paused concept is parked, not abandoned — never pruned, never
+// relaunched; the hook prints a one-line hint instead. A submission sitting
+// unprocessed in the store still takes the recovery path.
+describe("a paused concept — hint, no relaunch, no prune (#555)", () => {
+  const pause = (stateFile) => {
+    const s = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+    fs.writeFileSync(stateFile, JSON.stringify({ ...s, paused_at: iso(40 * H) }));
+  };
+
+  test("isStale is false for a paused state, whatever its age", () => {
+    expect(isStale({ started_at: iso(30 * 24 * H), paused_at: iso(30 * 24 * H) })).toBe(false);
+  });
+
+  test("a paused state yields only the hint — no python, no CronCreate, file kept", () => {
+    const p = project({ startedAgo: 48 * H, savedAgo: 48 * H });
+    try {
+      pause(p.stateFile);
+      const { status, stdout } = runHook(p);
+      expect(status).toBe(0);
+      expect(stdout).toMatch(/Paused \/auto-concept page/);
+      expect(stdout).toContain("Resume from pause");
+      expect(stdout).not.toContain("concept-server.py");
+      expect(stdout).not.toContain("CronCreate");
+      expect(stdout).not.toMatch(/PRUNED/);
+      expect(fs.existsSync(p.stateFile)).toBe(true);
+    } finally {
+      fs.rmSync(p.cwd, { recursive: true, force: true });
+      fs.rmSync(p.home, { recursive: true, force: true });
+    }
+  });
+
+  test("a paused state with an unprocessed submission still recovers it", () => {
+    const p = project({ startedAgo: 48 * H, savedAgo: 1 * H });
+    try {
+      pause(p.stateFile);
+      fs.writeFileSync(path.join(p.store, "state.json"), JSON.stringify({ decisions: JSON.stringify({ submitted: true }), version: 4, saved_at: iso(1 * H) }));
+      const { stdout } = runHook(p);
+      expect(stdout).not.toMatch(/Paused \/auto-concept page/);
+      expect(stdout.length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(p.cwd, { recursive: true, force: true });
+      fs.rmSync(p.home, { recursive: true, force: true });
+    }
+  });
+});
