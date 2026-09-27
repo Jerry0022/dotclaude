@@ -17,7 +17,7 @@ import { localMerge, localTag, LocalMergeError } from "../lib/local-merge.js";
 import { createRequire } from "node:module";
 
 // Same reading of `validation` as the completion card and stop.flow.guard.
-const { classify } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
+const { classify, readRepoOpen } = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
 
 /** Soft budget for the PR title — over-long titles are clamped, never rejected. */
 export const PR_TITLE_MAX = 70;
@@ -44,7 +44,7 @@ export const schema = z.object({
       evidence: z.string().optional(),
       waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional(),
     })).optional(),
-  ).describe("The requirements this ship delivers — the same items the completion card will carry. The merge is REFUSED while one is still your own work (no status, partial/unmet without waitsOn, or waitsOn pending — your background work has not finished). Close the gap and call ship_release again; waitsOn user/deploy/external may ship."),
+  ).describe("The requirements this ship delivers — the same items the completion card will carry. The merge is REFUSED while one is still your own work (no status, partial/unmet without waitsOn, or waitsOn pending — your background work has not finished). Close the gap and call ship_release again; waitsOn user/deploy/external may ship. Omitted → the not-met items of the last completion card rendered for this cwd (≤ 12 h) are checked instead; pass the current items explicitly once the gaps are closed."),
   acceptGaps: z.boolean().default(false).describe("Ship despite open own gaps. Only when the USER explicitly asked to ship as-is — never on your own judgement."),
 });
 
@@ -74,7 +74,12 @@ export async function handler(params) {
   const opts = { cwd };
 
   // Requirement gate: no merge over a gap Claude can still close itself.
-  const gaps = params.acceptGaps ? [] : shipValidationGaps(params.validation);
+  // Without an explicit `validation` the last card of this checkout speaks —
+  // a caller that never passes it (backlog runner, a ship typed after the
+  // card) must not skip the gate that way.
+  const fromCard = params.validation === undefined ? readRepoOpen(cwd) : null;
+  const validationSource = params.validation !== undefined ? "param" : fromCard ? "card" : "none";
+  const gaps = params.acceptGaps ? [] : shipValidationGaps(params.validation ?? fromCard);
   if (gaps.length) {
     return {
       success: false,
@@ -82,11 +87,16 @@ export async function handler(params) {
       reason: "validation-gaps",
       delivered: "none",
       gaps,
+      validationSource,
       error:
+        (validationSource === "card" ? "The last completion card in this checkout reports open requirements. " : "") +
         `${gaps.length} requirement(s) are still your own work: ` +
         gaps.map(g => `${g.requirement} (${g.reason})`).join("; ") +
         ". Close them (implement, test, wait for your background result), then call ship_release again — " +
         "after any code change run ship_build first, so the merge stays the built and tested tree. " +
+        (validationSource === "card"
+          ? "If they are closed already, pass the current `validation` explicitly. "
+          : "") +
         "Only the user can waive this (acceptGaps: true).",
     };
   }

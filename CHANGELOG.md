@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.219.0] — 2026-09-27
+
+### Changed
+- **One Stop block names every card fault.** When the title, content, validation, requirement-gap and pending gates of `stop.flow.guard` fail together, they are reported in one numbered block, so Claude fixes all of them in a single re-render. Before, only the first fault was blocked and the rest passed unseen.
+- **`ship_release` checks requirement gaps even when the caller passes no `validation`.** The completion card now also stores its open requirements per checkout. A ship without `validation` reads that copy (at most 12 h old) and reports `validationSource: "card"`. An explicit `validation` always wins. Git-Bash and native Windows paths map to the same checkout.
+
 ## [0.218.0] — 2026-09-27
 
 ### Added

@@ -2099,6 +2099,10 @@ function buildCompletionCard(params) {
     const openItems = validationGaps.GAP_EXEMPT_VARIANTS.has(params.variant) ? [] : validationGaps.openItems(params.validation);
     if (openItems.length) writeFileSync(openFile, JSON.stringify(openItems));
     else try { unlinkSync(openFile); } catch { /* none written */ }
+    //  - the same items keyed by the checkout, for ship_release: the ship
+    //    server never sees the session id, and a caller that ships without
+    //    passing `validation` still meets this card's gaps.
+    validationGaps.writeRepoOpen(params.cwd, openItems);
     // pending-attested satisfies the pending gate — set only when the field
     // actually carries items (an empty array declares nothing).
     if (hasPending(params.pending)) {
