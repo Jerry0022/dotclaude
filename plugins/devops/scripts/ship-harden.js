@@ -30,7 +30,7 @@ const CODE_FILE_RE = /\.([cm]?[jt]sx?|py|vue|svelte|astro)$/;
 /**
  * The line with its string literals emptied — a check on code structure must
  * not fire on a fixture string (`"describe.only(…)"` in a test of this very
- * check, a regex source naming TODO). Quotes stay so positions keep a shape.
+ * check, a regex source that names the H7 markers). Quotes stay so positions keep a shape.
  */
 function codeOf(text) {
   return text.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, '$1$1').replace(/\/(?![/*])(?:\\.|[^/\\\n])+\/[gimsuy]*/g, '/r/');
@@ -127,9 +127,13 @@ function run(opts) {
   const { base, cwd, strict, dryRun } = opts;
   const scope = opts.files.map((f) => f.replace(/\\/g, '/'));
   const pathspec = scope.length ? ['--', ...scope] : [];
-  const added = new Map();
-  addedLines(git(cwd, ['diff', '-U0', '--no-color', `origin/${base}...HEAD`, ...pathspec]), added);
-  addedLines(git(cwd, ['diff', '-U0', '--no-color', 'HEAD', ...pathspec]), added);
+  // One diff from the merge-base to the WORKING TREE covers committed and
+  // uncommitted changes with the line numbers the files have now. Two diffs
+  // (base...HEAD plus HEAD→tree) reported lines the tree had already changed.
+  const mergeBase = git(cwd, ['merge-base', `origin/${base}`, 'HEAD']).trim();
+  const added = mergeBase
+    ? addedLines(git(cwd, ['diff', '-U0', '--no-color', mergeBase, ...pathspec]))
+    : new Map();
 
   for (const f of [...added.keys()]) if (SKIP_PATH_RE.test(f)) added.delete(f);
   if (added.size === 0) return { applicable: false, reason: 'empty diff', fixed: [], findings: [], skipped: [] };
