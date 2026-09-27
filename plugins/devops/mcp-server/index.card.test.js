@@ -730,6 +730,33 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
     }
   });
 
+  // #583: a session stalled on a restart, a reboot or a limit reset said
+  // "pick it up whenever you like". The reason now names what unblocks it.
+  test("paused with a reason: heading and resume line name what unblocks the work", async () => {
+    for (const [lang, reason, resetAt, heading, hint] of [
+      ["de", "restart", undefined, "⏸️ Pausiert bis Neustart — Claude Code neu starten", "› Claude Code neu starten, dann hier schreiben, um weiterzumachen."],
+      ["en", "reboot", undefined, "⏸️ Paused until reboot", "› Restart the PC, then open this session and write here to continue."],
+      ["de", "usage-reset", "23:40", "⏸️ Pausiert bis Limit-Reset (23:40)", "› Nach dem Limit-Reset um 23:40 hier schreiben, um weiterzumachen."],
+    ]) {
+      const text = await cardText({
+        variant: "paused", summary: "Plugin-Update wartet", lang, session_id: "test-paused-reason-" + reason,
+        pause: { reason, resetAt },
+        changes: [{ area: "Plugin", description: "Neue Version installiert" }],
+      });
+      expect(text, reason).toContain(heading);
+      expect(text, reason).toContain(hint);
+    }
+  });
+
+  test("paused with reason user keeps the plain pause copy", async () => {
+    const text = await cardText({
+      variant: "paused", summary: "x", lang: "de", session_id: "test-paused-user",
+      pause: { reason: "user" }, changes: [{ area: "A", description: "B" }],
+    });
+    expect(text).toContain("⏸️ Pausiert — weiter, wann du willst");
+    expect(text).toContain("› Schreib hier, um weiterzumachen.");
+  });
+
   test("V&V unverified: ⚠ Ungeprüft shippen? — evidence carries the ungeprüft post", async () => {
     // Simulated indirectly: without the Light-verification flag files the gate
     // is closed, so this asserts the CLEAN path stays 'ready' — the flag-driven

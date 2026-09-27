@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.226.0] — 2026-09-27
+
+### Added
+- **A paused card names why the work stops** (#583). `render_completion_card` takes `pause: { reason: "restart" | "reboot" | "usage-reset" | "user", resetAt? }` on the `paused` variant. The heading names the reason (`⏸️ Pausiert bis Neustart — Claude Code neu starten`, `… bis PC-Neustart`, `… bis Limit-Reset (23:40)`), the context line the one action that resumes the work, and the session title reads `⏸️ Paused until restart – …`; every reason prefix strips like the others. The variant guidance now sends a next step of restart, reboot or limit reset to `paused`, never `analysis` / `ready` / `fallback`. `reason: "user"` or no `pause` keeps today's copy.
+
 ## [0.225.0] — 2026-09-27
 
 ### Changed
