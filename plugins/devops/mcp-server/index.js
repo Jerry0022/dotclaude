@@ -120,6 +120,18 @@ function tryParse(v) {
   try { return JSON.parse(v); } catch { return v; }
 }
 
+// `cta` is an object of placeholders, but the hook text lists it beside plain
+// fields, so callers pass `cta: "Umsetzen?"` — which used to fail the whole
+// card with invalid_type. A JSON string still parses; any other string becomes
+// the free-text `info` placeholder instead of an error.
+function ctaInput(v) {
+  if (typeof v !== 'string') return v;
+  const parsed = tryParse(v);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  const text = v.trim();
+  return text ? { info: text } : undefined;
+}
+
 // Resolved at CALL time, not module load: a mid-session plugin-cache rebuild
 // (ss.plugin.update) deletes the version dir this server was started from, and
 // a baked path then dies with MODULE_NOT_FOUND → node exit 1 (the observed
@@ -2385,7 +2397,7 @@ server.registerTool(
         }).optional(),
       ).describe("Repository state"),
       cta: z.preprocess(
-        v => typeof v === 'string' ? tryParse(v) : v,
+        ctaInput,
         z.object({
           vOld: z.string().optional(),
           vNew: z.string().optional(),
@@ -2395,7 +2407,7 @@ server.registerTool(
           reason: z.string().optional(),
           description: z.string().optional(),
         }).optional(),
-      ).describe("CTA template placeholders"),
+      ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
       userTest: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
@@ -2514,7 +2526,7 @@ export {
   insideWorkTree, withDetectedRepoMode,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
-  resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
+  ctaInput, resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
 };
 
 // ---------------------------------------------------------------------------

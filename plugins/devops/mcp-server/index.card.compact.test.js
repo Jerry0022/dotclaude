@@ -27,7 +27,7 @@ vi.mock("zod", () => {
   return { z };
 });
 
-let render, renderBudgetLineMd, buildBudgetModel, sanitizeSessionId;
+let render, renderBudgetLineMd, buildBudgetModel, sanitizeSessionId, ctaInput;
 
 beforeAll(async () => {
   const mod = await import("./index.js");
@@ -35,6 +35,7 @@ beforeAll(async () => {
   renderBudgetLineMd = mod.renderBudgetLineMd;
   buildBudgetModel = mod.buildBudgetModel;
   sanitizeSessionId = mod.sanitizeSessionId;
+  ctaInput = mod.ctaInput;
   await render({ variant: "analysis", summary: "warmup", lang: "en", session_id: "test-compact-warmup" });
 }, 60_000);
 
@@ -212,5 +213,19 @@ describe("AUD-010 — the session id never steers a file write out of tmpdir", (
     // The unsanitised join would have landed one level ABOVE tmpdir.
     expect(existsSync(join(tmpdir(), "..", escaped))).toBe(false);
     expect(existsSync(join(tmpdir(), escaped))).toBe(false);
+  });
+});
+
+describe("cta input — a plain string never fails the card", () => {
+  test("a sentence becomes the info placeholder", () => {
+    expect(ctaInput("Subagent-Ship umsetzen?")).toEqual({ info: "Subagent-Ship umsetzen?" });
+  });
+  test("a JSON object string still parses, objects pass through", () => {
+    expect(ctaInput('{"reason":"Limit"}')).toEqual({ reason: "Limit" });
+    expect(ctaInput({ version: "1.2.3" })).toEqual({ version: "1.2.3" });
+  });
+  test("blank or JSON non-object strings do not become garbage", () => {
+    expect(ctaInput("  ")).toBeUndefined();
+    expect(ctaInput("42")).toEqual({ info: "42" });
   });
 });
