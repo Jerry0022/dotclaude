@@ -73,7 +73,15 @@ vi.mock("../lib/local-merge.js", async (importOriginal) => {
   };
 });
 
+// The version-file rebase has its own real-git suite (lib/version-rebase.test.js).
+// Default: it refuses, so every older test keeps the plain rebaseRequired path.
+vi.mock("../lib/version-rebase.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  rebaseVersionFiles: vi.fn(() => ({ ok: false, reason: "no-version-file" })),
+}));
+
 import { handler, PR_TITLE_MAX } from "./release.js";
+import { rebaseVersionFiles } from "../lib/version-rebase.js";
 import * as localMergeLib from "../lib/local-merge.js";
 import { readVersion } from "../lib/version.js";
 import { execFileSync } from "node:child_process";
@@ -1141,5 +1149,60 @@ describe("ship_release — names never reach a shell (AUD-C014)", () => {
     for (const [cmd] of gitLib.gitStrict.mock.calls) {
       expect(argvCalls.some((a) => a.join(" ") === cmd)).toBe(true);
     }
+  });
+});
+
+describe("ship_release — automatic version-file rebase", () => {
+  beforeEach(() => {
+    rebaseVersionFiles.mockReturnValue({ ok: false, reason: "no-version-file" });
+  });
+
+  test("only version files collide: rebased and bumped again, nothing pushed, retest owed", async () => {
+    gitLib.isRebasedOnto.mockReturnValue(false);
+    gitLib.fileOverlap.mockReturnValue({ mergeBase: "b", branchFiles: [], baseFiles: [], overlap: ["CHANGELOG.md", ".claude-plugin/marketplace.json"] });
+    rebaseVersionFiles.mockReturnValue({ ok: true, from: "0.2.0", to: "0.3.0", bump: "minor", resolved: ["CHANGELOG.md"], commit: "f00" });
+    const res = await handler(params());
+    expect(rebaseVersionFiles).toHaveBeenCalledWith({ upstream: "origin/main", cwd: "/repo" });
+    expect(res).toMatchObject({ success: false, rebaseRequired: true, retestRequired: true });
+    expect(res.autoRebased.to).toBe("0.3.0");
+    expect(res.error).toMatch(/run ship_build .* then call ship_release again/);
+    expect(pushCall()).toBeUndefined();
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("a code file in the overlap never tries the automatic path", async () => {
+    gitLib.isRebasedOnto.mockReturnValue(false);
+    gitLib.fileOverlap.mockReturnValue({ mergeBase: "b", branchFiles: [], baseFiles: [], overlap: ["CHANGELOG.md", "src/a.js"] });
+    const res = await handler(params());
+    expect(rebaseVersionFiles).not.toHaveBeenCalled();
+    expect(res.rebaseRequired).toBe(true);
+    expect(res.autoRebased).toBeUndefined();
+  });
+
+  test("a refused automatic rebase falls back to the manual answer and says why", async () => {
+    gitLib.isRebasedOnto.mockReturnValue(false);
+    gitLib.fileOverlap.mockReturnValue({ mergeBase: "b", branchFiles: [], baseFiles: [], overlap: ["README.md"] });
+    rebaseVersionFiles.mockReturnValue({ ok: false, reason: "non-version-hunk", files: ["README.md"] });
+    const res = await handler(params());
+    expect(res).toMatchObject({ success: false, rebaseRequired: true, autoRebaseRefused: "non-version-hunk: README.md" });
+    expect(res.retestRequired).toBeUndefined();
+    expect(pushCall()).toBeUndefined();
+  });
+
+  test("base advanced during the checks wait: rebased, PR left open, not merged", async () => {
+    gitLib.isRebasedOnto.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    rebaseVersionFiles.mockReturnValue({ ok: true, from: "0.2.0", to: "0.3.0", bump: "minor", resolved: [], commit: "f00" });
+    const res = await handler(params());
+    expect(res).toMatchObject({ success: false, rebaseRequired: true, retestRequired: true, baseAdvancedDuringChecks: true });
+    expect(res.error).toMatch(/^PR #42 left OPEN, NOT merged/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("a retry with commitMessage on a clean tree reuses the release commit", async () => {
+    const res = await handler(params({ commitMessage: "chore: release v1.0.0" }));
+    expect(res.commitSkipped).toBe("clean tree");
+    expect(res.success).toBe(true);
+    expect(execFileSync.mock.calls.some((c) => c[1] && c[1][0] === "commit")).toBe(false);
   });
 });

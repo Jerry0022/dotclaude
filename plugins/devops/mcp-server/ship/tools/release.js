@@ -14,6 +14,7 @@ import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js
 import { clampText } from "../../lib/soft-limits.js";
 import { readVersion } from "../lib/version.js";
 import { localMerge, localTag, LocalMergeError } from "../lib/local-merge.js";
+import { versionOnlyOverlap, rebaseVersionFiles } from "../lib/version-rebase.js";
 import { createRequire } from "node:module";
 
 // Same reading of `validation` as the completion card and stop.flow.guard.
@@ -57,6 +58,35 @@ export function shipValidationGaps(validation) {
   if (!Array.isArray(validation) || !validation.length) return [];
   const { gaps } = classify(validation, { openTasks: 0 });
   return gaps;
+}
+
+/**
+ * The base moved ahead and only version files collide (both sides bumped and
+ * added a CHANGELOG entry): rebase and bump again here instead of sending the
+ * caller through a manual conflict round (lib/version-rebase.js). The rebased
+ * tree holds the base's new commits, so it is NOT merged now — the result
+ * keeps `rebaseRequired: true` (the skill's existing path: push, test,
+ * retry) and adds `autoRebased` + `retestRequired`. Returns true when it
+ * rebased; false leaves the caller's ordinary rebaseRequired answer.
+ */
+function autoRebase(result, base, overlap, cwd) {
+  if (!versionOnlyOverlap(overlap.overlap)) return false;
+  const auto = rebaseVersionFiles({ upstream: `origin/${base}`, cwd });
+  if (!auto.ok) {
+    result.autoRebaseRefused = auto.files ? `${auto.reason}: ${auto.files.join(", ")}` : auto.reason;
+    return false;
+  }
+  result.success = false;
+  result.rebaseRequired = true;
+  result.retestRequired = true;
+  result.autoRebased = auto;
+  result.overlapFiles = overlap.overlap;
+  result.error =
+    `Rebased onto origin/${base} automatically — only version files collided` +
+    (auto.bump !== "none" ? `; bumped again to v${auto.to} (${auto.bump})` : "") +
+    `. Nothing was pushed or merged. The branch now contains ${base}'s new commits: ` +
+    `run ship_build (tests) on it, then call ship_release again.`;
+  return true;
 }
 
 export async function handler(params) {
@@ -177,7 +207,12 @@ export async function handler(params) {
     }
 
     // Optional: commit version-bumped files
-    if (commitMessage) {
+    if (commitMessage && !dirtyState(opts).dirty && !dirtyState(opts).error) {
+      // A retry after an automatic rebase (or any retry) finds the release
+      // commit already made — `git commit` on a clean tree would throw.
+      result.commit = headShort(opts);
+      result.commitSkipped = "clean tree";
+    } else if (commitMessage) {
       const state = dirtyState(opts);
       if (state.error) {
         throw new Error(`git status failed (${state.error}) — cannot tell which files to commit. Nothing was committed.`);
@@ -298,6 +333,7 @@ export async function handler(params) {
     if (!isRebasedOnto(`origin/${base}`, opts)) {
       // Check overlap to give actionable context
       const overlap = fileOverlap(`origin/${base}`, opts);
+      if (autoRebase(result, base, overlap, cwd)) return result;
       result.success = false;
       result.rebaseRequired = true;
       result.overlapFiles = overlap.overlap;
@@ -402,6 +438,11 @@ export async function handler(params) {
     gitArgs(["fetch", "origin", base], { cwd, timeout: NETWORK_TIMEOUT });
     if (!isRebasedOnto(`origin/${base}`, opts)) {
       const overlap = fileOverlap(`origin/${base}`, opts);
+      if (autoRebase(result, base, overlap, cwd)) {
+        result.baseAdvancedDuringChecks = true;
+        result.error = `PR #${pr.number} left OPEN, NOT merged. ` + result.error;
+        return result;
+      }
       result.success = false;
       result.rebaseRequired = true;
       result.baseAdvancedDuringChecks = true;

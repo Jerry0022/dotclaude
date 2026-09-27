@@ -683,6 +683,8 @@ over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design
 
 **If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry, then re-run the **Step 1d full check** before the retry: a parallel ship just landed, and its purpose may impose obligations on this branch (see `deep-knowledge/purpose-alignment.md`). See `{PLUGIN_ROOT}/deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
 
+**`autoRebased` set** (with `rebaseRequired` + `retestRequired`): only version files collided, so `ship_release` already rebased and bumped again (`autoRebased.to`; the CHANGELOG header follows). Skip the manual rebase: push the branch (`git push --force-with-lease`), run `ship_build`, re-run preflight, then call `ship_release` again — the release commit exists, a `commitMessage` on the clean tree is skipped. Use `autoRebased.to` as `vNew` on the card. `autoRebaseRefused` names why the tool left it to Step 1b.
+
 **If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:
 
 ```bash
