@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.215.1] — 2026-09-27
+
+### Changed
+- **The weekly bar on the completion card shows when usage runs ahead of the week's pace.** Absolute usage says little over seven days. The Wk bar now appears once usage is more than 10 pp ahead of elapsed time (the yellow marker threshold), and always in the last 24 h before the weekly reset. The 50 % used threshold and the 1 h reset window now apply only to the 5h bar.
+
+## [0.215.0] — 2026-09-27
+
+### Added
+- **You can pause an open concept page and resume it later.** Say "pausieren" or "machen wir später weiter" and the bridge, the pulser, the waker and the backstop cron stop. The page, your decisions and the durable store stay, and `concept-active.json` records `paused_at`. While a concept is paused, a session start or a compact shows a one-line resume hint and relaunches nothing. The 24 h prune never deletes a paused concept, the card shows no link and no compass, and strict mode bound to the concept is released. "Weiter mit dem Concept" relaunches the bridge on the same port with every decision intact. A submission that arrived right before the pause is still recovered and ends the pause (#555).
+
+## [0.214.4] — 2026-09-27
+
+### Changed
+- **An analysis that ends in decisions goes to a concept page.** Before, the Quiet output style offered "a `/auto-concept` page or an artifact" as equals, and an analysis ending in five proposals went out as a static artifact because that was quicker to publish. Now any analysis that leaves the user something to pick (options, proposals, next steps) always becomes a `/auto-concept` page. An artifact is used only for a read-only report with nothing left to decide.
+
+## [0.214.3] — 2026-09-27
+
+### Fixed
+- **A concept resumed after more than a day keeps its link on the card.** A card with a `concept` field now resolves the page link whatever the age of the open, because the caller asserts the page is open. Without the field, the card and the skill router measure staleness the way the resume hook does (#426): from the durable store's last save or draft, not from `started_at` alone. The dead-bridge relaunch now tells Claude to refresh `started_at`, `server_pid` and `cron_id` in `concept-active.json`, so the state file stops describing the dead bridge (#563).
+
+## [0.214.2] — 2026-09-27
+
+### Changed
+- **The do-run "PC danach" question no longer pushes auto-resume.** The options now read `🟢 PC anlassen · ➖ Resume` / `🟢 PC anlassen · ➕ Resume` / `🔴 PC ausmachen`. They always appear in that order, and the recommendation stays on "without resume". It moves to "with resume" only when the run is expected to be long and to plausibly use up the plan's usage (burn, a large backlog, a full audit or parallel lanes, combined with a 5h window already half used). The status symbols let the user tell the three options apart at a glance.
+- **Question options keep a fixed order in this repo.** A new project extension, `.claude/skills/do-run/reference.md`, makes this a rule for every `AskUserQuestion` defined here: only the `(Recommended)` marker may move, and it usually sits on the first option.
+
 ## [0.214.1] — 2026-09-27
 
 ### Fixed

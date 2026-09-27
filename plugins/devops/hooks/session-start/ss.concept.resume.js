@@ -75,7 +75,15 @@ function isValidState(obj) {
   if (obj.slug && !/^[a-zA-Z0-9._-]{1,80}$/.test(obj.slug)) return false;
   // `owner` (#417) is echoed into --owner arguments; keep it a plain token.
   if (obj.owner !== undefined && (typeof obj.owner !== 'string' || !/^[a-zA-Z0-9._-]{1,40}$/.test(obj.owner))) return false;
+  // `paused_at` (#555) is an ISO timestamp written by the auto-concept pause.
+  if (obj.paused_at !== undefined && !(typeof obj.paused_at === 'string' && Number.isFinite(Date.parse(obj.paused_at)))) return false;
   return true;
+}
+
+/** The user paused this concept (#555): bridge and watchers are stopped on
+ *  purpose, the page and its decisions wait for "weiter mit dem Concept". */
+function isPaused(state) {
+  return Boolean(state && typeof state.paused_at === 'string' && Number.isFinite(Date.parse(state.paused_at)));
 }
 
 /**
@@ -107,9 +115,9 @@ function deleteState() {
  * server's own derivation in `concept-server.py` __main__ — the HTML basename
  * without its extension, under `.claude/concepts/` in the project root.
  */
-function storeDirFor(htmlPath) {
+function storeDirFor(htmlPath, root = cwd) {
   const base = path.basename(String(htmlPath || '')).replace(/\.html$/i, '');
-  return path.join(cwd, '.claude', 'concepts', base);
+  return path.join(root, '.claude', 'concepts', base);
 }
 
 /**
@@ -307,6 +315,8 @@ function postShutdown(port, timeoutMs = 1500) {
  * @param {object} [store] — readStore() result (optional: no store → age of the open)
  */
 function isStale(state, store) {
+  // A paused concept is parked, not abandoned (#555): the pause may last a week.
+  if (isPaused(state)) return false;
   if (store && store.hasDraft) return false;
   const stamps = [state.started_at, store && store.lastActivityAt]
     .map((s) => (typeof s === 'string' ? Date.parse(s) : NaN))
@@ -510,6 +520,12 @@ function buildDeadBridgeRecovery(state, store) {
     `Then confirm the recovery with \`curl -s http://localhost:${state.port}/recovery\`, ` +
     `re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}), ` +
     `and process the recovered submission.`,
+    // A submission that arrived just before a pause (#555) outranks the pause:
+    // once the bridge runs again, the state file must stop claiming it is paused.
+    ...(isPaused(state)
+      ? [`The concept was paused (paused_at ${state.paused_at}); the relaunch ends the pause — delete \`paused_at\` ` +
+         `from ${STATE_PATH} (read-modify-write) once the bridge answers.`]
+      : []),
   ].join(' ');
 }
 
@@ -539,13 +555,31 @@ function buildDeadBridgeRelaunch(state, statePath = STATE_PATH) {
     `Bash tasks (run_in_background: true), and re-arm the backstop cron: CronCreate with cron "*/15 * * * *" ` +
     `(recurring: true) and prompt: '${buildCronBody(state.port, statePath, state.owner || '')}'. The page reconnects on its own ` +
     `once the heartbeat is back — the user does not have to reload.`,
+    `Finally rewrite ${statePath} in place (read-modify-write, keep every other field): \`started_at\` = now ` +
+    `(ISO), \`server_pid\` = the relaunched bridge's PID, \`cron_id\` = the new backstop cron's id. Until then ` +
+    `the file still describes the dead bridge, and a state opened more than 24 h ago reads as abandoned (#563).`,
   ].join(' ');
+}
+
+/**
+ * A paused concept (#555): one line, no relaunch. The user stopped the bridge
+ * and its watchers on purpose; relaunching them at every session start or
+ * compact would undo the pause while nobody is there. The model resumes only
+ * when the user's prompt continues the concept.
+ */
+function buildPausedHint(state) {
+  return `Paused /auto-concept page in this project (slug ${state.slug || '?'}, port ${state.port}, ` +
+    `html_path ${state.html_path}, paused at ${state.paused_at}). Do NOT relaunch the bridge or re-arm watchers now. ` +
+    `Only when the user's prompt continues this concept ("weiter mit dem Concept", "Concept fortsetzen"), follow ` +
+    `auto-concept § Resume from pause; any other prompt leaves the pause alone.`;
 }
 
 module.exports = {
   isValidHtmlPath,
   isValidState,
   isStale,
+  isPaused,
+  buildPausedHint,
   resolveScript,
   buildCronBody,
   buildBackgroundTasks,
@@ -592,6 +626,15 @@ if (require.main === module) {
           `BEFORE removing anything under ${store.storeDir}.\n`
         );
       }
+      process.exit(0);
+    }
+
+    // Paused on purpose (#555): a hint, no relaunch — on startup and compact
+    // alike. After the HTML check (a vanished page still ends the concept) and
+    // never over an unprocessed submission: that still takes the recovery
+    // path below, a pause must not hide it.
+    if (isPaused(state) && !store.unprocessed) {
+      process.stdout.write(buildPausedHint(state) + '\n');
       process.exit(0);
     }
 

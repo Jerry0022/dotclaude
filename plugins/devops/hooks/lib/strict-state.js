@@ -184,10 +184,25 @@ function armInline(cwd, opts = {}) {
   return { mode: activate(cwd, { reason: 'inline', sessionId: opts.sessionId, now: opts.now }), kept: false };
 }
 
-/** First workflow binding whose state file exists in `cwd`, or null. */
+/**
+ * Does the workflow state file still hold its mode? It must exist — and a
+ * concept state file must not be paused (#555): a paused concept stops its
+ * bridge on purpose and may wait for days, so strict bound to it is released
+ * like a closed concept instead of lingering until the 24 h expiry.
+ */
+function bindingLive(file) {
+  if (!fs.existsSync(file)) return false;
+  try {
+    const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (state && typeof state.paused_at === 'string' && state.paused_at) return false;
+  } catch { /* not JSON (a flag file) or mid-write — existence is the signal */ }
+  return true;
+}
+
+/** First workflow binding whose state file holds its mode in `cwd`, or null. */
 function findBinding(cwd) {
   for (const b of BINDINGS) {
-    if (fs.existsSync(path.join(projectRoot(cwd), b.file))) return b;
+    if (bindingLive(path.join(projectRoot(cwd), b.file))) return b;
   }
   return null;
 }
@@ -211,7 +226,7 @@ function evaluate(cwd, opts = {}) {
   if (!mode || mode.active !== true) return { active: false, mode: null, why: 'off' };
   const now = typeof opts.now === 'number' ? opts.now : Date.now();
   if (mode.expiresAt && now >= Date.parse(mode.expiresAt)) return { active: false, mode, why: 'expired' };
-  if (mode.boundTo && !fs.existsSync(path.join(inherited ? mainWorktree(cwd) || projectRoot(cwd) : projectRoot(cwd), mode.boundTo))) {
+  if (mode.boundTo && !bindingLive(path.join(inherited ? mainWorktree(cwd) || projectRoot(cwd) : projectRoot(cwd), mode.boundTo))) {
     return { active: false, mode, why: 'binding-gone' };
   }
   if (!inherited && mode.branch) {

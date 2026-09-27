@@ -145,6 +145,27 @@ describe("budget line — omission and glyph-bar fallback (§ 2.4)", () => {
     expect(line).toMatch(/[▰▱│]/);
   });
 
+  // Wk: 10080 min window. resetInMinutes 5040 → 50 % of the week elapsed.
+  const wkLabels = (weekly) => buildBudgetModel(
+    { timestamp: fresh(), session: { pct: 20, resetInMinutes: 200 }, weekly }, 0, 0, "",
+  ).bars.map((b) => b.label);
+
+  test("weekly on pace → hidden, even at a high absolute percent", () => {
+    expect(wkLabels({ pct: 58, resetInMinutes: 5040 })).toEqual([]);
+    expect(wkLabels({ pct: 60, resetInMinutes: 5040 })).toEqual([]);
+  });
+
+  test("weekly more than 10 pp ahead of time (yellow) → shown, even below 50 %", () => {
+    expect(wkLabels({ pct: 61, resetInMinutes: 5040 })).toEqual(["Wk"]);
+    // Day 1: 10 % of the week elapsed, 25 % used.
+    expect(wkLabels({ pct: 25, resetInMinutes: 9072 })).toEqual(["Wk"]);
+  });
+
+  test("weekly within 24 h of the reset → shown regardless of pace", () => {
+    expect(wkLabels({ pct: 30, resetInMinutes: 1440 })).toEqual(["Wk"]);
+    expect(wkLabels({ pct: 30, resetInMinutes: 1441 })).toEqual([]);
+  });
+
   test("terminal fallback uses ▰ (elapsed) / │ (usage marker) / ▱ (left) glyphs", () => {
     const usage = { timestamp: fresh(), session: { pct: 90, resetInMinutes: 30 }, weekly: null };
     const model = buildBudgetModel(usage, 0, 0, "");

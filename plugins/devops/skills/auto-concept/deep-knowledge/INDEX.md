@@ -9,6 +9,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [interactive-components.md](interactive-components.md) | Interactive Components | Reference implementations for interactive elements in concept pages. |
 | [iteration-rules.md](iteration-rules.md) | Iteration Tabs (single file, many iterations) | Every concept page is a stack of iteration tabs. The **tab bar lives at the |
 | [monitoring.md](monitoring.md) | Concept Browser Monitoring | How Claude monitors the concept page for user decisions, processes them |
+| [pause-resume.md](pause-resume.md) | Pause and resume an open concept (#555) | Referenced from `SKILL.md` § 6c. A pause stops every process of an open conce... |
 | [reality-check.md](reality-check.md) | Reality Check — the implement gate | A concept session lives for hours or days. The default branch keeps moving |
 | [templates-attachments.md](templates-attachments.md) | Concept templates, part 12 of 16: Shared systems — attachments | Every field marked `textarea[data-attachable]` — the feedback dock (general, |
 | [templates-common.md](templates-common.md) | Concept templates, part 01 of 16: Overview, UI locale, common structure | Three **templates** (layout modes) cover every concept use case. A template is |

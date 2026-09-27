@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
-import { isStale, readStore } from "./ss.concept.resume.js";
+import { isStale, readStore, storeDirFor } from "./ss.concept.resume.js";
 
 // #426 — a concept opened 2026-09-20 11:32 with a draft saved at 22:03 and a
 // journal restore at 14:50 the next day vanished on a session restart at
@@ -130,5 +130,61 @@ describe("dead bridge, old open — the hook keeps a live concept and announces 
     expect(r.stdout).toContain("port 1");
     expect(r.stdout).toContain(p.store);
     expect(r.stdout).toContain("no activity for more than 24 h");
+  });
+});
+
+// #563: the completion card resolves the store from the card's cwd, not from
+// the hook's own process.cwd().
+describe("storeDirFor honours an explicit project root", () => {
+  test("root wins over the process cwd", () => {
+    const root = path.join(os.tmpdir(), "some-project");
+    expect(storeDirFor("docs/concepts/2026-09-25-x.html", root)).toBe(path.join(root, ".claude", "concepts", "2026-09-25-x"));
+  });
+});
+
+// #555: a paused concept is parked, not abandoned — never pruned, never
+// relaunched; the hook prints a one-line hint instead. A submission sitting
+// unprocessed in the store still takes the recovery path.
+describe("a paused concept — hint, no relaunch, no prune (#555)", () => {
+  const pause = (stateFile) => {
+    const s = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+    fs.writeFileSync(stateFile, JSON.stringify({ ...s, paused_at: iso(40 * H) }));
+  };
+
+  test("isStale is false for a paused state, whatever its age", () => {
+    expect(isStale({ started_at: iso(30 * 24 * H), paused_at: iso(30 * 24 * H) })).toBe(false);
+  });
+
+  test("a paused state yields only the hint — no python, no CronCreate, file kept", () => {
+    const p = project({ startedAgo: 48 * H, savedAgo: 48 * H });
+    try {
+      pause(p.stateFile);
+      const { status, stdout } = runHook(p);
+      expect(status).toBe(0);
+      expect(stdout).toMatch(/Paused \/auto-concept page/);
+      expect(stdout).toContain("Resume from pause");
+      expect(stdout).not.toContain("concept-server.py");
+      expect(stdout).not.toContain("CronCreate");
+      expect(stdout).not.toMatch(/PRUNED/);
+      expect(fs.existsSync(p.stateFile)).toBe(true);
+    } finally {
+      fs.rmSync(p.cwd, { recursive: true, force: true });
+      fs.rmSync(p.home, { recursive: true, force: true });
+    }
+  });
+
+  test("a paused state with an unprocessed submission still recovers it", () => {
+    const p = project({ startedAgo: 48 * H, savedAgo: 1 * H });
+    try {
+      pause(p.stateFile);
+      fs.writeFileSync(path.join(p.store, "state.json"), JSON.stringify({ decisions: JSON.stringify({ submitted: true }), version: 4, saved_at: iso(1 * H) }));
+      const { stdout } = runHook(p);
+      expect(stdout).not.toMatch(/Paused \/auto-concept page/);
+      expect(stdout).toContain("concept-server.py");
+      expect(stdout).toMatch(/delete `paused_at`/);
+    } finally {
+      fs.rmSync(p.cwd, { recursive: true, force: true });
+      fs.rmSync(p.home, { recursive: true, force: true });
+    }
   });
 });

@@ -2144,6 +2144,15 @@ nothing after the closing `---`.
 If the concept is part of a larger task (e.g. called mid-flow from another
 skill), skip the card and return control — the parent skill renders its own.
 
+### 6c. Pause and resume (#555)
+
+The user pauses in chat ("pausieren", "machen wir später weiter") → **pause**,
+not close-out: stop the pulser, the waker, the backstop cron and the bridge,
+mark `concept-active.json` with `paused_at`, keep page, decisions and store,
+end with the `paused` card (no `concept` field). Resume only when a prompt
+continues this concept: relaunch on the same port, re-arm, drop `paused_at`.
+Order, commands and the state-file rewrite: `deep-knowledge/pause-resume.md`.
+
 ## Smart Trigger Rules
 
 The auto-concept skill should be **auto-suggested** (not auto-triggered) when:

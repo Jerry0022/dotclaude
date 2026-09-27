@@ -10,6 +10,7 @@ import {
   releasedPrefix,
   titlePrefixFor,
   titleInstruction,
+  conceptUrl,
 } from "./mode-state.js";
 
 // The sidebar title names the state the last card left the session in. The
@@ -202,6 +203,58 @@ describe("titlePrefixFor", () => {
       } finally {
         rmSync(cwd, { recursive: true, force: true });
       }
+    }
+  });
+
+  // #563: the open was more than 24 h ago, but the durable store shows recent
+  // activity (a save) or a typed draft — the same last-activity rule as the
+  // resume hook (#426), so the card does not declare a live concept dead.
+  test("an old concept-active.json with recent store activity or a draft still counts as an open concept", () => {
+    const old = new Date(Date.now() - 48 * 3600_000).toISOString();
+    const stores = [
+      { "state.json": { saved_at: new Date().toISOString(), decisions: "{}" } },
+      { "state.json": { saved_at: old, decisions: "{}" }, "drafts/a.json": { ts: old, state: { "text:q1": "noch offen" } } },
+    ];
+    for (const files of stores) {
+      const cwd = mkdtempSync(join(tmpdir(), "devops-title-store-"));
+      try {
+        mkdirSync(join(cwd, ".claude", "concepts", "x", "drafts"), { recursive: true });
+        writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: old }));
+        for (const [rel, body] of Object.entries(files)) writeFileSync(join(cwd, ".claude", "concepts", "x", rel), JSON.stringify(body));
+        expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(files))
+          .toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+      }
+    }
+  });
+
+  // #563: a card that carries a `concept` field asserts the page is open, so
+  // its link resolves whatever the age of the open.
+  test("conceptUrl resolves the link for an old state when the card carries a concept field", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "devops-title-url-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date(Date.now() - 48 * 3600_000).toISOString() }));
+      expect(conceptUrl(cwd, { phase: "waiting" })).toBe("http://localhost:4321/docs/concepts/x.html");
+      expect(conceptUrl(cwd, undefined)).toBe("");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  // #555: a paused concept has no bridge — no link, no compass; the card's own
+  // outcome (the `paused` variant of the pausing turn) owns the title.
+  test("a paused concept-active.json neither owns the title nor yields a link", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "devops-title-paused-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString(), paused_at: new Date().toISOString() }));
+      expect(titlePrefixFor({ variant: "paused", cwd }, deps)).toBe(SESSION_PREFIX.paused);
+      expect(conceptUrl(cwd, undefined)).toBe("");
+      expect(conceptUrl(cwd, { phase: "waiting" })).toBe("");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
     }
   });
 
