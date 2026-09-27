@@ -134,6 +134,8 @@ function eachEntry(issues, path, arr, check) {
 }
 
 const VALIDATION_STATUS = ["met", "partial", "unmet"];
+/** Mirrors WAITS_ON in hooks/lib/validation-gaps.js. */
+const VALIDATION_WAITS_ON = ["user", "deploy", "external", "pending"];
 const PENDING_KINDS = ["agent", "task", "workflow"];
 const CONCEPT_PHASES = ["waiting", "iterating", "implementing"];
 
@@ -185,10 +187,11 @@ export function validateCardInput(params) {
     : null);
 
   eachEntry(issues, "validation", params.validation, (v) =>
-    !isObj(v) ? "must be { requirement, status?, evidence? }"
+    !isObj(v) ? "must be { requirement, status, evidence?, waitsOn? }"
     : !isStr(v.requirement) ? "requirement must be a string"
     : v.status !== undefined && !VALIDATION_STATUS.includes(v.status) ? `status must be one of ${VALIDATION_STATUS.join("|")}`
     : v.evidence !== undefined && !isStr(v.evidence) ? "evidence must be a string"
+    : v.waitsOn !== undefined && !VALIDATION_WAITS_ON.includes(v.waitsOn) ? `waitsOn must be one of ${VALIDATION_WAITS_ON.join("|")}`
     : null);
 
   eachEntry(issues, "userTest", params.userTest, (u) => (isStr(u) ? null : "must be a string"));
@@ -257,7 +260,7 @@ export function formatIssues(issues) {
  */
 export const CARD_FIELD_REFERENCE =
   'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
-  'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
+  'validation: [{ requirement, status: met|partial|unmet, evidence, waitsOn?: user|deploy|external|pending }] · ' +
   'userFinalTest: [string | { action, afterDeployment }] · open: [string | { text, reply }] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 

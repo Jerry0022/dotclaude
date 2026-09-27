@@ -601,6 +601,8 @@ See `deep-knowledge/call-examples.md` for the three reference payloads
 For intermediate merges: no tag, no release notes, no version commit —
 the tool automatically skips tag/release creation when `base` is not `main`.
 
+**Requirement gate.** Pass `validation` (the card's items). A gap that is still your own work — no status, partial/unmet without `waitsOn`, or `waitsOn: "pending"` — returns `reason: "validation-gaps"` with nothing pushed: close the listed gaps, then call `ship_release` again. `waitsOn` user/deploy/external may ship; `acceptGaps: true` only when the user said to ship as-is.
+
 The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, **alpha channel tag** (main only), GitHub release deferred to promotion.
 
 Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeSha, mergeVerified?, mergeWarning?, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, postMergeError?, titleClamped }`.

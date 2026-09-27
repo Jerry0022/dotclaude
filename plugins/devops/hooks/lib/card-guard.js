@@ -25,6 +25,12 @@
  *        `validation` field rides on the card; the MCP sets the attested flag
  *        when it is populated. This is the "did we build the RIGHT thing" half;
  *        the test gate (stop.flow.browsertest) is the "did we build it right".
+ *        4b. Validation gaps — once a card exists, block when a requirement
+ *        is still Claude's own work: no status, or partial/unmet without a
+ *        `waitsOn` (user · deploy · external · pending), or `waitsOn: pending`
+ *        while no background task is open any more (the result is in, the
+ *        gap is owed). "0/3 Anforderungen" on an otherwise green card was the
+ *        norm before — nothing looked at the status (lib/validation-gaps.js).
  *     5. Pending — once a card exists, block when background subagents / tasks
  *        are still running and the card did not declare them (`pending`). Open
  *        work is proven from the transcript (lib/pending-tasks.js), so the card
@@ -106,6 +112,7 @@ function isSubstantialAnswer(transcriptContent, threshold = SUBSTANTIAL_CHARS) {
 /** A user-role entry that opens a new turn — shared with the other transcript
  *  walkers in lib/skill-invocations.js. */
 const { isPromptEntry } = require('./skill-invocations');
+const { classify } = require('./validation-gaps');
 
 /** The Desktop widget tool — loaded as `mcp__visualize__show_widget`, or under
  *  a connector-id namespace when it arrives deferred. */
@@ -388,6 +395,10 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     not the user. Never enforce the card.
  * @param {boolean} [s.validationPending]  — a code change owes a validation attestation
  * @param {boolean} [s.validationAttested] — the card was rendered with a `validation` field
+ * @param {Array<{requirement, status, waitsOn, evidence}>} [s.validationOpen] — the card's not-met
+ *                                     requirements (MCP flag); aborted/paused cards write none
+ * @param {boolean} [s.openTasksKnown] — false when the transcript could not be read, so
+ *                                     `openTaskNames` says nothing about background work
  * @param {string[]} [s.openTaskNames] — background subagents / tasks still running at
  *                                     turn end (names only — ids stay internal)
  * @param {boolean} [s.pendingAttested] — the card was rendered with a `pending` field
@@ -425,7 +436,7 @@ function lastUserEntryIsNotification(transcriptContent) {
  */
 function decideAction({
   workHappened, cardRendered, stopHookActive, substantial, silent,
-  validationPending, validationAttested, openTaskNames, pendingAttested, pluginRoot,
+  validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
   widgetFile, widgetCalled, guideActive,
@@ -559,6 +570,23 @@ function decideAction({
     };
   }
 
+  // Gate 4b — a requirement that waits on nobody is Claude's own gap: close
+  // it now instead of reporting it. The open-task count is transcript-proven,
+  // so `waitsOn: "pending"` cannot outlive the work it names.
+  if (cardRendered && Array.isArray(validationOpen) && validationOpen.length > 0) {
+    // An unreadable transcript proves nothing about background work — then
+    // `pending` is taken at its word instead of declared finished.
+    const openTasks = openTasksKnown === false ? null : (openTaskNames || []).length;
+    const { gaps } = classify(validationOpen, { openTasks });
+    if (gaps.length > 0) {
+      return {
+        action: 'block',
+        resetFlags: false,
+        reason: buildValidationGapsReason(gaps, openTaskNames || []),
+      };
+    }
+  }
+
   // Gate 5 — a card rendered while background subagents / tasks are STILL
   // running must declare them. Without `pending`, the card's CTA asks the user
   // to act ("SHIP or CHANGE?", "All DONE") on results that do not exist yet.
@@ -611,7 +639,7 @@ function offlineRendererPath(pluginRoot) {
  */
 const CARD_FIELD_REFERENCE =
   'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
-  'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
+  'validation: [{ requirement, status: met|partial|unmet, evidence, waitsOn?: user|deploy|external|pending }] · ' +
   'userFinalTest: [string | { action, afterDeployment }] · open: [string | { text, reply }] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 
@@ -745,6 +773,33 @@ function buildWidgetSkippedReason(widgetFile) {
     'verbatim, as the LAST action — no text after it. If the tool does not exist',
     'in this session, output the visible title line instead and end the turn.',
     NO_OUTPUT_NUDGE_REPLY,
+  ].join('\n');
+}
+
+function buildValidationGapsReason(gaps, openTasks) {
+  const why = {
+    'no-status': 'no status',
+    'open': 'partial/unmet, waits on nobody',
+    'no-evidence': 'waitsOn without evidence — name what exactly it waits for',
+    'pending-done': 'waitsOn "pending", but no background task is open any more — read its result and integrate it',
+  };
+  const lines = gaps.slice(0, 6).map(g => `  - ${g.requirement} (${why[g.reason]})`);
+  if (gaps.length > 6) lines.push(`  - +${gaps.length - 6} more`);
+  return [
+    '[stop.flow.guard] Requirement gaps — the card reports requirements that are still your own work:',
+    ...lines,
+    '',
+    'Do not end the turn on them. Close each gap NOW (implement, test, integrate',
+    'the finished background result), then re-render the card with the real status.',
+    'A requirement may stay partial/unmet only with `waitsOn`:',
+    '  user     — the user must act or decide (listen, click, approve, choose)',
+    '  deploy   — verifiable only after ship / deploy / restart',
+    '  external — a third party (service down, quota, a review by others)',
+    '  pending  — your own background agent/workflow is still running' +
+      (openTasks.length ? ` (open now: ${openTasks.slice(0, 3).join(', ')})` : ' (none is open now)'),
+    'Every item needs a status. If the user explicitly narrowed the scope, drop the',
+    'requirement or set waitsOn "user" and say so in the evidence. If the gap truly',
+    'cannot be closed, ask the user (AskUserQuestion) instead of reporting done.',
   ].join('\n');
 }
 
