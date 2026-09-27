@@ -499,6 +499,22 @@ describe("decideAction — validation gate", () => {
       expect(d.action).toBe("pass");
     });
 
+    test("several failing gates are reported in ONE block, numbered", () => {
+      const d = decideAction({ ...base, validationAttested: false, openTaskNames: ["redteam"], pendingAttested: false,
+        validationOpen: [{ requirement: "Tooltip", status: "partial", waitsOn: null }] });
+      expect(d.action).toBe("block");
+      expect(d.reason).toMatch(/3 card gates failed/);
+      expect(d.reason).toMatch(/Validation required/);
+      expect(d.reason).toMatch(/Requirement gaps/);
+      expect(d.reason).toMatch(/redteam/);
+      expect(d.reason).toMatch(/\(3\/3\)/);
+    });
+
+    test("a single failing gate keeps its own reason text", () => {
+      const d = decideAction({ ...base, validationOpen: [{ requirement: "R", status: "unmet", waitsOn: null }] });
+      expect(d.reason.startsWith("[stop.flow.guard] Requirement gaps")).toBe(true);
+    });
+
     test("stop_hook_active yields — the gate blocks only once", () => {
       const d = decideAction({ ...base, stopHookActive: true, validationOpen: [{ requirement: "R", status: "unmet", waitsOn: null }] });
       expect(d.action).toBe("pass");

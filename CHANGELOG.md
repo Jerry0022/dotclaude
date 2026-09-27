@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.220.1] — 2026-09-27
+
+### Changed
+- **Post-ship cleanup is back on the age gate, 30/30 days.** It runs only after a ship and only once a removable leftover is older than `autoCleanGateDays` (30). It then removes every removable leftover older than `autoCleanMinAgeDays`, whose default is back to 30 (was 7). This reverts the immediate removal from 0.217.0 (#571). A session worktree now keeps its intermediate state for a month. Worktree removal never touches conversations: transcripts follow Claude Code's own `cleanupPeriodDays`. The sub-agent branch detection via merged PR heads and the same-commit remote twin from 0.217.0 stay (#572).
+
+### Removed
+- **The daily SessionStart background cleanup (`ss.git.hygiene`, `hygiene-bg.js`).** The unlanded-work warning on the ship card stays: it still names gone-upstream branches and abandoned session worktrees with commits that have no PR (#573).
+
+## [0.220.0] — 2026-09-27
+
+### Added
+- **Agent cards reach the user.** A replay of three days of transcripts found that only 2 of 95 agent cards were shown. `pre.agent.relay` now holds back the first tool call after an agent launch whose card was never relayed, and hands the card back to Claude. `stop.agent.relay` blocks the turn end once for the same case. Both fire once per launch and are silent in subagents. Rendering the completion widget counts as shown, so the Quiet style is unaffected.
+- **`devops:scout` agent (sonnet · low).** A read-only locator for "where/how is X?" sweeps over more than ~10 files. It returns the answer first, then `path:line` evidence. It replaces `Explore` in the delegation policy, skills and evals.
+- **`pre.agent.model` hook.** An Agent spawn that would silently inherit the session model (no `model` of its own, or `model: inherit`) is refused once with the reason. Repeating the identical spawn goes through, so keeping the session model is a deliberate choice. `pre.agent.announce` skips the card for a spawn that will be refused.
+
+### Changed
+- **The delegation policy aims at agents in 30–70 % of implementation sessions.** It names three signs of too little delegation: the suite re-run inline, 10+ files touched, and a continuation redoing sweeps. Every spawn now names its model. `haiku` is no longer recommended: it is cheaper but not better at research. Effort cannot be set per spawn, so `low` lives in the frontmatter of `scout` and `gamer`.
+
+## [0.219.0] — 2026-09-27
+
+### Changed
+- **One Stop block names every card fault.** When the title, content, validation, requirement-gap and pending gates of `stop.flow.guard` fail together, they are reported in one numbered block, so Claude fixes all of them in a single re-render. Before, only the first fault was blocked and the rest passed unseen.
+- **`ship_release` checks requirement gaps even when the caller passes no `validation`.** The completion card now also stores its open requirements per checkout. A ship without `validation` reads that copy (at most 12 h old) and reports `validationSource: "card"`. An explicit `validation` always wins. Git-Bash and native Windows paths map to the same checkout.
+
 ## [0.218.0] — 2026-09-27
 
 ### Added

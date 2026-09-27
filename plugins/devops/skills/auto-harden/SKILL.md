@@ -69,7 +69,7 @@ Read its result block (`tier`, `done`, `open`, `needs-decision`, `ship`) and
 **ignore `ship`** — this skill never ships; its caller does. `open` and
 `needs-decision` items feed Step 10. **Inline shortcut:** when your own tier
 check lands on Inline (one domain, ≤ ~5 files), apply the fixes yourself
-without loading auto-agents. The read-only helpers (Explore scans, the qa and
+without loading auto-agents. The read-only helpers (scout scans, the qa and
 redteam reviewers, code-simplifier) stay direct `Agent` spawns — they
 implement nothing. The ship path never loads auto-agents.
 
@@ -117,7 +117,7 @@ Scan `$ARGUMENTS` for:
 Runs instead of Steps 2–10 when `/do-ship` calls with `--invoked-by=ship`
 (approved concept item "Harden beim Ship, diff-eng wie Polish"). Every ship
 gets the cheap, mechanical half of a harden pass on exactly what it lands,
-without the full pass's cost (Explore/qa/redteam agents, test plan, coverage
+without the full pass's cost (scout/qa/redteam agents, test plan, coverage
 writing). Mirrors `/auto-polish` § Rules-only path.
 
 1. **Scope** = the files /do-ship passed, and inside them only the added or
@@ -206,7 +206,7 @@ Two things happen in parallel — do NOT block on either:
 ## Step 4 — Findings Scan (parallel research)
 
 While qa runs in background, scan `$SCOPE_FILES` for actionable issues.
-Spawn ONE `Explore` agent per concern (parallel — single message, multiple
+Spawn ONE `devops:scout` agent per concern (parallel — single message, multiple
 Agent calls):
 
 1. **Bug-hunt scan** — search for: TODO/FIXME/XXX/HACK comments referencing
@@ -231,7 +231,7 @@ Agent calls):
    `$SCOPE_FILES`, check whether it's referenced by ANY test file. Flag
    uncovered functions whose static complexity > trivial.
 
-Each Explore agent returns a short findings list (file:line + 1-line
+Each scout agent returns a short findings list (file:line + 1-line
 description + suggested action category).
 
 ## Step 5 — Bug-Fix Phase

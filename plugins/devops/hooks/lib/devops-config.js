@@ -46,15 +46,15 @@ const SCHEMA = Object.freeze({
   cleanup: Object.freeze({
     autoClean: Object.freeze({
       type: 'boolean', default: true,
-      doc: 'After a successful ship (and once a day at session start), remove leftovers that provably landed on their own.',
+      doc: 'After a successful ship, remove old leftovers that provably landed on their own (only once the age gate opens).',
     }),
     autoCleanGateDays: Object.freeze({
       type: 'integer', default: 30, min: 1, max: 3650,
-      doc: 'Deprecated (#571), ignored: the automatic cleanup no longer waits for an old leftover.',
+      doc: 'The automatic cleanup only runs once a removable leftover is older than this many days.',
     }),
     autoCleanMinAgeDays: Object.freeze({
-      type: 'integer', default: 7, min: 1, max: 3650,
-      doc: 'Session worktrees are removed after this many idle days; branches without a checkout go at once, sub-agent worktrees after 2 h.',
+      type: 'integer', default: 30, min: 1, max: 3650,
+      doc: 'The automatic cleanup removes leftovers older than this; younger ones only via the cleanup page.',
     }),
     nudge: Object.freeze({
       type: 'boolean', default: true,

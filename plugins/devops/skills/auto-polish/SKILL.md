@@ -63,7 +63,7 @@ with `--mode=background` under `--autonomous`, else `--mode=interactive`.
 Read its result block (`tier`, `done`, `open`, `needs-decision`, `ship`) and
 **ignore `ship`** — this skill never ships. **Inline shortcut:** when your own
 tier check lands on Inline (one domain, ≤ ~5 files), apply the changes
-yourself without loading auto-agents. Read-only helpers (Explore scans, qa,
+yourself without loading auto-agents. Read-only helpers (scout scans, qa,
 redteam, designer consults) stay direct `Agent` spawns. The rules-only path
 never loads auto-agents.
 
@@ -166,7 +166,7 @@ In parallel — do NOT block:
 
 ## Step 4 — Findings Scan (parallel research)
 
-Spawn parallel Explore agents (single message, multiple Agent calls):
+Spawn parallel `devops:scout` agents (single message, multiple Agent calls):
 
 1. **State-visuals gaps** — same as `/auto-harden` Step 4 #3:
    interactive elements missing :hover, :focus, :focus-visible, :disabled,
@@ -251,7 +251,7 @@ polish pass (agents, browser, viewports).
    profile for the files it names (how a CLI or plugin repo checks its own UI
    sources).
 2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4, R5, R6),
-   inline — no Explore agents, no browser, no screenshots. Runtime halves
+   inline — no scout agents, no browser, no screenshots. Runtime halves
    are never attempted here; they are listed once as
    `skipped: runtime rules (full /auto-polish)`.
 3. **Never fix.** Return a findings list, one entry per finding:

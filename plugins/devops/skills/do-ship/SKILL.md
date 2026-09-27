@@ -601,7 +601,7 @@ See `deep-knowledge/call-examples.md` for the three reference payloads
 For intermediate merges: no tag, no release notes, no version commit —
 the tool automatically skips tag/release creation when `base` is not `main`.
 
-**Requirement gate.** Pass `validation` (the card's items). A gap that is still your own work — no status, partial/unmet without `waitsOn`, or `waitsOn: "pending"` — returns `reason: "validation-gaps"` with nothing pushed: close the listed gaps, then call `ship_release` again. `waitsOn` user/deploy/external may ship; `acceptGaps: true` only when the user said to ship as-is.
+**Requirement gate.** Pass `validation` (the card's items; omitted → the last card of this checkout, ≤ 12 h, is checked). A gap that is still your own work — no status, partial/unmet without `waitsOn`, or `waitsOn: "pending"` — returns `reason: "validation-gaps"` with nothing pushed: close the listed gaps, then call `ship_release` again. `waitsOn` user/deploy/external may ship; `acceptGaps: true` only when the user said to ship as-is.
 
 The tool handles: commit (optional), rebase verification, push (explicit force-with-lease after rebase), PR create (or reuse with mergeability check), **pre-merge CI checks gate (waits for green)**, **pre-merge rebase re-check (closes the checks-window race)**, merge (squash or merge commit), **post-merge tree guard**, **alpha channel tag** (main only), GitHub release deferred to promotion.
 
@@ -1212,9 +1212,9 @@ ship_hygiene({ cwd: "<cwd>", trigger: "ship", lang: "de" })
 
 (`trigger: "promote"` for a promotion-only run — `modes/promote.md` Step 4.)
 The tool removes leftover branches and session worktrees whose content
-provably landed — after a ship only (the SessionStart run does the same once a
-day): branches without a checkout at once, sub-agent worktrees after 2 hours
-idle, Desktop session worktrees after 7 idle days. It flags unlanded work on a
+provably landed — only after a ship, only once one of them is older than the
+age gate (default 30 days), and then every removable one older than 30 days;
+younger leftovers stay for the page. It flags unlanded work on a
 `[gone]` branch or a detached session worktree, and decides whether the
 cleanup page is worth suggesting (more than 50 leftovers, at most once a
 week). Pass its card lines through unchanged: `card.tests` → append to

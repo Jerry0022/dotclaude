@@ -42,7 +42,7 @@ describe("devops-config — resolution project > global > default", () => {
     const { main } = fakeClone();
     const { values, sources } = cfg.load(main, { home: mkTmp("cfg-home-") });
     expect(values.cleanup).toEqual({
-      autoClean: true, autoCleanGateDays: 30, autoCleanMinAgeDays: 7,
+      autoClean: true, autoCleanGateDays: 30, autoCleanMinAgeDays: 30,
       nudge: true, nudgeThreshold: 50, nudgeCooldownDays: 7,
     });
     expect(sources["cleanup.nudgeThreshold"]).toBe("default");

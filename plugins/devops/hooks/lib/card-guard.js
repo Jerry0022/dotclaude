@@ -5,7 +5,9 @@
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
  *
- *   Stacked gates, all one-block (stop_hook_active yields):
+ *   Stacked gates, all one-block (stop_hook_active yields). Gates 1–2 return
+ *   on the first hit (no card / card not shown); gates 3–5 are collected and
+ *   reported together in one block, so one re-render can fix all of them:
  *     1. Completion card — block when work happened but no card was rendered.
  *        1b. (#449) block when the card was rendered but never shown after
  *        its last render (no ✨ marker text, no card widget). Output AFTER a
@@ -536,38 +538,34 @@ function decideAction({
     }
   }
 
+  // Gates 3–5 are collected, not returned one by one: the Stop hook blocks
+  // only once per turn (stop_hook_active yields), so a first failing gate used
+  // to hide every later one — a card blocked for its title then passed with
+  // an undeclared background task or an open requirement gap.
+  const failures = [];
+
   // Gate 3 — card content quality (design § 5.1 - § 5.3): title status
   // words, result-line count/subject, points count. Only checked once a card
   // exists and its text is available.
   if (cardRendered && cardText) {
     const title = extractCardTitle(cardText);
     const statusWord = titleStatusWordViolation(title);
-    if (statusWord) {
-      return { action: 'block', resetFlags: false, reason: buildTitleStatusWordReason(statusWord) };
-    }
+    if (statusWord) failures.push(buildTitleStatusWordReason(statusWord));
 
     const resultLines = extractResultLines(cardText);
     const resultViolation = resultLinesViolation(resultLines);
-    if (resultViolation) {
-      return { action: 'block', resetFlags: false, reason: buildResultLinesReason(resultViolation) };
-    }
+    if (resultViolation) failures.push(buildResultLinesReason(resultViolation));
 
     const heading = (cardText.match(/^##\s+.*$/m) || [])[0] || '';
     const points = extractPoints(cardText);
     const pointViolation = pointsViolation(points, heading);
-    if (pointViolation) {
-      return { action: 'block', resetFlags: false, reason: buildPointsReason(pointViolation) };
-    }
+    if (pointViolation) failures.push(buildPointsReason(pointViolation));
   }
 
   // Gate 4 — validation must be attested for a code-change turn. Only checked
   // once a card exists, since the `validation` field is part of the card.
   if (cardRendered && active && validationPending && !validationAttested) {
-    return {
-      action: 'block',
-      resetFlags: false,
-      reason: buildValidationReason(),
-    };
+    failures.push(buildValidationReason());
   }
 
   // Gate 4b — a requirement that waits on nobody is Claude's own gap: close
@@ -578,13 +576,7 @@ function decideAction({
     // `pending` is taken at its word instead of declared finished.
     const openTasks = openTasksKnown === false ? null : (openTaskNames || []).length;
     const { gaps } = classify(validationOpen, { openTasks });
-    if (gaps.length > 0) {
-      return {
-        action: 'block',
-        resetFlags: false,
-        reason: buildValidationGapsReason(gaps, openTaskNames || []),
-      };
-    }
+    if (gaps.length > 0) failures.push(buildValidationGapsReason(gaps, openTaskNames || []));
   }
 
   // Gate 5 — a card rendered while background subagents / tasks are STILL
@@ -594,11 +586,11 @@ function decideAction({
   // talked out of. Independent of `active`: launching an agent is itself work.
   const open = openTaskNames || [];
   if (cardRendered && open.length > 0 && !pendingAttested) {
-    return {
-      action: 'block',
-      resetFlags: false,
-      reason: buildPendingReason(open),
-    };
+    failures.push(buildPendingReason(open));
+  }
+
+  if (failures.length > 0) {
+    return { action: 'block', resetFlags: false, reason: combineReasons(failures) };
   }
 
   // Line budget (design § 2.4 / § 5.4) — reported, never enforced here.
@@ -773,6 +765,19 @@ function buildWidgetSkippedReason(widgetFile) {
     'verbatim, as the LAST action — no text after it. If the tool does not exist',
     'in this session, output the visible title line instead and end the turn.',
     NO_OUTPUT_NUDGE_REPLY,
+  ].join('\n');
+}
+
+/**
+ * One block reason for several failed gates. A single failure keeps its own
+ * text unchanged; several are numbered under one header so ONE re-render
+ * fixes all of them — the next stop cycle yields and would not ask again.
+ */
+function combineReasons(reasons) {
+  if (reasons.length === 1) return reasons[0];
+  return [
+    `[stop.flow.guard] ${reasons.length} card gates failed — fix ALL of them in ONE re-render (the next stop does not ask again):`,
+    ...reasons.map((r, i) => `\n(${i + 1}/${reasons.length}) ${r}`),
   ].join('\n');
 }
 

@@ -272,7 +272,7 @@ line, so the tier decision itself stays visible even without a card:
 | Card | Who renders it | When |
 |---|---|---|
 | **Plan card** 🗺️ | `node {PLUGIN_ROOT}/scripts/agent-card.js` (JSON on stdin, see the script header) | Full ceremony: in the Step 3 plan, or — where Step 3 asks no confirmation — once when execution starts. Again only when the run changes shape (a wave added or dropped, a scope-cut, a sub-split) — the full card, not a diff. |
-| **Spawn card** 🤖 | `pre.agent.announce`, for every launch | Every tier that spawns. Agents launched in one message each hand you a card that grows by one row — show **only the last one** of the message, verbatim; it lists them all. A prose summary ("vier Agenten setzen … um") never replaces it. |
+| **Spawn card** 🤖 | `pre.agent.announce`, for every launch | Every tier that spawns. Agents launched in one message each hand you a card that grows by one row — show **only the last one** of the message, verbatim; it lists them all. A prose summary ("vier Agenten setzen … um") never replaces it. Unshown, the next tool call is held back once (`pre.agent.relay`). |
 
 Relay both verbatim, also under the Quiet output style. Neither is typed by
 hand — the plan card comes from the script, the spawn card from the hook,

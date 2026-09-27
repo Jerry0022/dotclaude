@@ -228,7 +228,9 @@ must act or decide), `deploy` (verifiable only after ship/deploy/restart),
 still running — checked against the transcript, stale once it finished), and
 its `evidence` must name what exactly it waits for.
 Anything else is Claude's own gap: `stop.flow.guard` (Gate 4b) blocks the turn
-once to close it, and `ship_release` refuses to merge over it. When a gap truly
+once to close it (together with every other failing card gate, in one block),
+and `ship_release` refuses to merge over it — also when the caller passes no
+`validation`: then the last card rendered for the checkout (≤ 12 h) counts. When a gap truly
 cannot be closed, ask the user instead of reporting done. The card counts
 "2/3 Anforderungen · 1 wartet auf dich" — the ◐/✗ glyph only for own gaps.
 

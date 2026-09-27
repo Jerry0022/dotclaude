@@ -80,4 +80,65 @@ function openItems(validation) {
     }));
 }
 
-module.exports = { WAITS_ON, GAP_EXEMPT_VARIANTS, classify, openItems };
+// ---------------------------------------------------------------------------
+// Per-checkout copy for ship_release. The ship MCP server never learns the
+// session id, so the session flag is out of its reach; a caller that ships
+// without passing `validation` (do-run backlog, auto-concept, a ship typed
+// right after a card) would otherwise skip the gate entirely. The card writes
+// the not-met items keyed by its cwd too; ship_release reads them when the
+// caller passed none. An explicit `validation` always wins.
+// ---------------------------------------------------------------------------
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+
+/** A card older than this no longer speaks for the checkout. */
+const REPO_FLAG_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+function normalizeCwd(cwd) {
+  let raw = String(cwd);
+  // The card and the ship get the cwd from different writers: a Git-Bash
+  // `/c/Users/…` and a native `C:\Users\…` must land on the same key.
+  if (process.platform === 'win32') raw = raw.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:');
+  let p = path.resolve(raw).replace(/\\/g, '/').replace(/\/+$/, '');
+  if (process.platform === 'win32') p = p.toLowerCase();
+  return p;
+}
+
+function repoFlagPath(cwd, dir = os.tmpdir()) {
+  const hash = crypto.createHash('sha1').update(normalizeCwd(cwd)).digest('hex').slice(0, 16);
+  return path.join(dir, 'dotclaude-devops-validation-open-cwd-' + hash);
+}
+
+/** Write (items non-empty) or remove (empty) the checkout's open-requirement copy. */
+function writeRepoOpen(cwd, items, dir) {
+  if (!cwd) return;
+  const file = repoFlagPath(cwd, dir);
+  try {
+    if (Array.isArray(items) && items.length) {
+      fs.writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), cwd: normalizeCwd(cwd), items }));
+    } else {
+      fs.unlinkSync(file);
+    }
+  } catch { /* advisory: a missing copy only disables the ship fallback */ }
+}
+
+/** The last card's not-met items for this checkout, or null when none / stale / unreadable. */
+function readRepoOpen(cwd, { dir, maxAgeMs = REPO_FLAG_MAX_AGE_MS, now = Date.now() } = {}) {
+  if (!cwd) return null;
+  try {
+    const data = JSON.parse(fs.readFileSync(repoFlagPath(cwd, dir), 'utf8'));
+    if (!data || !Array.isArray(data.items)) return null;
+    if (now - Date.parse(data.at) > maxAgeMs) return null;
+    return data.items;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = {
+  WAITS_ON, GAP_EXEMPT_VARIANTS, REPO_FLAG_MAX_AGE_MS,
+  classify, openItems, repoFlagPath, writeRepoOpen, readRepoOpen,
+};
