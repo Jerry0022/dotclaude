@@ -918,6 +918,55 @@ describe("ship_release — #398 post-merge truth contract", () => {
     expect(res.tagVerified).toBe(false);
     expect(res.tagError).toMatch(/tag push failed after 2 attempts/);
   });
+
+  // #566: a permission refusal fails the same on every retry — one attempt,
+  // then a copy-ready hand-off for the owner, the merge untouched.
+  test("a tag push refused with 403 is not retried and hands the owner the tag commands", async () => {
+    createPathLsRemote();
+    let pushes = 0;
+    gitLib.gitStrict.mockImplementation((cmd) => {
+      if (cmd === "push origin alpha/v1.0.0") {
+        pushes += 1;
+        throw new Error("remote: Permission to o/r.git denied to bot. fatal: unable to access: The requested URL returned error: 403");
+      }
+      return "";
+    });
+    const res = await handler(params({ tagVerifyAttempts: 4 }));
+    expect(pushes).toBe(1);
+    expect(res.success).toBe(true);
+    expect(res.merged).toBe("main");
+    expect(res.tagVerified).toBe(false);
+    expect(res.tagError).toMatch(/refused \(permission\) — not retried/);
+    const h = res.tagHandoff;
+    expect(h.permanent).toBe(true);
+    expect(h.commands).toEqual([
+      "git fetch origin main",
+      `git tag -a alpha/v1.0.0 ${res.mergeSha} -m '{"channel":"alpha","version":"1.0.0"}'`,
+      "git push origin alpha/v1.0.0",
+      "git ls-remote --tags origin alpha/v1.0.0",
+    ]);
+    expect(h.note).toMatch(/lightweight/);
+    expect(h.note).toMatch(/Everything up-to-date/);
+    expect(h.gates).toMatch(/promotion/);
+  });
+
+  test("a transient push failure keeps retrying and still carries a hand-off", async () => {
+    createPathLsRemote();
+    gitLib.gitStrict.mockImplementation((cmd) => {
+      if (cmd === "push origin alpha/v1.0.0") throw new Error("remote hung up");
+      return "";
+    });
+    const res = await handler(params({ tagVerifyAttempts: 2 }));
+    expect(res.tagHandoff.permanent).toBe(false);
+    expect(res.tagHandoff.commands).toHaveLength(4);
+  });
+
+  test("a successful tag push carries no hand-off", async () => {
+    createPathLsRemote();
+    const res = await handler(params());
+    expect(res.tagVerified).toBe(true);
+    expect(res.tagHandoff).toBeUndefined();
+  });
 });
 
 // A PR title a few characters over budget used to be a hard schema reject, and

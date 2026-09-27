@@ -10,6 +10,7 @@ import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } 
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
+import { isPermanentPushError, tagHandoff } from "../lib/tag-handoff.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 import { clampText } from "../../lib/soft-limits.js";
 import { readVersion } from "../lib/version.js";
@@ -569,6 +570,10 @@ export async function handler(params) {
       result.tagWarning =
         `PR merged into ${base}, but origin/${base} could not be fetched afterwards — ` +
         `alpha/${tag} was NOT created (it would point at a stale ref). Create it manually on the merge commit.`;
+      result.tagHandoff = tagHandoff({
+        channelTag: `alpha/${tag}`, channel: "alpha", version: tag.replace(/^v/, ""),
+        sha: result.mergeSha || null, base, permanent: false,
+      });
     } else if (!intermediate && tag) {
       const channelTag = `alpha/${tag}`;
       try {
@@ -600,10 +605,27 @@ export async function handler(params) {
           // shared with, or capped by, the checks wait or the merge (#398). A
           // push whose client side timed out after the ref landed is harmless
           // to repeat: pushing an identical existing tag is a no-op success.
+          // A refusal for permission reasons (#566) fails identically on every
+          // attempt — it ends the loop at once and goes to the owner hand-off.
+          let refused = null;
           const pushed = await retryUntil(
-            () => { gitArgs(["push", "origin", channelTag], { ...opts, timeout: NETWORK_TIMEOUT }); return true; },
+            () => {
+              try {
+                gitArgs(["push", "origin", channelTag], { ...opts, timeout: NETWORK_TIMEOUT });
+                return true;
+              } catch (e) {
+                if (!isPermanentPushError(e)) throw e;
+                refused = e;
+                return false;
+              }
+            },
             { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
           );
+          if (refused) {
+            const err = new Error(`tag push refused (permission) — not retried: ${refused.message?.slice(0, 200) || "unknown error"}`);
+            err.permanent = true;
+            throw err;
+          }
           if (!pushed.ok) throw new Error(`tag push failed after ${pushed.attempts} attempts: ${pushed.error?.message?.slice(0, 200) || "unknown error"}`);
           // Retry the verification: one negative read right after a push proves
           // nothing (replica lag), which is the #251 false-negative class.
@@ -623,6 +645,13 @@ export async function handler(params) {
         result.channel = "alpha";
         result.tagVerified = false;
         result.tagError = e.message?.slice(0, 200);
+        // The merge landed; the owner can still create the tag (#566). Drop the
+        // unpushed local tag so the hand-off's `git tag -a` also works in this checkout.
+        if (e.permanent || /tag push failed/.test(e.message || "")) gitTry(["tag", "-d", channelTag], opts);
+        result.tagHandoff = tagHandoff({
+          channelTag, channel: "alpha", version: tag.replace(/^v/, ""),
+          sha: result.mergeSha || null, base, permanent: !!e.permanent, error: e.message,
+        });
       }
       if (tagDefaulted) result.tagDefaulted = true;
 

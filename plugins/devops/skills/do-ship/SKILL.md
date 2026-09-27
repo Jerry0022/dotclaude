@@ -867,7 +867,7 @@ WAS requested, say why on the card as an `open` item (Step 6):
 | `$SHIP_LOCKOUT` / orchestrator arguments | "Promotion auf <channel> ausgesetzt — unbeaufsichtigter Lauf, bitte selbst anstoßen" |
 | Step 4d raised the deploy gate | "Promotion auf <channel> ausgesetzt — erst deployen, dann `promote <channel>`" |
 | intermediate ship (feature branch) | "Promotion erst nach dem Ship auf main" |
-| `tagSkipped` / `tagError` (no alpha tag) | "Promotion ausgesetzt — alpha-Tag fehlt (siehe Test-Punkt)" |
+| `tagSkipped` / `tagError` (no alpha tag) | "Promotion ausgesetzt — alpha-Tag fehlt (siehe Test-Punkt)"; with `tagHandoff` the owner-action item from `release-results.md` comes first |
 | no channel tags in the repo (no ring model) | "Kein Ring-Modell (keine Channel-Tags) — nichts zu promoten" |
 
 Otherwise follow `modes/promote.md` with these fixed inputs — its Step 2

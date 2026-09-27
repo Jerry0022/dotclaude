@@ -17,6 +17,11 @@ alone as a merge, `rebaseRequired` / `autoRebased`) stay in the skill.
 - `tagError` → tag creation/push failed after its own retries; the ship is still
   `success: true` (tag trouble never fails a landed merge), but the card must
   show the ring gap.
+- `tagHandoff` (with `tagError`) → the session could not push the tag; the owner
+  can (#566). Put it on the card as the FIRST `open` item, an owner action, not a
+  test: `{ text: "alpha/v<X.Y.Z> fehlt — Tag selbst anlegen (Befehle unten)", reply: "<tagHandoff.commands joined with newlines>" }`,
+  plus `tagHandoff.gates` as the reason when `permanent: true`. Never fold it into
+  "Promotion ausgesetzt". The block's format and rules: `release-flow.md` § owner hand-off.
 
 ## Other return shapes
 
