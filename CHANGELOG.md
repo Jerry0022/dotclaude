@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.218.0] — 2026-09-27
+
+### Added
+- **Larger work can wait for a near window reset.** Once the 5h window reaches the plan's threshold (Max 20x 90 %, Max 5x 80 %, Pro 70 %), the per-prompt budget nudge carries a `defer:` hint with the minutes to the reset. Before multi-file work Claude then asks once whether to start now, wait for the reset, or park the work as an issue. "After the reset" is the recommended answer when the reset is at most 60 min away. That choice arms a one-shot resume timer 5 min past the reset and pauses. The hint is omitted while the week is the tighter limit. It is separate from the card's pace-based yellow marker (`deep-knowledge/defer-to-reset.md`).
+- **`autonomous-resume-schedule.js --buffer <min>`** sets the minutes past the reset (0–60). The default stays 15 for unattended resumes.
+
 ## [0.217.0] — 2026-09-27
 
 ### Changed
