@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.217.0] — 2026-09-27
+
+### Changed
+- **Leftovers that provably landed are removed on the next ship, not after 30 days.** A branch without a checkout goes at once, a sub-agent worktree (`agent-*`) after 2 hours idle, a Desktop session worktree after `autoCleanMinAgeDays` (7) idle days. `autoCleanGateDays` is deprecated and ignored (#571).
+
+### Fixed
+- **Sub-agent branches of a squash-merged PR count as landed.** Every commit reachable from a merged PR head now proves a branch landed, so branches that were merged into the PR's branch before the squash are removed, together with their same-commit twin on origin (#572).
+
+### Added
+- **Unlanded work is flagged instead of forgotten.** A `[gone]` branch or a detached session worktree with commits that reached neither main nor a merged PR gets a ⚠ open item on the ship card. The new `ss.git.hygiene` hook runs the same cleanup once a day per repo in the background and shows its result at the next session start, so repos without ships get cleaned too (#573).
+
 ## [0.216.0] — 2026-09-27
 
 ### Added
