@@ -41,9 +41,9 @@ hand. Confirm the change in one line with the new effective value.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `autoClean` | `true` | After a successful ship, remove old leftovers on its own (branches and clean session worktrees whose content provably landed). |
+| `autoClean` | `true` | After a successful ship, remove old leftovers on its own (branches, clean session worktrees and a removed branch's same-commit twin on origin, all only when their content provably landed). |
 | `autoCleanGateDays` | `30` | The automatic cleanup only runs once a removable leftover is older than this. |
-| `autoCleanMinAgeDays` | `7` | …and then removes every removable leftover older than this; younger ones only via the cleanup page. |
+| `autoCleanMinAgeDays` | `30` | …and then removes every removable leftover older than this; younger ones only via the cleanup page. Worktree removal never touches a session's conversation — transcripts follow Claude Code's own `cleanupPeriodDays`. |
 | `nudge` | `true` | After a successful ship or promote, suggest the cleanup page when too much piles up. |
 | `nudgeThreshold` | `50` | Suggest it when more than this many branches/worktrees lie around. |
 | `nudgeCooldownDays` | `7` | Days of silence after a suggestion (0 = after every ship above the threshold). |

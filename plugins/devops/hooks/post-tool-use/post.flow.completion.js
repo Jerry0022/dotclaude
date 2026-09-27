@@ -259,7 +259,15 @@ const CARD_FLAG_PREFIXES = [
   'dotclaude-devops-validation-attested',
   'dotclaude-devops-pending-attested',
   'dotclaude-devops-card-widget',
+  'dotclaude-devops-validation-open',
 ];
+
+/**
+ * Flags whose ABSENCE is a statement too: the MCP deletes validation-open when
+ * a re-render closed every gap, so an already-adopted copy under the real id
+ * must go with it — or Gate 4b blocks on gaps the card no longer reports.
+ */
+const MIRROR_ABSENCE_PREFIXES = new Set(['dotclaude-devops-validation-open']);
 
 /**
  * The session key the completion MCP writes card flags under. Twin of
@@ -302,7 +310,12 @@ function adoptCardFlags(hook) {
       if (prefix === 'dotclaude-devops-card-widget') fs.copyFileSync(from, to);
       else fs.renameSync(from, to);
       moved++;
-    } catch { /* not written for this card */ }
+    } catch {
+      // Not written for this card.
+      if (MIRROR_ABSENCE_PREFIXES.has(prefix) && !fs.existsSync(from)) {
+        try { fs.unlinkSync(to); } catch { /* nothing adopted earlier */ }
+      }
+    }
   }
   return moved;
 }
@@ -447,7 +460,7 @@ function handleShipAndCardFlags(hook, toolName) {
 /**
  * --- 1. Edit/tool-call counters and V&V gate flags ---
  * Increments the edit and tool-call counters (1, 1b), writes the per-turn
- * work-happened flag and last-activity timestamp (1c, 1d), and updates the
+ * work-happened flag (1c), and updates the
  * light-verification / validation gate flags consumed by stop.flow.browsertest
  * and stop.flow.guard (1e) — in that order, each best effort.
  * @returns {{ editCount: number, firstOfTurn: boolean }} the edit count after
@@ -457,7 +470,6 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
   const editCount = bumpEditCounter(hook, isCodeEdit);
   bumpToolCallCounter(hook);
   const firstOfTurn = claimWorkHappened(hook, toolName);
-  touchLastActivity(hook);
   updateLightGateFlags(hook, toolName, isCodeEdit);
   return { editCount, firstOfTurn };
 }
@@ -510,14 +522,6 @@ function claimWorkHappened(hook, toolName) {
     try { writeSessionFile(workFile, toolName); } catch { /* best effort */ }
     return false;
   }
-}
-
-/** --- 1d. Write last-activity timestamp (consumed by cache-timeout check) --- */
-function touchLastActivity(hook) {
-  try {
-    const activityFile = sessionFile('dotclaude-devops-last-activity', hook.session_id);
-    writeSessionFile(activityFile, Date.now().toString());
-  } catch { /* best effort */ }
 }
 
 /**
@@ -795,7 +799,7 @@ function cardContractLines(hook, scheduledTask) {
     'COMPLETION CARD — when ALL work is done:',
     ...ladder,
     `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
-    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
+    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable (cta is an object of placeholders, e.g. { reason }, never a sentence).',
     `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
     '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
     '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',

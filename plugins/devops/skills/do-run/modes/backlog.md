@@ -279,7 +279,7 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
      prompt: "RUN_BACKLOG_AUTOSTART: confirmation timeout. phase=gate, resume
      /do-run backlog Step 4 loop with: queue=<issue numbers>,
      milestones=<titles>, shutdown=<y/n>, autoResume=<y/n>, burnMode=<y/n>,
-     ship=<auto|manual>, passes=<harden,polish|none>, strict=<on|off>,
+     ship=<auto|manual>, passes=harden,polish, strict=<on|off>,
      branch=<branch>." })
    ```
    On re-entry the Step 0.1 `phase=gate` branch resumes the Step 4 loop (skips
@@ -358,12 +358,13 @@ for each issue in queue:
                  `devops:qa` agent — gated when the diff changes ≥1 code file
                  (browsertest-guard.isCodeChange); verify per test-strategy.md
                  (browser verification MANDATORY for web tech)
-  3b. PASSES   → the router's Q4 passes over this issue's diff:
-                 Skill("devops:auto-harden", "--invoked-by=autonomous"), then
-                 Skill("devops:auto-polish", "--invoked-by=autonomous")
-                 (+ --strict under "Strikt") — each gated when chosen;
-                 skipped when none were chosen (or via `run-contract.js skip
-                 harden|polish --reason "<why>"` for a conscious skip)
+  3b. PASSES   → over this issue's diff, never asked:
+                 Skill("devops:auto-harden", "--invoked-by=autonomous") always,
+                 then Skill("devops:auto-polish", "--invoked-by=autonomous")
+                 only when the diff holds UI files (ui-defaults.md § UI file
+                 detection) (+ --strict under "Strikt") — both gated by the run
+                 contract, Polish only on UI; a conscious skip via
+                 `run-contract.js skip harden|polish --reason "<why>"`
   4. SHIP      → $SHIP=auto: Skill("devops:do-ship", "--queued=<n>/<N>
                  --keep") — NEVER the ship_* MCP tools directly; the
                  run-contract `do-ship` obligation refuses `ship_release`

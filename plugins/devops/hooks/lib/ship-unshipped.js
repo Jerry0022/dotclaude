@@ -7,7 +7,7 @@
  *   a PROMOTION prompt ("promote stable", "auf beta heben") on a branch with
  *   nothing unshipped is a promotion-only do-ship run — a handful of calls
  *   (ls-remote, ship_promote, the card) instead of the ~16 of a ship — so the
- *   careful-compact stop does not apply to it. When anything is unshipped the
+ *   subagent delegation does not apply to it. When anything is unshipped the
  *   run ships first and the stop applies as for any ship.
  *
  *   "Unshipped" = tracked changes in the work tree, OR a file the branch

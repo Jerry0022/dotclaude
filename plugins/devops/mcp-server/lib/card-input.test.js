@@ -162,6 +162,17 @@ describe("variant contract (#406)", () => {
     expect(r.issues).toEqual([{ path: "variant", message: expect.stringContaining('use "ready-files"') }]);
   });
 
+  test("a git-no-remote ship-successful needs only the local merge, not pushed:true", () => {
+    // Observed 2026-09-27: a local-merge ship card (delegated ship e2e) was
+    // refused by --render-card while the MCP path renders it.
+    const ok = validateCardInput({ ...BASE, variant: "ship-successful", state: { mode: "git-no-remote", merged: "main", pushed: false, delivered: "local-merge" } });
+    expect(ok.issues).toEqual([]);
+    const noMerge = validateCardInput({ ...BASE, variant: "ship-successful", state: { mode: "git-no-remote", pushed: false } });
+    expect(noMerge.issues).toEqual([{ path: "state", message: expect.stringContaining("local merge proof state.merged") }]);
+    const boolMerge = validateCardInput({ ...BASE, variant: "ship-successful", state: { mode: "git-no-remote", merged: true } });
+    expect(boolMerge.issues.map((i) => i.path)).toEqual(["state", "state.merged"]);
+  });
+
   test("unknownCardKeys names top-level keys the schema does not know, in payload order", () => {
     expect(unknownCardKeys({ ...BASE, links: "x", cwd: ".", validationNotes: 1 })).toEqual(["links", "validationNotes"]);
     expect(unknownCardKeys({ ...BASE, promotion: {}, session_id: "s" })).toEqual([]);

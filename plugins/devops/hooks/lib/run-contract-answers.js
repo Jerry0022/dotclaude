@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-answers
- * @version 0.1.3
+ * @version 0.2.0
  * @plugin devops
  * @description Run-contract answer extraction: the do-run router / follow-up
  *   AskUserQuestion parsing (spec B) and the machine-prompt parsing
@@ -270,8 +270,12 @@ const NEG_RE = /^(?:ohne|kein(?:e|en)?|without|no)\s+(.+)$/i;
 function parseQ4(tokens, q4) {
   const rec = { passes: new Set(), rethink: false, burn: false };
   const recLabels = optionLabels(q4).filter(hasRecommended);
+  // Q4 no longer offers Harden / Polish: both always run (Polish only on UI
+  // changes — obligations.js). A pre-change Q4 that still lists them is read
+  // as before, so a run armed across the plugin update keeps its choice.
+  const offersPasses = optionLabels(q4).some(l => /harden|polish/i.test(l));
   if (recLabels.length) passFlagsOf(recLabels, rec);
-  else { rec.passes.add('harden'); rec.passes.add('polish'); }
+  if (!offersPasses || !recLabels.length) { rec.passes.add('harden'); rec.passes.add('polish'); }
   const recommended = ['harden', 'polish'].filter(p => rec.passes.has(p));
   if (!tokens.length) return { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false };
   if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: [], rethink: false, burn: false, unresolved: false };
@@ -298,7 +302,7 @@ function parseQ4(tokens, q4) {
   }
   let passes;
   if (flags.passes.size) passes = ['harden', 'polish'].filter(p => flags.passes.has(p) && !neg.has(p));
-  else if (neg.size || unresolved || !named) passes = recommended.filter(p => !neg.has(p));
+  else if (neg.size || unresolved || !named || !offersPasses) passes = recommended.filter(p => !neg.has(p));
   else passes = [];
   return { passes, rethink: flags.rethink, burn: flags.burn, unresolved };
 }
@@ -313,9 +317,16 @@ function answeredFields(fields) {
   return out;
 }
 
-/** A router call that lacks one of Ablauf / Umfang / Durchgänge. */
+/**
+ * A router call that lacks Ablauf or Umfang, or carries neither Was? nor
+ * Durchgänge? (H-B13: Flow + Scope alone is no full router). Durchgänge is
+ * optional next to Was?: do-run drops Q4 when neither Rethink nor Budget
+ * verbrennen applies. A partial call arms only after a fresh do-run marker.
+ */
 function isPartialRouterCall(questions) {
-  return isRouterCall(questions) && !['Ablauf?', 'Umfang?', 'Durchgänge?'].every(h => findQuestion(questions, h));
+  if (!isRouterCall(questions)) return false;
+  if (!['Ablauf?', 'Umfang?'].every(h => findQuestion(questions, h))) return true;
+  return !findQuestion(questions, 'Was?') && !findQuestion(questions, 'Durchgänge?');
 }
 
 /**

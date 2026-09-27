@@ -27,13 +27,21 @@ function project() {
   return dir;
 }
 
-function transcript(dir, model) {
+// `refused`: an identical spawn pre.agent.model already refused this turn, so
+// the spawn under test is the deliberate retry that keeps the session model.
+function transcript(dir, model, refused = null) {
   const file = path.join(dir, "transcript.jsonl");
   const lines = [
     { type: "user", message: { role: "user", content: "hi" } },
     { type: "assistant", message: { role: "assistant", model: "claude-sonnet-5", content: [] } },
     { type: "assistant", message: { role: "assistant", model, content: [] } },
   ];
+  if (refused) {
+    lines.push(
+      { type: "assistant", message: { role: "assistant", model, content: [{ type: "tool_use", id: "t-refused", name: "Agent", input: refused }] } },
+      { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t-refused", is_error: true, content: "[agent-model] would inherit" }] } },
+    );
+  }
   fs.writeFileSync(file, lines.map(l => JSON.stringify(l)).join("\n") + "\n");
   return file;
 }
@@ -115,7 +123,7 @@ describe("pre.agent.announce (hook)", () => {
     const dir = project();
     const res = runHook(dir, {
       input: { subagent_type: "Explore", description: "Sweep hooks", prompt: "x" },
-      extra: { transcript_path: transcript(dir, "claude-opus-5-5") },
+      extra: { transcript_path: transcript(dir, "claude-opus-5-5", { subagent_type: "Explore", description: "Sweep hooks" }) },
     });
     expect(line(res)).toBe("Explore · opus 5.5 (session) · session effort · background — Sweep hooks");
   });
@@ -155,9 +163,19 @@ describe("pre.agent.announce (hook)", () => {
     const dir = project();
     const res = runHook(dir, {
       input: { subagent_type: "claude-security:explore", prompt: "x" },
-      extra: { transcript_path: transcript(dir, "claude-fable-5-1") },
+      extra: { transcript_path: transcript(dir, "claude-fable-5-1", { subagent_type: "claude-security:explore" }) },
     });
     expect(line(res)).toBe("claude-security:explore · fable 5.1 (session) · session effort · background");
+  });
+
+  test("a first inheriting spawn is not announced — pre.agent.model refuses it", () => {
+    const dir = project();
+    const res = runHook(dir, {
+      input: { subagent_type: "Explore", description: "Sweep hooks", prompt: "x" },
+      extra: { transcript_path: transcript(dir, "claude-opus-5-5") },
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toBe("");
   });
 
   test("an unknown devops role falls back to the session model", () => {

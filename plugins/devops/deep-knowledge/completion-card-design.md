@@ -30,7 +30,7 @@ Two visual blocks. Nothing between them, nothing under the second one.
 › result line 3                            │  (Desktop: top of the one surface)
 ✓ 3/3 Anforderungen  ✓ 3464 Tests grün  ✓ 4 Live-Checks ok     ← evidence row
 ○ commit → ○ push → ○ PR → ○ merge · branch · Build 176c57d       ← pipeline line
-5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls · /compact  ┘ budget (footer)
+5h [time bar | usage marker] 3 h 39 m   Wk [...] 6 d 20 h   🧠 1180 Calls  ┘ budget (footer)
 ## 📦 {decision as a question}?            ┐
 › one context line (optional)              │  Block 2 · "what to decide"
 1. reservation / test step                 │  (Desktop: quiet accent-tinted box)
@@ -117,11 +117,18 @@ it is the card's footer, not part of the evidence.
 - A light glint (24 px, 12 % white) sweeps once every 4 s across the **filled
   part only** — never over time that has not passed; disabled under
   `prefers-reduced-motion`.
-- **Omitted entirely** while both windows are < 50 % and > 1 h from reset.
+- **When a window shows.** `5h`: from 50 % used or 1 h before reset.
+  `Wk`: once usage runs > 10 pp ahead of elapsed time (the yellow marker
+  threshold — the user must see they are ahead of the linear weekly pace)
+  or in the last 24 h before reset, whatever the pace. Absolute weekly
+  percent alone never shows it. With neither window due, the line is
+  **omitted entirely**.
 - Terminal / markdown fallback: `5h ▰▰▰▰▰▰▰│▱▱▱▱▱▱ 3 h 39 m   Wk ▰▰│▱▱▱▱▱▱ 6 d 20 h`
   (▰ = time, │ = usage); a yellow/red condition is written as a leading `⚠`.
-- Context health: from the tool-call threshold on, `🧠 1180 Calls · /compact`
-  sits dim at the right end of the budget line. Below the threshold nothing.
+- Context health: from the tool-call threshold on, `🧠 1180 Calls` sits dim
+  at the right end of the budget line. Below the threshold nothing. It is a
+  depth indicator, not a `/compact` advice: a large-context ship runs in a
+  fresh subagent, so nothing has to be compacted first.
 
 ### 2.5 Pipeline line ("where it lies")
 
@@ -222,7 +229,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
 | `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Nachbessern) | |
-| `ready` / `test`, no remote | `📦 Lokal fertig trotz {reservation} — noch etwas?` / `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified, ship-compact) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
+| `ready` / `test`, no remote | `📦 Lokal fertig trotz {reservation} — noch etwas?` / `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
 | `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points | context line = distance to beta |

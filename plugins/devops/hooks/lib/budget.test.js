@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { planTier, classify, refreshDueMinutes, readBudget, maybeRefreshUsage, budgetLine, budgetSummary, nudgeSuffix, STALE_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER } = require("./budget.js");
+const { planTier, classify, refreshDueMinutes, readBudget, maybeRefreshUsage, budgetLine, budgetSummary, nudgeSuffix, deferInfo, STALE_MS, FAILURE_BACKOFF_MS, REFRESH_MARKER } = require("./budget.js");
 
 /**
  * The budget class is the delegation policy's fourth input. What must hold
@@ -427,5 +427,48 @@ describe("budgetSummary — the block get_usage returns", () => {
     const b = readBudget({ home: h, nowMs: NOW, env: {}, snapshot: null });
     expect(b.fivePct).toBe(null);
     expect(b.cls).toBe("ask-before-parallel"); // not the disk file's sonnet-only
+  });
+});
+
+describe("defer to the reset — the fill triggers, the reset time picks the default", () => {
+  const win = (pct, reset, { weekly = 20, plan = "Max 20x" } = {}) => read(home({
+    "usage-live.json": { timestamp: iso(NOW), session: { pct, resetInMinutes: reset }, weekly: { pct: weekly, resetInMinutes: 5000 }, plan },
+  }));
+
+  test("Max 20x at 91 % with 46 min left: waiting is the default, the doc is named", () => {
+    const b = win(91, 46);
+    expect(deferInfo(b)).toEqual({ minutes: 46, soon: true });
+    expect(nudgeSuffix(b)).toContain("defer: window 91%, resets in 46 min");
+    expect(nudgeSuffix(b)).toContain("after the reset (Recommended) / now inline");
+    expect(nudgeSuffix(b)).toContain("deep-knowledge/defer-to-reset.md");
+    expect(nudgeSuffix(b)).toMatch(/^ · budget: ask-before-parallel/); // the class suffix stays first
+  });
+
+  test("a far reset still triggers, with starting now as the default", () => {
+    const b = win(92, 180);
+    expect(deferInfo(b)).toEqual({ minutes: 180, soon: false });
+    expect(nudgeSuffix(b)).toContain("now inline (Recommended) / after the reset");
+  });
+
+  test("a near reset alone never triggers — the fill decides", () => {
+    expect(deferInfo(win(20, 10))).toBeNull();
+    expect(deferInfo(win(89, 10))).toBeNull();
+  });
+
+  test("the threshold follows the plan: Max 5x 80 %, Pro 70 %", () => {
+    expect(deferInfo(win(80, 30, { plan: "Max 5x" }))).not.toBeNull();
+    expect(deferInfo(win(79, 30, { plan: "Max 5x" }))).toBeNull();
+    expect(deferInfo(win(70, 30, { plan: "Pro" }))).not.toBeNull();
+    expect(deferInfo(win(69, 30, { plan: "Pro" }))).toBeNull();
+  });
+
+  test("a tight week suppresses it: the 5 h reset brings nothing back", () => {
+    expect(deferInfo(win(95, 30, { weekly: 99 }))).toBeNull();
+    expect(deferInfo(win(95, 30, { weekly: 98 }))).not.toBeNull();
+  });
+
+  test("an env override or an unknown window never defers", () => {
+    expect(deferInfo({ ...win(95, 20), override: "free" })).toBeNull();
+    expect(deferInfo({ tier: "max20", fivePct: null, resetInMinutes: 20 })).toBeNull();
   });
 });

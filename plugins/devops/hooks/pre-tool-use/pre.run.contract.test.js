@@ -130,16 +130,30 @@ describe("branch gate (backlog)", () => {
     expect(run("Bash", { command: "git checkout -q -b fix/1" }).code).toBe(0);
   });
 
+  test("leaving a segment without UI changes: harden/do-ship open, polish not owed", () => {
+    armBacklog();
+    ev({ k: "skill", name: "auto-agents" });
+    ev({ k: "edit" });
+    fs.writeFileSync(path.join(dir, "lib.js"), "module.exports = 1;\n");
+    const r = run("Bash", { command: "git switch -c fix/2" });
+    expect(r.code).toBe(2);
+    const open = r.stderr.split("\n").find(l => l.startsWith("Open for this item:"));
+    for (const ob of ["harden", "do-ship"]) expect(open).toContain(ob);
+    expect(open).not.toContain("polish");
+  });
+
   test("leaving a segment with work: harden/polish/do-ship open → blocked", () => {
     armBacklog();
     ev({ k: "skill", name: "auto-agents" });
     ev({ k: "edit" });
+    fs.writeFileSync(path.join(dir, "app.css"), "a { color: red; }\n");
     const r = run("Bash", { command: "git switch -c fix/2" });
     expect(r.code).toBe(2);
     expect(r.stderr.split("\n")[0]).toContain("BLOCKED at branch");
     for (const ob of ["harden", "polish", "do-ship"]) expect(r.stderr).toContain(ob);
     ev({ k: "skill", name: "auto-harden", args: "--invoked-by=autonomous" });
     ev({ k: "skill", name: "auto-polish", args: "--invoked-by=autonomous" });
+    ev({ k: "agent", type: "devops:qa" }); // the stylesheet counts as a code file for qa
     ev({ k: "release", ok: false });
     expect(run("Bash", { command: "git checkout -b fix/3" }).stderr).toContain("do-ship");
     ev({ k: "card", variant: "ship-blocked" });

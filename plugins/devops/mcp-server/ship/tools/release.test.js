@@ -1,4 +1,5 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { createRequire } from "node:module";
 
 // zod is a runtime dependency of the MCP server (installed where the server
 // runs) but is not a devDependency of this repo, so the test environment can't
@@ -6,7 +7,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 // does — so a minimal chainable stub is enough to load the module.
 vi.mock("zod", () => {
   const node = new Proxy(() => node, { get: () => () => node });
-  return { z: { object: () => node, string: () => node, boolean: () => node, enum: () => node, number: () => node } };
+  return { z: { object: () => node, string: () => node, boolean: () => node, enum: () => node, number: () => node, array: () => node, preprocess: () => node } };
 });
 
 // Mock node:child_process so the optional commit path (execFileSync) never
@@ -171,6 +172,64 @@ beforeEach(() => {
   ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [] });
   ghLib.deleteRemoteBranch.mockReturnValue({ ok: true, method: "gh-api" });
   scanConflictMarkers.mockReturnValue({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false });
+});
+
+describe("ship_release — requirement gate", () => {
+  test("an own gap (partial, no waitsOn) refuses the merge before anything is pushed", async () => {
+    const result = await handler(params({ validation: [
+      { requirement: "Tooltip erscheint", status: "partial", evidence: "halb" },
+      { requirement: "Live-Check", status: "partial", waitsOn: "deploy", evidence: "erst nach Restart" },
+    ] }));
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("validation-gaps");
+    expect(result.delivered).toBe("none");
+    expect(result.gaps).toEqual([{ requirement: "Tooltip erscheint", reason: "open" }]);
+    expect(ghLib.createPR).not.toHaveBeenCalled();
+  });
+
+  test("waitsOn pending blocks the ship too — the own review has not returned", async () => {
+    const result = await handler(params({ validation: [{ requirement: "Review", status: "partial", waitsOn: "pending", evidence: "redteam läuft" }] }));
+    expect(result.reason).toBe("validation-gaps");
+  });
+
+  test("only waiting requirements, or acceptGaps from the user, pass the gate", async () => {
+    const waiting = await handler(params({ validation: [{ requirement: "Anhören", status: "partial", waitsOn: "user", evidence: "Clips gerendert" }] }));
+    expect(waiting.reason).not.toBe("validation-gaps");
+    const accepted = await handler(params({ acceptGaps: true, validation: [{ requirement: "R", status: "unmet" }] }));
+    expect(accepted.reason).not.toBe("validation-gaps");
+  });
+
+  describe("fallback: no `validation` passed → the checkout's last card speaks", () => {
+    const vg = createRequire(import.meta.url)("../../../hooks/lib/validation-gaps.js");
+    const cwd = "/repo-fallback-" + process.pid;
+    afterEach(() => vg.writeRepoOpen(cwd, []));
+
+    test("an own gap on the last card refuses the merge, source 'card'", async () => {
+      vg.writeRepoOpen(cwd, [{ requirement: "Tooltip", status: "partial", waitsOn: null, evidence: "halb" }]);
+      const result = await handler(params({ cwd }));
+      expect(result.reason).toBe("validation-gaps");
+      expect(result.validationSource).toBe("card");
+      expect(result.error).toMatch(/last completion card/);
+      expect(ghLib.createPR).not.toHaveBeenCalled();
+    });
+
+    test("an explicit validation wins over the card copy", async () => {
+      vg.writeRepoOpen(cwd, [{ requirement: "Tooltip", status: "partial", waitsOn: null, evidence: "halb" }]);
+      const result = await handler(params({ cwd, validation: [{ requirement: "Tooltip", status: "met", evidence: "fertig" }] }));
+      expect(result.reason).not.toBe("validation-gaps");
+    });
+
+    test("a card older than 12 h no longer blocks", () => {
+      vg.writeRepoOpen(cwd, [{ requirement: "Tooltip", status: "partial", waitsOn: null }]);
+      expect(vg.readRepoOpen(cwd)).toHaveLength(1);
+      expect(vg.readRepoOpen(cwd, { now: Date.now() + vg.REPO_FLAG_MAX_AGE_MS + 1000 })).toBeNull();
+    });
+
+    test("no card copy → no gate (legacy callers keep working)", async () => {
+      const result = await handler(params({ cwd }));
+      expect(result.reason).not.toBe("validation-gaps");
+    });
+  });
 });
 
 describe("ship_release — unresolved conflict markers", () => {

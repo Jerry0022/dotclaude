@@ -200,3 +200,22 @@ describe("prompt.flow.title-work", () => {
     expect(shouldMark({})).toBe(false);
   });
 });
+
+// "weiter" after a usage limit or a crash continues a ship: the title says
+// Shipping, never the hourglass (lib/ship-resume.js).
+describe("prompt.flow.title-work — a resumed ship is shipping", () => {
+  test("'weiter' with an open ship checkpoint → Shipping; without one → hourglass", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "title-resume-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: dir });
+      expect(prefixFor("weiter", dir)).toBe(WORK_PREFIX);
+      const cp = (await import("../lib/ship-checkpoint.js")).default;
+      cp.recordShipStep("ship_preflight", { cwd: dir }, { ready: true, branch: "feat/x", base: "main" });
+      expect(prefixFor("weiter", dir)).toBe(SHIPPING_PREFIX);
+      expect(prefixFor("Continue from where you left off.", dir)).toBe(SHIPPING_PREFIX);
+      expect(prefixFor("bau mir ein neues Feature", dir)).toBe(WORK_PREFIX);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

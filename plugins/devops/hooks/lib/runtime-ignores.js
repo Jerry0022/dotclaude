@@ -63,6 +63,7 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/run-contract.pending',
   '.claude/batch-handoff.json',
   '.claude/.ship-in-progress',
+  '.claude/.ship-checkpoint.json',
   '.claude/.ship-lockout',
   '.claude/.ship-queue',
   '.claude/.ship-watcher/',

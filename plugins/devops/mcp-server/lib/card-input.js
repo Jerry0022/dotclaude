@@ -54,7 +54,7 @@ export const CARD_VARIANTS = [
 export const CARD_KNOWN_KEYS = [
   "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
-  "deployGate", "validation", "delivery", "promotion", "compact",
+  "deployGate", "validation", "delivery", "promotion",
 ];
 
 /** Top-level keys of `params` the schema does not know, in payload order. */
@@ -134,6 +134,8 @@ function eachEntry(issues, path, arr, check) {
 }
 
 const VALIDATION_STATUS = ["met", "partial", "unmet"];
+/** Mirrors WAITS_ON in hooks/lib/validation-gaps.js. */
+const VALIDATION_WAITS_ON = ["user", "deploy", "external", "pending"];
 const PENDING_KINDS = ["agent", "task", "workflow"];
 const CONCEPT_PHASES = ["waiting", "iterating", "implementing"];
 
@@ -162,7 +164,11 @@ export function validateCardInput(params) {
   if (params.variant === "ship-successful") {
     const s = isObj(params.state) ? params.state : null;
     if (s && s.mode === "file-only") issues.push({ path: "variant", message: 'a file-only project has no merge to report — use "ready-files"' });
-    else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
+    // No remote: ship_release merges LOCALLY, so `merged` is the whole proof
+    // and there is nothing to push (variant-guard accepts the same, #500).
+    else if (s && s.mode === "git-no-remote") {
+      if (!isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'a git-no-remote ship-successful requires the local merge proof state.merged: "<base>" (e.g. "main")' });
+    } else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
   }
   // `merged` names the base branch; the card prints it ("✓ merge main", the
   // track's base). A boolean read "merge true" and "Shipped v → true" (audit
@@ -185,10 +191,11 @@ export function validateCardInput(params) {
     : null);
 
   eachEntry(issues, "validation", params.validation, (v) =>
-    !isObj(v) ? "must be { requirement, status?, evidence? }"
+    !isObj(v) ? "must be { requirement, status, evidence?, waitsOn? }"
     : !isStr(v.requirement) ? "requirement must be a string"
     : v.status !== undefined && !VALIDATION_STATUS.includes(v.status) ? `status must be one of ${VALIDATION_STATUS.join("|")}`
     : v.evidence !== undefined && !isStr(v.evidence) ? "evidence must be a string"
+    : v.waitsOn !== undefined && !VALIDATION_WAITS_ON.includes(v.waitsOn) ? `waitsOn must be one of ${VALIDATION_WAITS_ON.join("|")}`
     : null);
 
   eachEntry(issues, "userTest", params.userTest, (u) => (isStr(u) ? null : "must be a string"));
@@ -229,14 +236,6 @@ export function validateCardInput(params) {
     else if (!isObj(c)) issues.push({ path: "concept", message: "must be a phase string or an object" });
     else if (c.phase !== undefined && !CONCEPT_PHASES.includes(c.phase)) issues.push({ path: "concept.phase", message: `must be one of ${CONCEPT_PHASES.join("|")}` });
   }
-  if (params.compact !== undefined && params.compact !== null) {
-    const c = params.compact;
-    if (!isObj(c)) issues.push({ path: "compact", message: "must be { tokens: number, focus?: string }" });
-    else {
-      if (typeof c.tokens !== "number") issues.push({ path: "compact.tokens", message: "must be a number" });
-      if (c.focus !== undefined && !isStr(c.focus)) issues.push({ path: "compact.focus", message: "must be a string" });
-    }
-  }
   if (isObj(params.state) && params.state.pr !== undefined && params.state.pr !== null) {
     const pr = params.state.pr;
     if (!isObj(pr) || typeof pr.number !== "number" || !isStr(pr.title)) issues.push({ path: "state.pr", message: "must be { number: number, title: string }" });
@@ -257,7 +256,7 @@ export function formatIssues(issues) {
  */
 export const CARD_FIELD_REFERENCE =
   'Shapes: changes: [{ area, description }] · tests: [{ method, result }] · ' +
-  'validation: [{ requirement, status: met|partial|unmet, evidence }] · ' +
+  'validation: [{ requirement, status: met|partial|unmet, evidence, waitsOn?: user|deploy|external|pending }] · ' +
   'userFinalTest: [string | { action, afterDeployment }] · open: [string | { text, reply }] · ' +
   'pending: [{ name, kind: agent|task|workflow, doing }] · state / cta / delivery: objects.';
 

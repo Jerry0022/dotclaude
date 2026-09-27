@@ -47,7 +47,7 @@
  *   extractAnswers(toolResponse, toolInput)       → {questions, answers}
  *   isRouterCall(questions)                       → boolean
  *   parseRouterAnswers(questions, answers, {doRunArgs}) → header fields | null
- *   isPartialRouterCall(questions)                → boolean (router-shaped, lacks Ablauf / Umfang / Durchgänge)
+ *   isPartialRouterCall(questions)                → boolean (router-shaped, lacks Ablauf / Umfang, or both Was? and Durchgänge?)
  *   answeredFields(fields)                        → only the fields a router call answered (R7)
  *   mergeRouterAnswers(cwd, questions, fields, {sessionId, now}) → header | null (R7 merge)
  *   parseFollowUp(questions, answers)             → patch | null

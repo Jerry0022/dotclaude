@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.222.0] — 2026-09-27
+
+### Changed
+- **`/do-run` no longer asks about Harden and Polish.** Harden always runs after an implementation. Polish runs only when the change touches UI files (the `ui-defaults.md` § UI file detection plus the project's `files:` override). Q4 keeps only Rethink and Budget, and the question is dropped when neither applies. The run contract derives both passes without a Q4 answer: it measures UI files alongside code files (`measure` event with `uiFiles`), owes Polish only when UI files changed, and still accepts a deliberate `skip`. `/auto-polish` under do-run returns `{ applicable: false, reason: "no UI files in diff" }` on a diff without UI files. UI detection moved to `hooks/lib/ui-files.js`, shared by the design reminder and the run contract.
+- **`auto-polish` SKILL.md is back within its 250-line budget.** The findings scan, the rules-only ship path, the fix phases and the re-test/concept-page procedures moved verbatim to the skill's `deep-knowledge/`. SKILL.md keeps the decisions: which step, which findings, which approval rule. No behavior change.
+
+## [0.221.0] — 2026-09-27
+
+### Added
+- **A ship in a long session runs in a subagent with a fresh context.** Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0` turns it off), `prompt.ship.detect` emits a `[ship-delegate]` block instead of stopping for `/compact`. The session writes a brief (intent quoted verbatim, changes, findings and decisions with their reasons, tests, validation, open points), and a general-purpose subagent runs `/do-ship --delegated` from it. Gate questions come back to the session as a choice and return by `SendMessage`. The subagent renders the card with the session's id, because the dotclaude self-sync finalizer marks the MCP servers stale right after the render. The session only shows the card. Neither a hook nor a skill can trigger `/compact`, and the Desktop host refuses button prefills that start with "/", so a fresh context is the only automatic lever. Measured: a sandbox subagent ship took 13–19 calls at an average of 126–138 k context (1.5–2.5 M cache reads). The same ship inline in a 275 k session would take about 4.3 M. Ten earlier inline ships took 2.5–14.8 M each. Break-even is about 150 k. Below the threshold the ship stays inline, and `--inline` keeps a single ship inline. The delegated spawn names its model and relays its agent card (the `pre.agent.model` / `pre.agent.relay` gates from 0.220.0).
+- **An interrupted ship resumes where it stopped.** The ship MCP server writes `.claude/.ship-checkpoint.json` (gitignored) after every ship step. After a usage limit or a PC crash, `ss.ship.resume` names the open step, and "weiter" continues from it. The session title stays `🚀 Shipping – ` and the run ends with the ship card. A version bump whose verification failed (for example, because the CHANGELOG lagged) now counts as landed once the files were rewritten, so a resume never bumps twice. A sandbox end-to-end run found that bug.
+
+### Changed
+- **Completion card input is more forgiving.** A plain sentence passed as `cta` no longer breaks the card. A local ship card without a remote (`git-no-remote`) now renders offline through `--render-card`.
+
+### Removed
+- **The `/compact` recommendations.** Removed: the careful-compact ship stop (the `compact` card field, the "Ohne Kompaktieren shippen" button, `lib/ship-compact.js`), the cache-timeout hint and the card hint. `--no-compact` stays as an alias of `--inline`. `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` is still read as a fallback for the delegate threshold.
+
+## [0.220.1] — 2026-09-27
+
+### Changed
+- **Post-ship cleanup is back on the age gate, 30/30 days.** It runs only after a ship and only once a removable leftover is older than `autoCleanGateDays` (30). It then removes every removable leftover older than `autoCleanMinAgeDays`, whose default is back to 30 (was 7). This reverts the immediate removal from 0.217.0 (#571). A session worktree now keeps its intermediate state for a month. Worktree removal never touches conversations: transcripts follow Claude Code's own `cleanupPeriodDays`. The sub-agent branch detection via merged PR heads and the same-commit remote twin from 0.217.0 stay (#572).
+
+### Removed
+- **The daily SessionStart background cleanup (`ss.git.hygiene`, `hygiene-bg.js`).** The unlanded-work warning on the ship card stays: it still names gone-upstream branches and abandoned session worktrees with commits that have no PR (#573).
+
+## [0.220.0] — 2026-09-27
+
+### Added
+- **Agent cards reach the user.** A replay of three days of transcripts found that only 2 of 95 agent cards were shown. `pre.agent.relay` now holds back the first tool call after an agent launch whose card was never relayed, and hands the card back to Claude. `stop.agent.relay` blocks the turn end once for the same case. Both fire once per launch and are silent in subagents. Rendering the completion widget counts as shown, so the Quiet style is unaffected.
+- **`devops:scout` agent (sonnet · low).** A read-only locator for "where/how is X?" sweeps over more than ~10 files. It returns the answer first, then `path:line` evidence. It replaces `Explore` in the delegation policy, skills and evals.
+- **`pre.agent.model` hook.** An Agent spawn that would silently inherit the session model (no `model` of its own, or `model: inherit`) is refused once with the reason. Repeating the identical spawn goes through, so keeping the session model is a deliberate choice. `pre.agent.announce` skips the card for a spawn that will be refused.
+
+### Changed
+- **The delegation policy aims at agents in 30–70 % of implementation sessions.** It names three signs of too little delegation: the suite re-run inline, 10+ files touched, and a continuation redoing sweeps. Every spawn now names its model. `haiku` is no longer recommended: it is cheaper but not better at research. Effort cannot be set per spawn, so `low` lives in the frontmatter of `scout` and `gamer`.
+
+## [0.219.0] — 2026-09-27
+
+### Changed
+- **One Stop block names every card fault.** When the title, content, validation, requirement-gap and pending gates of `stop.flow.guard` fail together, they are reported in one numbered block, so Claude fixes all of them in a single re-render. Before, only the first fault was blocked and the rest passed unseen.
+- **`ship_release` checks requirement gaps even when the caller passes no `validation`.** The completion card now also stores its open requirements per checkout. A ship without `validation` reads that copy (at most 12 h old) and reports `validationSource: "card"`. An explicit `validation` always wins. Git-Bash and native Windows paths map to the same checkout.
+
+## [0.218.0] — 2026-09-27
+
+### Added
+- **Larger work can wait for a near window reset.** Once the 5h window reaches the plan's threshold (Max 20x 90 %, Max 5x 80 %, Pro 70 %), the per-prompt budget nudge carries a `defer:` hint with the minutes to the reset. Before multi-file work Claude then asks once whether to start now, wait for the reset, or park the work as an issue. "After the reset" is the recommended answer when the reset is at most 60 min away. That choice arms a one-shot resume timer 5 min past the reset and pauses. The hint is omitted while the week is the tighter limit. It is separate from the card's pace-based yellow marker (`deep-knowledge/defer-to-reset.md`).
+- **`autonomous-resume-schedule.js --buffer <min>`** sets the minutes past the reset (0–60). The default stays 15 for unattended resumes.
+
+## [0.217.0] — 2026-09-27
+
+### Changed
+- **Leftovers that provably landed are removed on the next ship, not after 30 days.** A branch without a checkout goes at once, a sub-agent worktree (`agent-*`) after 2 hours idle, a Desktop session worktree after `autoCleanMinAgeDays` (7) idle days. `autoCleanGateDays` is deprecated and ignored (#571).
+
+### Fixed
+- **Sub-agent branches of a squash-merged PR count as landed.** Every commit reachable from a merged PR head now proves a branch landed, so branches that were merged into the PR's branch before the squash are removed, together with their same-commit twin on origin (#572).
+
+### Added
+- **Unlanded work is flagged instead of forgotten.** A `[gone]` branch or a detached session worktree with commits that reached neither main nor a merged PR gets a ⚠ open item on the ship card. The new `ss.git.hygiene` hook runs the same cleanup once a day per repo in the background and shows its result at the next session start, so repos without ships get cleaned too (#573).
+
+## [0.216.0] — 2026-09-27
+
+### Added
+- **Requirement gaps get closed before the turn ends.** A `validation` item can now carry `waitsOn: user | deploy | external | pending` together with evidence. Any requirement that is not met and has no such reason, or has no status at all, is Claude's own gap. The new `stop.flow.guard` Gate 4b blocks the turn once, so Claude closes the gap or asks the user instead of reporting done. `waitsOn: "pending"` is valid only while the transcript still shows open background work.
+- **`ship_release` refuses to merge over the gaps Claude owns.** The new `validation` parameter makes the tool return `reason: "validation-gaps"` with nothing pushed. Only an explicit `acceptGaps: true` from the user lets a ship through anyway.
+
+### Changed
+- **The requirements count says who a requirement waits on.** The card used to show "◐ 0/3 Anforderungen" on an otherwise green card. It now shows, for example, "✓ 2/3 Anforderungen · 1 wartet auf dich". ◐ and ✗ appear only for Claude's own gaps, and requirements that wait on someone else no longer turn the card red.
+
+## [0.215.1] — 2026-09-27
+
+### Changed
+- **The weekly bar on the completion card shows when usage runs ahead of the week's pace.** Absolute usage says little over seven days. The Wk bar now appears once usage is more than 10 pp ahead of elapsed time (the yellow marker threshold), and always in the last 24 h before the weekly reset. The 50 % used threshold and the 1 h reset window now apply only to the 5h bar.
+
 ## [0.215.0] — 2026-09-27
 
 ### Added

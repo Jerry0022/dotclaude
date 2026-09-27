@@ -38,8 +38,8 @@ describe("do-run SKILL.md — run contract", () => {
     expect(step7).toMatch(/never the\s+`ship_\*` MCP tools directly/);
   });
 
-  it("Rules say every chosen pass runs or is skipped with a reason", () => {
-    expect(doRunSkill).toMatch(/Every chosen pass runs, or is skipped\s+with a reason that the card shows/);
+  it("Rules say Harden / Polish are never asked and never silently dropped", () => {
+    expect(doRunSkill).toMatch(/Harden always, Polish on every UI change — never asked, never silently\s+dropped/);
   });
 });
 

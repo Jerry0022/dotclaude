@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.215.0**
+**Version: 0.222.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -210,9 +210,9 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ## Features
 
-- **<!--devops:count:hooks-->65<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->68<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
-- **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Windows
+- **<!--devops:count:agents-->13<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Scout, Windows
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -221,7 +221,7 @@ generator. `claude` + `/login` in a terminal repairs the dialog.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->65<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->68<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -283,7 +283,9 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.readme.standards` — Once per session, before the first substantial write to a README file, points Claude…
 - `pre.mcp.health` — Detects dead or stale MCP servers before tool calls fail cryptically.
 - `pre.strict.agent-gate` — While strict mode is active, refuse an Agent spawn whose prompt does not start with t…
+- `pre.agent.model` — Refuses an Agent spawn once when it would silently inherit the session model — no `mo…
 - `pre.agent.announce` — Makes every Agent spawn visible to the user: resolves the agent's effective model and…
+- `pre.agent.relay` — Holds back the first tool call after an agent launch whose card (pre.agent.announce)…
 - `pre.run.contract` — Refuse (exit 2) the tool call that would walk past an open obligation of the do-run R…
 
 #### SubagentStart — runs when a subagent is spawned
@@ -308,6 +310,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 
 - `stop.git.sync` — Throttled background git sync at turn end.
 - `stop.flow.browsertest` — Light-verification enforcement gate (the "V" of the V&V gate).
+- `stop.agent.relay` — Blocks the turn end once when an agent launch of this turn never showed its card (lib…
 - `stop.flow.guard` — Per-turn completion card + validation enforcement (the validation half of the V&V gate).
 - `stop.guide.handoff` — Offer the auto-guide skill when Claude's own answer hands the user a manual click-thr…
 - `stop.flow.selfcalibration` — Run self-calibration when Claude finishes a response turn.
@@ -335,7 +338,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 #### ship — enforce the shipping pipeline
 
 - `pre.ship.guard` — Block manual PR/merge via Bash *(PreToolUse)*
-- `prompt.ship.detect` — Detect ship intent, enforce /do-ship skill; above `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (200 k tokens) hands the user a `/compact` command instead *(UserPromptSubmit)*
+- `prompt.ship.detect` — Detect ship intent, enforce /do-ship skill; above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (200 k tokens) runs the ship in a fresh-context subagent instead *(UserPromptSubmit)*
 - `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
 - `ss.ship.resume` — Re-enter a ship that was mid-pipeline when the context compacted or the session paused: verify git/gh state first, never a second PR or tag *(SessionStart)*
 
@@ -516,6 +519,7 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 | **qa** | Test, verify, screenshot |
 | **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
 | **research** | Deep-dive investigations |
+| **scout** | Read-only locator (sonnet · low): "where/how is X?" sweeps, answer + `path:line` evidence |
 | **rethinker** | Code-blind fresh-approach ideation through one lens |
 | **windows** | Platform-specific features |
 
@@ -590,9 +594,9 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->65<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->68<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
-├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
+├── agents/                        ← <!--devops:count:agents-->13<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)

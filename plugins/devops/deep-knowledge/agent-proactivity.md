@@ -10,7 +10,7 @@ first tool call; pick the tier by signal, not by habit.
 | Tier | Signal | Do |
 |------|--------|----|
 | **Inline** | 1 domain, Q&A, quick fix, or an answer reachable by reading ~5 files or fewer | No agent — a sub-agent pays a full context bootstrap and loses the conversation. |
-| **1 agent, background** | The deliverable is a *conclusion* whose path would flood the conversation: anything that needs web pages (`research` — even one fetch), a sweep over more than ~10 files (`Explore`, "is our X sound?"), a full test suite or build (`qa`), a high-stakes plan or diff to attack (`redteam`), a trade-off with real stakes that no file answers (`po`) | Spawn with `run_in_background: true`; keep working inline; relay the conclusion, not the transcript. |
+| **1 agent, background** | The deliverable is a *conclusion* whose path would flood the conversation: anything that needs web pages (`research` — even one fetch), a sweep over more than ~10 files (`scout`, "where/how is X?"), a full test suite or build (`qa`), a high-stakes plan or diff to attack (`redteam`), a trade-off with real stakes that no file answers (`po`) | Spawn with `run_in_background: true`; keep working inline; relay the conclusion, not the transcript. |
 | **2–3 agents, parallel** | Two *analysis* lenses on one question (`research` + `po`, `po` + `redteam`) | Spawn in one message, ~5–15 tool calls per agent. **Implementing** agents in parallel (`core` + `frontend` editing the working tree at once) are never auto-spawned: offer it in one sentence like a ceremony. A UI consuming a new endpoint is not independent: Inline if ~5 files or fewer, else Full ceremony. |
 | **Full ceremony** | 3+ domains, a feature end-to-end, or a high-risk change (migration, auth, breaking contract, destructive op) | Never auto-start. Offer it in one sentence, no slash name; on a yes invoke the auto-agents skill (do-run if the user will be away). |
 
@@ -19,15 +19,18 @@ auto-fix, auto-harden, auto-polish) execute through the auto-agents skill:
 it applies this table and shows agent cards; Inline needs no skill load.
 Prompts without a skill apply the table directly.
 
-Every spawn is announced to the user — also under the Quiet output style.
-`pre.agent.announce` resolves model and effort and hands you an agent card
-(same template for 1 or 10 agents) to show verbatim; spawns in one message
-→ show only the last card, it lists them all — never a prose summary.
-Models are family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`) —
-the harness resolves each to the newest model of that family, so never pin a
-version (`claude-opus-5-5`) anywhere.
-`Explore` and `general-purpose` inherit the session model: `Explore` only
-locates — pass `model: "sonnet"`; implementing goes to a devops domain agent.
+**Aim:** agents in roughly 30–70 % of implementation sessions — not 100 %
+(each costs a context bootstrap), but a long session with none is a smell:
+the suite run inline again and again (→ `qa`, background), 10+ files touched
+(→ offer the ceremony), a `weiter`/`ship` continuation redoing sweeps inline.
+
+Every spawn gets an agent card (`pre.agent.announce`) — show it verbatim as
+the next text, also under Quiet; spawns in one message → only the last card.
+Every spawn names its `model` (`opus`, `sonnet`, `fable` — family aliases,
+never a pinned version), even when it equals the session's: an inheriting
+spawn is refused once (`pre.agent.model`). Effort is not a spawn parameter —
+it comes from the agent file. Locating → `scout` (sonnet · low), not
+`Explore`; implementing → a domain agent. No `haiku`.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
@@ -82,12 +85,9 @@ tool-call ceiling in the agent prompt. Class names say what they do.
   reset, or old enough that the class may have tightened (plan-scaled: Pro
   minutes, Max 20x hours; never at the limit or minutes before a reset),
   gets a detached refresh; the `budget:` suffix carries it next prompt.
-- **The newest `[budget]` line is the class — nothing older is.** After a
-  reset it arrives with every prompt for a while ("week reset 2 h ago … →
-  free"), also on short prompts and on resume, and outranks every earlier
-  *usage claim*: a "You've hit your weekly limit" message, your own plan
-  text, a percentage you wrote into skill args. It never outranks the user
-  (hard stop stays above). Never put usage numbers or a class into skill
+- **The newest `[budget]` line is the class** — it outranks every earlier
+  usage claim (a limit message, your own plan text, a percentage in skill
+  args), never the user. Never put usage numbers or a class into skill
   args or agent prompts from memory — pass the line. No `[budget]` line at
   all → `get_usage` once, read `budget.cls`; on error keep the last line,
   with none treat it as ask-before-parallel.

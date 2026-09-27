@@ -6,12 +6,13 @@
  *
  *   1. Auto-clean (after a ship only). Opens only when a REMOVABLE leftover is
  *      older than `autoCleanGateDays` (default 30); then it removes every
- *      removable leftover older than `autoCleanMinAgeDays` (default 7).
+ *      removable leftover older than `autoCleanMinAgeDays` (default 30).
  *      Younger ones are left to the page. "Removable" means nothing can be
  *      lost:
  *        - branch: its tip is in the default branch — git ancestor, the head
- *          of a merged PR (squash merges), or every file it touched is
- *          identical in the default branch;
+ *          of a merged PR (squash merges), reachable from a merged PR head
+ *          (a sub-agent branch merged into the PR's branch, #572), or every
+ *          file it touched is identical in the default branch;
  *        - worktree: a session worktree (under `.claude/worktrees/`), not
  *          locked, clean (`status --porcelain --untracked-files=all
  *          --ignored=matching` lists nothing but regenerable build output,
@@ -36,6 +37,11 @@
  *      plain skip.
  *      Branch removal is `branch -D` (a squash-merged branch is no git
  *      ancestor, so `-d` would refuse); the tip SHA is logged for recovery.
+ *      A removed branch's twin on origin goes too, but only when it points at
+ *      the very same commit (a pushed sub-agent branch, #572).
+ *      At risk (#573): a `[gone]` branch or a detached session worktree whose
+ *      commits did NOT land is never removed — it is reported on the card,
+ *      because it looks like every other leftover and is easily forgotten.
  *   2. Nudge (after ship and promote). More than `nudgeThreshold` leftovers
  *      (default 50) and the cooldown (`nudgeCooldownDays`, default 7) passed →
  *      the card gets an open item that points to the cleanup page.
@@ -98,6 +104,8 @@ const VERIFY_MAX_FILES = 5000;
 const VERIFY_MAX_BYTES = 64 * 1024 * 1024;
 const NEVER_DELETE = new Set(["main", "master", "HEAD", "origin"]);
 const SESSION_WORKTREE_MARKER = "/.claude/worktrees/";
+/** A sub-agent's worktree (Agent tool, `isolation: "worktree"`) — never a Desktop session. */
+const AGENT_WORKTREE = /\/\.claude\/worktrees\/agent-[0-9a-f]+$/i;
 /** More touched files than this and the tree comparison is left to the page. */
 const TREE_CHECK_MAX_FILES = 200;
 const LOG_KEEP = 200;
@@ -210,6 +218,13 @@ export function scanRepo(cwd, now = Date.now()) {
   const defaultBranch = defaultBranchOf(cwd);
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter(Boolean));
 
+  const refs = gitOut(["for-each-ref", "refs/heads", "--format=%(refname)%09%(objectname)%09%(committerdate:unix)%09%(upstream:track)"], cwd) || "";
+  const gone = new Set();
+  for (const line of refs.split("\n")) {
+    const [ref, , , track] = line.trim().split("\t");
+    if (ref && track === "[gone]") gone.add(ref.slice("refs/heads/".length));
+  }
+
   const units = [];
   const linked = worktrees.slice(1).filter((w) => !w.prunable && normPath(w.path) !== current);
   const shas = [...new Set(linked.map((w) => w.head).filter(Boolean))];
@@ -230,13 +245,15 @@ export function scanRepo(cwd, now = Date.now()) {
       branch: w.branch,
       head: w.head,
       locked: w.locked,
+      detached: w.detached,
+      gone: Boolean(w.branch && gone.has(w.branch)),
       session: normPath(w.path).includes(SESSION_WORKTREE_MARKER),
+      agent: AGENT_WORKTREE.test(normPath(w.path)),
       // unreadable activity → treated as fresh (fail closed)
       ageDays: last === null ? 0 : Math.max(0, (now - last) / DAY_MS),
     });
   }
 
-  const refs = gitOut(["for-each-ref", "refs/heads", "--format=%(refname)%09%(objectname)%09%(committerdate:unix)"], cwd) || "";
   for (const line of refs.split("\n")) {
     const [ref, sha, ts] = line.trim().split("\t");
     if (!ref || !ref.startsWith("refs/heads/")) continue;
@@ -247,6 +264,7 @@ export function scanRepo(cwd, now = Date.now()) {
       key: `branch:${name}`,
       branch: name,
       head: sha,
+      gone: gone.has(name),
       ageDays: Math.max(0, (now - Number(ts) * 1000) / DAY_MS),
     });
   }
@@ -283,6 +301,33 @@ export function fetchMergedHeads(cwd, defaultBranch) {
   return { bySha, byName };
 }
 
+/**
+ * Every commit reachable from a merged PR head but not from `baseRef` — the
+ * commits a squash merge carried into the default branch under another name.
+ * A sub-agent branch merged into the PR's branch before the squash sits in
+ * this set, although it is neither an ancestor of main nor a PR head (#572).
+ * Heads missing locally are skipped; stdin keeps a 1000-PR list off the
+ * command line (Windows caps it at 32 k chars). Empty set on any failure.
+ */
+export function reachableFromMerged(cwd, merged, baseRef) {
+  if (!merged || !merged.bySha || merged.bySha.size === 0) return new Set();
+  const run = (args, input) => {
+    try {
+      return execFileSync("git", args, {
+        cwd, input, encoding: "utf8", timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch {
+      return null;
+    }
+  };
+  const check = run(["cat-file", "--batch-check=%(objectname) %(objecttype)"], [...merged.bySha].join("\n") + "\n");
+  if (check === null) return new Set();
+  const heads = check.split("\n").map((l) => l.trim().split(" ")).filter(([, t]) => t === "commit").map(([sha]) => sha);
+  if (heads.length === 0) return new Set();
+  const out = run(["rev-list", "--stdin"], [...heads, "--not", baseRef].join("\n") + "\n");
+  return new Set((out || "").split("\n").map((s) => s.trim()).filter(Boolean));
+}
+
 /** Every file `sha` changed since its merge base is identical in `baseRef`. */
 function treeLanded(sha, ctx) {
   const base = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
@@ -304,6 +349,7 @@ export function landedVia(sha, branch, ctx) {
   if (gitOk(["merge-base", "--is-ancestor", sha, ctx.baseRef], ctx.cwd)) return "ancestor";
   if (ctx.merged) {
     if (ctx.merged.bySha.has(sha)) return "pr";
+    if (ctx.viaMerged && ctx.viaMerged.has(sha)) return "pr";
     // local tip behind the merged PR head (pushed from elsewhere, then merged)
     for (const head of (branch && ctx.merged.byName.get(branch)) || []) {
       if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
@@ -472,32 +518,55 @@ function keepReason(unit, ctx) {
   return landedVia(unit.head, unit.branch, ctx) ? null : "not-landed";
 }
 
+/** Commits on `sha` that neither `baseRef` nor a merged PR carried (0 when unreadable). */
+function ownCommits(sha, ctx) {
+  const out = gitOut(["rev-list", "--no-merges", sha, "--not", ctx.baseRef], ctx.cwd) || "";
+  return out.split("\n").filter((c) => c && !ctx.viaMerged.has(c)).length;
+}
+
 /**
- * Which leftovers the auto-clean removes, if its gate opens.
+ * Which leftovers the auto-clean removes, and which unlanded ones are at risk.
+ * Removal waits for the age gate: only once a removable leftover is older
+ * than `autoCleanGateDays`, and then only what is older than
+ * `autoCleanMinAgeDays` (both 30 by default — a month of worktrees to look
+ * back into). The at-risk check ignores age: unpushed work is worth a warning
+ * on the day it is abandoned.
  * @param {{units:object[], defaultBranch:string}} scan
  * @param {{autoCleanGateDays:number, autoCleanMinAgeDays:number}} settings
  * @param {{cwd:string, fetchMerged?:Function, projectsDir?:string|null}} io
- * @returns {{gateOpen:boolean, reason:string|null, remove:object[], keep:object[], offline:boolean}}
+ * @returns {{gateOpen:boolean, reason:string|null, remove:object[], keep:object[], atRisk:object[], offline:boolean}}
  */
 export function planAutoClean(scan, settings, io) {
   const gate = settings.autoCleanGateDays;
   const minAge = settings.autoCleanMinAgeDays;
-  if (!scan.units.some((u) => u.ageDays > gate)) {
-    return { gateOpen: false, reason: `nothing older than ${gate} days`, remove: [], keep: [], offline: false };
+  if (scan.units.length === 0) {
+    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false };
   }
   const originRef = `refs/remotes/origin/${scan.defaultBranch}`;
   const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
   const fetchMerged = io.fetchMerged || fetchMergedHeads;
   const merged = fetchMerged(io.cwd, scan.defaultBranch);
   const ctx = {
-    cwd: io.cwd, baseRef, merged, projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
+    cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
+    projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
   };
   const remove = [];
   const keep = [];
-  for (const u of scan.units.filter((x) => x.ageDays > minAge)) {
+  const atRisk = [];
+  for (const u of scan.units) {
     const reason = keepReason(u, ctx);
-    if (reason) keep.push({ ...u, reason });
-    else remove.push(u);
+    if (!reason) {
+      if (u.ageDays > minAge) remove.push(u);
+      continue;
+    }
+    if (u.ageDays > minAge) keep.push({ ...u, reason });
+    // Unlanded work nobody looks after: its PR branch is gone, or its session
+    // worktree sits detached. Offline, a squash-merged branch looks the same —
+    // report nothing rather than a false alarm.
+    const abandoned = u.gone || (u.kind === "worktree" && u.session && u.detached);
+    if (reason === "not-landed" && abandoned && merged !== null) {
+      atRisk.push({ kind: u.kind, branch: u.branch, path: u.path, head: u.head, commits: ownCommits(u.head, ctx) });
+    }
   }
   const gateOpen = remove.some((u) => u.ageDays > gate);
   return {
@@ -505,6 +574,8 @@ export function planAutoClean(scan, settings, io) {
     reason: gateOpen ? null : `nothing removable older than ${gate} days`,
     remove: gateOpen ? remove : [],
     keep,
+    // a detached worktree and the branch it came from are one finding
+    atRisk: atRisk.filter((r, i) => atRisk.findIndex((x) => x.head === r.head) === i),
     offline: merged === null,
   };
 }
@@ -519,6 +590,20 @@ function deleteBranch(name, sha, cwd, defaultBranch) {
   if (tip === null) return "gone";
   if (tip !== sha) return "moved";
   return gitOk(["branch", "-D", name], cwd) ? null : "delete-failed";
+}
+
+/**
+ * The removed branch's twin on origin, when it points at the same commit —
+ * a pushed sub-agent branch that nobody deletes after the parent PR's squash
+ * merge (#572). Anything else on origin (moved, never pushed, someone else's)
+ * stays. Returns a skip reason, "none" when there is no twin, or null.
+ */
+function deleteRemoteTwin(name, sha, cwd) {
+  if (NEVER_DELETE.has(name)) return "protected";
+  const remote = gitOut(["rev-parse", "--verify", "-q", `refs/remotes/origin/${name}`], cwd);
+  if (remote === null) return "none";
+  if (remote !== sha) return "remote-moved";
+  return gitOk(["push", "origin", "--delete", name], cwd, NETWORK_TIMEOUT) ? null : "remote-delete-failed";
 }
 
 /**
@@ -560,12 +645,19 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
  */
 export function executeAutoClean(plan, scan, {
   cwd, budgetMs = REMOVAL_BUDGET_MS, now = Date.now, removeTimeout = REMOVE_TIMEOUT, projectsDir = defaultProjectsDir(),
-  holdPrune = false,
+  holdPrune = false, remotes = false,
 } = {}) {
   const removed = [];
   const skipped = [];
   let damaged = holdPrune;
   const deadline = now() + budgetMs;
+  const branchGone = (name, sha) => {
+    removed.push({ kind: "branch", name, sha });
+    if (!remotes) return;
+    const why = deleteRemoteTwin(name, sha, cwd);
+    if (why === null) removed.push({ kind: "remote", name, sha });
+    else if (why !== "none") skipped.push({ kind: "remote", name, reason: why });
+  };
   for (const u of plan.remove.filter((x) => x.kind === "worktree")) {
     const left = deadline - now();
     if (left <= 0) {
@@ -586,13 +678,13 @@ export function executeAutoClean(plan, scan, {
     if (u.branch) {
       const bwhy = deleteBranch(u.branch, u.head, cwd, scan.defaultBranch);
       if (bwhy) skipped.push({ kind: "branch", name: u.branch, reason: bwhy });
-      else removed.push({ kind: "branch", name: u.branch, sha: u.head });
+      else branchGone(u.branch, u.head);
     }
   }
   for (const u of plan.remove.filter((x) => x.kind === "branch")) {
     const why = deleteBranch(u.branch, u.head, cwd, scan.defaultBranch);
     if (why) skipped.push({ kind: "branch", name: u.branch, reason: why });
-    else removed.push({ kind: "branch", name: u.branch, sha: u.head });
+    else branchGone(u.branch, u.head);
   }
   // a failed/timed-out removal may have left a half-deleted checkout; prune
   // would drop its registration and turn it into an unlisted orphan
@@ -650,9 +742,11 @@ export function cardLines(result, lang = "de") {
   if (ac && ac.ran) {
     const b = ac.removed.filter((x) => x.kind === "branch").length;
     const w = ac.removed.filter((x) => x.kind === "worktree").length;
+    const r = ac.removed.filter((x) => x.kind === "remote").length;
     const parts = [];
     if (b) parts.push(de ? plural(b, "Branch", "Branches") : plural(b, "branch", "branches"));
     if (w) parts.push(de ? plural(w, "Worktree", "Worktrees") : plural(w, "worktree", "worktrees"));
+    if (r) parts.push(de ? plural(r, "Remote-Branch", "Remote-Branches") : plural(r, "remote branch", "remote branches"));
     let text = parts.length
       ? `${parts.join(" · ")} ${de ? "entfernt" : "removed"}`
       : (de ? "nichts entfernt" : "nothing removed");
@@ -675,6 +769,22 @@ export function cardLines(result, lang = "de") {
       : {
         text: `${result.leftover} branches/worktrees lying around (threshold ${result.threshold}) — say "branch cleanup" to open the cleanup page`,
         reply: "Yes, branch cleanup.",
+      };
+  }
+  const risk = result.atRisk || [];
+  if (risk.length) {
+    const shown = risk.slice(0, 3).map((x) => {
+      const name = x.branch || path.basename(String(x.path || "")) || x.head.slice(0, 7);
+      return de ? `${name} (${plural(x.commits, "Commit", "Commits")})` : `${name} (${plural(x.commits, "commit", "commits")})`;
+    }).join(", ") + (risk.length > 3 ? ` +${risk.length - 3}` : "");
+    out.risk = de
+      ? {
+        text: `⚠ Nicht gelandete Arbeit ohne PR: ${shown} — pushen und mergen oder bewusst verwerfen`,
+        reply: "Sichere die nicht gelandete Arbeit: pushen, PR öffnen und mergen.",
+      }
+      : {
+        text: `⚠ Unlanded work without a PR: ${shown} — push and merge it, or drop it on purpose`,
+        reply: "Rescue the unlanded work: push, open a PR and merge it.",
       };
   }
   return out;
@@ -710,6 +820,7 @@ export function runHygiene(p) {
     leftover: scan.units.length,
     threshold: settings.nudgeThreshold,
     autoClean: { ran: false, reason: null, removed: [], skipped: [], kept: 0, offline: false },
+    atRisk: [],
     nudge: false,
     nudgeSuppressed: null,
   };
@@ -719,7 +830,7 @@ export function runHygiene(p) {
   let dirty = false;
   const priorDamage = openDamage(repo, [], now);
 
-  if (trigger !== "ship") {
+  if (trigger === "promote") {
     result.autoClean.reason = "promote — nudge only";
   } else if (!settings.autoClean) {
     result.autoClean.reason = "disabled (cleanup.autoClean)";
@@ -728,12 +839,13 @@ export function runHygiene(p) {
     const plan = planAutoClean(scan, settings, { cwd, fetchMerged: p.fetchMerged, projectsDir });
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
+    result.atRisk = plan.atRisk;
     if (!plan.gateOpen) {
       result.autoClean.reason = plan.reason;
     } else {
       const done = executeAutoClean(plan, scan, {
         cwd, budgetMs: p.budgetMs ?? REMOVAL_BUDGET_MS, removeTimeout: p.removeTimeout ?? REMOVE_TIMEOUT, projectsDir,
-        holdPrune: priorDamage.length > 0,
+        holdPrune: priorDamage.length > 0, remotes: p.remotes ?? true,
       });
       result.autoClean.ran = true;
       result.autoClean.removed = done.removed;
