@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.knowledge.dispatch
- * @version 0.9.0
+ * @version 0.10.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description On-demand deep-knowledge injection based on prompt keywords.
@@ -25,6 +25,7 @@ const { ensureLocale } = require('../lib/locale');
 const { readBudget, maybeRefreshUsage, nudgeSuffix, budgetLine } = require('../lib/budget');
 const { readDelegation } = require('../lib/delegation');
 const { matchPointers, legacyOverrides, pointerLine } = require('../lib/knowledge-pointers');
+const { SAFE_CONTEXT_CHARS } = require('../lib/context-cap');
 
 /**
  * Topic-to-file keyword map.
@@ -146,6 +147,26 @@ function lockoutArmed(cwd) {
 const MAX_INJECT_PER_PROMPT = 2;
 const MAX_INJECT_BYTES = 8192;
 
+// A doc head shorter than this carries too little to be worth the space — the
+// doc gets a pointer line instead (lib/context-cap).
+const MIN_USEFUL_HEAD = 1500;
+
+/**
+ * The longest head of `text` within `limit` characters, cut at the last
+ * section heading, else the last blank line, else the last line break — never
+ * mid-sentence. '' when nothing fits.
+ */
+function headOf(text, limit) {
+  if (!(limit > 0)) return '';
+  if (text.length <= limit) return text;
+  const slice = text.slice(0, limit);
+  for (const mark of ['\n## ', '\n### ', '\n\n', '\n']) {
+    const at = slice.lastIndexOf(mark);
+    if (at > limit / 2) return slice.slice(0, at).trimEnd();
+  }
+  return '';
+}
+
 // Trigger glossary cap: hard limit on the per-prompt injected aliases payload
 // so we never blow context as more skills add `triggers.<lang>.txt` files.
 const MAX_TRIGGER_GLOSSARY_BYTES = 1024;
@@ -233,21 +254,15 @@ process.stdin.on('end', () => {
   // Filter out already-injected, apply count cap
   const candidates = matched.filter(t => !injected.has(t.file));
 
-  // Read file contents with byte budget
-  const sections = [];
-  let totalBytes = 0;
+  // Read the matched docs; which of them fit is decided below, once the rest
+  // of the payload is known (lib/context-cap).
+  const docs = [];
   for (const topic of candidates) {
-    if (sections.length >= MAX_INJECT_PER_PROMPT) break;
+    if (docs.length >= MAX_INJECT_PER_PROMPT) break;
     const filePath = path.join(dkDir, topic.file);
     if (!fs.existsSync(filePath)) continue;
-    try {
-      const content = fs.readFileSync(filePath, 'utf8').trim();
-      const entryBytes = Buffer.byteLength(content, 'utf8');
-      if (totalBytes + entryBytes > MAX_INJECT_BYTES && sections.length > 0) break;
-      sections.push(`--- deep-knowledge/${topic.file} ---\n${content}`);
-      totalBytes += entryBytes;
-      injected.add(topic.file);
-    } catch {}
+    try { docs.push({ file: topic.file, content: fs.readFileSync(filePath, 'utf8').trim() }); }
+    catch {}
   }
 
   // Pointers for the retired skills' docs (one line each, not the body).
@@ -261,13 +276,6 @@ process.stdin.on('end', () => {
       injected.add(hit.file);
     }
   } catch { /* a pointer is never worth a failed prompt */ }
-
-  // Persist DK injection state (atomic write via session-id lib)
-  if (sections.length > 0 || pointers.length > 0) {
-    try {
-      writeSessionFile(markerFile, [...injected].join('\n'));
-    } catch {}
-  }
 
   // Compose additionalContext.
   //   1. Always re-inject the compact locale tag — Claude's auto-compaction
@@ -329,6 +337,50 @@ process.stdin.on('end', () => {
         `equivalent to invoking the named skill, in addition to its English description.)`,
       );
     }
+  }
+
+  // Doc bodies go in only while the whole payload stays under the harness
+  // limit — past it Claude Code shows a 2 KB preview and the doc (and every
+  // line after the cut) is lost, while the one-shot marker below would still
+  // count it as delivered (~44 prompts in two days, 2026-09-27). A doc that
+  // does not fit whole goes in as its head, cut at a section or paragraph
+  // boundary, with the path of the full file; with no room left for a useful
+  // head it becomes a one-line pointer to that path.
+  const sections = [];
+  let totalBytes = 0;
+  const docPath = (file) => path.join(dkDir, file).replace(/\\/g, '/');
+  const header = `[deep-knowledge dispatch] Injecting 2 reference doc(s) relevant to this prompt:\n`;
+  const sizeWith = (extra) => [...blocks, ...pointers, header, ...sections, ...extra].join('\n').length;
+  // Room kept for the pointer line of every doc still to come.
+  const reserve = (i) => (docs.length - i - 1) * 320;
+  for (let i = 0; i < docs.length; i++) {
+    const doc = docs[i];
+    const title = `--- deep-knowledge/${doc.file} ---`;
+    const whole = `${title}\n${doc.content}`;
+    const entryBytes = Buffer.byteLength(doc.content, 'utf8');
+    const underCap = sections.length === 0 || totalBytes + entryBytes <= MAX_INJECT_BYTES;
+    if (underCap && sizeWith([whole]) + reserve(i) <= SAFE_CONTEXT_CHARS) {
+      sections.push(whole);
+      totalBytes += entryBytes;
+    } else {
+      const tail = `[… ${doc.file} continues — read the full file before acting on its topic: ${docPath(doc.file)}]`;
+      const room = SAFE_CONTEXT_CHARS - reserve(i) - sizeWith([`${title}\n\n${tail}`]);
+      const head = headOf(doc.content, Math.min(room, sections.length === 0 ? Infinity : MAX_INJECT_BYTES - totalBytes));
+      if (head.length >= MIN_USEFUL_HEAD) {
+        sections.push(`${title}\n${head}\n${tail}`);
+        totalBytes += Buffer.byteLength(head, 'utf8');
+      } else {
+        pointers.push(`[deep-knowledge] deep-knowledge/${doc.file} matches this prompt but is too large to inject here — read ${docPath(doc.file)} before acting on its topic.`);
+      }
+    }
+    injected.add(doc.file);
+  }
+
+  // Persist DK injection state (atomic write via session-id lib)
+  if (sections.length > 0 || pointers.length > 0) {
+    try {
+      writeSessionFile(markerFile, [...injected].join('\n'));
+    } catch {}
   }
 
   if (pointers.length > 0) blocks.push(...pointers);

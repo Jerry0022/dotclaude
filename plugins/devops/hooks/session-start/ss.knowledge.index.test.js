@@ -5,7 +5,8 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { buildContext, ALWAYS_ON, MAX_ALWAYS_ON_BYTES } = require("./ss.knowledge.index.js");
+const { buildContext, indexRows, ALWAYS_ON, MAX_ALWAYS_ON_BYTES } = require("./ss.knowledge.index.js");
+const { SAFE_CONTEXT_CHARS } = require("../lib/context-cap.js");
 
 /**
  * The bug this pins: `agent-proactivity.md` said "orchestrate by default", but
@@ -27,7 +28,7 @@ function tmpPlugin(files) {
 }
 
 describe("ss.knowledge.index — always-on policy injection", () => {
-  test("real plugin: the delegation policy is injected in full after the index", () => {
+  test("real plugin: rules first, the policy in full, the index last", () => {
     const ctx = buildContext(PLUGIN_ROOT);
     expect(ctx).not.toBeNull();
     expect(ALWAYS_ON).toContain("agent-proactivity.md");
@@ -37,14 +38,58 @@ describe("ss.knowledge.index — always-on policy injection", () => {
       .trim();
     expect(ctx).toContain("[deep-knowledge always-on] deep-knowledge/agent-proactivity.md");
     expect(ctx).toContain(policy);
-    // Index first, policy after, then the budget line — the last thing Claude reads.
-    expect(ctx.indexOf("| File | Topic |")).toBeLessThan(ctx.indexOf("always-on"));
-    const last = ctx.trimEnd().split("\n").pop();
-    expect(last).toMatch(/^\[budget\] .* → (free|ask-before-parallel|sonnet-only)/);
-    expect(ctx.indexOf("always-on")).toBeLessThan(ctx.indexOf("[budget]"));
-    // The kill-switch state sits right before the budget line.
-    const lines = ctx.trimEnd().split("\n");
-    expect(lines[lines.length - 2]).toMatch(/^\[delegation\] (auto|ask|off) \(/);
+    // What always holds comes first: plugin root, switch, budget, then policy.
+    const lines = ctx.split("\n");
+    expect(lines[0]).toMatch(/^\[devops\] \{PLUGIN_ROOT\} = /);
+    expect(lines[1]).toMatch(/^\[delegation\] (auto|ask|off) \(/);
+    expect(lines[2]).toMatch(/^\[budget\] .* → (free|ask-before-parallel|sonnet-only)/);
+    expect(ctx.indexOf("[budget]")).toBeLessThan(ctx.indexOf("always-on"));
+    // The index comes after the policy — the part a cut may lose.
+    expect(ctx.indexOf("always-on")).toBeLessThan(ctx.indexOf("[deep-knowledge] Reference docs"));
+    expect(ctx).toContain("/deep-knowledge/INDEX.md has a one-line summary");
+  });
+
+  test("real plugin: the whole payload stays under the harness preview limit", () => {
+    // Above ~10 000 chars Claude Code shows only a 2 KB preview (lib/context-cap).
+    // Pin it with a long plugin root, as an installed cache path can be.
+    const ctx = buildContext(PLUGIN_ROOT);
+    expect(ctx.length).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
+    for (const row of indexRows(fs.readFileSync(path.join(PLUGIN_ROOT, "deep-knowledge", "INDEX.md"), "utf8"))) {
+      expect(ctx).toContain(row.file); // every doc stays discoverable by name
+    }
+  });
+
+  test("the index shrinks before anything else does", () => {
+    const rows = Array.from({ length: 40 }, (_, i) => `| [doc-${i}.md](doc-${i}.md) | Topic number ${i} with a longer title | summary |`);
+    const policy = "p".repeat(6000);
+    const root = tmpPlugin({ "INDEX.md": ["| File | Topic | Summary |", ...rows].join("\n"), "agent-proactivity.md": policy });
+    const ctx = buildContext(root);
+    expect(ctx).toContain(policy);
+    expect(ctx).toContain("doc-39 (Topic number 39 with a longer title)"); // fits: file + topic
+
+    const big = tmpPlugin({
+      "INDEX.md": ["| File | Topic | Summary |", ...rows].join("\n"),
+      "agent-proactivity.md": "p".repeat(7000),
+    });
+    const tight = buildContext(big);
+    expect(tight).toContain("p".repeat(7000));
+    expect(tight.length).toBeLessThanOrEqual(SAFE_CONTEXT_CHARS);
+    expect(tight).not.toContain("(Topic number 39)"); // topics dropped first
+    expect(tight).toContain("doc-39");
+
+    const many = Array.from({ length: 400 }, (_, i) => `| [a-long-document-name-${i}.md](x) | T | s |`);
+    const huge = tmpPlugin({ "INDEX.md": many.join("\n"), "agent-proactivity.md": "p".repeat(7000) });
+    const onlyPointer = buildContext(huge);
+    expect(onlyPointer).toContain("p".repeat(7000));
+    expect(onlyPointer).not.toContain("a-long-document-name-399");
+    expect(onlyPointer).toContain("INDEX.md has a one-line summary");
+  });
+
+  test("indexRows reads file and topic from the generated table", () => {
+    expect(indexRows("| [a.md](a.md) | Alpha | x |\n| File | Topic |\n| [b-c.md](b-c.md) | Beta · Gamma | y |")).toEqual([
+      { file: "a", topic: "Alpha" },
+      { file: "b-c", topic: "Beta · Gamma" },
+    ]);
   });
 
   test("the policy stays under the preload cap", () => {
@@ -58,9 +103,9 @@ describe("ss.knowledge.index — always-on policy injection", () => {
   });
 
   test("a missing always-on file is skipped, index still goes", () => {
-    const root = tmpPlugin({ "INDEX.md": "# Index\n\n| File | Topic |" });
+    const root = tmpPlugin({ "INDEX.md": "# Index\n\n| [x.md](x.md) | Ex | s |" });
     const ctx = buildContext(root);
-    expect(ctx).toContain("| File | Topic |");
+    expect(ctx).toContain("x (Ex)");
     expect(ctx).not.toContain("always-on");
   });
 
@@ -70,7 +115,7 @@ describe("ss.knowledge.index — always-on policy injection", () => {
       "agent-proactivity.md": "x".repeat(MAX_ALWAYS_ON_BYTES + 1),
     });
     const ctx = buildContext(root);
-    expect(ctx).toContain("# Index");
+    expect(ctx).toContain("[deep-knowledge] Reference docs");
     expect(ctx).not.toContain("always-on");
   });
 
@@ -81,8 +126,9 @@ describe("ss.knowledge.index — always-on policy injection", () => {
     expect(ctx).toContain(`${root}/deep-knowledge/pre-mortem.md`);
     expect(ctx).toContain("$CLAUDE_PLUGIN_ROOT is NOT set in the Bash tool");
     expect(ctx).toContain("Never search the filesystem");
-    // Before the index body; the budget line must stay last.
-    expect(ctx.indexOf("{PLUGIN_ROOT} =")).toBeLessThan(ctx.indexOf("| File | Topic |"));
+    // The very first line — it must survive any cut.
+    expect(ctx.indexOf("{PLUGIN_ROOT} =")).toBe(ctx.indexOf("[devops]") + "[devops] ".length);
+    expect(ctx.startsWith("[devops] {PLUGIN_ROOT} = ")).toBe(true);
   });
 
   test("no INDEX.md → nothing to inject", () => {
@@ -101,11 +147,11 @@ describe("ss.knowledge.index — kill-switch", () => {
 
   test("off: the policy body is NOT preloaded, the one-line state replaces it", () => {
     const ctx = withSwitch("off");
-    expect(ctx).toContain("| File | Topic |");
+    expect(ctx).toContain("[deep-knowledge] Reference docs");
     expect(ctx).not.toContain("always-on");
     expect(ctx).not.toContain("## Tiers");
     expect(ctx).toContain("[delegation] off (.claude/delegation.json) — no proactive delegation, no offers");
-    expect(ctx.trimEnd().split("\n").pop()).toMatch(/^\[budget\] /);
+    expect(ctx.split("\n")[2]).toMatch(/^\[budget\] /);
   });
 
   test("ask: policy preloaded as usual, the line says offer-then-yes", () => {
