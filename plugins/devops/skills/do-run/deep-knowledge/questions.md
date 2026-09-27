@@ -112,12 +112,12 @@ F5  header: "Desktop"       multiSelect: false
     2. "Desktop übernehmen"                — Computer-Use für native Apps.
 
 F6  header: "PC danach"     multiSelect: false
-    1. "PC anlassen · ohne Resume (Recommended)" — PC bleibt an; kein automatischer Anstoß.
-    2. "PC anlassen · mit Resume"          — PC bleibt an; nach dem 5h-Reset werden hängende Worktrees mit »weiter« angestoßen.   [(Recommended) instead of option 1 when the run is long AND likely to hit the limit — see below]
-    3. "PC ausmachen · ohne Resume"        — PC fährt nach Abschluss herunter (wartet auf andere Sessions).
+    1. "🟢 PC anlassen · ➖ Resume (Recommended)" — PC bleibt an; kein automatischer Anstoß.
+    2. "🟢 PC anlassen · ➕ Resume"          — PC bleibt an; nach dem 5h-Reset werden hängende Worktrees mit »weiter« angestoßen.   [(Recommended) instead of option 1 when the run is long AND likely to hit the limit — see below]
+    3. "🔴 PC ausmachen"                     — PC fährt nach Abschluss herunter (wartet auf andere Sessions).
 
 F7  header: "Burn-Resume"   multiSelect: false   [only with Budget verbrennen]
-    question: "Stoppt das Limit den Burn und der Auto-Resume stößt nach dem Reset an: weiterbrennen? (Gilt nur mit »PC anlassen · mit Resume«.)"
+    question: "Stoppt das Limit den Burn und der Auto-Resume stößt nach dem Reset an: weiterbrennen? (Gilt nur mit »🟢 PC anlassen · ➕ Resume«.)"
     1. "Burn fortsetzen (Recommended)"     — Nach dem Reset läuft der Burn mit neu berechnetem Plan weiter.
     2. "Burn abschalten"                   — Nach dem Reset nur noch die offenen Hauptaufgaben, Standard-Tiefe; Füll-Tasks entfallen.
 
@@ -130,14 +130,16 @@ F8  header: "Zusatz-Tasks"  multiSelect: true    [only with Budget verbrennen, n
 ```
 
 F6 keeps its option order in every call — only the `(Recommended)` marker
-moves. It goes on "PC anlassen · mit Resume" only when both hold: the run
+moves. It goes on "🟢 PC anlassen · ➕ Resume" only when both hold: the run
 is expected to be long (Budget verbrennen, a backlog of ≥ 3 issues or
 milestones, "Alles prüfen", or parallel lanes) **and** it will plausibly
 use up the plan's usage (Budget verbrennen always; otherwise the `[budget]`
 line shows the 5h window already ≥ 50 % used, or parallel sessions draw on
-it). Any other run gets the marker on "PC anlassen · ohne Resume" — a
+it). Any other run gets the marker on "🟢 PC anlassen · ➖ Resume" — a
 resume that never fires is noise, and one that fires on a finished run
-wakes a worktree for nothing.
+wakes a worktree for nothing. The symbols carry the state at a glance:
+🟢/🔴 the PC stays on or shuts down, ➕/➖ auto-resume on or off; shutdown
+never resumes, so its label needs no resume symbol.
 
 F7 is the auto-resume answer for the burn: whatever the user types after a
 limit is asked again by `prompt.burn.resume` (manual nudge, "Burn

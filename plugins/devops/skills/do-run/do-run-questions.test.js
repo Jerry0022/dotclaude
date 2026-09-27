@@ -201,7 +201,8 @@ describe("label rules (base call and follow-up)", () => {
   });
 
   test.each(all)("%s %j is short (≤ 4 words, ≤ 30 chars)", (_id, label) => {
-    const words = label.split(/\s+/).filter((w) => w !== "·");
+    // Status symbols (🟢 ➕ …) are not words: F6 pairs them with its labels.
+    const words = label.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
     expect(words.length).toBeLessThanOrEqual(4);
     // 30, not shorter: "Interaktiv · Ship automatisch" — the user chose
     // words that explain themselves over a terser label.
@@ -226,7 +227,7 @@ describe("label rules (base call and follow-up)", () => {
 
   test("F2 and F6 labels share one shape each", () => {
     for (const o of byId(followUp, "F2").options) expect(o.label).toMatch(/ prüfen$/);
-    for (const o of byId(followUp, "F6").options) expect(o.label).toMatch(/^PC (anlassen|ausmachen) · (mit|ohne) Resume$/);
+    for (const o of byId(followUp, "F6").options) expect(o.label).toMatch(/^(🟢 PC anlassen · [➕➖] Resume|🔴 PC ausmachen)$/u);
   });
 
   test("F7 asks the burn's auto-resume policy: continue recommended, switch-off second", () => {
@@ -237,7 +238,7 @@ describe("label rules (base call and follow-up)", () => {
     expect(f7.options[0].recommended).toBe(true);
     const followUpQuestions = section(questions, "## Follow-up questions");
     expect(followUpQuestions).toMatch(/only with Budget verbrennen/);
-    expect(followUpQuestions).toMatch(/Gilt nur mit »PC anlassen · mit Resume«/);
+    expect(followUpQuestions).toMatch(/Gilt nur mit »🟢 PC anlassen · ➕ Resume«/);
   });
 
   test("F8 collects burn task sources (multi-select, empty = only the prompt); backlog skips it", () => {
@@ -251,12 +252,12 @@ describe("label rules (base call and follow-up)", () => {
 
   test("F6 never pairs shutdown with resume (autonomous HARD GATE by construction)", () => {
     const labels = byId(followUp, "F6").options.map((o) => o.label);
-    expect(labels).not.toContain("PC ausmachen · mit Resume");
+    expect(labels.filter((l) => l.startsWith("🔴"))).toEqual(["🔴 PC ausmachen"]);
   });
 
   test("F6 order is fixed; resume is recommended only for long, limit-bound runs", () => {
     const f6 = byId(followUp, "F6");
-    expect(f6.options.map((o) => o.label)).toEqual(["PC anlassen · ohne Resume", "PC anlassen · mit Resume", "PC ausmachen · ohne Resume"]);
+    expect(f6.options.map((o) => o.label)).toEqual(["🟢 PC anlassen · ➖ Resume", "🟢 PC anlassen · ➕ Resume", "🔴 PC ausmachen"]);
     expect(f6.options[0].recommended).toBe(true);
     const followUpQuestions = section(questions, "## Follow-up questions");
     expect(followUpQuestions).toMatch(/F6 keeps its option order in every call/);
