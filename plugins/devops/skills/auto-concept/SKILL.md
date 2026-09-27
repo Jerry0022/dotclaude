@@ -26,6 +26,18 @@ allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python 
 Generate an interactive HTML page for `$ARGUMENTS`, open it in the browser,
 and monitor for user decisions.
 
+## No reachable bridge ≠ no concept
+
+A concept request always produces **this skill's page**: the `templates.md`
+engine, a template and content variant, the decision panel, the validation
+gate, the file under `docs/concepts/`. The bridge is mandatory wherever it can
+run — every Desktop or local CLI session runs Step 3 unchanged. Only a session
+whose owner **cannot reach** a localhost bridge (a claude.ai cloud or remote
+container, no local browser) takes the fallback in Step 3 § No reachable
+bridge — and even there only the *transport* changes, never the page. A
+hand-built look-alike page with its own decision storage is never a
+substitute (#568).
+
 ## Step 0 — Load Extensions
 
 Check for optional overrides. Use **Glob** to verify each path exists before reading.
@@ -872,6 +884,36 @@ pattern list and common failure modes.
 
 Open the generated HTML file **inside the user's existing Edge window** as
 a new tab — NEVER open a separate browser window.
+
+### No reachable bridge — hand-off fallback (cloud / remote sessions)
+
+**A fallback, never a choice.** Whenever this session can start the bridge
+and open Edge on the owner's machine, the sections below apply unchanged. Take
+this path only when the owner cannot reach `http://localhost:{port}` from the
+device they use: the session runs in a claude.ai cloud or other remote
+container, or there is no local desktop to open Edge on. "The bridge would be
+slow", "fewer tokens" or a failed first Edge start are no reason — retry per
+the sections below.
+
+1. **Steps 0–2 ran in full** — the page exists at
+   `docs/concepts/<date>-<slug>.html`, built from the engine, and the
+   Post-Generation Validation gate passed (`post.concept.gate` runs on it as
+   on every page). Never skip them because the live channel is missing.
+2. **Commit and push** the page on the working branch
+   (`docs(concept): <slug>`), so another session can open it.
+3. **Hand off in one line**, naming the reason, the file, the branch and the
+   way back to the live loop:
+   > Keine erreichbare Concept-Bridge (<reason, e.g. Cloud-Session>) — die
+   > Seite liegt unter `docs/concepts/<file>.html` auf `<branch>`. In einer
+   > Desktop-Session auf diesem Branch „öffne das Concept `<file>`" sagen,
+   > dann startet die Bridge und die Live-Runde läuft.
+4. **No bridge, no crons, no Edge start** in this session; the sidebar keeps
+   its normal outcome prefix (no compass — nothing waits on a page here).
+   The completion card reports the page under `changes` and the hand-off as
+   its one `open` item; it carries no `concept` field.
+
+Publishing the same page as a claude.ai artifact with a swapped transport is a
+separate, later fallback (#589) — not part of this path.
 
 ### MANDATORY — Real Edge browser only
 
