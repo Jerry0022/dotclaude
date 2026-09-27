@@ -84,7 +84,7 @@ describe("base call: the four spec questions in one AskUserQuestion", () => {
   });
 
   test("the skill says ONE call and at most one follow-up", () => {
-    expect(skill).toMatch(/Base call: four questions, one `AskUserQuestion`/);
+    expect(skill).toMatch(/Base call: up to four questions, one `AskUserQuestion`/);
     expect(skill).toMatch(/Follow-up: at most one more call/);
   });
 });
@@ -94,7 +94,7 @@ describe("base call: fixed option order", () => {
     Q1: ["Prompt umsetzen", "Audit", "Backlog"],
     Q2: ["Interaktiv · Ship manuell", "Interaktiv · Ship automatisch", "Autonom · Ship manuell", "Autonom · Ship automatisch"],
     Q3: ["Flexibel", "Strikt"],
-    Q4: ["Harden danach", "Polish danach", "Rethink vorher", "Budget verbrennen"],
+    Q4: ["Rethink vorher", "Budget verbrennen"],
   };
 
   test.each(Object.entries(EXPECTED))("%s options in spec order", (id, labels) => {
@@ -116,10 +116,9 @@ describe("base call: recommendation", () => {
     expect(q.options.slice(1).some((o) => o.recommended)).toBe(false);
   });
 
-  test("Q4: Harden + Polish recommended; Rethink only conditionally; Budget never", () => {
-    const [harden, polish, rethink, budget] = byId(base, "Q4").options;
-    expect(harden.recommended).toBe(true);
-    expect(polish.recommended).toBe(true);
+  test("Q4: no Harden / Polish option; Rethink only conditionally; Budget never", () => {
+    const [rethink, budget] = byId(base, "Q4").options;
+    expect(byId(base, "Q4").options.map((o) => o.label).join(" ")).not.toMatch(/Harden|Polish/);
     expect(rethink.recommended).toBe(false);
     expect(rethink.note).toMatch(/\(Recommended\)" when the prompt reads stuck/);
     expect(budget.recommended).toBe(false);
@@ -176,15 +175,18 @@ describe("base call: Q3 default = last choice, without reordering", () => {
 });
 
 describe("base call: empty multi-select answer", () => {
-  test("nothing ticked in Q4 = the recommended set; 'keine' = no passes", () => {
+  test("nothing ticked in Q4 = the recommended option only; a pass skip goes through the contract", () => {
     const reading = section(questions, "**Reading Q4", "## Resume question");
-    expect(reading).toMatch(/Nothing ticked\*\* → the recommended set/);
-    expect(reading).toMatch(/"keine" \/ "none"/);
+    expect(reading).toMatch(/Nothing ticked\*\* → every option whose label carries/);
+    expect(reading).toMatch(/run-contract\.js skip harden\|polish --reason/);
   });
 
-  test("Q4's question names the set an empty answer runs (no pre-tick exists)", () => {
-    expect(skill).toMatch(/Leer lassen = Harden \+ Polish\)/);
-    expect(questions).toMatch(/no pre-selection: an option can be\s+marked, never pre-ticked/);
+  test("Harden always, Polish on UI changes — Q4 dropped when neither extra applies", () => {
+    expect(skill).toMatch(/Leer lassen = nichts\)/);
+    expect(skill).toMatch(/only when an option below applies, else dropped/);
+    expect(skill).toMatch(/\*\*Harden, always\*\*/);
+    expect(skill).toMatch(/\*\*Polish, on UI changes\*\*/);
+    expect(questions).toMatch(/no pre-selection: an option can be marked, never\s+pre-ticked/);
   });
 });
 

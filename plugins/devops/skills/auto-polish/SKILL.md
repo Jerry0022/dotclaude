@@ -35,8 +35,10 @@ above this skill in the call graph. `/auto-agents` (layer 5) never calls it;
 it is the layer this skill *executes through*.
 
 1. **Direct** — user asks for it (trigger phrase; the skill is hidden from the slash menu).
-2. **From `/do-run`** ("Polish danach") — `--invoked-by=do-run`, a full pass
-   scoped to the run's changes, executed through auto-agents (§ Execution).
+2. **From `/do-run`** (every run that touched UI files — no longer a
+   question) — `--invoked-by=do-run`, a full pass scoped to the run's
+   changes, executed through auto-agents (§ Execution); without UI files in
+   scope it self-skips (Step 2).
    Under "Autonom" do-run adds `--autonomous` (no prompts; structural changes
    always flagged, never auto-applied); under "Strikt" it adds `--strict`.
    Skip self-spawned qa/redteam when the parent owns those waves. The
@@ -133,8 +135,14 @@ Resolve `$SCOPE_FILES`:
   framework conventions) ∪ uncommitted changes (same filter).
 - Repo mode: all tracked UI files.
 
-If `$SCOPE_FILES` empty → fall back to the last 10 commits' UI changes
-and inform the user.
+If `$SCOPE_FILES` empty:
+- `--invoked-by=do-run` (or its legacy values) → **self-skip**: no agents,
+  no card — return `{ applicable: false, reason: "no UI files in diff" }` to
+  the caller and stop. The run touched no UI (same detection as the ship
+  path, `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § UI file detection
+  plus the override's `files:`), and the run contract owes no Polish then.
+- Direct invocation → fall back to the last 10 commits' UI changes and
+  inform the user.
 
 ## Step 3 — Kick off Test Plan + UI-QA Agent (parallel)
 

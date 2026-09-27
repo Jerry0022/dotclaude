@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.run.contract
- * @version 0.4.6
+ * @version 0.5.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card
@@ -137,9 +137,9 @@ function armFromPending(hook, root, RC, C, sessionId, budget) {
   }
   if (!fields) {
     source = 'fallback';
-    // The click-through defaults: parse an empty Q4 whose options carry the
-    // recommended passes; the do-run args still set a preset mode.
-    const q4 = { header: 'Durchgänge?', question: 'Durchgänge?', options: [{ label: 'Harden danach (Recommended)' }, { label: 'Polish danach (Recommended)' }] };
+    // The click-through defaults: an empty Q4 arms Harden + Polish (both
+    // always owed; Polish only on UI changes); the do-run args still set a preset mode.
+    const q4 = { header: 'Durchgänge?', question: 'Durchgänge?', options: [] };
     fields = RC.parseRouterAnswers([q4], {}, { doRunArgs: marker.args });
   }
   const h = RC.arm(root, { ...fields, source, sessionId: sessionId || marker.sessionId || null });
@@ -224,8 +224,9 @@ function promotePushHead(call, contract, root, C, budget, fallbackTimeoutMs) {
  * 6. H-F20: one base and one count per release / non-release case per call,
  * not per gate (one compound shell line can hit branch, card and release).
  * Measured lazily — only a gate that needs qa asks git.
- * @param {{resolveBase: Function, codeFilesChanged: Function}} Q lib/run-contract-qa.js
- * @returns {(gate: string) => number|null}
+ * One diff yields both counts: code files (qa) and UI files (polish).
+ * @param {{resolveBase: Function, changedCounts: Function}} Q lib/run-contract-qa.js
+ * @returns {(gate: string) => {code:number, ui:number}|null}
  */
 function qaCounter(gitRoot, explicitBase, C, Q, budget) {
   let base;
@@ -234,7 +235,7 @@ function qaCounter(gitRoot, explicitBase, C, Q, budget) {
     const key = gate === 'release' ? 'release' : 'other';
     if (!counts.has(key)) {
       if (base === undefined) base = Q.resolveBase(gitRoot, explicitBase, C, budget);
-      counts.set(key, budget.expired() ? null : Q.codeFilesChanged(gitRoot, gate, base, C.gitLines, budget));
+      counts.set(key, budget.expired() ? null : Q.changedCounts(gitRoot, gate, base, C.gitLines, budget));
     }
     return counts.get(key);
   };
@@ -252,10 +253,14 @@ function gateRefusal(call, { croot, contract }, RC, countFor, armed, sessionId) 
     if (gate === 'release' && call.shellRelease && contract.ship !== 'auto') continue;
     const ctx = { closes: call.closes || [] };
     if ((gate === 'release' || gate === 'card' || gate === 'branch') && RC.segmentHasWork(seg)) {
-      const n = countFor(gate);
+      const counts = countFor(gate);
+      const n = counts ? counts.code : null;
+      const ui = counts ? counts.ui : null;
       ctx.codeFilesChanged = n;
-      // Recorded before deciding, so the card knows qa's input (`QA ?` when unknown).
-      if (RC.record(croot, { k: 'measure', codeFiles: n }, { sessionId })) evs.push({ k: 'measure', codeFiles: n });
+      ctx.uiFilesChanged = ui;
+      // Recorded before deciding, so the card knows qa's and polish's input (`QA ?` when unknown).
+      const m = { k: 'measure', codeFiles: n, uiFiles: ui };
+      if (RC.record(croot, m, { sessionId })) evs.push(m);
     }
     const open = RC.openObligations(contract, evs, gate, ctx);
     if (!open.length) continue;

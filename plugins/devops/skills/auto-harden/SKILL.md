@@ -37,7 +37,7 @@ it is the layer this skill *executes through*. Four ways in:
 
 1. **Direct** — user asks for it (trigger phrase; the skill is hidden from the slash menu). Full skill
    runs as documented below. Asks questions when `$AUTONOMOUS=0`.
-2. **From `/do-run`** ("Harden danach") — `--invoked-by=do-run`, a full pass
+2. **From `/do-run`** (after every implementation — no longer a question) — `--invoked-by=do-run`, a full pass
    scoped to the run's changes, executed through auto-agents (§ Execution).
    Under "Autonom" do-run adds `--autonomous`; under "Strikt" it adds
    `--strict`. The pre-PR-2 values `--invoked-by=agents` and

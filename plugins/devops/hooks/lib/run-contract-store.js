@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-store
- * @version 0.6.0
+ * @version 0.7.0
  * @plugin devops
  * @description Run-contract persistence: paths, atomic JSON / JSONL io,
  *   lifecycle (arm / update / claim / record / close), expiry + archive and
@@ -932,7 +932,7 @@ function record(cwd, event, opts = {}) {
   if (ev.k === 'measure') {
     const seg = currentSegment(h, eventsOf(cwd, h));
     const last = [...seg].reverse().find(e => e.k === 'measure');
-    if (last && last.codeFiles === ev.codeFiles) return null;
+    if (last && last.codeFiles === ev.codeFiles && last.uiFiles === ev.uiFiles) return null;
   }
   if (ev.k === 'block') {
     const seg = currentSegment(h, eventsOf(cwd, h));

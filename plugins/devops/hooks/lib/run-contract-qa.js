@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-qa
- * @version 0.1.1
+ * @version 0.2.0
  * @plugin devops
  * @description The one qa measurement (AUD-010): base resolution + changed
  *   code files, shared by the PreToolUse gate (pre-tool-use/pre.run.contract.js)
@@ -58,12 +58,14 @@ function resolveBase(root, explicit, C, budget) {
 const { GIT_TIMEOUT_MS } = require('./git-timeout');
 
 /**
- * Changed code files for the qa rule, or null (unknown).
+ * Changed files of the run, or null (unknown): the diff against the base,
+ * plus (outside release) the uncommitted diff and untracked files.
  * @param {(root:string, args:string[], opts?:object) => string[]} [gitLines]
  *   defaults to git-timeout's gitLines; tests inject a fake
  * @param {object} [budget] an optional git-timeout gitBudget() shared across a chain (AUD-019)
+ * @returns {string[]|null}
  */
-function codeFilesChanged(root, gate, base, gitLines = require('./git-timeout').gitLines, budget) {
+function changedFiles(root, gate, base, gitLines = require('./git-timeout').gitLines, budget) {
   try {
     // H-A6: gitLines throws on a git failure → the catch below = unknown.
     const opts = budget ? { budget } : { timeout: GIT_TIMEOUT_MS };
@@ -79,9 +81,32 @@ function codeFilesChanged(root, gate, base, gitLines = require('./git-timeout').
         for (const n of gitLines(root, ['ls-files', '--others', '--exclude-standard'], opts)) set.add(n);
       } catch { /* untracked files unknown: the diff count stands */ }
     }
-    const { isCodeChange } = require('./browsertest-guard');
-    return [...set].filter(f => isCodeChange(f)).length;
+    return [...set];
   } catch { return null; }
+}
+
+/** Changed code files for the qa rule, or null (unknown). */
+function codeFilesChanged(root, gate, base, gitLines, budget) {
+  const files = changedFiles(root, gate, base, gitLines, budget);
+  if (!files) return null;
+  const { isCodeChange } = require('./browsertest-guard');
+  return files.filter(f => isCodeChange(f)).length;
+}
+
+/**
+ * Both counts from one diff: code files (qa) and UI files (Polish is owed
+ * only when the run touched UI — ui-files.js, the auto-polish ship-path
+ * detection, the project's `files:` override included). null when unknown.
+ * @returns {{code:number, ui:number}|null}
+ */
+function changedCounts(root, gate, base, gitLines, budget) {
+  const files = changedFiles(root, gate, base, gitLines, budget);
+  if (!files) return null;
+  const { isCodeChange } = require('./browsertest-guard');
+  const { isUiFile, loadOverride } = require('./ui-files');
+  let extra = [];
+  try { extra = loadOverride(root).files; } catch { /* defaults only */ }
+  return { code: files.filter(f => isCodeChange(f)).length, ui: files.filter(f => isUiFile(f, extra)).length };
 }
 
 /**
@@ -108,4 +133,16 @@ function measureQa(root, gate, explicitBase, opts = {}) {
   } catch { return null; }
 }
 
-module.exports = { safeBase, resolveBase, codeFilesChanged, measureQa };
+/** measureQa's twin with both counts (the CLI's status / done). */
+function measureChanges(root, gate, explicitBase, opts = {}) {
+  const C = opts.C || require('./git-timeout');
+  const budget = opts.budget || require('./git-timeout').gitBudget(opts.totalMs);
+  try {
+    if (budget.expired()) return null;
+    const base = resolveBase(root, explicitBase, C, budget);
+    if (budget.expired()) return null;
+    return changedCounts(root, gate, base, C.gitLines, budget);
+  } catch { return null; }
+}
+
+module.exports = { safeBase, resolveBase, changedFiles, codeFilesChanged, changedCounts, measureQa, measureChanges };

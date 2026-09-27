@@ -36,14 +36,15 @@ at turn end.
 this router's own answers (Q1–Q4, the follow-up) straight from the
 `AskUserQuestion` result and writes them to `.claude/run-contract.json`. From
 that point on, a PreToolUse hook refuses the tool call that would walk past a
-chosen pass, a skipped `auto-agents` classification, an unrefined issue, or a
+pass, a skipped `auto-agents` classification, an unrefined issue, or a
 ship that bypasses `devops:do-ship` — with the exact call that satisfies it.
 Mechanism, obligations and gates: `{PLUGIN_ROOT}/deep-knowledge/run-contract.md`.
 
 | Gate hits… | Applies to |
 |---|---|
 | `auto-agents` | every `prompt` / `backlog` run — the tier decision is never skipped |
-| `harden` / `polish` | a chosen pass, once the segment has real work |
+| `harden` | every run, once the segment has real work |
+| `polish` | the same, but only when the diff holds UI files (`hooks/lib/ui-files.js`; unknown counts as owed) |
 | `qa` | code changes past the size threshold |
 | `do-ship` | `Ship automatisch` — a `ship_release` call is refused without a prior `Skill("devops:do-ship")` |
 | `refine` / `triage` | backlog mode's Präsenz obligations |

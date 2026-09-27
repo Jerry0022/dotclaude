@@ -303,7 +303,7 @@ execution context (the user will not be there to re-enter it):
 CronCreate({
   cron: "<M> <H> <D> <Mo> *",
   recurring: false,
-  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=<harden,polish|none>, strict=<on|off>, branch=<current-branch>."
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=harden,polish, strict=<on|off>, branch=<current-branch>."
 })
 ```
 
@@ -570,12 +570,12 @@ because progress is saved.
 
 ## Step 6.5 — Passes and ship (do-run router)
 
-Only for status COMPLETED in `implement` mode, and only when the router set
-`$PASSES` or `$SHIP=auto`: run the router's Step 7 (`../SKILL.md`) now —
-auto-harden / auto-polish with `--invoked-by=autonomous`, then, for
+Only for status COMPLETED in `implement` mode: run the router's Step 7
+(`../SKILL.md`) now — auto-harden always, auto-polish when the change
+touched UI files, both with `--invoked-by=autonomous`, then, for
 `$SHIP=auto`, do-ship under the `do-run` lockout. Still no questions (the
 Lockout holds). A blocked pass or ship is logged and reported, the run
-continues to Step 7. Every chosen pass is gated by the run contract
+continues to Step 7. Every owed pass is gated by the run contract
 (`{PLUGIN_ROOT}/deep-knowledge/run-contract.md`) exactly as it is for any other do-run
 run — running it here, in order, satisfies the gate; there is no separate
 autonomous-mode exemption. INTERRUPTED / BLOCKED runs and `analyze` mode

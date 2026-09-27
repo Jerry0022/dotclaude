@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.3.4
+ * @version 0.4.0
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -95,6 +95,12 @@ function codeFilesOf(seg, ctx) {
   const m = measureOf(seg || []);
   return m && typeof m.codeFiles === 'number' ? m.codeFiles : null;
 }
+/** ctx.uiFilesChanged, else the segment's latest measure; null = unknown. */
+function uiFilesOf(seg, ctx) {
+  if (ctx && typeof ctx.uiFilesChanged === 'number') return ctx.uiFilesChanged;
+  const m = measureOf(seg || []);
+  return m && typeof m.uiFiles === 'number' ? m.uiFiles : null;
+}
 /** Whether auto-issue args name item `n`: a `#n` read as issue-refs.js reads
  *  it (`#7d84a8` and "#333 border" name no #7 / #333), or `n` / `#n` as a
  *  token of its own after the word issue ("refine issue #412 — card border"
@@ -148,9 +154,14 @@ function obState(contract, seg, allEvs, ob, gate, ctx) {
       if (!editGate && !work) return null;
       return res(seg.some(ev => isSkill(ev, 'auto-agents')));
     case 'harden':
-    case 'polish':
+    case 'polish': {
       if (!contract.passes.includes(ob) || !work) return null;
-      return res(passDone(seg, `auto-${ob}`));
+      const done = passDone(seg, `auto-${ob}`);
+      // Polish is owed only when the run touched UI files (the auto-polish
+      // ship-path check). Measured 0 → not applicable; unknown → still owed.
+      if (!done && ob === 'polish' && !skip && uiFilesOf(seg, ctx) === 0) return null;
+      return res(done);
+    }
     case 'qa':
       if (!work || !qaApplies(contract, ctx, seg)) return null;
       return res(seg.some(isQaAgent));
@@ -221,8 +232,8 @@ function fixFor(contract, ob, allEvs, item) {
 
 const WHY = {
   'auto-agents': 'auto-agents decides the tier in a do-run run',
-  harden: 'the user chose "Harden danach"',
-  polish: 'the user chose "Polish danach"',
+  harden: 'do-run runs Harden after every implementation',
+  polish: 'UI files changed — do-run runs Polish after every UI change',
   qa: 'code files changed above the qa threshold',
   'do-ship': 'the user chose "Ship automatisch"',
   refine: 'backlog Step 2 refines every issue before it ships',
