@@ -621,6 +621,8 @@ export async function handler(params) {
             },
             { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
           );
+          // `pushed.ok` means "the loop settled", not "the push landed" — a
+          // refusal settles it too, so check `refused` first.
           if (refused) {
             const err = new Error(`tag push refused (permission) — not retried: ${refused.message?.slice(0, 200) || "unknown error"}`);
             err.permanent = true;
