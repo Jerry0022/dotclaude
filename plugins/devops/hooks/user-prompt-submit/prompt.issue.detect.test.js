@@ -179,3 +179,51 @@ describe("prompt.issue.detect — a branch named in the prompt", () => {
     expect(tracked("w1-list")).toEqual(["12", "13", "14"]);
   });
 });
+
+describe("prompt.issue.detect — first-prompt matching runs in the hook (issue-match cache)", () => {
+  const { createRequire } = require("node:module");
+  const IM = createRequire(import.meta.url)("../lib/issue-match.js");
+  const REMOTE = "https://github.com/acme/widgets.git";
+  const ISSUES = [
+    { number: 7, title: "[FEATURE] Dark mode toggle for settings page", labels: ["type:feature"] },
+    { number: 9, title: "[BUG] Crash when exporting CSV", labels: ["type:bug"] },
+  ];
+
+  function withRemote() { execFileSync("git", ["remote", "add", "origin", REMOTE], { cwd }); }
+
+  test("a match ≥ 0.6 asks about that issue — no match_issues call", () => {
+    withRemote();
+    IM.writeCache(REMOTE, ISSUES, { dir: tmp });
+    const r = run("dark mode toggle settings", "m-hit");
+    expect(r.stdout).toContain("open issue #7");
+    expect(r.stdout).toContain('Arbeitest du an Issue #7');
+    expect(r.stdout).not.toContain("match_issues");
+  });
+
+  test("no match ≥ 0.6 → no output at all", () => {
+    withRemote();
+    IM.writeCache(REMOTE, ISSUES, { dir: tmp });
+    const r = run("please refactor the build pipeline and update the readme wording", "m-miss");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+
+  test("no cache for this repo → the old match_issues instruction", () => {
+    withRemote();
+    const r = run("dark mode toggle settings", "m-nocache");
+    expect(r.stdout).toContain("call the match_issues");
+  });
+
+  test("a stale cache counts as none", () => {
+    withRemote();
+    IM.writeCache(REMOTE, ISSUES, { dir: tmp, now: Date.now() - IM.CACHE_MAX_AGE_MS - 1000 });
+    expect(run("dark mode toggle settings", "m-stale").stdout).toContain("call the match_issues");
+  });
+
+  test("the heuristic still runs once per session", () => {
+    withRemote();
+    IM.writeCache(REMOTE, ISSUES, { dir: tmp });
+    expect(run("dark mode toggle settings", "m-once").stdout).toContain("#7");
+    expect(run("dark mode toggle settings again", "m-once").stdout).toBe("");
+  });
+});
