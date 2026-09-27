@@ -1128,7 +1128,11 @@ const HEADINGS = {
     analysis: () => '📋 Analyse gelesen — umsetzen oder Fragen?',
     aborted: (c) => `🚫 Abgebrochen wegen ${c.reason} — anders versuchen?`,
     fallback: () => '🔧 Erledigt — noch etwas?',
-    paused: () => '⏸️ Pausiert — weiter, wann du willst',
+    paused: (c) => ({
+      restart: '⏸️ Pausiert bis Neustart — Claude Code neu starten',
+      reboot: '⏸️ Pausiert bis PC-Neustart',
+      'usage-reset': '⏸️ Pausiert bis Limit-Reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
+    })[c.pauseReason] || '⏸️ Pausiert — weiter, wann du willst',
     pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
     concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
@@ -1158,7 +1162,11 @@ const HEADINGS = {
     analysis: () => '📋 Read through — questions?',
     aborted: (c) => `🚫 Aborted because of ${c.reason} — try differently?`,
     fallback: () => '🔧 Done — anything else?',
-    paused: () => '⏸️ Paused — pick it up whenever you like',
+    paused: (c) => ({
+      restart: '⏸️ Paused until restart — restart Claude Code',
+      reboot: '⏸️ Paused until reboot',
+      'usage-reset': '⏸️ Paused until limit reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
+    })[c.pauseReason] || '⏸️ Paused — pick it up whenever you like',
     pending: (c) => `⏳ Not done yet — ${c.what}`,
     concept: (c) => `🧭 Concept ${c.what}`,
     batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
@@ -1396,7 +1404,26 @@ function decisionContext(input, key, delivery, state, lang) {
     unmet: strictlyUnmet,
     reason: (input.cta && input.cta.reason) || topGateFinding(input, lang),
     branch: state.branch || '',
+    // #583: why a paused card stops — heading and context line name it.
+    pauseReason: (input.pause && input.pause.reason) || '',
+    resetAt: (input.pause && input.pause.resetAt) || '',
   };
+}
+
+/** The one action that resumes a paused card (#548, reasons #583). */
+function pausedResumeLine(pause, lang) {
+  const reason = pause && pause.reason;
+  const at = pause && pause.resetAt;
+  if (lang === 'en') {
+    if (reason === 'restart') return 'Restart Claude Code, then write here to continue.';
+    if (reason === 'reboot') return 'Restart the PC, then open this session and write here to continue.';
+    if (reason === 'usage-reset') return (at ? `After the limit resets at ${at}` : 'After the limit resets') + ', write here to continue.';
+    return 'Write here to continue.';
+  }
+  if (reason === 'restart') return 'Claude Code neu starten, dann hier schreiben, um weiterzumachen.';
+  if (reason === 'reboot') return 'PC neu starten, dann diese Session öffnen und hier schreiben, um weiterzumachen.';
+  if (reason === 'usage-reset') return (at ? `Nach dem Limit-Reset um ${at}` : 'Nach dem Limit-Reset') + ' hier schreiben, um weiterzumachen.';
+  return 'Schreib hier, um weiterzumachen.';
 }
 
 /** The optional `›` context line under the heading (§ 2.6). */
@@ -1404,7 +1431,7 @@ function buildContextLine(input, key, delivery, lang) {
   if (input._downgraded) return '› ' + renderDowngradeNote(lang, input._downgradeReason);
   if (key === 'aborted' && input.cta && input.cta.info) return '› ' + input.cta.info;
   // Paused (#548): the one thing left to say is how to pick it up again.
-  if (key === 'paused') return '› ' + (lang === 'en' ? 'Write here to continue.' : 'Schreib hier, um weiterzumachen.');
+  if (key === 'paused') return '› ' + pausedResumeLine(input.pause, lang);
   return '';
 }
 
@@ -1852,7 +1879,7 @@ function refreshUsage() {
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
   'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest', 'open',
-  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept',
+  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept', 'pause',
 ];
 
 /** Prefix that carries the relay contract with the card itself. */
@@ -2306,7 +2333,7 @@ server.registerTool(
       "and the app's one no-output nudge that follows gets an empty reply; " +
       "the visible title line is only for a failed call, never a shortcut.",
     inputSchema: z.object({
-      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\"): the card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `⏸️ Paused – …`."),
+      variant: z.enum(CARD_VARIANTS).describe("Card variant based on task outcome. `released` is the channel-promotion card (alpha→beta→stable) do-ship renders whenever a promotion ran — also after a ship in the same run (ship stable): ONE released card then carries the ship's changes, tests, state and userFinalTest plus the promotion facts, never a ship-successful card first. `ready-files` is the file-only equivalent of `ready` — work landed on disk in a project with no git repo, so there is no commit, branch, PR or merge to report. `paused` is for work the user pauses to continue later (\"machen wir später weiter\", \"pause for now\") AND for work whose next step is a Claude Code restart, a machine reboot or a usage-limit reset — never `analysis`, `ready` or `fallback` then; pass `pause: { reason }` (restart / reboot / usage-reset). The card states the pause, the result lines say what was stopped and what was kept, and it asks nothing — the session title becomes `⏸️ Paused – …` (with a reason: `⏸️ Paused until restart – …`)."),
       summary: z.string().transform(v => clampText(v, SUMMARY_MAX).value)
         .describe("What changed for the user, ≤ 8 words / 60 characters (clamped on a word boundary, not rejected). No pipeline status — 'gemergt', 'geshipped', 'live', the version: the Delivery block and the CTA already say that."),
       lang: z.enum(["en", "de"]).default("de").describe("UI language for CTA"),
@@ -2404,6 +2431,13 @@ server.registerTool(
           }),
         ]).optional(),
       ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich', where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
+      pause: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.object({
+          reason: z.enum(["restart", "reboot", "usage-reset", "user"]).optional().describe("What unblocks the work: 'restart' = restart Claude Code (a new plugin/MCP version, a settings change), 'reboot' = restart the machine, 'usage-reset' = wait for the usage limit to reset, 'user' (default) = the user paused it."),
+          resetAt: z.string().optional().describe("usage-reset only: when the limit resets, as the user reads it (e.g. '23:40' or 'Mo 09:00'). Named in the heading."),
+        }).optional(),
+      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('⏸️ Paused until restart – …') and the context line the one action that resumes it. Omit for a plain user pause."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([

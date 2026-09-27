@@ -8,6 +8,7 @@ import {
   VARIANT_TITLE_PREFIX,
   stripTitlePrefix,
   releasedPrefix,
+  pausedPrefix,
   titlePrefixFor,
   titleInstruction,
   conceptUrl,
@@ -120,6 +121,22 @@ describe("titlePrefixFor", () => {
     expect(SESSION_PREFIX.paused).toBe("⏸️ Paused – ");
     expect(stripTitlePrefix("⏸️ Paused – PC cleanup")).toBe("PC cleanup");
     expect(stripTitlePrefix("⏳ ⏸️ Paused – PC cleanup")).toBe("PC cleanup");
+  });
+
+  // #583: the paused title names what unblocks the work; every reason
+  // variant still strips back to the bare title.
+  test("a paused card with a reason names it in the title, and it strips cleanly", () => {
+    expect(pausedPrefix("restart")).toBe("⏸️ Paused until restart – ");
+    expect(pausedPrefix("reboot")).toBe("⏸️ Paused until reboot – ");
+    expect(pausedPrefix("usage-reset")).toBe("⏸️ Paused until limit reset – ");
+    expect(pausedPrefix("user")).toBe(SESSION_PREFIX.paused);
+    expect(pausedPrefix(undefined)).toBe(SESSION_PREFIX.paused);
+    expect(titlePrefixFor({ variant: "paused", pause: { reason: "restart" } }, deps)).toBe("⏸️ Paused until restart – ");
+    expect(titlePrefixFor({ variant: "paused", pause: { reason: "user" } }, deps)).toBe(SESSION_PREFIX.paused);
+    for (const r of ["restart", "reboot", "usage-reset"]) {
+      expect(stripTitlePrefix(pausedPrefix(r) + "Plugin update"), r).toBe("Plugin update");
+      expect(stripTitlePrefix("⏳ " + pausedPrefix(r) + "Plugin update"), r).toBe("Plugin update");
+    }
   });
 
   test("a ship lands as Shipped — final and intermediate alike", () => {

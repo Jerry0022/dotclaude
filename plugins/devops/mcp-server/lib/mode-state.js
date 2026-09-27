@@ -115,11 +115,28 @@ export function releasedPrefix(channel) {
   return SESSION_PREFIX.released.replace(" – ", ` ${name} – `);
 }
 
+/** `pause.reason` → the word the paused title names (#583). `user` and an
+ *  unknown reason keep the bare `⏸️ Paused – `. */
+export const PAUSE_REASONS = Object.freeze({
+  restart: "restart",
+  reboot: "reboot",
+  "usage-reset": "limit reset",
+});
+
+/** `⏸️ Paused until restart – ` — the paused base with what unblocks the work
+ *  spliced in; the bare base for a user pause or an unknown reason. */
+export function pausedPrefix(reason) {
+  const word = PAUSE_REASONS[String(reason ?? "").trim().toLowerCase()];
+  if (!word) return SESSION_PREFIX.paused;
+  return SESSION_PREFIX.paused.replace(" – ", ` until ${word} – `);
+}
+
 /** Every string a title may start with: the pinned prefixes plus the released
- *  prefix per channel. Longest first so "🚀 Shipping – " never loses to a
- *  shorter sibling. */
+ *  prefix per channel and the paused prefix per reason. Longest first so
+ *  "🚀 Shipping – " never loses to a shorter sibling. */
 const STRIPPABLE = Object.freeze(
-  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix)].filter(Boolean).sort((a, b) => b.length - a.length),
+  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix), ...Object.keys(PAUSE_REASONS).map(pausedPrefix)]
+    .filter(Boolean).sort((a, b) => b.length - a.length),
 );
 
 /** `title` without any leading devops prefix (repeated prefixes included, so
@@ -166,7 +183,7 @@ export function stripTitlePrefix(title) {
  * channel it reached (`delivery.promote.current`, else `promotion.to`, else
  * `cta.to`) right in the prefix.
  *
- * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string, delivery?: object, promotion?: object, cta?: object }} params
+ * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string, delivery?: object, promotion?: object, cta?: object, pause?: { reason?: string } }} params
  * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean }} deps
  * @returns {string|null|{ owned: string, other: string }}
  */
@@ -198,6 +215,7 @@ function outcomePrefix(params, pending) {
       (d && d.promote && d.promote.current) || (p && p.to) || (c && c.to) || "",
     );
   }
+  if (variant === "paused") return pausedPrefix(params.pause && params.pause.reason);
   return VARIANT_TITLE_PREFIX[variant] ?? "";
 }
 

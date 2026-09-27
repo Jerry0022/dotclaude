@@ -704,6 +704,7 @@ function buildBlockReason(pluginRoot, opts = {}) {
     '  code/doc changes (≥1 edit), no app → ready',
     '  zero file changes (analysis/explain/audit) → analysis',
     '  the user pauses the work to continue later → paused',
+    '  next step = Claude Code restart / reboot / usage-limit reset → paused + pause:{reason}',
     '  unsure → fallback',
     '',
     'PENDING (orthogonal to the variant): if background subagents, workflows or',

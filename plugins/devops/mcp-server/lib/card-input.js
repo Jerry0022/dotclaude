@@ -54,7 +54,7 @@ export const CARD_VARIANTS = [
 export const CARD_KNOWN_KEYS = [
   "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
-  "deployGate", "validation", "delivery", "promotion",
+  "deployGate", "validation", "delivery", "promotion", "pause",
 ];
 
 /** Top-level keys of `params` the schema does not know, in payload order. */
