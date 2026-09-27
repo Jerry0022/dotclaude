@@ -124,3 +124,61 @@ describe("stop.flow.browsertest — a test run in the background", () => {
     }
   });
 });
+
+describe("stop.flow.browsertest — background agents that may still change files", () => {
+  const LAUNCH =
+    "Async agent launched successfully. (This tool result is internal metadata — never quote or " +
+    "paste any part of it, including the agentId below, into a user-facing reply.)\n" +
+    "agentId: a75d674f7108dd6c8 (internal ID - do not mention to user. Use SendMessage with to: " +
+    "'a75d674f7108dd6c8', summary: '<5-10 word recap>' to continue this agent.)\n" +
+    "The agent is working in the background.";
+
+  function transcriptWithAgent(dir, subagentType, { finished = false } = {}) {
+    const lines = [
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "Agent", input: { subagent_type: subagentType, run_in_background: true } }] } }),
+      JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", content: LAUNCH, tool_use_id: "toolu_1" }] } }),
+    ];
+    if (finished) {
+      lines.push(JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "<task-notification>\n<task-id>a75d674f7108dd6c8</task-id>\n<status>completed</status>\n<summary>Agent done</summary>\n</task-notification>" }));
+    }
+    const file = path.join(dir, "agent-transcript.jsonl");
+    fs.writeFileSync(file, lines.join("\n") + "\n");
+    return file;
+  }
+
+  function owe(dir) {
+    fs.writeFileSync(flagPath(dir, "light-pending"), path.join(dir, "a.js"));
+    fs.writeFileSync(flagPath(dir, "light-kind"), "runner");
+  }
+
+  test("an implementing agent still running → no forced verification turn, every flag kept", async () => {
+    const dir = project();
+    try {
+      owe(dir);
+      expect(await stop(dir, transcriptWithAgent(dir, "devops:frontend"))).toBe("");
+      expect(hasFlag(dir, "light-pending")).toBe(true);
+      expect(hasFlag(dir, "light-blockcount")).toBe(false);
+    } finally { cleanup(dir); }
+  });
+
+  test("once it finished, the owed check is enforced again", async () => {
+    const dir = project();
+    try {
+      owe(dir);
+      const decision = JSON.parse(await stop(dir, transcriptWithAgent(dir, "devops:frontend", { finished: true })));
+      expect(decision.decision).toBe("block");
+    } finally { cleanup(dir); }
+  });
+
+  test("a read-only agent (research, qa, redteam) defers nothing", async () => {
+    const dir = project();
+    try {
+      for (const role of ["devops:research", "devops:qa", "devops:redteam", "Explore"]) {
+        owe(dir);
+        try { fs.unlinkSync(flagPath(dir, "light-blockcount")); } catch { /* none */ }
+        const decision = JSON.parse(await stop(dir, transcriptWithAgent(dir, role)));
+        expect(decision.decision, role).toBe("block");
+      }
+    } finally { cleanup(dir); }
+  });
+});

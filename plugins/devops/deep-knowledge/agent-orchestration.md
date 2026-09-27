@@ -119,6 +119,45 @@ past its budget **pauses and reports** instead of disappearing into a long,
 unsupervised tail. Reserve large fan-out (many agents) for genuinely
 breadth-parallel work; most coding tasks do not need it (15× token overhead).
 
+### Parallel implementers per wave
+
+The count follows the work, not a fixed number. Parallel **implementers**
+(agents that edit files) in one wave:
+
+1. **One agent per disjoint ownership bundle** — a set of files plus the
+   interfaces / contracts those files own. Two bundles that touch the same
+   interface are ONE bundle. Never give two agents the same file.
+2. **A shared contract changes first, serially** — then fan out, and hand the
+   finished contract change to every later agent as a note (agents that know
+   the concurrent change recover most interference; agents that don't fail
+   almost always when one changes a helper the other relies on).
+3. **Ceilings** — coupled or feature work: **5** per wave. Homogeneous,
+   mechanical units (per-module migrations, per-file fixes) where each agent
+   has its own worktree and its own passing tests: up to **10** per wave.
+   More bundles than the ceiling → another wave (or bundle them), never a
+   wider wave.
+4. **Budget class** — `ask-before-parallel` → at most 3 implementers per wave;
+   `sonnet-only` → at most 2. An explicit run skill (`/do-run`) is exempt
+   from the budget class (as everywhere) and keeps the ceilings of 3.
+5. **Read-only lens agents** (research, scout, qa, redteam, po, gamer) are not
+   implementers: up to ~8 in parallel, limited by cost only — they cannot
+   conflict, and more independent lenses keep adding signal.
+6. **Synthesis stays short, verification does not** — every wave with more
+   than one implementer ends in the inter-wave gate below: merge, then the
+   full test suite. A central check after the merge is what keeps parallel
+   errors from compounding; the prose summary is what gets cut.
+
+Measured (2026-09-27 benchmark): sessions with ≥ 6 agents cost ~5× in the
+main context and compacted 1.9× as often, and 7 parallel "split" frontend
+agents on one feature were the expensive pattern — overlapping ownership, not
+the count, is what made them so. Evidence: Anthropic agent-teams docs ("start
+with 3–5", "three focused teammates often outperform five scattered ones",
+one file owner per file), `/batch` (5–30 isolated, separately tested units),
+Google/MIT "Towards a Science of Scaling Agent Systems" (independent agents
+amplify errors 17.2×, a central verifier 4.4×), "Passes Alone, Fails Together"
+(arXiv 2609.25396: interference on shared helpers, recovered by a note about
+the concurrent change).
+
 ## Wave Execution
 
 Follow the wave model from `agent-collaboration.md`. The execution mechanics below

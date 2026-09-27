@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.224.0] — 2026-09-27
+
+### Added
+- **`ship_release` rebases itself when only version files collide.** Two ships from the same main both bump the version and add a CHANGELOG entry; the second used to get `rebaseRequired` and a manual conflict round. When every file both sides changed is a version file (`mcp-server/ship/lib/version-rebase.js`), a hunk that differs only in version numbers takes the base's side, two new CHANGELOG entries keep ours on top, and anything else aborts and restores the branch. It then bumps again from the base's version by the same kind. Nothing is pushed or merged: the result keeps `rebaseRequired` and adds `autoRebased` + `retestRequired`, so the rebased tree is built and tested before the retry. A retry with `commitMessage` on a clean tree reuses the release commit.
+- **The first prompt is matched against open issues in the hook.** The issues MCP server writes its open-issue list to a per-repo cache; `prompt.issue.detect` scores the first prompt itself and involves Claude only on a match with confidence ≥ 0.6. Without a cache it falls back to the `match_issues` instruction.
+- **The graphify answer-in-gate also covers `grep -r` / `rg` / `git grep` typed as Bash** (`hooks/lib/bash-grep.js`), keyed apart from the Grep tool.
+
+### Changed
+- **Smaller ship context.** do-ship `SKILL.md` 85.7 KB → 67.6 KB: the execution detail of rare and late paths moved verbatim to `skills/do-ship/deep-knowledge/`; every decision, gate and tool call stays, each moved block leaves a stub with its trigger and an imperative Read, and a test checks that every stub resolves. The harden ship pass runs as `scripts/ship-harden.js` (same H1–H7 checks and JSON) instead of loading the 23 KB auto-harden skill on every ship; structure checks skip string literals and `TODO` counts only in comments.
+- **No blind retry in `pre.tokens.guard`.** An unbounded Bash command is priced at the Bash output cap like a file read, so at the default cap it runs and the bounded form comes back as a hint; quoted text is no command. A block names the narrower call and asks for the identical retry only when the full output is needed.
+- **The Light check waits for implementing agents.** `stop.flow.browsertest` defers while a background implementer or workflow is still running (read-only roles don't count) and enforces the check at the Stop after their results.
+- **Parallel implementers follow ownership bundles** (`agent-orchestration.md`): one agent per disjoint bundle, a shared contract first, ceilings of 5 per wave (coupled) and 10 (isolated, separately tested units), 3 / 2 under a tight budget class; read-only lens agents up to ~8.
+
+### Fixed
+- **`pre.crawl.guard` lets a project that is a drive root search itself** (H:\ with its own `.git` or `.claude`); other drives, `/` and home stay blocked.
+
 ## [0.223.0] — 2026-09-27
 
 ### Fixed

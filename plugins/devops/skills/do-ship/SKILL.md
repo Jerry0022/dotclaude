@@ -98,12 +98,9 @@ Parse these from the skill arguments first; then continue with Pre-Step A.
 
 ## Pre-Step 0 — Large context: ship in a subagent (the hook decides, this skill obeys)
 
-A ship makes about 16 API calls, and each one re-reads the whole context. It
-runs at the end of a session, when that context is largest (measured
-2026-09-21: 434 k tokens per call on average, about 24 % of a session's
-tokens). Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0`
-turns it off) `prompt.ship.detect` emits a `[ship-delegate]` block instead of
-the inline mandate.
+Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0` turns it off)
+`prompt.ship.detect` emits a `[ship-delegate]` block instead of the inline mandate
+(why — about 16 calls, each re-reading the largest context of the session: `modes/delegated.md`).
 
 **If that block is in this turn's context and this run is not `--delegated`:
 do not run the pipeline here.** Run no `ship_*` call and no git push or merge.
@@ -310,10 +307,9 @@ The result carries `outOfBandDeploys: { detected, files, kinds, globs }` — art
 this diff touches that a code merge will NOT deploy (#243). **Carry this value
 forward to Step 4d.** It is informational, never a hard gate (`ready` is unaffected).
 
-The tool **auto-detects** the correct base branch:
-- If on a sub-branch like `feat/42-video-filters-core`, it detects `feat/42-video-filters` as the parent and uses it as base.
-- Otherwise it uses the repository's default branch (resolves `origin/HEAD` — typically `main`, but `master` or any other name works too). Falls back to `main` if `origin/HEAD` is not set.
-- You can override by passing an explicit base: `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
+The tool **auto-detects** the correct base branch (a sub-branch's parent, else the repo's
+default branch); override with `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
+Details: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Base auto-detection.
 
 Check the result:
 - `autoDetectedBase` — non-null if a parent branch was detected (confirms intermediate merge).
@@ -324,19 +320,10 @@ Check the result:
 The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection, and unresolved conflict markers (`no-conflict-markers`).
 
 **Dirty tree from untracked files: fix the source, never park and restore.**
-The Desktop app refuses to archive a session whose worktree is dirty, and it
-copies the main checkout's untracked `.claude/` into every new worktree. An
-untracked file moved aside so preflight passes and put back after the merge
-blocks the archive — observed with `.claude/graphify.json` (2026-09-23). Settle
-each file where it belongs, inside this ship:
-- **Plugin configuration** (`.claude/graphify.json`, `settings.json`, the rest
-  of the *MUST be tracked* list in `{PLUGIN_ROOT}/deep-knowledge/project-setup.md`
-  § .gitignore) → commit it. Include it in the ship when it matches the main
-  checkout's copy.
-- **Plugin runtime state** → it belongs in `hooks/lib/runtime-ignores.js`, which
-  `ss.project.setup` writes into `.git/info/exclude` at every session start (a
-  file missing there is a plugin bug — add it to that list), or delete it when
-  it is a stray hook artifact (e.g. a `.claude/` created in a subdirectory).
+Settle each untracked file where it belongs, inside this ship — read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Dirty tree from untracked files
+and follow it (plugin configuration → commit it; plugin runtime state →
+`hooks/lib/runtime-ignores.js` or delete it). Never park and restore.
 A harness-created worktree must end Step 5c with an empty `git status --porcelain`.
 
 The marker check has two scopes. A marker in the files **this ship would land** is a hard error — `ship_release` re-scans immediately before committing, so one left behind by the rebase in 1b is caught there too. A marker anywhere else in the repo is a **warning**: it predates this branch, so report it and open a separate fix rather than holding an unrelated release hostage.
@@ -354,30 +341,11 @@ project marched into rebase/push/PR and reported a merge that never happened.
 | `git-no-remote` | Local repo, no origin | The pipeline runs as usual, but everything that needs GitHub happens **locally**: `ship_release` commits, merges the branch into its local base (main, or the parent of a sub-branch; squash/merge/rebase as passed) and creates the `alpha/v…` tag locally. Only push and PR are skipped. A base that moved ahead returns `rebaseRequired` → `git rebase <base>` (local, no fetch) and retry. The card is `ship-successful` with `state: { mode: "git-no-remote", merged, pushed: false, delivered: "local-merge" }`. Skip Step 4b (no CI) and Step 5d (no remote to promote on). |
 | `file-only` | Not a git repo at all | Everything that is not a git action still runs — see below. |
 
-**`file-only` is NOT "skip the ship".** A ship is worth running in a repo-less
-project for everything it does besides git: the build, the test suite, the
-doc-freshness check, the quality gates, the worktree/merge sanity questions,
-and the honest report at the end. Only the git actions are meaningless there.
-
-Concretely, in `file-only`:
-
-- **Run** Step 2 (build + tests) and Step 3 (version bump) exactly as normal —
-  `ship_build` and `ship_version_bump` already handle the mode.
-- **Run** the documentation and quality checks you would otherwise run; a
-  repo-less project benefits from them just as much.
-- **Skip** Step 1b entirely (there is nothing to rebase onto) and Step 4b (no
-  merge to watch).
-- **Call** `ship_release` anyway — it returns
-  `{ success: true, skipped: true, reason: "file-only-mode", delivered: "none" }`
-  without touching git.
-- **Call** `ship_cleanup` anyway — it clears the ship sentinel and refuses every
-  destructive git call.
-- **Render** the `ready-files` completion card, not `ship-successful`, and pass
-  `state: { mode: "file-only", filesModified: <n>, delivered: "none" }`. Never
-  claim a commit, branch, PR or merge.
-
-Report the outcome in plain terms: what was built, what the tests said, what
-changed on disk — and that there is no repo, so nothing was pushed.
+**`file-only` is NOT "skip the ship".** When `mode: "file-only"`, read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/repo-modes.md` § file-only and follow it: Step 2 and
+Step 3 run as normal, Step 1b and Step 4b are skipped, `ship_release` and `ship_cleanup`
+are still called, and the card is `ready-files` — never `ship-successful`, never a
+claimed commit, branch, PR or merge.
 
 ### 1b. Resolve merge-safety warnings
 
@@ -394,18 +362,9 @@ changed on disk — and that there is no repo, so nothing was pushed.
 3. **If rebase succeeds** (no conflicts): push and re-check (go to 1c).
 
 4. **If rebase has conflicts** — resolve them autonomously (do NOT ask user):
-   a. `git diff --name-only --diff-filter=U` to list conflicting files.
-   b. For each conflicting file:
-      - Read the file (contains `<<<<<<<`/`|||||||`/`=======`/`>>>>>>>` markers with diff3 base section)
-      - Analyze **both sides semantically**: what did our branch change vs. what did base change?
-      - Check **chronological context**: which change is newer? Do they contradict or complement each other?
-      - Produce a merged version that preserves **both** intents
-      - Write the resolved file, then `git add <file>` — with **all four** marker
-        lines removed, `|||||||` included. Deleting the familiar three and
-        leaving the diff3 base marker is the failure `no-conflict-markers` exists
-        for; it blocks the ship at Step 4 rather than landing on main.
-   c. `git rebase --continue`
-   d. If more conflicts appear (multi-commit rebase), repeat (b)–(c)
+   Read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Rebase conflict
+   resolution and follow its steps a–d (resolve both intents semantically, remove
+   **all four** marker lines incl. `|||||||`, `git add`, `git rebase --continue`, repeat).
    e. **Truly ambiguous conflicts** (both sides change the same logic in contradictory ways and the correct resolution is not determinable from code context): abort the rebase (`git rebase --abort`) and ask the user via AskUserQuestion with a clear, developer-readable explanation:
       - Show the conflicting snippet (both sides + base)
       - Explain what each side intended
@@ -467,10 +426,13 @@ items → `userFinalTest`. Silent when clean.
 Every ship runs the two cheap passes on exactly what it lands (spec call
 graph: `do-ship → auto-harden, auto-polish`, both `--invoked-by=ship`). Both
 are static, diff-only, run no agents and no browser, return a findings
-structure and no card — the Skill tool, one call each, then continue:
+structure and no card — one call each, then continue:
 
-1. `/auto-harden --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>` — every
-   changed file; checks H1–H7 on the added lines (`auto-harden` § Ship path).
+1. `node "{PLUGIN_ROOT}/scripts/ship-harden.js" --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>` — every
+   changed file; checks H1–H7 on the added lines and applies the mechanical
+   H1/H2 fixes itself. It is `auto-harden` § Ship path as a script — same
+   checks, same JSON — so the ship never loads the whole auto-harden skill
+   for seven regexes. Add `--strict` under strict mode (below).
 2. `/auto-polish --invoked-by=ship [--cwd=<path>] <ui files of the diff>` — only when the
    diff has UI files (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § UI file
    detection, plus the project's `## UI rules` override in
@@ -625,44 +587,27 @@ irreversible step, so once it landed the result ALWAYS carries `merged` +
 
 - `merged` present → the PR IS on base. Never retry `ship_release` for the same
   branch (double-ship) and never conclude "nothing happened" from `success: false`.
-- `mergeSha: null` + `mergeWarning` → merged, but the merge commit could not be
-  read back (slow fetch); `mergeVerified: false` → merged, but `gh pr view`
-  never confirmed it. Both are warnings for the card, not failures.
-- `success: false` **with** `merged` + `postMergeError` → a post-merge step
-  (tree guard, local sync, tagging) threw. The ring state is in the tag fields:
-  `tagSkipped: true` + `tagWarning` means `alpha/<tag>` was NOT created and must
-  be created by hand on `mergeSha` — surface it as a `userFinalTest` item.
-- `tagError` → tag creation/push failed after its own retries; the ship is still
-  `success: true` (tag trouble never fails a landed merge), but the card must
-  show the ring gap.
+- Any other merge/tag field (`mergeSha: null` + `mergeWarning`, `mergeVerified: false`,
+  `success: false` with `merged` + `postMergeError`, `tagSkipped` + `tagWarning`, `tagError`):
+  read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Merge and tag fields and follow
+  it — these are card warnings or ring gaps on a landed merge, never a retry.
 
-**Two other return shapes exist and must not be mistaken for the one above:**
-
-- `{ success: true, skipped: true, reason: "file-only-mode", delivered: "none" }`
-  — not a git repo. Nothing was committed, and there was nothing to commit to.
-  `success` means "the tool did what it could", NOT "the work reached main".
-- `{ success: true, reason: "no-remote", delivered: "local-merge", merged: "<base>", mergeSha, pushed: false, tag, tagLocal: true, localMerge: { via } }`
-  — local repo without an origin. Commit, merge into the local base and tag
-  all happened locally; only push and PR did not. On `success: false` with
-  `rebaseRequired` (or `delivered: "local-commit-only"`), the commit is on
-  the branch but not merged — rebase onto the local base and retry, or report
-  the `error` (a dirty checkout of the base is never overwritten).
+**Two other return shapes exist and must not be mistaken for the one above** —
+`reason: "file-only-mode"` (not a git repo) and `reason: "no-remote"` (local repo
+without an origin): when either appears, read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Other return shapes and follow it.
 
 **Never read `success: true` alone as a merge.** Always check `merged` before
 reporting one, and check `skipped` / `pushed` before continuing to any step
 that assumes a remote.
 
-**A third shape is a transient failure, not a mode:**
-`{ success: false, reason: "git-probe-timeout", delivered: "none", error }` —
-the repo-mode probe (`git rev-parse`) did not answer within its budget on a
-loaded machine. `ship_preflight` reports the same case as `mode: "unknown"`,
-`ready: false`, and `ship_cleanup` as `reason: "git-probe-timeout"` with the
-sentinel kept. Nothing happened; **retry the same call once** — do not read it
-as file-only (that was the 2026-09-18 failure: a real repo got a skipped
-`success: true` and the ship silently never ran). A second timeout → BLOCK
-(`ship-blocked`, "git unresponsive — machine under load").
+**A third shape is a transient failure, not a mode:** `reason: "git-probe-timeout"`.
+Nothing happened; **retry the same call once** — never read it as file-only. A second
+timeout → BLOCK (`ship-blocked`, "git unresponsive — machine under load"). Details:
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § git-probe-timeout.
 
-**If `titleClamped` is set**: the PR title exceeded the 70-char budget and was cut on a word boundary — the ship proceeded, it is not an error. The field carries `{ original, applied, max }`. Aim for a shorter title next time; surface it only if the clamped subject reads badly.
+**If `titleClamped` is set**: the ship proceeded, it is not an error — see
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § titleClamped.
 
 **Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
 the EARLIEST channel autonomously. beta/stable tags and GitHub Releases are
@@ -677,59 +622,31 @@ over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
 
-- Hot-fix bypass: pass `skipChecks: true` or set `DEVOPS_SHIP_SKIP_CHECKS=1`. Result records `checks.status: "skipped"` so the card flags it.
-- Tune timeout per call: `checksTimeoutSec: <30..3600>`.
-- See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
+- Hot-fix bypass (`skipChecks`), timeout tuning and the full state matrix:
+  `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Pre-merge CI gate options.
 
 **If `rebaseRequired: true`**: the branch is not rebased onto base. Go back to Step 1b and rebase before retrying. This also fires as `baseAdvancedDuringChecks: true` when a **parallel ship landed on base while we waited for CI** — the PR is left open and unmerged (no silent overwrite). Same action: rebase + retry, then re-run the **Step 1d full check** before the retry: a parallel ship just landed, and its purpose may impose obligations on this branch (see `deep-knowledge/purpose-alignment.md`). See `{PLUGIN_ROOT}/deep-knowledge/merge-safety.md → How ship_release Prevents Overwrites`.
 
-**If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:
+**`autoRebased` set** (with `rebaseRequired` + `retestRequired`): only version files collided, so `ship_release` already rebased and bumped again (`autoRebased.to`; the CHANGELOG header follows). Skip the manual rebase: push the branch (`git push --force-with-lease`), run `ship_build`, re-run preflight, then call `ship_release` again — the release commit exists, a `commitMessage` on the clean tree is skipped. Use `autoRebased.to` as `vNew` on the card. `autoRebaseRefused` names why the tool left it to Step 1b.
 
-```bash
-git fetch origin <base>
-git show -s --format=%T <branch-HEAD-sha>   # tree of what was built+tested
-git show -s --format=%T origin/<base>        # tree of what landed
-```
-
-- **Trees equal** → false alarm. Log one line ("post-merge tree guard false alarm — trees verified identical"), NO `userFinalTest` item.
-- **Trees differ** → a concurrent ship was three-way merged into base during the merge — its changes are preserved. Surface `postMergeWarning` as a `userFinalTest` item ("Verify main is consistent — a parallel ship merged in concurrently"). Do NOT treat it as a ship failure — the merge landed.
-- Comparing `origin/<base>` to the `mergeSha` alone proves nothing (same commit after propagation) — always compare against the **branch HEAD** that was built and tested.
+**If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify
+before surfacing** — read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Post-merge
+tree verification and follow it. Trees equal → false alarm, NO `userFinalTest` item; trees
+differ → a `userFinalTest` item, never a ship failure (the merge landed).
 
 If `success: false` → do NOT proceed to cleanup. Report error and render completion card with variant `ship-blocked`.
 
 ### Squash-Merge Traceability Convention
 
-When shipping a **feature branch → main** that was built from intermediate sub-branch merges, the PR body **MUST** include references to all intermediate PRs:
-
-```markdown
-## Summary
-Feature: Video filters (end-to-end)
-
-## Intermediate PRs
-- #47 — feat(core): video filter data models
-- #48 — feat(frontend): video filter UI
-- #49 — feat(ai): video filter ML pipeline
-```
-
-This preserves the audit trail through squash-merges. Without these references, `git log` on main only shows one commit with no link back to the sub-branch work.
+When shipping a **feature branch → main** that was built from intermediate sub-branch merges,
+the PR body **MUST** include references to all intermediate PRs — template:
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Squash-merge traceability.
 
 ### Step 4a — Delivery extension hook
 
-After `ship_release` succeeds, check `{project}/.claude/skills/do-ship/reference.md` (fallback: the
-pre-PR-2 `ship/` dir, Step 0) for a
-`deliver:` field:
-
-- **Default (`git+gh` or field absent):** existing behavior — PR + merge already done in Step 4.
-- **`ssh-rsync`:** rsync build output to the configured `target`. (Future work — currently falls through to `none`.)
-- **`ha-rest`:** POST to Home Assistant REST API at `base_url`. (Future work — currently falls through to `none`.)
-- **`none`:** skip delivery entirely.
-
-When `deliver` is set, the MCP `ship_release` tool dispatches to the corresponding
-handler. Handlers `ssh-rsync` and `ha-rest` are extension points documented for
-consumer configuration — not yet implemented in this release (they fall through to
-`none` intentionally).
-
-See `{PLUGIN_ROOT}/deep-knowledge/skill-extension-guide.md -> Delivery targets` for reference.md examples.
+After `ship_release` succeeds, check the project's `reference.md` for a `deliver:` field:
+read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4a — Delivery extension hook
+and follow it. Default (`git+gh` or field absent): PR + merge already done in Step 4.
 
 ## Step 4b — Spawn Post-Merge Watcher (final ship only)
 
@@ -740,43 +657,9 @@ the `file-only` and `git-no-remote` cases: nothing reached GitHub, so there
 is no Actions run to wait for (a local merge sets `merged` but not `pushed`).
 
 After `ship_release` returns `success: true` **and** `merged: "main"`, spawn the post-merge
-watcher in the background. It waits for the GitHub Actions run triggered by the merge
-and (if configured) probes the production URL — all without blocking the ship flow.
-
-```bash
-# Background — fire and forget. The watcher anchors its state dir to the MAIN
-# repo (resolved via git-common-dir), NOT to <cwd>: a worktree ship deletes <cwd>
-# during ship_cleanup, so the result must land in the main repo where the
-# ss.ship.verify hook (running from the main repo at the next SessionStart) can
-# still read it. No --state-dir flag is needed — the default handles this.
-nohup node "{PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
-  --cwd "<cwd>" \
-  --base "main" \
-  --merge-sha "<ship_release.mergeSha>" \
-  --pr "<ship_release.pr.number>" \
-  --max-wait 1800 \
-  --verify-config "<cwd>/.claude/skills/do-ship/reference.md" \
-  --version "<ship_version_bump.vNew or empty>" \
-  > /dev/null 2>&1 &
-```
-
-On Windows (PowerShell), use `Start-Process` with `-WindowStyle Hidden` instead of `nohup`:
-```powershell
-Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("{PLUGIN_ROOT}/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "main", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/do-ship/reference.md", "--version", "<vNew>")
-```
-
-Always pass the `do-ship/` path: when it does not exist, the watcher falls back
-to the pre-PR-2 `.claude/skills/ship/reference.md` itself.
-
-The watcher writes status to `<main-repo>/.claude/.ship-watcher/<merge-sha>.json`
-(resolved from the git-common-dir, so a removed worktree cannot swallow the result)
-and the `ss.ship.verify` hook — reading the same main-repo dir from ANY worktree,
-never the worktree's seeded copy — surfaces unack'd results once at the next
-SessionStart. On failure, a best-effort Windows toast fires immediately.
-
-The watcher is a plugin `scripts/` CLI and is orphaned on purpose; the MCP reaper
-(`hooks/lib/mcp-reaper.js`) exempts that class, so a Stop/SessionStart reap never
-kills it mid-wait.
+watcher in the background (fire and forget): read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4b — Watcher spawn and run its
+command exactly (bash `nohup` / PowerShell `Start-Process`) — unless a skip rule below applies.
 
 **Skip the watcher entirely** when:
 - `intermediate: true` (no CI on intermediate merges typically)
@@ -788,13 +671,9 @@ completion card in Step 6 so it can render "Deploy-Verify läuft im Hintergrund"
 
 ## Step 4c — Live Surface Verification (final ship only)
 
-**A green pipeline ≠ a release users can see.** CI can pass, the merge can land,
-the Step 4b watcher's HTTP probe can return 200 — and the version users actually
-get can still be the **old** one. This step opens the real user-facing surface(s)
-in a browser and asserts the **shipped version is live and visible** before the
-completion card declares done. It complements (does NOT replace) the
-`stop.flow.browsertest` gate (which verifies code changes *pre*-merge) and the
-Step 4b watcher (headless, post-session). (#210)
+**A green pipeline ≠ a release users can see.** This step opens the real user-facing
+surface(s) in a browser and asserts the **shipped version is live and visible** before the
+completion card declares done. (#210)
 
 **Skip this step entirely when ANY of:**
 - `intermediate: true` (intermediate merges have no live surface).
@@ -802,95 +681,24 @@ Step 4b watcher (headless, post-session). (#210)
   (libraries, CLIs, internal tooling have no user-facing deploy). Skip silently.
 - User passed `--no-verify` / `--no-watch` intent in the ship trigger.
 
-### Config — declare surfaces
-
-Read `{project}/.claude/skills/do-ship/reference.md` (fallback: the pre-PR-2 `ship/` dir,
-Step 0) for a `surfaces:` list (or, for
-a single surface, the existing `verify:` block's `url`/`selector`/`expected`).
-Each surface: `{ name, url, selector, expected }` where `expected` may use the
-`$VERSION` placeholder (expands to the just-shipped `vNew` / tag). Full format:
-`deep-knowledge/post-merge-verify.md → Declarative surfaces`.
-
-### Verify each surface
-
-For every declared surface:
-
-1. Pick the browser tool via the waterfall in
-   `{PLUGIN_ROOT}/deep-knowledge/browser-tool-strategy.md` (Claude-in-Chrome in Edge first).
-   This is a live post-deploy read — see `{PLUGIN_ROOT}/deep-knowledge/test-autonomy.md`.
-   Works in foreground, background, and autonomous mode.
-2. Open `url` in the **separate Edge testing window** (per the Edge Credo).
-3. Read the **rendered** version marker. Use **Eval JS** (`javascript_tool` /
-   `browser_evaluate` / `preview_eval`) to read structured data
-   (`document.querySelector(selector)?.textContent` or the documented attribute)
-   — NOT "read page", which strips scripts and misses client-rendered values.
-4. Assert the rendered value contains the shipped version (`vNew` / tag).
-
-**Why a browser, not just the watcher's HTTP probe:** the headless probe fetches
-raw response bytes — it misses **client-rendered** version strings (SPA where JS
-injects the version) and cannot see a download page whose served artifact is
-gated behind a DB row or an API. A real browser renders the DOM and follows the
-same path a user does. Gaps this catches that pass CI:
-- a GitHub release marked `prerelease` leaves the prior version as
-  `/releases/latest` → the "latest" download link still serves the old version;
-- a download page driven by a DB row / API (not GitHub directly) keeps serving
-  the old version until that row is registered;
-- multi-surface releases (web + desktop binary + edge functions) where one
-  surface silently lags.
-
-### Feed the result into Step 6
-
-- **All surfaces serve the shipped version** → clean `ship-successful`.
-- **Any surface lags / still shows the old version / unreachable** → STILL
-  `ship-successful` (the merge happened — per the Step 6 variant rule, never
-  downgrade after a merge), but add one **prominent `userFinalTest` item per
-  lagging surface**, e.g.
-  `{ action: "Download-Seite zeigt noch <alt> statt <neu> — prerelease-Flag / DB-Row prüfen", afterDeployment: true }`.
-  When a surface definitively serves the **old** version (a real regression
-  risk), make that item the first and loudest.
-- **No browser tool available** (waterfall fails): do NOT block the ship. Record
-  a `userFinalTest` item "Live-Surface manuell verifizieren: <url> sollte <vNew> zeigen".
-
+Otherwise read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4c — Live surface
+verification and follow it for every declared surface. A lagging surface or a missing browser
+tool never blocks and never downgrades the variant — each becomes a `userFinalTest` item.
 Pass `state.surfaceVerify = { checked: N, live: M, lagging: [...] }` into the card.
 
 ## Step 4d — Out-of-Band Deploy Gate (final ship only)
 
 **A code merge does NOT apply DB migrations or deploy edge/serverless functions.**
-When the shipped diff touches such artifacts, merging the PR leaves the code
-referencing infra that was never applied — the change is silently NOT live even
-though every prior step went green. This step turns `ship_preflight`'s detection
-into either an actual deploy (when a handler is configured) or a mandatory,
-loud completion-card gate. (#243)
 
 **Skip this step entirely when:**
 - `intermediate: true` (no deploy target for intermediate merges), or
 - `ship_preflight.outOfBandDeploys.detected` is `false` (the common case — skip
   silently, nothing changed).
 
-**When `outOfBandDeploys.detected` is `true`:**
-
-1. **If Step 0 captured a `deploy:` handler** that can apply these artifacts
-   (e.g. `supabase` → `apply_migration` + `deploy_edge_function` via the Supabase
-   MCP): run it now, after the merge landed. Deploy each detected artifact.
-   - **All deployed successfully** → the change is live. Do NOT set the gate;
-     instead add a `userFinalTest` item to **verify** the deployed infra behaves
-     (e.g. "Verify the migration applied: query the new column in prod").
-   - **Any deploy failed / handler errored** → fall through to step 2 for the
-     artifacts that did not deploy, naming the failure.
-
-   Keep concrete deploy automation in the **project** extension — the plugin
-   ships detection + the gate, never a stack-specific deployer.
-
-2. **Otherwise (no handler, or a deploy failed)** — raise the deploy gate. This
-   is mandatory: the completion card MUST NOT read as "all done" while merged
-   infra is undeployed. Carry into Step 6:
-   - `state.deployPending: true` — flips the ship-successful CTA from
-     "Alles ERLEDIGT" to "🚨 DEPLOY erforderlich (noch nicht live)".
-   - `deployGate: [...]` — one item per detected artifact, each
-     `{ artifact: "<path>", kind: "<migration|function|infra>", action: "<the concrete deploy step still required>" }`.
-     Derive `artifact`/`kind` from `outOfBandDeploys.matched`; write `action` as
-     the smallest true next step (e.g. "apply_migration", "deploy edge function
-     desktop-latest", or "run your migration + function deploy").
+**When `outOfBandDeploys.detected` is `true`:** read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4d — Out-of-band deploy gate and
+follow it. A configured `deploy:` handler deploys each artifact now; otherwise (no handler, or a
+deploy failed) the gate is mandatory — carry `state.deployPending: true` + `deployGate` into Step 6.
 
 Never downgrade the variant — the merge DID happen (per the Step 6 variant rule).
 The gate lives in `deployGate` + `state.deployPending`, not in the variant.
@@ -1009,40 +817,10 @@ already landed.
 
 ### Substep 3 — Re-open session-opened files from main-repo path
 
-After `ship_cleanup` completes, every file:// URL the session opened from
-inside `$WORKTREE_PATH` is now dead (the worktree directory has been
-pruned). The merged HTML still lives at the equivalent path inside the
-main repo, so re-open every tracked file from there so the user's browser
-tab silently picks up the live version.
-
-Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1 (the ship
-ran directly from the main checkout, no path rewrite needed).
-
-```bash
-node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" reopen-main \
-  --worktree="$WORKTREE_PATH"
-```
-
-The script:
-- Reads `<main-repo>/.claude/session-opened-files.json` (the tracking
-  file is anchored at the main repo root so it survives worktree
-  cleanup — see `scripts/session-open-tracker.js` for the storage
-  contract).
-- Filters tracked entries to those that were under `$WORKTREE_PATH`.
-- Maps each filtered entry to the main-repo equivalent (`relative
-  path within worktree` → `<main-repo>/<relative>`).
-- Opens every still-existing file in Edge via the standard
-  `start "" msedge "file:///…"` pattern.
-- Prints a JSON summary `{ reopened: [...], missing: [...], consumed }`.
-
-Treat the summary as informational. Any entries listed under `missing`
-mean the file did not survive the merge (likely deleted during the
-session) — that is expected and not a ship failure.
-
-**Background — issue #160.** Without this step, `/do-ship` silently
-invalidates every browser tab that was pointing into the worktree. The
-user sees a 404 / blank tab and reasonably concludes the concept page
-itself is broken, when in reality the content is fine at the main path.
+Skip this step entirely when `$WORKTREE_PATH` was empty in Substep 1. Otherwise run
+`node "{PLUGIN_ROOT}/scripts/session-open-tracker.js" reopen-main --worktree="$WORKTREE_PATH"`
+and treat its JSON summary as informational (`missing` entries are expected, not a failure).
+What the script does and why: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/cleanup.md` § Re-open session-opened files (Step 5b Substep 3).
 
 ## Step 5c — Keep-mode cleanup (sentinel only)
 
@@ -1063,12 +841,9 @@ Harness-created worktree: run `git status --porcelain` afterwards. Anything
 listed blocks the Desktop archive — settle it per Step 1a (*Dirty tree from
 untracked files*) before the card, never by restoring a parked copy.
 
-The remote branch is gone either way — deleted by the GitHub merge (`--delete-branch`)
-outside a worktree, by `ship_release` itself inside one (`remoteBranchDeleted: true`; it
-also drops the stale remote-tracking ref so the next lease-pinned push is not rejected).
-The next commit + push in this worktree re-creates it via
-`git push --set-upstream origin <branch>` automatically. A `remoteBranchWarning` in the
-release result means the delete failed: surface it as one `open` item on the card
+The remote branch is gone either way (why, and how the next push re-creates it:
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/cleanup.md` § Keep-mode: the remote branch (Step 5c)). A
+`remoteBranchWarning` in the release result means the delete failed: surface it as one `open` item on the card
 ("Remote-Branch `<branch>` konnte nicht gelöscht werden — »branches aufräumen« öffnet die Aufräum-Seite"), nothing else.
 
 In Step 6:
@@ -1133,22 +908,9 @@ for.
 
 **Skip condition:** If no memory files were written or updated during this session → skip silently.
 
-**If memories were touched this session**, run a lightweight dream pass:
-
-1. **Orient** — Read `MEMORY.md` index and list all `memory/*.md` files
-2. **Consolidate**:
-   - Merge overlapping entries (same topic, different sessions)
-   - Convert any relative dates to absolute (`"gestern"` → actual date)
-   - Remove entries contradicted by current code/repo state
-   - Remove implementation details derivable from code (file paths, line numbers, script commands)
-3. **Prune** — Delete memory files that are fully stale (topic resolved, info now in code/docs)
-4. **Update Index** — Rewrite `MEMORY.md` to match surviving files. Keep under 200 lines.
-
-**Rules:**
-- No user-visible output. This step is silent.
-- Max budget: ~5K tokens (reads + minimal writes)
-- Never touch `CLAUDE.md` — only `memory/` files
-- If consolidation finds nothing to change → done, no writes needed
+**If memories were touched this session**, run the lightweight dream pass: read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/memory-dream.md` and follow it — silent (no user-visible
+output), ~5K tokens, never touches `CLAUDE.md`.
 
 ## Step 6 — Completion Card
 
@@ -1187,30 +949,11 @@ any failure.
 
 ### Promotion-gap nudge (final ship to main without a promotion — MANDATORY)
 
-Deliberate promotion has no heartbeat without a forcing function — invisible
-channel lag is how stable rots. Before rendering the card, compute the drift:
-
-```bash
-git ls-remote --tags origin
-```
-
-- Latest alpha version = highest `alpha/vX.Y.Z` (numeric compare, never lexicographic).
-- Latest beta version = highest `beta/vX.Y.Z`.
-- Latest stable version = highest of `stable/vX.Y.Z` ∪ bare `vX.Y.Z`.
-- No channel tags at all (pre-migration repo) → skip silently.
-
-Pass every channel's latest version in `delivery.promote.channels`
-(`{ alpha, beta, stable }`, null for a channel without tags). When alpha is
-ahead of beta or stable, pass each gap — `betaLag` and `stableLag`, same shape:
-- `{ versions: N }` — gap < 3 versions AND that channel's last tag younger than 7 days
-  (annotated taggerdate via
-  `git for-each-ref --format='%(taggerdate:iso)' 'refs/tags/<channel>/*'`).
-- `{ versions: N, days: D }` — gap ≥ 3 versions OR ≥ 7 days.
-
-The card renders them on the channel ladder line
-(`alpha **v0.27.0** › beta v0.25.0 (−2) › stable v0.19.0 (−8 · 7 d)`).
-It is NOT a `userFinalTest` item — it is not a test — and NOT an `open` item.
-Visible lag is the ring model working; the nudge just keeps it visible.
+Deliberate promotion has no heartbeat without a forcing function. **Before rendering the card**,
+read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Promotion-gap nudge and
+compute the drift from `git ls-remote --tags origin`: every channel's latest version →
+`delivery.promote.channels`, each gap → `betaLag` / `stableLag`. No channel tags at all → skip
+silently. It is NOT a `userFinalTest` item and NOT an `open` item.
 
 ### Post-ship hygiene (merged ship or promotion — MANDATORY)
 
@@ -1240,53 +983,14 @@ page what stays) and for every blocked or aborted run. A failed call
 user's settings (`{PLUGIN_ROOT}/deep-knowledge/devops-config.md`) — never
 override them for one run.
 
-```
-render_completion_card({
-  variant: "ship-successful",
-  summary: "<≤ 8 words / 60 chars, user's language: WHAT changed for the user. No version, no 'gemergt/geshipped/live' — the Delivery block and the CTA say that.>",
-  lang: "de",
-  cwd: "<current working directory — same as ship_release>",
-  buildId: <from ship_build.buildId>,
-  changes: [<top 3 FUNCTIONAL changes — user-perceived effect, phrased as behavior; area ≤ 24, description ≤ 90 chars (one line each). Derive from ship_build/version_bump results but do NOT list files/modules. See completion-card template § Changes.>],
-  tests: [<from ship_build results — the automated GATES, one line each: { method: "npm test", result: "1460 grün" }. Numbers, not prose; include skipped/non-green gates ("Codex-Review → übersprungen — Limit") and the Step 1e lines: { method: "Harden (Ship)", result: "1 Fix · 2 Hinweise" } whenever the harden pass ran, { method: "UI-Regeln", result: "2 Findings · R2b deaktiviert" } only when the diff had UI files. Rendered on the header line(s) under **Geprüft**.>],
-  validation: [<requirement ≤ 70 → evidence ≤ 100 chars; partial/unmet items first. Long-form evidence belongs in the PR body.>],
-  userFinalTest: [<ONLY real manual tests the user must run>],
-  open: [<decisions, cleanups, open questions about THIS work — NOT tests: "Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?"; as { text, reply } when the user's answer is clear — reply: "Bitte löschen.". Never another branch, worktree or session — the user may be shipping it in parallel right now; that session ships its own branch (the card drops such points). Never a side topic: that is a task chip (spawn_task), and a point naming a chip is dropped too.>],
-  state: {
-    branch: "main",
-    commit: <from ship_release.commit>,
-    pushed: true,
-    pr: { number: <from ship_release.pr.number>, title: <PR title> },
-    merged: "main"
-  },
-  cta: {
-    vOld: <from ship_version_bump.vOld>,
-    vNew: <from ship_version_bump.vNew>,
-    bump: <bump type>
-  },
-  delivery: {
-    pr: { number: <ship_release.pr.number>, title: <PR title> },
-    ship: { version: <ship_version_bump.vNew>, base: "main" },
-    promote: { channels: { alpha: <ship_version_bump.vNew>, beta: <latest beta or null>, stable: <latest stable or null> }, current: "alpha",
-               betaLag: <from the promotion-gap nudge above, omit when alpha == beta>,
-               stableLag: <from the promotion-gap nudge above, omit when alpha == stable> }
-  }
-})
-```
+**Read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § ship-successful payload
+before calling `render_completion_card` and build the call from it** — every field and its limits:
+`variant`, `summary`, `lang`, `cwd` (the same as `ship_release`), `buildId`, `changes`, `tests`
+(incl. the Step 1e lines), `validation`, `userFinalTest`, `open`, `state` (`branch`, `commit`,
+`pushed`, `pr`, `merged`), `cta` (`vOld`, `vNew`, `bump`) and `delivery` (`pr`, `ship`, `promote`).
 
-The card renders `delivery` as ONE block at the foot of the body (PR · base +
-bump · commit · build-id · channel ladder) and drops the separate 📌 footer and
-state line — every pipeline fact appears once. `ship.version` must be the
-semver from the bump, never a commit SHA.
-
-**Delivery track (`delivery`).** Populate it so the card shows WHERE in the
-pipeline this ship sits (PR → Ship → Promote). `pr` + `ship` are known
-post-merge. Add `promote: { channels: { alpha: <vNew> }, current: "alpha" }`
-**only for ring-model projects** (plain ship publishes to alpha) — that also
-makes the CTA read "SHIPPED → alpha" and shows the channel ladder with beta/
-stable still pending. Projects without channels omit `promote`; the track then
-just shows PR → Ship, and a later promotion (Step 5d) renders the `released` card that
-advances the ladder to beta/stable.
+`delivery` rules — `ship.version` is the semver from the bump, never a commit SHA; `promote`
+**only for ring-model projects**: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Delivery track.
 
 **Variant reflects what the pipeline DID, not what's verified downstream.**
 Once `ship_release` reports `merged` + (where applicable) `tag` + `release`,
@@ -1309,42 +1013,13 @@ This is stronger than a `userFinalTest` item: the CTA itself flips to
 "🚨 DEPLOY erforderlich (noch nicht live)" and a loud gate block names each
 undeployed artifact — so a merged-but-undeployed ship is never mistaken for done.
 Undeployed infra is the ONE thing that must not hide behind a green card.
-Example:
-```
-deployGate: [
-  { artifact: "supabase/migrations/20260708_token_revoked.sql", kind: "migration", action: "apply_migration" },
-  { artifact: "supabase/functions/desktop-latest/index.ts",     kind: "function",  action: "deploy edge function desktop-latest" }
-],
-state: { branch: "main", pushed: true, merged: "main", commit: "<sha>", deployPending: true }
-```
+Example payload: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § deployGate example.
 
 **Keep-mode variant** (Step 5a chose keep, Step 5c ran):
-```
-render_completion_card({
-  variant: "ship-successful",
-  summary: "<~10 words — mention 'Worktree behalten' or similar>",
-  lang: "de",
-  cwd: "<current working directory — still the worktree path>",
-  buildId: <from ship_build.buildId>,
-  changes: [...],
-  tests: [...],
-  state: {
-    branch: "<feature-branch name, NOT 'main' — the kept branch>",
-    worktree: true,
-    commit: <from ship_release.commit>,
-    pushed: true,
-    pr: { number: <from ship_release.pr.number>, title: <PR title> },
-    merged: "main",
-    kept: true
-  },
-  cta: { vOld, vNew, bump },
-  delivery: { pr, ship: { version: vNew, base: "main" }, promote: { channels: { alpha: vNew }, current: "alpha" } }
-})
-```
-
-The renderer flips the CTA from `All DONE` / `Alles ERLEDIGT` to
-`KEEP CODING in <branch>` / `WEITER in <branch>` when `state.kept: true`, and
-names the kept branch on the Delivery ship line (`· \`feat/x (kept locally)\``).
+the same call with `cwd` still the worktree path, a summary that mentions "Worktree behalten",
+and `state: { branch: "<kept feature branch, NOT 'main'>", worktree: true, …, merged: "main", kept: true }`.
+Full payload: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Keep-mode variant.
+`state.kept: true` flips the CTA to `KEEP CODING in <branch>` / `WEITER in <branch>`.
 
 Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
 

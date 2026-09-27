@@ -86,7 +86,7 @@ function runBash(dir, sid, toolInput, extraEnv = {}) {
       if (res.status === null) {
         throw new Error(`hook never started after ${attempt + 1} attempts: ${res.error}`);
       }
-      return { status: res.status, stderr: res.stderr || "" };
+      return { status: res.status, stderr: res.stderr || "", stdout: res.stdout || "" };
     }
   }
 }
@@ -366,6 +366,38 @@ describe("pre.tokens.guard — guard_blocked / guard_released telemetry", () => 
     expect(blockedEv).toMatchObject({ tool: "Bash", kind: "bash-file" });
     expect(blockedEv.est).toBeGreaterThan(0);
     expect(releasedEv).toMatchObject({ tool: "Bash", kind: "bash-file" });
+    cleanup(dir);
+  });
+});
+
+describe("pre.tokens.guard — no blind retry (benchmark 2026-09-27)", () => {
+  test("at the real Bash output cap an unbounded command runs, with the bounded form as a hint", () => {
+    const dir = project();
+    for (const command of ["git log", "npm ls", "find .", "docker logs web"]) {
+      const r = runBash(dir, `s-hint-${command.replace(/\W/g, "")}`, { command }, { BASH_MAX_OUTPUT_LENGTH: undefined });
+      expect(r.status, command).toBe(0);
+      const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      expect(ctx, command).toMatch(/^\[tokens-guard\] This command has no limit flag/);
+      expect(ctx, command).toContain("Next time prefer:");
+    }
+    cleanup(dir);
+  }, 30_000);
+
+  test("quoted text is no command: node -e \"… find / …\" is not an unbounded find", () => {
+    const dir = project();
+    const r = runBash(dir, "s-quoted", { command: `node -e "console.log(r('find / -name x'))"` });
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toContain("HIGH TOKEN COST");
+    cleanup(dir);
+  });
+
+  test("a block names the narrower call and asks for a retry only when the full output is needed", () => {
+    const dir = project();
+    const r = runBash(dir, "s-better", { command: "git log" });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("Better:     Use the bounded form: git log --oneline -20");
+    expect(r.stderr).toContain("Retry the identical call only if you really need its full output.");
+    expect(r.stderr).not.toContain("To proceed, retry the same operation.");
     cleanup(dir);
   });
 });

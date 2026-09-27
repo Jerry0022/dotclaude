@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.crawl.guard
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash|PowerShell
@@ -53,8 +53,30 @@ function decide(inputData) {
   if (!cmd) return none;
   if (process.env.DEVOPS_ALLOW_ROOT_CRAWL === '1' || hasBypass(cmd)) return none;
   const cwd = typeof hook.cwd === 'string' ? hook.cwd : undefined;
-  const crawls = findRootCrawls(cmd, { shell, cwd });
+  const crawls = findRootCrawls(cmd, { shell, cwd }).filter(c => !isOwnProjectRoot(c, cwd));
   return { block: crawls.length > 0, crawls, hook };
+}
+
+/** `H:\`, `h:/`, `/h` → `h:`; anything else → null. */
+function driveOf(p) {
+  const s = String(p || '').trim().replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+  const m = s.match(/^([a-z]):$/) || s.match(/^\/([a-z])$/) || s.match(/^\/(?:cygdrive|mnt)\/([a-z])$/);
+  return m ? `${m[1]}:` : null;
+}
+
+/**
+ * A project whose root IS a drive root (H:\ as the working directory, with
+ * its own .git or .claude) may search itself: that drive is the project, not
+ * a detour across the machine. Only a drive — never `/` (in Git Bash every
+ * mounted drive), a network share or home — and only the cwd's own drive.
+ */
+function isOwnProjectRoot(crawl, cwd) {
+  if (!crawl || crawl.kind !== 'root' || !cwd) return false;
+  const own = driveOf(cwd);
+  if (!own || driveOf(crawl.resolved || crawl.path) !== own) return false;
+  const fs = require('fs');
+  const base = `${own}/`;
+  return fs.existsSync(`${base}.git`) || fs.existsSync(`${base}.claude`);
 }
 
 /**
@@ -111,4 +133,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { decide, denyText };
+module.exports = { decide, denyText, driveOf, isOwnProjectRoot };

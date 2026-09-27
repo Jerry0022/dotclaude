@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.issue.detect
- * @version 0.5.2
+ * @version 0.6.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect issue references in user messages. Only a request to
@@ -18,7 +18,9 @@
  *   prompt that quoted "[issue-status] Tracked issues this session: #530, …"
  *   as an example put four unrelated issues on the In Progress → Done/Todo +
  *   comment track (2026-09-26).
- *   On the first prompt of a session with no reference, instruct Claude to
+ *   On the first prompt of a session with no reference, score it against the
+ *   issues server's cached open issues (lib/issue-match) and ask only on a
+ *   match ≥ 0.6; without a cache, instruct Claude to
  *   call the match_issues MCP tool for heuristic matching.
  */
 
@@ -110,6 +112,32 @@ process.stdin.on('end', () => {
     if (!heuristicDone) {
       // Mark heuristic as done for this session
       try { writeSessionFile(heuristicFile, '1'); } catch {}
+
+      // Match against the issues server's cached list here, in the hook: a
+      // hit worth asking about reaches Claude, a miss costs nothing. Only
+      // without a usable cache does Claude call match_issues itself.
+      const { MATCH_ASK_MIN, readCache, matchIssues } = require('../lib/issue-match');
+      let issues = null;
+      try {
+        const remote = execSync('git config --get remote.origin.url', {
+          cwd: hook.cwd || process.cwd(), encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+        issues = readCache(remote);
+      } catch { /* no remote or no git: fall back to the tool */ }
+      if (issues) {
+        const [best] = matchIssues(issues, maskNonProse(message), { maxResults: 1, threshold: MATCH_ASK_MIN });
+        if (best) {
+          process.stdout.write(
+            `No explicit issue reference in the prompt, but open issue #${best.number} ` +
+            `("${best.title}") matches it (confidence ${best.confidence.toFixed(2)}). ` +
+            `Ask the user: "Arbeitest du an Issue #${best.number} (${best.title})?" ` +
+            `If confirmed, set it to "In Progress" on the project board and, when the ` +
+            `work is complete, update it like a tracked issue in the completion flow. ` +
+            `If declined, proceed without issue context.\n`
+          );
+        }
+        return;
+      }
 
       // Instruct Claude to call the match_issues MCP tool
       process.stdout.write(

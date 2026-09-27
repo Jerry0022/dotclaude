@@ -25,6 +25,11 @@ import { z } from "zod";
 import { execFile } from "node:child_process";
 import { register as registerHeartbeat } from "../lib/heartbeat.js";
 import { tokenize, scoreIssue } from "./matching.js";
+import { createRequire } from "node:module";
+
+// The hook side reads this copy (prompt.issue.detect scores the first prompt
+// itself and asks Claude only on a real hit — hooks/lib/issue-match.js).
+const { writeCache } = createRequire(import.meta.url)("../../hooks/lib/issue-match.js");
 
 const SERVER_NAME = "dotclaude-issues";
 const SERVER_VERSION = "0.2.0";
@@ -78,6 +83,7 @@ function fetchIssues() {
           }));
           lastRefresh = Date.now();
           process.stderr.write(`[issues-mcp] Cached ${issueCache.length} open issues\n`);
+          persistCache(issueCache);
         } catch (e) {
           process.stderr.write(`[issues-mcp] Unparsable issue list: ${e.message}\n`);
         }
@@ -88,6 +94,14 @@ function fetchIssues() {
     inFlight = null;
   });
   return inFlight;
+}
+
+/** Write the list for the hook, keyed by this checkout's origin. Best effort. */
+function persistCache(issues) {
+  execFile("git", ["config", "--get", "remote.origin.url"], { encoding: "utf8", timeout: 5_000 }, (err, url) => {
+    if (err || !url) return;
+    try { writeCache(url, issues); } catch (e) { process.stderr.write(`[issues-mcp] cache write failed: ${e.message}\n`); }
+  });
 }
 
 async function ensureCache() {

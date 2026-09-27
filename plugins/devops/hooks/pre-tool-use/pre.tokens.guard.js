@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.tokens.guard
- * @version 0.14.1
+ * @version 0.15.0
  * @event PreToolUse
  * @plugin devops
  * @description Block Read/Bash/Glob/Grep operations that would consume a
@@ -32,10 +32,19 @@
  *   see `pre.tokens.guard.bash.test.js`'s dedicated cap describe block for
  *   the raised-limit coverage) rather than removed.
  *
- *   Grep only (never Glob) carries a separate graphify "answer-in-gate": an
+ *   Grep (never Glob) carries a separate graphify "answer-in-gate": an
  *   ELIGIBLE search (see `hooks/lib/graph-nudge.isEligibleSearch`) is
  *   answered from the knowledge graph directly instead of merely blocked —
- *   see the gate section below for the full policy.
+ *   see the gate section below for the full policy. Since 0.15.0 a recursive
+ *   `grep -r` / `rg` / `git grep` typed as Bash goes through the same gate
+ *   (`hooks/lib/bash-grep`), keyed apart from the Grep tool.
+ *
+ *   No blind retry (0.15.0): an unbounded Bash command (`git log`, `find .`)
+ *   is priced at the Bash output cap like a file read, so at the harness
+ *   default it runs and the bounded form comes back as a hint instead of a
+ *   block; quoted text no longer counts as a command. A block names the
+ *   narrower call and asks for the identical retry only when the full output
+ *   is needed (21 of 64 blocks had been retried unchanged).
  *
  *   The retry flag is keyed on the cost-determining fields plus cwd, so a
  *   reworded `description` or a flipped `run_in_background` no longer
@@ -342,10 +351,22 @@ process.stdin.on('end', () => {
   const GRAPHIFY_RELENT_AFTER_BYPASSES = 3;
   const GRAPHGATE_FLAG_TTL_MS = 12 * 60 * 60 * 1000;
 
-  if (toolName === 'Grep') {
+  // A recursive `grep -r` / `rg` / `git grep` typed as Bash is the same search
+  // (lib/bash-grep) and goes through the same gate as the Grep tool; its
+  // flags are keyed apart (`BashGrep`) so they never release a Grep call.
+  let gateInput = toolName === 'Grep' ? toolInput : null;
+  if (toolName === 'Bash') {
+    try {
+      const bg = require('../lib/bash-grep').parseBashGrep(toolInput.command || '');
+      if (bg) gateInput = { pattern: bg.pattern, path: bg.path, output_mode: 'content' };
+    } catch { /* not a search we understand — leave it to the Bash checks */ }
+  }
+  const keyTool = toolName === 'Bash' ? 'BashGrep' : toolName;
+
+  if (gateInput) {
     const sid = hook.session_id || hook.sessionId || '';
-    const pattern = toolInput.pattern;
-    const searchPath = toolInput.path;
+    const pattern = gateInput.pattern;
+    const searchPath = gateInput.path;
     // Cheap, zero-require pre-filter mirroring graph-nudge.isSemanticPattern's
     // cheap rejects closely enough to skip the require+stat cost for the vast
     // majority of calls — the AUTHORITATIVE check is still
@@ -354,21 +375,21 @@ process.stdin.on('end', () => {
       && pattern.length >= 3 && pattern.length <= 200
       && !/[/\\[\](){}^$*+?]/.test(pattern)
       && pattern.trim().split(/[|\s]+/).filter(Boolean).length <= 4;
-    const cheapPathMaybeOk = !searchPath || toolInput.output_mode === 'content';
+    const cheapPathMaybeOk = !searchPath || gateInput.output_mode === 'content';
 
     if (sid && cheapPatternMaybeOk && cheapPathMaybeOk) {
       try {
         const graphNudge = require('../lib/graph-nudge');
         const gstate = require('../lib/graphify-state');
         const patternForLog = String(pattern || '').slice(0, 120);
-        const outputMode = toolInput.output_mode || '';
-        const eligible = graphNudge.isEligibleSearch(toolName, toolInput, cwd);
+        const outputMode = gateInput.output_mode || '';
+        const eligible = graphNudge.isEligibleSearch('Grep', gateInput, cwd);
 
         if (eligible && !gstate.isRelented(sid, cwd)) {
           // The SAME key the classic confirm flag below is keyed on (R6/R8) —
           // sharing it is what lets the bypass branch pre-release that flag.
-          const costFieldsJson = JSON.stringify(costFields(toolName, toolInput));
-          const searchKey = `${toolName}:${cwd}:${costFieldsJson}`;
+          const costFieldsJson = JSON.stringify(costFields('Grep', gateInput));
+          const searchKey = `${keyTool}:${cwd}:${costFieldsJson}`;
           const gflag = flagPath(`graphgate:${sid}:${searchKey}`);
 
           // R3/R4 ordering: the escape-hatch flag AND the declined marker are
@@ -389,8 +410,8 @@ process.stdin.on('end', () => {
           if (gflagFresh) {
             // Escape hatch: already gated this exact search — fall through.
             const metrics = require('../lib/graphify-metrics');
-            const keyHash = graphNudge.gateKeyHash(toolName, cwd, costFieldsJson);
-            metrics.record('gate_bypassed', { tool: toolName, pattern: patternForLog, outputMode, keyHash }, { cwd, sid });
+            const keyHash = graphNudge.gateKeyHash(keyTool, cwd, costFieldsJson);
+            metrics.record('gate_bypassed', { tool: keyTool, pattern: patternForLog, outputMode, keyHash }, { cwd, sid });
             // R6/R8 double-block fix: the classic full-repo-search threshold
             // check further below is keyed on the SAME `searchKey` and would
             // otherwise block a SECOND time on this exact retry (it has never
@@ -401,7 +422,7 @@ process.stdin.on('end', () => {
             // `/`); a directory+content-mode search never reaches that check
             // at all (see the per-tool Grep branch below), so writing its
             // flag there would just be a stray file for no behavioural gain.
-            if (isRepoWide(searchPath)) {
+            if (toolName === 'Grep' && isRepoWide(searchPath)) {
               try { fs.writeFileSync(flagPath(searchKey), Date.now().toString()); } catch {}
             }
             // Bypass streak: only counts when this IS the most recently
@@ -435,7 +456,7 @@ process.stdin.on('end', () => {
               if (resolved) {
                 const metrics = require('../lib/graphify-metrics');
                 const { spawnGraphifySync } = require('../lib/graphify-query-spawn');
-                const keyHash = graphNudge.gateKeyHash(toolName, cwd, costFieldsJson);
+                const keyHash = graphNudge.gateKeyHash(keyTool, cwd, costFieldsJson);
                 const info = graphNudge.stalenessInfo(cwd, { resolved });
                 const withinTolerance = !info.truncated && info.newerCount <= GRAPHIFY_STALE_TOLERANCE;
 
@@ -463,7 +484,7 @@ process.stdin.on('end', () => {
                 } else {
                   const release = gstate.acquireGateQuerySlot();
                   if (!release) {
-                    metrics.record('gate_skipped_busy', { tool: toolName, pattern: patternForLog }, { cwd, sid });
+                    metrics.record('gate_skipped_busy', { tool: keyTool, pattern: patternForLog }, { cwd, sid });
                     gstate.markDeclined(sid, cwd, searchKey, 'busy'); // R1
                   } else {
                     let queryOut = '';
@@ -496,7 +517,7 @@ process.stdin.on('end', () => {
                     if (info.newerCount > 0) kickSelfHeal(info.newerCount, false);
 
                     if (!queryOk || !graphNudge.hasGraphAnswer(queryOut)) {
-                      metrics.record('gate_noanswer', { tool: toolName, pattern: patternForLog, outputMode, reason, ms: queryMs }, { cwd, sid });
+                      metrics.record('gate_noanswer', { tool: keyTool, pattern: patternForLog, outputMode, reason, ms: queryMs }, { cwd, sid });
                       gstate.markDeclined(sid, cwd, searchKey, reason); // R1 — no gflag write, this was never a block
                     } else {
                       // R5 (streak): write the gate flag only now — a genuine block.
@@ -518,13 +539,13 @@ process.stdin.on('end', () => {
                         console.error(`note: graph lags ${info.newerCount} file(s) behind — background refresh started`);
                       }
                       console.error('');
-                      console.error('retry the same search if you need exact matches.');
+                      console.error(toolName === 'Bash' ? 'Rerun the same command only if you need exact matches.' : 'retry the same search if you need exact matches.');
                       console.error('─'.repeat(54));
                       // R9: answerChars reflects what was actually SHOWN
                       // (trimmed to the traversal header, capped at 2000),
                       // not graphify's raw, potentially much larger stdout.
                       metrics.record('gate_fired', {
-                        newerCount: info.newerCount, tool: toolName, pattern: patternForLog,
+                        newerCount: info.newerCount, tool: keyTool, pattern: patternForLog,
                         answerChars: answer.length, outputMode, keyHash, ms: queryMs,
                       }, { cwd, sid });
                       process.exit(2);
@@ -600,18 +621,37 @@ process.stdin.on('end', () => {
       },
     ];
 
+    // Quoted text is an argument, never a command: `node -e "…find / …"` or
+    // `grep "git log" x` must not read as an unbounded find / git log.
+    const unquoted = cmd.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, "''");
     let verboseMatch = null;
     for (const vp of verbosePatterns) {
-      if (vp.test.test(cmd) && !vp.guard.test(cmd)) {
+      if (vp.test.test(unquoted) && !vp.guard.test(unquoted)) {
         verboseMatch = vp;
         break;
       }
     }
 
     if (verboseMatch) {
-      estimatedTokens = THRESHOLD;
+      // Same ceiling as the file branch below: the Bash tool never returns
+      // more than BASH_MAX_OUTPUT_LENGTH (default 30000 chars ≈ 7.5k tokens),
+      // so a flat threshold-sized estimate was fiction and every block a
+      // blind retry. At the default cap the call runs and the narrower form
+      // rides along as a hint; only a raised cap still blocks.
+      const bashCap = Math.ceil((Number(process.env.BASH_MAX_OUTPUT_LENGTH) || 30000) * (cfg.tokensPerByte || 0.25));
+      estimatedTokens = Math.min(THRESHOLD, bashCap);
       description = 'Bash: unbounded output — may flood context';
       verboseSuggestion = verboseMatch.suggestion;
+      if (estimatedTokens < THRESHOLD) {
+        recordMetric('guard_hinted', { tool: toolName, kind: 'bash-verbose' }, { cwd, sid: hook.session_id || 'nosid' });
+        process.stdout.write(JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            additionalContext: `[tokens-guard] This command has no limit flag; its output is cut at the Bash cap (~${bashCap.toLocaleString('en-US')} tokens). Next time prefer: ${verboseSuggestion}`,
+          },
+        }));
+        process.exit(0);
+      }
     }
 
     // Check whether the command actually READS a known expensive file, rather
@@ -812,8 +852,18 @@ process.stdin.on('end', () => {
     }
   }
 
+  // What to do instead of a blind retry (21 of 64 blocks were retried
+  // unchanged in two days because this line only said "retry").
   console.error(line);
-  console.error('To proceed, retry the same operation.');
+  const narrower = toolName === 'Read'
+    ? 'Read only the part you need (offset + limit), or Grep the file for the lines you want.'
+    : (toolName === 'Grep' || toolName === 'Glob')
+      ? 'Set `path` to the directory that holds your target (project map / graphify query tell you which).'
+      : verboseSuggestion
+        ? `Use the bounded form: ${verboseSuggestion}`
+        : 'Read only the part you need (head / tail / grep on the file), not the whole file.';
+  console.error(`Better:     ${narrower}`);
+  console.error('Retry the identical call only if you really need its full output.');
   console.error('');
   process.exit(2);
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.browsertest
- * @version 0.4.0
+ * @version 0.5.0
  * @event Stop
  * @plugin devops
  * @description Light-verification enforcement gate (the "V" of the V&V gate).
@@ -42,8 +42,19 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const { sessionFile, readSessionFile, writeSessionFile } = require('../lib/session-id');
 const { decideLightTest, hasSkipJustification } = require('../lib/browsertest-guard');
-const { safeReadTranscript, lastAssistantText } = require('../lib/card-guard');
+const { safeReadTranscript, lastAssistantText, PENDING_TAIL_BYTES } = require('../lib/card-guard');
 const { BGRUN_FLAG, settleRecordedRuns } = require('../lib/light-bgrun');
+const { scanOpenTasks } = require('../lib/pending-tasks');
+
+/** Agent roles that only read, review or research — they never move the tree. */
+const READ_ONLY_AGENT_RE = /(^|:)(research|scout|qa|redteam|po|gamer|rethinker|Explore|Plan|claude-code-guide|codex-rescue|scan-\w+|explore)$/i;
+
+/** A background agent or workflow that may still change files is running. */
+function implementersRunning(transcript) {
+  if (!transcript) return false;
+  return scanOpenTasks(transcript).some(t =>
+    t.kind === 'workflow' || (t.kind === 'agent' && !READ_ONLY_AGENT_RE.test(String(t.name || ''))));
+}
 
 let inputData = '';
 process.stdin.setEncoding('utf8');
@@ -84,6 +95,14 @@ process.stdin.on('end', () => {
   if (pendingResult && !verifiedResult && !silentResult) {
     const transcript = safeReadTranscript(hook.transcript_path);
     skipJustified = hasSkipJustification(lastAssistantText(transcript));
+    // Background agents that may still change files: verifying now would
+    // test a tree that is about to move, and the forced turn only produced
+    // SKIP-VERIFICATION replies. Defer like an in-flight test run — every
+    // flag stays, and the Stop after their results enforces the check.
+    if (!inFlight) {
+      try { inFlight = implementersRunning(safeReadTranscript(hook.transcript_path, PENDING_TAIL_BYTES)); }
+      catch { /* unreadable: enforce as usual */ }
+    }
   }
 
   const decision = decideLightTest({

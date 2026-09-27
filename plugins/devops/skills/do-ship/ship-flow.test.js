@@ -134,7 +134,8 @@ describe("do-ship — harden + polish at ship (Step 1e)", () => {
   const passes = section(SKILL, "### 1e. Ship passes", "### Merge strategy decision");
 
   test("both passes are called with --invoked-by=ship, diff-scoped", () => {
-    expect(passes).toContain("/auto-harden --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>");
+    // The harden ship path runs as a script (no auto-harden skill load per ship).
+    expect(passes).toContain('node "{PLUGIN_ROOT}/scripts/ship-harden.js" --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>');
     expect(passes).toContain("/auto-polish --invoked-by=ship [--cwd=<path>] <ui files of the diff>");
   });
 
@@ -170,5 +171,28 @@ describe("do-ship — harden + polish at ship (Step 1e)", () => {
   test("the frontmatter declares both calls", () => {
     const fm = SKILL.slice(0, SKILL.indexOf("\n---", 4));
     expect(fm).toMatch(/invokes: \[auto-harden, auto-polish\]/);
+  });
+});
+
+// The core/reference split (benchmark 2026-09-27): every procedure moved out of
+// SKILL.md is reached through a stub. A stub whose file or section is gone would
+// let a (delegated) ship skip a step silently.
+describe("do-ship — every reference stub resolves", () => {
+  const stubs = [...SKILL.matchAll(/`\{PLUGIN_ROOT\}\/skills\/do-ship\/deep-knowledge\/([a-z-]+\.md)`\s*§\s*([^\n.(]+?)(?=\s+and\s|\s*\(|\s*$|\.\s|\n)/gm)];
+
+  test("the split left stubs, and each names an existing file", () => {
+    expect(stubs.length).toBeGreaterThanOrEqual(10);
+    for (const [, file] of stubs) {
+      expect(fs.existsSync(path.join(__dirname, "deep-knowledge", file)), file).toBe(true);
+    }
+  });
+
+  test("each named section exists as a heading in its file", () => {
+    for (const [, file, section] of stubs) {
+      const body = fs.readFileSync(path.join(__dirname, "deep-knowledge", file), "utf8");
+      const words = section.trim().split(/\s+/).slice(0, 3).join(" ");
+      const headings = body.split("\n").filter((l) => /^#{1,4} /.test(l)).join("\n");
+      expect(headings, `${file} § ${section}`).toContain(words);
+    }
   });
 });
