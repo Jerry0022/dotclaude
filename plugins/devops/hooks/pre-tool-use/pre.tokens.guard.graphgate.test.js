@@ -635,3 +635,54 @@ describe("pre.tokens.guard — graphify hard-gate (integration)", () => {
     });
   });
 });
+
+describe("pre.tokens.guard — the graph gate also answers a recursive grep typed as Bash", () => {
+  let origLockDir, isoLockDir;
+  beforeEach(() => {
+    origLockDir = process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    isoLockDir = fs.mkdtempSync(path.join(os.tmpdir(), "graphgate-lockiso-"));
+    process.env.DOTCLAUDE_GRAPHLOCK_DIR = isoLockDir;
+  });
+  afterEach(() => {
+    try { fs.rmSync(isoLockDir, { recursive: true, force: true }); } catch {}
+    if (origLockDir === undefined) delete process.env.DOTCLAUDE_GRAPHLOCK_DIR;
+    else process.env.DOTCLAUDE_GRAPHLOCK_DIR = origLockDir;
+  });
+
+  const bash = (dir, sid, command) => runTool("Bash", dir, sid, { command });
+
+  test.each([
+    ["grep -rn", "grep -rn gammaTerm ."],
+    ["rg", "rg gammaTerm"],
+    ["git grep", "git grep -n gammaTerm"],
+  ])("%s → answered from the graph, the same command again runs", (_, command) => {
+    const dir = project({ consent: true, graph: "fresh" });
+    const first = bash(dir, `s-bash-${command.length}`, command);
+    expect(first.status).toBe(2);
+    expect(first.stderr).toContain("GRAPHIFY GATE");
+    expect(first.stderr).toContain("Rerun the same command only if you need exact matches.");
+    const second = bash(dir, `s-bash-${command.length}`, command);
+    expect(second.stderr).not.toContain("GRAPHIFY GATE");
+    expect(second.status).toBe(0);
+    cleanup(dir);
+  });
+
+  test("a non-recursive grep, a pipeline or a regex is left alone", () => {
+    const dir = project({ consent: true, graph: "fresh" });
+    for (const command of ["grep deltaTerm file.txt", "grep -r deltaTerm . | sort", "grep -rE 'a.*b' ."]) {
+      const r = bash(dir, "s-bash-skip", command);
+      expect(r.stderr, command).not.toContain("GRAPHIFY GATE");
+    }
+    cleanup(dir);
+  });
+
+  test("a Bash-grep bypass never releases a Grep-tool call for the same pattern", () => {
+    const dir = project({ consent: true, graph: "fresh" });
+    const sid = "s-bash-keys";
+    expect(bash(dir, sid, "grep -rn epsilonTerm .").stderr).toContain("GRAPHIFY GATE");
+    expect(bash(dir, sid, "grep -rn epsilonTerm .").status).toBe(0);
+    // The Grep tool's own first call is still gated on its own key.
+    expect(runGrep(dir, sid, "epsilonTerm").stderr).toContain("GRAPHIFY GATE");
+    cleanup(dir);
+  });
+});

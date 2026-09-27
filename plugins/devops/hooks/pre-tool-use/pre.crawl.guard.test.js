@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(__dirname, "pre.crawl.guard.js");
@@ -237,5 +238,33 @@ describe("pre.crawl.guard — allows", () => {
     const dir = project();
     const res = spawnSync(process.execPath, [HOOK], { cwd: dir, input: "not json", encoding: "utf8" });
     expect(res.status).toBe(0);
+  });
+});
+
+describe("pre.crawl.guard — a project that IS a drive root may search itself", () => {
+  const { driveOf, isOwnProjectRoot, decide: decideFn } = createRequire(import.meta.url)("./pre.crawl.guard.js");
+
+  test("driveOf", () => {
+    expect(driveOf("H:\\")).toBe("h:");
+    expect(driveOf("h:/")).toBe("h:");
+    expect(driveOf("/h")).toBe("h:");
+    expect(driveOf("/mnt/c")).toBe("c:");
+    expect(driveOf("/")).toBeNull();
+    expect(driveOf("C:/Users/x")).toBeNull();
+  });
+
+  test("never for another drive, /, home, or a cwd that is no drive root", () => {
+    expect(isOwnProjectRoot({ kind: "root", path: "C:/" }, "H:/")).toBe(false);
+    expect(isOwnProjectRoot({ kind: "root", path: "/" }, "H:/")).toBe(false);
+    expect(isOwnProjectRoot({ kind: "home", path: "~" }, "H:/")).toBe(false);
+    expect(isOwnProjectRoot({ kind: "root", path: "C:/" }, "C:/Users/x/repo")).toBe(false);
+  });
+
+  test.runIf(fs.existsSync("H:/.claude") || fs.existsSync("H:/.git"))("on this machine: H:\ as the project searches itself, C:\ stays blocked", () => {
+    const run = (command) => decideFn(JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: "H:\\" })).block;
+    expect(run("grep -rn foo .")).toBe(false);
+    expect(run("find H:/ -name x")).toBe(false);
+    expect(run("find C:/ -name x")).toBe(true);
+    expect(run("find / -name x")).toBe(true);
   });
 });
