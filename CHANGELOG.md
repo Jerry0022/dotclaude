@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.215.1] — 2026-09-27
+
+### Changed
+- **The weekly bar on the completion card shows when usage runs ahead of the week's pace.** Absolute usage says little over seven days. The Wk bar now appears once usage is more than 10 pp ahead of elapsed time (the yellow marker threshold), and always in the last 24 h before the weekly reset. The 50 % used threshold and the 1 h reset window now apply only to the 5h bar.
+
 ## [0.215.0] — 2026-09-27
 
 ### Added
