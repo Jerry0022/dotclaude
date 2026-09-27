@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.214.4] — 2026-09-27
+
+### Changed
+- **An analysis that ends in decisions goes to a concept page.** Before, the Quiet output style offered "a `/auto-concept` page or an artifact" as equals, and an analysis ending in five proposals went out as a static artifact because that was quicker to publish. Now any analysis that leaves the user something to pick (options, proposals, next steps) always becomes a `/auto-concept` page. An artifact is used only for a read-only report with nothing left to decide.
+
 ## [0.214.3] — 2026-09-27
 
 ### Fixed
