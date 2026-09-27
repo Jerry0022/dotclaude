@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.223.0] — 2026-09-27
+
+### Fixed
+- **The delegation policy reaches the model again.** Above ~10 000 characters Claude Code shows a hook's `additionalContext` only as a 2 KB preview. The SessionStart index hook sent 15.9 KB, so the model saw the start of the deep-knowledge table and never the always-on delegation policy after it (126 SessionStarts in two days). `ss.knowledge.index` now puts the plugin root, the delegation switch and the budget class first, then the policy in full, and the index last as file + topic, file names or a pointer to `INDEX.md`, whichever keeps the payload under 9 500 characters (`hooks/lib/context-cap.js`). 9.2 KB today.
+- **A matched deep-knowledge doc is no longer lost to the same preview.** `prompt.knowledge.dispatch` injected the first matched doc whole (up to 36 KB), so it arrived as a 2 KB preview and still counted as delivered for the session. A doc that does not fit now goes in as its head, cut at a section boundary, plus the path of the full file. With no room for a useful head it becomes a one-line pointer.
+
+### Added
+- **`render_completion_card` refuses a card the Stop gate would block, before it renders.** Title status word, missing `validation`, a requirement gap and undeclared background work are checked with the Stop gate's own rules and reason texts (`hooks/lib/card-pregate.js`). A refused call returns `isError` and renders nothing, so the fix costs one short tool result instead of a second card and widget (102 Stop blocks in two days, ~3.5k output tokens each). The Stop gate is unchanged. The same findings twice render anyway, and a refused call does not close a run contract.
+
+### Removed
+- **Self-calibration.** Its Stop hook wrote the instruction to plain stdout, which never reaches the model, so the loop never ran. The SessionStart and UserPromptSubmit variants were no-ops. Delivering it would have re-read a quarter of all deep-knowledge every 10 minutes.
+- **`local_generate` / `local_status` in the role agents.** The bare names never resolved to the local-llm MCP tools (0 calls in 70 sessions).
+
+### Changed
+- **The "card already rendered" reminder comes once per render** instead of after every later tool call (129× in two days).
+
 ## [0.222.0] — 2026-09-27
 
 ### Changed
