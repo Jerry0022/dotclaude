@@ -229,7 +229,8 @@ function main() {
             'Agent card — show the user this card verbatim in the next text you write (before your next ' +
             'tool call if you would otherwise stay silent), also under the Quiet output style. Agents ' +
             'launched in one message each hand you a card that grows by one row: show only the LAST ' +
-            'card of the message — it lists them all; never a prose summary in its place:\n' +
+            'card of the message — it lists them all; never a prose summary in its place. Until it is shown, ' +
+            'your next tool call is held back once (pre.agent.relay):\n' +
             card,
         },
       }));

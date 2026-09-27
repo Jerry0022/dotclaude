@@ -81,6 +81,11 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.agent.relay.js", "timeout": 10 }
+        ]
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.run.contract.js", "timeout": 20 }
         ],
         "matcher": "Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request"
@@ -173,6 +178,7 @@
         "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.git.sync.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.browsertest.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.agent.relay.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.guard.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.guide.handoff.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.selfcalibration.js" },

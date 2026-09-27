@@ -23,6 +23,8 @@ Every spawn is announced to the user — also under the Quiet output style.
 `pre.agent.announce` resolves model and effort and hands you an agent card
 (same template for 1 or 10 agents) to show verbatim; spawns in one message
 → show only the last card, it lists them all — never a prose summary.
+Show it as the next text right after the launch: `pre.agent.relay` holds back
+the next tool call once (and `stop.agent.relay` the turn end) while it is unshown.
 Models are family aliases (`opus`, `sonnet`, `fable`, `haiku`, `inherit`) —
 the harness resolves each to the newest model of that family, so never pin a
 version (`claude-opus-5-5`) anywhere.
