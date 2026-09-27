@@ -127,7 +127,7 @@ given when this cron is armed — the router asks Q1/Q2 before F3/F4):
 - **Interaktiv** → `shutdown=no`, in every arm and re-arm. The user said they stay;
   a presence timeout never powers the PC down under them.
 - **Autonom** → `shutdown=yes` until F6 "PC danach" is answered, then F6's value
-  (`PC aus` → `yes`, `PC an · …` → `no`).
+  (`PC ausmachen` → `yes`, `PC anlassen · …` → `no`).
 - No router answer (legacy direct entry) → `shutdown=yes`.
 
 **Re-arm** it (delete + recreate at a fresh `now + 3min`) after **every** answered
@@ -247,8 +247,8 @@ referencing its deep-knowledge — do NOT duplicate that prose here.
    leaves each issue committed on its own branch (not pushed, issue and
    milestone stay open, item reported as `ready`). Not asked again.
 3. **Shutdown / resume — answered by the router.** Autonom → its follow-up F6
-   ("PC danach": `PC an · mit Resume` / `PC an · ohne Resume` /
-   `PC aus · ohne Resume`), which folds autonomous mode Step 2 **Q3** and
+   ("PC danach": `PC anlassen · ohne Resume` / `PC anlassen · mit Resume` /
+   `PC ausmachen · ohne Resume`), which folds autonomous mode Step 2 **Q3** and
    **Q4** and keeps their HARD GATE by construction (shutdown=yes ⇒
    `$AUTO_RESUME=no`). Interaktiv → `shutdown=no`, `autoResume=no`.
 
