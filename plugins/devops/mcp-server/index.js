@@ -73,6 +73,7 @@ const cjsRequire = createRequire(import.meta.url);
 // Which requirements are still Claude's own work (waitsOn) — shared with
 // stop.flow.guard and ship_release so all three read the status the same way.
 const validationGaps = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'validation-gaps.js'));
+const cardPregate = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'card-pregate.js'));
 
 /**
  * The validation items Claude itself still owns: everything except a not-met
@@ -2455,6 +2456,11 @@ server.registerTool(
     withDetectedRepoMode(params);
     const localShip = localShipInstruction(params);
     if (localShip) return { content: [{ type: 'text', text: localShip }] };
+    // stop.flow.guard's payload gates, before anything renders — a refused
+    // call costs one short tool result instead of a second card + widget
+    // (hooks/lib/card-pregate.js). The Stop gate itself is unchanged.
+    const pre = cardPregate.check(params);
+    if (pre.refuse) return { isError: true, content: [{ type: 'text', text: pre.text }] };
     const cardMarkdown = buildCompletionCard(params);
     const titleNote = sessionTitleNote(params);
     const actionsNote = ctaActionsNote(params);

@@ -971,6 +971,7 @@ module.exports = {
   renderLadderLines,
   offlineRendererPath,
   buildValidationReason,
+  buildValidationGapsReason,
   buildNotRelayedReason,
   buildWidgetSkippedReason,
   showWidgetCalledThisTurn,

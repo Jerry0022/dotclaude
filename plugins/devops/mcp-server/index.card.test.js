@@ -11,6 +11,9 @@ import * as RC from "../hooks/lib/run-contract.js";
 // Never spawn the real headless usage scraper (Edge) from a unit test — it is
 // slow and flaky under parallel load. The card renders without a budget line.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
+// These cards carry requirement gaps on purpose — the pre-check (hooks/lib/card-pregate)
+// would refuse the first render; its own tests live next to it.
+process.env.DEVOPS_CARD_PREGATE = "0";
 // These tests assert the terminal markdown. On the Desktop app the markdown
 // shrinks to the title line (§ 4, the widget draws the body), and a vitest run
 // started from a Desktop session inherits that entrypoint — pin the terminal.
@@ -1146,6 +1149,24 @@ describe("render_completion_card — armed batch carries the how-to", () => {
       expect(en).toMatch(/^2\. Execute: ">go <text>" or \/do-batch go/m);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("render_completion_card — the pre-check refuses before rendering", () => {
+  test("a title status word is refused once, with nothing rendered; the same call again renders", async () => {
+    process.env.DEVOPS_CARD_PREGATE = "1";
+    try {
+      const sid = `test-pregate-${process.pid}-${Date.now()}`;
+      const first = await render({ variant: "ready", summary: "3 Agenten laufen", lang: "de", session_id: sid });
+      expect(first.isError).toBe(true);
+      expect(first.content).toHaveLength(1);
+      expect(first.content[0].text).toMatch(/^\[card-pregate\] Not rendered/);
+      const second = await render({ variant: "ready", summary: "3 Agenten laufen", lang: "de", session_id: sid });
+      expect(second.isError).toBeUndefined();
+      expect(second.content[second.content.length - 1].text).toContain("3 Agenten laufen");
+    } finally {
+      process.env.DEVOPS_CARD_PREGATE = "0";
     }
   });
 });

@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 // card (§ 2.4 budget line, § 2.6 points cap, test-minimal's minimal form).
 // Same mock preamble as index.card.test.js.
 process.env.DEVOPS_COMPLETION_NO_USAGE = "1";
+// These cards carry requirement gaps on purpose — the pre-check (hooks/lib/card-pregate)
+// would refuse the first render; its own tests live next to it.
+process.env.DEVOPS_CARD_PREGATE = "0";
 // Terminal markdown is what these tests assert (on Desktop it is the title line only, § 4).
 process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
 
