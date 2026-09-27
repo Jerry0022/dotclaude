@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.214.1] — 2026-09-27
+
+### Fixed
+- **A green test line no longer renders as red on the completion card.** `"7663 grün · 1 Flake (auch auf main rot) behoben · 3 skipped"` showed "✗ 7663 Tests rot" and a "Nicht erreicht" line, because any failure word in the line overrode the counted verdict. The verdict word next to a count now decides; a bare failure word counts only when no green count is present.
+
 ## [0.214.0] — 2026-09-27
 
 ### Added
