@@ -53,6 +53,7 @@ service-account*.json
 .claude/skills/*
 !.claude/skills/do-ship/
 !.claude/skills/auto-polish/
+!.claude/skills/do-run/
 
 # >>> devops-plugin runtime state — kept for clones without the plugin; the plugin itself writes .git/info/exclude >>>
 # Written into the PROJECT's .claude/ by the plugin itself.

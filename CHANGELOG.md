@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.214.2] — 2026-09-27
+
+### Changed
+- **The do-run "PC danach" question no longer pushes auto-resume.** The options now read `🟢 PC anlassen · ➖ Resume` / `🟢 PC anlassen · ➕ Resume` / `🔴 PC ausmachen`. They always appear in that order, and the recommendation stays on "without resume". It moves to "with resume" only when the run is expected to be long and to plausibly use up the plan's usage (burn, a large backlog, a full audit or parallel lanes, combined with a 5h window already half used). The status symbols let the user tell the three options apart at a glance.
+- **Question options keep a fixed order in this repo.** A new project extension, `.claude/skills/do-run/reference.md`, makes this a rule for every `AskUserQuestion` defined here: only the `(Recommended)` marker may move, and it usually sits on the first option.
+
 ## [0.214.1] — 2026-09-27
 
 ### Fixed
