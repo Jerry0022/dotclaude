@@ -186,6 +186,12 @@ describe("a dead bridge with nothing pending is relaunched too (#348)", () => {
     expect(text).toContain("run_in_background: true");
   });
 
+  test("tells Claude to refresh started_at, server_pid and cron_id afterwards (#563)", () => {
+    expect(text).toContain("started_at");
+    expect(text).toContain("server_pid");
+    expect(text).toContain("cron_id");
+  });
+
   test("re-arms all three watchers — pulser, waker and the backup cron", () => {
     expect(text).toContain("--mode pulse");
     expect(text).toContain("--mode watch");
