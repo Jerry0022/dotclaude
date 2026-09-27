@@ -20,6 +20,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { createRequire } from "node:module";
 import { register as registerHeartbeat } from "../lib/heartbeat.js";
 
 import { schema as preflightSchema, handler as preflightHandler } from "./tools/preflight.js";
@@ -41,6 +42,23 @@ const server = new McpServer({
 // Set once the stdio transport is live — see the boot block at the bottom.
 let bootMs = null;
 
+/**
+ * Where an interrupted ship left off (hooks/lib/ship-checkpoint.js): every
+ * pipeline tool's result is recorded after it returns, so a ship that dies
+ * mid-way (usage limit, crash) resumes at the step that did not finish.
+ * Loaded on first use — no work before connect (Boot Discipline) — and never
+ * allowed to fail the tool call it follows.
+ */
+let checkpointLib;
+function recordStep(name, params, result) {
+  try {
+    if (checkpointLib === undefined) {
+      checkpointLib = createRequire(import.meta.url)("../../hooks/lib/ship-checkpoint.js");
+    }
+    checkpointLib.recordShipStep(name, params, result);
+  } catch { checkpointLib = checkpointLib || null; }
+}
+
 function registerTool(name, title, description, schema, handler) {
   server.registerTool(
     name,
@@ -48,6 +66,7 @@ function registerTool(name, title, description, schema, handler) {
     async (params) => {
       try {
         const result = await handler(params);
+        recordStep(name, params, result);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };

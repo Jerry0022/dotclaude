@@ -54,7 +54,7 @@ export const CARD_VARIANTS = [
 export const CARD_KNOWN_KEYS = [
   "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
-  "deployGate", "validation", "delivery", "promotion", "compact",
+  "deployGate", "validation", "delivery", "promotion",
 ];
 
 /** Top-level keys of `params` the schema does not know, in payload order. */
@@ -164,7 +164,11 @@ export function validateCardInput(params) {
   if (params.variant === "ship-successful") {
     const s = isObj(params.state) ? params.state : null;
     if (s && s.mode === "file-only") issues.push({ path: "variant", message: 'a file-only project has no merge to report — use "ready-files"' });
-    else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
+    // No remote: ship_release merges LOCALLY, so `merged` is the whole proof
+    // and there is nothing to push (variant-guard accepts the same, #500).
+    else if (s && s.mode === "git-no-remote") {
+      if (!isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'a git-no-remote ship-successful requires the local merge proof state.merged: "<base>" (e.g. "main")' });
+    } else if (!s || s.pushed !== true || !isStr(s.merged) || !s.merged.trim()) issues.push({ path: "state", message: 'ship-successful requires the merge proof state.pushed: true and state.merged: "<base>" (e.g. "main")' });
   }
   // `merged` names the base branch; the card prints it ("✓ merge main", the
   // track's base). A boolean read "merge true" and "Shipped v → true" (audit
@@ -231,14 +235,6 @@ export function validateCardInput(params) {
     if (isStr(c)) { if (!CONCEPT_PHASES.includes(c)) issues.push({ path: "concept", message: `must be one of ${CONCEPT_PHASES.join("|")} or { phase?, url? }` }); }
     else if (!isObj(c)) issues.push({ path: "concept", message: "must be a phase string or an object" });
     else if (c.phase !== undefined && !CONCEPT_PHASES.includes(c.phase)) issues.push({ path: "concept.phase", message: `must be one of ${CONCEPT_PHASES.join("|")}` });
-  }
-  if (params.compact !== undefined && params.compact !== null) {
-    const c = params.compact;
-    if (!isObj(c)) issues.push({ path: "compact", message: "must be { tokens: number, focus?: string }" });
-    else {
-      if (typeof c.tokens !== "number") issues.push({ path: "compact.tokens", message: "must be a number" });
-      if (c.focus !== undefined && !isStr(c.focus)) issues.push({ path: "compact.focus", message: "must be a string" });
-    }
   }
   if (isObj(params.state) && params.state.pr !== undefined && params.state.pr !== null) {
     const pr = params.state.pr;

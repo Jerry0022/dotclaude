@@ -1,6 +1,6 @@
 ---
 name: do-ship
-version: 0.12.0
+version: 0.13.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, silent memory consolidation,
@@ -20,8 +20,8 @@ invokes: [auto-harden, auto-polish]
 triggers:
   en: ["ship it", "push and merge", "release", "promote", "promotion", "channel release", "promote to beta", "promote to stable"]
   de: ["auf stable heben"]
-argument-hint: "[beta|stable|promote] [<version>] [--cwd <path>] [--keep] [--queued] [--no-compact]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+argument-hint: "[beta|stable|promote] [<version>] [--cwd <path>] [--keep] [--queued] [--delegated] [--inline]"
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, Agent, SendMessage, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Ship
@@ -90,34 +90,46 @@ that safe; a plain `/do-ship` with no arguments behaves exactly as before.
 | `--queued` | This ship is one of several in a queue. The card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here, and Step 6 skips `ship_hygiene` — the orchestrator decided what stays. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
 
-| `--no-compact` | Skip the careful-compact stop for this one ship (below). Parsed and dropped — it changes nothing else. |
+| `--delegated` | This run is the fresh-context subagent of a delegated ship (Pre-Step 0). Follow `modes/delegated.md` → *Subagent*: gates return a decision instead of asking, the card comes back as JSON. |
+| `--resume` | Continue an interrupted ship from its checkpoint (Pre-Step R). Sent by `prompt.ship.detect`'s `[ship-resume]` block when the user continues ("weiter", "continue", a ship prompt) and a ship stopped half-way. |
+| `--inline` (old: `--no-compact`) | Keep this one ship in the main context even when the context is large (Pre-Step 0). Parsed and dropped — it changes nothing else. |
 
 Parse these from the skill arguments first; then continue with Pre-Step A.
 
-## Pre-Step 0 — Careful compact (the hook decides, this skill obeys)
+## Pre-Step 0 — Large context: ship in a subagent (the hook decides, this skill obeys)
 
-A ship runs ~16 API calls, each re-reading the whole context, at the end of a
-session when that context is largest (measured 2026-09-21: Ø 434 k tokens per
-call, ~24 % of a session's tokens). Nothing in Claude Code lets a skill or hook
-compact the context — only the user can, with `/compact`. So
-`prompt.ship.detect` measures the context on every ship prompt and, above
-`DOTCLAUDE_SHIP_COMPACT_THRESHOLD` (default 350 k tokens, `0` disables), emits a
-`[ship-compact]` block instead of the ship instruction. It never fires twice
-in a row: the ship prompt right after an advice is the user's answer and runs.
+A ship makes about 16 API calls, and each one re-reads the whole context. It
+runs at the end of a session, when that context is largest (measured
+2026-09-21: 434 k tokens per call on average, about 24 % of a session's
+tokens). Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0`
+turns it off) `prompt.ship.detect` emits a `[ship-delegate]` block instead of
+the inline mandate.
 
-**If that block is in this turn's context: stop here.** Run nothing — no
-Pre-Step, no `ship_*` call, no git — and end the turn with the completion card
-the block names (`variant: "ship-blocked"`, `compact: { tokens }`). The card
-shows the saving and the full `/compact` command as text; on Desktop its one
-button puts `ship --no-compact` into the input box. The user either compacts
-and types `/do-ship` again (the hook sees the compaction and lets it through), or
-ships without compacting (the button, or simply `/do-ship` again).
-Ships reached through the Skill tool by an orchestrator (`/do-run backlog`,
-auto-cleanup) never see the block — the hook only reads user prompts.
+**If that block is in this turn's context and this run is not `--delegated`:
+do not run the pipeline here.** Run no `ship_*` call and no git push or merge.
+Follow the block: write the brief, spawn the general-purpose subagent with
+`--delegated`, and relay its decisions through `AskUserQuestion`. The subagent
+renders the card with this session's id; you set the title and show the card
+it hands back. `modes/delegated.md` → *Main session* has the details for the
+case where something goes wrong. The user types nothing extra.
+
+**`--delegated`:** you are that subagent. Follow `modes/delegated.md` →
+*Subagent* for every step it names. Every other step is unchanged.
+
+Ships that an orchestrator reaches through the Skill tool (`/do-run backlog`,
+auto-cleanup) never see the block, because the hook only reads user prompts.
 A **promotion-only** prompt ("promote stable" with nothing unshipped) never
-gets it either: that run is ~4 calls (ls-remote, `ship_promote`, the card),
-not ~16, so the stop would cost the user more than it saves. A promotion that
-has to ship first is a ship and gets the stop like any other.
+sees it either: that run is about 4 calls, so delegating would save nothing. A
+promotion that has to ship first is a ship and is delegated like any other.
+
+## Pre-Step R — Resume an interrupted ship (`--resume`)
+
+The ship MCP server keeps a checkpoint of every step
+(`.claude/.ship-checkpoint.json`), so a ship stopped by a usage limit or a
+crash continues at the first step that did not finish. It never starts over,
+and it never repeats a bump, PR or tag. With `--resume`, follow
+`modes/resume.md`: read the checkpoint, check it against git/gh, skip what
+landed, and end with the normal ship card.
 
 ## Pre-Step A — Autonomous Lockout Detection
 

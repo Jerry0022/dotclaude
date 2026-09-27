@@ -85,33 +85,6 @@ describe("--render-card CLI fallback", () => {
     expect(out).toMatch(/^## 📋 Analyse gelesen/m);
   });
 
-  test("compact: the ship-compact stop as a card — size, saving, command text, one ship button (Desktop)", async () => {
-    const payload = { variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: S("compact"), compact: { tokens: 435000 } };
-    const term = await renderCard(payload);
-    expect(term).toMatch(/^## 🗜 Kontext 435 k Tokens — vor dem Ship kompaktieren\?/m);
-    expect(term).toContain("Kompaktieren spart beim Ship ≈ 5.4 M Tokens");
-    expect(term).toContain("`/compact Ship steht an. Behalte:");
-    expect(term).not.toContain("ungeprüft");
-    const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(stderr).toContain('data-prompt="ship --no-compact"');
-    expect(stderr).toContain("Ohne Kompaktieren shippen");
-    expect(stderr).not.toMatch(/data-prompt="\s*\/compact/);
-    // the command stays visible in the widget, as plain text
-    expect(stderr).toContain(">/compact Ship steht an. Behalte:");
-  });
-
-  test("compact outranks an open concept page — the ship stop stays the decision", async () => {
-    const payload = {
-      variant: "ship-blocked", summary: "Ship angehalten", lang: "de", session_id: S("compact-concept"),
-      compact: { tokens: 435000 }, concept: "waiting", pending: [{ name: "devops:qa", doing: "Suite" }],
-    };
-    const term = await renderCard(payload);
-    expect(term).toMatch(/^## 🗜 Kontext 435 k Tokens — vor dem Ship kompaktieren\?/m);
-    expect(term).not.toContain("🧭 Concept");
-    const { stderr } = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
-    expect(stderr).toContain('data-prompt="ship --no-compact"');
-  });
-
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
     const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: S("clean") });
     expect(out).not.toContain("DO NOT OUTPUT THIS BLOCK");

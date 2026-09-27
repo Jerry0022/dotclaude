@@ -34,6 +34,9 @@
  *   here instead of the hourglass. Observed 2026-09-21: `/do-ship` after a
  *   change left `⏳` on the title for the whole pipeline whenever the model
  *   skipped the do-ship skill's own courtesy rename (Pre-Step C).
+ *   A prompt that resumes an interrupted ship ("weiter" after a usage limit
+ *   or a crash, lib/ship-resume.js) is a ship too: it gets `🚀 Shipping – `,
+ *   never the hourglass.
  *
  *   Guarded by runOnce: the marker is taken here and given back by
  *   stop.flow.guard at every non-silent turn end (card or no card — since
@@ -52,6 +55,11 @@ require('../lib/plugin-guard');
 const { runOnce, releaseOnce } = require('../lib/run-once');
 const { isSilent, isScheduledTask, isMachineTurn } = require('./prompt.flow.silent-turn');
 const { isShipIntent } = require('../lib/ship-intent');
+
+/** An interrupted ship this prompt resumes, or null — never fatal. */
+function resumesShip(prompt, cwd) {
+  try { return !!require('../lib/ship-resume').shipResumeFor(prompt, cwd); } catch { return false; }
+}
 
 /** The runOnce token name — stop.flow.guard releases it after a card. */
 const ONCE_KEY = 'prompt-title-work';
@@ -95,8 +103,8 @@ const KNOWN_PREFIX_EMOJI = [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI];
  * starts one (a ship → `🚀 Shipping – `), the bare hourglass otherwise. The
  * hourglass is the fallback, never the override.
  */
-function prefixFor(prompt) {
-  return isShipIntent(prompt) ? SHIPPING_PREFIX : WORK_PREFIX;
+function prefixFor(prompt, cwd) {
+  return isShipIntent(prompt) || resumesShip(prompt, cwd) ? SHIPPING_PREFIX : WORK_PREFIX;
 }
 
 function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
@@ -172,7 +180,7 @@ if (require.main === module) {
     if (!shouldMark(hook)) process.exit(0);
     if (!runOnce(ONCE_KEY, hook.session_id)) process.exit(0);
     const prompt = hook.prompt || hook.user_message || hook.message || '';
-    process.stdout.write(instruction(prefixFor(prompt), { machine: isMachineTurn(prompt) }) + '\n');
+    process.stdout.write(instruction(prefixFor(prompt, hook.cwd || process.cwd()), { machine: isMachineTurn(prompt) }) + '\n');
     process.exit(0);
   });
 }

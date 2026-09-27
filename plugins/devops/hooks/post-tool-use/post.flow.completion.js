@@ -460,7 +460,7 @@ function handleShipAndCardFlags(hook, toolName) {
 /**
  * --- 1. Edit/tool-call counters and V&V gate flags ---
  * Increments the edit and tool-call counters (1, 1b), writes the per-turn
- * work-happened flag and last-activity timestamp (1c, 1d), and updates the
+ * work-happened flag (1c), and updates the
  * light-verification / validation gate flags consumed by stop.flow.browsertest
  * and stop.flow.guard (1e) — in that order, each best effort.
  * @returns {{ editCount: number, firstOfTurn: boolean }} the edit count after
@@ -470,7 +470,6 @@ function updateEditAndGateFlags(hook, toolName, isCodeEdit) {
   const editCount = bumpEditCounter(hook, isCodeEdit);
   bumpToolCallCounter(hook);
   const firstOfTurn = claimWorkHappened(hook, toolName);
-  touchLastActivity(hook);
   updateLightGateFlags(hook, toolName, isCodeEdit);
   return { editCount, firstOfTurn };
 }
@@ -523,14 +522,6 @@ function claimWorkHappened(hook, toolName) {
     try { writeSessionFile(workFile, toolName); } catch { /* best effort */ }
     return false;
   }
-}
-
-/** --- 1d. Write last-activity timestamp (consumed by cache-timeout check) --- */
-function touchLastActivity(hook) {
-  try {
-    const activityFile = sessionFile('dotclaude-devops-last-activity', hook.session_id);
-    writeSessionFile(activityFile, Date.now().toString());
-  } catch { /* best effort */ }
 }
 
 /**
@@ -808,7 +799,7 @@ function cardContractLines(hook, scheduledTask) {
     'COMPLETION CARD — when ALL work is done:',
     ...ladder,
     `Pass: variant, summary (max ~10 words, user language), lang:(use "de" if user writes German, "en" otherwise), session_id:"${hook.session_id || ''}",`,
-    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable.',
+    '  plus changes, tests, state, cta, userTest, userFinalTest as applicable (cta is an object of placeholders, e.g. { reason }, never a sentence).',
     `  cwd:"${hook.cwd || ''}" — without it PR/commit/branch render as dead text, not links.`,
     '  `delivery` (the PR → Ship → Promote track) whenever this work reached a pipeline stage:',
     '  a PR exists, it was shipped, or a channel was promoted. Populate the stages that happened,',
