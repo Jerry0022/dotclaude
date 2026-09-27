@@ -180,7 +180,8 @@ describe("a paused concept — hint, no relaunch, no prune (#555)", () => {
       fs.writeFileSync(path.join(p.store, "state.json"), JSON.stringify({ decisions: JSON.stringify({ submitted: true }), version: 4, saved_at: iso(1 * H) }));
       const { stdout } = runHook(p);
       expect(stdout).not.toMatch(/Paused \/auto-concept page/);
-      expect(stdout.length).toBeGreaterThan(0);
+      expect(stdout).toContain("concept-server.py");
+      expect(stdout).toMatch(/delete `paused_at`/);
     } finally {
       fs.rmSync(p.cwd, { recursive: true, force: true });
       fs.rmSync(p.home, { recursive: true, force: true });

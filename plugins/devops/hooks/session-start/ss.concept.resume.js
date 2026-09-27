@@ -520,6 +520,12 @@ function buildDeadBridgeRecovery(state, store) {
     `Then confirm the recovery with \`curl -s http://localhost:${state.port}/recovery\`, ` +
     `re-arm the keepalive pulser (${bg.pulser}) and the pickup waker (${bg.waker}), ` +
     `and process the recovered submission.`,
+    // A submission that arrived just before a pause (#555) outranks the pause:
+    // once the bridge runs again, the state file must stop claiming it is paused.
+    ...(isPaused(state)
+      ? [`The concept was paused (paused_at ${state.paused_at}); the relaunch ends the pause — delete \`paused_at\` ` +
+         `from ${STATE_PATH} (read-modify-write) once the bridge answers.`]
+      : []),
   ].join(' ');
 }
 
