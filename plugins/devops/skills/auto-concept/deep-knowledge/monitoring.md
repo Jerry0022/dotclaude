@@ -22,6 +22,12 @@ The **concept bridge server** (`scripts/concept-server.py`) acts as the
 communication hub. Both Claude and the page talk to the server via HTTP —
 no browser tool injection needed for heartbeat or decision exchange.
 
+**Artifact fallback (#589)** — no bridge, and the owner decides on a
+claude.ai artifact copy: nothing is monitored. The page writes its submission
+to the artifact's `db` document `concept/decisions`, and Claude reads it once,
+when told, with `ArtifactData` (`artifact-fallback.md`) instead of
+`/pending` + `/decisions`.
+
 This is an **iterative loop**, not a one-shot. After each submission,
 Claude processes the feedback, updates the page, and monitors again.
 The loop continues until the user is done (closes page or says "fertig").
