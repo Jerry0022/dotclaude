@@ -219,9 +219,10 @@ prompt as item 6 of § Agent Prompt Template — the plan shows the budget the
 prompts will carry, so it is visible before anything is spawned.
 
 **Confirmation — only where the user has not already said go.** Ask for it
-on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`.
-Every other caller's own gate was the confirmation — do-run's questions
-answered with "Autonom", the concept's implement click, an `--autonomous` pass —
+on a direct invocation (no `--from`) and on `--from=do-run --mode=interactive`
+without `--rethink`. Every other caller's own gate was the confirmation —
+do-run's questions answered with "Autonom", the concept's implement click, a
+do-run rethink handoff (`--rethink`: its pick was the go), an `--autonomous` pass —
 and the user may be away, so show the plan and continue; the plan card is
 then the one agent overview of the run — Step 5 does not show it twice.
 Accept:
