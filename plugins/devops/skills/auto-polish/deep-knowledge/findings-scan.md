@@ -49,13 +49,15 @@ Spawn parallel `devops:scout` agents (single message, multiple Agent calls):
    no internal seams, hook-reuse opportunities (same effect logic in
    3+ components).
 
-8. **Standing UI rules (`$UI_RULES`)** — R0–R6, each with a static and a
+8. **Standing UI rules (`$UI_RULES`)** — R0–R7, each with a static and a
    runtime half. `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` (loaded in Step 0) is the
    single source for what each half checks — work from it, not from memory:
    R0 app style · R1 tooltips (app-styled, Info/Label delay tiers) · R2a
    dropdowns styled · R2b uniform menu items · R3 spacing · R4 hotkeys ·
    R5 scrollbars · R6 platform matrix (Windows / Linux desktop, Android /
-   iOS tablet, Android / iOS phone — design, UX and function on each).
+   iOS tablet, Android / iOS phone — design, UX and function on each) ·
+   R7 wording (same or different on purpose — fixed strings keep one term
+   per concept, chat and prose may vary).
    **R0 is part of every rule**, project rules included.
    Detection uses the allowlist from `ui-defaults.md` merged with the
    override. A rule whose mechanism class has zero matches in the whole
@@ -64,9 +66,9 @@ Spawn parallel `devops:scout` agents (single message, multiple Agent calls):
    absence itself into the one project-level finding (no app-styled tooltip
    component, no scrollbar style). Only **new or changed**
    elements in scope are findings on the ship path; the full pass may also
-   list pre-existing violations, marked as such. R0, R1, R4 and R5 are
+   list pre-existing violations, marked as such. R0, R1, R4, R5 and R7 are
    **report-only** (R0: only a literal → token swap is mechanical; R1: a fix
    may only reuse an existing label's text, through the app's tooltip
    component; R4: the key choice is design; R5: thumb/track colours are
-   design). A more recent project convention from merged
+   design; R7: wording is product language). A more recent project convention from merged
    PRs beats a generic rule — say so in the finding instead of reporting it.

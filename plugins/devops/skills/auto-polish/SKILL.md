@@ -171,7 +171,7 @@ one per concern: #1 state-visuals gaps · #2 consistency drift (extended) ·
 #3 hardcoded → token candidates · #4 UI functionality gaps · #5 backend
 UI-impact issues (the ONLY backend-touchable items) · #6 structural smells
 (proposals only, never auto-applied) · #7 component-level architecture ·
-#8 standing UI rules R0–R6 (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`). What each scan
+#8 standing UI rules R0–R7 (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`). What each scan
 looks for: `deep-knowledge/findings-scan.md` (this skill's directory).
 
 ## Rules-only path (ship) — `$RULES_ONLY=1`

@@ -4,7 +4,8 @@ Standing UI conventions every project using the devops plugin gets by default.
 The same recurring defects — tooltips and scrollbars left at the browser's
 look, icon buttons without tooltips, dropdowns left at the native look,
 spacing that differs between two identical cards, actions that only a mouse
-can reach, layouts that only work on the developer's own desktop — show up
+can reach, layouts that only work on the developer's own desktop, one
+operation named two ways in two places — show up
 in every new project. This file names the outcome each rule expects so that
 it is in context **while the UI is written**, and is checked **after** it is written by `/auto-polish`.
 
@@ -212,6 +213,32 @@ No rule repeats it.
   everything else (a touch path for a hover-only action, a breakpoint
   layout) is report-only — it is design.
 
+### 7 · Wording — same or different, on purpose
+
+A judgement, not a lookup table: whenever a text names something the app
+already names elsewhere, **decide** whether it should read the same or
+differ — never let it drift by accident.
+
+- **Name the same thing the same way** where the user relies on recognising
+  it: labels, buttons, menu items, dialog titles, toasts, errors, settings.
+  "Entschlüsselung" on the button and "Dekodierung" in the toast for one
+  operation is a defect — and often a wrong claim (decrypting is not
+  decoding). Word form is no variance ("Entschlüsseln" / "Entschlüsselung").
+- **Vary where variation helps**: chat messages, generated or
+  conversational replies, onboarding and help prose may rephrase freely —
+  repeating one fixed sentence there reads robotic. What stays recognisable
+  is the name of a feature or object the user must find again in the UI.
+- **Differ on purpose** when the concepts differ (Archivieren ≠ Löschen), a
+  platform convention asks for it, or the register changes (control vs.
+  explanation). Near-synonyms for one concept, or one word for two concepts,
+  are the drift to avoid. Consistency holds per locale.
+- **Static:** a new or changed fixed string naming a concept differently
+  than the existing strings do, with no reason in sight. Reported once per
+  term pair, never per occurrence; free-form text is not checked.
+- **Runtime:** each changed flow read once in order (trigger → dialog →
+  confirm → toast / error) — does every named thing keep its name?
+- **Fix policy:** report-only — wording is product language.
+
 ## Common rules
 
 - **New or changed elements only** on the ship path. Existing elements are the
@@ -256,7 +283,8 @@ project extends or replaces them (§ Project override).
 | Scrollbar styling | `scrollbar-color`, `scrollbar-width`, `scrollbar-gutter`, `::-webkit-scrollbar*`, `color-scheme`, a scroll-area component (Radix / shadcn `ScrollArea`, OverlayScrollbars, SimpleBar) |
 | Hotkey mechanisms | `accesskey`, `useHotkeys(` / `useKeyboardShortcut(`, `@HostListener('window:keydown` / `document:keydown`, `v-hotkey`, `Mousetrap.bind(`, `hotkeys(`, a project shortcut registry (`registerShortcut(`, `shortcuts.ts`, `keymap.*`), `<kbd>` inside the control |
 | Menu components | `<mat-menu>`, `<Menu>` / `DropdownMenu` / `Popover` (MUI, Radix, shadcn, Headless UI, Ant), `<v-menu>`, `<el-dropdown>`, `<Dropdown>` (Bootstrap), a project `Menu`/`Dropdown` component under `components/` |
-| UI file detection | `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`, `*.scss`, `*.sass`, `*.less`, `*.styled.*`, `*.component.*`, `*.razor`, `*.xaml`, `*.axaml` |
+| Copy sources (R7) | string literals and text nodes in UI files, locale files (see UI file detection) |
+| UI file detection | `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`, `*.scss`, `*.sass`, `*.less`, `*.styled.*`, `*.component.*`, `*.razor`, `*.xaml`, `*.axaml`; locale files — `*.po`, `*.arb`, `*.xlf` / `*.xliff`, `*.resx`, `*.strings`, and `*.json` / `*.yml` / `*.yaml` under a `locale(s)` / `i18n` / `lang` / `translations` directory |
 
 ## Project override
 
@@ -268,12 +296,13 @@ section:
 
 ```markdown
 ## UI rules
-- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5, R6 (static halves) — a disabled rule is named on the ship card
+- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5, R6, R7 (static halves) — a disabled rule is named on the ship card
 - tooltip.mechanisms: appTooltip, <HelpHint>
 - tooltip.delay: info 1200, label 400   # ms, the two R1 tier values; project beats user-global
 - hotkey.mechanisms: useShortcut(, data-hotkey
 - platforms: windows, linux, android-tablet, ios-tablet   # narrows the R6 matrix; default: windows, linux, android-tablet, ios-tablet, android-phone, ios-phone
 - menu.components: <AppMenu>, <ContextMenu>
+- Encryption is always "Verschlüsselung" / "Entschlüsselung", never "Kodierung" (R7 term choice).
 - files: src/renderer/**/*.ts   # extra UI file globs
 - Icon-only buttons in the title bar are exempt from R1 (platform chrome).
 - All list rows use `--space-3` vertical rhythm; `--space-2` only inside dense tables.

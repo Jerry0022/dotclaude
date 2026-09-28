@@ -127,7 +127,8 @@ DESIGN_RESULT:
   dropdowns styled and uniform, consistent spacing per component type, a
   discreetly shown hotkey on every interaction, keyboard-operable flows,
   scrollbars in the app's style, every design and interaction tuned for
-  Windows + Linux desktop, Android + iOS tablet and Android + iOS phone) and
+  Windows + Linux desktop, Android + iOS tablet and Android + iOS phone, wording
+  that names one thing the same way and varies only on purpose) and
   the project's `## UI rules` override;
   every spec you hand to frontend names how each rule is met, or why the
   project convention overrides it.
