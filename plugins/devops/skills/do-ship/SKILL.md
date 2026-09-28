@@ -1,6 +1,6 @@
 ---
 name: do-ship
-version: 0.13.0
+version: 0.14.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, silent memory consolidation,
@@ -33,6 +33,33 @@ Supports two modes: **direct** (branch → main) and **intermediate** (sub-branc
 > The ship MCP server runs in the plugin directory, NOT the target repo.
 > Every `ship_*` tool call MUST include `cwd` set to the current working directory of this Claude session.
 > Omitting `cwd` will cause the tool to operate on the wrong repository.
+
+## Pipeline at a glance
+
+The map of one run. Every step keeps its full rules further down — this table
+never replaces them.
+
+| Step | What | Call | Ends the run when |
+|---|---|---|---|
+| Pre-Steps 0, R, A–C | delegate, resume, lockout, session activity, sidebar title | `autonomous-lockout.js check` | activity pending (ask; BLOCK under lockout) |
+| 0 / 0.5 | extensions, Codex detection, ship tool schemas | `ToolSearch select:…` | tools absent → `deep-knowledge/manual-ship.md` |
+| 1 | preflight + rebase loop, purpose alignment, harden/polish passes | `ship_preflight` | `ready: false`; ambiguous conflict |
+| 2 | build + Codex gate | `ship_build`, `codex-safe.sh` | build red; Codex judgment (ask; BLOCK under lockout) |
+| 2.5 / 2.6 | deploy-parity build (background), docs-sync | `deploy-parity.js` | parity `failed` |
+| 3 | CHANGELOG + bump (final ship to main only) | `ship_version_bump` | `success: false`; major (ask; BLOCK under lockout) |
+| 4 | commit, PR, CI, merge, alpha tag | `ship_release` | `success: false` without `merged` |
+| 4a–4d | delivery hook, watcher, live surfaces, out-of-band deploy gate | — | never (card fields) |
+| 5a–5c | keep-mode decision, cleanup | `ship_cleanup` | `ExitWorktree` fails |
+| 5d | promote (beta/stable named by the user) | `ship_promote` | never (guard error → `open` item) |
+| 5e, 6 | memory dream, promotion gap, hygiene, card — the last action | `ship_hygiene`, `render_completion_card` | — |
+
+Every `ship-blocked` exit calls `ship_cleanup({ keep: true })` first (Pre-Step C → *Sentinel hygiene*).
+
+**After a context compaction mid-ship** Claude Code keeps only the first 5,000
+tokens of this skill — roughly everything from Step 0 on is gone from context. Before
+the next ship step, re-invoke `Skill("devops:do-ship", "--resume")`: Pre-Step R
+skips what landed and the full text is back. Never finish a ship from this
+table alone.
 
 ## Target channel — alpha by default, beta / stable on request
 
@@ -89,7 +116,6 @@ that safe; a plain `/do-ship` with no arguments behaves exactly as before.
 | `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel. |
 | `--queued` | This ship is one of several in a queue. The card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here, and Step 6 skips `ship_hygiene` — the orchestrator decided what stays. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
-
 | `--delegated` | This run is the fresh-context subagent of a delegated ship (Pre-Step 0). Follow `modes/delegated.md` → *Subagent*: gates return a decision instead of asking, the card comes back as JSON. |
 | `--resume` | Continue an interrupted ship from its checkpoint (Pre-Step R). Sent by `prompt.ship.detect`'s `[ship-resume]` block when the user continues ("weiter", "continue", a ship prompt) and a ship stopped half-way. |
 | `--inline` (old: `--no-compact`) | Keep this one ship in the main context even when the context is large (Pre-Step 0). Parsed and dropped — it changes nothing else. |
@@ -130,11 +156,10 @@ landed, and end with the normal ship card.
 
 ## Pre-Step A — Autonomous Lockout Detection
 
-`/do-ship` is composed by unsupervised orchestrators (do-run backlog mode
-ships every queued issue this way; future AFK runners may too). Those runs are in
-a **Post-Confirmation Lockout** — the user is AFK and **no `AskUserQuestion` can
-ever be answered**. A modal raised mid-pipeline would hang the entire night run on
-a single issue. Detect that state FIRST, before any other step:
+Unsupervised orchestrators (do-run backlog mode) run `/do-ship` in a
+**Post-Confirmation Lockout** — the user is AFK and **no `AskUserQuestion` can
+ever be answered**; one modal would hang the whole night run. Detect that state
+FIRST, before any other step:
 
 ```bash
 node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check
@@ -143,15 +168,11 @@ node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check
 Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run
 **and persist it durably**: write a `.claude/.ship-lockout` marker in the repo
 root (`node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-lockout','1')"`).
-`$SHIP_LOCKOUT` is consumed at ~5 later gates, across a >5-min CI wait during
-which the conversation may compact and drop the variable from memory. At every
-interactive gate, re-derive `$SHIP_LOCKOUT=true` when the marker file exists
-rather than trusting recall alone — a lost lockout that silently re-enables
-`AskUserQuestion` is exactly the AFK-hang this guard exists to prevent. Clear the
-marker in Step 5 cleanup (delete `.claude/.ship-lockout`). If the command errors
-or the script is absent (older plugin), treat it as **not locked** — a normal
-interactive ship — and continue. The guard only ever *adds* non-interactive
-safety; it never blocks a normal ship.
+A compaction during the CI wait can drop the variable, so at every interactive
+gate re-derive `$SHIP_LOCKOUT=true` when the marker file exists — never trust
+recall alone. Clear the marker in Step 5 cleanup (delete `.claude/.ship-lockout`).
+If the command errors or the script is absent (older plugin), treat it as **not
+locked** and continue: the guard only ever *adds* non-interactive safety.
 
 **The rule when `$SHIP_LOCKOUT` is set: never call `AskUserQuestion`.** Every gate
 that would normally ask takes its documented non-interactive branch instead. The
@@ -185,7 +206,7 @@ Before anything else, check whether this session still has work in progress.
 
 1. Check for **background agents** still running (Agent tool results pending)
 2. Check for **background Bash commands** still executing
-3. Check for **TodoWrite tasks** that are not yet marked `completed` or `cancelled`
+3. Check for **tasks** (`TaskList`) that are not yet marked `completed` or `cancelled`
 
 If ANY of the above are active:
 
@@ -296,8 +317,7 @@ Run preflight, resolve any merge-safety issues autonomously, and re-check — re
 
 ### 1a. Run preflight
 
-Call `ship_preflight` MCP tool (dotclaude-ship server).
-**CRITICAL:** Always pass `cwd` — the MCP server runs in the plugin directory, not the target repo.
+Call `ship_preflight` MCP tool (dotclaude-ship server) with `cwd`.
 Omit `base` to let the tool auto-detect it.
 ```
 ship_preflight({ cwd: "<current working directory>" })
@@ -564,13 +584,10 @@ Determine bump type based on changes:
 **Before calling ship_version_bump**, update CHANGELOG.md with the new version entry.
 The MCP tool updates JSON files and README — CHANGELOG is editorial and must be done by Claude.
 
-> **CHANGELOG is large** — an `Edit` requires a prior `Read`, but the repo's
-> `pre.tokens.guard` blocks the first Read of a big CHANGELOG (tens of thousands of
-> tokens). Read only the head of the file (`Read` with a small `limit`, e.g. 40 —
-> the newest entries are at the top) to satisfy the Edit precondition, or retry the
-> blocked Read once (the guard's sanctioned bypass). Never load the whole file. This
-> matters most in an AFK / `$SHIP_LOCKOUT` run, where a surprise token-guard block
-> would otherwise stall the pipeline with no one to retry it.
+> **CHANGELOG is large** — `pre.tokens.guard` blocks a full Read. Read only the head
+> (`Read` with `limit: 40`, newest entries are on top) to satisfy the Edit
+> precondition, or retry a blocked Read once (the sanctioned bypass). Never load the
+> whole file — under `$SHIP_LOCKOUT` a surprise block would stall the pipeline.
 
 Then call `ship_version_bump` MCP tool (always pass `cwd`):
 ```
@@ -625,16 +642,11 @@ timeout → BLOCK (`ship-blocked`, "git unresponsive — machine under load"). D
 **If `titleClamped` is set**: the ship proceeded, it is not an error — see
 `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § titleClamped.
 
-**Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
-the EARLIEST channel autonomously. beta/stable tags and GitHub Releases are
-created later by a promotion (`ship beta|stable`, Step 5d — same SHA, no rebuild).
-Pass the bare `tag: "vX.Y.Z"` (the tool prefixes the channel) — or **omit
-`tag`** and the tool derives `v<version>` from the version file `ship_version_bump`
-just wrote (result carries `tagDefaulted: true`). Only an explicit `tag: null`
-skips the ring tag, and even then the result says so: `tagSkipped: true` +
-`tagWarning` (main is ahead of every ring, a promotion has nothing to promote) —
-surface that warning as a `userFinalTest` item, never render an all-green card
-over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.
+**Ring model (channels):** the tag is `alpha/vX.Y.Z` — a ship always tags the earliest
+channel; beta/stable and GitHub Releases come only from a promotion (Step 5d). Pass the
+bare `tag: "vX.Y.Z"` or omit `tag` (derived from the bumped version, `tagDefaulted: true`).
+An explicit `tag: null` returns `tagSkipped` + `tagWarning` → a `userFinalTest` item, never
+an all-green card (#372). Background: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Ring tag.
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
 
@@ -741,38 +753,21 @@ a ship** — no "close the session, then `git worktree remove …`" note, ever.
 
 ### Signals that trigger keep-mode
 
-Evaluate all sources; ANY positive hit → keep-mode.
+ANY positive hit → keep-mode:
 
-1. **Open TodoWrite tasks not covered by this ship.** Call `TaskList` and check for `pending` or
-   `in_progress` items that describe work NOT delivered by the current PR's diff. Tasks that
-   were *about* this ship (e.g. "Run npm test", "Bump version") and are still open due to a
-   tracking slip do NOT count — only genuine follow-up scope.
+1. **Open tasks** (`TaskList`, `pending` / `in_progress`) describing follow-up
+   scope this PR did NOT deliver — tasks *about* this ship do not count.
+2. **Follow-up phrases** in the user's last ~10 turns ("danach", "Phase 2",
+   "after this", "we'll continue", …).
+3. **Several announced work blocks**, only the first shipped now.
+4. **Ship-but-keep wording in the trigger** ("ship und weiter", "keep
+   worktree", `--keep`, "ohne cleanup") — highest priority.
 
-2. **Explicit follow-up signals in recent user messages** (this session, last ~10 turns):
-   - German: `"danach"`, `"dann noch"`, `"anschließend"`, `"weiter mit"`, `"als nächstes"`,
-     `"Phase 2"`, `"wir sind nicht fertig"`, `"noch nicht durch"`, `"zwischendurch"`,
-     `"erstmal X, dann Y"`, `"shippen aber wir machen weiter"`
-   - English: `"after this"`, `"then we"`, `"next up"`, `"phase 2"`, `"still need to"`,
-     `"we'll continue"`, `"ship but keep going"`, `"intermediate ship"`
-
-3. **Multiple distinct scopes announced earlier.** If the user laid out a sequence of
-   logically separate work blocks and only the first is being shipped now → keep-mode.
-
-4. **Explicit ship-but-keep wording in the trigger.** If the prompt that started this ship
-   says something like `"ship das aber wir machen weiter"`, `"ship und weiter"`,
-   `"keep worktree"`, `"--keep"`, `"ohne cleanup"` → keep-mode (highest priority).
-
-### When the signal is ambiguous
-
-If you considered keep-mode but the signal is weak (e.g. one borderline phrase, no clear
-follow-up scope), default to **normal cleanup**. Cleanup is recoverable — the branch can be
-re-created from the merge commit. Orphan worktrees from false-positive keep-mode are not.
-
-### Decision logging
-
-In the completion card's `changes` or `summary`, mention the chosen mode briefly when
-keep-mode triggers — e.g. `"Worktree behalten — Folge-Arbeit erkannt"` — so the user sees
-what was decided and can override (`"nein, doch räum auf"` for a follow-up cleanup).
+A weak or borderline signal → **normal cleanup** (a branch is re-creatable from
+the merge commit, an orphan worktree is not). When keep-mode triggers, say so
+on the card (`"Worktree behalten — Folge-Arbeit erkannt"`). Before deciding on
+signal 1–3, read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/cleanup.md` § Keep-mode signals (Step 5a) and follow it:
+the full phrase lists (de + en), the ambiguity rule and the decision note.
 
 ## Step 5b — Cleanup (normal mode)
 
@@ -780,15 +775,10 @@ what was decided and can override (`"nein, doch räum auf"` for a follow-up clea
 
 ### Substep 1 — Capture session context
 
-**Before any cleanup action**, capture two pieces of state for Substep 3:
-
-1. The current worktree path (if running inside one) — capture via
-   `pwd` / `git rev-parse --show-toplevel` BEFORE `ExitWorktree` runs.
-   Save it as `$WORKTREE_PATH`. Skip this if not in a worktree.
-2. The resolved main-repo root via `git rev-parse --git-common-dir` and
-   walking to its parent (or `git worktree list --porcelain` first entry).
-   Save it as `$MAIN_REPO_ROOT`. Substep 3 re-resolves this internally but
-   capturing it here makes the cleanup trail easier to log.
+**Before any cleanup action** (before `ExitWorktree`), capture for Substep 3 and Step 5d:
+`$WORKTREE_PATH` = `git rev-parse --show-toplevel` (only inside a worktree, else empty) and
+`$MAIN_REPO_ROOT` = the parent of `git rev-parse --git-common-dir` (or the first entry of
+`git worktree list --porcelain`).
 
 ### Substep 2 — Exit worktree + ship_cleanup
 
@@ -982,13 +972,8 @@ ship_hygiene({ cwd: "<cwd>", trigger: "ship", lang: "de" })
 ```
 
 (`trigger: "promote"` for a promotion-only run — `modes/promote.md` Step 4.)
-The tool removes leftover branches and session worktrees whose content
-provably landed — only after a ship, only once one of them is older than the
-age gate (default 30 days), and then every removable one older than 30 days;
-younger leftovers stay for the page. It flags unlanded work on a
-`[gone]` branch or a detached session worktree, and decides whether the
-cleanup page is worth suggesting (more than 50 leftovers, at most once a
-week). Pass its card lines through unchanged: `card.tests` → append to
+What it removes, flags and suggests: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/cleanup.md` § Post-ship hygiene (Step 6).
+Pass its card lines through unchanged: `card.tests` → append to
 `tests`, `card.risk` and `card.open` (each a `{ text, reply }` item) → append
 to `open`, `risk` first. All are absent when nothing happened — add nothing
 then, and never restate the result in prose.
@@ -1009,19 +994,13 @@ before calling `render_completion_card` and build the call from it** — every f
 **only for ring-model projects**: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Delivery track.
 
 **Variant reflects what the pipeline DID, not what's verified downstream.**
-Once `ship_release` reports `merged` + (where applicable) `tag` + `release`,
-the ship **has happened** → render `ship-successful`. Do NOT downgrade to
-`ready` just because a downstream auto-deploy isn't confirmed yet (Vercel on
-main-push, a tag-triggered build, the Step 4b watcher still running). `ready`
-is the PRE-ship variant — its CTA is "SHIP or CHANGE?" — so using it after a
-merge is self-contradictory and reads as "nothing shipped". Surface any
-pending/unverified downstream as an explicit `userFinalTest` item instead
-(e.g. "Vercel-Deploy live verifizieren", "Build run #N läuft — `gh run view N`").
-The MCP variant guard already auto-corrects `ship-successful`→`ready` when
-`state.merged`/`state.pushed` are falsy, so the only judgement call left to you
-is: merged ⇒ `ship-successful`, downstream-still-pending ⇒ `userFinalTest`,
-never a variant downgrade. (Project ship-extensions: keep project-specific
-downstream surfaces, but don't re-encode this variant rule.)
+`merged` (+ `tag` where applicable) ⇒ `ship-successful`. Never downgrade to
+`ready` (the PRE-ship variant, "SHIP or CHANGE?") because a downstream deploy,
+tag build or the Step 4b watcher is still pending — each becomes a
+`userFinalTest` item ("Vercel-Deploy live verifizieren", "Build run #N läuft —
+`gh run view N`"). The MCP variant guard already turns `ship-successful` into
+`ready` when `state.merged`/`state.pushed` are falsy. (Project ship-extensions:
+keep project-specific downstream surfaces, but don't re-encode this rule.)
 
 **Out-of-band deploy gate (from Step 4d).** When Step 4d raised the gate, pass
 `state.deployPending: true` and the `deployGate` array to `render_completion_card`.
@@ -1040,10 +1019,8 @@ Full payload: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-paylo
 Output the card markdown VERBATIM — card is the last **visible** output, nothing after closing `---`.
 
 **The card ends the run — nothing after it.** No memory pass, no extension
-step, no check of a background task, no line of text: on the Desktop app every
-tool call after the card widget shows as a row under it, and each one invites a
-closing sentence the user reads as noise. Everything the run still has to do
-happens before the card (Step 5e). A project extension step that cannot run
+step, no check of a background task, no line of text (on Desktop each call after
+the widget shows as a row under it). Everything else happens before the card (Step 5e). A project extension step that cannot run
 before `render_completion_card` — it would stale the card's own MCP call — runs
 between that call and the Desktop `show_widget` call, never after the widget.
 When such a step fails, say it in ONE line before the widget, not after it.
@@ -1059,11 +1036,8 @@ is dropped, not restated with an "outdated" note).
 
 **No side topics on the ship card.** Its `open` points are decisions about THIS
 work. A finding outside it goes into a task chip (`spawn_task`, Desktop app) —
-the chip is the offer, one click starts the fix in its own session. Never both:
-the card drops a point that says a chip or follow-up task exists, and its
-"Nachbessern" answer would have the user fix the topic here a second time and
-ship again. Only where no chip exists (terminal) may a side finding stay an
-open point.
+never both a chip and an open point about it. Only where no chip exists
+(terminal) may a side finding stay an open point.
 
 ## Data Flow & Hierarchical Merges
 

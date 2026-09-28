@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.231.0] — 2026-09-28
+
+### Added
+- **A ship survives a context compaction.** Claude Code re-attaches only the first 5,000 tokens of each invoked skill after a compaction (official skills docs); do-ship's SKILL.md is about 17k tokens, so a compaction mid-ship left roughly the pre-steps in context and Steps 0–6 were gone. SKILL.md now opens with a "Pipeline at a glance" run map (every step, its tool call, what ends the run — about 4 KB, well inside the window) and the rule to re-invoke `Skill("devops:do-ship", "--resume")` before the next ship step after a compaction. `ss.ship.resume` (0.3.0) says the same when a session restarts from `compact` with an open ship checkpoint, instead of waiting for a "weiter". A new test pins the run map inside the first 12,000 characters and checks that every step it names keeps its full section.
+
+### Changed
+- **do-ship SKILL.md is leaner without losing a rule** (skill 0.14.0). Rare-path execution detail moved verbatim behind stubs — the Step 5a keep-mode phrase lists and the post-ship hygiene semantics to `deep-knowledge/cleanup.md`, the ring-tag background to `release-results.md` — and repeated rationale was trimmed (Pre-Step A, Step 3 CHANGELOG note, Step 6 variant and card rules). Every decision, gate, BLOCK rule and tool call stays inline: the official 500-line guideline was deliberately not forced, because a per-phase split would put main-path gates behind Reads that community reports show get skipped. 1075 → 1049 lines including the new run map.
+
+### Fixed
+- The Composed-ships table in do-ship was split by a blank line, so its `--delegated` / `--resume` / `--inline` rows rendered as a headerless broken table. Pre-Step B names `TaskList` instead of the retired TodoWrite, and `deep-knowledge/pre-flight.md` states that SKILL.md wins where its pre-MCP commands differ.
+
 ## [0.230.0] — 2026-09-28
 
 ### Added

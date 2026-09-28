@@ -88,3 +88,18 @@ Feature: Video filters (end-to-end)
 ```
 
 This preserves the audit trail through squash-merges. Without these references, `git log` on main only shows one commit with no link back to the sub-branch work.
+
+## Ring tag
+
+Referenced by `/do-ship` Step 4. The tag rule itself stays in SKILL.md.
+
+**Ring model (channels):** the tag is `alpha/vX.Y.Z` — every ship publishes to
+the EARLIEST channel autonomously. beta/stable tags and GitHub Releases are
+created later by a promotion (`ship beta|stable`, Step 5d — same SHA, no rebuild).
+Pass the bare `tag: "vX.Y.Z"` (the tool prefixes the channel) — or **omit
+`tag`** and the tool derives `v<version>` from the version file `ship_version_bump`
+just wrote (result carries `tagDefaulted: true`). Only an explicit `tag: null`
+skips the ring tag, and even then the result says so: `tagSkipped: true` +
+`tagWarning` (main is ahead of every ring, a promotion has nothing to promote) —
+surface that warning as a `userFinalTest` item, never render an all-green card
+over it (#372). See `docs/superpowers/specs/2026-07-11-tag-channel-system-design.md`.

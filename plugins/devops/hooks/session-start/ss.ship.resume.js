@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.ship.resume
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description Keep a running /do-ship stable across a compaction or a resume.
@@ -21,6 +21,8 @@
  *   sentinel: it has no 60-min expiry — a usage limit lasts hours — and it
  *   names the steps that already landed, so the resumed run starts at the
  *   first unfinished one instead of re-deriving everything.
+ *   Since 0.3.0 a compaction tells a turn that is still shipping to reload the
+ *   skill with --resume: only its first 5,000 tokens survive a compaction.
  */
 
 require('../lib/plugin-guard');
@@ -57,11 +59,21 @@ function buildResumeInstruction({ cwd, source }) {
     const when = source === 'compact' ? 'the context was just compacted'
       : source === 'resume' ? 'this session was just resumed'
         : 'this session just started';
+    // Claude Code re-attaches only the first 5,000 tokens of an invoked skill
+    // after a compaction (code.claude.com/docs/en/skills), so a turn that is
+    // still shipping must reload the skill before its next step, not wait for
+    // a prompt that never comes mid-turn.
+    const next = source === 'compact'
+      ? ['Only the first 5,000 tokens of the do-ship skill survived the compaction. If this turn is still shipping,',
+        're-invoke Skill("devops:do-ship", "--resume") before the next ship step — it continues at the step marked next',
+        '(the title stays "🚀 Shipping – " and the turn ends with the ship card). Otherwise the next "weiter" / "continue" /',
+        'ship prompt resumes it (prompt.ship.detect sends a [ship-resume] block — follow it).']
+      : ['The next "weiter" / "continue" / ship prompt resumes it at the step marked next (prompt.ship.detect sends a',
+        '[ship-resume] block — follow it; the title stays "🚀 Shipping – " and the turn ends with the ship card).'];
     return [
       `[ss.ship.resume] An interrupted /do-ship of branch ${cp.branch || '?'} is waiting in ${cwd} and ${when}.`,
       `Progress: ${describeCheckpoint(cp)}`,
-      'The next "weiter" / "continue" / ship prompt resumes it at the step marked next (prompt.ship.detect sends a',
-      '[ship-resume] block — follow it; the title stays "🚀 Shipping – " and the turn ends with the ship card).',
+      ...next,
       'Never start that ship over and never repeat a step marked ✓. If the user asks for something else first,',
       'do that — but mention in one line that a ship is waiting to be resumed.',
     ].join('\n');

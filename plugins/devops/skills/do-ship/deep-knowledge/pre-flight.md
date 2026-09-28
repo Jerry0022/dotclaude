@@ -1,5 +1,10 @@
 # Pre-Flight Safety Gate
 
+> What `ship_preflight` / `ship_release` check, spelled out as commands. The MCP
+> pipeline runs these itself; by hand they apply only on the manual checklist
+> (`manual-ship.md`). Where this file and `SKILL.md` differ, `SKILL.md` wins — a
+> dirty tree is settled at its source (Step 1a), never discarded on request.
+
 Run before ANY other ship step. If any check fails → STOP.
 
 ## Checks

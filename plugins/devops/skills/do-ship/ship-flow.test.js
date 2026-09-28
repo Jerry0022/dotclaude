@@ -223,3 +223,28 @@ describe("do-ship — manual checklist without the ship MCP server", () => {
     expect(MANUAL).not.toMatch(/git tag -a/);
   });
 });
+
+// Claude Code re-attaches only the first 5,000 tokens of an invoked skill after
+// a compaction (code.claude.com/docs/en/skills). The run map and the reload
+// instruction must sit inside that window, or a compacted ship loses both.
+describe("do-ship — survives a compaction", () => {
+  const glance = section(SKILL, "## Pipeline at a glance", "## Target channel");
+
+  test("the run map sits well inside the re-attached first 5,000 tokens", () => {
+    expect(SKILL.indexOf("## Target channel")).toBeLessThan(12000);
+  });
+
+  test("it tells a compacted ship to reload the skill with --resume", () => {
+    expect(glance).toContain('Skill("devops:do-ship", "--resume")');
+    expect(glance).toMatch(/Never finish a\s+ship from this\s+table alone/);
+  });
+
+  test("every step the map names has its full section below", () => {
+    for (const h of ["## Pre-Step 0", "## Pre-Step R", "## Pre-Step A", "## Pre-Step B", "## Pre-Step C",
+      "## Step 0 ", "## Step 0.5", "## Step 1 ", "## Step 2 ", "## Step 2.5", "## Step 2.6", "## Step 3 ",
+      "## Step 4 ", "### Step 4a", "## Step 4b", "## Step 4c", "## Step 4d", "## Step 5a", "## Step 5b",
+      "## Step 5c", "## Step 5d", "## Step 5e", "## Step 6 "]) {
+      expect(SKILL.indexOf(h), h).toBeGreaterThan(SKILL.indexOf("## Target channel"));
+    }
+  });
+});
