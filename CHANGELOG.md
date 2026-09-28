@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.237.0] — 2026-09-28
+
+### Changed
+- **Hotkeys only where they guide; keyboard operability stays for everything.** The UI rule R4 is split. **R4a** keeps every flow keyboard-operable (focus order, Esc, Enter, arrows, app-styled focus ring). **R4b** no longer asks for a hotkey on every interaction: only essential elements get one, recognised by marker — navigation, the one primary action of a view, stepper next/back, variant/option choice, and the project's `hotkey.essential:` commands. Keys come from the platform convention, then `1`–`9` for enumerations, then the label's first letter or the start of a word part ("Neues **P**rojekt" → P), and the mnemonic lives in the translated string. Browser/OS-reserved combinations are off limits, a single-character key never fires in a text field (WCAG 2.1.4), a destructive action never sits on a bare key, and more than `hotkey.budget` (default 12) single-key bindings per view is reported as noise.
+- **Hotkey hints appear on hover, in the app's style.** The hint is an app-styled `<kbd>` revealed like an Info tooltip (1500 ms on hover, instantly on focus), with `aria-keyshortcuts` on every bound element, a `?` sheet and a held modifier to show all keys. Marking the key in the word is the fallback (`hotkey.display: inline`); apps with settings offer "off / on hover / in the word".
+- `disable: R4` still switches off both halves; `disable: R4b` drops only the hotkeys. New override keys: `hotkey.display`, `hotkey.essential`, `hotkey.budget`, `hotkey.reserved`.
+
+### Tests
+- `post.design.remind.test.js` covers R4a/R4b and the bare-R4 alias (19 cases green).
+
 ## [0.236.1] — 2026-09-28
 
 ### Fixed
