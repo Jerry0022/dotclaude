@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1229,6 +1230,69 @@ describe("post.flow.completion — the card widget ends the turn", () => {
     expect(out).not.toContain("orchestrator");
     expect(ran()).toEqual([]);
     cleanup(dir); cleanup(root);
+  });
+
+  // A note sent while the activation turn ran is stored mid-turn; the Desktop
+  // app shows no panel for a queued prompt and the card still said "0 Einträge".
+  describe("notes collected after the batch card was rendered", () => {
+    const B = createRequire(import.meta.url)("../lib/batch-state.js");
+    const batchCard = (n) => ({ title: "completion_card_body", widget_code: `<h3 class="card-title">📥 Batch sammelt — ${n} Einträge</h3>` });
+
+    test("the card counts 0, the queue holds 1 → one ack line instead of ending the turn", () => {
+      const dir = project();
+      B.activate(dir);
+      B.appendNote(dir, "links oben lobby?!");
+      const { root, ran } = fakeRoot();
+      const raw = runHookRaw(dir, "s-late-1", WIDGET, { tool_input: batchCard(0) }, { CLAUDE_PLUGIN_ROOT: root });
+      const out = JSON.parse(raw);
+      expect(out.continue).toBeUndefined();
+      const text = out.hookSpecificOutput.additionalContext;
+      expect(text).toContain("✓ Notiz #1 gespeichert — kam an, während die Aktivierung noch lief. Jetzt 1 Eintrag; nächster Prompt wird Notiz #2.");
+      expect(text).toMatch(/EXACTLY this one line/);
+      expect(ran().map((r) => r.name)).toEqual(["one", "two"]);
+      cleanup(dir); cleanup(root);
+    });
+
+    test("two late notes name the range", () => {
+      const dir = project();
+      B.activate(dir);
+      B.appendNote(dir, "a");
+      B.appendNote(dir, "b");
+      const out = runHook(dir, "s-late-2", WIDGET, { tool_input: batchCard(0) });
+      expect(out).toContain("✓ Notizen #1–#2 gespeichert");
+      expect(out).toContain("Jetzt 2 Einträge; nächster Prompt wird Notiz #3.");
+      cleanup(dir);
+    });
+
+    test("a card that already counts every note ends the turn as usual", () => {
+      const dir = project();
+      B.activate(dir);
+      B.appendNote(dir, "a");
+      const { root } = fakeRoot();
+      const out = JSON.parse(runHookRaw(dir, "s-late-3", WIDGET, { tool_input: batchCard(1) }, { CLAUDE_PLUGIN_ROOT: root }));
+      expect(out.continue).toBe(false);
+      cleanup(dir); cleanup(root);
+    });
+
+    test("a mode that is no longer active owes no ack", () => {
+      const dir = project();
+      B.appendNote(dir, "a");
+      const { root } = fakeRoot();
+      const out = JSON.parse(runHookRaw(dir, "s-late-4", WIDGET, { tool_input: batchCard(0) }, { CLAUDE_PLUGIN_ROOT: root }));
+      expect(out.continue).toBe(false);
+      cleanup(dir); cleanup(root);
+    });
+
+    test("a blocking Stop hook wins — the re-rendered card counts afresh", () => {
+      const dir = project();
+      B.activate(dir);
+      B.appendNote(dir, "a");
+      const { root } = fakeRoot({ blockFirst: true });
+      const text = runHook(dir, "s-late-5", WIDGET, { tool_input: batchCard(0) }, { CLAUDE_PLUGIN_ROOT: root });
+      expect(text).toContain("[card-turn-end]");
+      expect(text).not.toContain("✓ Notiz");
+      cleanup(dir); cleanup(root);
+    });
   });
 
   test("any other widget never ends the turn", () => {

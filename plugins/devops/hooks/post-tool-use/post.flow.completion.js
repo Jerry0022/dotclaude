@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.29.5
+ * @version 0.30.0
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -71,6 +71,9 @@
  *   The card widget ends the turn: this hook runs the plugin's Stop hooks and,
  *   when none blocks, answers `{"continue": false}` — no model call follows the
  *   card, so no recap, no nudge reply, no post-card step (hooks/lib/card-turn-end.js).
+ *   One exception: a batch card that counts fewer notes than the queue holds
+ *   (a prompt sent during the activation turn, collected mid-turn, no panel in
+ *   the Desktop app) keeps the turn for exactly one ack line (lateBatchNotes).
  *
  *   Stdin, parsing and the reply go through lib/hook-input.js's runHook; main()
  *   runs the numbered sections below in order and returns the reply. Its git
@@ -742,14 +745,65 @@ const ORCHESTRATOR_HOLD_LINE =
 function cardWidgetReply(hook) {
   let end = { end: false };
   try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
-  if (end.end) return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
+  // A blocking Stop hook makes Claude re-render — that card counts afresh.
   if (end.reason) return contextOf(cardTurnBlockedLines(end));
   if (ORCHESTRATOR_HOLDS.has(end.hold)) return contextOf([ORCHESTRATOR_HOLD_LINE]);
+  const late = lateBatchNotes(hook);
+  if (late) return contextOf(lateBatchNoteLines(late));
+  if (end.end) return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
   return contextOf([
     '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
     'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
     NO_OUTPUT_NUDGE_REPLY,
   ]);
+}
+
+/** The batch heading as the card renders it (mcp-server CTA `batch`, de + en). */
+const BATCH_HEADING = /Batch (sammelt|collecting)\s*(?:—|&mdash;|&#8212;|-)\s*(\d+)/;
+
+/**
+ * 2a. Notes collected while the batch card's turn was still running.
+ *
+ * A prompt sent during the activation turn is queued; the collect hook stores
+ * and blocks it mid-turn, and the Desktop app shows no "blocked" panel for a
+ * queued prompt. The card was rendered before it landed and still says
+ * "0 Einträge" — so the user saw no sign of note #1 until note #2 said "#2".
+ * The shown count is read from the widget itself and compared with the file.
+ *
+ * @returns {{shown:number, now:number, lang:'de'|'en'}|null}
+ */
+function lateBatchNotes(hook) {
+  try {
+    const m = BATCH_HEADING.exec(String(hook.tool_input && hook.tool_input.widget_code || ''));
+    if (!m) return null;
+    const B = guardedRequire('../lib/batch-state');
+    const cwd = hook.cwd || process.cwd();
+    if (!B.isModeActive(cwd)) return null;
+    const shown = Number(m[2]);
+    const now = B.countNotes(cwd);
+    return now > shown ? { shown, now, lang: m[1] === 'sammelt' ? 'de' : 'en' } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The one line Claude owes under the card for `lateBatchNotes`. */
+function lateBatchNoteLines({ shown, now, lang }) {
+  const first = shown + 1;
+  const de = lang === 'de';
+  const which = now === first
+    ? (de ? `Notiz #${now}` : `Note #${now}`)
+    : (de ? `Notizen #${first}–#${now}` : `Notes #${first}–#${now}`);
+  const line = de
+    ? `✓ ${which} gespeichert — kam an, während die Aktivierung noch lief. Jetzt ${now} ${now === 1 ? 'Eintrag' : 'Einträge'}; nächster Prompt wird Notiz #${now + 1}.`
+    : `✓ ${which} saved — it arrived while activation was still running. Now ${now} ${now === 1 ? 'entry' : 'entries'}; the next prompt becomes note #${now + 1}.`;
+  return [
+    `[do-batch] Card shown, but it counts ${shown} note(s) and the queue now holds ${now}: the user sent`,
+    'a prompt while this turn ran, the collect hook stored it, and the Desktop app shows no',
+    'panel for a queued prompt — the user has no sign it landed. Write EXACTLY this one line,',
+    'verbatim, then end the response (no tool call, no second card):',
+    line,
+  ];
 }
 
 /** 2a. The reply to a render_completion_card call. */
