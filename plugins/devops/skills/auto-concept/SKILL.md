@@ -912,8 +912,19 @@ the sections below.
    The completion card reports the page under `changes` and the hand-off as
    its one `open` item; it carries no `concept` field.
 
-Publishing the same page as a claude.ai artifact with a swapped transport is a
-separate, later fallback (#589) — not part of this path.
+### No reachable bridge, owner decides remotely — artifact fallback (#589)
+
+**Second tier, behind the hand-off.** Take it only when the hand-off above
+applies AND the owner wants to decide now from the device they are on (phone,
+claude.ai) instead of waiting for a Desktop session, and this session has the
+Artifact tool. The bridge stays first wherever it can run; the hand-off stays
+the default when nobody asked to decide remotely.
+
+Build the copy with `node "{PLUGIN_ROOT}/scripts/concept-artifact.js"
+--artifact docs/concepts/<file>.html`, publish it with `capabilities: {db: {}}`,
+and read the decisions back on the next turn with `ArtifactData` — no bridge,
+no crons, no Edge start. The steps, the wrapper contract and the card:
+`deep-knowledge/artifact-fallback.md`.
 
 ### MANDATORY — Real Edge browser only
 

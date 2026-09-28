@@ -5,6 +5,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 
 | File | Topic | Summary |
 |------|-------|---------|
+| [artifact-fallback.md](artifact-fallback.md) | Artifact Fallback — deciding on a claude.ai artifact (#589) | The second-tier no-bridge path of `SKILL.md` Step 3. The decision to take it |
 | [bridge-server.md](bridge-server.md) | Concept Bridge Server + Edge | The **concept bridge server** (`scripts/concept-server.py`) serves static files |
 | [interactive-components.md](interactive-components.md) | Interactive Components | Reference implementations for interactive elements in concept pages. |
 | [iteration-rules.md](iteration-rules.md) | Iteration Tabs (single file, many iterations) | Every concept page is a stack of iteration tabs. The **tab bar lives at the |

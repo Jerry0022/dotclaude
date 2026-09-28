@@ -34,4 +34,28 @@ describe("auto-concept — no reachable bridge ≠ no concept (#568)", () => {
     expect(text).toMatch(/Hand off in one line/);
     expect(text).toMatch(/#589/);
   });
+
+  // #589: the artifact copy is the second tier — after the hand-off, before
+  // the Edge rules, and never a replacement for the bridge.
+  test("the artifact fallback is a second tier behind the hand-off", () => {
+    const fb = skill.indexOf("### No reachable bridge — hand-off fallback");
+    const art = skill.indexOf("### No reachable bridge, owner decides remotely — artifact fallback (#589)");
+    const edge = skill.indexOf("### MANDATORY — Real Edge browser only");
+    expect(art).toBeGreaterThan(fb);
+    expect(art).toBeLessThan(edge);
+    const text = skill.slice(art, edge);
+    expect(text).toMatch(/Second tier, behind the hand-off/);
+    expect(text).toMatch(/concept-artifact\.js/);
+    expect(text).toMatch(/capabilities: \{db: \{\}\}/);
+    expect(text).toMatch(/no bridge,\s+no crons, no Edge start/);
+    expect(text).toMatch(/deep-knowledge\/artifact-fallback\.md/);
+    expect(skill).not.toMatch(/separate, later fallback \(#589\)/);
+  });
+
+  test("the artifact procedure names the read-back and the never-ack rule", () => {
+    const dk = fs.readFileSync(path.join(__dirname, "deep-knowledge", "artifact-fallback.md"), "utf8");
+    expect(dk).toMatch(/ArtifactData \{ action: "get", collection: "concept", doc_id: "decisions" \}/);
+    expect(dk).toMatch(/never acks what is not stored/);
+    expect(dk).toMatch(/not connected/);
+  });
 });

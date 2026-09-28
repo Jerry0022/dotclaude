@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.239.0] — 2026-09-28
+
+### Added
+- **Concept pages without a reachable bridge can be decided remotely through a claude.ai artifact (#589).** New `scripts/concept-artifact.js --artifact <page.html>` writes `<name>.artifact.html`: the engine page bytes stay unchanged, one wrapper `<script>` goes in after `<head>` between marker comments (a re-run replaces it). The wrapper only installs where `window.claude.use` exists. It diverts `POST /decisions` to the artifact db doc `concept/decisions` (200 `{durable:true}` only on a stored write, 507 without a db or on a refused write, 400 on bad JSON) and `GET /decisions` to the same doc, so a reload restores a sent round. Every other endpoint goes to the real fetch, so the heartbeat stays "not connected". The CLI output names `capabilities {db:{}}` and the `readBack` call (ArtifactData get `concept/decisions`).
+- **auto-concept Step 3 documents the artifact fallback as the second tier behind the hand-off.** The procedure lives in the new `deep-knowledge/artifact-fallback.md` (steps, wrapper contract, deleting the doc after reading because the page's `/reset` finds no bridge); `monitoring.md` points to it.
+
+### Tests
+- New `concept-artifact.test.js` (12 cases: vm-sandboxed wrapper runtime and CLI), `no-bridge-fallback.test.js` +2; auto-concept suites 687 green.
+- Not yet exercised inside a live claude.ai artifact (inline script plus `claude.use("db")` consent).
+
 ## [0.238.0] — 2026-09-28
 
 ### Changed
