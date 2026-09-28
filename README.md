@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.235.0**
+**Version: 0.236.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -407,7 +407,7 @@ extensions under an old name (`.claude/skills/ship/`) keep loading.
 | `/do-learn` | Explicit | Capture long-term learnings and route to project-specific instructions |
 | `/auto-harden` | Hidden · Router | Stabilization pass: full test suite, autonomous bug fixes, regression + consistency |
 | `/auto-polish` | Hidden · Router + `/do-ship` | UI refinement: visual consistency, state-visuals, UI-side functionality checks |
-| `/do-run rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, concept decision, autonomous implementation |
+| `/do-run rethink` | Explicit | Strategic reset for stuck development: code-blind fresh approaches, autonomous decision (concept page only for a real fork), autonomous implementation |
 | `/do-run audit` | Explicit | Full-spectrum audit (functional, visual, animation, audio, a11y, logging, performance, …) of this chat's work, the last 48h's requirements, or everything; then fixes or a DevOps concept page |
 | `/do-batch` | Explicit + Hook | Collect mode: batch prompts into `.claude/batch.md` instead of executing them, then merge into one feasibility-checked plan |
 | `/auto-guide` | Hidden · Hook | Live tutorial in the user's Edge tab: step panel overlay for logins, API keys, and settings Claude cannot do itself |
@@ -481,7 +481,8 @@ code and UI** — no new features, no fresh scope.
   runs its rules-only path on every UI diff; the `post.design.remind` hook
   puts the rules in context the moment a UI file is written.
 - **`/do-run rethink`** — strategic reset: code-blind fresh approaches for
-  stuck development, decided on a concept page, then implemented.
+  stuck development, decided autonomously (a concept page only for a real
+  fork), then implemented — no questions asked.
 - **`/do-run audit`** — full-spectrum audit: functional requirements traced to
   evidence plus visual, animation, audio, accessibility, logging, performance,
   resilience, security basics, tests and build. Asks the scope (this chat's

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.236.0] — 2026-09-28
+
+### Changed
+- **Rethink decides alone; a concept page only for a real fork.** `/do-run rethink` and the "Rethink vorher" option no longer ask the user anything — no intake question, no question round, no corridor-widening question. Target, success criteria, no-gos and demolition corridor are derived from the evidence (conservative corridor: the named target only) and listed in the brief as assumptions. The run ends in exactly one of two exits: an autonomous pick handed to implementation (default; on a criteria tie the lower risk, then the lower effort wins), or a concept page when a real fork remains that the evidence cannot rank, the strongest approach is over-corridor (picking it on the page is the widening), or the goal stays unclear. A close call on effort alone is not a fork. With Ablauf "Autonom" a page the rethink opens waits for the user's return.
+- **No plan confirmation after a rethink.** The interactive handoff passes `--rethink` to `auto-agents`, whose Step 3 treats the rethink pick as the go, like the concept's implement click.
+
+### Tests
+- New `do-run-rethink.test.js` (17 contract tests; the 13 core ones fail against the old text). Behavioral check: a subagent played the new mode through 6 scenarios (clear winner, taste fork, over-corridor winner, empty target, effort-only tie, interactive full ceremony) — 6/6 took the expected exit, none asked the user; the four ambiguities of the first round (precedence, tie-breaker, skill name, router args) are fixed.
+
 ## [0.235.0] — 2026-09-28
 
 ### Added
