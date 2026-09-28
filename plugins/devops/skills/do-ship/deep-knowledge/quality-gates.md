@@ -33,6 +33,15 @@ Run the full test suite only if:
 If the full suite already passed on the **same build-ID** earlier in the
 session → skip. Log: `Tests skipped — already passed on build <hash>`.
 
+## Deploy-Parity Build (Step 2.5)
+
+The gates above run in the warm working copy. The deploy host does not: it
+clones fresh, installs from the lockfile and runs its own build command with
+the npm `pre`/`post` hooks. Step 2.5 repeats exactly that in a temporary clean
+worktree (`scripts/deploy-parity.js`) and blocks on `failed`; `inconclusive`
+(missing host secrets, missing tool, time budget) and `skipped` only add a card
+line. Reference: `{PLUGIN_ROOT}/deep-knowledge/deploy-parity.md`.
+
 ## Pre-Merge CI Checks Gate
 
 After the PR is created (or reused) and before the merge, `ship_release`

@@ -21,6 +21,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [content-conventions.md](content-conventions.md) | Content Conventions — Sizing & Self-Reference | How to size and structure project-persistent content (CLAUDE.md, skills, |
 | [decision-format.md](decision-format.md) | Decision Format | When presenting multiple options (via AskUserQuestion or inline), use this |
 | [defer-to-reset.md](defer-to-reset.md) | Defer to the Reset — Resume Timer for a Nearly Full Window | When the 5 h window is almost full, larger work can wait for the reset: a one... |
+| [deploy-parity.md](deploy-parity.md) | Deploy-Parity Build | Before a ship merges, build the commit the way the deploy host will. Run by `... |
 | [desktop-testing.md](desktop-testing.md) | Automated Desktop Testing (Computer Use) | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [devops-config.md](devops-config.md) | Plugin Settings (devops-config) | How to change devops plugin behaviour when the user asks in plain words — per... |
 | [documentation-maintenance.md](documentation-maintenance.md) | Documentation Maintenance | Keep project docs in their target state as behavior, flows, and architecture ... |
