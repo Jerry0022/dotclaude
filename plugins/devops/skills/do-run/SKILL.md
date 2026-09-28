@@ -10,10 +10,10 @@ description: >-
   remaining weekly budget as depth per task (ONLY on the literal /do-run
   burn or /run-burn or the "Budget verbrennen" answer, never from wording
   such as burn, budget, limit or token), rethinks a stuck area from scratch
-  (code-blind lens agents, concept page), or runs a full-spectrum audit
-  with evidence for every finding. Do NOT trigger for: a single known bug
-  (auto-fix), a pure consistency or UI pass, a security-only review,
-  repo/branch hygiene, shipping, or a quick edit.
+  (code-blind lens agents; decided alone, a concept page only for a real
+  fork), or runs a full-spectrum audit with evidence for every finding.
+  Do NOT trigger for: a single known bug (auto-fix), a pure consistency or
+  UI pass, a security-only review, repo/branch hygiene, shipping, or a quick edit.
   Triggers: "backlog abarbeiten", "arbeite den backlog ab", "backlog runner",
   "run the backlog", "milestones abarbeiten", "arbeite die milestones ab",
   "arbeite den milestone ab", "autonomous", "run autonomous",
@@ -134,7 +134,7 @@ Q3  header: "Umfang?"       multiSelect: false
 
 Q4  header: "Durchgänge?"   multiSelect: true   [only when an option below applies, else dropped; one option: questions.md § Reading Q4]
     question: "Was kommt dazu? (Leer lassen = nichts)"   [with Rethink recommended: "(Leer lassen = Rethink vorher)"]
-    1. "Rethink vorher"                 — Erst frisch neu denken (Concept-Seite), dann umsetzen.   [only for Prompt umsetzen; + " (Recommended)" when the prompt reads stuck]
+    1. "Rethink vorher"                 — Erst frisch neu denken, dann umsetzen; Concept-Seite nur bei echter Weichenstellung.   [only for Prompt umsetzen; + " (Recommended)" when the prompt reads stuck]
     2. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
 ```
 
@@ -180,8 +180,8 @@ it was folded from: `deep-knowledge/execution.md` § Mode files.
 Q3, `$PASSES` = `harden,polish` always (Polish applies only on UI changes,
 Step 7). Implementation always goes through `auto-agents`,
 the single execution path: `Skill("devops:auto-agents")` with args
-`--from=do-run --mode=<interactive|background> --ship=<auto|manual> <task>`
-(Interaktiv → `interactive`, Autonom → `background`). Inside a do-run run
+`--from=do-run --mode=<interactive|background> --ship=<auto|manual> [--rethink] <task>`
+(Interaktiv → `interactive`, Autonom → `background`; `--rethink` after `modes/rethink.md`). Inside a do-run run
 `auto-agents` always decides the tier, Inline included — it reports Inline
 in one line, never a shortcut around loading the skill (run-contract's
 `auto-agents` obligation, Step 5b).
@@ -189,7 +189,7 @@ in one line, never a shortcut around loading the skill (run-contract's
 | Q1 | Ablauf | Runs | Mode questions answered here (the mode skips them) |
 |---|---|---|---|
 | Prompt umsetzen | Interaktiv | [Rethink vorher → `modes/rethink.md`] → `auto-agents` → Step 7 | — |
-| Prompt umsetzen | Autonom | [Rethink vorher → `modes/rethink.md`, while the user is still here] → `modes/autonomous.md` from Step 0.7 with the prompt as task, `$EXEC_MODE=implement`; its Step 6.5 hands back to Step 7 | autonomous Step 1 intake, Step 2 Q1–Q4 (Q1 → implement, Q2 ← F5, Q3+Q4 ← F6) |
+| Prompt umsetzen | Autonom | [Rethink vorher → `modes/rethink.md` — decides alone; a concept page it opens waits for the user's return] → `modes/autonomous.md` from Step 0.7 with the prompt as task, `$EXEC_MODE=implement`; its Step 6.5 hands back to Step 7 | autonomous Step 1 intake, Step 2 Q1–Q4 (Q1 → implement, Q2 ← F5, Q3+Q4 ← F6) |
 | Prompt umsetzen + Budget verbrennen | either | `modes/burn.md` from Step 2 with the prompt as primary task → its Step 7 autonomous frame (F5/F6 answers) → Step 7 | burn Step 1 confirmation (the tick is the confirmation), Step 3 intake, Step 4 task sources (F8), Step 6 plan confirmation (autonomous Step 4 with its 3-minute autostart), resume policy (F7); autonomous Step 2 |
 | Audit | Interaktiv | `modes/audit.md` with `--scope=<F2> --mode=<F1>` → Step 7 when `implement` | audit Step 2 intake |
 | Audit | Autonom | `modes/autonomous.md` frame; its Step 5 work unit is `modes/audit.md` with `--autonomous --scope=<F2> --mode=<F1>`; `$EXEC_MODE` = `implement` (umsetzen) or `analyze` (Concept — the page waits for the user's return) | autonomous Steps 1–2, audit Step 2 |
