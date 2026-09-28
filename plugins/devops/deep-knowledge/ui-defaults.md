@@ -213,27 +213,31 @@ No rule repeats it.
   everything else (a touch path for a hover-only action, a breakpoint
   layout) is report-only — it is design.
 
-### 7 · Wording — one term per concept
+### 7 · Wording — same or different, on purpose
 
-- **Outcome:** one concept (object, action, state), one term — on the
-  label, button, menu item, tooltip, dialog, toast, error and help alike;
-  word form is no variance ("Entschlüsseln" / "Entschlüsselung"). Variance
-  is deliberate or a defect: "Entschlüsselung" on the button and
-  "Dekodierung" in the toast for the same operation is a defect — and often
-  a wrong claim (decrypting is not decoding).
-- **Deliberately different** only for a different concept (Archivieren ≠
-  Löschen), a platform convention, or help prose next to a control —
-  recorded in the override's `terms:` glossary (a code comment does not
-  count). Synonyms against repetition never qualify. No glossary → the term
-  the existing strings use wins. Consistency holds per locale; two languages
-  for one concept in one locale is a finding.
-- **Static:** a glossary `not:` synonym in a new or changed string; without
-  a glossary, a new string naming a concept differently than the diff files
-  or its locale file do. One finding per term pair.
-- **Runtime:** every changed flow read once in order (trigger → dialog →
-  confirm → toast / error), each concept keeping its term.
-- **Fix policy:** report-only — the term is product language. Mechanical
-  only for a glossary `not:` hit in a new string.
+A judgement, not a lookup table: whenever a text names something the app
+already names elsewhere, **decide** whether it should read the same or
+differ — never let it drift by accident.
+
+- **Name the same thing the same way** where the user relies on recognising
+  it: labels, buttons, menu items, dialog titles, toasts, errors, settings.
+  "Entschlüsselung" on the button and "Dekodierung" in the toast for one
+  operation is a defect — and often a wrong claim (decrypting is not
+  decoding). Word form is no variance ("Entschlüsseln" / "Entschlüsselung").
+- **Vary where variation helps**: chat messages, generated or
+  conversational replies, onboarding and help prose may rephrase freely —
+  repeating one fixed sentence there reads robotic. What stays recognisable
+  is the name of a feature or object the user must find again in the UI.
+- **Differ on purpose** when the concepts differ (Archivieren ≠ Löschen), a
+  platform convention asks for it, or the register changes (control vs.
+  explanation). Near-synonyms for one concept, or one word for two concepts,
+  are the drift to avoid. Consistency holds per locale.
+- **Static:** a new or changed fixed string naming a concept differently
+  than the existing strings do, with no reason in sight. Reported once per
+  term pair, never per occurrence; free-form text is not checked.
+- **Runtime:** each changed flow read once in order (trigger → dialog →
+  confirm → toast / error) — does every named thing keep its name?
+- **Fix policy:** report-only — wording is product language.
 
 ## Common rules
 
@@ -279,7 +283,7 @@ project extends or replaces them (§ Project override).
 | Scrollbar styling | `scrollbar-color`, `scrollbar-width`, `scrollbar-gutter`, `::-webkit-scrollbar*`, `color-scheme`, a scroll-area component (Radix / shadcn `ScrollArea`, OverlayScrollbars, SimpleBar) |
 | Hotkey mechanisms | `accesskey`, `useHotkeys(` / `useKeyboardShortcut(`, `@HostListener('window:keydown` / `document:keydown`, `v-hotkey`, `Mousetrap.bind(`, `hotkeys(`, a project shortcut registry (`registerShortcut(`, `shortcuts.ts`, `keymap.*`), `<kbd>` inside the control |
 | Menu components | `<mat-menu>`, `<Menu>` / `DropdownMenu` / `Popover` (MUI, Radix, shadcn, Headless UI, Ant), `<v-menu>`, `<el-dropdown>`, `<Dropdown>` (Bootstrap), a project `Menu`/`Dropdown` component under `components/` |
-| Copy sources (R7) | string literals and text nodes in UI files, locale files (see UI file detection), the `terms:` glossary of the override |
+| Copy sources (R7) | string literals and text nodes in UI files, locale files (see UI file detection) |
 | UI file detection | `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`, `*.scss`, `*.sass`, `*.less`, `*.styled.*`, `*.component.*`, `*.razor`, `*.xaml`, `*.axaml`; locale files — `*.po`, `*.arb`, `*.xlf` / `*.xliff`, `*.resx`, `*.strings`, and `*.json` / `*.yml` / `*.yaml` under a `locale(s)` / `i18n` / `lang` / `translations` directory |
 
 ## Project override
@@ -298,7 +302,7 @@ section:
 - hotkey.mechanisms: useShortcut(, data-hotkey
 - platforms: windows, linux, android-tablet, ios-tablet   # narrows the R6 matrix; default: windows, linux, android-tablet, ios-tablet, android-phone, ios-phone
 - menu.components: <AppMenu>, <ContextMenu>
-- terms: Entschlüsselung (not: Dekodierung, Decodierung); Löschen (not: Entfernen); Archivieren   # R7 glossary: canonical term (not: synonyms)
+- Encryption is always "Verschlüsselung" / "Entschlüsselung", never "Kodierung" (R7 term choice).
 - files: src/renderer/**/*.ts   # extra UI file globs
 - Icon-only buttons in the title bar are exempt from R1 (platform chrome).
 - All list rows use `--space-3` vertical rhythm; `--space-2` only inside dense tables.

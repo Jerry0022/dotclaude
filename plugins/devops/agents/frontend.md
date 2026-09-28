@@ -62,8 +62,8 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
   its tooltip; scrollbars styled once, globally, from tokens; design,
   interactions and function checked on Windows + Linux desktop, Android + iOS
   tablet and Android + iOS phone — no hover-, right-click- or shortcut-only
-  action without a touch path; one term per concept across label, dialog,
-  toast and error — a different term only for a different concept) plus the
+  action without a touch path; fixed UI strings name one thing one way —
+  chat and prose may vary, a different concept gets a different term) plus the
   project's `## UI rules` override in `.claude/skills/auto-polish/reference.md` (pre-PR-2: `tune-polish/`).
   No app-styled tooltip component or scrollbar style yet → build it first,
   then the element that needs it. `/do-ship` measures the static halves on

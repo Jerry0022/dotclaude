@@ -41,7 +41,7 @@ const RULES = [
   { id: 'R4', text: 'every interaction has a hotkey shown discreetly in the control or tooltip' },
   { id: 'R5', text: 'scrollbars styled once, globally, from tokens (scrollbar-color/-width, ::-webkit-scrollbar fallback, color-scheme per theme); no local divergence' },
   { id: 'R6', text: 'platform matrix: design, UX and function checked on Windows + Linux desktop, Android + iOS tablet, Android + iOS phone; no hover/right-click/shortcut-only action without a touch path, no 100vh, safe-area insets, fonts with generic fallback' },
-  { id: 'R7', text: 'wording: one term per concept across label, dialog, toast, error and help; a different term only for a different concept, recorded in the override terms: glossary' },
+  { id: 'R7', text: 'wording: decide consciously whether a text names a thing the same or differently — fixed UI strings keep one term per concept, chat and prose may vary freely, a different concept gets a different term' },
 ];
 
 function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY, docPath = deepKnowledgePath('ui-defaults.md')) {

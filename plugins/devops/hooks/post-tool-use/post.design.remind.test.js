@@ -137,7 +137,7 @@ describe("post.design.remind (hook)", () => {
     expect(context).toContain("Info 1500 ms (default), Label 500 ms");
     expect(context).toContain("R5 scrollbars");
     expect(context).toContain("R6 platform matrix");
-    expect(context).toContain("R7 wording: one term per concept");
+    expect(context).toContain("R7 wording: decide consciously");
   });
 
   test("a UI file inside <repo>/.claude/worktrees/<name>/ gets the reminder (AUD-012)", () => {
