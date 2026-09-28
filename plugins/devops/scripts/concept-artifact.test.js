@@ -83,6 +83,14 @@ describe("wrapper runtime", () => {
     await expect(s.fetch("/decisions")).rejects.toThrow(/no artifact db/);
   });
 
+  test("a Request object carries its body, and bad JSON is never acked", async () => {
+    const s = sandbox();
+    const req = new Request("https://example.claude.ai/decisions", { method: "POST", body: '{"submitted":true}' });
+    expect((await s.fetch(req)).status).toBe(200);
+    expect(s.store.get("concept/decisions")).toMatchObject({ submitted: true });
+    expect((await s.fetch("/decisions", { method: "POST", body: "{nope" })).status).toBe(400);
+  });
+
   test("a refused write answers 507, never a durable ack", async () => {
     const s = sandbox({ db: { doc: () => ({ set: () => Promise.reject({ code: "not_granted" }) }) } });
     const res = await s.fetch("/decisions", { method: "POST", body: "{}" });

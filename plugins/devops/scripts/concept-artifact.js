@@ -67,10 +67,13 @@ const WRAPPER_JS = `(function () {
     if (!isDecisions(input)) return realFetch(input, init);
     var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
     if (method === 'POST') {
-      return getDb().then(function (db) {
+      var bodyText = init && init.body != null ? Promise.resolve(String(init.body))
+        : (input && typeof input.text === 'function' ? input.text() : Promise.resolve('{}'));
+      return Promise.all([getDb(), bodyText]).then(function (r) {
+        var db = r[0];
         if (!db) return reply(507, { durable: false, reason: 'no-artifact-db' });
         var data;
-        try { data = JSON.parse((init && init.body) || '{}'); } catch (e) { return reply(400, { durable: false, reason: 'bad-json' }); }
+        try { data = JSON.parse(r[1] || '{}'); } catch (e) { return reply(400, { durable: false, reason: 'bad-json' }); }
         data._artifactStoredAt = new Date().toISOString();
         return db.doc('${DOC_PATH}').set(data).then(
           function () { return reply(200, { durable: true }); },
