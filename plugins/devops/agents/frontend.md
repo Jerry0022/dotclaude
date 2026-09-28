@@ -58,8 +58,10 @@ Your worktree starts on HEAD (main). You MUST rebase immediately:
   browser/OS default look — part of every rule; tooltips through the app's
   styled tooltip component with the Info/Label delay tiers, never `title`;
   dropdowns styled with the app's tokens and uniform per menu; same component
-  → same spacing tokens; a hotkey on every interaction shown in the control or
-  its tooltip; scrollbars styled once, globally, from tokens; design,
+  → same spacing tokens; every flow keyboard-operable, hotkeys only on essential
+  elements (navigation, primary action, variant choice as `1`–`9`) with a key
+  from the word where possible, hinted by an app-styled `<kbd>` revealed like
+  an Info tooltip; scrollbars styled once, globally, from tokens; design,
   interactions and function checked on Windows + Linux desktop, Android + iOS
   tablet and Android + iOS phone — no hover-, right-click- or shortcut-only
   action without a touch path; fixed UI strings name one thing one way —

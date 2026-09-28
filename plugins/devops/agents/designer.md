@@ -124,8 +124,10 @@ DESIGN_RESULT:
 - **The standing UI rules are the floor under every design system.** Read
   `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` (R0 app style for every
   element and every rule, app-styled tooltips with an Info/Label delay tier,
-  dropdowns styled and uniform, consistent spacing per component type, a
-  discreetly shown hotkey on every interaction, keyboard-operable flows,
+  dropdowns styled and uniform, consistent spacing per component type, hotkeys
+  only on essential elements (navigation, primary action, variant choice) with
+  a mnemonic or `1`–`9` key and a hover-revealed app-styled hint,
+  keyboard-operable flows,
   scrollbars in the app's style, every design and interaction tuned for
   Windows + Linux desktop, Android + iOS tablet and Android + iOS phone, wording
   that names one thing the same way and varies only on purpose) and

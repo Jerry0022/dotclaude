@@ -481,7 +481,7 @@ Treat what they return like the other 1d findings:
 - every other finding → a `userFinalTest` item naming id/rule, file:line and
   what to check; a harden H3 (secret-shaped literal) goes first.
 - one `tests` line per pass that ran: `{ method: "Harden (Ship)", result: "1 Fix · 2 Hinweise" }`,
-  `{ method: "UI-Regeln", result: "2 Findings · R2b deaktiviert (Projekt-Override) · R4 n/a" }`.
+  `{ method: "UI-Regeln", result: "2 Findings · R2b deaktiviert (Projekt-Override) · R4b n/a" }`.
 
 **Never blocks.** If Step 2's `ship_build` goes red on a line a pass fixed,
 revert that fix, re-run the gate, and report the finding instead; a red

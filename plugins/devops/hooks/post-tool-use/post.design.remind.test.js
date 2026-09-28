@@ -129,7 +129,7 @@ describe("post.design.remind (hook)", () => {
       sessionId: nextSid(),
     });
     expect(context).toContain("[ui-defaults]");
-    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4", "R5", "R6", "R7"]) {
+    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4a", "R4b", "R5", "R6", "R7"]) {
       expect(context).toContain(`${id} `);
     }
     expect(context).toContain("part of every rule");
@@ -231,7 +231,7 @@ describe("post.design.remind (hook)", () => {
     const dir = project();
     writeOverride(
       dir,
-      "- disable: R2b, R4\n" +
+      "- disable: R2b, R4b\n" +
       "- files: .ts\n" +
       "- Icon-only buttons in the title bar are exempt from R1 (platform chrome)."
     );
@@ -245,8 +245,9 @@ describe("post.design.remind (hook)", () => {
     expect(context).toContain("R2a ");
     expect(context).not.toMatch(/\bR2b\b .*/);
     expect(context).not.toContain("R2b uniform");
-    expect(context).not.toContain("R4 every");
-    expect(context).toContain("disabled by project override: R2b, R4");
+    expect(context).toContain("R4a every flow keyboard-operable");
+    expect(context).not.toContain("R4b hotkeys");
+    expect(context).toContain("disabled by project override: R2b, R4b");
     expect(context).toContain("Icon-only buttons in the title bar are exempt from R1 (platform chrome).");
   });
 
@@ -257,7 +258,7 @@ describe("post.design.remind (hook)", () => {
       filePath: path.join(dir, "src", "App.tsx"),
       sessionId: nextSid(),
     });
-    expect(context).toContain("disabled by project override: R4");
+    expect(context).toContain("disabled by project override: R4a, R4b");
   });
 
   test("the new auto-polish dir wins over the old tune-polish dir", () => {
@@ -268,7 +269,7 @@ describe("post.design.remind (hook)", () => {
       filePath: path.join(dir, "src", "App.tsx"),
       sessionId: nextSid(),
     });
-    expect(context).toContain("disabled by project override: R4");
+    expect(context).toContain("disabled by project override: R4a, R4b");
     expect(context).not.toContain("disabled by project override: R1");
   });
 
