@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.234.0] — 2026-09-28
+
+### Changed
+- **do-run asks "Desktop" and "PC danach" only when they matter.** An autonomous run no longer asks both follow-ups every time. F5 (Desktop) comes only when a mouse/keyboard takeover adds real value, meaning a native, non-browser GUI has to be driven (desktop, game or emulator app whose UI the task touches, or the prompt asks for it). F6 (PC danach) comes only when hitting the 5h limit is foreseeable, with buffer: the run's estimated window share plus half again reaches the remaining headroom, and Budget verbrennen always asks. A question that is not asked takes its default: desktop stays free, the PC stays on, no auto-resume. Shutdown, resume and a desktop takeover stay reachable through prompt phrases ("PC danach aus", "resume nach dem Limit", "übernimm den Desktop"). Because F6 now appears only when a resume is expected, `➕ Resume` is its first, recommended option.
+
 ## [0.233.0] — 2026-09-28
 
 ### Added

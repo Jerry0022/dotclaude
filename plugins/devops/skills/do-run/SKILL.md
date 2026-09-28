@@ -86,6 +86,7 @@ It never reorders the options that remain.
 | `audit`, or an audit trigger phrase | Q1 dropped → Audit. |
 | `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Autonom · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
+| a shutdown, resume or desktop-takeover wish | F6 / F5 dropped → the named option; phrases: `deep-knowledge/questions.md` § Follow-up questions. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
 | strict already armed for this branch (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
 
@@ -146,9 +147,9 @@ four questions). No follow-up when nothing is open.
 |---|---|
 | Q1 Audit | F1 Ergebnis + F2 Audit-Umfang |
 | Q1 Backlog | F3 Milestones (and F4 Issues when loose issues exist) — run `modes/backlog.md` Step 1 fetch, trust gate and presence-cron arm first; they feed the options |
-| Q2 Autonom (not Backlog), or Budget verbrennen | F5 Desktop + F6 PC danach |
-| Q2 Autonom with Backlog | F6 PC danach (backlog never asks Desktop) |
-| Budget verbrennen (not Backlog) | additionally F7 Burn-Resume + F8 Zusatz-Tasks — four questions, the tool maximum |
+| Q2 Autonom (not Backlog), or Budget verbrennen | F5 Desktop **only when a desktop takeover adds real value**, F6 PC danach **only when a resume is foreseeable** — a gated-out question is not asked and takes its default; both gates: `deep-knowledge/questions.md` § Follow-up questions. |
+| Q2 Autonom with Backlog | F6 PC danach under the same gate (backlog never asks Desktop) |
+| Budget verbrennen (not Backlog) | additionally F7 Burn-Resume + F8 Zusatz-Tasks — at most four questions, the tool maximum |
 | Budget verbrennen with Backlog | additionally F6 (if not already asked) + F7; no F8 — the backlog is the queue |
 
 The follow-up questions F1–F8, and what each answer feeds:

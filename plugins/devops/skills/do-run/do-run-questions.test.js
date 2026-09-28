@@ -257,13 +257,27 @@ describe("label rules (base call and follow-up)", () => {
     expect(labels.filter((l) => l.startsWith("🔴"))).toEqual(["🔴 PC ausmachen"]);
   });
 
-  test("F6 order is fixed; resume is recommended only for long, limit-bound runs", () => {
+  test("F6 is asked only when a resume is foreseeable, so ➕ Resume leads", () => {
     const f6 = byId(followUp, "F6");
-    expect(f6.options.map((o) => o.label)).toEqual(["🟢 PC anlassen · ➖ Resume", "🟢 PC anlassen · ➕ Resume", "🔴 PC ausmachen"]);
+    expect(f6.options.map((o) => o.label)).toEqual(["🟢 PC anlassen · ➕ Resume", "🟢 PC anlassen · ➖ Resume", "🔴 PC ausmachen"]);
     expect(f6.options[0].recommended).toBe(true);
     const followUpQuestions = section(questions, "## Follow-up questions");
-    expect(followUpQuestions).toMatch(/F6 keeps its option order in every call/);
-    expect(followUpQuestions).toMatch(/expected to be long[\s\S]*\*\*and\*\* it will plausibly\s+use up the plan's usage/);
+    expect(followUpQuestions).toMatch(/\*\*Resume gate \(F6\)\.\*\* Ask only when hitting the 5h limit is foreseeable,\s+with buffer/);
+    expect(followUpQuestions).toMatch(/Gated out → `🟢 PC anlassen · ➖ Resume`/);
+  });
+
+  test("F5 is asked only when a desktop takeover adds real value", () => {
+    const followUpQuestions = section(questions, "## Follow-up questions");
+    expect(followUpQuestions).toMatch(/\*\*Desktop gate \(F5\)\.\*\* Ask only when a mouse\/keyboard takeover adds real\s+value/);
+    expect(followUpQuestions).toMatch(/Gated out → `Desktop frei lassen`/);
+    const step4 = section(skill, "## Step 4 — Follow-up", "## Step 5");
+    expect(step4).toMatch(/F5 Desktop \*\*only when a desktop takeover adds real value\*\*/);
+    expect(step4).toMatch(/F6 PC danach \*\*only when a resume is foreseeable\*\*/);
+  });
+
+  test("shutdown stays reachable without asking: a phrase preset answers F6", () => {
+    expect(section(questions, "## Follow-up questions")).toMatch(/"PC danach aus"[\s\S]*F6 = `🔴 PC ausmachen`/);
+    expect(section(skill, "## Step 1", "## Step 2")).toMatch(/a shutdown, resume or desktop-takeover wish/);
   });
 
   test("follow-up single-selects: first option is the recommendation", () => {
