@@ -708,14 +708,25 @@ function validateMarker(raw) {
  *
  * A marker ending in a word character additionally requires a word boundary, so
  * `go` does not fire on "google das mal".
+ *
+ * Trailing punctuation is optional on both sides (#599): a legacy marker `los:`
+ * fires on a typed `los`, and a marker `los` fires on `los:`. The typed
+ * punctuation is part of the match, so `stripMarker` never leaves it at the
+ * start of the payload. A marker that is punctuation only keeps its full text,
+ * and a symbol marker (`>>`) gains no optional tail.
  */
+const MARKER_TAIL = /[:;,.!?]+$/;
+
 function markerMatch(text, marker) {
   if (typeof text !== 'string' || !text) return null;
   const v = validateMarker(marker);
   if (!v.ok) return null;
-  const escaped = v.marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
-  const boundary = /[\p{L}\p{N}_]$/u.test(v.marker) ? '(?![\\p{L}\\p{N}_])' : '';
-  return new RegExp(`^\\s*${escaped}${boundary}`, 'iu').exec(text);
+  const stem = v.marker.replace(MARKER_TAIL, '').trimEnd() || v.marker;
+  const escaped = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+  const wordEnd = /[\p{L}\p{N}_]$/u.test(stem);
+  const boundary = wordEnd ? '(?![\\p{L}\\p{N}_])' : '';
+  const tail = wordEnd || stem !== v.marker ? '(?:\\s*[:;,.!?]+)?' : '';
+  return new RegExp(`^\\s*${escaped}${boundary}${tail}`, 'iu').exec(text);
 }
 
 function startsWithMarker(text, marker) {

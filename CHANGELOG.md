@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.237.1] — 2026-09-28
+
+### Fixed
+- **The `/do-batch` execute marker fires with or without its trailing punctuation (#599).** A legacy marker stored as `los:` never matched a typed `los`, so the execute prompt was filed as a note and had to be retyped. The matcher now takes the marker stem plus an optional punctuation tail on both sides: `los:` fires on `los`, `los` fires on `los:`, and the typed punctuation never lands at the start of the payload. Symbol markers (`>>`) and punctuation-only markers keep their exact form; `go` still does not fire on "google".
+
+### Tests
+- 4 new cases in `batch-state.test.js` (143 green); hook suites 3424 green.
+
 ## [0.237.0] — 2026-09-28
 
 ### Changed

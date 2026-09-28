@@ -153,6 +153,31 @@ describe("custom markers typed via the 'Sonstiges' option", () => {
       .toBe("collect");
   });
 
+  // #599: a legacy marker `los:` never fired on a typed `los` — the prompt was
+  // filed as a note and had to be retyped.
+  test("trailing punctuation of the stored marker is optional", () => {
+    expect(startsWithMarker("los", "los:")).toBe(true);
+    expect(startsWithMarker("los bau das", "los:")).toBe(true);
+    expect(startsWithMarker("Los : bau das", "los:")).toBe(true);
+    expect(stripMarker("los bau das", "los:")).toBe("bau das");
+    expect(classify({ text: "los", marker: "los:", modeActive: true })).toBe("execute");
+    expect(startsWithMarker("lost in space", "los:")).toBe(false);
+  });
+
+  test("typed punctuation after a bare marker is consumed", () => {
+    expect(startsWithMarker("los: bau das", "los")).toBe(true);
+    expect(stripMarker("los: bau das", "los")).toBe("bau das");
+    expect(stripMarker(">go: bau das", ">go")).toBe("bau das");
+    expect(startsWithMarker("google das mal", "go:")).toBe(false);
+  });
+
+  test("symbol and punctuation-only markers keep their exact form", () => {
+    expect(stripMarker(">>: bau das", ">>")).toBe(": bau das");
+    expect(startsWithMarker(">> bau das", ">>")).toBe(true);
+    expect(startsWithMarker("... bau das", "...")).toBe(true);
+    expect(startsWithMarker("bau das", "...")).toBe(false);
+  });
+
   test("regex metacharacters in a phrase are literal", () => {
     expect(startsWithMarker("mach.es jetzt", "mach.es")).toBe(true);
     expect(startsWithMarker("machxes jetzt", "mach.es")).toBe(false);
