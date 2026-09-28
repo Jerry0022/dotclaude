@@ -1,6 +1,6 @@
 ---
 name: do-ship
-version: 0.14.0
+version: 0.15.0
 description: >-
   Full end-to-end shipping pipeline using MCP tools: ship_preflight, ship_build,
   ship_version_bump, ship_release, ship_cleanup, silent memory consolidation,
@@ -458,8 +458,8 @@ structure and no card — one call each, then continue:
    checks, same JSON — so the ship never loads the whole auto-harden skill
    for seven regexes. Add `--strict` under strict mode (below).
 2. `/auto-polish --invoked-by=ship [--cwd=<path>] <ui files of the diff>` — only when the
-   diff has UI files (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § UI file
-   detection, plus the project's `## UI rules` override in
+   diff has UI files (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § Detection
+   allowlist (row *UI file detection*), plus the project's `## UI rules` override in
    `.claude/skills/auto-polish/reference.md`, pre-PR-2 fallback `tune-polish/`);
    the static halves of the standing UI rules (`auto-polish` § Rules-only path).
 
@@ -573,7 +573,7 @@ record the gap in the CHANGELOG entry (Step 3). The mechanical roster markers
 
 **If shipping to main:**
 
-Determine bump type based on changes:
+Determine bump type based on changes. The full table: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/versioning.md` § When to bump.
 - **patch/minor**: decide autonomously
 - **major**: always ask user via AskUserQuestion. **If `$SHIP_LOCKOUT`
   (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`, "needs major-version
@@ -1039,11 +1039,35 @@ work. A finding outside it goes into a task chip (`spawn_task`, Desktop app) —
 never both a chip and an open point about it. Only where no chip exists
 (terminal) may a side finding stay an open point.
 
-## Data Flow & Hierarchical Merges
+## Reference files — every one is one level from here
 
-- **Data flow** (preflight → build → version-bump → release → cleanup →
-  completion card): see `deep-knowledge/data-flow.md` for the direct-ship
-  and intermediate-ship diagrams.
-- **Hierarchical merges** (sub-branch → feature branch → main, automatic
-  parent detection via `<parent>-<role>` naming): see
-  `deep-knowledge/hierarchical-merge.md`.
+Every file under `deep-knowledge/` and `modes/` (paths relative to
+`{PLUGIN_ROOT}/skills/do-ship/`) is listed here, so none is reachable only
+through another reference. Read one when its step sends you there. A *spec*
+describes what an MCP tool already does: the pipeline never repeats it by hand —
+only the manual checklist (`manual-ship.md`, Step 0.5) walks it step by step.
+
+| File | Read when |
+|---|---|
+| `modes/delegated.md` | Pre-Step 0 — a `[ship-delegate]` block, or `--delegated` |
+| `modes/resume.md` | Pre-Step R — `--resume`, also after a compaction mid-ship |
+| `modes/promote.md` | Step 5d and every promotion-only run |
+| `deep-knowledge/manual-ship.md` | Step 0.5 — the ship tools are absent |
+| `deep-knowledge/preflight-rebase.md` | Steps 1a/1b — base detection, dirty tree, rebase conflicts |
+| `deep-knowledge/pre-flight.md` | *spec* of the `ship_preflight` checks |
+| `deep-knowledge/repo-modes.md` | Step 1a-ii — `mode: "file-only"` |
+| `deep-knowledge/purpose-alignment.md` | Step 1d, and the Step 4 re-check after `baseAdvancedDuringChecks` |
+| `deep-knowledge/quality-gates.md` | *spec* of the Step 2 gates and the pre-merge CI gate |
+| `deep-knowledge/build-id.md` | the card's `buildId` — what it hashes, when it changes |
+| `deep-knowledge/versioning.md` | Step 3 — the bump kind (§ When to bump); the rest is the *spec* of `ship_version_bump` |
+| `deep-knowledge/call-examples.md` | Step 4 — the `ship_release` payloads |
+| `deep-knowledge/release-results.md` | Step 4 — every result field beyond a clean `merged` |
+| `deep-knowledge/release-flow.md` | *spec* of `ship_release`; § owner hand-off when the tag cannot be pushed |
+| `deep-knowledge/post-merge-steps.md` | Steps 4a–4d |
+| `deep-knowledge/post-merge-verify.md` | Steps 4b/4c — the project's `verify:` / `surfaces:` config |
+| `deep-knowledge/cleanup.md` | Steps 5a–5c and the post-ship hygiene of Step 6 |
+| `deep-knowledge/memory-dream.md` | Step 5e |
+| `deep-knowledge/completion-card-payloads.md` | Step 6 |
+| `deep-knowledge/data-flow.md` | the direct- and intermediate-ship data flow diagrams |
+| `deep-knowledge/hierarchical-merge.md` | intermediate ships (sub-branch → feature branch → main) |
+| `deep-knowledge/branching.md` | the branch naming (`<parent>-<role>`) that hierarchical merges detect |

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.232.0] — 2026-09-28
+
+### Added
+- **Every do-ship reference file is one level from SKILL.md** (skill 0.15.0). The official skill guidance keeps references one level deep, because a file reached only through another reference may be read partially or not at all. Six files were reachable only that way (`versioning`, `pre-flight`, `quality-gates`, `build-id`, `branching`, `post-merge-verify`). SKILL.md now ends with a "Reference files" index that lists every `deep-knowledge/` and `modes/` file with the step that sends you there. Files that only describe what an MCP tool already does are marked *spec*: the pipeline never repeats them by hand, and only the manual checklist walks them. Step 3 now points straight at `versioning.md` § When to bump.
+- `reference-graph.test.js` checks that every file is in the index and that every index row exists and says when to read it. It also checks that every `deep-knowledge/` / `modes/` path, and every `file.md` § / → section reference across the whole skill tree, resolves to a real file and heading, including plugin-level deep-knowledge. A mutation check (a dropped row, a broken section) turns it red.
+
+### Fixed
+- do-ship Step 1e pointed at `ui-defaults.md` § UI file detection, a heading that does not exist. That list is a row of § Detection allowlist, and the pointer now names it; the new test found this.
+
 ## [0.231.0] — 2026-09-28
 
 ### Added
