@@ -1,12 +1,12 @@
 /**
  * @module ship-delegate
- * @version 1.0.0
+ * @version 1.1.0
  * @plugin devops
  * @description The "ship in a fresh-context subagent" instruction, shared by
  *   `prompt.ship.detect` (which emits it instead of the plain
  *   Skill('devops:do-ship') mandate) and its test.
  *
- *   Why: a /do-ship runs ~16 API calls, each re-reading the WHOLE context, and
+ *   Why: a /do-ship runs ~25 API calls, each re-reading the WHOLE context, and
  *   it runs at the end of a session when that context is largest. Measured
  *   over 10 sessions (2026-09-21): Ø 434 k tokens per ship call, ~24 % of
  *   the session's tokens for a step that produces ~10 k output tokens.
@@ -16,29 +16,40 @@
  *   conversation, only a brief of it: the main session writes that brief
  *   once and a general-purpose subagent runs do-ship on a fresh context
  *   (`--delegated`, skills/do-ship/modes/delegated.md). The user types
- *   nothing extra; the main session renders the card from the payload the
- *   subagent returns.
+ *   nothing extra; the main session shows the card the subagent rendered.
+ *
+ *   Measured on the first 7 delegated ships (2026-09-27/28): the subagent
+ *   starts at 72–75 k, grows to 150–195 k and makes 20–39 calls (Ø ~27).
+ *   Cost-weighted (cache read 0.1, 1 h cache write 2.0, output 5) the ships
+ *   took 8.3 M against ≈ 13.1 M inline: −45 to −55 % at ≥ 400 k, only −13 %
+ *   at ~225 k, and +28 % at 115 k. Break-even sits near 170 k.
  *
  *   - Threshold `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (tokens; `0` disables;
  *     the old `DOTCLAUDE_SHIP_COMPACT_THRESHOLD` is still read as a
- *     fallback), default 200 k. Delegating costs no user prompt, so the bar
- *     is lower than the old stop's 350 k: a subagent starts at roughly
- *     50 k (system prompt, tool schemas, brief), so at 200 k one ship
- *     already saves ≈ 2.4 M cache reads.
+ *     fallback), default 250 k: a clear margin above break-even, so a
+ *     delegated ship never costs more than the inline one would have.
  *   - `--inline` (or the old `--no-compact`) keeps one ship in the main
  *     context.
- *   - Never for a promotion-only run (`promotionOnly`): ~4 calls, not ~16.
- *   - Only user prompts reach the hook, so an orchestrator's Skill-tool ship
- *     (`/do-run backlog`, auto-cleanup) always runs where it was invoked.
+ *   - Never for a promotion-only run (`promotionOnly`): ~4 calls, not ~25.
+ *   - Two entry points share this decision: `prompt.ship.detect` for a ship
+ *     prompt, `pre.ship.delegate` for a do-ship the model starts through the
+ *     Skill tool (concept finalize, `/do-run backlog`, an autonomous ship) —
+ *     before that guard, half of the large-context ships ran inline that way.
  */
 
 const { formatTokens } = require('./context-size');
 
-const DEFAULT_THRESHOLD = 200_000;
+const DEFAULT_THRESHOLD = 250_000;
 
-/** What a fresh subagent carries before its first ship call: system prompt,
- *  tool schemas, the skill and the brief. */
-const SUBAGENT_FLOOR = 50_000;
+/** What a fresh subagent carries on its first ship call: system prompt,
+ *  tool schemas, the skill and the brief (measured 72–75 k). */
+const SUBAGENT_FLOOR = 75_000;
+
+/** API calls of one ship (measured 20–39, Ø ~27). */
+const SHIP_CALLS = 25;
+
+/** A 1 h cache write costs as much as ~20 cache reads (2.0 vs 0.1). */
+const CACHE_WRITE_READS = 20;
 
 /** `/do-ship --inline`, `ship it --no-compact` — one-shot opt-out. */
 const INLINE = /(^|\s)--(inline|no-compact)\b/i;
@@ -56,13 +67,16 @@ function threshold(env = process.env) {
 }
 
 /**
- * What delegating saves on one ship: the context above the subagent's own
- * floor, re-read ~16 times.
+ * What delegating saves on one ship, in cache-read tokens: inline re-reads
+ * the main context on every call; delegated, the subagent re-reads its own
+ * floor instead, writes that floor to the cache once (≈ 20 reads' worth),
+ * and the main session still reads its context twice to show the card.
  * @param {number} tokens
  * @returns {string} "≈ 5.3 M"
  */
 function shipSavingEstimate(tokens) {
-  const m = (Math.max(0, tokens - SUBAGENT_FLOOR) * 16) / 1_000_000;
+  const saved = (SHIP_CALLS - 2) * tokens - SHIP_CALLS * SUBAGENT_FLOOR - CACHE_WRITE_READS * SUBAGENT_FLOOR;
+  const m = Math.max(0, saved) / 1_000_000;
   return m >= 10 ? `≈ ${Math.round(m)} M` : `≈ ${m.toFixed(1)} M`;
 }
 
@@ -78,6 +92,52 @@ function shouldDelegate({ tokens, prompt, promotionOnly = false, env = process.e
   return !INLINE.test(prompt || '');
 }
 
+/** `--delegated` (the subagent itself) and `--resume` (Pre-Step R, which
+ *  ss.ship.resume also reloads mid-turn after a compaction) are never
+ *  redirected by the Skill-call guard. */
+const OWN_RUN = /(^|\s)--(delegated|resume)\b/i;
+
+/**
+ * What a do-ship Skill call's args say about promotion: `promote`, `beta`
+ * or `stable` as a leading word, plus a named version. A named version is
+ * promotion-only by definition; a channel alone is promotion-only only when
+ * nothing is unshipped (the caller checks git).
+ * @param {string} args
+ * @returns {{ promote: boolean, version: string|null }}
+ */
+function promotionOfArgs(args) {
+  const s = String(args || '');
+  const promote = /^\s*(promote|beta|stable)\b/i.test(s);
+  const v = promote ? s.match(/\b\d+\.\d+\.\d+\b/) : null;
+  return { promote, version: v ? v[0] : null };
+}
+
+/**
+ * Whether a do-ship the model starts through the Skill tool in the MAIN
+ * session has to go to a subagent instead (pre.ship.delegate).
+ * @param {{ skill: string, args?: string, tokens: number|null, promotionOnly?: boolean, env?: NodeJS.ProcessEnv }} o
+ * @returns {boolean}
+ */
+function shouldDelegateSkillCall({ skill, args = '', tokens, promotionOnly = false, env = process.env }) {
+  if (!/(^|:)do-ship$/.test(String(skill || ''))) return false;
+  if (OWN_RUN.test(args)) return false;
+  return shouldDelegate({ tokens, prompt: args, promotionOnly, env });
+}
+
+/**
+ * Whether an Agent spawn that starts a delegated ship would cost more than
+ * the inline ship: the main context is known and below the threshold. A
+ * resume and an unknown size (right after a compaction) always pass.
+ * @param {{ prompt: string, tokens: number|null, env?: NodeJS.ProcessEnv }} o
+ * @returns {boolean}
+ */
+function delegatedSpawnTooSmall({ prompt, tokens, env = process.env }) {
+  const p = String(prompt || '');
+  if (!/devops:do-ship/.test(p) || !/--delegated\b/.test(p) || /--resume\b/.test(p)) return false;
+  const limit = threshold(env);
+  return Boolean(limit) && tokens != null && tokens < limit;
+}
+
 /**
  * The instruction block that replaces the inline ship mandate.
  * @param {{ tokens: number, skillArgs?: string, pluginRoot: string, env?: NodeJS.ProcessEnv }} o
@@ -90,7 +150,7 @@ function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, sessionId
   const mode = `${String(pluginRoot).replace(/\\/g, '/')}/skills/do-ship/modes/delegated.md`;
   return [
     `[ship-delegate] Context is ${formatTokens(tokens)} tokens (threshold ${formatTokens(threshold(env))}). The ship runs in a`,
-    `fresh-context subagent instead of here: it saves ${shipSavingEstimate(tokens)} cache-read tokens and the user types nothing extra.`,
+    `fresh-context subagent instead of here: it saves ${shipSavingEstimate(tokens)} cache-read tokens (its own cache write counted) and the user types nothing extra.`,
     'Do NOT run the pipeline in this context: no ship_* call, no git push/merge — even if the do-ship skill is already loaded.',
     '',
     '1. If this session still has its OWN background agents or commands running, ask the user first (wait / ship anyway / cancel).',
@@ -169,6 +229,7 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
 }
 
 module.exports = {
-  DEFAULT_THRESHOLD, SUBAGENT_FLOOR, INLINE,
+  DEFAULT_THRESHOLD, SUBAGENT_FLOOR, SHIP_CALLS, INLINE,
   threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction, shipResumeInstruction,
+  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall,
 };

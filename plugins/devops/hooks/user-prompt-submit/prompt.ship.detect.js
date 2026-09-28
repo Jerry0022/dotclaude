@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.8.0
+ * @version 0.8.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -11,7 +11,7 @@
  *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
  *   is marked `🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
  *   Above a context threshold the mandate becomes the delegate instruction
- *   from lib/ship-delegate.js: the ship would re-read that context ~16
+ *   from lib/ship-delegate.js: the ship would re-read that context ~25
  *   times, so the main session briefs a fresh-context subagent that runs
  *   do-ship --delegated and hands the card back. `--inline` opts out once.
  *   Target channel (promote folded into do-ship, skill restructure PR 2):
@@ -22,7 +22,7 @@
  *   "promote" passes `promote` (do-ship asks which promotion). This hook
  *   owns every do-ship prompt; the trigger router stays silent on them.
  *   A promotion-only prompt (nothing unshipped, lib/ship-unshipped.js) never
- *   is delegated — the run is ~4 calls, not ~16.
+ *   is delegated — the run is ~4 calls, not ~25.
  *   A promotion that names a version ("promote stable 0.193.0", the card's
  *   promote buttons) is promotion-only by definition: the mandate forbids
  *   shipping new work, so a stale button click never ships later edits.
@@ -156,8 +156,7 @@ process.stdin.on('end', () => {
 
   // --- Large context: the ship runs in a fresh-context subagent
   // (lib/ship-delegate.js has the numbers and the why). Only user prompts
-  // reach this hook, so an orchestrator's Skill-tool ship is never
-  // redirected. A promotion with nothing to ship first is cheap, and one
+  // reach this hook; a Skill-tool ship is redirected by pre.ship.delegate. A promotion with nothing to ship first is cheap, and one
   // that names its version never ships — both stay inline; the git probe
   // runs only when delegation would otherwise apply.
   const tokens = currentContextTokens(hook.transcript_path);
