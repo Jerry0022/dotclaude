@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.236.1] — 2026-09-28
+
+### Fixed
+- **A note sent while `/do-batch` is still activating is acknowledged.** A prompt sent during the activation turn is queued and collected mid-turn; the Desktop app shows no block panel for a queued prompt, and the card rendered before it landed still said "0 Einträge" — the user saw no sign of note #1 until note #2 said "#2". `post.flow.completion` now compares the count on the shown batch card with `.claude/batch.md` and, when notes are missing, keeps the turn for exactly one ack line (`✓ Notiz #1 gespeichert — kam an, während die Aktivierung noch lief …`) instead of ending it.
+
+### Tests
+- 5 new cases in `post.flow.completion.test.js` (one late note, a range, a current card, mode off, a blocking Stop hook); the heading regex was checked against the widget of the session that reported it.
+
 ## [0.236.0] — 2026-09-28
 
 ### Changed
