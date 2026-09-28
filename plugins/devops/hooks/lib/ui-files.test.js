@@ -14,6 +14,14 @@ describe("isUiFile — the one detection for the reminder and the run contract",
     expect(isUiFile(f)).toBe(false);
   });
 
+  test.each(["src/locales/de.json", "public/i18n/app/en.yaml", "lib/l10n/app_de.arb", "Resources/Strings.resx", "po/de.po"])("%s is a locale file (R7)", (f) => {
+    expect(isUiFile(f)).toBe(true);
+  });
+
+  test.each(["package.json", "config/app.yaml", "src/language-utils.json"])("%s is not a locale file", (f) => {
+    expect(isUiFile(f)).toBe(false);
+  });
+
   test("an override `files:` glob opts plugin source back in", () => {
     const { files } = parseUiRules(["files: plugins/devops/skills/**/*.html  # concept templates"]);
     expect(isUiFile("plugins/devops/skills/x/page.html", files)).toBe(true);

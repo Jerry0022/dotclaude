@@ -122,14 +122,14 @@ describe("post.design.remind (hook)", () => {
     })).toBe("");
   });
 
-  test("UI file produces the reminder with R0..R6", () => {
+  test("UI file produces the reminder with R0..R7", () => {
     const dir = project();
     const context = runHook(dir, {
       filePath: path.join(dir, "src", "App.tsx"),
       sessionId: nextSid(),
     });
     expect(context).toContain("[ui-defaults]");
-    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4", "R5", "R6"]) {
+    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4", "R5", "R6", "R7"]) {
       expect(context).toContain(`${id} `);
     }
     expect(context).toContain("part of every rule");
@@ -137,6 +137,7 @@ describe("post.design.remind (hook)", () => {
     expect(context).toContain("Info 1500 ms (default), Label 500 ms");
     expect(context).toContain("R5 scrollbars");
     expect(context).toContain("R6 platform matrix");
+    expect(context).toContain("R7 wording: one term per concept");
   });
 
   test("a UI file inside <repo>/.claude/worktrees/<name>/ gets the reminder (AUD-012)", () => {

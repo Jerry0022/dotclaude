@@ -153,6 +153,7 @@ Default budgets below apply only when no project extension sets its own.
 ## content
 
 - **Probe:** user-facing text exists.
-- **Checklist:** typos, inconsistent terminology, missing i18n keys,
+- **Checklist:** typos, inconsistent terminology (one term per concept —
+  `ui-defaults.md` R7), missing i18n keys,
   placeholder text left in UI, docs/README matching actual behavior.
 - **Evidence:** file:line or screenshot.

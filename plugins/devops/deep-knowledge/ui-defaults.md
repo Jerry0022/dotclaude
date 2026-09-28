@@ -4,7 +4,8 @@ Standing UI conventions every project using the devops plugin gets by default.
 The same recurring defects — tooltips and scrollbars left at the browser's
 look, icon buttons without tooltips, dropdowns left at the native look,
 spacing that differs between two identical cards, actions that only a mouse
-can reach, layouts that only work on the developer's own desktop — show up
+can reach, layouts that only work on the developer's own desktop, one
+operation named two ways in two places — show up
 in every new project. This file names the outcome each rule expects so that
 it is in context **while the UI is written**, and is checked **after** it is written by `/auto-polish`.
 
@@ -212,6 +213,40 @@ No rule repeats it.
   everything else (a touch path for a hover-only action, a breakpoint
   layout) is report-only — it is design.
 
+### 7 · Wording — one term per concept
+
+- **Outcome:** a concept (object, action, state) carries the same term
+  wherever the user meets it — label, button, menu item, tooltip, dialog
+  title, confirmation, toast, error, empty state, in-app help. Different
+  concepts get clearly different terms, never near-synonyms. Variance is
+  either **deliberate** or a defect: "Entschlüsselung" on the button and
+  "Dekodierung" in the toast for the same operation is a defect — and often
+  a wrong claim too (decrypting is not decoding), so the rule forces the
+  question whether it really is one concept.
+- **Same term:** along a flow (trigger → dialog → confirm → toast / error)
+  and across views. Word form is no variance: "Entschlüsseln" on the button
+  and "Entschlüsselung" as the dialog title are one term. Synonyms to avoid
+  repetition ("elegant variation") are never a reason in UI text.
+- **Different term, on purpose:** only for a different concept (Archivieren
+  ≠ Löschen), a platform convention the app follows (the OS's own name for
+  settings), or a register change between a control and explanatory help
+  prose. The evidence is a `terms:` entry in the project override — a code
+  comment does not count, the user never sees it. Without a glossary, the
+  term the existing strings already use wins.
+- **Per locale:** consistency holds within each language; a translation is
+  no variant, and mixing languages for one concept inside one locale
+  (Löschen / Delete) is a finding.
+- **Static:** a `not:` synonym from `terms:` in a new or changed string is a
+  deterministic finding. Without a glossary: a new string naming a concept
+  with another term than the other strings of the diff files or the same
+  locale file do — a judgement, reported. One finding per term pair, never
+  one per occurrence.
+- **Runtime:** each changed flow is read once in order — trigger, dialog,
+  confirmation, toast, error — and every concept keeps its term.
+- **Fix policy:** report-only — the term is product language. Mechanical only
+  for a `not:` hit of the glossary in a new string (swap for the glossary
+  term).
+
 ## Common rules
 
 - **New or changed elements only** on the ship path. Existing elements are the
@@ -256,7 +291,8 @@ project extends or replaces them (§ Project override).
 | Scrollbar styling | `scrollbar-color`, `scrollbar-width`, `scrollbar-gutter`, `::-webkit-scrollbar*`, `color-scheme`, a scroll-area component (Radix / shadcn `ScrollArea`, OverlayScrollbars, SimpleBar) |
 | Hotkey mechanisms | `accesskey`, `useHotkeys(` / `useKeyboardShortcut(`, `@HostListener('window:keydown` / `document:keydown`, `v-hotkey`, `Mousetrap.bind(`, `hotkeys(`, a project shortcut registry (`registerShortcut(`, `shortcuts.ts`, `keymap.*`), `<kbd>` inside the control |
 | Menu components | `<mat-menu>`, `<Menu>` / `DropdownMenu` / `Popover` (MUI, Radix, shadcn, Headless UI, Ant), `<v-menu>`, `<el-dropdown>`, `<Dropdown>` (Bootstrap), a project `Menu`/`Dropdown` component under `components/` |
-| UI file detection | `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`, `*.scss`, `*.sass`, `*.less`, `*.styled.*`, `*.component.*`, `*.razor`, `*.xaml`, `*.axaml` |
+| Copy sources (R7) | string literals and text nodes in UI files, locale files (see UI file detection), the `terms:` glossary of the override |
+| UI file detection | `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`, `*.scss`, `*.sass`, `*.less`, `*.styled.*`, `*.component.*`, `*.razor`, `*.xaml`, `*.axaml`; locale files — `*.po`, `*.arb`, `*.xlf` / `*.xliff`, `*.resx`, `*.strings`, and `*.json` / `*.yml` / `*.yaml` under a `locale(s)` / `i18n` / `lang` / `translations` directory |
 
 ## Project override
 
@@ -268,12 +304,13 @@ section:
 
 ```markdown
 ## UI rules
-- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5, R6 (static halves) — a disabled rule is named on the ship card
+- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5, R6, R7 (static halves) — a disabled rule is named on the ship card
 - tooltip.mechanisms: appTooltip, <HelpHint>
 - tooltip.delay: info 1200, label 400   # ms, the two R1 tier values; project beats user-global
 - hotkey.mechanisms: useShortcut(, data-hotkey
 - platforms: windows, linux, android-tablet, ios-tablet   # narrows the R6 matrix; default: windows, linux, android-tablet, ios-tablet, android-phone, ios-phone
 - menu.components: <AppMenu>, <ContextMenu>
+- terms: Entschlüsselung (not: Dekodierung, Decodierung); Löschen (not: Entfernen); Archivieren   # R7 glossary: canonical term (not: synonyms)
 - files: src/renderer/**/*.ts   # extra UI file globs
 - Icon-only buttons in the title bar are exempt from R1 (platform chrome).
 - All list rows use `--space-3` vertical rhythm; `--space-2` only inside dense tables.

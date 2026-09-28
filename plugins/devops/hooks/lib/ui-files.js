@@ -20,8 +20,13 @@ const { resolveExtensionFile } = require('./skill-names');
 const DEFAULT_UI_EXTENSIONS = [
   '.tsx', '.jsx', '.vue', '.svelte', '.html', '.css', '.scss', '.sass',
   '.less', '.razor', '.xaml', '.axaml',
+  // Locale files carry the UI's text (R7 wording).
+  '.po', '.arb', '.xlf', '.xliff', '.resx', '.strings',
 ];
 const DEFAULT_UI_BASENAME_PATTERNS = [/\.styled\./i, /\.component\./i];
+// Generic data formats count only inside a locale directory — a bare `.json`
+// would make package.json a UI file.
+const LOCALE_DIR_PATTERN = /(^|\/)(locales?|i18n|lang|translations)\/(.+\/)?[^/]+\.(json|ya?ml)$/i;
 
 // Never UI: dependencies and Claude's own config. Concept pages are NOT
 // excluded — the rules apply to them like to any other page.
@@ -82,6 +87,7 @@ function isUiFile(filePath, extraGlobs) {
 
   if (DEFAULT_UI_EXTENSIONS.some(ext => lower.endsWith(ext))) return true;
   if (DEFAULT_UI_BASENAME_PATTERNS.some(re => re.test(basename))) return true;
+  if (LOCALE_DIR_PATTERN.test(lower)) return true;
   return false;
 }
 
