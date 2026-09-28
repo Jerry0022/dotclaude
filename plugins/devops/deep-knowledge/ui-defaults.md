@@ -215,37 +215,25 @@ No rule repeats it.
 
 ### 7 · Wording — one term per concept
 
-- **Outcome:** a concept (object, action, state) carries the same term
-  wherever the user meets it — label, button, menu item, tooltip, dialog
-  title, confirmation, toast, error, empty state, in-app help. Different
-  concepts get clearly different terms, never near-synonyms. Variance is
-  either **deliberate** or a defect: "Entschlüsselung" on the button and
+- **Outcome:** one concept (object, action, state), one term — on the
+  label, button, menu item, tooltip, dialog, toast, error and help alike;
+  word form is no variance ("Entschlüsseln" / "Entschlüsselung"). Variance
+  is deliberate or a defect: "Entschlüsselung" on the button and
   "Dekodierung" in the toast for the same operation is a defect — and often
-  a wrong claim too (decrypting is not decoding), so the rule forces the
-  question whether it really is one concept.
-- **Same term:** along a flow (trigger → dialog → confirm → toast / error)
-  and across views. Word form is no variance: "Entschlüsseln" on the button
-  and "Entschlüsselung" as the dialog title are one term. Synonyms to avoid
-  repetition ("elegant variation") are never a reason in UI text.
-- **Different term, on purpose:** only for a different concept (Archivieren
-  ≠ Löschen), a platform convention the app follows (the OS's own name for
-  settings), or a register change between a control and explanatory help
-  prose. The evidence is a `terms:` entry in the project override — a code
-  comment does not count, the user never sees it. Without a glossary, the
-  term the existing strings already use wins.
-- **Per locale:** consistency holds within each language; a translation is
-  no variant, and mixing languages for one concept inside one locale
-  (Löschen / Delete) is a finding.
-- **Static:** a `not:` synonym from `terms:` in a new or changed string is a
-  deterministic finding. Without a glossary: a new string naming a concept
-  with another term than the other strings of the diff files or the same
-  locale file do — a judgement, reported. One finding per term pair, never
-  one per occurrence.
-- **Runtime:** each changed flow is read once in order — trigger, dialog,
-  confirmation, toast, error — and every concept keeps its term.
-- **Fix policy:** report-only — the term is product language. Mechanical only
-  for a `not:` hit of the glossary in a new string (swap for the glossary
-  term).
+  a wrong claim (decrypting is not decoding).
+- **Deliberately different** only for a different concept (Archivieren ≠
+  Löschen), a platform convention, or help prose next to a control —
+  recorded in the override's `terms:` glossary (a code comment does not
+  count). Synonyms against repetition never qualify. No glossary → the term
+  the existing strings use wins. Consistency holds per locale; two languages
+  for one concept in one locale is a finding.
+- **Static:** a glossary `not:` synonym in a new or changed string; without
+  a glossary, a new string naming a concept differently than the diff files
+  or its locale file do. One finding per term pair.
+- **Runtime:** every changed flow read once in order (trigger → dialog →
+  confirm → toast / error), each concept keeping its term.
+- **Fix policy:** report-only — the term is product language. Mechanical
+  only for a glossary `not:` hit in a new string.
 
 ## Common rules
 
