@@ -220,7 +220,8 @@ CTA that invites the next prompt as if it would be worked on.
 No text block before or after it: do not print `describeMode`, do not
 paraphrase the how-to, do not tell the user to switch the mode on — it is on.
 The long form stays one `/do-batch help` away, and the hook repeats the
-summary on every collected prompt.
+summary on every collected prompt. Exception: a note collected while this turn
+ran — the hook then hands you one ack line to write under the card.
 
 **2.6 Attachments are filed by you, because only you can see them.** This is a
 standing rule for the whole collection window, not a one-off part of activation:
