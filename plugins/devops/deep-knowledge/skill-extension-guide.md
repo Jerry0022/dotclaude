@@ -103,10 +103,11 @@ Every plugin skill starts with Step 0:
 ```markdown
 # reference.md
 ## UI rules
-- disable: R2b, R4                 # standing rules to switch off (named on the ship card)
+- disable: R2b, R4b                # standing rules to switch off (named on the ship card)
 - tooltip.mechanisms: appTooltip, <HelpHint>
 - tooltip.delay: info 1200, label 400   # ms, the two R1 tier values (default 1500 / 500)
 - hotkey.mechanisms: useShortcut(, data-hotkey
+- hotkey.display: inline           # R4b hints marked in the word instead of hover-revealed
 - menu.components: <AppMenu>, <ContextMenu>
 - files: src/renderer/**/*.ts      # extra UI file globs for detection + the reminder hook
 - Icon-only buttons in the title bar are exempt from R1 (platform chrome).

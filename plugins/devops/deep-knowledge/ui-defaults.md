@@ -68,7 +68,7 @@ No rule repeats it.
 
   | Tier | Delay | Use when |
   |---|---|---|
-  | **Info** (default) | 1500 ms | The element can be understood and operated without the tooltip: descriptions, hotkey hints (R4), tips, tutorial-style explanations |
+  | **Info** (default) | 1500 ms | The element can be understood and operated without the tooltip: descriptions, hotkey hints (R4b), tips, tutorial-style explanations |
   | **Label** | 500 ms | Only when one criterion holds: (a) the tooltip is the element's only name — an icon-only control whose icon is not a universal convention; (b) it shows content that is cut off on screen (truncated text) or a value the user is inspecting (chart point); (c) it says why a control is disabled or unavailable |
 
   Both tiers: once a tooltip has closed, the next one opens **instantly** when
@@ -130,19 +130,94 @@ No rule repeats it.
 
 ### 4 · Hotkeys and keyboard operability
 
-- **Static:** every new or changed interaction or selection (button, tab,
-  menu item, dialog action, list selection) has a key binding through one of
-  the project's hotkey mechanisms (§ Detection allowlist) **and** shows it
-  discreetly where it visually fits — a `<kbd>` badge, an underlined
-  mnemonic letter, a right-aligned `⌘K` in the control — or, where that does
-  not fit, states it clearly in the tooltip. Two elements in one view bound
-  to the same key is a finding. **Fix policy: report-only** — choosing the
-  key is design.
-- **Runtime:** every flow is completable without a mouse: sensible focus
-  order, Escape closes, Enter confirms, arrow keys move within lists and
-  menus, a visible focus ring. Checked by a tab-walk + accessibility snapshot
-  in a full `/auto-polish` pass. The goal is an app that is fully keyboard
-  operable wherever the platform allows.
+Two rules: **R4a keyboard operability** holds for every element; **R4b
+hotkeys** only for the few elements that guide through the app or pick
+between options. A key on every button is noise nobody learns, and it
+collides with typing and with speech input. They are separate so a project
+can switch hotkeys off (`disable: R4b`) without losing the operability
+check; `disable: R4` switches off both.
+
+#### 4a · Keyboard operability — every element
+
+- **Static:** a new or changed interactive element that a keyboard cannot
+  reach or operate — a click handler on a non-focusable element without
+  `tabindex` and key handling, a positive `tabindex`, `outline: none`
+  without an app-styled `:focus-visible` replacement (R0).
+- **Runtime:** a tab-walk + accessibility snapshot completes every changed
+  flow without a mouse — sensible focus order, Escape closes, Enter
+  confirms, arrow keys move within lists and menus, a visible app-styled
+  focus ring. The goal is an app that is fully keyboard operable wherever
+  the platform allows.
+- **Fix policy:** report-only.
+
+#### 4b · Hotkeys — essential elements only
+
+- **Which elements get a hotkey** — essential only, recognised by marker so
+  the check needs no taste call:
+
+  | Essential | Recognised by | Key |
+  |---|---|---|
+  | Navigation through the app | links in `<nav>`, `role="tab"`, sidebar / router nav items | mnemonic, or `1`–`9` for a tab row |
+  | The one primary action of a view or dialog | `type="submit"`, the `primary` button variant | platform convention, else mnemonic |
+  | Step controls of a wizard or stepper | next / back | `←` / `→`, else mnemonic |
+  | Choosing between variants or options | `role="radiogroup"` / `listbox` options, segmented control, view-mode or variant switcher | `1`–`9` in visual order, active only for that group or view |
+  | Global commands the project names | `hotkey.essential:` (§ Project override) — e.g. search, new | platform convention, else mnemonic |
+
+  Everything else — secondary or rare actions, per-row repeats, settings
+  toggles, links in prose — needs no hotkey and gets none by default.
+- **Key choice, in order:** (1) the platform convention where one exists —
+  `Ctrl`/`⌘`+S saves, `/` or `Ctrl`/`⌘`+K searches, `?` opens the hotkey
+  sheet; (2) enumerations — tabs, steps, variants, options — take `1`–`9`
+  in visual order; (3) a mnemonic from the visible label: its first letter,
+  else the first letter of a word part or syllable ("Neues **P**rojekt" →
+  P, "Export**v**orschau" → V), else a distinctive consonant, vowels last;
+  avoid letters that underline badly (`i`, `l`, `g`, `y`) and look-alikes
+  (`I`/`1`, `O`/`0`); (4) otherwise any free key — a mnemonic is preferred,
+  never forced. The mnemonic lives in the **translated string** (e.g.
+  `"{key:P}rojekt"`), not in code, so each locale gets its own letter;
+  digits are the same in every locale.
+- **Never:** a browser- or OS-reserved combination — `Ctrl`/`⌘` + T, W, N,
+  L, R, P, F, D, H, J, Q, Tab; `Ctrl`/`⌘`/`Alt` + `1`–`9` (tab switching);
+  bare `Alt` + letter (browser and Electron menus); `F1`, `F5`, `F11`,
+  `F12`; `Alt`+F4 (an Electron app loosens this with `hotkey.reserved:`). A
+  destructive action (delete, discard) never on a key without a modifier.
+  A single-character key never fires while focus is in a text field
+  (`input`, `textarea`, `contenteditable`, `role="textbox"`, IME
+  composition) — WCAG 2.1.4.
+- **Display — hover first, in the app's style:** the hint is an app-styled
+  `<kbd>` badge (R0 tokens), revealed like an **Info** tooltip (R1, 1500 ms
+  on hover, instantly on keyboard focus) — inside the element's tooltip,
+  or, when the element already has a Label-tier tooltip, appended to that
+  one, never a second tooltip. Never permanently visible by default. Every
+  bound element carries `aria-keyshortcuts` — the checker's link between
+  element and key, and the screen reader's. The modifier label follows the
+  platform (R6).
+- **Finding all keys:** `?` opens an app-styled sheet listing the hotkeys of
+  the current view; holding the platform modifier (`Ctrl`, `⌘` on
+  macOS / iPadOS) shows every hint in place while held. Desktop and
+  hardware keyboards only — without a keyboard no hints are shown, which is
+  no R6 conflict: a hint is not an action.
+- **Fallback — marked in the word:** for users the hover hints disturb, the
+  key is marked permanently in the label — the mnemonic letter underlined,
+  the digit in front of an option. Digits and icon-only controls keep the
+  badge. The project sets the default (`hotkey.display: hover | inline`);
+  an app with a settings view offers one control "Hotkeys: off / hints on
+  hover / marked in the word" — which also gives users the switch-off WCAG
+  2.1.4 asks for.
+- **Static:** a new or changed essential element without a binding through
+  one of the project's hotkey mechanisms (§ Detection allowlist) or without
+  `aria-keyshortcuts`; a binding whose hint is permanently visible while
+  the display mode is `hover`, or shown through a native `title`; two
+  elements in one view on the same key (per locale); a reserved combination;
+  a destructive action on a bare key; a document-level single-character
+  binding without a text-field guard; more than `hotkey.budget` (default 12)
+  single-key bindings in one view — noise is judged by that budget, never
+  per element. A mnemonic whose letter is not in the label is advisory
+  only. **Fix policy: report-only** — choosing the key is design.
+- **Runtime:** hints appear at ~1.5 s on hover and instantly on focus (or
+  inline in the fallback mode) in the app's style in every theme; `?` and
+  the held modifier reveal the view's keys; a letter key typed into a text
+  field does not fire its action.
 
 ### 5 · Scrollbars
 
@@ -201,7 +276,7 @@ No rule repeats it.
 - **Runtime:** every changed view is walked on each target of the matrix —
   layout (no horizontal page scroll, nothing clipped, hit areas per R3,
   readable type), interactions (tap, long-press, swipe, drag on touch;
-  hover, right-click, keyboard per R4 on desktop; the on-screen keyboard
+  hover, right-click, keyboard per R4a / R4b on desktop; the on-screen keyboard
   never covers the focused input) and function (the flow completes, same
   result on every target). Emulate with the browser tool's viewport/touch
   emulation (`responsive-testing.md`); what emulation cannot show — real
@@ -281,7 +356,9 @@ project extends or replaces them (§ Project override).
 | Tooltip delay props | `delay` / `closeDelay` (React Aria), `delayDuration` / `skipDelayDuration` (Radix), `enterDelay` / `enterNextDelay` (MUI), `matTooltipShowDelay`, `showDelay` / `hideDelay` (Fluent), `openDelay` (Chakra) |
 | Native look (R0 findings) | `title="…"` — or a framework `title` prop that renders it — as the only tooltip route, bare `<select>` / `<datalist>`, `alert(` / `confirm(` / `prompt(`, unstyled `<input type="checkbox\|radio\|range\|date\|time\|color\|file">`, `outline: none` / `outline: 0` without a `:focus-visible` replacement |
 | Scrollbar styling | `scrollbar-color`, `scrollbar-width`, `scrollbar-gutter`, `::-webkit-scrollbar*`, `color-scheme`, a scroll-area component (Radix / shadcn `ScrollArea`, OverlayScrollbars, SimpleBar) |
-| Hotkey mechanisms | `accesskey`, `useHotkeys(` / `useKeyboardShortcut(`, `@HostListener('window:keydown` / `document:keydown`, `v-hotkey`, `Mousetrap.bind(`, `hotkeys(`, a project shortcut registry (`registerShortcut(`, `shortcuts.ts`, `keymap.*`), `<kbd>` inside the control |
+| Hotkey mechanisms | `accesskey`, `useHotkeys(` / `useKeyboardShortcut(`, `@HostListener('window:keydown` / `document:keydown`, `v-hotkey`, `Mousetrap.bind(`, `hotkeys(`, `tinykeys(`, a project shortcut registry (`registerShortcut(`, `shortcuts.ts`, `keymap.*`) |
+| Hotkey hints (R4b) | `aria-keyshortcuts` (the element–key link, not a binding), `<kbd>` inside a tooltip or badge, a label in the shortcut registry |
+| Essential elements (R4b) | `<nav>` links, `role="tab"`, `type="submit"` / `primary` variant, stepper next / back, `role="radiogroup"` / `listbox` options, segmented / variant switchers, plus `hotkey.essential:` |
 | Menu components | `<mat-menu>`, `<Menu>` / `DropdownMenu` / `Popover` (MUI, Radix, shadcn, Headless UI, Ant), `<v-menu>`, `<el-dropdown>`, `<Dropdown>` (Bootstrap), a project `Menu`/`Dropdown` component under `components/` |
 | Copy sources (R7) | string literals and text nodes in UI files, locale files (see UI file detection) |
 | UI file detection | `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`, `*.scss`, `*.sass`, `*.less`, `*.styled.*`, `*.component.*`, `*.razor`, `*.xaml`, `*.axaml`; locale files — `*.po`, `*.arb`, `*.xlf` / `*.xliff`, `*.resx`, `*.strings`, and `*.json` / `*.yml` / `*.yaml` under a `locale(s)` / `i18n` / `lang` / `translations` directory |
@@ -296,10 +373,14 @@ section:
 
 ```markdown
 ## UI rules
-- disable: R2b, R4          # rule ids: R0, R1, R2a, R2b, R3, R4, R5, R6, R7 (static halves) — a disabled rule is named on the ship card
+- disable: R2b, R4b         # rule ids: R0, R1, R2a, R2b, R3, R4a, R4b, R5, R6, R7 (static halves); a bare R2 / R4 disables both halves — a disabled rule is named on the ship card
 - tooltip.mechanisms: appTooltip, <HelpHint>
 - tooltip.delay: info 1200, label 400   # ms, the two R1 tier values; project beats user-global
 - hotkey.mechanisms: useShortcut(, data-hotkey
+- hotkey.display: hover        # R4b hint default: hover (Info-tier reveal) | inline (key marked in the word)
+- hotkey.essential: search, new-project   # extra global commands that must carry a hotkey
+- hotkey.budget: 12           # max single-key bindings per view before R4b reports noise
+- hotkey.reserved: -Alt+F4    # Electron: loosen (-) or extend the reserved-combination list
 - platforms: windows, linux, android-tablet, ios-tablet   # narrows the R6 matrix; default: windows, linux, android-tablet, ios-tablet, android-phone, ios-phone
 - menu.components: <AppMenu>, <ContextMenu>
 - Encryption is always "Verschlüsselung" / "Entschlüsselung", never "Kodierung" (R7 term choice).

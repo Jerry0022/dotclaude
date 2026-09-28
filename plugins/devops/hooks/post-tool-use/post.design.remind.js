@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.4.2
+ * @version 0.5.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
@@ -38,18 +38,24 @@ const RULES = [
   { id: 'R2a', text: "dropdowns styled with the app's tokens, not native" },
   { id: 'R2b', text: 'uniform item structure within a menu' },
   { id: 'R3', text: 'same component type -> same spacing tokens as siblings' },
-  { id: 'R4', text: 'every interaction has a hotkey shown discreetly in the control or tooltip' },
+  { id: 'R4a', text: 'every flow keyboard-operable: focusable, sensible focus order, Esc closes, Enter confirms, arrows in lists/menus, app-styled focus ring' },
+  { id: 'R4b', text: 'hotkeys only on essential elements (nav, primary action, stepper, variant/option choice as 1-9) - key from the word (first letter, word-part start) where possible, never reserved combos or bare keys firing in text fields; hint as app-styled <kbd> revealed like an Info tooltip, aria-keyshortcuts, ? sheet; hotkey.display: inline marks the key in the word instead' },
   { id: 'R5', text: 'scrollbars styled once, globally, from tokens (scrollbar-color/-width, ::-webkit-scrollbar fallback, color-scheme per theme); no local divergence' },
   { id: 'R6', text: 'platform matrix: design, UX and function checked on Windows + Linux desktop, Android + iOS tablet, Android + iOS phone; no hover/right-click/shortcut-only action without a touch path, no 100vh, safe-area insets, fonts with generic fallback' },
   { id: 'R7', text: 'wording: decide consciously whether a text names a thing the same or differently — fixed UI strings keep one term per concept, chat and prose may vary freely, a different concept gets a different term' },
 ];
+
+// A bare family id (`R2`, `R4`) disables both of its halves (`R2a`/`R2b`, `R4a`/`R4b`).
+function isDisabled(id, disable) {
+  return disable.has(id) || disable.has(id.replace(/[a-z]$/, ''));
+}
 
 function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY, docPath = deepKnowledgePath('ui-defaults.md')) {
   const lines = [];
   lines.push(
     `[ui-defaults] UI file touched — standing UI rules apply to the elements you are writing (${docPath}):`
   );
-  const enabled = RULES.filter(r => !disable.has(r.id));
+  const enabled = RULES.filter(r => !isDisabled(r.id, disable));
   for (const r of enabled) {
     const text = typeof r.text === 'function' ? r.text(delay) : r.text;
     lines.push(`${r.id} ${text}`);
@@ -57,7 +63,7 @@ function buildReminder(disable, extra, delay = DEFAULT_TOOLTIP_DELAY, docPath = 
   for (const line of extra) {
     lines.push(line);
   }
-  const disabledIds = RULES.filter(r => disable.has(r.id)).map(r => r.id);
+  const disabledIds = RULES.filter(r => isDisabled(r.id, disable)).map(r => r.id);
   if (disabledIds.length > 0) {
     lines.push(`disabled by project override: ${disabledIds.join(', ')}`);
   }

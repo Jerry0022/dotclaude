@@ -15,7 +15,7 @@ of the R6 platform matrix (layout, touch vs. mouse/keyboard interactions,
 the flow completing), and read every changed flow once in order for R7
 (trigger, dialog, confirmation, toast, error keep one term per concept) — what emulation cannot show goes to `userFinalTest`
 with the target named. Findings follow the same score/approval
-rules as every other polish item; R0/R1/R4/R5/R7 stay report-only (R0 token
+rules as every other polish item; R0/R1/R4a/R4b/R5/R7 stay report-only (R0 token
 swaps excepted). Without a browser tool: list them once as skipped in
 Step 12.
 

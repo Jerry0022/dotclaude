@@ -978,8 +978,8 @@ describe("web-guide-overlay — edge tab (#516)", () => {
     const edgeTab = findAll(host, (e) => e.className === "edgetab")[0];
     expect(edgeTab.tagName).toBe("BUTTON");
     expect(edgeTab.getAttribute("aria-label")).toMatch(/wieder anzeigen/);
-    // the hotkey is surfaced in the control itself (ui-defaults.md — a hotkey
-    // on every interaction shown in the control or its tooltip)
+    // the hotkey is surfaced in the control itself (ui-defaults.md R4b — a
+    // bound element names its key to assistive tech)
     expect(edgeTab.getAttribute("aria-label")).toMatch(/Esc/);
   });
 

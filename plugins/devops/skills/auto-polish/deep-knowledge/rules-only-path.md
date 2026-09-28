@@ -15,7 +15,7 @@ polish pass (agents, browser, viewports).
    the override names a scope file: that explicit opt-in counts as a UI
    profile for the files it names (how a CLI or plugin repo checks its own UI
    sources).
-2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4, R5, R6, R7),
+2. **Check** only the **static** halves of Step 4 #8 (R0, R1, R2a, R2b, R3, R4a, R4b, R5, R6, R7),
    inline — no scout agents, no browser, no screenshots. Runtime halves
    are never attempted here; they are listed once as
    `skipped: runtime rules (full /auto-polish)`.
