@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.233.0] — 2026-09-28
+
+### Added
+- **Standing UI rule R7 — wording: same or different, on purpose** (`deep-knowledge/ui-defaults.md` § 7). A judgement hint, not a lookup table: fixed UI strings (labels, buttons, dialogs, toasts, errors, settings) name one thing one way — "Entschlüsselung" in one dialog and "Dekodierung" in the next for the same action is noise, and often wrong (decrypting is not decoding). Chat messages, generated or conversational replies, onboarding and help prose may vary freely; only feature and object names stay recognisable. Different concepts get different terms on purpose (platform convention, a change of register). Backed by Microsoft's "one term, one concept", Google developer style, GOV.UK and NN/g, which all reject "elegant variation" in UI text. Static half: a new fixed string that names a concept differently than existing strings is reported once per term pair; at runtime each changed flow is read in order. Report-only, never auto-fixed. The design reminder hook, auto-polish (R0–R7), the frontend and designer agents and the do-run audit content checklist point at it; a project override can disable R7 like any other rule.
+- **Locale files count as UI files.** `.po`, `.arb`, `.xlf`/`.xliff`, `.resx` and `.strings` always, `.json`/`.yml`/`.yaml` only under a `locale(s)`/`i18n`/`lang`/`translations` directory, so `package.json` and config YAML stay non-UI. That makes copy edits visible to the design reminder, the ship polish pass and the run contract (Polish owed when UI files changed).
+
+### Decided
+- A first draft had a deterministic `terms:` glossary with forbidden synonyms and a mechanical swap fix. Dropped: wording is a conscious choice per context, and chat or prose must be allowed to vary — if-then rules would have flattened exactly that.
+
 ## [0.232.0] — 2026-09-28
 
 ### Added
