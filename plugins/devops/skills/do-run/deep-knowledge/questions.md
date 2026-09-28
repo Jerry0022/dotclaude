@@ -115,13 +115,13 @@ F4  header: "Issues"        multiSelect: true
     "Milestones 2", "Milestones 3" … / "Issues 2", "Issues 3" … (the run contract
     reads only these headers).
 
-F5  header: "Desktop"       multiSelect: false
+F5  header: "Desktop"       multiSelect: false   [only behind the desktop gate below]
     1. "Desktop frei lassen (Recommended)" — Kein Maus/Tastatur-Takeover; Browser-Tests laufen trotzdem.
     2. "Desktop übernehmen"                — Computer-Use für native Apps.
 
-F6  header: "PC danach"     multiSelect: false
-    1. "🟢 PC anlassen · ➖ Resume (Recommended)" — PC bleibt an; kein automatischer Anstoß.
-    2. "🟢 PC anlassen · ➕ Resume"          — PC bleibt an; nach dem 5h-Reset werden hängende Worktrees mit »weiter« angestoßen.   [(Recommended) instead of option 1 when the run is long AND likely to hit the limit — see below]
+F6  header: "PC danach"     multiSelect: false   [only behind the resume gate below]
+    1. "🟢 PC anlassen · ➕ Resume (Recommended)" — PC bleibt an; nach dem 5h-Reset werden hängende Worktrees mit »weiter« angestoßen.
+    2. "🟢 PC anlassen · ➖ Resume"          — PC bleibt an; kein automatischer Anstoß.
     3. "🔴 PC ausmachen"                     — PC fährt nach Abschluss herunter (wartet auf andere Sessions).
 
 F7  header: "Burn-Resume"   multiSelect: false   [only with Budget verbrennen]
@@ -137,17 +137,36 @@ F8  header: "Zusatz-Tasks"  multiSelect: true    [only with Budget verbrennen, n
     4. "Coverage-Lücken"                   — Ungetestete Dateien und Funktionen.
 ```
 
-F6 keeps its option order in every call — only the `(Recommended)` marker
-moves. It goes on "🟢 PC anlassen · ➕ Resume" only when both hold: the run
-is expected to be long (Budget verbrennen, a backlog of ≥ 3 issues or
-milestones, "Alles prüfen", or parallel lanes) **and** it will plausibly
-use up the plan's usage (Budget verbrennen always; otherwise the `[budget]`
-line shows the 5h window already ≥ 50 % used, or parallel sessions draw on
-it). Any other run gets the marker on "🟢 PC anlassen · ➖ Resume" — a
-resume that never fires is noise, and one that fires on a finished run
-wakes a worktree for nothing. The symbols carry the state at a glance:
-🟢/🔴 the PC stays on or shuts down, ➕/➖ auto-resume on or off; shutdown
-never resumes, so its label needs no resume symbol.
+**F5 and F6 are gated — do not bother the user with them by default.** A
+gated-out question is simply not asked; its default holds and is named in
+one line only when it matters ("Desktop bleibt frei · PC bleibt an").
+
+- **Desktop gate (F5).** Ask only when a mouse/keyboard takeover adds real
+  value: verifying the change needs a native, non-browser GUI — the project
+  is a desktop, game or mobile-emulator app (Electron, Tauri, WPF/WinUI, Qt,
+  Unity/Godot, Android/iOS emulator) **and** the task touches its UI, or
+  the prompt names native-app interaction. Web apps, CLIs, libraries,
+  backends, docs and plugin code never get it — browser tools cover web
+  UIs without the desktop. Gated out → `Desktop frei lassen`.
+- **Resume gate (F6).** Ask only when hitting the 5h limit is foreseeable,
+  with buffer: estimate the run's share of the 5h window (short prompt run
+  ~10–20 %; long run — a backlog of ≥ 3 issues or milestones, "Alles
+  prüfen", parallel lanes — ≥ 50 %), add half of it again as buffer, and
+  ask when that reaches the window's remaining headroom from the newest
+  `[budget]` line (or parallel sessions draw on it). Budget verbrennen
+  always passes the gate. Gated out → `🟢 PC anlassen · ➖ Resume`.
+- **Phrase presets (Step 1).** "PC danach aus", "fahr den PC runter",
+  "shutdown" → F6 = `🔴 PC ausmachen`; "resume nach dem Limit",
+  "weitermachen nach dem Reset" → F6 = `🟢 PC anlassen · ➕ Resume`;
+  "übernimm den Desktop", "teste mit Maus/Tastatur" → F5 = `Desktop
+  übernehmen`. A preset answers the question whether or not its gate
+  passed — shutdown stays reachable without asking everyone.
+
+F6 is asked only when a resume is foreseeable, so its first option — the
+recommendation — is `➕ Resume`; the order never changes. The symbols carry
+the state at a glance: 🟢/🔴 the PC stays on or shuts down, ➕/➖
+auto-resume on or off; shutdown never resumes, so its label needs no resume
+symbol.
 
 F7 is the auto-resume answer for the burn: whatever the user types after a
 limit is asked again by `prompt.burn.resume` (manual nudge, "Burn
