@@ -65,5 +65,11 @@ describe("ss.ship.resume", () => {
     expect(out).toContain("interrupted /do-ship of branch feat/x");
     expect(out).toContain("preflight ✓ · build ✓ · bump ← next");
     expect(out).toContain("[ship-resume]");
+    // After a compaction only the skill's first 5,000 tokens remain: a turn
+    // still shipping reloads it with --resume instead of waiting for a prompt.
+    const compacted = buildResumeInstruction({ cwd: dir, source: "compact" });
+    expect(compacted).toContain('re-invoke Skill("devops:do-ship", "--resume")');
+    expect(compacted).toContain("5,000 tokens");
+    expect(out).not.toContain("5,000 tokens");
   });
 });

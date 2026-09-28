@@ -157,3 +157,54 @@ The next commit + push in this worktree re-creates it via
 `git push --set-upstream origin <branch>` automatically. A `remoteBranchWarning` in the
 release result means the delete failed: surface it as one `open` item on the card
 ("Remote-Branch `<branch>` konnte nicht gelöscht werden — »branches aufräumen« öffnet die Aufräum-Seite"), nothing else.
+
+## Keep-mode signals (Step 5a)
+
+The full signal catalogue behind `/do-ship` Step 5a. The decision (ANY hit →
+keep-mode, a weak signal → normal cleanup) stays in SKILL.md.
+
+Evaluate all sources; ANY positive hit → keep-mode.
+
+1. **Open tasks not covered by this ship.** Call `TaskList` and check for `pending` or
+   `in_progress` items that describe work NOT delivered by the current PR's diff. Tasks that
+   were *about* this ship (e.g. "Run npm test", "Bump version") and are still open due to a
+   tracking slip do NOT count — only genuine follow-up scope.
+
+2. **Explicit follow-up signals in recent user messages** (this session, last ~10 turns):
+   - German: `"danach"`, `"dann noch"`, `"anschließend"`, `"weiter mit"`, `"als nächstes"`,
+     `"Phase 2"`, `"wir sind nicht fertig"`, `"noch nicht durch"`, `"zwischendurch"`,
+     `"erstmal X, dann Y"`, `"shippen aber wir machen weiter"`
+   - English: `"after this"`, `"then we"`, `"next up"`, `"phase 2"`, `"still need to"`,
+     `"we'll continue"`, `"ship but keep going"`, `"intermediate ship"`
+
+3. **Multiple distinct scopes announced earlier.** If the user laid out a sequence of
+   logically separate work blocks and only the first is being shipped now → keep-mode.
+
+4. **Explicit ship-but-keep wording in the trigger.** If the prompt that started this ship
+   says something like `"ship das aber wir machen weiter"`, `"ship und weiter"`,
+   `"keep worktree"`, `"--keep"`, `"ohne cleanup"` → keep-mode (highest priority).
+
+### When the signal is ambiguous
+
+If you considered keep-mode but the signal is weak (e.g. one borderline phrase, no clear
+follow-up scope), default to **normal cleanup**. Cleanup is recoverable — the branch can be
+re-created from the merge commit. Orphan worktrees from false-positive keep-mode are not.
+
+### Decision logging
+
+In the completion card's `changes` or `summary`, mention the chosen mode briefly when
+keep-mode triggers — e.g. `"Worktree behalten — Folge-Arbeit erkannt"` — so the user sees
+what was decided and can override (`"nein, doch räum auf"` for a follow-up cleanup).
+
+## Post-ship hygiene (Step 6)
+
+What `ship_hygiene` does — `/do-ship` Step 6 keeps the call, the pass-through
+of its card lines and the skip rules.
+
+The tool removes leftover branches and session worktrees whose content
+provably landed — only after a ship, only once one of them is older than the
+age gate (default 30 days), and then every removable one older than 30 days;
+younger leftovers stay for the page. It flags unlanded work on a
+`[gone]` branch or a detached session worktree, and decides whether the
+cleanup page is worth suggesting (more than 50 leftovers, at most once a
+week).
