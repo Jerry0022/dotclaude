@@ -26,7 +26,10 @@ plugin for cloud sessions brings the automated pipeline back.
    `origin/<base>`. Conflict markers: `git grep -nE '^(<{7}|={7}|>{7}|\|{7})( |$)'`
    over the diff must find nothing.
 2. **Gates** — every pre-merge gate the project extension names (lint, tests,
-   build). A red gate stops the ship; say so, do not merge.
+   build). A red gate stops the ship; say so, do not merge. When the plugin
+   files are on disk, the deploy-parity build is one of them:
+   `node "{PLUGIN_ROOT}/scripts/deploy-parity.js" --cwd "<cwd>"` — `failed`
+   stops the ship (`{PLUGIN_ROOT}/deep-knowledge/deploy-parity.md`).
 3. **Version bump** — every version-bearing file the project extension (or
    `versioning.md`) names, all to the same `X.Y.Z`. Major → ask the user
    (under a lockout: stop, as the pipeline would).

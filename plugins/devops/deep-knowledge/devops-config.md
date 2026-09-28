@@ -58,3 +58,17 @@ worktrees with unshipped content, worktrees with uncommitted changes, locked
 worktrees, worktrees outside `.claude/worktrees/`, the current worktree, the
 default branch, remote branches. Those stay for the cleanup page ("branch
 cleanup" / "branches aufräumen" — the auto-cleanup skill).
+
+### `deployParity` — the deploy-parity build before a ship merges
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | `/do-ship` Step 2.5 builds the commit the way the deploy host will (clean checkout, fresh lockfile install, host build command incl. npm `pre`/`post` hooks) and blocks the merge when that build fails. `false` → skipped with a card line. |
+| `timeoutSec` | `600` | Budget for install + build together (30–7200). Running out reads as *inconclusive*, never as failed. |
+
+"Keinen Deploy-Build vor dem Ship" → `deployParity.enabled false`; "der
+Host-Build darf 20 Minuten dauern" → `deployParity.timeoutSec 1200`. The build
+command itself, extra released env names and a hard team-wide opt-out belong in
+the committed ship extension (`deployParity:` block in the project's
+`.claude/skills/do-ship/reference.md`), not here. Details:
+`deep-knowledge/deploy-parity.md`.

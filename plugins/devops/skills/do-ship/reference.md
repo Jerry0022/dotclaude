@@ -70,6 +70,27 @@ purpose_alignment:
 
 This pattern applies to ALL plugin skills, not just ship.
 
+## Deploy-parity build (Step 2.5)
+
+Every ship builds the commit the way the deploy host will — clean checkout,
+fresh lockfile install, the host's build command incl. npm `pre`/`post` hooks —
+and blocks the merge when that build fails. Detection is automatic and
+stack-independent; tune it here when it guesses wrong (full reference:
+`{PLUGIN_ROOT}/deep-knowledge/deploy-parity.md`):
+
+```yaml
+deployParity:
+  disable: false                         # true = never run it in this project
+  buildCmd: "bash scripts/host-build.sh" # override the detected build
+  installCmd: "npm ci"                   # override the install ("" = none)
+  dir: "apps/web"                        # monorepo: where the host builds
+  timeoutSec: 900                        # budget for install + build
+  passEnv: [PUBLIC_SITE_URL]             # non-secret env names the build may see
+```
+
+Per-machine switches (`deployParity.enabled`, `deployParity.timeoutSec`) live in
+devops-config, not here.
+
 ## Out-of-band deploy gate (#243)
 
 A code merge does **not** apply DB migrations or deploy edge/serverless

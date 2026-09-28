@@ -69,6 +69,16 @@ const SCHEMA = Object.freeze({
       doc: 'Days of silence after a suggestion (0 = suggest after every ship above the threshold).',
     }),
   }),
+  deployParity: Object.freeze({
+    enabled: Object.freeze({
+      type: 'boolean', default: true,
+      doc: 'Before a ship merges, build the commit the way the deploy host will (clean checkout, fresh install).',
+    }),
+    timeoutSec: Object.freeze({
+      type: 'integer', default: 600, min: 30, max: 7200,
+      doc: 'Time budget in seconds for the deploy-parity install + build; running out reads as inconclusive, never as failed.',
+    }),
+  }),
 });
 
 /** `section.key` for every setting, in SCHEMA order. */

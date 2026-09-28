@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.230.0] — 2026-09-28
+
+### Added
+- **A ship builds the commit the way the deploy host will, before it merges.** do-ship Step 2.5 runs `scripts/deploy-parity.js` in the background after `ship_build`: a clean temporary `git worktree` of the shipped commit, a fresh lockfile install (`npm ci`, `pnpm install --frozen-lockfile`, `yarn install --immutable`, …), then the host's own build command including npm `pre`/`post` lifecycle hooks. It catches what a warm local checkout hides — a `prebuild` guard that only runs on the host, a build that relies on untracked or generated files, a host build command that differs from the tests — which cost a consumer project about 30 red production deploys in one month while every ship was green. Detection is table-driven and stack-independent (`vercel.json`, `netlify.toml`, `wrangler.*`, `render.yaml`, `firebase.json`, `fly.toml`/Dockerfile, GitHub Pages workflows, then `package.json`, Dockerfile, Makefile, Cargo, Go, pyproject); nothing recognisable is skipped, never failed. The build sees an allowlisted environment without secrets; a failure caused by missing host secrets (a withheld or local-only `.env` name in the output), a missing tool, registry auth or the time budget is *inconclusive* and does not block — only a real build failure does. Own budget (default 600 s, `deployParity.timeoutSec`), opt-out per clone or machine (`deployParity.enabled`) and team-wide overrides in the project's do-ship `reference.md` (`deployParity:` — `disable`, `buildCmd`, `installCmd`, `dir`, `timeoutSec`, `passEnv`). Reference: `deep-knowledge/deploy-parity.md`.
+
 ## [0.229.0] — 2026-09-28
 
 ### Added

@@ -264,6 +264,8 @@ Also capture, if present in the merged `reference.md`, for use later in this run
 - `deploy:` — a deploy handler (e.g. `supabase`) that can actually APPLY those
   artifacts post-merge. Used by Step 4d. When absent, Step 4d raises the deploy
   gate instead of deploying.
+- `deployParity:` — overrides for the deploy-parity build (Step 2.5):
+  `disable`, `buildCmd`, `installCmd`, `dir`, `timeoutSec`, `passEnv`.
 
 4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc), which MUST be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 2 can act on it.
 
@@ -491,6 +493,8 @@ Pass project-specific commands from extensions if available.
 
 If `success: false` → call `render_completion_card` with variant `ship-blocked`. Do not continue.
 
+On success, **start Step 2.5 in the background now**, before the Codex gate — the two overlap.
+
 ### Codex Review Gate (after build passes)
 
 **MUST run** if codex-plugin-cc is installed — not optional, not suggested.
@@ -509,6 +513,16 @@ If `success: false` → call `render_completion_card` with variant `ship-blocked
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
    - **other non-zero** → surface first line of stderr, continue to Step 3
 3. If codex-plugin-cc not installed → skip silently
+
+## Step 2.5 — Deploy-Parity Build
+
+Build the commit **the way the deploy host will** (host build command, npm `pre`/`post` hooks, fresh lockfile install, clean temp worktree), stack-independent. Skip when `intermediate: true` or the extension sets `deployParity.disable: true`. Otherwise start it with Bash `run_in_background: true` right after `ship_build` passes (own budget, never inside the 120 s step ceiling), passing the extension's `deployParity:` values as flags:
+
+```bash
+node "{PLUGIN_ROOT}/scripts/deploy-parity.js" --cwd "<cwd>" [--build-cmd "…"] [--install-cmd "…"] [--dir "…"] [--timeout-sec N] [--pass-env A,B]
+```
+
+Wait for its JSON before Step 3. `failed` → **STOP** with `ship-blocked` (also under `$SHIP_LOCKOUT`); `passed` / `inconclusive` / `skipped` → continue with a card `tests` line. Card lines, detection and the inconclusive heuristic: `{PLUGIN_ROOT}/deep-knowledge/deploy-parity.md` § In the ship.
 
 ## Step 2.6 — Docs-Sync
 
