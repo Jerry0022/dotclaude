@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.agent.announce
- * @version 0.2.0
+ * @version 0.3.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Agent
@@ -218,6 +218,17 @@ function modelGateWillRefuse(input, cwd, transcriptPath, toolUseId) {
   }
 }
 
+/** True when pre.ship.delegate refuses this spawn (a delegated ship below the threshold). */
+function shipDelegateWillRefuse(prompt, transcriptPath) {
+  try {
+    if (!/devops:do-ship/.test(prompt)) return false;
+    const tokens = require('../lib/context-size').currentContextTokens(transcriptPath);
+    return require('../lib/ship-delegate').delegatedSpawnTooSmall({ prompt, tokens });
+  } catch {
+    return false;
+  }
+}
+
 function main() {
   let inputData = '';
   process.stdin.setEncoding('utf8');
@@ -234,6 +245,7 @@ function main() {
       const prompt = typeof input.prompt === 'string' ? input.prompt : '';
       if (strictWillBlock(cwd, prompt)) process.exit(0);
       if (modelGateWillRefuse(input, cwd, hook.transcript_path, hook.tool_use_id)) process.exit(0);
+      if (shipDelegateWillRefuse(prompt, hook.transcript_path)) process.exit(0);
 
       const card = buildCard(input, cwd, hook.transcript_path, hook.tool_use_id, sessionLang(hook.session_id));
       process.stdout.write(JSON.stringify({
@@ -257,4 +269,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse };
+module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse };

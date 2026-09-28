@@ -124,9 +124,11 @@ Parse these from the skill arguments first; then continue with Pre-Step A.
 
 ## Pre-Step 0 — Large context: ship in a subagent (the hook decides, this skill obeys)
 
-Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0` turns it off)
+Above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 250 k tokens, `0` turns it off)
 `prompt.ship.detect` emits a `[ship-delegate]` block instead of the inline mandate
-(why — about 16 calls, each re-reading the largest context of the session: `modes/delegated.md`).
+(why — about 25 calls, each re-reading the largest context of the session: `modes/delegated.md`).
+A do-ship Skill call in such a context gets the same block from `pre.ship.delegate`
+as the refusal of that call.
 
 **If that block is in this turn's context and this run is not `--delegated`:
 do not run the pipeline here.** Run no `ship_*` call and no git push or merge.
@@ -139,8 +141,10 @@ case where something goes wrong. The user types nothing extra.
 **`--delegated`:** you are that subagent. Follow `modes/delegated.md` →
 *Subagent* for every step it names. Every other step is unchanged.
 
-Ships that an orchestrator reaches through the Skill tool (`/do-run backlog`,
-auto-cleanup) never see the block, because the hook only reads user prompts.
+This holds for a ship you start yourself through the Skill tool (concept
+finalize, `/do-run backlog`, an autonomous ship), too. Below the threshold
+the ship stays here: `pre.ship.delegate` refuses a `--delegated` spawn there,
+because the subagent's fresh context would cost more than it saves.
 A **promotion-only** prompt ("promote stable" with nothing unshipped) never
 sees it either: that run is about 4 calls, so delegating would save nothing. A
 promotion that has to ship first is a ship and is delegated like any other.

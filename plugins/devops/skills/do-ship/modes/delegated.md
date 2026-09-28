@@ -1,24 +1,32 @@
 # Delegated ship: the pipeline in a fresh-context subagent
 
-A ship makes about 16 API calls, and each one re-reads the whole context. It
+A ship makes about 25 API calls, and each one re-reads the whole context. It
 runs at the end of a session, when that context is largest: measured
 2026-09-21, the average was 434 k tokens per call, about 24 % of a session's
 tokens. No hook or skill can compact the context. The pipeline does not need
 the conversation, only a brief of it. So above
-`DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 200 k tokens, `0` turns it off)
+`DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` (default 250 k tokens, `0` turns it off)
 `prompt.ship.detect` emits a `[ship-delegate]` block instead of the inline
-mandate. The main session writes the brief once. A general-purpose subagent
+mandate, and `pre.ship.delegate` refuses a do-ship Skill call with the same
+block. The main session writes the brief once. A general-purpose subagent
 then runs `/do-ship --delegated` on a fresh context, renders the card with the
 main session's id, and hands it back for display. The user never types
 `/compact` or a second ship prompt. `--inline` (or the old `--no-compact`)
 keeps a single ship in the main context.
 
-Measured on a sandbox ship (2026-09-27): the subagent made 13 calls at about
-126 k context each, 1.5 M cache reads in total. The same ship inline in a
-275 k session would have taken about 4.3 M.
+Measured on the first 7 delegated ships (2026-09-27/28): the subagent starts
+at 72–75 k, grows to 150–195 k and makes 20–39 calls. Weighted by price
+(cache read 0.1, 1 h cache write 2.0, output 5) they cost 8.3 M against
+about 13.1 M inline: 45–55 % less at 400 k and more, only 13 % less at
+about 225 k, and 28 % more at 115 k. Break-even is near 170 k, so the
+threshold sits at 250 k and `pre.ship.delegate` refuses a delegated spawn
+below it.
 
-Ships that an orchestrator starts through the Skill tool (`/do-run backlog`,
-auto-cleanup) never see the block: the hook only reads user prompts.
+A ship the model starts through the Skill tool (concept finalize,
+`/do-run backlog`, an autonomous ship after a background agent) gets the
+block from `pre.ship.delegate`: the call is refused and the refusal carries
+the instruction. Before that guard, half of the large-context ships ran
+inline that way, the largest at 951 k.
 
 ## Main session (the parent)
 

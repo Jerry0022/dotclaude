@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.235.0] — 2026-09-28
+
+### Added
+- **Ships started through the Skill tool are delegated too.** New PreToolUse hook `pre.ship.delegate` (matcher `Skill|Agent`) refuses a main-session `Skill(do-ship)` above `DOTCLAUDE_SHIP_DELEGATE_THRESHOLD` with the same `[ship-delegate]` instruction `prompt.ship.detect` gives a user prompt, so the ship runs in a fresh-context subagent. It leaves `--delegated`, `--resume`, `--inline`, promotion-only runs, subagents and an unknown context size alone. Until now about half of the large-context ships ran inline, because the prompt hook only reads user prompts: concept finalize (951 k, 573 k), `/do-run backlog` queued ships (286–489 k) and autonomous ships after background agents (219 k, 379 k).
+
+### Changed
+- **Delegation is never costlier than inline.** The same hook refuses a `--delegated` ship spawn when the known main context is below the threshold, and the default threshold moves from 200 k to 250 k tokens. Price-weighted (cache read 0.1, 1 h cache write 2.0, output 5) the break-even is about 170 k: −45–55 % at ≥ 400 k, −13 % at ~225 k, but +28 % at 115 k (a model that delegated after a compaction).
+- **Honest saving estimate.** The `[ship-delegate]` block now assumes a subagent floor of 75 k, about 25 calls and its one fresh cache write (measured: starts at 72–75 k, grows to 150–195 k, 20–39 calls). The old 50 k / 16-call estimate overstated the saving. `modes/delegated.md`, SKILL.md and the README carry the measured numbers.
+- `pre.agent.announce` shows no agent card for a spawn the guard refuses.
+
+### Decided
+- Transcript review of every delegated ship since v0.221.0: 7/7 completed (one more was still running), no fallback, the subagent resolved merge conflicts itself, the parent relay stayed at 2 calls. Total 8.3 M delegated against ≈ 13.1 M inline (−37 %). No manual `/compact` before any delegated ship — the original goal holds.
+- Guarding `ship_preflight` (MCP) instead was rejected: it would need a sentinel for `--inline`, while the Skill call is the single entry point and carries the args.
+
 ## [0.234.0] — 2026-09-28
 
 ### Changed
