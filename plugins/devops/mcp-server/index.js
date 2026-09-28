@@ -693,12 +693,16 @@ const WAITING_LABEL = {
 
 /**
  * "2/3 Anforderungen · 1 wartet auf dich" — the met count, then every not-met
- * requirement by who it waits on. A requirement that waits on nobody is
+ * requirement by who it waits on. A deploy wait counts as met: the work is
+ * done, only its proof comes later. A requirement that waits on nobody is
  * Claude's own gap: it keeps the row ◐/✗ instead of hiding in "0/3".
  */
 function requirementsPost(validation, lang) {
   if (!validation.length) return null;
-  const { total, met, waiting } = validationGaps.classify(validation);
+  const { total, met: metRaw, waiting } = validationGaps.classify(validation);
+  // Built and done, only its check has to wait for the deploy: that is not a
+  // shortfall, so it counts as met ("3/3 · 1 erst nach Deploy prüfbar").
+  const met = metRaw + waiting.deploy;
   const owned = ownedValidation({ validation });
   const unmet = owned.filter(v => v.status === 'unmet').length;
   const noun = lang === 'en' ? 'Requirements' : 'Anforderungen';
@@ -710,7 +714,7 @@ function requirementsPost(validation, lang) {
   // still running (pending is "not done yet", not "done, waiting on you").
   const ownGap = owned.some(v => v.status !== 'met') || waiting.pending > 0;
   if (met < total) return { glyph: ownGap ? '◐' : '✓', text: met + '/' + total + ' ' + noun + tail, dim: false };
-  return { glyph: '✓', text: total + '/' + total + ' ' + noun, dim: true };
+  return { glyph: '✓', text: total + '/' + total + ' ' + noun + tail, dim: !tail };
 }
 
 function testsPost(tests, lang) {

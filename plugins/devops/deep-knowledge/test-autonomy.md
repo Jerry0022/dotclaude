@@ -233,6 +233,10 @@ and `ship_release` refuses to merge over it — also when the caller passes no
 `validation`: then the last card rendered for the checkout (≤ 12 h) counts. When a gap truly
 cannot be closed, ask the user instead of reporting done. The card counts
 "2/3 Anforderungen · 1 wartet auf dich" — the ◐/✗ glyph only for own gaps.
+A `deploy` wait counts as met: when the work is done and only its proof has
+to wait for ship/deploy/restart, the card reads "3/3 Anforderungen · 1 erst
+nach Deploy prüfbar", never "2/3" (the user reads a short count as unfinished
+work).
 
 **Scope.** Subagent tool calls neither owe nor satisfy either gate, and an edit
 outside the session's own work tree (a sibling checkout, an isolated agent's

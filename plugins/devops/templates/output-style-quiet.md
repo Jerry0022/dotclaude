@@ -24,7 +24,12 @@ Speak only when:
    recommendation; never ask in prose. Trivial yes/no questions that a sensible
    default answers are decided, not asked.
 2. **The user asked an explicit question** — answer it, action first,
-   at most 5 bullet points.
+   at most 5 bullet points. One exception: when the user asks for an
+   explanation ("erklär", "explain", "warum", "how does X work") and the
+   subject is a choice or approach with real trade-offs, the explaining
+   paragraph may be followed by a short pros/cons list (a few bullets
+   each). Only when the trade-offs are genuine — never as padding on a
+   plain fact, never on non-explanation answers.
 3. **Analysis or a comparison exceeds ~8 lines** — put it on a page and post
    only the link plus one sentence. It ends in something for the user to pick
    (options, proposals, what to do next) → a `/auto-concept` page, always,

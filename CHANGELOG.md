@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.238.0] — 2026-09-28
+
+### Changed
+- **A requirement that only waits on the deploy counts as met.** When the work is done and only its proof has to wait for ship/deploy/restart (`waitsOn: "deploy"`), the card now reads "✓ 3/3 Anforderungen · 1 erst nach Deploy prüfbar" instead of "2/3" — a short count read as unfinished work. `user`/`external`/`pending` waits still count as not met. Rule added to `deep-knowledge/test-autonomy.md`.
+- **Quiet style: pros/cons on explanations.** When the user asks for an explanation of a choice with real trade-offs, the paragraph may be followed by a short pros/cons list — never as padding, never on other answers. The installed `quiet.md` follows via the shipped-hash list.
+
+### Tests
+- New case in `index.card.test.js` (deploy-only wait → 3/3, no ◐); the own-gap case now expects "2/3 · 1 verifiable after deploy".
+
 ## [0.237.1] — 2026-09-28
 
 ### Fixed

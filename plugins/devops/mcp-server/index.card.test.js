@@ -143,7 +143,21 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
         { requirement: "R3", status: "partial", evidence: "after ship", waitsOn: "deploy" },
       ],
     });
-    expect(text).toContain("◐ 1/3 Requirements · 1 verifiable after deploy");
+    expect(text).toContain("◐ 2/3 Requirements · 1 verifiable after deploy");
+  });
+
+  test("a requirement that only waits on the deploy counts as met — 3/3, no shortfall", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Deploy-Test", lang: "de", session_id: "test-anatomy-deploy",
+      validation: [
+        { requirement: "R1", status: "met", evidence: "ok" },
+        { requirement: "R2", status: "met", evidence: "ok" },
+        { requirement: "R3", status: "partial", evidence: "greift nach Ship + Plugin-Update", waitsOn: "deploy" },
+      ],
+    });
+    expect(text).toContain("✓ 3/3 Anforderungen · 1 erst nach Deploy prüfbar");
+    expect(text).not.toContain("2/3");
+    expect(text).not.toContain("◐");
   });
 
   test("own background work still running keeps ◐ — in progress is not done", async () => {
