@@ -176,6 +176,26 @@ describe("Quiet style — the reply language follows what the user typed", () =>
   });
 });
 
+// #595: a file handed to the user must be reachable — a relative link that
+// climbed out of the cwd was broken, a file:/// link is not shown at all.
+describe("Quiet style — a file handed to the user gets a working path", () => {
+  const flat = fs.readFileSync(path.join(REPO_PLUGIN, TEMPLATE_REL), "utf8").replace(/\s+/g, " ");
+  const dk = fs.readFileSync(path.join(REPO_PLUGIN, "deep-knowledge", "browser-file-urls.md"), "utf8");
+
+  test("inside the cwd a relative link, outside an absolute code-span path, never file:///", () => {
+    expect(flat).toContain("inside the working directory a relative markdown link");
+    expect(flat).toContain("outside it the absolute path as a code span");
+    expect(flat).toContain("never a `file:///` link");
+  });
+
+  test("Explorer opens with the file selected in the same turn, detail in browser-file-urls.md", () => {
+    expect(flat).toContain('explorer.exe /select,"C:\\…\\file"');
+    expect(flat).toContain("browser-file-urls.md` § Files handed to the user");
+    expect(dk).toContain("## Files handed to the user (issue #595)");
+    expect(dk).toContain('explorer.exe /select,"$(cygpath -w "$ABS_PATH")"');
+  });
+});
+
 describe("ss.plugin.update → Quiet style sync (end to end)", () => {
   test("the real hook refreshes an outdated shipped copy and reports it", () => {
     // Marketplace clone: a git repo with plugins/devops carrying the template.

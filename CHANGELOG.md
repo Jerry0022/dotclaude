@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.240.0] — 2026-09-30
+
+### Added
+- **Quiet style: files handed to the user get a path that works, and Explorer opens at the file (#595).** A file the user should run or open themselves gets a relative markdown link when it lies inside the working directory and the absolute path as a code span when it lies outside it — never a relative link that climbs out of the working directory, never a `file:///` link (a live test in the Desktop Code tab showed such a link is not rendered at all). In the same turn Claude opens Explorer with the file selected (`explorer.exe /select,"C:\…\file"`). The installed `quiet.md` follows via the shipped-hash list.
+- **`deep-knowledge/browser-file-urls.md` → new section "Files handed to the user":** inside/outside table, PowerShell and Git-Bash (`cygpath -w`) Explorer commands, and the note that `explorer.exe` exits 1 even on success.
+
+### Tests
+- 2 new cases in `output-style-sync.test.js` (hand-off rule in the template, hash of the current template listed); output-style-sync, session-start and knowledge-pointers suites 226 green.
+
 ## [0.239.1] — 2026-09-30
 
 ### Fixed
