@@ -128,8 +128,9 @@ marker) and `payload step` / `payload wait` pass on every call.
 Expected: `"injected"` on every fresh document. Every other answer —
 `already-injected`, `blocked`, `reload-needed`, a navigation mid-inject, a
 hostile page — is handled per `deep-knowledge/recovery.md` § Inject results.
-Re-run this step after every navigation, once the page has settled
-(recovery.md § Navigation and redirects).
+Re-run this step after every navigation, once the page has settled, and
+send the current step (5b) right after it — on a new origin the overlay
+restores nothing by itself (recovery.md § Navigation and redirects).
 
 ## Step 5 — The step loop
 

@@ -78,8 +78,9 @@ When the user says they are stuck:
 
 - Login is a normal step: "Logge dich ein, dann **Weiter**." The redirect
   removes the overlay; the loop's navigation branch re-injects it once the
-  page has settled (recovery.md § Navigation and redirects) and the overlay
-  restores the same step from `sessionStorage` on its own.
+  page has settled (recovery.md § Navigation and redirects) and re-sends the
+  same step immediately — after a hop to another origin the overlay has
+  nothing to restore on its own.
 - A step whose action reloads or leaves the page says so, so the vanishing
   panel is expected: „Nach dem Klick lädt die Seite neu — das Panel kommt
   gleich zurück."
