@@ -402,7 +402,9 @@
   // App-styled tooltip for the FAB (ui-defaults.md R0/R1) — never the native
   // title, which ignores the overlay's look, the delay and keyboard focus.
   // Label tier (500 ms): the tip is the FAB's only visible name.
-  var fabTip = mk("div", "tip", "Claude Guide – Schritt anzeigen");
+  var FAB_TIP_TEXT = "Claude Guide – Schritt anzeigen";
+  var FAB_LOADING_TEXT = "Claude lädt den nächsten Schritt …";
+  var fabTip = mk("div", "tip", FAB_TIP_TEXT);
   fabTip.id = "wg-tip";
   fabTip.setAttribute("role", "tooltip");
   fabTip.hidden = true;
@@ -789,14 +791,28 @@
     abortResetTimer = null;
     clearHeartbeat();
 
+    // #608: no step yet — a fresh inject, above all on a new origin where the
+    // per-origin sessionStorage has nothing to restore. The FAB stays visible
+    // as a loading marker until setStep() arrives, so the guide never just
+    // vanishes; it cannot expand (there is no panel content to show).
     if (!currentStep) {
       edgeTab = false;
       edgeTabBtn.style.display = "none";
       applyPosition();
       panel.style.display = "none";
-      fabButton.style.display = "none";
+      fabButton.style.display = "flex";
+      fabButton.setAttribute("aria-expanded", "false");
+      fabButton.setAttribute("aria-label", FAB_LOADING_TEXT);
+      fabButton.setAttribute("aria-disabled", "true");
+      fabButton.style.opacity = ".7"; // muted: waiting, not actionable
+      badge.textContent = "…";
+      fabTip.textContent = FAB_LOADING_TEXT;
       return;
     }
+    fabButton.setAttribute("aria-label", "Claude Guide");
+    fabButton.setAttribute("aria-disabled", "false");
+    fabButton.style.opacity = "";
+    fabTip.textContent = FAB_TIP_TEXT;
 
     // #516: an edge tab replaces fab+panel entirely — restoring it (click or
     // Escape) does not abort the guide, it just flips edgeTab back off.
@@ -1127,6 +1143,7 @@
   }
 
   function toggleFab() {
+    if (!currentStep) return; // #608: loading FAB — nothing to expand yet
     collapsed = !collapsed;
     render(true);
     saveState();

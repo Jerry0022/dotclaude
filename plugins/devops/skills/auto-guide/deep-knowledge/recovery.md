@@ -34,9 +34,17 @@ Every navigation (login redirect, SSO hop, form submit, Claude's own
    `JSON.stringify({ url: location.href, ready: document.readyState, hidden: document.hidden })`.
 2. `ready` is not `"complete"`, or the URL differs from the previous probe →
    `W pause 2`, probe again. Give a redirect chain up to ~60 s.
-3. Stable → Step 4 (inject), then 5b with the **same** step (the overlay also
-   restores it from `sessionStorage` on its own), then 5c.
+3. Stable → Step 4 (inject), then 5b with the **same** step **right away**,
+   then 5c. Never rely on the overlay's own restore: `sessionStorage` is per
+   origin, so after a hop to another origin (a redirect or Claude's own
+   deep-link) it restores nothing and shows only its loading FAB („Claude
+   lädt den nächsten Schritt …") until 5b arrives (#608). Only a same-origin
+   reload restores the step by itself.
 4. Still moving after ~60 s → Step 7 · aborted, naming the last URL.
+
+Before Claude itself `navigate`s to **another origin**, show a short
+transition step first — „Ich öffne gleich <site> — das Panel kommt dort
+zurück." — so the user knows the panel moves with them.
 
 Steps whose action reloads or leaves the page say so in their text (see
 authoring.md § Login and redirects), so the user expects the panel to vanish

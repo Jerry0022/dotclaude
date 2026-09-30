@@ -1027,6 +1027,52 @@ describe("web-guide-overlay — edge tab (#516)", () => {
   });
 });
 
+// #608: sessionStorage is per origin, so an inject on a new origin restores
+// nothing. The FAB must stay visible as a loading marker until setStep().
+describe("web-guide-overlay — loading FAB without a step (#608)", () => {
+  let sandbox;
+
+  beforeEach(() => {
+    sandbox = makeSandbox();
+  });
+
+  test("a fresh inject with nothing to restore shows the FAB in its loading state, panel hidden", () => {
+    run(sandbox);
+    expect(sandbox.window.claudeGuide.state().stepId).toBeNull();
+    const host = getHost(sandbox);
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    const panel = findAll(host, (e) => e.className === "panel")[0];
+    const tip = findAll(host, (e) => e.className === "tip")[0];
+    expect(fab.style.display).toBe("flex");
+    expect(fab.getAttribute("aria-label")).toBe("Claude lädt den nächsten Schritt …");
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+    expect(tip.textContent).toBe("Claude lädt den nächsten Schritt …");
+    expect(panel.style.display).toBe("none");
+  });
+
+  test("activating the loading FAB does not expand an empty panel", () => {
+    run(sandbox);
+    const host = getHost(sandbox);
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    fab.dispatch("click", { type: "click", detail: 0 });
+    const panel = findAll(getHost(sandbox), (e) => e.className === "panel")[0];
+    expect(panel.style.display).toBe("none");
+    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+  });
+
+  test("setStep() after the loading state renders the step normally", () => {
+    run(sandbox);
+    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 2, title: "T", text: "go" });
+    const host = getHost(sandbox);
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    const tip = findAll(host, (e) => e.className === "tip")[0];
+    expect(fab.style.display).toBe("flex");
+    expect(fab.getAttribute("aria-label")).toBe("Claude Guide");
+    expect(fab.style.opacity).toBe("");
+    expect(tip.textContent).toBe("Claude Guide – Schritt anzeigen");
+  });
+});
+
 describe("web-guide-overlay — app-styled FAB tooltip (ui-defaults.md R0/R1)", () => {
   test("the FAB has no native title, but a role=tooltip bubble in the overlay's own style", () => {
     expect(SRC).not.toMatch(/\.title\s*=(?!=)/);

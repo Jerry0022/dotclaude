@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.239.1] — 2026-09-30
+
+### Fixed
+- **The auto-guide panel no longer vanishes after a cross-origin navigation (#608).** `sessionStorage` is per origin, so a re-inject on a new site restored no step and `render()` hid the FAB and the panel entirely — the user had to ask in chat where the guide went. Without a step the FAB now stays visible in a muted loading state („Claude lädt den nächsten Schritt …", `aria-disabled`) and does not expand; `setStep()` restores the normal render. `recovery.md`, `authoring.md` and `SKILL.md` now require sending the current step right after every re-inject, and a short transition step before Claude navigates to another origin.
+
+### Tests
+- 3 new cases in `web-guide-overlay.test.js` (loading FAB, no expand, normal render after `setStep`); overlay suites 96 green.
+
 ## [0.239.0] — 2026-09-28
 
 ### Added
