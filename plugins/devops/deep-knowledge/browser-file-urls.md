@@ -86,6 +86,35 @@ tracker compares against the worktree root. The `--context` flag is
 optional but useful in `/do-ship` Step 5c logs (`concept`,
 `autonomous-report`, `repo-health`, etc.).
 
+## Files handed to the user (issue #595)
+
+Not a browser open, but the same Windows path trap: an answer that hands the
+user a file to run or open **themselves** — a `.cmd`/`.ps1` they must start
+(an elevated script Claude may not run), a report, a log.
+
+| Where the file lives | In the answer | Why |
+|---|---|---|
+| inside the session's working directory | relative markdown link, `[name](path/rel/to/cwd)` | the app's documented link format — it opens |
+| outside the working directory | the absolute Windows path as a code span, `` `C:\Users\…\run.cmd` `` | a relative link climbs out of the cwd and resolves against a hidden workspace (broken); a `file:///C:/…` markdown link is not shown in the Desktop Code tab at all (user test, 2026-09-30) |
+
+In the **same turn**, open Explorer with the file selected so the user can
+double-click it straight away (Windows only; skip on macOS/Linux):
+
+```powershell
+explorer.exe /select,"C:\Users\Jerem\scripts\run.cmd"
+```
+
+From Git-Bash build the backslash path with `cygpath -w` instead of typing
+it (the Bash tool halves backslashes in heredocs and `sed`):
+
+```bash
+explorer.exe /select,"$(cygpath -w "$ABS_PATH")"
+```
+
+`explorer.exe` exits with code 1 even on success — do not read that as a
+failure. Open Explorer once per hand-off, not for every file an answer
+merely mentions.
+
 ## Cross-platform note
 
 On macOS/Linux `$(pwd)` already returns an absolute POSIX path, so

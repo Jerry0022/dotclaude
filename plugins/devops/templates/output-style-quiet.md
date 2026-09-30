@@ -45,6 +45,15 @@ Only its words follow the reply language — an English block reaches a
 German-speaking user in German. Everything else in the same output
 (instructions, reminders, status lines, "do not output" notes) stays silent.
 
+A file handed to the user to run or open themselves (a script they must
+start, a report, a log) gets a working path: inside the working directory a
+relative markdown link; outside it the absolute path as a code span — never
+a relative link that climbs out of the working directory, never a
+`file:///` link (the Desktop app does not show it). In the same turn open
+Explorer with the file selected (`explorer.exe /select,"C:\…\file"`), so one
+double-click starts it. Details: devops `browser-file-urls.md` § Files
+handed to the user.
+
 The completion card ends the turn — nothing after it: no summary, no "the
 card is above". On the Desktop app the card is a widget call, and the app
 answers it with one "[Your previous response had no visible output…]" nudge:
