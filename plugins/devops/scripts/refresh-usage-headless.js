@@ -359,6 +359,37 @@ function killScraperInstance({ exec = execSync, pidFile = SCRAPER_PID_FILE, reap
   reap();
 }
 
+/**
+ * Open the visible login window so that it actually stays open.
+ *
+ * 2026-10-01: a manual "refresh usage" reaped the hidden scraper and launched
+ * the login window right away — while the reaped Edge was still shutting down.
+ * The new launch handed off to that dying singleton and vanished with it, so
+ * the user saw no window at all. Wait until the old instance has released the
+ * profile (CDP gone), launch, then check the window is still up a few seconds
+ * later and relaunch once if it is not.
+ *
+ * @returns {Promise<boolean>} true when the login window is up
+ */
+async function openLoginWindow({
+  launch = () => launchScraperInstance({ visible: true, url: LOGIN_URL }),
+  cdpAlive = isCDPAvailable,
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  releaseWaitMs = 10000,
+  settleMs = 4000,
+} = {}) {
+  for (let waited = 0; waited < releaseWaitMs && await cdpAlive(); waited += 500) await sleep(500);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const pid = await launch();
+    if (pid) {
+      await sleep(settleMs);
+      if (await cdpAlive()) return true;
+      log(`Login window vanished after launch (attempt ${attempt}/2)`);
+    }
+  }
+  return false;
+}
+
 /** Age of a lock file in ms, or Infinity if absent/unreadable. */
 function lockAgeMs(lockFile) {
   try { return Date.now() - fs.statSync(lockFile).mtimeMs; } catch { return Infinity; }
@@ -912,7 +943,7 @@ async function main() {
     try { fs.unlinkSync(SCRAPER_PID_FILE); } catch {}
     writeLoginMarker();
     log('LOGIN_REQUIRED: scraper profile is not logged in to claude.ai');
-    await launchScraperInstance({ visible: true, url: LOGIN_URL });
+    if (!(await openLoginWindow())) log('LOGIN_REQUIRED: the login window could not be kept open');
     process.exit(2);
   }
 
@@ -939,6 +970,7 @@ module.exports = {
   reapScraperInstances,
   classifyScraperPid,
   killScraperInstance,
+  openLoginWindow,
   LOGIN_RETRY_AFTER_MS,
   FRESH_CACHE_MAX_AGE_SECONDS,
 };

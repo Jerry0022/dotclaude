@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.241.2] — 2026-10-01
+
+### Fixed
+- **Completion card: the stale-usage note reads like a sentence, in local time and the card's language.** It used to say `⚠ No current usage data — last reading 2026-09-30 20:48 UTC, ~21h old (not logged in)`: a UTC ISO stamp, English on a German card, and "not logged in" read as the user's own Claude login. Now it names the local time relative to today ("Stand gestern 22:48 (vor 21 h)") and, for a signed-out scraper, says that the usage fetch uses its own Edge profile, that claude.ai signed that profile out (the user's Claude login is not affected) and that »refresh usage« fixes it. Other failure reasons are passed through. The stored `_failureReason` value is unchanged.
+- **`refresh usage`: the manual login window stays open.** The script reaped the hidden scraper and launched the visible window immediately; Edge handed the launch to the still-dying singleton and the window died with it. New `openLoginWindow()` waits up to 10 s until the old instance released the profile (CDP gone), checks the window 4 s after launch and relaunches once.
+
+### Changed
+- **`deep-knowledge/usage.md`:** claude.ai can sign the scraper's profile out server-side (403 `account_session_invalid`, redirect `/login?from=logout&reauth=1`); every automatic run then serves cache until `refresh usage` runs once. "Not logged in" always means the scraper's own profile, never the user's Claude login.
+
+### Tests
+- New `mcp-server/index.expired-note.test.js` (4 cases) and 3 `openLoginWindow` cases in `scripts/refresh-usage-headless.test.js`; branch suites (expired-note, meter, card, card-widget, refresh-usage-headless, budget) 339 green. Full suite not run in the ship (>10 min on this machine).
+
 ## [0.241.1] — 2026-10-01
 
 ### Docs
