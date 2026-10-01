@@ -19,7 +19,7 @@ user-invocable: false
 triggers:
   en: ["run agents", "use agents", "orchestrate", "parallel agents", "multi-agent", "delegate to agents", "agent workflow"]
 argument-hint: "[--from=<caller>] [--mode=interactive|background] [--ship=auto|manual] [--burn=<BURN-STATE.json>] <task or plan>"
-allowed-tools: Agent, SendMessage, CronCreate, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
+allowed-tools: Agent, SendMessage, CronCreate, Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion, mcp__plugin_devops_dotclaude-completion__*, mcp__Claude_Browser__preview_start, mcp__Claude_Browser__preview_list, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_list
 ---
 
 # auto-agents — the execution path
@@ -246,7 +246,7 @@ options:
   - label: "Background (recommended)"
     description: "Agents run autonomously. Single final report at the end."
   - label: "Interactive"
-    description: "Agents involve you on design/concept decisions — AskUserQuestion for short trade-offs; a richer comparison ends the wave and comes back to you as an open decision. Expect ≥1 checkpoint per wave."
+    description: "You are involved on design/concept decisions — agents return their forks, I ask you between waves (short trade-offs as a question, a richer comparison as an open decision). Expect ≥1 checkpoint per wave."
 ```
 
 **de:**
@@ -257,7 +257,7 @@ options:
   - label: "Hintergrund (Recommended)"
     description: "Agents arbeiten autonom. Am Ende ein Gesamtbericht."
   - label: "Interaktiv"
-    description: "Agents binden dich bei Design-/Konzeptentscheidungen ein — AskUserQuestion für kurze Trade-offs; ein größerer Vergleich beendet die Wave und kommt als offene Entscheidung zu dir zurück. Rechne mit ≥1 Checkpoint pro Wave."
+    description: "Du entscheidest bei Design-/Konzeptfragen mit — Agents geben ihre Gabelungen zurück, ich frage dich zwischen den Waves (kurze Trade-offs als Frage, ein größerer Vergleich als offene Entscheidung). Rechne mit ≥1 Checkpoint pro Wave."
 ```
 
 Store the result as `$EXEC_MODE` (`background` or `interactive`).

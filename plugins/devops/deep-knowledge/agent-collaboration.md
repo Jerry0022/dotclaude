@@ -8,27 +8,33 @@ How agents work together on multi-role tasks.
 User Request
     │
     ▼
-Feature Agent (orchestrator)
+Feature Agent (one feature, elaborate → build → verify)
     │
-    ├──→ Core Agent      (business logic, contracts)
+    ├──→ PO, Lens: customer ┐
+    ├──→ PO, Lens: tech     ├─ parallel, only when the brief has no
+    ├──→ PO, Lens: business ┘  acceptance criteria
     │       │
     │       ▼
-    ├──→ Frontend Agent  (UI, depends on Core contracts)
+    ├──→ PO synthesis    (weighs the lenses → scope + acceptance criteria)
     │       │
     │       ▼
-    ├──→ Windows Agent   (platform-specific, depends on Core)
+    ├──→ Core Agent      (business logic, contracts, platform code)
     │       │
     │       ▼
-    ├──→ AI Agent        (AI features, depends on Core data)
+    ├──→ Designer Agent  (UX/UI specs, when the UX is not specified yet)
+    │       │
+    │       ▼
+    ├──→ Frontend Agent  ┐ parallel, disjoint files,
+    ├──→ AI Agent        ┘ consume Core contracts
     │
     ▼
 QA Agent (verifies all changes)
     │
     ▼
-PO Agent (validates against requirements)
+PO, Review (go/no-go against the acceptance criteria)
     │
     ▼
-Ship (if approved)
+Ship — by the orchestrator, once (if approved)
 ```
 
 ## Execution Waves
@@ -37,10 +43,11 @@ When multiple agents work on a feature, they execute in waves:
 
 | Wave | Agents | Model | Why |
 |------|--------|-------|-----|
+| 0 | **PO** lenses (parallel) → **PO** synthesis | sonnet → opus | Elaboration — unless criteria come from outside (`feature-elaboration.md`) |
 | 1 | **Core** | sonnet | Defines contracts and interfaces first |
-| 2 | **Frontend**, **Windows**, **AI** (parallel) | sonnet | Consume Core contracts |
+| 2 | **Designer** → **Frontend**, **AI** (parallel) | sonnet | Consume Core contracts |
 | 3 | **QA** | sonnet | Verifies all changes together |
-| 4 | **PO** | opus | Validates against requirements |
+| 4 | **PO** review | opus | Validates against the acceptance criteria |
 
 Agents in the same wave can run in parallel (`||` suffix in naming). The `Model`
 column is each agent's frontmatter default — see `agent-orchestration.md`
@@ -97,12 +104,11 @@ branch off the integration branch:
 feat/42-video-filters               ← Feature agent (integration branch)
 ├── feat/42-video-filters-core      ← Core agent worktree
 ├── feat/42-video-filters-frontend  ← Frontend agent worktree
-├── feat/42-video-filters-windows   ← Windows agent worktree
 └── feat/42-video-filters-ai        ← AI agent worktree
 ```
 
 The orchestrator merges each sub-branch back into the integration branch (merge order
-follows wave order: Core → Frontend/Windows/AI → integration). The integration branch is
+follows wave order: Core → Frontend/AI → integration). The integration branch is
 shipped to `main` **once**, at the end, via `/do-ship` — sub-branches are NOT shipped
 individually.
 
@@ -125,6 +131,10 @@ To ensure agents work on the correct branch, every isolated agent MUST follow th
    `git merge --no-ff <sub-agent-branch>`
 
 ### For every isolated Sub-Agent (first action after spawn)
+
+The agent-side procedure — including the isolation check that keeps a
+non-isolated agent from resetting the session's checkout — is
+[agent-branch-setup.md](agent-branch-setup.md). In short:
 
 1. Fetch and start your branch from the parent tip. Use `checkout -B` (not `-b`) so it
    works whether or not the fresh worktree already sits on a branch of that name:
@@ -190,7 +200,7 @@ Creating an issue is a refinement session, not a solo task. All relevant roles p
 
 1. `po` — drafts scope, user story, acceptance criteria
 2. Domain roles — add technical notes, flag assumptions, identify risks
-3. UX/user role (if applicable) — validates user story from the end-user perspective, challenges vague AC
+3. `po` with `Lens: customer` (if applicable) — validates the user story from the end-user perspective, challenges vague AC
 4. `qa` — defines testability: what does "done" look like?
 
 All happens within the single `/auto-issue` execution.
@@ -201,7 +211,7 @@ All happens within the single `/auto-issue` execution.
 - **Never skip QA review.** Even "trivial" changes get reviewed.
 - **Handoff data is mandatory.** No agent starts without knowing what came before.
 - **Conflicts resolve at integration.** The Feature agent handles merge conflicts per `deep-knowledge/merge-safety.md`. Never use `--ours`/`--theirs`. Auto-resolve complementary changes; escalate design decisions to user.
-- **Parallel agents don't cross-depend.** Frontend and Windows never import from each other.
+- **Parallel agents don't cross-depend.** Frontend and AI never import from each other.
 - **Push integration branch before spawning sub-agents.** Sub-agents reset to `origin/<integration-branch>` to start from the integration tip.
 - **Sub-branches use dash names, never slashes.** `<parent>-<role>` — a slash-nested child collides with the checked-out integration branch ref (see § Branch naming).
 - **Merge sub-branches back in wave order; ship the integration branch once.** Sub-branches are not shipped individually.

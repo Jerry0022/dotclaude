@@ -90,6 +90,15 @@ describe("pre.agent.model hook", () => {
     expect(ok.code).toBe(0);
   }, 20000);
 
+  test("an Explore spawn with its own model passes with a scout hint, a devops agent gets none", async () => {
+    const named = { ...explore, model: "sonnet" };
+    const { dir, file } = project(jsonl(prompt(), spawnUse("t1", named)));
+    const r = await runHook({ tool_name: "Agent", tool_input: named, tool_use_id: "t1", cwd: dir, transcript_path: file }, dir);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("devops:scout");
+    expect(gate.locateHint({ subagent_type: "devops:qa" })).toBeNull();
+  }, 20000);
+
   test("silent inside a subagent", async () => {
     const { dir, file } = project(jsonl(prompt(), spawnUse("t1", explore)));
     const r = await runHook({ tool_name: "Agent", tool_input: explore, tool_use_id: "t1", cwd: dir, transcript_path: file, agent_id: "a" }, dir);

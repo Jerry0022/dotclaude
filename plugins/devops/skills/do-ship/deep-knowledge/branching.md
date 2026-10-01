@@ -15,12 +15,12 @@
 main
  └── feat/42-video-filters          ← integration branch
       ├── feat/42-core               ← agent worktree
-      ├── feat/42/frontend            ← agent worktree
-      └── feat/42/windows             ← agent worktree
+      ├── feat/42-frontend           ← agent worktree
+      └── feat/42-ai                 ← agent worktree
 ```
 
 Merge order follows wave order (see `{PLUGIN_ROOT}/deep-knowledge/agent-collaboration.md`):
-Core → Frontend/Windows/AI → integration branch → main.
+Core → Frontend/AI → integration branch → main.
 
 ## When to use sub-branches
 

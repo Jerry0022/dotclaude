@@ -65,6 +65,16 @@ const TOPIC_MAP = [
     patterns: [/\bui.*(?:default|rule|convention|regel)/i, /\btooltip/i, /\bdropdown/i, /\bhotkey/i, /\bshortcut/i, /\btastenk/i, /\bkeyboard.*(?:nav|access|shortcut)/i, /\bdesign.*(?:rule|regel|check)/i, /\bscroll.?bar/i],
   },
   {
+    file: 'windows-platform.md',
+    specificity: 2,
+    patterns: [/\bsystem.?tray\b/i, /\btray.?icon/i, /\b(?:windows|msi|exe).{0,12}installer\b/i, /\bregistry.?(?:key|schlüssel|eintrag)/i, /\bhk(?:cu|lm)\b/i, /\baumid\b/i, /\bmsix\b/i, /\bnsis\b/i, /\bfile.?association/i, /\bdateizuordnung/i],
+  },
+  {
+    file: 'feature-elaboration.md',
+    specificity: 2,
+    patterns: [/\bfeature.*(?:ausarbeit|elaborat|refin)/i, /\bacceptance.?criteria/i, /\bakzeptanzkriterien/i, /\bpo.?lens/i],
+  },
+  {
     file: 'codex-integration.md',
     specificity: 1,
     patterns: [/\bcodex/i, /\bgpt.?5/i],

@@ -48,7 +48,7 @@ const { BGRUN_FLAG, settleRecordedRuns } = require('../lib/light-bgrun');
 const { scanOpenTasks } = require('../lib/pending-tasks');
 
 /** Agent roles that only read, review or research — they never move the tree. */
-const READ_ONLY_AGENT_RE = /(^|:)(research|scout|qa|redteam|po|gamer|rethinker|Explore|Plan|claude-code-guide|codex-rescue|scan-\w+|explore)$/i;
+const READ_ONLY_AGENT_RE = /(^|:)(research|scout|qa|redteam|po|rethinker|Explore|Plan|claude-code-guide|codex-rescue|scan-\w+|explore)$/i;
 
 /** A background agent or workflow that may still change files is running. */
 function implementersRunning(transcript) {

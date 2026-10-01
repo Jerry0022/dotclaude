@@ -20,7 +20,7 @@ triggers:
   en: ["polish", "ui polish", "design pass"]
   de: ["ui angleichen", "design konsistenz", "feinschliff", "visuell aufräumen"]
 argument-hint: "[--autonomous] [--strict] [--invoked-by=do-run|ship] [--cwd=<path>] [optional scope: file/dir path]"
-allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
+allowed-tools: Agent, Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, mcp__Claude_Browser__*, mcp__claude-in-chrome__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card
 ---
 
 # Tune Polish — UI Refinement Pass

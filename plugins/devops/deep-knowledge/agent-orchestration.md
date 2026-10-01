@@ -18,21 +18,22 @@ Select agents based on domains touched, complexity, and risk:
 | Agent | When to include | Wave |
 |-------|----------------|------|
 | **research** | Topic needs investigation first | 0 (pre-work) |
-| **core** | Business logic, APIs, data models | 1 |
+| **po** (`Lens:` customer / tech / business) | Elaboration unless the acceptance criteria come from outside — lenses in parallel, then a po synthesis; procedure and gate: [feature-elaboration.md](feature-elaboration.md) | 0 |
+| **core** | Business logic, APIs, data models, platform code (`windows-platform.md`) | 1 |
 | **frontend** | UI components, templates, styling | 2 |
-| **windows** | Platform-specific (system tray, native APIs) | 2 |
 | **ai** | AI/ML integration, embeddings, prompts | 2 |
 | **designer** | UX/UI decisions, design system, specs | 0 or 2 |
 | **qa** | Unit tests, build check, browser-based visual verification | 3 |
-| **po** | Requirements validation, trade-off review | 4 |
-| **gamer** | End-user/player perspective | 3 or 4 |
+| **po** (`Review:`) | Go/no-go against the acceptance criteria — with `Lens: customer` and qa screenshots for UI/game work | 4 |
 
 ### Selection Criteria
 
 - Include an agent only if it adds **concrete value** — not for coverage
 - Prefer fewer agents with clear purpose over many with vague roles
 - Always include **qa** for any code changes (Wave 3)
-- Include **po** only for feature-level work, not bugfixes or refactoring
+- Include **po** only for feature-level work, not bugfixes or refactoring.
+  Its lens agents argue one perspective each and may run on `model: "sonnet"`;
+  the synthesis that weighs them keeps opus
 
 ### Model & Effort Defaults
 
@@ -64,12 +65,11 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
 | **core** | sonnet | medium | Standard code generation |
 | **frontend** | sonnet | medium | Standard code generation |
 | **ai** | sonnet | medium | Standard code generation |
-| **windows** | sonnet | medium | Standard code generation |
 | **designer** | sonnet | medium | Design specs |
 | **qa** | sonnet | medium | Test execution + evaluation |
-| **gamer** | sonnet | low | Quick UX feedback |
 | **scout** | sonnet | low | Read-only locating and sweeps — replaces Explore (which inherits the session) |
-| **feature** | inherit | *(inherit)* | Inherits from parent session |
+| **feature** | opus | medium | Long autonomous run: elaborates, builds, delegates |
+| **rethinker** | opus | high | Code-blind ideation, one lens per agent (do-run rethink only) |
 
 **Model override rules:**
 - Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`.
@@ -80,7 +80,7 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
   would inherit it (Explore, general-purpose, `model: inherit`) is refused once
   by `pre.agent.model`; the identical retry is the deliberate exception.
 - **Effort is chosen by agent, not per spawn**: `low` belongs to mechanical,
-  read-only work (`scout`, `gamer`) — sonnet·low for locating beats
+  read-only work (`scout`) — sonnet·low for locating beats
   opus·anything; reasoning roles keep medium/high.
 - **`/do-run burn` inverts this**: it overrides **upward only** (sonnet → opus)
   per its depth profile, and never downgrades for cost. The overrides come
@@ -139,7 +139,7 @@ The count follows the work, not a fixed number. Parallel **implementers**
 4. **Budget class** — `ask-before-parallel` → at most 3 implementers per wave;
    `sonnet-only` → at most 2. An explicit run skill (`/do-run`) is exempt
    from the budget class (as everywhere) and keeps the ceilings of 3.
-5. **Read-only lens agents** (research, scout, qa, redteam, po, gamer) are not
+5. **Read-only lens agents** (research, scout, qa, redteam, po) are not
    implementers: up to ~8 in parallel, limited by cost only — they cannot
    conflict, and more independent lenses keep adding signal.
 6. **Synthesis stays short, verification does not** — every wave with more
@@ -195,8 +195,8 @@ Every spawned agent MUST receive:
    percentage from memory — a limit message or plan text from before a
    window reset is not an input (`agent-proactivity.md` § Budget). An agent
    that itself spawns agents (`feature`, `designer`) applies the same model +
-   ceiling override; hooks do not fire inside sub-agents, so the parent must
-   pass it down.
+   ceiling override; the `[budget]` line is injected on user prompts only,
+   never inside a sub-agent, so the parent must pass it down.
 10. **Scope contract** — when a `[claude-strict contract]` block is in context
    (strict mode armed — `deep-knowledge/strict.md`), it goes **verbatim at
    the top** of the prompt, before item 1. The `pre.strict.agent-gate` hook
@@ -243,7 +243,13 @@ agent.
 - **Orchestrator** — aggregate these signals into the wave summary so the user
   can see the silence was intentional, not laziness.
 
-**Use `AskUserQuestion` for lightweight, in-chat decisions:**
+**Who asks:** Claude Code strips `AskUserQuestion` from every sub-agent. A
+sub-agent that hits one of the forks below stops at it and returns it as
+`open_questions` (options + the one it recommends); the **orchestrator** asks
+the user via `AskUserQuestion` between waves — or before spawning the wave,
+when the fork is already visible in the plan.
+
+**Lightweight, in-chat decisions (one `AskUserQuestion` from the orchestrator):**
 - Mode / strategy picks with 2–4 named alternatives
 - Naming the user will see (commands, labels, public API names, file names exposed
   in UI)
@@ -317,7 +323,7 @@ check to risk:
 - **Low risk** (additive, disjoint files): a lightweight self-check — the
   orchestrator reads the handoff (contracts, signatures, findings) and confirms it
   is internally consistent and matches what the next wave was told to expect.
-- **Contract-defining waves** (Core → Frontend/Windows/AI): before spawning the
+- **Contract-defining waves** (Core → Frontend/AI): before spawning the
   dependent wave, validate the contract concretely — types compile, exported
   signatures match the handoff, no TODO stubs where the next wave expects real
   APIs. A mismatch here is exactly what cascades.

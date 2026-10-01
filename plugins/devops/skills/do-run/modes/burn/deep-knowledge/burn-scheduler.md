@@ -34,8 +34,8 @@ Depth first; lanes only fill a time gap depth cannot close.
 | Profile | Opus for | Extra pass | Tool calls | depthFactor |
 |---------|----------|------------|------------|-------------|
 | `standard` | per `agent-orchestration.md` § Model & Effort Defaults | — | 15–30 | 1.0 |
-| `deep` | core, frontend, ai, windows, designer | redteam on the task diff | 30–45 | 1.5 |
-| `max` | deep + qa, gamer | redteam on the task diff | 45–60 | 2.0 |
+| `deep` | core, frontend, ai, designer | redteam on the task diff | 30–45 | 1.5 |
+| `max` | deep + qa | redteam on the task diff | 45–60 | 2.0 |
 
 The first version's per-task **PO review** and **second QA** are gone: the
 second QA re-ran what the first had verified, and a PO weighs trade-offs that

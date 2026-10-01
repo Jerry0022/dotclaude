@@ -66,15 +66,16 @@ A new commit = one completed logical unit:
 
 ## Checkpoint commits (agents)
 
-Every agent that writes code — `core`, `frontend`, `ai`, `windows`,
-`designer`, `feature` — works in checkpoints on its own branch:
+Every agent that writes code — `core`, `frontend`, `ai`, `designer`,
+`feature` — works in checkpoints on its own branch:
 
 - **Where — never above the session's branch:**
   - **No git repo** (e.g. files on a network share): no branches, no
     commits — the agent edits the files and reports `branch: none`.
   - **The session works on a feature / worktree branch** (the normal case):
-    checkpoints go on the agent's own sub-branch (`<parent>-<role>`) or on
-    that feature branch — **never on `main`, `master` or the remote's
+    checkpoints go on the agent's own sub-branch (`<parent>-<role>`) or — an
+    agent working in place in the session's checkout
+    (`agent-branch-setup.md`) — on that feature branch, files staged by name — **never on `main`, `master` or the remote's
     default branch, local or remote.** From there, `main` is reached only
     through `/do-ship`.
   - **The session itself works on `main`** (by necessity, no feature
@@ -95,7 +96,7 @@ Every agent that writes code — `core`, `frontend`, `ai`, `windows`,
 - Same rules as any commit: stage the task's files by name, hooks stay on (a
   pre-commit hook that refuses a checkpoint means: keep working, commit at
   the next green step — never `--no-verify`).
-- Analysis-only agents (`po`, `research`, `redteam`, `qa`, `gamer`,
+- Analysis-only agents (`po`, `research`, `redteam`, `qa`, `scout`,
   `rethinker`) change no files and do not commit. The main session's own
   inline work follows the table above, not this section.
 

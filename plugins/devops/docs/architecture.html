@@ -168,7 +168,7 @@
 <section id="overview">
 <h1>Architecture Documentation <small>devops v0.87.0</small></h1>
 <p class="lead">
-  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->69<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->14<!--/devops:count:skills--> skills, <!--devops:count:agents-->13<!--/devops:count:agents--> agents,
+  A comprehensive DevOps automation plugin for Claude Code &mdash; <!--devops:count:hooks-->69<!--/devops:count:hooks--> hooks, <!--devops:count:skills-->14<!--/devops:count:skills--> skills, <!--devops:count:agents-->11<!--/devops:count:agents--> agents,
   2 MCP servers, a deterministic completion card engine, and a 3-layer extension system.
 </p>
 <div role="note" style="margin:.4rem 0 1.4rem;padding:.6rem .9rem;background:var(--bg2);border-left:3px solid var(--warn);border-radius:4px;color:var(--text2);font-size:.85rem;">
@@ -192,8 +192,8 @@
     <p style="color:var(--text2);font-size:.85rem">Slash menu: do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit), do-learn, do-batch · hidden workers: auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue · no longer skills (deep-knowledge + hooks): readme-standards, graphify, usage, strict, project-setup</p>
   </div>
   <div class="card">
-    <h4><!--devops:count:agents-->13<!--/devops:count:agents--> Agents</h4>
-    <p style="color:var(--text2);font-size:.85rem">Specialized subagents: ai, core, designer, feature, frontend, gamer, po, qa, redteam, research, windows</p>
+    <h4><!--devops:count:agents-->11<!--/devops:count:agents--> Agents</h4>
+    <p style="color:var(--text2);font-size:.85rem">Specialized subagents: ai, core, designer, feature, frontend, po, qa, redteam, research, rethinker, scout</p>
   </div>
   <div class="card">
     <h4>2 MCP Servers</h4>
@@ -211,8 +211,8 @@
 ├── .claude-plugin/
 │   ├── plugin.json            <span style="color:var(--text2)"># Plugin manifest (name, version, mcpServers, hooks)</span>
 │   └── marketplace.json       <span style="color:var(--text2)"># Marketplace registration</span>
-├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->13<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
-├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->47<!--/devops:count:dk--> cross-cutting reference docs</span>
+├── agents/                    <span style="color:var(--accent2)"># <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions (*.md with YAML frontmatter)</span>
+├── deep-knowledge/            <span style="color:var(--warn)"># <!--devops:count:dk-->50<!--/devops:count:dk--> cross-cutting reference docs</span>
 ├── hooks/
 │   ├── hooks.json             <span style="color:var(--purple)"># Hook registry (event &rarr; command mapping)</span>
 │   ├── lib/                   <span style="color:var(--text2)"># plugin-guard, run-once, session-id</span>
@@ -769,49 +769,37 @@
     <span class="badge b-agent">frontend</span>
     <h4>Frontend</h4>
     <p style="color:var(--text2);font-size:.85rem">UI components, templates, styling, user-facing interactions</p>
-    <p><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Edit</span><span class="tag">Bash</span><span class="tag">Glob</span><span class="tag">Grep</span><span class="tag">preview_*</span></p>
+    <p><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Edit</span><span class="tag">Bash</span><span class="tag">Glob</span><span class="tag">Grep</span><span class="tag">mcp__Claude_Browser</span><span class="tag">mcp__claude-in-chrome</span></p>
   </div>
   <div class="card">
     <span class="badge b-agent">feature</span>
-    <h4>Feature Orchestrator</h4>
-    <p style="color:var(--text2);font-size:.85rem">Coordinates feature agents, delegates across domains</p>
-    <p><span class="tag">Bash</span><span class="tag">Glob</span><span class="tag">Grep</span><span class="tag">Agent</span><span class="tag">AskUserQuestion</span></p>
+    <h4>Feature</h4>
+    <p style="color:var(--text2);font-size:.85rem">One feature end to end: po lenses + synthesis when unrefined, then build, delegate, verify</p>
+    <p><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Edit</span><span class="tag">Bash</span><span class="tag">Agent</span></p>
   </div>
   <div class="card">
     <span class="badge b-agent">qa</span>
     <h4>Quality Assurance</h4>
     <p style="color:var(--text2);font-size:.85rem">Tests, builds, screenshots, console error validation</p>
-    <p><span class="tag">Bash</span><span class="tag">Read</span><span class="tag">Glob</span><span class="tag">Grep</span><span class="tag">preview_*</span></p>
+    <p><span class="tag">Bash</span><span class="tag">Read</span><span class="tag">Glob</span><span class="tag">Grep</span><span class="tag">mcp__Claude_Browser</span><span class="tag">mcp__claude-in-chrome</span></p>
   </div>
   <div class="card">
     <span class="badge b-agent">research</span>
     <h4>Research</h4>
     <p style="color:var(--text2);font-size:.85rem">Technology comparison, best practices, fact verification</p>
-    <p><span class="tag">WebSearch</span><span class="tag">WebFetch</span><span class="tag">Read</span><span class="tag">Grep</span><span class="tag">Glob</span></p>
+    <p><span class="tag">WebSearch</span><span class="tag">WebFetch</span><span class="tag">Read</span><span class="tag">Grep</span><span class="tag">Glob</span><span class="tag">Bash</span></p>
   </div>
   <div class="card">
     <span class="badge b-agent">po</span>
     <h4>Product Owner</h4>
-    <p style="color:var(--text2);font-size:.85rem">Requirements, validation, acceptance criteria, backlog</p>
-    <p><span class="tag">Read</span><span class="tag">Grep</span><span class="tag">Glob</span><span class="tag">AskUserQuestion</span></p>
-  </div>
-  <div class="card">
-    <span class="badge b-agent">gamer</span>
-    <h4>Gamer / UX Tester</h4>
-    <p style="color:var(--text2);font-size:.85rem">Player perspective, game-feel, performance, fun factor</p>
-    <p><span class="tag">Read</span><span class="tag">Bash</span><span class="tag">preview_*</span><span class="tag">AskUserQuestion</span></p>
+    <p style="color:var(--text2);font-size:.85rem">One lens (customer · tech · business) or the synthesis/review that weighs them</p>
+    <p><span class="tag">Read</span><span class="tag">Grep</span><span class="tag">Glob</span><span class="tag">WebSearch</span></p>
   </div>
   <div class="card">
     <span class="badge b-agent">designer</span>
     <h4>UX/UI Designer</h4>
     <p style="color:var(--text2);font-size:.85rem">Design specs, token systems, visual hierarchy</p>
-    <p><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Edit</span><span class="tag">Glob</span></p>
-  </div>
-  <div class="card">
-    <span class="badge b-agent">windows</span>
-    <h4>Windows Platform</h4>
-    <p style="color:var(--text2);font-size:.85rem">System tray, native APIs, installers, platform integration</p>
-    <p><span class="tag">Read</span><span class="tag">Write</span><span class="tag">Edit</span><span class="tag">Bash</span><span class="tag">Glob</span><span class="tag">Grep</span></p>
+    <p><span class="tag">all connected tools (Figma, browser)</span></p>
   </div>
 </div>
 </section>
