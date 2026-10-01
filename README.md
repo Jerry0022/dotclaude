@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.241.0**
+**Version: 0.241.1**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -71,6 +71,7 @@ Your mileage may vary. Your sanity will not.
 - [Supported Stacks](#supported-stacks)
 - [Integrations](#integrations)
 - [Customization](#customization)
+- [Local Claude Code setup](#local-claude-code-setup)
 
 **Use**
 - [Features](#features)
@@ -207,6 +208,91 @@ answer; the style targets narration, not explanations.
 If the desktop app's "New output style" dialog asks you to sign in again, the
 headless CLI token behind it has expired — the file route above needs no
 generator. `claude` + `/login` in a terminal repairs the dialog.
+
+## Local Claude Code setup
+
+Recommendations for the machine Claude Code runs on — independent of this
+plugin, but they decide how far your usage goes and what survives an OS
+reinstall.
+
+### Recommended settings
+
+| Setting (`~/.claude/settings.json`) | Why |
+|---|---|
+| `"promptCacheTtl": "1h"` | On a subscription the main conversation already uses the 1-hour prompt cache — but in overage (usage credits) Claude Code silently drops to 5 minutes, so every short break re-writes the whole context. Pinning `1h` keeps it. Needs Claude Code ≥ 2.1.242; check with `/usage` → `Prompt cache (main)`. |
+| `"outputStyle": "Quiet"` | See [Quiet output style](#quiet-output-style-recommended). |
+
+**Check first, then set — let Claude do it.** Paste this into any Claude Code
+session; it measures what the 1-hour TTL would have saved on your own last
+sessions (reads local transcripts only, no extra model calls) and sets it only
+when the effect is significant:
+
+```text
+Analyse my prompt-cache pauses, then decide on promptCacheTtl:
+1. Read the newest (up to 100) main-session transcripts under
+   ~/.claude/projects/*/*.jsonl plus their */subagents/*.jsonl, with a small
+   Node script (stream line by line, never load them into context). Dedupe
+   assistant entries by requestId; take usage.input_tokens,
+   cache_creation.ephemeral_5m_input_tokens / ephemeral_1h_input_tokens,
+   cache_read_input_tokens, output_tokens and the timestamp.
+2. Total volume in input-price units: input x1 + 5m-write x1.25 +
+   1h-write x2 + read x0.1 (x0.05 on Opus 5.5, x0.025 on Fable) + output x5.
+3. For every main-session gap between two calls of 5-60 min, count the
+   context of the earlier call x1.25 as the re-write a 5-minute TTL would cost.
+   Separately sum the gaps over 60 min whose next call was a real miss
+   (cache write > 50 % of its context): that is what even 1h does not save.
+4. Report: sessions/days covered, total units, share of the 5-60 min
+   re-writes (= what promptCacheTtl "1h" protects in overage), share of the
+   >60 min misses, and which TTL the transcripts show today.
+5. If the 5-60 min share is >= 3 % of the volume, set "promptCacheTtl": "1h"
+   in ~/.claude/settings.json (keep the file valid JSON, change nothing else)
+   and tell me to check /usage -> "Prompt cache (main)" in a new session.
+   Below 3 %, recommend leaving it and say why. Never delete or print
+   transcript content.
+```
+
+How the cache works, in short: every API call (each tool call, not just each
+message) re-sends the full context; an unchanged prefix is read from the cache
+at ~0.1× the input price (0.05× on Opus 5.5), new content is written once at
+2× (1h TTL). A pause longer than the TTL, a model switch, or a change in the
+tool list (MCP server or plugin toggled mid-session) re-writes everything.
+Keep one topic per session, run big reads in subagents, and `/compact` or
+write a hand-off *before* a long break while the cache is still warm.
+
+### Before reinstalling Windows (or moving to a new machine)
+
+Claude Code keeps everything local in two places under your user profile.
+Back these up; everything else is either regenerated or lives in your account.
+
+| Path | What it holds | Back up? |
+|---|---|---|
+| `%USERPROFILE%\.claude\settings.json`, `settings.local.json`, `keybindings.json` | Permissions, hooks, enabled plugins, marketplaces, output style, cache TTL | **Yes** |
+| `%USERPROFILE%\.claude\CLAUDE.md` | Your global instructions | **Yes** |
+| `%USERPROFILE%\.claude\output-styles\`, `agents\`, `skills\`, `commands\` | Personal styles, agents, skills, slash commands | **Yes** |
+| `%USERPROFILE%\.claude\projects\<project>\memory\` | Auto-memory per project | **Yes** |
+| `%USERPROFILE%\.claude\scheduled-tasks\`, `scripts\`, statusline script | Desktop scheduled tasks and your own helper scripts | **Yes** |
+| `%USERPROFILE%\.claude\plugins\installed_plugins.json`, `known_marketplaces.json` | Which plugins and marketplaces are installed | Yes (small) |
+| devops state in `%USERPROFILE%\.claude\` (`delegation.json`, `devops-*.json`, `token-config.json`) | Plugin preferences | Yes (small) |
+| `%USERPROFILE%\.claude.json` | User-scoped MCP servers (`claude mcp add -s user`), per-project trust and state | **Yes** |
+| `%APPDATA%\Claude\claude_desktop_config.json`, `config.json` | Desktop app settings and its MCP servers | **Yes** |
+| `%USERPROFILE%\.claude\projects\*.jsonl`, `history.jsonl` | Session transcripts and prompt history (can be GBs) | Optional — only for `--resume` of old sessions |
+| `%USERPROFILE%\.claude\plugins\cache\`, `cache\`, `debug\`, `shell-snapshots\`, `telemetry\`, `file-history\` | Caches and logs | No — regenerated |
+| `%USERPROFILE%\.claude\.credentials.json` | Login token | **No** — never copy or sync it; run `/login` after the reinstall |
+| `%APPDATA%\Claude\` (everything else) | Browser caches of the desktop app | No |
+
+Not on disk, nothing to back up: claude.ai connectors, published artifacts,
+cloud sessions and routines — they belong to your account.
+
+**Your code is the bigger risk.** Unpushed commits and uncommitted work in
+worktrees (`<repo>\.claude\worktrees\…`) are gone with the disk. Before
+reinstalling, ship or at least push every branch: `git log --branches --not --remotes`
+lists what only exists locally.
+
+**Make it a habit, not an emergency.** Keep the "Yes" rows in a private git
+repo (dotfiles) and restore them with a copy after reinstalling Claude Code —
+exclude `.credentials.json`, transcripts and caches. After restoring:
+install Claude Code, `/login`, then `claude plugin update` pulls every plugin
+from the restored marketplaces.
 
 ## Features
 
