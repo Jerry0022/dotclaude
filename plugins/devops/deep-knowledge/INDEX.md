@@ -5,6 +5,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 
 | File | Topic | Summary |
 |------|-------|---------|
+| [agent-branch-setup.md](agent-branch-setup.md) | Agent Branch Setup | The first step of every implementing agent (`core`, `frontend`, `ai`, |
 | [agent-collaboration.md](agent-collaboration.md) | Agent Collaboration Protocol | How agents work together on multi-role tasks. |
 | [agent-conventions.md](agent-conventions.md) | Agent Naming & Collaboration Conventions | [role:X · Type] Task description |
 | [agent-orchestration.md](agent-orchestration.md) | Agent Orchestration | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
@@ -27,6 +28,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [documentation-maintenance.md](documentation-maintenance.md) | Documentation Maintenance | Keep project docs in their target state as behavior, flows, and architecture ... |
 | [edge-profiles.md](edge-profiles.md) | Edge Profiles | Configuration and usage rules for the two Microsoft Edge profiles used by thi... |
 | [fact-verification.md](fact-verification.md) | Fact Verification | Cross-cutting rule for all web research, claims, and statistics. |
+| [feature-elaboration.md](feature-elaboration.md) | Feature Elaboration | How a feature is thought through before anyone builds it — `po` lenses in |
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/do-ship`, the role agents, and hooks. |
 | [graphify.md](graphify.md) | graphify — Codebase Knowledge Graph (default-on, opt-out) | Codebase knowledge graph via the external graphify CLI: default-on, opt-out v... |
 | [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/auto-harden` and `/auto-polish`. Covers |
@@ -52,3 +54,4 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [ui-defaults.md](ui-defaults.md) | UI Defaults | Standing UI conventions every project using the devops plugin gets by default. |
 | [usage.md](usage.md) | Usage Data — Live Token Usage | Live token usage (5h + weekly windows, burn rate) for the completion card's b... |
 | [visual-verification.md](visual-verification.md) | Visual Verification Methods | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
+| [windows-platform.md](windows-platform.md) | Windows Platform Work | Reference for Windows-specific implementation — system tray, native |

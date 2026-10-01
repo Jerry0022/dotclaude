@@ -15,8 +15,8 @@ import { fileURLToPath } from "node:url";
 const plugin = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...p) => readFileSync(join(plugin, ...p), "utf8").replace(/\r\n/g, "\n");
 
-const IMPLEMENTERS = ["core", "frontend", "ai", "windows", "designer", "feature"];
-const ANALYSTS = ["po", "research", "redteam", "qa", "gamer", "rethinker"];
+const IMPLEMENTERS = ["core", "frontend", "ai", "designer", "feature"];
+const ANALYSTS = ["po", "research", "redteam", "qa", "scout", "rethinker"];
 
 describe("the rule itself", () => {
   const conv = read("deep-knowledge", "commit-conventions.md");

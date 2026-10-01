@@ -98,4 +98,15 @@ function refusalText(input) {
   );
 }
 
-module.exports = { MARKER, refusedBefore, wouldRefuse, refusalText };
+/**
+ * Explore that names its model passes the gate, yet `devops:scout` is the
+ * cheaper locator (sonnet · low, ~1 min median vs ~5 for Explore in the
+ * 2026-09 transcripts). A hint, never a block — Explore stays legitimate.
+ */
+function locateHint(input) {
+  if ((input && input.subagent_type) !== 'Explore') return null;
+  return '[agent-model] Explore spawned — for locating and sweeps `devops:scout` (sonnet · low) is the cheaper ' +
+    'default (delegation policy). Keep Explore when you need its thoroughness levels.';
+}
+
+module.exports = { MARKER, refusedBefore, wouldRefuse, refusalText, locateHint };

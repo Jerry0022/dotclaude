@@ -34,7 +34,7 @@ allowed-tools: >-
   AskUserQuestion, CronCreate, CronDelete, CronList,
   EnterWorktree, ExitWorktree, TodoWrite,
   WebFetch, WebSearch,
-  mcp__computer-use__*, mcp__Claude_in_Chrome__*,
+  mcp__computer-use__*, mcp__claude-in-chrome__*, mcp__Claude_in_Chrome__*,
   mcp__Claude_Preview__*, mcp__Claude_Browser__*,
   mcp__plugin_playwright_playwright__*,
   mcp__plugin_devops_dotclaude-completion__*,

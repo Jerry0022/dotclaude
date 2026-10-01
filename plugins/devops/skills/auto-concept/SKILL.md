@@ -18,7 +18,7 @@ user-invocable: false
 triggers:
   en: ["concept", "concept page", "interactive plan", "show me this as a page", "visualize this"]
 argument-hint: "[topic, analysis result, plan, or concept to visualize]"
-allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+allowed-tools: Read, Write, Glob, Grep, Bash(start *), Bash(cmd *), Bash(python *), Bash(curl *), Bash(kill *), Bash(node *), AskUserQuestion, CronCreate, CronDelete, mcp__Claude_Browser__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__plugin_devops_dotclaude-completion__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
 ---
 
 # Concept
@@ -931,7 +931,7 @@ no crons, no Edge start. The steps, the wrapper contract and the card:
 The concept page MUST be opened in the user's **real Edge browser** via the
 OS shell. **Forbidden alternatives** that will produce a broken session:
 
-- ❌ **Never** use `mcp__Claude_Preview__preview_start` / `preview_*` to
+- ❌ **Never** use `preview_start` / `preview_*` (`mcp__Claude_Browser__*`, formerly `mcp__Claude_Preview__*`) to
   display the page. The preview pane is a sandboxed in-IDE iframe — it
   has no heartbeat connection, no cron polling, and the user cannot
   interact with it the way the concept flow needs. `mcp__Claude_Preview__*`
@@ -1415,8 +1415,8 @@ never re-run a completed step. The checkpoint records what the previous run
    brief: the concept file path, the submitted round, and the decisions the
    work must honour — not a paraphrase. `auto-agents` applies the delegation
    tiers, shows its agent cards, splits the approved work by domain
-   (`devops:core`, `devops:frontend`, `devops:designer`, `devops:ai`,
-   `devops:windows`), runs independent parts in parallel and lets
+   (`devops:core`, `devops:frontend`, `devops:designer`, `devops:ai`),
+   runs independent parts in parallel and lets
    `devops:qa` verify; `{PLUGIN_ROOT}/deep-knowledge/agent-orchestration.md`
    stays the authority on who owns what. The implement click is the yes its
    parallel tier needs — it does not ask again. Its result comes back here:

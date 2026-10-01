@@ -7,10 +7,10 @@ description: >-
   replacement for Explore, whose model and effort follow the session.
   Use proactively, in the background, for a sweep over more than ~10 files or a "where/how is X wired?" question — no user request needed.
   <example>Find every caller of renderAgentCard and how its lang is chosen</example>
-  <example>Which hooks read the transcript tail, and with what byte limit?</example>
 model: sonnet
 effort: low
 color: cyan
+maxTurns: 30
 tools: ["Read", "Grep", "Glob", "Bash"]
 ---
 

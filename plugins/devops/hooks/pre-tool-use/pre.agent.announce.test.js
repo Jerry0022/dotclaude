@@ -184,13 +184,13 @@ describe("pre.agent.announce (hook)", () => {
     expect(line(res)).toBe("nope · session model · session effort · background");
   });
 
-  test("feature inherits: session model and effort, override still visible", () => {
+  test("feature names its own model now: a downward override shows the arrow, effort stays", () => {
     const dir = project();
     const res = runHook(dir, {
-      input: { subagent_type: "devops:feature", model: "opus", prompt: "x" },
+      input: { subagent_type: "devops:feature", model: "sonnet", prompt: "x" },
       extra: { transcript_path: transcript(dir, "claude-sonnet-5") },
     });
-    expect(line(res)).toBe("feature · sonnet 5 (session) → opus · session effort · background");
+    expect(line(res)).toBe("feature · opus → sonnet · medium · background");
   });
 
   test("an override equal to the frontmatter model shows no arrow", () => {

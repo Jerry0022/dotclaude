@@ -18,7 +18,7 @@ autonomous flow MUST comply. No exceptions, no silent fallback to other browsers
 
 Microsoft Edge is the **exclusive** browser. Never launch, control, or interact
 with Chrome, Firefox, or any other browser. The Chrome MCP extension
-(`mcp__Claude_in_Chrome__*`) is installed **in Edge** — its name contains
+(`mcp__claude-in-chrome__*`; older installs `mcp__Claude_in_Chrome__*`) is installed **in Edge** — its name contains
 "Chrome" because it's a Chromium extension, but it runs in Edge.
 
 ### 2. Claude Extension First — Computer-Use for Browser Only on Explicit Request
@@ -110,13 +110,13 @@ not mouse/keyboard, so it doesn't interfere with the user's work.
 For testing **the project's own running app on a local dev server**, the tool
 order is set by the waterfall below. There are two first-class primaries:
 
-- **Claude-in-Chrome MCP** (`mcp__Claude_in_Chrome__*`) runs as an extension in
+- **Claude-in-Chrome MCP** (`mcp__claude-in-chrome__*`, older installs `mcp__Claude_in_Chrome__*`) runs as an extension in
   **Microsoft Edge** (Chromium, fully compatible). Full DOM read+write: navigate,
   click, type, evaluate JS, read DOM, fill forms, manage tabs. No desktop
   takeover; works foreground + background; uses the user's real Edge context.
   **When the extension is connected it stays primary** — it is the most capable
   tool (multi-tab, file upload, external origins, real login context).
-- **Claude Preview** (`preview_*`) attaches to the local dev server. **When the
+- **Claude Preview** (`preview_*` — server `mcp__Claude_Browser`, formerly `mcp__Claude_Preview`) attaches to the local dev server. **When the
   Chrome extension is not connected, Preview is the primary tool** for the
   localhost app (no longer a last resort): it needs no extension setup, persists
   login **per-baseRepo** across worktrees/chats, and ships native viewport presets

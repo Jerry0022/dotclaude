@@ -65,7 +65,7 @@ computer-use:
 - **External / deployed-URL checks** (e.g. post-merge production health) — not localhost.
 - **`concept` interactive pages** — served over an http bridge with a cron
   heartbeat in the user's real Edge; Preview's sandbox cannot host the bridge.
-- **Native / cross-app flows** — `desktop-testing.md`, `agents/windows`.
+- **Native / cross-app flows** — `desktop-testing.md`, `windows-platform.md`.
 
 ---
 

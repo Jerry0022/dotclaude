@@ -8,7 +8,6 @@ description: >-
   Spawned in parallel (one per lens) by /do-run rethink Step 4.
   Not proactive — spawned only by /do-run rethink.
   <example>Rethink the onboarding flow through the ux-design lens</example>
-  <example>Fresh product-value approach for the stuck reporting section</example>
 model: opus
 effort: high
 color: purple

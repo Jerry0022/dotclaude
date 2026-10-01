@@ -284,7 +284,7 @@ function needsLightVerification(profileClass, filePath, carveOuts, domPaths) {
 // ---------------------------------------------------------------------------
 
 const BROWSER_MCP_RE =
-  /^mcp__(Claude_in_Chrome__|Claude_Preview__preview_|plugin_playwright_playwright__browser_)/;
+  /^mcp__(Claude_in_Chrome__|claude-in-chrome__|Claude_Browser__|Claude_Preview__preview_|plugin_playwright_playwright__browser_)/;
 const BROWSER_SHORT_RE =
   /^(preview_(snapshot|screenshot|eval|click|fill|console_logs|inspect|navigate|start|logs|network)|browser_(navigate|snapshot|take_screenshot|click|evaluate|console_messages|network_requests|type|fill_form|wait_for))/;
 

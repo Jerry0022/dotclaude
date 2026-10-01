@@ -40,7 +40,8 @@ the plugin goes through this skill (`{PLUGIN_ROOT}/deep-knowledge/plugin-behavio
 ### Caller hand-over (non-interactive)
 
 Other skills and agents (`/do-run backlog` Step 2, `/auto-concept` `create-issues`,
-`/do-learn`, `/do-batch`, the `po` agent) invoke this skill through the
+`/do-learn`, `/do-batch`, and the orchestrator on behalf of a `po` review's
+follow-ups) invoke this skill through the
 **Skill** tool with a self-contained prompt. When the hand-over carries every
 required field, **no `AskUserQuestion` fires** — the caller already made the
 decisions (or runs under a zero-prompt invariant) and a question here is a UX

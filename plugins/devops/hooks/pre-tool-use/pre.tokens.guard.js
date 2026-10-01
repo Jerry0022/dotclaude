@@ -238,7 +238,26 @@ process.stdin.on('end', () => {
   const toolInput = hook.tool_input || {};
   const cfg = loadConfig();
   const LIMIT = cfg.estimatedLimitTokens;
-  const THRESHOLD = Math.round(LIMIT * (cfg.confirmThresholdPct || 0.02));
+  // Sub-agent calls carry `agent_id` (and `agent_type`); the main thread has
+  // neither. A sub-agent has its own fresh context window whose purpose is to
+  // read broadly and return only a conclusion, so a main-thread-sized
+  // threshold is mis-sized for it. It gets a SEPARATE, higher threshold —
+  // not an exemption: default 4x the main pct (pro 5% -> 20%, max_20 10% ->
+  // 40%), capped at 50% so one call can never swallow half a window.
+  // Overridable via `subagentConfirmThresholdPct` and, per agent_type,
+  // `subagentTypeThresholdPct: { "<agent_type>": pct }`.
+  const isSubagent = typeof hook.agent_id === 'string' && hook.agent_id !== '';
+  const mainPct = cfg.confirmThresholdPct || 0.02;
+  let activePct = mainPct;
+  if (isSubagent) {
+    const perType = cfg.subagentTypeThresholdPct && typeof cfg.subagentTypeThresholdPct === 'object'
+      ? cfg.subagentTypeThresholdPct[hook.agent_type] : undefined;
+    const valid = v => typeof v === 'number' && v > 0 && v <= 1;
+    activePct = valid(perType) ? perType
+      : valid(cfg.subagentConfirmThresholdPct) ? cfg.subagentConfirmThresholdPct
+      : Math.min(0.5, mainPct * 4);
+  }
+  const THRESHOLD = Math.round(LIMIT * activePct);
 
   let estimatedTokens = 0;
   let description = '';
@@ -824,7 +843,9 @@ process.stdin.on('end', () => {
   console.error(`Operation:  ${description}`);
   const planLabel = cfg.plan || 'unknown';
   console.error(`Est. cost:  ~${estimatedTokens.toLocaleString()} tokens  (${pct}% of ${(LIMIT / 1000).toFixed(0)}K context window)`);
-  console.error(`Threshold:  ${THRESHOLD.toLocaleString()} tokens (${(cfg.confirmThresholdPct * 100).toFixed(0)}% of context · ${planLabel})`);
+  console.error(isSubagent
+    ? `Threshold:  ${THRESHOLD.toLocaleString()} tokens (${(activePct * 100).toFixed(0)}% of context · sub-agent threshold · ${planLabel})`
+    : `Threshold:  ${THRESHOLD.toLocaleString()} tokens (${(cfg.confirmThresholdPct * 100).toFixed(0)}% of context · ${planLabel})`);
 
   if (toolName === 'Read') {
     const fp = toolInput.file_path || '';

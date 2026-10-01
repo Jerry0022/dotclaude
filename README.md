@@ -57,7 +57,7 @@ Based on ~0.7M tokens/week plugin overhead:
 | Debugging the same error 4 times | /auto-fix kicks in after the second failure |
 | Writing commit messages by hand | Conventional commits enforced by shared conventions |
 
-**Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
+**Token guard payoff:** The token guard blocks any single operation above your plan's per-operation share of the ~200K context window — **5% (~10K tokens) on Pro, 8% (~16K) on Max 5×, 10% (~20K) on Max 20×**. Calls from a sub-agent get their own, higher threshold (4× the plan's share, capped at 50 %; `subagentConfirmThresholdPct` and a per-agent `subagentTypeThresholdPct` map override it): a sub-agent's fresh context exists to read broadly and return only the conclusion. In a typical session, Claude attempts 5–15 broad searches or large-file reads that would each burn 20–80K tokens — that's 100–400K tokens/session evaporating into context you never asked for. Across ~10 sessions/week, the guard saves roughly **1–4M tokens/week** in prevented waste. The plugin's own overhead (~0.7M tokens/week for hooks, startup checks, and skill prompts) pays for itself 1.5–6x over just by keeping Claude from reading files it doesn't need.
 
 Your mileage may vary. Your sanity will not.
 
@@ -298,7 +298,7 @@ from the restored marketplaces.
 
 - **<!--devops:count:hooks-->69<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
-- **<!--devops:count:agents-->13<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, Gamer, PO, QA, Redteam, Research, Scout, Windows
+- **<!--devops:count:agents-->11<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -598,18 +598,16 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 | Agent | Role |
 |---|---|
 | **ai** | AI/ML integration |
-| **core** | Business logic and APIs |
+| **core** | Business logic, APIs and platform code (Windows: `deep-knowledge/windows-platform.md`) |
 | **designer** | UX/UI design, tokens, and specs |
-| **feature** | Orchestrate feature implementation |
+| **feature** | One feature end to end: elaborate (po lenses → synthesis) when unrefined, build, verify |
 | **frontend** | UI components and styling |
-| **gamer** | Player perspective and UX |
-| **po** | Requirements and validation |
+| **po** | Product judgment: one lens (customer · tech · business) or the synthesis/review that weighs them |
 | **qa** | Test, verify, screenshot |
 | **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
 | **research** | Deep-dive investigations |
 | **scout** | Read-only locator (sonnet · low): "where/how is X?" sweeps, answer + `path:line` evidence |
 | **rethinker** | Code-blind fresh-approach ideation through one lens |
-| **windows** | Platform-specific features |
 
 ## Completion Cards
 
@@ -684,7 +682,7 @@ devops/
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← <!--devops:count:hooks-->69<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
-├── agents/                        ← <!--devops:count:agents-->13<!--/devops:count:agents--> agent definitions
+├── agents/                        ← <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)

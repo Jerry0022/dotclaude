@@ -23,7 +23,7 @@ triggers:
   en: ["repo health", "branch cleanup", "branch hygiene"]
   de: ["branches aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen"]
 argument-hint: "[optional: focus area — branches, sessions, PRs]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__plugin_devops_dotclaude-ship__*, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
+allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Browser__*, mcp__claude-in-chrome__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__plugin_devops_dotclaude-ship__*, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
 ---
 
 # Auto-Cleanup — Repo Health
