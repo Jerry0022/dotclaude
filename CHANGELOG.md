@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.241.1] — 2026-10-01
+
+### Docs
+- **README: new section "Local Claude Code setup".** A "Recommended settings" table (`promptCacheTtl: "1h"`, `outputStyle`) with a short prompt-cache primer: Claude Code caches the main conversation for 1 h on any subscription, but only 5 min for API-key use, subagents and overage — and overage silently drops to 5 min unless `promptCacheTtl: "1h"` is set. Measured on 14 days of the maintainer's transcripts (928 sessions), a 5-min TTL would have cost +24–38 % volume, so pinning 1 h is the real lever (Opus 5.5 cache reads cost 0.05×).
+- **Copy-paste prompt that analyses before it sets.** It streams the last ≤ 100 main-session transcripts (plus subagents), computes the share of volume lost to 5–60 min pause re-writes — what the 1 h TTL protects in overage — and sets `promptCacheTtl` only when that share is ≥ 3 %.
+- **"Before reinstalling Windows" backup table:** what to keep from `~/.claude` (settings, CLAUDE.md, memory, skills, agents, output styles), `~/.claude.json` and `%APPDATA%\Claude`; never `.credentials.json`; push branches and worktrees first.
+- A keep-warm timer (ping before the TTL expires) was evaluated against transcript simulations and rejected: 1.91 % net saving, below the agreed 3 % bar.
+
 ## [0.241.0] — 2026-10-01
 
 ### Added
