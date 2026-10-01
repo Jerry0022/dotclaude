@@ -180,3 +180,64 @@ describe('card-pregate — check (flags, transcript, one refusal per finding)', 
     expect(check({ ...ok, summary: 'läuft', session_id: 'unknown' }, { home, tmp }).refuse).toBe(false);
   });
 });
+
+// #612 — the Light check owed by stop.flow.browsertest is asked BEFORE the card,
+// so a deliberate skip lands on the card instead of as prose below it.
+describe('card-pregate — verification owed (#612)', () => {
+  const owed = { kind: 'runner', red: false };
+  const skip = { skipped: true, reason: 'plugin hook, no startable surface' };
+  const light = (name, content = '1') => fs.writeFileSync(path.join(os.tmpdir(), `dotclaude-devops-${name}-${sid}`), content);
+  const clearLight = () => {
+    for (const name of ['light-pending', 'light-verified', 'light-kind', 'light-red', 'light-bgrun']) {
+      try { fs.unlinkSync(path.join(os.tmpdir(), `dotclaude-devops-${name}-${sid}`)); } catch { /* not written */ }
+    }
+  };
+
+  test('owed and no skip → one finding naming both ways out', () => {
+    const r = findings(ok, { verificationOwed: owed });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatch(/passing test run/);
+    expect(r[0]).toMatch(/verification: \{ skipped: true, reason/);
+  });
+
+  test('a red run is named as such', () => {
+    expect(findings(ok, { verificationOwed: { kind: 'runner', red: true } })[0]).toMatch(/FAILED/);
+  });
+
+  test('a skip with a reason satisfies it; a skip without one does not', () => {
+    expect(findings({ ...ok, verification: skip }, { verificationOwed: owed })).toEqual([]);
+    expect(findings({ ...ok, verification: { skipped: true, reason: '  ' } }, { verificationOwed: owed })).toHaveLength(1);
+    expect(findings({ ...ok, verification: { skipped: false, reason: 'x' } }, { verificationOwed: owed })).toHaveLength(1);
+  });
+
+  test('cards that finish no code work are exempt', () => {
+    for (const variant of ['analysis', 'aborted', 'paused', 'test-minimal', 'fallback']) {
+      expect(findings({ ...ok, variant }, { verificationOwed: owed }), variant).toEqual([]);
+    }
+  });
+
+  test('check reads the Light flags: owed → refused once, then rendered', () => {
+    setup();
+    try {
+      light('light-pending', 'a.js');
+      light('light-kind', 'runner');
+      const first = check({ ...ok, session_id: sid }, { home, tmp });
+      expect(first.refuse).toBe(true);
+      expect(first.text).toMatch(/verification: \{ skipped: true/);
+      expect(check({ ...ok, session_id: sid }, { home, tmp }).refuse).toBe(false);
+    } finally { clearLight(); }
+  });
+
+  test('check: a skip on the card, a verified run or a running test owe nothing', () => {
+    setup();
+    try {
+      light('light-pending', 'a.js');
+      expect(check({ ...ok, session_id: sid, verification: skip }, { home, tmp }).refuse).toBe(false);
+      light('light-bgrun', `b68oycrr6 ${Date.now()}`);
+      expect(check({ ...ok, session_id: sid }, { home, tmp }).refuse).toBe(false);
+      fs.unlinkSync(path.join(os.tmpdir(), `dotclaude-devops-light-bgrun-${sid}`));
+      light('light-verified', 'npm test');
+      expect(check({ ...ok, session_id: sid }, { home, tmp }).refuse).toBe(false);
+    } finally { clearLight(); }
+  });
+});

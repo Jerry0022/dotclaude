@@ -729,6 +729,16 @@ describe("post.flow.completion — a background test run verifies only by its re
     expect(has(dir, "light-pending", sid)).toBe(true);
     cleanup(dir);
   });
+
+  test("a code edit drops a card-recorded skip too — it covered the code before (#612)", () => {
+    const dir = project();
+    const sid = "s-skip-edit";
+    fs.writeFileSync(path.join(dir, ".tmp", `dotclaude-devops-light-skipped-${sid}`), "no surface");
+    runHook(dir, sid, "Edit");
+    expect(has(dir, "light-skipped", sid)).toBe(false);
+    expect(has(dir, "light-pending", sid)).toBe(true);
+    cleanup(dir);
+  });
 });
 
 // The completion MCP keys its per-turn flags by the `session_id` the MODEL

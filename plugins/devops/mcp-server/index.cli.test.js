@@ -590,3 +590,49 @@ describe("AUD-010 — CLI path sanitises the session id before any file write", 
     expect(existsSync(join(tmpdir(), escaped))).toBe(false);
   });
 });
+
+// #612 — a deliberate skip rides on the card: ⚠ line with its reason, a
+// decision point, and the light-skipped flag the Stop gate accepts.
+describe("--render-card CLI — a deliberate verification skip (#612)", () => {
+  const written = [];
+  const flag = (name, sid, content) => {
+    const file = join(tmpdir(), `dotclaude-devops-${name}-${sid}`);
+    writeFileSync(file, content);
+    written.push(file);
+  };
+  afterAll(() => {
+    for (const f of written) { try { unlinkSync(f); } catch { /* already gone */ } }
+  });
+  const skip = { skipped: true, reason: "Plugin-Hook ohne startbare Oberfläche" };
+
+  test("owed check + skip → ⚠ line with the reason, a decision point, the flag", async () => {
+    const sid = S("vv-skip");
+    flag("light-pending", sid, "a.js");
+    const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid, verification: skip });
+    written.push(join(tmpdir(), `dotclaude-devops-light-skipped-${sid}`));
+    expect(out).toMatch(/^## ⚠ Ungeprüft shippen\?$/m);
+    expect(out).toContain("⚠ ungeprüft — übersprungen: Plugin-Hook ohne startbare Oberfläche");
+    expect(out).toContain("Verifikation übersprungen: Plugin-Hook ohne startbare Oberfläche");
+    expect(out).not.toContain("kein Test lief");
+    expect(out).not.toContain("npm test lief nicht");
+    expect(readFileSync(join(tmpdir(), `dotclaude-devops-light-skipped-${sid}`), "utf8")).toBe(skip.reason);
+  });
+
+  test("english copy", async () => {
+    const sid = S("vv-skip-en");
+    flag("light-pending", sid, "a.js");
+    const out = await renderCard({ variant: "ready", summary: "x", lang: "en", session_id: sid, verification: { skipped: true, reason: "no surface" } });
+    written.push(join(tmpdir(), `dotclaude-devops-light-skipped-${sid}`));
+    expect(out).toContain("⚠ unverified — skipped: no surface");
+    expect(out).toContain("Verification skipped: no surface");
+  });
+
+  test("nothing owed → the skip is ignored and no flag is written", async () => {
+    const sid = S("vv-skip-verified");
+    flag("light-pending", sid, "a.js");
+    flag("light-verified", sid, "npm test");
+    const out = await renderCard({ variant: "ready", summary: "x", lang: "de", session_id: sid, verification: skip });
+    expect(out).not.toContain("übersprungen");
+    expect(existsSync(join(tmpdir(), `dotclaude-devops-light-skipped-${sid}`))).toBe(false);
+  });
+});

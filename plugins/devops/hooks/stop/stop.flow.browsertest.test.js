@@ -182,3 +182,34 @@ describe("stop.flow.browsertest — background agents that may still change file
     } finally { cleanup(dir); }
   });
 });
+
+// #612 — a skip the completion card recorded (light-skipped) is a justified
+// skip: the Stop after the card neither blocks nor asks for prose below it.
+describe("stop.flow.browsertest — a skip recorded by the completion card", () => {
+  function owe(dir) {
+    fs.writeFileSync(flagPath(dir, "light-pending"), path.join(dir, "a.js"));
+    fs.writeFileSync(flagPath(dir, "light-kind"), "runner");
+  }
+
+  test("owed check + card-recorded skip → no block, the cycle's flags reset", async () => {
+    const dir = project();
+    try {
+      owe(dir);
+      fs.writeFileSync(flagPath(dir, "light-skipped"), "plugin hook, no startable surface");
+      expect(await stop(dir)).toBe("");
+      expect(hasFlag(dir, "light-pending")).toBe(false);
+      expect(hasFlag(dir, "light-skipped")).toBe(false);
+      expect(hasFlag(dir, "light-blockcount")).toBe(false);
+    } finally { cleanup(dir); }
+  });
+
+  test("without it the owed check still blocks, and the reason names the card field", async () => {
+    const dir = project();
+    try {
+      owe(dir);
+      const decision = JSON.parse(await stop(dir));
+      expect(decision.decision).toBe("block");
+      expect(decision.reason).toMatch(/verification: \{ skipped: true, reason/);
+    } finally { cleanup(dir); }
+  });
+});

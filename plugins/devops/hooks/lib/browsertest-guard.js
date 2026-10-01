@@ -28,9 +28,11 @@
  *        verified flag is cleared by post.flow.completion on the next edit), so
  *        verification must come AFTER the last code change.
  *     Escalation — the gate blocks up to CAP times instead of once. An early
- *        skip requires an explicit `SKIP-VERIFICATION: <reason>` token in the
- *        response; otherwise the gate keeps blocking until the cap, then yields
- *        (never wedges) and records a visible skip.
+ *        skip is the completion card's `verification: { skipped, reason }`
+ *        (recorded in light-skipped, #612) or, without a card, an explicit
+ *        `SKIP-VERIFICATION: <reason>` token in the response; otherwise the
+ *        gate keeps blocking until the cap, then yields (never wedges) and
+ *        records a visible skip.
  *
  *   Inputs: flag state (light-pending / light-verified / red / kind) +
  *           stop_hook_active + silent + blockCount + skipJustified + inFlight.
@@ -662,6 +664,52 @@ function hasSkipJustification(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Card-recorded skip (#612)
+// ---------------------------------------------------------------------------
+
+// The completion card carries a conscious skip as `verification: { skipped,
+// reason }` and records it in this flag; the Stop gate below reads it as a
+// justified skip, so the reason never has to follow the card as prose.
+const LIGHT_SKIPPED_FLAG = 'dotclaude-devops-light-skipped';
+
+/** Card variants that never finish code work — the card pre-gate never asks them for a check. */
+const VERIFICATION_EXEMPT_VARIANTS = new Set(['analysis', 'aborted', 'paused', 'test-minimal', 'fallback']);
+
+/**
+ * The reason of a card payload's deliberate skip, or '' when it carries none.
+ * @param {object} input — render_completion_card params
+ * @returns {string}
+ */
+function cardSkipReason(input) {
+  const v = input && input.verification;
+  if (!v || typeof v !== 'object' || v.skipped !== true) return '';
+  return typeof v.reason === 'string' ? v.reason.trim() : '';
+}
+
+/**
+ * Card pre-gate text: the card would finish while the Light check is still
+ * owed. Refused once (card-pregate.js), so naming both ways out is enough.
+ * @param {'dom'|'runner'|'any'} [kind]
+ * @param {{ red?: boolean }} [opts]
+ * @returns {string}
+ */
+function buildCardVerificationReason(kind, { red = false } = {}) {
+  const check = kind === 'dom' ? 'a browser check of the changed view'
+    : kind === 'runner' ? 'a passing test run (npm test / vitest / pytest / …)'
+    : 'a browser check or a passing test run';
+  const head = red
+    ? '[stop.flow.browsertest] Code changed and the last test run FAILED — this card would finish unverified.'
+    : '[stop.flow.browsertest] Code changed but no matching Light check ran — this card would finish unverified.';
+  return [
+    head,
+    `Run ${check} now and render the card again — or, when verification is genuinely`,
+    'impossible here, render it with `verification: { skipped: true, reason: "<one line>" }`:',
+    'the card then shows the skip as ⚠ unverified with your reason and a decision point.',
+    'Never write the reason as prose below the card.',
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Decision
 // ---------------------------------------------------------------------------
 
@@ -754,10 +802,12 @@ function escFooter(escalated) {
     'no_runtime_static_paths of .claude/skills/devops-test-plan/profile.json.',
     '',
     'To CONSCIOUSLY skip (genuinely no startable surface / non-runtime change):',
-    'put a line `SKIP-VERIFICATION: <one-line reason>` in your response. The skip',
-    'is then recorded and shown on the completion card as ⚠ UNVERIFIED — it is not',
-    'silent. Without that token the gate keeps blocking until it yields after ' +
-      BLOCK_CAP + ' blocks.',
+    'render the completion card with `verification: { skipped: true, reason: "<one line>" }`',
+    '— again, if it is already shown. The card then carries the skip as ⚠ unverified',
+    'with your reason and a decision point; never write the reason as prose below the',
+    'card. A turn that ends without a card may instead put a line',
+    '`SKIP-VERIFICATION: <one-line reason>` in its response. Without either the gate',
+    'keeps blocking until it yields after ' + BLOCK_CAP + ' blocks.',
   ]);
 }
 
@@ -852,6 +902,10 @@ module.exports = {
   backgroundRunOutcome,
   settleBackgroundRuns,
   hasSkipJustification,
+  LIGHT_SKIPPED_FLAG,
+  VERIFICATION_EXEMPT_VARIANTS,
+  cardSkipReason,
+  buildCardVerificationReason,
   decideLightTest,
   buildLightTestReason,
 };
