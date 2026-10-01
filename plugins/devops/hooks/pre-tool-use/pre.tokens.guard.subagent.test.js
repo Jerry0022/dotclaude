@@ -75,7 +75,7 @@ function run(dir, extra, file) {
   return { status: res.status, stderr: res.stderr || "" };
 }
 const blocked = r => r.status === 2 && /HIGH TOKEN COST/.test(r.stderr);
-const cleanup = dir => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} };
+const cleanup = dir => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort temp cleanup; a locked file must not fail the test */ } };
 
 // Config: 200K window, main 5% = 10K tokens, sub-agent default 4x = 40K.
 // Files: 60 KB ~ 15K tokens (between), 240 KB ~ 60K tokens (above both).

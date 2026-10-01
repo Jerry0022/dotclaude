@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.242.0] — 2026-10-01
+
+### Removed
+- **Agents `devops:gamer` and `devops:windows`.** The roster is now 11 agents. The player perspective lives in `po` (customer lens) and `designer` ("Game projects"); Windows platform work goes to `core` with the new `deep-knowledge/windows-platform.md`. A consumer that spawns `devops:gamer` or `devops:windows` explicitly no longer finds them — use `devops:po` / `devops:designer` or `devops:core` instead. Both saw under 10 spawns in 30 days.
+
+### Changed
+- **`feature` elaborates before it builds.** po lenses (customer / tech / business) run in parallel, a po synthesis fixes scope and acceptance criteria, then the build (itself or core/designer/frontend/ai, each in an isolated worktree), qa, and a po review (customer lens, screenshots for UI and games). Procedure: new `deep-knowledge/feature-elaboration.md`; skipped only when criteria come from outside (refined issue, approved concept, signed-off plan). `po` gets the modes Lens / Synthesis / Standalone / Review. `feature` never ships — the orchestrator ships the integration branch once (`agent-collaboration.md` no longer contradicts this).
+- **Agent tools actually resolve.** `qa` and `frontend` list MCP servers by their real names (`mcp__Claude_Browser`, `mcp__claude-in-chrome`, plus the old aliases). Bare names like `navigate` / `preview_screenshot` never resolved: 0 browser calls in 65 qa runs over 30 days. `browsertest-guard` and 7 skills/docs know the current server names; `designer` inherits all tools minus computer-use; `AskUserQuestion` is gone from sub-agent tool lists (Claude Code strips it) and the auto-agents Interactive mode now asks between waves in the orchestrator; `research` gets Bash for `codex-safe.sh` (rc=75 usage limit = instant skip). Invalid color `magenta` → `pink`.
+- **Branch setup centralised** in new `deep-knowledge/agent-branch-setup.md`: isolation is proven (worktree path/branch or a `Worktree:` line), no more `git reset --hard` (it was copied into 6 agents; 60 resets observed, ~70 % of implementer spawns ran without isolation), exact sub-branch names come from the prompt, existing branches continue without `-B`.
+- **Token guard: separate sub-agent threshold.** Sub-agents block at 4× the main-thread percentage (cap 50 %), overridable via `subagentConfirmThresholdPct` and per `agent_type` via `subagentTypeThresholdPct`. 37 % of sub-agent tool errors were this guard's blocks. Nobody is exempted; the main thread is unchanged.
+- **Explore spawns get a hint toward `devops:scout`** (cheap read-only locator).
+- Agent output formats slimmed to "result first + open_questions" (po followed the old format in 1 of 21 runs, designer in 2 of 18).
+
+### Decisions
+- Basis: a 30-day transcript audit (1,312 sessions, 1,240 sub-agent runs) plus the official sub-agent / plugin-component docs (MCP tools must be `mcp__<server>[__tool]`; `effort`, `isolation`, `maxTurns` are valid plugin-agent fields). Final coherence review by `redteam` (10 risks) and `po` (8 points), all folded in.
+- Rejected: keeping gamer/windows as standalone roles (too few spawns to justify the routing cost); exempting sub-agents from the token guard (a raised threshold instead).
+
+### Tests
+- New `scripts/agent-definitions.test.js` (frontmatter fields, tool names, colors, one example each, branch setup, browser servers vs. guard, model table vs. frontmatter, no removed roles), `scripts/skill-browser-servers.test.js`, `hooks/pre-tool-use/pre.tokens.guard.subagent.test.js`, Explore hint case in `agent-model-gate.test.js`. Full suite after the rebase onto main 8229 passed, 3 skipped (278 files); ship branch suites 171 green; lint clean. Codex review skipped (usage limit).
+
 ## [0.241.3] — 2026-10-01
 
 ### Fixed
