@@ -454,9 +454,11 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
    evidence). The card-guard blocks a second identical card. Output-style
    rule (quiet): such a turn answers with nothing.
 6. **Pre-check in the tool.** `render_completion_card` runs the payload
-   gates — title status word (1), validation owed, requirement gaps, and
-   undeclared background work — before it renders (`hooks/lib/card-pregate.js`,
-   same rules and reason texts as the Stop gate). A failing call returns
+   gates — title status word (1), validation owed, requirement gaps,
+   undeclared background work, and a Light check still owed on a code-change
+   card (run it, or pass `verification: { skipped: true, reason }`; the card
+   then shows `⚠ ungeprüft — übersprungen: <reason>`) — before it renders
+   (`hooks/lib/card-pregate.js`, same rules and reason texts as the Stop gates). A failing call returns
    `isError` with `[card-pregate] Not rendered …` and nothing to show: fix the
    payload and call again. The same findings a second time render anyway, and
    the Stop gate still checks every card after the turn — the pre-check only
