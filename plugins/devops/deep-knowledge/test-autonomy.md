@@ -207,11 +207,20 @@ but no matching Light check passed this turn, the turn is blocked.
 - **Order.** A new qualifying edit invalidates a prior verification, so the
   check must run *after* the last code change — testing early then editing does
   not count.
-- **Escalation.** The gate blocks up to **2×**, then yields (it never wedges the
-  session). To consciously skip — genuinely no startable surface, or a
-  non-runtime change the carve-outs missed — put a line
-  `SKIP-VERIFICATION: <one-line reason>` in the response. That yields early
-  **and** the completion card stamps **⚠ UNVERIFIED**, so a skip is never silent.
+- **Asked before the card.** `render_completion_card` refuses a card once while
+  the check is still owed (card pre-gate; analysis / aborted / paused /
+  test-minimal / fallback cards are exempt, and a test still running in the
+  background owes nothing yet). Run the check and render again — or skip.
+- **Deliberate skip — on the card, never below it.** Genuinely no startable
+  surface, or a non-runtime change the carve-outs missed: render the card with
+  `verification: { skipped: true, reason: "<one line>" }`. The card shows
+  **⚠ ungeprüft — übersprungen: <reason>** plus a decision point, and the Stop
+  gate accepts the skip without asking for anything after the card. A turn that
+  ends without a card may still put `SKIP-VERIFICATION: <one-line reason>` in
+  its response.
+- **Escalation.** The Stop gate blocks up to **2×**, then yields (it never
+  wedges the session); the card stamps **⚠ UNVERIFIED** either way, so a skip
+  is never silent.
 
 **Validation — `stop.flow.guard`.** Any source change owes a validation
 attestation on the completion card: pass a `validation` field mapping each

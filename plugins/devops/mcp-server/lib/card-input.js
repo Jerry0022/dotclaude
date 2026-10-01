@@ -54,7 +54,7 @@ export const CARD_VARIANTS = [
 export const CARD_KNOWN_KEYS = [
   "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
-  "deployGate", "validation", "delivery", "promotion", "pause",
+  "deployGate", "validation", "verification", "delivery", "promotion", "pause",
 ];
 
 /** Top-level keys of `params` the schema does not know, in payload order. */
@@ -226,6 +226,13 @@ export function validateCardInput(params) {
     : !isObj(d) ? "must be a string or { artifact, kind?, action? }"
     : !isStr(d.artifact) ? "artifact must be a string"
     : null);
+
+  if (params.verification !== undefined && params.verification !== null) {
+    const v = params.verification;
+    if (!isObj(v)) issues.push({ path: "verification", message: "must be { skipped, reason? }" });
+    else if (typeof v.skipped !== "boolean") issues.push({ path: "verification.skipped", message: "must be a boolean" });
+    else if (v.reason !== undefined && !isStr(v.reason)) issues.push({ path: "verification.reason", message: "must be a string" });
+  }
 
   for (const key of ["state", "cta", "delivery", "promotion"]) {
     if (params[key] !== undefined && params[key] !== null && !isObj(params[key])) issues.push({ path: key, message: "must be an object" });

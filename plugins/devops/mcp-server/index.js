@@ -74,6 +74,9 @@ const cjsRequire = createRequire(import.meta.url);
 // stop.flow.guard and ship_release so all three read the status the same way.
 const validationGaps = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'validation-gaps.js'));
 const cardPregate = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'card-pregate.js'));
+// A deliberate verification skip (#612): read from the card's `verification`
+// field, handed to stop.flow.browsertest through the light-skipped flag.
+const { cardSkipReason, LIGHT_SKIPPED_FLAG } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'browsertest-guard.js'));
 
 /**
  * The validation items Claude itself still owns: everything except a not-met
@@ -856,6 +859,9 @@ function buildEvidencePosts(input, lang, key) {
   if (input.vv && input.vv.running) {
     // Its check is still running — "no test ran" would be false.
     dev.push({ glyph: '◐', text: lang === 'en' ? 'test still running in the background' : 'Test läuft noch im Hintergrund', dim: false });
+  } else if (input.vv && input.vv.unverified && input.vv.skipReason) {
+    // A deliberate skip (#612) — the reason rides on the card, not below it.
+    dev.push({ glyph: '⚠', text: (lang === 'en' ? 'unverified — skipped: ' : 'ungeprüft — übersprungen: ') + input.vv.skipReason, dim: false });
   } else if (input.vv && input.vv.unverified) {
     dev.push({ glyph: '⚠', text: lang === 'en' ? 'unverified — no test ran' : 'ungeprüft — kein Test lief', dim: false });
   }
@@ -1323,7 +1329,20 @@ function openReplies(input, lang) {
   });
 }
 
+/** The decision-box point for a deliberate verification skip (#612), or null. */
+function verificationSkipPoint(input, lang) {
+  const reason = input.vv && input.vv.unverified && input.vv.skipReason;
+  if (!reason) return null;
+  return (lang === 'en' ? 'Verification skipped: ' : 'Verifikation übersprungen: ') + reason;
+}
+
 function pointsForKey(input, key, lang) {
+  const points = basePointsForKey(input, key, lang);
+  const skip = verificationSkipPoint(input, lang);
+  return skip && key !== 'vv-running' ? [skip, ...points] : points;
+}
+
+function basePointsForKey(input, key, lang) {
   const open = normalizeOpenItems(input.open).map(it => it.text);
   const userTest = (Array.isArray(input.userTest) ? input.userTest : []).map(String).filter(Boolean);
   const finalTest = normalizeFinalTestItems(input.userFinalTest, lang);
@@ -1355,6 +1374,9 @@ function pointsForKey(input, key, lang) {
     case 'test':
       return [...open, ...userTest.map(testTag)];
     case 'vv-unverified':
+      // A deliberate skip names itself (pointsForKey) — the generic line only
+      // stands in when the card carries no reason.
+      if (verificationSkipPoint(input, lang)) return open;
       return [lang === 'en'
         ? 'npm test did not run — run it first, or ship anyway.'
         : 'npm test lief nicht — Tests laufen lassen oder trotzdem shippen.'];
@@ -2095,6 +2117,9 @@ function buildCompletionCard(params) {
   //     card can stamp ⚠ ungeprüft on an unverified / red finish (evidence
   //     row + heading — see resolveCardKey / buildEvidencePosts).
   params.vv = readVVState(params.session_id);
+  //     A deliberate skip (#612) names its reason on the card — only while a
+  //     check is actually owed; a running test owes nothing yet.
+  if (params.vv.unverified && !params.vv.running) params.vv.skipReason = cardSkipReason(params);
 
   // 4. Render the full card, and stash the same structured model + repoUrl on
   //    `params` so ctaActionsNote (the Desktop widget) can reuse it without a
@@ -2136,6 +2161,11 @@ function buildCompletionCard(params) {
     writeFileSync(join(tmpdir(), 'dotclaude-devops-card-rendered-' + key), new Date().toISOString());
     if (Array.isArray(params.validation) && params.validation.length > 0) {
       writeFileSync(join(tmpdir(), 'dotclaude-devops-validation-attested-' + key), new Date().toISOString());
+    }
+    //  - light-skipped hands a deliberate skip to stop.flow.browsertest (#612):
+    //    the Stop after this card yields without asking for prose below it.
+    if (params.vv && params.vv.skipReason) {
+      writeFileSync(join(tmpdir(), LIGHT_SKIPPED_FLAG + '-' + key), params.vv.skipReason);
     }
     //  - validation-open hands the not-met requirements to Gate 4b, which
     //    blocks once when one of them is still Claude's own work. Rewritten on
@@ -2513,6 +2543,13 @@ server.registerTool(
           waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional().describe("Only for a partial/unmet requirement Claude CANNOT close itself: user = the user must act or decide · deploy = only verifiable after ship/deploy/restart · external = a third party · pending = your own background agent/workflow is still running (checked against the transcript — stale once it finished). waitsOn needs `evidence` naming what exactly it waits for. Without waitsOn a partial/unmet requirement is YOUR gap: stop.flow.guard blocks the turn once to close it, and ship_release refuses to merge over it."),
         })).optional(),
       ).describe("V&V gate — validation attestation (“did we build the RIGHT thing”). REQUIRED for any turn that changed source code: map each requirement / acceptance criterion to how this change meets it and how you confirmed it. A code-change card without `validation` is blocked once by stop.flow.guard and re-requested. For a pure refactor/chore with no explicit requirement, pass one item stating the intent and how behaviour was kept equivalent. Each item: { requirement, status: met|partial|unmet (REQUIRED — a missing status is a gap), evidence, waitsOn? }. Close every gap you can before rendering — partial/unmet is only for what waits on the user, a deploy, a third party or your own still-running background work (waitsOn)."),
+      verification: z.preprocess(
+        v => typeof v === 'string' ? tryParse(v) : v,
+        z.object({
+          skipped: z.boolean().describe("true = you deliberately did not run the Light check (browser check / passing test run)."),
+          reason: z.string().optional().describe("One line: why verification is genuinely impossible here. Required with skipped: true."),
+        }).optional(),
+      ).describe("Deliberate verification skip (#612). When this turn changed code but no matching Light check ran, the card is refused once — run the check, or pass { skipped: true, reason }. The card then shows '⚠ unverified — skipped: <reason>' and a decision point, and the Stop gate accepts the skip. Never write the reason as prose below the card."),
       delivery: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({

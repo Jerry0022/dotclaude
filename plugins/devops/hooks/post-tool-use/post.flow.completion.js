@@ -94,7 +94,7 @@ let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, 
   SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder,
   decideCardTurnEnd, cardTurnBlockedLines, CARD_STOP_REASON, isGuideActive,
   classifyProfile, carveOutsFromProfile, domPathsFromProfile, resolveVerificationKind,
-  isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome;
+  isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome, LIGHT_SKIPPED_FLAG;
 let loadError = false;
 let loadingModule = '';
 const guardedRequire = (m) => { loadingModule = m; return require(m); };
@@ -125,6 +125,7 @@ try {
     isBrowserTool,
     isTestRunnerTool,
     testRunOutcome,
+    LIGHT_SKIPPED_FLAG,
   } = guardedRequire('../lib/browsertest-guard'));
 } catch (err) {
   loadError = true;
@@ -598,10 +599,12 @@ function oweFor(hook, { profileClass, carveOuts, domPaths }, editedPath) {
     );
     // ③ order — a new qualifying edit invalidates any prior verification,
     // so the Light check must run AFTER this change. A run still going in
-    // the background tests the code before it, so its record goes too.
+    // the background tests the code before it, so its record goes too. A
+    // card-recorded skip (#612) covered the code before this edit as well.
     unlinkFlag(hook, 'dotclaude-devops-light-verified');
     unlinkFlag(hook, 'dotclaude-devops-light-red');
     unlinkFlag(hook, BGRUN_FLAG);
+    unlinkFlag(hook, LIGHT_SKIPPED_FLAG);
   }
   // Validation gate — surface-agnostic: ANY real source change owes a
   // validation attestation in the completion card. A new edit invalidates

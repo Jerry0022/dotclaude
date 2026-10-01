@@ -1,6 +1,6 @@
 /**
  * @module card-pregate
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description stop.flow.guard's payload gates, checked by
  *   render_completion_card BEFORE it renders.
@@ -20,6 +20,11 @@
  *     4  validation owed          (validation-pending flag, no `validation`)
  *     4b requirement gaps         (validation-gaps.classify with the open-task count)
  *     5  undeclared background work (pending-tasks scan, no `pending`)
+ *   plus stop.flow.browsertest's Light gate (#612):
+ *     V  verification owed       (light-pending, no light-verified, no test
+ *                                 running in the background, no `verification`
+ *                                 skip) — asked BEFORE the card, so a skip
+ *                                 lands on the card instead of as prose below it
  *
  *   One refusal per identical finding: the same findings on the next call
  *   render anyway, so a false positive can never lock the card out — the
@@ -37,6 +42,11 @@ const {
 const validationGaps = require('./validation-gaps');
 const { scanOpenTasks, openTaskNames } = require('./pending-tasks');
 const { readSessionFile, sessionFile, writeSessionFile } = require('./session-id');
+const {
+  BG_RUN_MAX_MS, parseBackgroundRuns, VERIFICATION_EXEMPT_VARIANTS,
+  cardSkipReason, buildCardVerificationReason,
+} = require('./browsertest-guard');
+const { BGRUN_FLAG } = require('./light-bgrun');
 
 const EXACT = { exact: true };
 const REFUSED_PREFIX = 'dotclaude-devops-card-pregate';
@@ -61,9 +71,11 @@ function findTranscript(sessionId, home = os.homedir()) {
  * @param {object} ctx
  * @param {boolean} ctx.validationPending — the session owes a validation (flag)
  * @param {string[]|null} ctx.openTasks   — running background work by name; null = unknown
+ * @param {null|{ kind?: string, red?: boolean }} ctx.verificationOwed — the Light
+ *   check is owed and no test runs in the background (flags); null = not owed
  * @returns {string[]} one reason per failed gate (card-guard wording)
  */
-function findings(input, { validationPending = false, openTasks = null } = {}) {
+function findings(input, { validationPending = false, openTasks = null, verificationOwed = null } = {}) {
   const out = [];
   const word = titleStatusWordViolation(String(input.summary || ''));
   if (word) out.push(buildTitleStatusWordReason(word));
@@ -81,7 +93,28 @@ function findings(input, { validationPending = false, openTasks = null } = {}) {
 
   const pending = Array.isArray(input.pending) ? input.pending.filter(Boolean) : [];
   if (openTasks && openTasks.length > 0 && pending.length === 0) out.push(buildPendingReason(openTasks));
+
+  if (verificationOwed && !VERIFICATION_EXEMPT_VARIANTS.has(input.variant) && !cardSkipReason(input)) {
+    out.push(buildCardVerificationReason(verificationOwed.kind, { red: verificationOwed.red === true }));
+  }
   return out;
+}
+
+/**
+ * The Light check this session still owes, read from stop.flow.browsertest's
+ * flags — or null. A test still running in the background owes nothing yet:
+ * its result settles it (light-bgrun, BG_RUN_MAX_MS).
+ */
+function readVerificationOwed(sessionId) {
+  const flag = (name) => readSessionFile(`dotclaude-devops-${name}`, sessionId, EXACT);
+  if (!flag('light-pending') || flag('light-verified')) return null;
+  const bgrun = readSessionFile(BGRUN_FLAG, sessionId, EXACT);
+  if (bgrun) {
+    const now = Date.now();
+    if (parseBackgroundRuns(bgrun.content).some(r => now - r.at < BG_RUN_MAX_MS)) return null;
+  }
+  const kind = flag('light-kind');
+  return { kind: (kind && kind.content.trim()) || 'any', red: flag('light-red') !== null };
 }
 
 /**
@@ -98,7 +131,8 @@ function check(input, { home, tmp } = {}) {
     const transcriptPath = findTranscript(sessionId, home);
     const transcript = transcriptPath ? safeReadTranscript(transcriptPath, PENDING_TAIL_BYTES) : '';
     const openTasks = transcript ? openTaskNames(scanOpenTasks(transcript)) : null;
-    const reasons = findings(input, { validationPending, openTasks });
+    const verificationOwed = readVerificationOwed(sessionId);
+    const reasons = findings(input, { validationPending, openTasks, verificationOwed });
 
     const file = tmp ? path.join(tmp, `${REFUSED_PREFIX}-${sessionId}`) : sessionFile(REFUSED_PREFIX, sessionId);
     if (reasons.length === 0) {
@@ -130,4 +164,4 @@ function refusalText(reasons) {
   return [...head, '', ...body].join('\n').replace(/\[stop\.flow\.guard\] /g, '');
 }
 
-module.exports = { check, findings, findTranscript, refusalText, REFUSED_PREFIX };
+module.exports = { check, findings, findTranscript, readVerificationOwed, refusalText, REFUSED_PREFIX };

@@ -23,6 +23,10 @@ import {
   backgroundRunOutcome,
   settleBackgroundRuns,
   hasSkipJustification,
+  LIGHT_SKIPPED_FLAG,
+  VERIFICATION_EXEMPT_VARIANTS,
+  cardSkipReason,
+  buildCardVerificationReason,
   decideLightTest,
   buildLightTestReason,
 } from "./browsertest-guard.js";
@@ -1122,5 +1126,35 @@ describe("decideLightTest — a background run still in flight", () => {
 
   test("owed and nothing in flight → blocks as before", () => {
     expect(decideLightTest({ ...owed, inFlight: false }).action).toBe("block");
+  });
+});
+
+// #612 — a deliberate skip is a card field, not prose below the card.
+describe("card-recorded verification skip (#612)", () => {
+  test("cardSkipReason reads only a skipped: true with a non-empty reason", () => {
+    expect(cardSkipReason({ verification: { skipped: true, reason: "  no surface  " } })).toBe("no surface");
+    expect(cardSkipReason({ verification: { skipped: true } })).toBe("");
+    expect(cardSkipReason({ verification: { skipped: false, reason: "x" } })).toBe("");
+    expect(cardSkipReason({})).toBe("");
+    expect(cardSkipReason(null)).toBe("");
+  });
+
+  test("the pre-gate reason names the check per kind and the card field", () => {
+    expect(buildCardVerificationReason("dom")).toMatch(/browser check of the changed view/);
+    expect(buildCardVerificationReason("runner")).toMatch(/passing test run/);
+    expect(buildCardVerificationReason("any")).toMatch(/verification: \{ skipped: true, reason/);
+    expect(buildCardVerificationReason("runner", { red: true })).toMatch(/FAILED/);
+  });
+
+  test("exempt variants and the flag name are fixed", () => {
+    expect([...VERIFICATION_EXEMPT_VARIANTS].sort()).toEqual(["aborted", "analysis", "fallback", "paused", "test-minimal"]);
+    expect(LIGHT_SKIPPED_FLAG).toBe("dotclaude-devops-light-skipped");
+  });
+
+  test("the Stop block text points to the card field before the prose token", () => {
+    const reason = buildLightTestReason("runner");
+    expect(reason).toMatch(/verification: \{ skipped: true, reason/);
+    expect(reason).toMatch(/never write the reason as prose below the/);
+    expect(reason.indexOf("verification: {")).toBeLessThan(reason.indexOf("SKIP-VERIFICATION:"));
   });
 });

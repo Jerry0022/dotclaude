@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.241.3] — 2026-10-01
+
+### Fixed
+- **Completion card: a deliberate verification skip now shows on the card, not as prose under it (#612).** `stop.flow.browsertest` only runs at Stop — after the card's `show_widget` — so its demanded `SKIP-VERIFICATION:` line landed below the card and the card itself never said the check was skipped. `render_completion_card` takes a new `verification: { skipped: true, reason }` field; the card then shows **⚠ ungeprüft — übersprungen: <reason>** (en: "⚠ unverified — skipped: <reason>") plus a decision point "Verifikation übersprungen: <reason>", and records a `light-skipped` flag.
+- **Card pre-check asks for the Light check before the card.** A code-change card that would finish while the Light check is still owed is refused once by the card pre-gate (gate "verification owed"): run the check and render again, or pass the skip field. The identical call renders the second time — never a lock-out, mirroring the validation gate. Exempt: `analysis`, `aborted`, `paused`, `test-minimal`, `fallback`; a test still running in the background (within the 30-min window) owes nothing yet.
+- **Stop gate accepts the card-recorded skip.** `stop.flow.browsertest` reads and clears the `light-skipped` flag and no longer asks for prose after the card; its block text points to the card field first. The `SKIP-VERIFICATION:` token stays valid for turns that end without a card. A new qualifying code edit drops a stale card skip, the same way it drops `light-verified`.
+
+### Changed
+- **`deep-knowledge/test-autonomy.md`** (V&V gate) and **`deep-knowledge/completion-card-design.md`** (pre-check gates) describe the card-side skip and the new pre-gate.
+
+### Decisions
+- Gate placement: inside `render_completion_card` via the existing card pre-gate — self-contained, no new hook event. Rejected: a PreToolUse hook (duplicates the flag logic) and only rewording the Stop text (the card is already rendered by then).
+
+### Tests
+- New cases in `browsertest-guard`, `card-pregate`, `stop.flow.browsertest` (e2e), `post.flow.completion` and `index.cli` (de/en skip line + decision point). Full suite in the run: 8124 passed, 0 failed, 3 skipped (mcp-boot-probe, unrelated); ship branch suites 323 green; lint clean. Codex review skipped (usage limit).
+
 ## [0.241.2] — 2026-10-01
 
 ### Fixed
