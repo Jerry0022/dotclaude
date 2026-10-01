@@ -11,6 +11,7 @@ import {
   shouldOpenLoginWindow,
   classifyScraperPid,
   killScraperInstance,
+  openLoginWindow,
   LOGIN_RETRY_AFTER_MS,
 } from "./refresh-usage-headless.js";
 
@@ -300,5 +301,37 @@ describe("parseUsageText — claude.ai usage scrape", () => {
   test("fewer than two percentages → null (don't write garbage)", () => {
     expect(parseUsageText("42 % verwendet")).toBeNull();
     expect(parseUsageText("no usage here at all")).toBeNull();
+  });
+});
+
+// 2026-10-01: the manual login window opened while the reaped hidden scraper
+// was still shutting down, handed off to that dying Edge and vanished.
+describe('openLoginWindow — the login window must stay open', () => {
+  const sleep = async () => {};
+
+  test('waits until the old instance released the profile before launching', async () => {
+    const calls = [];
+    let alive = [true, true, false]; // old instance still up for two polls
+    const cdpAlive = async () => { const v = alive.length ? alive.shift() : true; calls.push('cdp:' + v); return v; };
+    const launch = async () => { calls.push('launch'); alive = [true]; return 123; };
+    expect(await openLoginWindow({ launch, cdpAlive, sleep })).toBe(true);
+    expect(calls.indexOf('launch')).toBe(3); // after the three release polls
+  });
+
+  test('relaunches once when the window vanishes right after launch', async () => {
+    let launches = 0;
+    const seq = [false, false, true]; // released · gone after 1st launch · up after 2nd
+    const cdpAlive = async () => seq.shift() ?? true;
+    const launch = async () => { launches++; return 1; };
+    expect(await openLoginWindow({ launch, cdpAlive, sleep })).toBe(true);
+    expect(launches).toBe(2);
+  });
+
+  test('gives up after two attempts and says so (false)', async () => {
+    let launches = 0;
+    const cdpAlive = async () => false;
+    const launch = async () => { launches++; return 1; };
+    expect(await openLoginWindow({ launch, cdpAlive, sleep })).toBe(false);
+    expect(launches).toBe(2);
   });
 });
