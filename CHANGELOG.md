@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.241.0] — 2026-10-01
+
+### Added
+- **New SessionStart hook `ss.mcp.failcache`: clears the devops entries from Claude Code's MCP failure cache.** Claude Code records a server's connect failure machine-wide in `~/.claude/mcp-needs-auth-cache.json` (keyed by server name, 15-min window), so one session whose `dotclaude-ship` hit the 30 s connect timeout — e.g. many sessions booting at once after an app restart — made every session starting in that window skip all three devops servers ("Skipping connection (recent failure cached …)"), with no in-session reconnect. The hook removes only the `plugin:devops:*` keys (atomic tmp+rename write, other servers untouched, missing/unparsable file = no-op, no rewrite when nothing matches). It runs alongside the MCP boot, so it rescues the next start; when an entry was still inside the window it prints a restart note for the user. No network, no subprocess, 5 s timeout.
+
+### Changed
+- **`deep-knowledge/mcp-deferred-tools.md`:** "Skipping connection (recent failure cached …)" is no longer filed under "process died at boot". New section "When the connect is skipped: recent failure cached" — signs, where the failing session's MCP log lives, recovery (restart after the hook ran), and no manual ship/promote while the servers are skipped.
+- README and `docs/architecture.html` hook rosters list the new hook.
+
+### Tests
+- New `hooks/lib/mcp-failure-cache.test.js` (5 cases: lib + hook end-to-end with a temp HOME); branch suites (mcp-failure-cache, gen-readme-sections, gen-module-type, session-start) 189 green. Full suite not run in the ship (>10 min on this machine).
+
 ## [0.240.0] — 2026-09-30
 
 ### Added

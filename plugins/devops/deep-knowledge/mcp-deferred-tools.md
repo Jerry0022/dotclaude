@@ -53,10 +53,11 @@ The result contains a `<functions>` block with one `<function>{...}</function>` 
 ## When the server is genuinely down: `Connection closed`
 
 The deferred-list rule above has one real exception. When the SessionStart
-reminder says a devops server **failed to connect** — `CONNECTION_CLOSED`,
-`"Connection closed"`, or `Skipping connection (recent failure cached …)` — the
-schema is not lazy, the process died at boot. ToolSearch returns nothing and a
-`reconnect_session_connector` only re-runs the same dead command.
+reminder says a devops server **failed to connect** — `CONNECTION_CLOSED` or
+`"Connection closed"` — the schema is not lazy, the process died at boot.
+ToolSearch returns nothing and a `reconnect_session_connector` only re-runs
+the same dead command. (`Skipping connection (recent failure cached …)` is a
+different case — next section.)
 
 **Diagnose before reporting** — the cause is almost always the installed cache,
 not the plugin code. Run the server's own command from the cache root and read
@@ -94,6 +95,39 @@ the cache dirs; `.md`/`.json` survived). The self-heal in `ss.plugin.update` →
 Do NOT hand-edit files into `~/.claude/plugins/cache/**` and do NOT fall back to
 `gh pr create` — the guard still blocks it, and the repaired server is minutes
 away.
+
+## When the connect is skipped: `recent failure cached`
+
+`Skipping connection (recent failure cached retries automatically in 15 min …)`
+means this session **never tried**. Claude Code keeps one failure cache for
+the whole machine, `~/.claude/mcp-needs-auth-cache.json`, keyed by server name
+(`"plugin:devops:dotclaude-ship": { timestamp, id }`), with a 15-min window.
+One session's `CONNECT_TIMEOUT` therefore skips the server in **every** session
+that starts inside the window, and each new failure elsewhere renews it.
+Observed 2026-10-01: many sessions started at once after an app restart, the
+ship server (normally ~0.6 s to boot) hit the 30 s timeout in two other
+sessions, and this session came up without ship/completion/issues.
+
+Signs: the own project's `mcp-logs-plugin-devops-dotclaude-*` folder under
+`%LOCALAPPDATA%/claude-cli-nodejs/Cache/<project>/` has **no log for this
+session's start** — the failing session is another one. Search all projects'
+folders for `CONNECT_TIMEOUT` to find it. The cache dir and the
+initialize probe above are healthy then — do not rebuild anything.
+
+There is **no in-session recovery**: the CLI connects only at session start,
+and touching the plugin's `.mcp.json` does not trigger a retry. Recover:
+
+1. The `plugin:devops:*` keys leave `~/.claude/mcp-needs-auth-cache.json`
+   (stdio servers never need auth; the other entries stay). The SessionStart
+   hook `ss.mcp.failcache` does this at every start — it runs concurrently with
+   the MCP boot, so it rescues the *next* start, and says so when an entry was
+   still blocking. Without the hook (older install): remove the keys by hand.
+2. The user restarts the session.
+
+Until then: render the card offline (`plugin-behavior.md` → *When the MCP
+server is not there*), say in one line that a restart is needed, and **never**
+ship or promote by hand — `modes/promote.md` says STOP when `ship_promote` is
+missing.
 
 ## Anti-patterns
 
