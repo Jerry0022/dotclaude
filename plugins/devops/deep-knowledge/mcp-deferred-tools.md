@@ -117,9 +117,12 @@ initialize probe above are healthy then — do not rebuild anything.
 There is **no in-session recovery**: the CLI connects only at session start,
 and touching the plugin's `.mcp.json` does not trigger a retry. Recover:
 
-1. Remove the `plugin:devops:*` keys from `~/.claude/mcp-needs-auth-cache.json`
-   (stdio servers never need auth; leave the other entries).
-2. The user restarts the session (or waits out the 15 min **and** restarts).
+1. The `plugin:devops:*` keys leave `~/.claude/mcp-needs-auth-cache.json`
+   (stdio servers never need auth; the other entries stay). The SessionStart
+   hook `ss.mcp.failcache` does this at every start — it runs concurrently with
+   the MCP boot, so it rescues the *next* start, and says so when an entry was
+   still blocking. Without the hook (older install): remove the keys by hand.
+2. The user restarts the session.
 
 Until then: render the card offline (`plugin-behavior.md` → *When the MCP
 server is not there*), say in one line that a restart is needed, and **never**
