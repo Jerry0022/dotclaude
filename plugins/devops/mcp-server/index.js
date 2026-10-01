@@ -246,14 +246,65 @@ function formatAgeLabel(ageMinutes) {
 
 /** Expired snapshots render as an explicit warning instead of percent bars \u2014
  *  a 33-day-old "93%" bar reads as current and is worse than no bar. */
-function renderExpiredNote(usageData, freshness) {
+function renderExpiredNote(usageData, freshness, lang = 'en', now = Date.now()) {
+  const L = EXPIRED_NOTE[lang] || EXPIRED_NOTE.en;
   const ts = usageData?.timestamp ? Date.parse(usageData.timestamp) : NaN;
-  const lastStr = Number.isFinite(ts)
-    ? new Date(ts).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
-    : 'unknown';
-  const age = formatAgeLabel(freshness.ageMinutes);
-  const reason = usageData?._failureReason ? ` (${usageData._failureReason})` : '';
-  return `\u26a0 No current usage data \u2014 last reading ${lastStr}${age ? ', ' + age : ''}${reason}`;
+  const when = Number.isFinite(ts) ? formatLastReading(ts, now, lang) : L.unknown;
+  const ago = Number.isFinite(freshness.ageMinutes) ? L.ago(formatAgeShort(freshness.ageMinutes)) : '';
+  const reason = describeFailureForUser(usageData?._failureReason, lang);
+  return `\u26a0 ${L.head} ${when}${ago}${reason ? ' \u2014 ' + reason : ''}`;
+}
+
+/** User-facing words for the stale-usage note. It used to print a UTC ISO
+ *  stamp and the scraper's internal reason ("not logged in"), which read as
+ *  "your Claude login is broken" while only the scraper's own Edge profile had
+ *  been signed out by claude.ai (2026-10-01, account_session_invalid). */
+const EXPIRED_NOTE = {
+  de: {
+    head: 'Keine aktuellen Usage-Daten \u2014 Stand',
+    unknown: 'unbekannt',
+    ago: (a) => ` (vor ${a})`,
+    today: 'heute',
+    yesterday: 'gestern',
+    signedOut: 'der Usage-Abruf nutzt ein eigenes Edge-Profil, und claude.ai hat es abgemeldet (dein Claude-Login ist nicht betroffen); sag \u00bbrefresh usage\u00ab, um es einmal anzumelden',
+  },
+  en: {
+    head: 'No current usage data \u2014 last reading',
+    unknown: 'unknown',
+    ago: (a) => ` (${a} ago)`,
+    today: 'today',
+    yesterday: 'yesterday',
+    signedOut: 'the usage fetcher uses its own Edge profile and claude.ai signed it out (your Claude login is fine); say "refresh usage" to sign it in once',
+  },
+};
+
+/** '21 h' / '3 d' / '12 min' \u2014 the age without the "~\u2026 old" wording. */
+function formatAgeShort(ageMinutes) {
+  if (ageMinutes >= 2880) return `${Math.round(ageMinutes / 1440)} d`;
+  if (ageMinutes >= 60) return `${Math.round(ageMinutes / 60)} h`;
+  return `${Math.max(0, Math.round(ageMinutes))} min`;
+}
+
+/** Local wall-clock time of the last reading: 'heute 14:02', 'gestern 22:48',
+ *  '28.09. 22:48' / 'Sep 28, 22:48' \u2014 never a UTC ISO stamp. */
+function formatLastReading(ts, now, lang = 'en') {
+  const L = EXPIRED_NOTE[lang] || EXPIRED_NOTE.en;
+  const d = new Date(ts);
+  const time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const dayStart = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((dayStart(new Date(now)) - dayStart(d)) / 86400000);
+  if (days === 0) return `${L.today} ${time}`;
+  if (days === 1) return `${L.yesterday} ${time}`;
+  if (lang === 'de') return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}. ${time}`;
+  return `${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()}, ${time}`;
+}
+
+/** The scraper's persisted failure reason, in words a user can act on. */
+function describeFailureForUser(reason, lang = 'en') {
+  if (!reason) return '';
+  const L = EXPIRED_NOTE[lang] || EXPIRED_NOTE.en;
+  if (/not logged in/i.test(reason)) return L.signedOut;
+  return reason;
 }
 
 function renderUsageMeter(usageData, delta5h, deltaWk) {
@@ -901,7 +952,7 @@ function buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang = 'de') 
   if (!usageData || !usageData.session) return null;
   const freshness = assessFreshness(usageData, Date.now());
   if (freshness.expired) {
-    return { omitted: false, expiredNote: renderExpiredNote(usageData, freshness), bars: [], contextHealth: healthLine || '' };
+    return { omitted: false, expiredNote: renderExpiredNote(usageData, freshness, lang), bars: [], contextHealth: healthLine || '' };
   }
 
   const s = usageData.session;
@@ -2514,6 +2565,7 @@ export {
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   ctaInput, resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
+  renderExpiredNote, formatLastReading,
 };
 
 // ---------------------------------------------------------------------------
