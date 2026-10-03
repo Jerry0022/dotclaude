@@ -169,6 +169,12 @@ describe("final-report close-out sheet", () => {
     expect(dispatch.slice(0, 900)).toContain("closeoutShipChoice()");
     expect(dispatch.slice(0, 900)).toContain("closeout-ship-required");
     expect(dispatch.slice(0, 900)).toContain("submitFinalize()");
+    // An active choice in a single-choice row confirms it — wired on click
+    // (a re-click on the default fires no change), never to submitFinalize.
+    expect(jsSource).toContain("addEventListener('click', closeoutChoiceClick)");
+    const choice = jsSource.slice(jsSource.indexOf("function closeoutChoiceClick"));
+    expect(choice.slice(0, 900)).toContain("confirmCloseoutRow(block)");
+    expect(choice.slice(0, 900)).not.toContain("submitFinalize");
   });
 
   test("a finalize cannot be delivered twice", () => {

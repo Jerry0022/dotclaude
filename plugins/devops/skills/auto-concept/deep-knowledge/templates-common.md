@@ -597,8 +597,13 @@ the `[ui-locale: ...]` hint produced.
              row stays clickable to go back and change the answer
              (closeoutRowClick()). "Answered" means the row was open when the
              single #closeout-execute button was clicked
-             (closeoutButtonClick()), never a per-row control: a pre-selected
-             default may stand as-is, confirming just means the user looked.
+             (closeoutButtonClick()) — or, in a single-choice row (ship,
+             this page), that the user actively clicked one of its options,
+             the pre-selected default included (closeoutChoiceClick()): the
+             choice IS the answer, "Weiter ›" is the alternative for taking
+             the default untouched, never a forced second click. A
+             pre-selected default may stand as-is, confirming just means the
+             user looked.
              The button reads "Weiter ›" until every visible row is answered,
              then transforms into the warning-coloured "⚠ Ausführen" (the
              consequence warning is its data-tip tooltip) that submits
@@ -669,8 +674,9 @@ the `[ui-locale: ...]` hint produced.
           </section>
 
           <!-- Block 2 — ship or not. Deliberately has NO default, so the row
-               can only be CONFIRMED once a radio is chosen: advanceCloseout()
-               refuses and shows #closeout-ship-required instead — opening and
+               can only be CONFIRMED once a radio is chosen: clicking one
+               confirms it at once (closeoutChoiceClick()), and
+               closeoutButtonClick() refuses and shows #closeout-ship-required instead — opening and
                looking at the row is free, answering it is not. -->
           <section class="closeout-block" data-closeout-block="ship">
             <button type="button" class="closeout-row" data-closeout-row aria-expanded="false">
