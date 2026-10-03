@@ -64,7 +64,11 @@ implement click) is the parallel split already made. Build the waves from it:
 one agent per bundle, each owning the files it lists, a bundle with `nach: Bx`
 in a wave after Bx. Keep the bundle's note details in that agent's prompt
 word for word. Split again only where a bundle is still too large for one agent,
-and never give two agents the same file.
+and never give two agents the same file. Hand each bundle's `Befunde:` line
+over verbatim as the agent's starting point, with the instruction to verify
+the one assumption the change rests on and then build — not to explore the
+area again from scratch. A finding that turns out wrong is reported back, not
+silently worked around.
 
 A missing `--mode` with a `--from` means the caller does not care →
 `background`. A missing `--mode` **without** `--from` is the only case that

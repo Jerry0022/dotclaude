@@ -208,7 +208,17 @@ describe("do-batch SKILL.md — hand-off to do-run / auto-concept", () => {
 });
 
 describe("do-batch bundle plan — issue #483", () => {
-  const step44 = section("**4.4 Build the bundle plan", "**4.5");
+  // 4.4 keeps the rule and the item list; the item bodies live in
+  // deep-knowledge/merge.md § Bundle plan, which SKILL.md must point at.
+  const merge = readFileSync(join(here, "deep-knowledge", "merge.md"), "utf8");
+  const bundleStart = merge.indexOf("## Bundle plan");
+  const bundleSection = merge.slice(bundleStart, merge.indexOf("\n## ", bundleStart + 1));
+  const step44 = section("**4.4 Build the bundle plan", "**4.5") + bundleSection;
+
+  it("4.4 points at the moved item bodies, which exist", () => {
+    expect(bundleStart).toBeGreaterThan(-1);
+    expect(section("**4.4 Build the bundle plan", "**4.5")).toContain("`deep-knowledge/merge.md` § Bundle plan");
+  });
   const step49 = section("**4.9 Hand off", "## Step 5");
 
   it("4.4 keeps every note detail, bundles by file ownership, and is no gate", () => {
@@ -223,5 +233,17 @@ describe("do-batch bundle plan — issue #483", () => {
     expect(step49).toMatch(/Bündel:/);
     expect(step49).toMatch(/besitzt .*Schnittstellen: .*nach: .*Prüfung:/);
     expect(step49).toMatch(/one agent per bundle/);
+  });
+
+  it("4.4 cuts bundles per area with a size recommendation, not per note", () => {
+    expect(step44).toMatch(/One bundle per area, not per note/);
+    expect(step44).toMatch(/2–6 bundles/);
+    expect(step44).toMatch(/Never one bundle\s+per note/);
+  });
+
+  it("4.4 and 4.9 hand the feasibility findings on per bundle", () => {
+    expect(step44).toMatch(/Findings per bundle — hand the 4\.3 analysis on/);
+    expect(step49).toMatch(/Befunde: <file:line facts/);
+    expect(step49).toMatch(/`Befunde:` into that agent's prompt/);
   });
 });

@@ -67,7 +67,7 @@ describe('ss.mcp.failcache hook', () => {
     });
   }
 
-  test('an active block is cleared and the user gets one restart note', () => {
+  test('an active block is cleared and the user gets a first-reply note with the offline paths', () => {
     const home = tmpHome();
     fs.writeFileSync(cacheFile(home), JSON.stringify({
       'plugin:devops:dotclaude-ship': { timestamp: Date.now(), id: 'c' },
@@ -75,7 +75,9 @@ describe('ss.mcp.failcache hook', () => {
     const out = runHook(home);
     expect(out).toContain('[mcp-failcache]');
     expect(out).toContain('dotclaude-ship');
-    expect(out).toContain('Show the user verbatim');
+    expect(out).toContain('In your FIRST reply, before any other work');
+    expect(out).toContain('mcp-server/ship/cli.js" <tool> <params.json>');
+    expect(out).toContain('never a manual ship');
     expect(JSON.parse(fs.readFileSync(cacheFile(home), 'utf8'))).toEqual({});
   });
 

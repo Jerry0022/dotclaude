@@ -786,10 +786,22 @@ function applyGitFacts(out, at, ps, created) {
   }
 }
 
+/**
+ * The offline ship CLI (`node …/mcp-server/ship/cli.js ship_release p.json`)
+ * runs the same merge as the ship_release MCP tool, so it hits the same
+ * release gate. The tool name is read from the quote-stripped segment (a
+ * quoted mention is no call), the script path from the raw one (it may be
+ * quoted on Windows).
+ */
+function matchShipCliRelease(out, seg, rawSeg) {
+  if (/(^|\s)ship_release(\s|$)/.test(seg) && /ship[\\/]+cli\.js/i.test(rawSeg)) out.release = true;
+}
+
 /** Facts of one raw segment: render-card flag, then what runs at command position. */
 function applySegmentFacts(out, rawSeg, lang, ps, depth, created) {
   const seg = stripQuotes(rawSeg, ps);
   matchRenderCard(out, seg, rawSeg);
+  matchShipCliRelease(out, seg, rawSeg);
   const at = commandAt(rawSeg, lang);
   if (!at) return;
   if (at.payload !== undefined) {

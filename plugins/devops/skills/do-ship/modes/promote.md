@@ -22,8 +22,11 @@ do-ship runs these steps in two situations (`../SKILL.md` § Target channel):
 ToolSearch({ query: "select:mcp__plugin_devops_dotclaude-ship__ship_promote,mcp__plugin_devops_dotclaude-ship__ship_hygiene", max_results: 5 })
 ```
 
-If the tool is not registered → STOP and report (do NOT fall back to manual
-`git tag` — the promotion guards live in the tool).
+If the server is installed but this session skipped its connect, call the same
+tool offline: `node "{PLUGIN_ROOT}/mcp-server/ship/cli.js" ship_promote <params.json>`
+(the guards live in the handler, which the CLI runs unchanged). If the tool is
+not registered and the CLI is not on disk → STOP and report (do NOT fall back to
+manual `git tag`).
 
 ## Step 1 — Gather channel state
 
