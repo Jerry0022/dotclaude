@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { JSDOM } from "jsdom";
 import { readTemplates } from "./templates-source.js";
 
@@ -21,7 +22,7 @@ import { readTemplates } from "./templates-source.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
 const md = readTemplates();
-const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const skill = readSkill();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const reality = fs.readFileSync(path.join(DK, "reality-check.md"), "utf8");
 

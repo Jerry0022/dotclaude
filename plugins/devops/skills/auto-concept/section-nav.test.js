@@ -2,6 +2,7 @@ import { describe, test, expect, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { JSDOM } from "jsdom";
 import { readTemplates } from "./templates-source.js";
 
@@ -22,7 +23,7 @@ const DK = path.join(__dirname, "deep-knowledge");
 const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const iterRules = fs.readFileSync(path.join(DK, "iteration-rules.md"), "utf8");
-const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const skill = readSkill();
 
 function scanBlocks(src) {
   const lines = src.split("\n");

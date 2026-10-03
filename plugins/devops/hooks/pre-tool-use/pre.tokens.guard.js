@@ -583,6 +583,14 @@ process.stdin.on('end', () => {
   if (toolName === 'Read') {
     const filePath = toolInput.file_path || '';
     const absPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+    // A devops skill's own deep-knowledge / mode files are mandatory reads:
+    // SKILL.md pointers say "Read … completely" (auto-concept step*.md,
+    // do-run modes). Advising offset + limit there would split the procedure
+    // the skill depends on, so they pass at any threshold. Plugin cache
+    // (…/devops/<version>/skills/…) and source repo (…/devops/skills/…).
+    if (/[\\/]devops[\\/](?:[^\\/]+[\\/])?skills[\\/][^\\/]+[\\/](?:deep-knowledge|modes)[\\/].+\.md$/i.test(absPath)) {
+      process.exit(0);
+    }
     try {
       const stat = fs.statSync(absPath);
       // The Read tool shows png/jpg/jpeg/gif/webp as an image, billed by its

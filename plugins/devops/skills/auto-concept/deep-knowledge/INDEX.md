@@ -12,6 +12,15 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [monitoring.md](monitoring.md) | Concept Browser Monitoring | How Claude monitors the concept page for user decisions, processes them |
 | [pause-resume.md](pause-resume.md) | Pause and resume an open concept (#555) | Referenced from `SKILL.md` § 6c. A pause stops every process of an open conce... |
 | [reality-check.md](reality-check.md) | Reality Check — the implement gate | A concept session lives for hours or days. The default branch keeps moving |
+| [step1-templates.md](step1-templates.md) | Concept steps 0.5–1 — mode question, count preferences, template authoring | Mode question, count preferences, per-iteration template choice, design autho... |
+| [step2-feedback.md](step2-feedback.md) | Concept step 2 — feedback surfaces, persistence, file location | Feedback dock, annotation layer, views, reload resilience, comment durability... |
+| [step2-generate.md](step2-generate.md) | Concept step 2 — engine source, page anatomy, submit actions | Engine source, localisation, design defaults, panel layout and anatomy, inter... |
+| [step3-open-browser.md](step3-open-browser.md) | Concept step 3 — opening the page, bridge launch, open-concept cards | No-bridge fallbacks, the Edge open command and its gates, the bridge server a... |
+| [step4-monitor.md](step4-monitor.md) | Concept step 4 — heartbeat, pickup and polling schedule | Heartbeat, `/pending` pickup and the polling schedule — execution detail of `... |
+| [step5-finalize.md](step5-finalize.md) | Concept step 5b — finalize parts A to D, legacy actions, critical invariant | Finalize parts A · Issues, B · Implement, C · Ship and D · Close out, legacy ... |
+| [step5-process.md](step5-process.md) | Concept step 5a–5b — reading a submission and the iterate / implement / finalize branches | Round marking, reading a submission, checkpoints and the iterate / implement ... |
+| [step5-update-page.md](step5-update-page.md) | Concept step 5c–5d — appending rounds, the final report, resuming the watch | Appending rounds, the final report and its open points, re-confirming wakes a... |
+| [step6-closeout.md](step6-closeout.md) | Concept step 6 — disposition, cleanup procedure, completion card | Disposition, the cleanup procedure, durable-store disposal, safety rules and ... |
 | [templates-attachments.md](templates-attachments.md) | Concept templates, part 12 of 16: Shared systems — attachments | Every field marked `textarea[data-attachable]` — the feedback dock (general, |
 | [templates-common.md](templates-common.md) | Concept templates, part 01 of 16: Overview, UI locale, common structure | Three **templates** (layout modes) cover every concept use case. A template is |
 | [templates-decision.md](templates-decision.md) | Concept templates, part 03 of 16: Template: decision | Multi-variant evaluation in a document column, with the ☰ overlay panel over |

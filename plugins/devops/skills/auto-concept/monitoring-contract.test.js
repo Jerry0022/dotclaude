@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 
 // Issue #276: the concept skill dropped a bridge submission whenever the user
 // clicked "submit" and then typed nothing. The cause was documentation, not
@@ -15,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = f => fs.readFileSync(path.join(__dirname, f), "utf8");
 
-const SKILL = read("SKILL.md");
+const SKILL = readSkill();
 const MONITORING = read("deep-knowledge/monitoring.md");
 const BRIDGE = read("deep-knowledge/bridge-server.md");
 

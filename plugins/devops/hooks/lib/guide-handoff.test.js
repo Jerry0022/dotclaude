@@ -130,6 +130,27 @@ describe("detectWebHandoff — prose shape (#506, exact session wording)", () =>
   });
 });
 
+describe("detectCardHandoff — copy verbs (#617 follow-up)", () => {
+  test("the issue's exact one-arrow wording triggers", () => {
+    expect(detectCardHandoff({ userTest: ["CRON_SECRET aus Vercel kopieren → gh secret set CRON_SECRET"] }))
+      .toEqual({ service: "Vercel" });
+  });
+
+  test("English copy of a credential from a dashboard triggers", () => {
+    expect(detectCardHandoff({ userTest: ["Copy the API key from the Stripe dashboard into .env"] }))
+      .toEqual({ service: "Stripe" });
+  });
+
+  test("a plain file copy (no service, no credential) does not trigger", () => {
+    expect(detectCardHandoff({ userTest: ["Kopiere die Datei config.json nach dist/"] })).toBeNull();
+  });
+
+  test("a self-performed copy is excluded — German and English", () => {
+    expect(detectCardHandoff({ userTest: ["Ich habe den API-Key aus Vercel kopiert."] })).toBeNull();
+    expect(detectCardHandoff({ userTest: ["I copied the token from GitHub."] })).toBeNull();
+  });
+});
+
 describe("detectCardHandoff — card payload (#506)", () => {
   test("userFinalTest item with the exact session wording", () => {
     const card = {

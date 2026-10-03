@@ -2,12 +2,13 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 
 // #568: a session whose owner cannot reach the localhost bridge still builds
 // the real concept page — only the transport changes. The bridge stays
 // mandatory wherever it can run; the hand-off is a fallback, never a choice.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const skill = readSkill();
 
 describe("auto-concept — no reachable bridge ≠ no concept (#568)", () => {
   test("the rule sits before Step 0 and keeps the bridge mandatory", () => {

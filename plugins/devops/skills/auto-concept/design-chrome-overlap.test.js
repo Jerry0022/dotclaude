@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { readTemplates } from "./templates-source.js";
 
 // Three defects measured on ONE real generated page (4 iterations, 18
@@ -32,7 +33,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
 const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
-const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const skill = readSkill();
 const iterRules = fs.readFileSync(path.join(DK, "iteration-rules.md"), "utf8");
 
 // Line-based scanner (same reason as panel-chrome.test.js): a lazy

@@ -237,7 +237,7 @@ do not overlap.
 
 ### Locale keys
 
-Localisation is mandatory (`SKILL.md` § Localisation) — nothing below may be
+Localisation is mandatory (`SKILL.md` Step 2 → `deep-knowledge/step2-generate.md` § Localisation) — nothing below may be
 hard-coded in German or English. Existing `proto.*` keys (`templates.md:109-115`)
 are reused under a `design.*` namespace, with the `proto.*` names kept as aliases
 so legacy pages resolve. New keys required:

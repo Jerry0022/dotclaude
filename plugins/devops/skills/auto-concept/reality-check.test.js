@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { readTemplates } from "./templates-source.js";
 
 // The reality check diverts an `implement` submission into ONE extra round when
@@ -25,7 +26,7 @@ const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
 const iterRules = fs.readFileSync(path.join(DK, "iteration-rules.md"), "utf8");
 const bridge = fs.readFileSync(path.join(DK, "bridge-server.md"), "utf8");
 const realityDoc = fs.readFileSync(path.join(DK, "reality-check.md"), "utf8");
-const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const skill = readSkill();
 
 // Line-based scanner (same reason as panel-chrome.test.js): a lazy regex
 // desynchronises on the first block whose body contains a fence.
