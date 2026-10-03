@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.245.1] — 2026-10-03
+
+### Fixed
+- **Completion card `analysis` only when nothing changed anywhere (#624).** The variant rule (COMPLETION CARD hint in `post.flow.completion`, `card-guard` variant decision, `deep-knowledge/completion-card-design.md`) now reads: `analysis` = answer or investigation only. Work done outside the repo with no repo diff (DB operation, delete, deploy, migration, settings change) → `fallback`; implementation handed to still-running agents → `ready`/`test` + `pending`; a mode activation (batch, concept) → its override.
+- **Card pregate refuses `analysis` after a write-type tool.** New check in `hooks/lib/card-pregate.js` (export `writeToolsThisTurn`): when this turn ran Edit/Write/NotebookEdit, an implementing agent (core/frontend/feature/ai/designer), DML via `execute_sql`, a deploy/delete/trash/merge/push MCP tool, or a Bash/PowerShell `rm`, `git push`, `DELETE FROM`, `DROP TABLE`, the `analysis` card is refused once with the tools named; the repeated call renders (existing refuse-once mechanism).
+
+### Decisions
+- Root cause: the variant rule keyed on repo file changes only, so out-of-repo work rendered as a passive "analysis" card.
+- Reused `fallback` (renders "Erledigt — noch etwas?") instead of a new `done` variant — no schema or renderer change.
+
+### Tests
+- 4 new `card-pregate` cases; full suite 8262 passed, 0 failed, 3 skipped (pre-existing); eslint clean.
+
 ## [0.245.0] — 2026-10-03
 
 ### Changed
