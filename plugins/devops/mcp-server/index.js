@@ -1195,7 +1195,7 @@ const HEADINGS = {
       'usage-reset': '⏸️ Pausiert bis Limit-Reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
     })[c.pauseReason] || '⏸️ Pausiert — weiter, wann du willst',
     pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
-    concept: (c) => `🧭 Concept ${c.what}`,
+    concept: (c) => `${c.icon} Concept ${c.what}`,
     batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
     'vv-unverified': () => '⚠ Ungeprüft shippen?',
     'vv-running': () => '⏳ Test läuft noch — Ergebnis abwarten?',
@@ -1229,7 +1229,7 @@ const HEADINGS = {
       'usage-reset': '⏸️ Paused until limit reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
     })[c.pauseReason] || '⏸️ Paused — pick it up whenever you like',
     pending: (c) => `⏳ Not done yet — ${c.what}`,
-    concept: (c) => `🧭 Concept ${c.what}`,
+    concept: (c) => `${c.icon} Concept ${c.what}`,
     batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
     'vv-unverified': () => '⚠ Ship unverified?',
     'vv-running': () => '⏳ Test still running — wait for its result?',
@@ -1248,6 +1248,13 @@ const CONCEPT_HEADING = {
   de: { waiting: 'wartet auf deine Entscheidungen', tail: ' — ich melde mich' },
   en: { waiting: 'waiting for your decisions', tail: ' — I will report back' },
 };
+// The heading glyph mirrors the session title: the compass only while the
+// page waits for the user; iterating / implementing means Claude works, so
+// the card shows the same bare hourglass the title carries (owner 2026-10-03).
+function conceptHeadingIcon(concept) {
+  const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
+  return phase === 'waiting' ? '🧭' : '⏳';
+}
 function conceptHeadingWhat(concept, pending, lang) {
   const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
   const L = CONCEPT_HEADING[lang] || CONCEPT_HEADING.de;
@@ -1568,7 +1575,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.concept({ what }), context: url ? '› ' + url : '', points: pts, buttonsKey: null, guideHandoff };
+    return { heading: T.concept({ what, icon: conceptHeadingIcon(input.concept) }), context: url ? '› ' + url : '', points: pts, buttonsKey: null, guideHandoff };
   }
   if (batch) {
     const guide = batchGuide(batch, lang);
@@ -2515,7 +2522,7 @@ server.registerTool(
             url: z.string().optional().describe("Override for the page URL shown above the CTA. Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich', where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich' (⏳ instead of 🧭 while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
       pause: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
