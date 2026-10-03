@@ -494,9 +494,16 @@ only once every row is (`updateCloseoutButton()`), which is the same click
 that submits `finalize`. Never two buttons, never "Alles ausführen". An
 **answered** row stays clickable (`closeoutRowClick()`) to go back and change
 the answer; the rows in between keep their state. "Answered" means the row
-was open when that one button was clicked, not a per-row control: a
-pre-selected default may stand as given, confirming just means the user
-looked. There is no separate plan line: each collapsed row's inline summary
+was open when that one button was clicked — or, in a single-choice row
+(ship, this page), that the user actively clicked one of its options,
+the pre-selected default included (`closeoutChoiceClick()`): clicking
+"Ja, Ship-Pipeline starten" or "Seite löschen" confirms the row and opens
+the next one exactly like "Weiter ›", which stays the alternative for
+taking the default untouched, never a forced second click. Arrow-key
+browsing through a radio group does not count, and the followups row (one
+route per open point) never auto-advances. A choice click never submits —
+only the button does. A pre-selected default may stand as given,
+confirming just means the user looked. There is no separate plan line: each collapsed row's inline summary
 ("shippen", "Seite löschen", "2 · Issue, Issue", "2 Schritte") IS the
 readout of what will happen, and the consequence warning ("Ein Klick, alles
 davon …") is the execute button's data-tip tooltip. Progress ("n von N

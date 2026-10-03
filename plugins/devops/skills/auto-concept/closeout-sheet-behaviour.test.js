@@ -524,6 +524,47 @@ describe("close-out sheet — the accordion", () => {
     expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
   });
 
+  test("clicking a ship option confirms the row like Weiter — no second click", () => {
+    const p = page({ items: ITEMS });
+    p.execute(); // followups ✓ → ship open
+    p.document.querySelector('input[name="closeout-ship"][value="yes"]').click();
+    expect(p.row("ship").dataset.answered).toBe("true");
+    expect(p.rowHead("files").getAttribute("aria-expanded")).toBe("true");
+    expect(p.window.closeoutShipChoice()).toBe("yes");
+    expect(p.posted.length, "a choice click never submits").toBe(0);
+  });
+
+  test("re-clicking the pre-selected page option counts as the answer too", () => {
+    const p = page({ items: ITEMS });
+    p.execute();
+    p.document.querySelector('input[name="closeout-ship"][value="no"]').click();
+    const discard = p.document.querySelector('input[name="dispose-mode"][value="discard"]');
+    expect(discard.checked, "default is already selected").toBe(true);
+    discard.click();
+    expect(p.row("files").dataset.answered).toBe("true");
+    expect(p.window.closeoutAllAnswered()).toBe(true);
+    expect(p.button().dataset.ready).toBe("true");
+    expect(p.posted.length, "the last row's choice does not fire the finalize").toBe(0);
+  });
+
+  test("arrow-key browsing through the options does not advance the sheet", () => {
+    const p = page({ items: ITEMS });
+    p.execute();
+    p.execute(); // refused — ship unanswered, stays open
+    const yes = p.document.querySelector('input[name="closeout-ship"][value="yes"]');
+    yes.dispatchEvent(new p.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    yes.click();
+    expect(p.row("ship").dataset.answered).toBe("false");
+    expect(p.rowHead("ship").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("a route click in the followups row does not collapse it", () => {
+    const p = page({ items: ITEMS });
+    p.document.querySelector('input[name="fu-oq-saml"][value="implement"]').click();
+    expect(p.row("followups").dataset.answered).toBe("false");
+    expect(p.rowHead("followups").getAttribute("aria-expanded")).toBe("true");
+  });
+
   test("the button reads Weiter until every row is answered, then Ausführen", () => {
     const p = page({ items: ITEMS });
     const btn = p.document.getElementById("closeout-execute");

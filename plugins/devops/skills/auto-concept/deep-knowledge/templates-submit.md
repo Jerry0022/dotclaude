@@ -1109,13 +1109,53 @@ function closeoutButtonClick() {
     }
     return;
   }
-  open.dataset.answered = 'true';
+  confirmCloseoutRow(open);
+}
+// Marks one row answered and opens the next unanswered one (or keeps this
+// one open when nothing is left — the button then reads "⚠ Ausführen").
+// Shared by "Weiter ›" and an active choice inside a single-choice row
+// (closeoutChoiceClick()); it never submits, so confirming the LAST row by
+// a choice click can never also fire the finalize.
+function confirmCloseoutRow(block) {
+  block.dataset.answered = 'true';
   const answered = loadCloseoutAnswered();
-  answered[open.dataset.closeoutBlock] = true;
+  answered[block.dataset.closeoutBlock] = true;
   saveCloseoutAnswered(answered);
-  const next = rows.find(r => r.dataset.answered !== 'true');
-  openCloseoutRow(next || open);
+  const next = closeoutRows().find(r => r.dataset.answered !== 'true');
+  openCloseoutRow(next || block);
   refreshCloseoutRows();
+}
+// The rows whose whole answer is ONE radio choice. Actively clicking one of
+// their options — also the pre-selected default — IS the answer, the same as
+// "Weiter ›": the user said "Ship" or "Seite löschen", making them click a
+// second button to mean it was pure friction. "Weiter ›" stays as the way to
+// take the default without touching it. The followups row is deliberately
+// not one of them: it holds one route per open point, so a click on the
+// first point's route must not collapse the row before the others are seen.
+const CLOSEOUT_SINGLE_CHOICE = { ship: 'closeout-ship', files: 'dispose-mode' };
+// Arrow keys move a radio group's selection AND dispatch a click — that is
+// browsing the options, not choosing one, so it must not advance the sheet
+// (otherwise the middle option of three could never be passed by keyboard).
+// Space/Enter and pointer clicks stay active choices.
+let _closeoutArrowNav = false;
+function closeoutChoiceKeydown(e) {
+  if (/^Arrow/.test(e.key)) {
+    _closeoutArrowNav = true;
+    setTimeout(() => { _closeoutArrowNav = false; }, 0);
+  }
+}
+function closeoutChoiceClick(e) {
+  const input = e.target;
+  if (!input || !input.matches || !input.matches('input[type="radio"]')) return;
+  if (_closeoutArrowNav) return;
+  const sheet = document.getElementById('closeout-sheet');
+  if (!sheet || sheet.dataset.frozen === 'true') return;
+  const block = input.closest('.closeout-block');
+  if (!block || block.dataset.open !== 'true') return;
+  if (CLOSEOUT_SINGLE_CHOICE[block.dataset.closeoutBlock] !== input.name) return;
+  const req = document.getElementById('closeout-ship-required');
+  if (req && block.dataset.closeoutBlock === 'ship') req.hidden = true;
+  confirmCloseoutRow(block);
 }
 
 // Re-renders the sheet. Called from showIteration() with { reset: true } (a
@@ -1558,6 +1598,11 @@ function wireCloseout() {
     if (!head) return;
     closeoutRowClick(head.closest('.closeout-block'));
   });
+  // An active choice in a single-choice row confirms it like "Weiter ›"
+  // (closeoutChoiceClick()). `click`, not `change`: re-clicking the
+  // pre-selected default fires no change but is just as much an answer.
+  document.getElementById('closeout-sheet')?.addEventListener('keydown', closeoutChoiceKeydown, true);
+  document.getElementById('closeout-sheet')?.addEventListener('click', closeoutChoiceClick);
   refreshCloseout({ reset: true });
   restoreInFlightCloseout();
 }
