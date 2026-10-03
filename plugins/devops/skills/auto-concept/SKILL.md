@@ -1636,6 +1636,11 @@ because the session feels like it is ending.
    still needs.
 3. On a successful release, rewrite the live final-report section in place:
    add a one-line "Shipped" note (version + tag) to the Zusammenfassung.
+4. **The ship card comes last.** Once `ship_release` has merged (the ship can
+   no longer block), run part D and Step 6a in full — bridge, pulser and
+   waker stopped — and only then let `do-ship` render its ship card. A card
+   rendered before the stop is followed by the watchers' exit notifications,
+   and the chat no longer ends on the outcome.
 
 ### D · Close out
 
@@ -1654,12 +1659,15 @@ because the session feels like it is ending.
    here is a coin flip on whether the user's closing impression is the final
    report or an HTTP 404. The bridge shutdown that follows is the honest
    end-of-session signal.
-2. Proceed to Step 6 with the `disposition` stored in part A step 2. Treat
-   this submission as the explicit "fertig" signal from the user.
-3. **Card selection:** if part C ran successfully, `ship` already rendered
-   its own ship card — that is the authoritative closing artefact and you
-   MUST NOT render a second concept completion card (duplicate summary).
-   Otherwise render the concept card per Step 6b.
+2. Proceed to Step 6a with the `disposition` stored in part A step 2. Treat
+   this submission as the explicit "fertig" signal from the user. Step 6a
+   stops the bridge, the pulser and the waker and waits until all three are
+   gone — that happens BEFORE any final card, so no exit notification can
+   arrive after it.
+3. **Card selection — only after the stop:** if part C ran successfully, the
+   `do-ship` ship card (held back per part C step 4) is the authoritative
+   closing artefact and you MUST NOT render a second concept completion card
+   (duplicate summary). Otherwise render the concept card per Step 6b.
 
 ### Legacy final-report actions
 
@@ -1984,8 +1992,8 @@ reason has exactly one correct response:
 | `PULSER_EXIT reason=SERVER_DEAD` | Only an internal crash of the pulser prints this now; it no longer gives up on a slow or absent bridge | Verify the bridge with one `curl /heartbeat` (relaunch on the same port if it is down), then re-launch the pulser |
 | `PULSER_EXIT reason=DUPLICATE_PULSER` | An OLDER pulser is already pulsing this port (the watchers survive a session restart on Windows; `ss.concept.resume` re-arms them anyway) — this younger one stepped down | Nothing. The beat is covered |
 | `WAKER_EXIT reason=DUPLICATE_WAKER` | A YOUNGER waker took over this port — a newer session re-armed the watchers, and this one belonged to the superseded session | Nothing. Do not re-launch; the newer waker wakes the session that owns the concept now |
-| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` has been gone for 3 consecutive polls (~1 min — a rewrite window is tolerated) — the concept ended (the waker already POSTed `/shutdown`) | Nothing. Do not re-launch; the session is over |
-| `WAKER_EXIT reason=HTML_GONE` | The concept page was deleted from disk — the waker shut the bridge down | Nothing to re-launch. `CronDelete` the backstop cron and remove the state file if it is still there |
+| `*_EXIT reason=STATE_GONE` | `.claude/concept-active.json` has been gone for 3 consecutive polls (~1 min — a rewrite window is tolerated) — the concept ended (the waker already POSTed `/shutdown`) | Nothing. Do not re-launch; the session is over. After a close-out: a silent turn — no text, no title change |
+| `WAKER_EXIT reason=HTML_GONE` | The concept page was deleted from disk — the waker shut the bridge down | Nothing to re-launch. `CronDelete` the backstop cron and remove the state file if it is still there. After a close-out (the state file is already gone): a silent turn — no text, no title change |
 | `*_EXIT reason=STATE_NEVER_APPEARED` | The launch outran the step that writes the state file | Write it, then re-launch. NOT the same as STATE_GONE — the concept is alive |
 | `*_EXIT reason=PORT_CHANGED` | A newer concept took over | Nothing. This task belongs to a superseded session |
 | No `*_EXIT` line at all | The task died without announcing why — bad arguments, a crash, `node` missing, killed | Do NOT assume the session ended. Verify the bridge with one `curl /heartbeat`, then re-launch both tasks |
@@ -2022,8 +2030,10 @@ bridge-server state** and render a completion card.
 
 ### 6a. Clean up the active-concept state — Cleanup-By-Disposition
 
-Before rendering the completion card, dispose of the bridge server, its
-state file, AND the on-disk concept artefacts. The on-disk steps depend
+Before rendering the completion card, stop the bridge server, the pulser and
+the waker, remove the state file, AND dispose of the on-disk concept
+artefacts. The card is the last thing in the chat — nothing of the concept
+may still be running when it renders. The on-disk steps depend
 on the user's disposition choice (see `deep-knowledge/templates-rounds.md`
 § Disposition Control for the UI + payload shape).
 
@@ -2051,6 +2061,15 @@ curl -s -X POST http://localhost:$PORT/shutdown > /dev/null 2>&1 || true
 node -e "const f='.claude/concept-active.json',fs=require('fs');try{const s=JSON.parse(fs.readFileSync(f,'utf8'));if(!s.owner||s.owner===process.argv[1])fs.unlinkSync(f)}catch{}" "$OWNER"
 ```
 
+**Then stop the watchers — before any card.** `TaskStop` the pulser, the
+waker and the bridge-server background tasks by the task IDs their launches
+returned. When an ID is unknown (a resumed session that re-armed them
+elsewhere), wait for that task's exit notification instead
+(`*_EXIT reason=STATE_GONE`, the bridge's own exit after `/shutdown`) — the
+watchers see the state file gone within ~1 min. Every exit lands inside this
+turn, before the card. One that still arrives after the card (a stray
+duplicate watcher) is a silent turn: no text, no title change.
+
 **Restore the session title** (Desktop app only — skip silently elsewhere):
 `mcp__ccd_session_mgmt__get_session` `self`; strip every leading devops
 prefix (`🧭 Concept – `, `⏳ `, `🚀 Shipping – `, … — the `SESSION_PREFIX`
@@ -2069,7 +2088,9 @@ server by port and is a no-op when the server is already dead. Removing
 SessionStart's `ss.concept.resume` hook will surface a phantom resume hint
 pointing at a server that no longer exists. Even if `/shutdown` fails (server
 already gone, port unbound), the watchdog terminates any surviving instance
-within 30 s once the cron stops POSTing heartbeats.
+once the heartbeats stop — but that is the safety net for a crashed session,
+not the close-out path: the close-out stops every task itself, above, and
+renders the card only after all of them are gone.
 
 **Apply disposition on the concept files.** Files are named
 `docs/concepts/{date}-{slug}.html` and `docs/concepts/{date}-{slug}-decisions.json`

@@ -100,10 +100,50 @@ describe("prompt.flow.title-work", () => {
   // submission is confirmed.
   test("a machine turn keeps the concept compass and the batch prefix", () => {
     const text = instruction(WORK_PREFIX, { machine: true });
-    expect(text).toMatch(/starts with 🧭 or 📥: do nothing — a mode owns it/);
+    expect(text).toMatch(/starts with 🧭 or 📥 or .*: do nothing — a mode or a card owns it/);
     expect(text).not.toMatch(/prefix whose emoji is one of 🧭 /);
     expect(text).not.toContain(`"${CONCEPT_PREFIX}"`);
     expect(text).not.toMatch(/brings the compass back/);
+    expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
+  });
+
+  /** The emoji list of the "do nothing" line, or null when there is none. */
+  const keptEmoji = (text) => {
+    const line = text.split("\n").find((l) => /starts with .*: do nothing — /.test(l) && !l.includes("already"));
+    return line ? line.replace(/^.*starts with /, "").replace(/: do nothing.*$/, "").split(" or ") : null;
+  };
+  /** The emoji list of the "strip" line. */
+  const strippedEmoji = (text) => {
+    const line = text.split("\n").find((l) => /prefix whose emoji is one of /.test(l));
+    return line.replace(/^.*one of /, "").trim().split(" ");
+  };
+
+  // #618: a watcher's exit notification after a concept close is a machine
+  // turn — it flipped "🚀 Shipped – X" to "⏳ X" after the final card. A
+  // notification turn leaves every outcome a card set; it still marks a
+  // plain title, because such a turn may start real work (a backlog run
+  // shipping its next item).
+  test("a machine turn on an outcome title leaves it, on a plain title still marks ⏳", () => {
+    const text = instruction(WORK_PREFIX, { machine: true });
+    const kept = keptEmoji(text);
+    for (const e of ["\u{1F680}", "\u{1F38A}", "\u{1F4E6}", "\u{1F9EA}", "⏸️"]) {
+      expect(kept, e).toContain(e);
+      expect(strippedEmoji(text), e).not.toContain(e);
+    }
+    expect(kept).not.toContain("⏳");
+    expect(text).not.toContain('"🚀 Shipped – "');
+    // A plain title still gets the hourglass.
+    expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
+    // The legacy worded hourglass is still rewritten to the bare form.
+    expect(strippedEmoji(text)).toEqual(["⏳"]);
+    expect(text).toContain(`"${LEGACY_PENDING_PREFIX}"`);
+  });
+
+  test("a user prompt on an outcome title still strips it to ⏳", () => {
+    const text = instruction(WORK_PREFIX);
+    expect(keptEmoji(text)).toEqual(["\u{1F4E5}"]);
+    for (const e of ["\u{1F680}", "\u{1F38A}", "\u{1F4E6}", "\u{1F9EA}", "⏸️"]) expect(strippedEmoji(text), e).toContain(e);
+    expect(text).toContain('"🚀 Shipped – "');
     expect(text).toContain(`"${WORK_PREFIX}" + <stripped title>`);
   });
 
@@ -183,7 +223,7 @@ describe("prompt.flow.title-work", () => {
     test("a task notification keeps the compass", () => {
       const out = run("<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>WAKER_EXIT reason=PENDING_SUBMISSION version=3 action=iterate</summary>\n</task-notification>");
       expect(out).toContain("[prompt.flow.title-work]");
-      expect(out).toMatch(/starts with 🧭 or 📥: do nothing — a mode owns it/);
+      expect(out).toMatch(/starts with 🧭 or 📥 or .*: do nothing — a mode or a card owns it/);
       expect(out).not.toMatch(/prefix whose emoji is one of 🧭 /);
     });
 
