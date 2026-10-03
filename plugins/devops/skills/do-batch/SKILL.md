@@ -468,7 +468,7 @@ silently if absent. Detail: `deep-knowledge/merge.md` § Local compaction.
   open decisions) — per the Step 4.6 decision rule.
 - **The hand-off is enforced, not just written down.** `.claude/batch-handoff.json`
   blocks edits and commits until do-run or auto-concept is invoked
-  (`--from=do-batch`); see `deep-knowledge/run-contract.md`.
+  (`--from=do-batch`); see `{PLUGIN_ROOT}/deep-knowledge/run-contract.md`.
 - **Never delete notes.** Archive them.
 - **Activation ends with the mode ON.** The invocation is the request; never
   ask the user to send `/do-batch on` afterwards. A re-activation while
