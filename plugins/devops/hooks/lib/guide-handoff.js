@@ -118,6 +118,11 @@ const CREATION_VERB_RE_SRC = [
   String.raw`leg(?:e)?\s(?:[^.!?\n]|\.(?=\S))*?\san`,
   String.raw`richte?\s(?:[^.!?\n]|\.(?=\S))*?\sein`,
   String.raw`gib\s(?:[^.!?\n]|\.(?=\S))*?\sein`,
+  // #617 follow-up: copying a credential out of a dashboard is the same
+  // hand-off ("CRON_SECRET aus Vercel kopieren → gh secret set …"); the
+  // service and credential-noun conditions keep plain file copies out.
+  String.raw`kopieren`, String.raw`kopiere`, String.raw`kopier`,
+  String.raw`copy`, String.raw`copying`,
 ];
 
 /** Unicode-aware whole-word alternative (JS `\b` is ASCII-only, so
@@ -166,9 +171,9 @@ const CREATION_VERB_RE = new RegExp(CREATION_VERB_RE_SRC.map(wordAlt).join('|'),
  */
 const SELF_PERFORMED_RE = new RegExp(
   '(?:' + wordAlt('ich') + String.raw`[^.!?\n]{0,60}?` +
-    wordAlt(['angelegt', 'erstellt', 'eingerichtet'].join('|')) + ')' +
+    wordAlt(['angelegt', 'erstellt', 'eingerichtet', 'kopiert'].join('|')) + ')' +
   '|(?:' + wordAlt('i') + String.raw`[^.!?\n]{0,60}?` +
-    wordAlt(['created', 'generated', String.raw`set\s+up`, 'configured'].join('|')) + ')',
+    wordAlt(['created', 'generated', String.raw`set\s+up`, 'configured', 'copied'].join('|')) + ')',
   'iu'
 );
 

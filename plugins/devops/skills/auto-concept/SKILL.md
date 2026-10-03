@@ -1621,6 +1621,25 @@ because the session feels like it is ending.
 
 ### C · Ship (`ship.run === true`)
 
+0. **Stage the disposition first, index only.** Apply the `disposition`
+   from part A step 2 to the git index and commit it on the branch
+   (`chore(concept): close out {slug}`) before the ship, so the release
+   carries it — a disposition applied after `ship_release` is left
+   uncommitted on the branch. Every file stays on disk where the bridge
+   serves it; Step 6a does the on-disk part after the stop:
+   - `keep`, no `moveTo` → nothing (plus the attachments copy + `git add`
+     from § Also dispose of the durable store).
+   - `keep` + `moveTo` → `cp` the HTML and the decisions JSON into
+     `<moveTo>/`, `git add` the copies, `git rm --cached` the originals
+     (if tracked).
+   - `gitignore` → the `.gitignore` line and the `git rm --cached` from the
+     table in Step 6a.
+   - `discard` → `git rm --cached` the HTML and the decisions JSON if
+     tracked.
+   Nothing to commit → no commit. Step 6a then skips the git half of its
+   table for this close-out and only moves or deletes the files on disk
+   (for `keep` + `moveTo`: delete the originals, the copies are already in
+   place).
 1. Run the full ship pipeline via the `do-ship` skill (ship_preflight →
    ship_build → ship_version_bump → ship_release → ship_cleanup). The execute
    click authorises the ship; it does NOT waive the gates `ship` already
@@ -2095,7 +2114,8 @@ renders the card only after all of them are gone.
 **Apply disposition on the concept files.** Files are named
 `docs/concepts/{date}-{slug}.html` and `docs/concepts/{date}-{slug}-decisions.json`
 — always include the `{date}-` prefix in patterns; bare `{slug}` does
-NOT match.
+NOT match. After a ship (part C step 0 already staged and committed the git
+half), only the on-disk moves and deletes below remain.
 
 | `mode` | `moveTo` | Action |
 |---|---|---|
