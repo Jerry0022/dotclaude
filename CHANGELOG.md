@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.245.3] — 2026-10-03
+
+### Fixed
+- **Concept close-out ends on the outcome card (#618).** `auto-concept` Step 6a (part C step 4, part D) now shuts down the bridge, deletes the state file and stops the pulser/waker/bridge tasks (TaskStop by ID, else waits for their exit notification) BEFORE the final card. `STATE_GONE` / `HTML_GONE` after a close-out → silent turn: no text, no title change. The watchdog prose is now a crash safety net only.
+- **Session title survives notification turns.** `prompt.flow.title-work` leaves an outcome-prefixed title (🚀 Shipped –, 🎊 Released …, 📦 Ready –, 🧪 Test – …) untouched on a machine/notification turn; a plain title still gets ⏳, real user prompts are unchanged.
+- **Quiet output style.** A watcher/server exit notification after a concept close counts as a no-change notification → answered with nothing (template + shipped hash updated).
+
+### Decisions
+- Root cause: watcher exits arrived as notifications after the final Shipped card; each started a new turn that answered with a sentence, and title-work flipped the title back to ⏳.
+- title-work does not skip machine turns entirely — a notification turn that starts real work (e.g. the next backlog item) still needs ⏳; it only protects outcome titles. `concept-watch.js` exit emission unchanged.
+- Known gaps: the ship-path close-out ordering is instruction-level, not code-enforced; the close-out disposition (`keep`/`gitignore`) still runs after the release on the ship path; whether TaskStop itself emits a late notification is unverified with a live concept.
+
+### Tests
+- 2 new title-work cases (outcome title kept on a notification turn, plain title still marked). Full suite 8275 passed, 3 skipped (pre-existing); output-style-sync 19/19 after the hash fix; eslint clean.
+
 ## [0.245.2] — 2026-10-03
 
 ### Fixed
