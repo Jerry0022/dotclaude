@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.245.4] — 2026-10-03
+
+### Fixed
+- **Web-Guide button for web steps in userTest and user-waiting validation (#617).** Card hand-off detection (`hooks/lib/guide-handoff.js` `detectCardHandoff`, `mcp-server/index.js` `detectGuideHandoff`) now also scans `userTest` and the requirement + evidence of `validation` items with `waitsOn: "user"`; the card shows the Web-Guide button for those steps. Other `waitsOn` values and plain-string items do not trigger.
+- **Card pregate nudge (`card-pregate.js` v0.3.0, `card-guard.js` `buildGuideHandoffReason`).** A card carrying such a user-waiting web step, with no auto-guide this turn, is refused once with a nudge to start or offer auto-guide; a repeat render passes; no transcript → skipped.
+- **agent-proactivity.md.** One clause extends the web hand-off rule to steps left on the card (7145 B, under the 7168-byte always-on preload cap).
+
+### Decisions
+- Root cause: `detectGuideHandoff` passed only `userFinalTest` and `open`; `userTest` and user-waiting `validation` were never scanned.
+- Known gaps: the issue's original one-arrow wording ("CRON_SECRET aus Vercel kopieren → gh secret set CRON_SECRET") is still not detected — the detector heuristics are unchanged, loosening them (copy verbs) is a separate decision. The pregate refusal header names stop.flow.guard although the Stop gate does not check this case.
+
+### Tests
+- New guide-handoff, card-pregate and index.card cases (245/245 targeted). Full suite 8281 passed, 3 skipped (pre-existing) after the preload-cap fix; eslint clean.
+
 ## [0.245.3] — 2026-10-03
 
 ### Fixed
