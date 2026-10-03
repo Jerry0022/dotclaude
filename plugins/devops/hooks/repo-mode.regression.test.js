@@ -253,7 +253,7 @@ describe("the git-exclude idiom is guarded in every skill that uses it", () => {
   const users = [
     ["do-run/modes/autonomous.md"],
     ["do-run/modes/backlog.md"],
-    ["do-batch/SKILL.md"],
+    ["do-batch/deep-knowledge/activation.md"],
   ];
 
   test.each(users)("%s guards git-common-dir before using it", (rel) => {

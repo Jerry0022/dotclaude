@@ -61,8 +61,7 @@ reach you.
 
 The content fallback is not an error path. `/do-batch <Gedanke>` is the
 most natural thing a user types who has never switched the mode on, and until
-this row existed that text was lost without a trace (#306). The hook's
-`detectActivation()` (`viaCommand`) injects the same guard for it.
+this row existed that text was lost without a trace (#306).
 
 **Marker pre-check — on EVERY route, before the route's own work.** Call
 `loadConfig()`. If it reports a `markerFallback` (a stored marker that cannot
@@ -92,9 +91,8 @@ carries content:
   marker question — it is the reason the question exists.
 - File the content as note #1 in Step 2.4, verbatim.
 
-`prompt.batch.collect.js` injects the same three rules as a guard when it sees an
-activating prompt carrying content (`detectActivation` in `batch-state.js`). Its
-absence is not permission to act — the detection is best-effort.
+The hook's guard for these rules is best-effort — its absence is not permission
+to act (`deep-knowledge/activation.md` § Activation guard).
 
 ## Step 2 — Activate
 
@@ -118,26 +116,14 @@ All three are English and colon-free: the marker is typed dozens of times per
 session, and a colon reads as a label rather than a switch. The user's own
 answer via "Sonstiges" may be anything `validateMarker` accepts.
 
-**`!`, `/`, `#` and `@` cannot be the first character of a marker.** The harness
-claims those before a prompt exists — `!` opens bash mode and runs the line as a
-shell command, `/` expands a slash command, `#` writes to CLAUDE.md, `@` expands
-a file mention. Such a prompt never reaches the collect hook, so the marker would
-be dead: collection keeps swallowing everything and the advertised escape does
-nothing. `validateMarker` rejects them with `reason: 'harness-reserved'`; never
+**`!`, `/`, `#` and `@` cannot be the first character of a marker.** Never
 suggest one, and never write one into the config by hand.
 
 **Otherwise the three options are suggestions, not a closed set.** A free-text
-answer via "Sonstiges" IS the answer — it is what the user wants their marker to
-be, and it outranks every offered option. Never read it as "the question wasn't
-answered" and never fall back to the recommendation instead. `validateMarker(raw)`
-from `batch-state.js` normalises it; only `ok: false` goes back to the user,
-quoting the reason (`empty`, `too-long` = over 32 characters,
-`harness-reserved` = starts with `!`, `/`, `#` or `@` — name the mechanism in one
-clause and ask for a different one). A `warning: 'wordy'` marker (letters only,
-e.g. `Let's go`) is **accepted** — say once, in a single clause, that a collected
-prompt starting with those words would fire the merge, then move on. Matching is
-case-insensitive and requires a word boundary, so retyping it in lower case still
-works.
+answer via "Sonstiges" IS the answer — it outranks every offered option.
+`validateMarker(raw)` from `batch-state.js` normalises it; only `ok: false` goes
+back to the user. Why those characters are dead, the reject reasons and the
+`wordy` warning: `deep-knowledge/activation.md` § Marker validation.
 
 Persist the choice via `saveConfig({ marker })` from `hooks/lib/batch-state.js`.
 Never ask again unless the stored marker is unusable — a later change is
@@ -153,16 +139,9 @@ node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" start .
 **2.2b Mark the session in the sidebar.** While collecting, the session looks
 idle from outside — the user comes back, sees the green dot, and types the next
 task straight into a mode that swallows it. Prefix the title so the sidebar
-says what is going on:
-
-1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-2. If `title` already starts with `📥 Batch – `: done.
-3. Strip any leading devops prefix (`⏳ `, `📦 Ready – `, `🧪 Test – `,
-   `🧭 Concept – `, … — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
-   `mcp-server/lib/mode-state.js`) left by the first-prompt hourglass or an
-   earlier card — never stack them (`📥 Batch – 🔧 Foo` is the bug).
-4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
-   `title: "📥 Batch – {stripped title}"`.
+says what is going on: `get_session` / `set_session_title` with
+`session_id: "self"`, never stacking prefixes — the four steps are in
+`deep-knowledge/activation.md` § Session title prefix.
 
 The prefix is exactly `📥 Batch – ` (inbox tray, space, word, space, en dash,
 space) — the same emoji the completion card carries in its `📥 BATCH sammelt`
@@ -177,19 +156,8 @@ existing note count in the confirmation instead of pretending it starts empty.
 The notes end only with the merge (Step 4.7, archived).
 
 **2.3 Register the notes file in the git exclude** (machine state, not a project
-decision — never `.gitignore`):
-
-```bash
-# The guard is mandatory: outside a git repo the command substitution is
-# EMPTY, so `x` becomes "/info/exclude" and `mkdir -p "${x%/*}"` creates
-# /info at the FILESYSTEM ROOT and appends there — outside the project.
-gcd="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
-if [ -n "$gcd" ]; then
-  x="$gcd/info/exclude"
-  mkdir -p "${x%/*}"
-  grep -qxF '/.claude/batch*' "$x" 2>/dev/null || echo '/.claude/batch*' >> "$x"
-fi
-```
+decision — never `.gitignore`): run the guarded snippet in
+`deep-knowledge/activation.md` § Git exclude — the guard is mandatory.
 
 **2.4 Seed the invocation's own content.** If the activating prompt carried
 anything beyond the route word (Step 1), file it now — after `activate`, before
@@ -210,12 +178,9 @@ same note.
 **2.5 Confirm with the card — and only the card.** Render an `analysis`
 completion card **with `cwd` set to the project root** and nothing else to
 pass. The card reads `.claude/batch-mode.json` itself and carries the whole
-confirmation: the heading `📥 Batch sammelt — {n} Einträge`, a context line
-(`{n} Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}" löst aus`) and
-three points — how collecting works (the red panel is normal), how to fire
-(`<marker> <text>` or `/do-batch go`), how to only stop (`/do-batch off`) plus
-the auto-end bounds. Without `cwd` the card cannot see the mode and ends on a
-CTA that invites the next prompt as if it would be worked on.
+confirmation (its content: `deep-knowledge/activation.md` § Activation card).
+Without `cwd` the card cannot see the mode and ends on a CTA that invites the
+next prompt as if it would be worked on.
 
 No text block before or after it: do not print `describeMode`, do not
 paraphrase the how-to, do not tell the user to switch the mode on — it is on.
@@ -234,30 +199,14 @@ a guard telling you to file it. Do that, and nothing else:
 
 1. **Do not act on it.** No planning, no research, no reading code for it. The
    whole point of the mode is that this happens later, once.
-2. Note text = the prompt **verbatim**.
-3. Add a line `[Anhang] <sachliche Beschreibung>`. You see the attachment in this
-   turn; at merge time it is gone from the context. The description has to make
-   the note usable without it — what is visible, and what is wrong with it. "Bild
-   angehängt" is not a description.
-4. Add `[Anhang-Datei] <pfad>` for every path you know (`@file` targets, saved
-   screenshots). The guard lists the ones the hook could extract.
-5. Store it as ONE note via `appendNote`, then answer with a single line naming
-   the note number.
-
-Without this, the note reaches the merge as "mach das so wie hier" with no
-"hier" — the linkage the user actually cared about is the first thing lost.
+2. File it as ONE note — the prompt verbatim plus `[Anhang]` description and
+   `[Anhang-Datei]` paths — via `appendNote`, then answer with a single line
+   naming the note number. Steps: `deep-knowledge/activation.md` § Filing an
+   attachment.
 
 **Desktop-app images are the exception — the hook files them itself (#490).**
-The Desktop app sends a pasted image as its own content block: the prompt
-carries no `[Image #N]` and no attachment key, so it IS collected (the user
-sees the red collect panel, as for any note). The harness has already saved
-the image to `<tmp>/claude/<project-slug>/<session_id>/images/`; the hook
-copies every image whose mtime matches the prompt (±3 s) to
-`.claude/batch-assets/<note-timestamp>-<n>.<ext>` and appends
-`[Anhang-Datei] <copy>` to the note. The panel says "📎 Das Bild ist mit der
-Notiz gespeichert". The same holds for `/do-batch <text>` while collecting;
-an image with a bare `/do-batch` still becomes a note of its own. Nothing for you to do; the copies are never moved, so
-archived notes keep valid paths.
+Nothing for you to do; mechanism: `deep-knowledge/activation.md` § Desktop-app
+images.
 
 ## Step 3 — Status
 
@@ -304,29 +253,13 @@ written against the state the branch had when collection started — often hours
 ago, while main moved on. Checking feasibility against that base is how a merged
 plan rebuilds what main already has or collides with it at ship time.
 
-- Marker path: the hook already ran `scripts/git-sync.js` synchronously and
-  injected the result as "SCHRITT 0". Read it first. A `⚠` / `✗` line is a
-  conflict or failure — resolve it (merge-safety.md: never `--ours`/`--theirs`)
-  before Step 4.1. "Der Sync konnte im Hook nicht laufen" means: run it yourself
-  now.
-- `/do-batch go` (also `los`, `merge`) runs through the same hook and gets the
-  same "SCHRITT 0". Only without an injected merge context: run it yourself,
-  synchronously, before anything else, and report the line:
-
-  ```bash
-  node "{PLUGIN_ROOT}/scripts/git-sync.js" --explain
-  ```
-
-  It merges the parent chain (`origin/main` → … → this branch, sub-branches
-  included); it never rebases and never touches main itself. `--explain` makes
-  every no-merge exit speak: `=` = nothing to merge (already in, on main, no
-  remote) — say so in one clause.
-
-**`– skipped:` is not "up to date".** The sync steps aside on uncommitted
-changes that overlap the incoming merge, a detached HEAD, an unfinished
-merge/rebase, or a running `/do-ship` — the branch may still be behind main.
-Fix the named cause (commit the WIP, check out the branch, finish the
-operation), re-run the command, and only then read the notes.
+On the marker and `go` paths the hook already ran `scripts/git-sync.js` and
+injected the result as "SCHRITT 0" — read it first and resolve any `⚠` / `✗`
+line before Step 4.1. Without an injected merge context, run
+`node "{PLUGIN_ROOT}/scripts/git-sync.js" --explain` yourself, synchronously,
+before anything else. **`– skipped:` is not "up to date"** — fix the named
+cause and re-run before reading the notes. Reading the output, the skip causes
+and the merge chain: `deep-knowledge/merge.md` § Sync main.
 
 **4.1 Read every note.** `.claude/batch.md`, verbatim. Notes are the user's own
 words — never paraphrase them away before analysing. When the injected context
@@ -335,15 +268,13 @@ index it carries is a checksum, not a substitute.
 
 **A note's `[Anhang]` / `[Anhang-Datei]` lines belong to that note and to no
 other.** Where an `[Anhang-Datei]` path still exists, open it before judging the
-note. The injected merge context already carries `[Anhang-Datei]` lines the
-hook matched late: every image of this session that no note took goes to the
-note nearest to it in time (up to 60 s; an image nearer to the marker prompt
-stays with that prompt), and `batch.md` itself is not rewritten. A line ending
-in "per Zeitstempel zugeordnet, N s Abstand — prüfen …" is a guess: open the
-image and check it fits the note before relying on it.
-Where a note refers to an image ("siehe Bild", "Screenshot") and neither
-path nor description exists, say so in its coverage line instead of guessing. Where only the `[Anhang]` description survives, that description IS the
-evidence — do not silently drop the note for lacking the image.
+note. A late-matched line ending in "per Zeitstempel zugeordnet, N s Abstand —
+prüfen …" is a guess: check the image fits the note before relying on it (how
+the hook matches: `deep-knowledge/merge.md` § Late image matching). Where a note
+refers to an image and neither path nor description exists, say so in its
+coverage line instead of guessing. Where only the `[Anhang]` description
+survives, that description IS the evidence — do not silently drop the note for
+lacking the image.
 
 **4.2 Write the coverage list before planning.** Exactly one line per note,
 `#1` … `#N`, each with a disposition:
@@ -374,41 +305,14 @@ Where notes describe the same surface, they merge. Build this plan on
 run. It is written silently as the execution basis, and the user is never
 asked to approve it (see 4.6).
 
-The plan must carry:
+The plan must carry (each item in full, with sizing and examples:
+`deep-knowledge/merge.md` § Bundle plan):
 
-1. **Every concrete detail of every note.** Thresholds, examples, edge cases,
-   timings, the user's wording where it is precise. A coverage line is not
-   enough: "85 von 85 erst wenn das Item auf einem FREIEN Platz gelandet ist,
-   dann ~1 s Delay, in dieser 1 s kein Abwerfen" goes into the plan as
-   written, never as "Zähler-Timing anpassen". A detail missing from the plan
-   is lost, because the receiving skill never sees the notes.
-2. **One bundle per area, not per note.** Cut bundles along coherent areas
-   of the product — one screen or flow, one subsystem, one data path — and
-   put every note that touches that area into its bundle, so one agent
-   explores the area once instead of several agents exploring it in
-   parallel. Bundles own separate files and can run in parallel.
-   Two bundles never own the same file; notes on a file that cannot be
-   split share its bundle. Sizing, as a recommendation: a typical batch of 5–15
-   notes lands at **2–6 bundles**. One bundle only when everything really
-   touches one area; split an area once it carries more than ~6 notes or
-   ~15 files, along a seam inside it (sub-screen, layer). Never one bundle
-   per note, never a bundle for a single trivial note that an area bundle
-   next to it can absorb. Name the area in the bundle name.
-3. **Named interfaces and order.** Where bundles meet, name the contract, e.g.
-   "engine emits a spawn event at turn end, UI animates it". Where one bundle
-   needs another first, say so ("B2 after B1"). No dependency means the
-   bundles run in parallel.
-4. **Verification per bundle.** How each bundle is shown to work: the test,
-   the check, the screen.
-5. **Findings per bundle — hand the 4.3 analysis on.** What the feasibility
-   check already established for this bundle: the files and lines involved,
-   the existing function or component to change, the approach chosen, the
-   traps seen (a shared helper, a test that pins the behaviour). The agent
-   that builds the bundle starts with an empty context; without this line it
-   searches the same code again, and in measured batches more than half of
-   an implementing agent's calls were reads and searches. Facts only, with
-   `file:line` — no guesses dressed as findings. A bundle the check did not
-   look at says so (`Befunde: —`).
+1. **Every concrete detail of every note.**
+2. **One bundle per area, not per note.** Two bundles never own the same file.
+3. **Named interfaces and order.**
+4. **Verification per bundle.**
+5. **Findings per bundle — hand the 4.3 analysis on.**
 
 **4.5 Surface conflicts individually — never resolve them silently.**
 
@@ -447,27 +351,15 @@ the scope with the user.
 **4.7 Archive, do not delete.** Before the hand-off, call `archiveNotes(cwd)`
 — it renames `batch.md` to `batch-<timestamp>.md`. The originals stay
 recoverable; a merge must never be the only record of what the user actually
-wrote. The archived path travels with the hand-off (4.9). Image copies in
-`.claude/batch-assets/` stay where they are — their names carry the note's
-timestamp, so the archived notes still point at them. `archiveNotes` removes
-copies older than 30 days that no note in `batch.md` or any archived
-`batch-*.md` still names — an archive keeps its images.
+wrote. The archived path travels with the hand-off (4.9). Image copies stay
+where they are (`deep-knowledge/merge.md` § Archive).
 
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
 off (the hook deactivated it when the merge fired; on the `/do-batch go` path
-do it yourself — `deactivate(cwd)` is idempotent). Stop the watchdog so it does
-not linger for its next poll:
-
-```bash
-node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .
-```
-
-Then restore the session title: `mcp__ccd_session_mgmt__get_session` `self`;
-if the `title` starts with `📥 Batch – `, call
-`mcp__ccd_session_mgmt__set_session_title` `self` with that prefix removed. A
-title without the prefix is left alone — the user renamed it meanwhile, and
-that name wins. Desktop app only; skip silently elsewhere. The injected merge
-context repeats this instruction because the hook path never loads this skill.
+do it yourself — `deactivate(cwd)` is idempotent). Stop the watchdog
+(`batch-watchdog.js stop .`) and strip a leading `📥 Batch – ` from the session
+title, leaving any other title alone — commands and steps:
+`deep-knowledge/merge.md` § Retire.
 
 Say in one clause that follow-up prompts run normally again and `/do-batch on`
 re-arms collection. A question here would be asking whether to keep blocking the
@@ -477,15 +369,9 @@ answers to your own questions.
 4.6 with `--from=do-batch` followed by the hand-off body:
 
 **Hook-enforced, not just written down.** When the merge fires,
-`prompt.batch.collect.js` writes `.claude/batch-handoff.json`
-(`{ firedAt, sessionId }`, runtime-ignored). While it exists and is younger
-than 6 h, a PreToolUse hook refuses Edit / Write / NotebookEdit on gated
-paths and `git commit` with the same message this step's decision rule
-already gives: a ready plan goes to `Skill("devops:do-run", "--from=do-batch
-…")`, a plan with open decisions to `Skill("devops:auto-concept",
-"--from=do-batch …")` — never implemented directly here. Reading, exploring
-and planning stay allowed; the marker is cleared by the PostToolUse `do-run`
-or `auto-concept` call itself, so a normal hand-off never sees the gate.
+`prompt.batch.collect.js` writes `.claude/batch-handoff.json`; until the
+`do-run` / `auto-concept` call clears it, edits and `git commit` are refused
+(`deep-knowledge/merge.md` § Hand-off gate).
 
 ```
 --from=do-batch
@@ -546,17 +432,9 @@ the invocation.
 
 ## Optional — local compaction
 
-When the `local-llm` plugin is installed AND AnythingLLM answers, the notes may
-be de-duplicated and reformatted locally at zero API cost.
-
-**Strictly formatting only.** No interpretation, no contradiction detection, no
-summarising of intent — `plugins/local-llm/deep-knowledge/delegation-rules.md`
-classifies ambiguous user requests as RED (never delegate) and caps practical
-context at ~8K tokens. A wrong compaction is worse than none: the plan silently
-loses a requirement and the original is no longer in the UI to check against.
-
-The dependency is soft. Resolve the plugin path and skip silently if absent —
-`devops` and `local-llm` are independently installable and must stay that way.
+With `local-llm` installed and AnythingLLM answering, the notes may be
+de-duplicated locally — **strictly formatting only**, soft dependency, skip
+silently if absent. Detail: `deep-knowledge/merge.md` § Local compaction.
 
 ## Rules
 
