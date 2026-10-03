@@ -32,11 +32,20 @@ try {
     const { clearPluginEntries, cacheFile } = require('../lib/mcp-failure-cache');
     const { active } = clearPluginEntries(cacheFile(home));
     if (active.length) {
+      const root = (process.env.CLAUDE_PLUGIN_ROOT || require('path').resolve(__dirname, '..', '..')).split(require('path').sep).join('/');
       const names = active.map((k) => k.replace('plugin:devops:', '')).join(', ');
+      // This hook races the MCP boot, so an active entry almost always means
+      // THIS session already skipped the servers — and nothing reconnects them
+      // in-session. Said once at the start, not discovered hours later at the
+      // ship (2026-10-03: a finished ship stalled on "restart needed").
       process.stdout.write(
-        `[mcp-failcache] Another session's connect timeout had blocked the devops MCP servers (${names}) machine-wide; the block is cleared now.\n` +
-          'Show the user verbatim if the devops tools (ship, completion card, issues) are missing in this session: ' +
-          '"Die devops-Server waren durch einen Timeout in einer anderen Session gesperrt — Sperre ist aufgehoben, ein Neustart dieser Session holt sie zurück."\n'
+        `[mcp-failcache] Another session's connect timeout had blocked the devops MCP servers (${names}) machine-wide; the block is cleared for the next start, but this session most likely started without them.\n` +
+          'In your FIRST reply, before any other work, tell the user in one line (in their language): ' +
+          '"Die devops-Server (Ship, Completion-Card, Issues) sind in dieser Session durch einen Timeout in einer anderen Session gesperrt — ich nutze die Offline-Wege; ein Neustart holt sie zurück."\n' +
+          'For the rest of the session use the offline entry points, never a manual ship: ' +
+          `card: node "${root}/mcp-server/index.js" --render-card <payload.json> · ` +
+          `ship pipeline: node "${root}/mcp-server/ship/cli.js" <tool> <params.json> ` +
+          '(deep-knowledge/mcp-deferred-tools.md § When the connect is skipped).\n'
       );
     }
   }
