@@ -42,7 +42,7 @@ never replaces them.
 | Step | What | Call | Ends the run when |
 |---|---|---|---|
 | Pre-Steps 0, R, A–C | delegate, resume, lockout, session activity, sidebar title | `autonomous-lockout.js check` | activity pending (ask; BLOCK under lockout) |
-| 0 / 0.5 | extensions, Codex detection, ship tool schemas | `ToolSearch select:…` | tools absent → `deep-knowledge/manual-ship.md` |
+| 0 / 0.5 | extensions, Codex detection, ship tool schemas | `ToolSearch select:…` | server skipped → same steps via `mcp-server/ship/cli.js`; tools absent → `deep-knowledge/manual-ship.md` |
 | 1 | preflight + rebase loop, purpose alignment, harden/polish passes | `ship_preflight` | `ready: false`; ambiguous conflict |
 | 2 | build + Codex gate | `ship_build`, `codex-safe.sh` | build red; Codex judgment (ask; BLOCK under lockout) |
 | 2.5 / 2.6 | deploy-parity build (background), docs-sync | `deploy-parity.js` | parity `failed` |
@@ -311,7 +311,9 @@ ToolSearch({
 
 If the `ToolSearch` result contains all six `<function>` entries, proceed. If ANY are missing from the returned block, the server is genuinely not registered — do NOT improvise a ship with `gh pr create` (the guard hook blocks it) or the tool at hand. When the session reminder shows the server as **failed to connect** (`Connection closed`), run the cache diagnosis in `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md → When the server is genuinely down` first: a cache that lost its `*.js` files is the usual cause and is repairable in-session.
 
-**Tools absent and not repairable → the manual checklist (#567).** This check runs here, before Step 1 and before any git or GitHub action — fail closed, never on a failed `ship_preflight` halfway through. The ship tools are absent when `mcp__plugin_devops_dotclaude-ship__*` is in neither the loaded nor the deferred tool list and `ToolSearch` finds none of them (a claude.ai cloud session without the plugin's MCP servers is the typical case). Announce the switch in one line with the reason, then read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/manual-ship.md` and follow it instead of Steps 1–5; its tag step points at `release-flow.md` § owner hand-off. Deferred tools are never absent — load them and run the pipeline.
+**Server installed but not connected → the offline ship CLI.** When the reminder says `Skipping connection (recent failure cached …)` or `CONNECT_TIMEOUT` for `dotclaude-ship` and `{PLUGIN_ROOT}/mcp-server/ship/cli.js` exists, run the same pipeline through it — Steps 1–5 unchanged, every `ship_*` call becomes `node "{PLUGIN_ROOT}/mcp-server/ship/cli.js" <tool> <params.json>` (params = the exact tool arguments as a JSON file, result JSON on stdout; exit 2 = invalid params, 1 = the handler threw). Same handlers, same gates, same checkpoint — this is the pipeline, not a manual ship, and needs no restart. Announce it in one line. Details: `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md` § When the connect is skipped.
+
+**Tools absent and not repairable → the manual checklist (#567).** This check runs here, before Step 1 and before any git or GitHub action — fail closed, never on a failed `ship_preflight` halfway through. The ship tools are absent when `mcp__plugin_devops_dotclaude-ship__*` is in neither the loaded nor the deferred tool list, `ToolSearch` finds none of them and the offline CLI above is not on disk either (a claude.ai cloud session without the plugin's MCP servers is the typical case). Announce the switch in one line with the reason, then read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/manual-ship.md` and follow it instead of Steps 1–5; its tag step points at `release-flow.md` § owner hand-off. Deferred tools are never absent — load them and run the pipeline.
 
 Do NOT skip this step even if you "think" the tools are available. `analysis` / `ready` / `test` cards have no ship-tool dependency and won't hit this — only the full pipeline does.
 

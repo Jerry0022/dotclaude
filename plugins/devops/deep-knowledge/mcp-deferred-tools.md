@@ -114,8 +114,27 @@ session's start** — the failing session is another one. Search all projects'
 folders for `CONNECT_TIMEOUT` to find it. The cache dir and the
 initialize probe above are healthy then — do not rebuild anything.
 
-There is **no in-session recovery**: the CLI connects only at session start,
-and touching the plugin's `.mcp.json` does not trigger a retry. Recover:
+There is **no in-session reconnect**: the CLI connects only at session start,
+touching the plugin's `.mcp.json` does not trigger a retry, and the "retries
+automatically in 15 min" in the message does not happen inside a running
+session (observed 2026-10-03: still skipped 2.5 h later). The **tools** stay
+usable without the connection — both servers have an offline entry point that
+runs the same handlers:
+
+- Completion card: `node "{PLUGIN_ROOT}/mcp-server/index.js" --render-card <payload.json>`
+- Ship pipeline: `node "{PLUGIN_ROOT}/mcp-server/ship/cli.js" <tool> <params.json>`
+  (`ship_preflight`, `ship_build`, `ship_version_bump`, `ship_release`,
+  `ship_promote`, `ship_cleanup`, `ship_hygiene`; params = the tool's arguments
+  as JSON, `-` reads stdin; result JSON on stdout; exit 2 invalid params,
+  1 handler threw). Same zod schema, same checkpoint, and the run-contract
+  release gate treats `cli.js ship_release` like the MCP tool. This is the
+  pipeline, not a manual ship — do-ship runs its Steps 1–5 through it.
+
+Say it when the session starts: the SessionStart hook reports the skip; tell
+the user right then (one line) that ship/card run offline this session, not
+hours later when the ship is due.
+
+To get the servers back for later sessions:
 
 1. The `plugin:devops:*` keys leave `~/.claude/mcp-needs-auth-cache.json`
    (stdio servers never need auth; the other entries stay). The SessionStart
@@ -124,10 +143,9 @@ and touching the plugin's `.mcp.json` does not trigger a retry. Recover:
    still blocking. Without the hook (older install): remove the keys by hand.
 2. The user restarts the session.
 
-Until then: render the card offline (`plugin-behavior.md` → *When the MCP
-server is not there*), say in one line that a restart is needed, and **never**
-ship or promote by hand — `modes/promote.md` says STOP when `ship_promote` is
-missing.
+A restart is optional — the offline entry points above cover card, ship and
+promote. **Never** ship or promote by hand (`gh pr create`, `gh pr merge`, a
+hand-made tag): the CLI is the only substitute for the tools.
 
 ## Anti-patterns
 

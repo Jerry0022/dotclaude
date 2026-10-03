@@ -43,6 +43,14 @@ describe("commandFacts", () => {
     expect(C.commandFacts("node other.js --render-card x").renderCard).toBeNull();
   });
 
+  test("the offline ship CLI's ship_release is a release; other tools and mentions are not", () => {
+    expect(C.commandFacts('node "C:/p/mcp-server/ship/cli.js" ship_release "C:/t/r.json"').release).toBe(true);
+    expect(C.commandFacts("node mcp-server/ship/cli.js ship_release - < r.json").release).toBe(true);
+    expect(C.commandFacts("node mcp-server/ship/cli.js ship_preflight p.json").release).toBe(false);
+    expect(C.commandFacts('grep "ship/cli.js ship_release" notes.md').release).toBe(false);
+    expect(C.commandFacts("node other.js ship_release").release).toBe(false);
+  });
+
   test("AUD-008: --render-card inside a quoted string (unrelated command) is never mistaken for the renderer", () => {
     expect(C.commandFacts('grep "index.js --render-card x" file.txt').renderCard).toBeNull();
     expect(C.commandFacts('echo "run node index.js --render-card /tmp/c.json manually"').renderCard).toBeNull();

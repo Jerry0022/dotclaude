@@ -81,8 +81,9 @@ describe("mcp-server stdout discipline", () => {
         }
       });
     }
-    // One exception, in the offline card renderer. Adding another must be a
+    // Two exceptions: the offline card renderer and the offline ship CLI —
+    // neither ever creates an MCP transport. Adding another must be a
     // deliberate edit of this expectation, not a silent drive-by.
-    expect(marked.map((m) => m.split(":")[0])).toEqual(["index.js"]);
+    expect([...new Set(marked.map((m) => m.split(":")[0]))].sort()).toEqual(["index.js", "ship/cli.js"]);
   });
 });
