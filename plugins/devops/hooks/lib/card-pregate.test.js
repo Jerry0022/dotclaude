@@ -283,3 +283,36 @@ describe('card-pregate — analysis after a change (#624)', () => {
     expect(check({ ...analysis, session_id: sid }, { home, tmp }).refuse).toBe(false);
   });
 });
+
+describe('card-pregate — web hand-off without the guide (#617)', () => {
+  const prompt = (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
+  const webStep = {
+    ...ok,
+    validation: [{ requirement: 'Cron läuft nachts', status: 'partial', waitsOn: 'user',
+      evidence: 'Vercel-Dashboard → Settings → Environment Variables → CRON_SECRET kopieren' }],
+  };
+
+  test('findings: hand-off + no guide → nudge; guide ran or no hand-off → none', () => {
+    expect(findings(ok, { guideHandoff: { service: 'Vercel' } }).join('\n')).toMatch(/manual website step.*\(Vercel\)[\s\S]*auto-guide/);
+    expect(findings(ok, { guideHandoff: { service: 'Vercel' }, guideInvoked: true })).toEqual([]);
+    expect(findings(ok, { guideHandoff: null })).toEqual([]);
+  });
+
+  test('check: a user-waiting web step without the guide refuses once, renders on the repeat', () => {
+    setup({ transcript: [prompt('richte den Cron ein'), toolUse('t1', 'Edit', { file_path: 'a.js' })].join('\n') });
+    const first = check({ ...webStep, session_id: sid }, { home, tmp });
+    expect(first.refuse).toBe(true);
+    expect(first.text).toMatch(/auto-guide/);
+    expect(check({ ...webStep, session_id: sid }, { home, tmp }).refuse).toBe(false);
+  });
+
+  test('check: no nudge when auto-guide ran this turn', () => {
+    setup({ transcript: [prompt('richte den Cron ein'), toolUse('t1', 'Skill', { skill: 'devops:auto-guide' })].join('\n') });
+    expect(check({ ...webStep, session_id: sid }, { home, tmp }).refuse).toBe(false);
+  });
+
+  test('check: no transcript → no nudge (unknown whether the guide ran)', () => {
+    setup();
+    expect(check({ ...webStep, session_id: sid }, { home, tmp }).refuse).toBe(false);
+  });
+});

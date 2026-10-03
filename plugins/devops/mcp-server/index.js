@@ -1532,8 +1532,8 @@ const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
  * of every OTHER variant (§ 2.6, § 3).
  */
 /**
- * A manual web hand-off hiding in the card's OWN `userFinalTest`/`open`
- * payload (#506) — the completion-card region is out of scope for
+ * A manual web hand-off hiding in the card's OWN `userFinalTest`/`open`/
+ * `userTest`/user-waiting `validation` payload (#506, #617) — the completion-card region is out of scope for
  * stop.guide.handoff (hooks/lib/guide-handoff.js), so a hand-off that lives
  * only here would otherwise never be seen. Never fatal: a missing/dangling
  * lib just means no guide button, not a broken card.
@@ -1541,7 +1541,10 @@ const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
 function detectGuideHandoff(input) {
   try {
     const { detectCardHandoff } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'guide-handoff.js'));
-    return detectCardHandoff({ userFinalTest: input.userFinalTest, open: input.open });
+    return detectCardHandoff({
+      userFinalTest: input.userFinalTest, open: input.open,
+      userTest: input.userTest, validation: input.validation,
+    });
   } catch {
     return null;
   }

@@ -99,4 +99,4 @@ spawn template), `agent-collaboration.md` (handoffs), auto-agents skill.
 
 Next step = "user, go to `<site>` and do X" (marketplace, API key, OAuth,
 account, terms, cron-job.org) → start `auto-guide` first, never a step
-list (#519).
+list (#519) — also for a step left on the card (#617).

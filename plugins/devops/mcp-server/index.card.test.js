@@ -1167,6 +1167,16 @@ describe("render_completion_card — web hand-off in the card payload (#506)", (
     });
     expect(consumePendingHandoff("test-guide-handoff-none")).toBeNull();
   });
+
+  test("a userTest web step records the hand-off too (#617)", async () => {
+    const { createRequire } = await import("node:module");
+    const { consumePendingHandoff } = createRequire(import.meta.url)("../hooks/lib/guide-pending.js");
+    await render({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-guide-handoff-user-test",
+      userTest: ["Vercel → Settings → Environment Variables → CRON_SECRET kopieren, dann `gh secret set CRON_SECRET`"],
+    });
+    expect(consumePendingHandoff("test-guide-handoff-user-test")).toBe("Vercel");
+  });
 });
 
 describe("render_completion_card — armed batch carries the how-to", () => {
