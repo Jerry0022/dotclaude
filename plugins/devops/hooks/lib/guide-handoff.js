@@ -328,18 +328,39 @@ function asList(value) {
 }
 
 /**
- * Scan the completion card's PAYLOAD (`userFinalTest` and `open`, as passed
- * to `render_completion_card` — not the rendered markdown/widget chrome) for
- * the same prose-hand-off signal as `detectWebHandoff`. Called from the MCP
- * completion server at render time, so a hit renders a live "Web-Guide
- * starten" button instead of only recording a pending hint (#506).
- * @param {{userFinalTest?: unknown[], open?: unknown[]}} card
+ * The text of the card's `validation` items that wait on the USER
+ * (`waitsOn: "user"`): requirement + evidence. String-shaped items and any
+ * other `waitsOn` (deploy, external, pending) are not a user step (#617).
+ */
+function userWaitingValidation(validation) {
+  return asList(validation)
+    .filter(v => v && typeof v === 'object' && !Array.isArray(v) && v.waitsOn === 'user')
+    .map(v => [v.requirement, v.evidence].filter(x => typeof x === 'string' && x).join('\n'))
+    .filter(Boolean);
+}
+
+/**
+ * Scan the completion card's PAYLOAD (`userFinalTest`, `open`, `userTest`
+ * and the requirement + evidence of `validation` items with
+ * `waitsOn: "user"`, as passed to `render_completion_card` — not the
+ * rendered markdown/widget chrome) for the same prose-hand-off signal as
+ * `detectWebHandoff`. Called from the MCP completion server at render time,
+ * so a hit renders a live "Web-Guide starten" button instead of only
+ * recording a pending hint (#506, #617); also from the card pregate, which
+ * nudges toward auto-guide when no guide ran this turn.
+ * @param {{userFinalTest?: unknown[], open?: unknown[], userTest?: unknown[], validation?: unknown[]}} card
  * @returns {{service:string}|null}
  */
 function detectCardHandoff(card) {
   // AUD-C042: each list is read as one block, so a numbered list split over
   // items or a `→` chain in one item hits the same shapes as in chat.
-  for (const list of [asList(card && card.userFinalTest), asList(card && card.open)]) {
+  const lists = [
+    asList(card && card.userFinalTest),
+    asList(card && card.open),
+    asList(card && card.userTest),
+    userWaitingValidation(card && card.validation),
+  ];
+  for (const list of lists) {
     const text = list.map(itemText).filter(Boolean).join('\n');
     const hit = text ? detectWebHandoff(text) : null;
     if (hit) return hit;

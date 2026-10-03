@@ -1,6 +1,6 @@
 /**
  * @module card-pregate
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description stop.flow.guard's payload gates, checked by
  *   render_completion_card BEFORE it renders.
@@ -29,6 +29,10 @@
  *     A  `analysis` after a change — the variant claims nothing changed, but
  *        this turn ran a write-type tool (file edit, implementing agent,
  *        DB write, deploy, delete, push)
+ *   and one more (#617):
+ *     G  web hand-off without the guide — the card leaves a manual website
+ *        step for the user (guide-handoff.detectCardHandoff) and auto-guide
+ *        did not run this turn; skipped when the transcript is unreadable
  *
  *   One refusal per identical finding: the same findings on the next call
  *   render anyway, so a false positive can never lock the card out — the
@@ -41,8 +45,9 @@ const path = require('path');
 const crypto = require('crypto');
 const {
   titleStatusWordViolation, buildTitleStatusWordReason, buildValidationReason,
-  buildValidationGapsReason, buildPendingReason, safeReadTranscript, PENDING_TAIL_BYTES,
+  buildValidationGapsReason, buildPendingReason, buildGuideHandoffReason, safeReadTranscript, PENDING_TAIL_BYTES,
 } = require('./card-guard');
+const { detectCardHandoff, webGuideInvokedThisTurn } = require('./guide-handoff');
 const validationGaps = require('./validation-gaps');
 const { scanOpenTasks, openTaskNames } = require('./pending-tasks');
 const { readSessionFile, sessionFile, writeSessionFile } = require('./session-id');
@@ -148,9 +153,12 @@ function buildAnalysisWriteReason(tools) {
  * @param {null|{ kind?: string, red?: boolean }} ctx.verificationOwed — the Light
  *   check is owed and no test runs in the background (flags); null = not owed
  * @param {string[]} ctx.writeTools — write-type tools used this turn (#624)
+ * @param {null|{ service?: string }} ctx.guideHandoff — web hand-off in the payload (#617)
+ * @param {boolean} ctx.guideInvoked — auto-guide ran this turn (#617)
  * @returns {string[]} one reason per failed gate (card-guard wording)
  */
-function findings(input, { validationPending = false, openTasks = null, verificationOwed = null, writeTools = [] } = {}) {
+function findings(input, { validationPending = false, openTasks = null, verificationOwed = null, writeTools = [],
+  guideHandoff = null, guideInvoked = false } = {}) {
   const out = [];
   const word = titleStatusWordViolation(String(input.summary || ''));
   if (word) out.push(buildTitleStatusWordReason(word));
@@ -176,6 +184,8 @@ function findings(input, { validationPending = false, openTasks = null, verifica
   if (input.variant === 'analysis' && Array.isArray(writeTools) && writeTools.length > 0) {
     out.push(buildAnalysisWriteReason(writeTools));
   }
+
+  if (guideHandoff && !guideInvoked) out.push(buildGuideHandoffReason(guideHandoff.service));
   return out;
 }
 
@@ -212,7 +222,10 @@ function check(input, { home, tmp } = {}) {
     const openTasks = transcript ? openTaskNames(scanOpenTasks(transcript)) : null;
     const verificationOwed = readVerificationOwed(sessionId);
     const writeTools = writeToolsThisTurn(transcript);
-    const reasons = findings(input, { validationPending, openTasks, verificationOwed, writeTools });
+    // #617: no transcript → whether the guide ran is unknown, so no nudge.
+    const guideHandoff = transcript ? detectCardHandoff(input) : null;
+    const guideInvoked = guideHandoff ? webGuideInvokedThisTurn(transcript) : false;
+    const reasons = findings(input, { validationPending, openTasks, verificationOwed, writeTools, guideHandoff, guideInvoked });
 
     const file = tmp ? path.join(tmp, `${REFUSED_PREFIX}-${sessionId}`) : sessionFile(REFUSED_PREFIX, sessionId);
     if (reasons.length === 0) {

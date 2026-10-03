@@ -168,6 +168,36 @@ describe("detectCardHandoff — card payload (#506)", () => {
   });
 });
 
+describe("detectCardHandoff — userTest and user-waiting validation (#617)", () => {
+  test("a userTest item with a Vercel arrow chain", () => {
+    const card = { userTest: ["Vercel → Settings → Environment Variables → CRON_SECRET kopieren, dann `gh secret set CRON_SECRET`"] };
+    expect(detectCardHandoff(card)).toEqual({ service: "Vercel" });
+  });
+
+  test("a validation item waitsOn:user — its evidence is scanned", () => {
+    const card = {
+      validation: [
+        { requirement: "Cron läuft nachts", status: "partial", waitsOn: "user",
+          evidence: "Vercel-Dashboard → Settings → Environment Variables → CRON_SECRET kopieren" },
+      ],
+    };
+    expect(detectCardHandoff(card)).toEqual({ service: "Vercel" });
+  });
+
+  test("a validation item waitsOn:user — its requirement is scanned", () => {
+    const card = { validation: [{ requirement: "Supabase-Bucket für Assets anlegen", status: "unmet", waitsOn: "user" }] };
+    expect(detectCardHandoff(card)).toEqual({ service: "Supabase" });
+  });
+
+  test("any other waitsOn (or none, or a string item) does not trigger", () => {
+    const evidence = "Vercel-Dashboard → Settings → Environment Variables → CRON_SECRET kopieren";
+    for (const waitsOn of ["deploy", "external", "pending", undefined]) {
+      expect(detectCardHandoff({ validation: [{ requirement: "r", status: "partial", waitsOn, evidence }] })).toBeNull();
+    }
+    expect(detectCardHandoff({ validation: [evidence] })).toBeNull();
+  });
+});
+
 describe("detectWebHandoff — must NOT trigger", () => {
   test("local CLI cleanup, no external service", () => {
     expect(detectWebHandoff("Worktree manuell aufräumen: `git worktree remove --force ./wt`")).toBeNull();

@@ -913,6 +913,16 @@ function buildPointsReason(detail) {
   ].join('\n');
 }
 
+function buildGuideHandoffReason(service) {
+  const where = service ? ` (${service})` : '';
+  return [
+    `[stop.flow.guard] The card leaves a manual website step for the user${where}, but no auto-guide ran this turn (#617).`,
+    'Per agent-proactivity § "Proactive `auto-guide` for web hand-offs": start `/auto-guide` (Web-Guide) for that step,',
+    'or offer it in one line, instead of handing the user a bare step list. Then render again —',
+    'the card shows the "Web-Guide starten" button; if the step really needs no guide, the same call renders on the next try.',
+  ].join('\n');
+}
+
 function buildGuideLoopReason() {
   return [
     '[stop.flow.guard] guide loop still active — continue 5c (hidden → W payload wait 0 + W pause 25) until next/abort/closed or the 20-min pause step.',
@@ -996,6 +1006,7 @@ module.exports = {
   widgetCardTitle,
   decideAction,
   buildBlockReason,
+  buildGuideHandoffReason,
   buildGuideLoopReason,
   renderLadderLines,
   offlineRendererPath,

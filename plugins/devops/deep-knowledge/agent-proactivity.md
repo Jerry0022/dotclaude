@@ -100,3 +100,7 @@ spawn template), `agent-collaboration.md` (handoffs), auto-agents skill.
 Next step = "user, go to `<site>` and do X" (marketplace, API key, OAuth,
 account, terms, cron-job.org) → start `auto-guide` first, never a step
 list (#519).
+The same holds for a step left on the card (`userTest`, `open`,
+`userFinalTest`, or a `validation` item with `waitsOn: "user"`): the card
+shows the Web-Guide button, and the card pregate refuses once when no
+auto-guide ran this turn (#617).
