@@ -40,7 +40,10 @@ The plan must carry:
    enough: "85 von 85 erst wenn das Item auf einem FREIEN Platz gelandet ist,
    dann ~1 s Delay, in dieser 1 s kein Abwerfen" goes into the plan as
    written, never as "Zähler-Timing anpassen". A detail missing from the plan
-   is lost, because the receiving skill never sees the notes.
+   is lost, because the receiving skill never sees the notes. That includes
+   every `[Anhang-Datei] <path>` line: it goes into the bundle of its note
+   verbatim, and `auto-agents` puts it into that agent's prompt with the order
+   to Read it first (`agent-orchestration.md` § Agent Prompt Template item 11).
 2. **One bundle per area, not per note.** Cut bundles along coherent areas
    of the product — one screen or flow, one subsystem, one data path — and
    put every note that touches that area into its bundle, so one agent
@@ -74,7 +77,11 @@ The plan must carry:
 The injected merge context already carries `[Anhang-Datei]` lines the
 hook matched late: every image of this session that no note took goes to the
 note nearest to it in time (up to 60 s; an image nearer to the marker prompt
-stays with that prompt), and `batch.md` itself is not rewritten. A line ending
+stays with that prompt). A note that has an `[Anhang]` description but no
+existing image file gets its image from the session transcript, matched by the
+note TEXT (a prompt sent while a turn ran is queued, and the harness never
+saves its image to the images folder). The hook appends these lines to
+`batch.md` too, so the archived collection names them. A line ending
 in "per Zeitstempel zugeordnet, N s Abstand — prüfen …" is a guess: open the
 image and check it fits the note before relying on it.
 Where a note refers to an image ("siehe Bild", "Screenshot") and neither

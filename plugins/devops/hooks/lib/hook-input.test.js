@@ -90,3 +90,24 @@ describe("runHook (harden scan 2026-09-26)", () => {
     expect(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).toBe("Edit");
   });
 });
+
+describe("sessionCwd", () => {
+  const { sessionCwd } = require("./hook-input.js");
+  const os = require("node:os");
+
+  test("prefers the payload's cwd over the hook process's (Desktop worktree sessions)", () => {
+    const dir = os.tmpdir();
+    const r = sessionCwd({ read: () => JSON.stringify({ cwd: dir }), fallback: "/somewhere/else" });
+    expect(r.cwd).toBe(dir);
+    expect(r.hook).toEqual({ cwd: dir });
+  });
+
+  test.each([
+    ["no payload", ""],
+    ["invalid JSON", "{nope"],
+    ["no cwd field", JSON.stringify({ session_id: "x" })],
+    ["a cwd that does not exist", JSON.stringify({ cwd: "Z:/definitely/not/here/123" })],
+  ])("falls back to the process cwd on %s", (_name, raw) => {
+    expect(sessionCwd({ read: () => raw, fallback: "/fallback" }).cwd).toBe("/fallback");
+  });
+});

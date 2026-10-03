@@ -308,7 +308,8 @@ asked to approve it (see 4.6).
 The plan must carry (each item in full, with sizing and examples:
 `deep-knowledge/merge.md` § Bundle plan):
 
-1. **Every concrete detail of every note.**
+1. **Every concrete detail of every note** — including each `[Anhang-Datei]`
+   path, which reaches the implementing agent's prompt verbatim.
 2. **One bundle per area, not per note.** Two bundles never own the same file.
 3. **Named interfaces and order.**
 4. **Verification per bundle.**

@@ -272,7 +272,10 @@ try {
 } catch {}
 
 // Determine repos to check
-const cwd = process.cwd();
+// The session's directory, not the hook process's: Desktop starts hooks of a
+// worktree session in the repo root (see hook-input sessionCwd).
+// Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
+const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
 const repos = [{ label: 'current repo', dir: cwd }];
 
 // Optional additional repos from reference.md

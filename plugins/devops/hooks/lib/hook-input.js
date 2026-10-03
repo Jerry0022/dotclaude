@@ -112,4 +112,35 @@ function runHook(main, { event } = {}) {
   });
 }
 
-module.exports = { parseHookInput, contextOutput, runHook };
+/**
+ * The directory the SESSION works in — the payload's `cwd`, not the hook
+ * process's own. The Desktop app starts hooks of a worktree session in the
+ * repo root it was created from, so `process.cwd()` there is the main checkout:
+ * ss.git.check reported "On `main` in repo root (not in a worktree)" — and the
+ * root's unpushed branches — in every worktree session, and forced an
+ * AskUserQuestion about it. The payload's `cwd` is the session's.
+ *
+ * Reads stdin synchronously, once, and only when it is not a terminal (a hand
+ * run without a payload never blocks). Falls back to `process.cwd()` when the
+ * payload is unusable or names no existing directory.
+ *
+ * @param {{read?: () => string, fallback?: string}} [opts] test seam
+ * @returns {{cwd: string, hook: object|null}}
+ */
+function sessionCwd(opts = {}) {
+  const fs = require('fs');
+  const fallback = opts.fallback || process.cwd();
+  let raw = '';
+  try {
+    if (opts.read) raw = opts.read();
+    else if (!process.stdin.isTTY) raw = fs.readFileSync(0, 'utf8');
+  } catch { /* no stdin */ }
+  const hook = parseHookInput(raw);
+  const cwd = hook && typeof hook.cwd === 'string' ? hook.cwd : '';
+  try {
+    if (cwd && fs.statSync(cwd).isDirectory()) return { cwd, hook };
+  } catch { /* gone */ }
+  return { cwd: fallback, hook };
+}
+
+module.exports = { parseHookInput, contextOutput, runHook, sessionCwd };

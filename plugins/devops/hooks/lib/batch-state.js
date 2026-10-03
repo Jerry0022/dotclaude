@@ -381,8 +381,21 @@ function archiveNotes(cwd, stampSource) {
  */
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
 
-/** How far an image's mtime may sit from its note for a certain match. */
+/** How far an image's mtime may sit AFTER its note for a certain match. */
 const IMAGE_MATCH_WINDOW_MS = 3000;
+
+/** How far an image's mtime may sit BEFORE its note for a certain match. The
+ *  harness writes the image at submit; the note's stamp is taken when the hook
+ *  runs, which under load was 3.7 s later (2026-10-03) — a symmetric 3 s
+ *  window missed the image at collect time and left the note without its 📎. */
+const IMAGE_LEAD_MS = 10_000;
+
+/** Is an image written at `imgMs` certainly the one pasted with the prompt
+ *  stamped `noteMs`? Asymmetric: an image precedes its hook, rarely follows. */
+function isCertainImageGap(imgMs, noteMs) {
+  const lead = noteMs - imgMs;
+  return lead >= -IMAGE_MATCH_WINDOW_MS && lead <= IMAGE_LEAD_MS;
+}
 
 /** Beyond this gap the merge does not guess at all. */
 const IMAGE_LATE_MATCH_MAX_MS = 60_000;
@@ -486,9 +499,11 @@ function claimImages(cwd, images, at) {
  * @param {{tmpRoot?:string, windowMs?:number, dirs?:string[]}} [opts]
  */
 function imagesNear(cwd, sessionId, at, opts = {}) {
-  const windowMs = opts.windowMs ?? IMAGE_MATCH_WINDOW_MS;
   const dirs = opts.dirs || sessionImageDirs(sessionId, opts.tmpRoot);
-  return unclaimedImages(cwd, dirs).filter(img => Math.abs(img.mtimeMs - at) <= windowMs);
+  const fits = typeof opts.windowMs === 'number'
+    ? (img) => Math.abs(img.mtimeMs - at) <= opts.windowMs
+    : (img) => isCertainImageGap(img.mtimeMs, at);
+  return unclaimedImages(cwd, dirs).filter(fits);
 }
 
 /**
@@ -588,6 +603,147 @@ function pruneAssets(cwd, { maxAgeDays = ASSET_MAX_AGE_DAYS, now = Date.now() } 
 /** The note lines that tie copies to their note — the merge opens each one. */
 function attachmentFileLines(copies) {
   return copies.map(p => `[Anhang-Datei] ${p}`).join('\n');
+}
+
+/**
+ * Append lines to the note stamped `at` in `.claude/batch.md`, in place. The
+ * merge's late image matches used to live only in the injected context, so the
+ * archived collection — the record of what was asked — named no image for a
+ * note whose screenshot the merge had opened. Written via rename; a note that
+ * is no longer in the file (edited away) is left alone.
+ * @returns {boolean} whether the note was found and extended
+ */
+function addNoteLines(cwd, at, lines) {
+  if (!lines.length) return false;
+  const file = notesPath(cwd);
+  let raw;
+  try { raw = fs.readFileSync(file, 'utf8'); } catch { return false; }
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  const header = `<!-- ${at} -->`;
+  const start = raw.indexOf(header);
+  if (start < 0) return false;
+  const next = raw.slice(start + header.length).search(/\r?\n<!--\s*\d{4}-\d{2}-\d{2}T[^\s>]*?\s*-->\r?\n/);
+  const end = next < 0 ? raw.length : start + header.length + next;
+  const body = raw.slice(0, end).replace(/\s+$/, '');
+  const out = `${body}${eol}${lines.join(eol)}${eol}${raw.slice(end).replace(/^\s*/, next < 0 ? '' : eol)}`;
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, out, 'utf8');
+  fs.renameSync(tmp, file);
+  return true;
+}
+
+// ── images from the transcript ─────────────────────────────────────────────
+
+const MEDIA_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp', 'image/bmp': '.bmp' };
+
+/**
+ * Images the user sent that the harness never put in its images folder — a
+ * prompt sent while a turn was still running arrives as a `queued_command`
+ * attachment, and its image exists only as base64 in the session transcript
+ * (2026-10-03: the turn filed the note with "[Anhang-Datei] (keine …)", the
+ * merge would have had a description and no picture). Decodes every image of a
+ * human prompt (typed or queued; never a tool result) into batch-assets, once
+ * per image content — the manifest keys it by hash, so a second call returns
+ * the same copy.
+ *
+ * @param {string} cwd
+ * @param {string} transcriptPath the hook payload's `transcript_path`
+ * @returns {{at:string, text:string, files:string[]}[]} prompts with images, oldest first
+ */
+function rescueTranscriptImages(cwd, transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath) return [];
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch { return []; }
+  const prompts = [];
+  for (const line of raw.split('\n')) {
+    if (!line.includes('"type":"image"')) continue;
+    let o;
+    try { o = JSON.parse(line); } catch { continue; }
+    let blocks = null;
+    const a = o && o.attachment;
+    if (a && a.type === 'queued_command' && Array.isArray(a.prompt)) blocks = a.prompt;
+    else if (o && o.type === 'user' && o.message && Array.isArray(o.message.content)
+      && !o.message.content.some(c => c && c.type === 'tool_result')) blocks = o.message.content;
+    if (!blocks) continue;
+    const images = blocks.filter(b => b && b.type === 'image' && b.source && typeof b.source.data === 'string');
+    if (!images.length) continue;
+    const text = blocks.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n');
+    prompts.push({ at: o.timestamp || (a && a.timestamp) || '', text, images });
+  }
+  if (!prompts.length) return [];
+  const crypto = require('crypto');
+  fs.mkdirSync(assetsDir(cwd), { recursive: true });
+  const captured = readCaptured(cwd);
+  let changed = false;
+  const out = prompts.map((p) => {
+    const t = Date.parse(p.at);
+    const stamp = (Number.isFinite(t) ? new Date(t) : new Date()).toISOString().replace(/[:.]/g, '-');
+    const files = p.images.map((img, k) => {
+      const key = `transcript:${crypto.createHash('sha1').update(img.source.data).digest('hex')}`;
+      if (typeof captured[key] === 'string' && captured[key] !== 'pruned' && fs.existsSync(captured[key])) return captured[key];
+      const dest = path.join(assetsDir(cwd), `${stamp}-t${k + 1}${MEDIA_EXT[img.source.media_type] || '.png'}`);
+      fs.writeFileSync(dest, Buffer.from(img.source.data, 'base64'));
+      captured[key] = dest;
+      changed = true;
+      return dest;
+    });
+    return { at: p.at, text: p.text, files };
+  });
+  if (changed) {
+    const tmp = `${capturedPath(cwd)}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(captured, null, 2), 'utf8');
+    fs.renameSync(tmp, capturedPath(cwd));
+  }
+  return out;
+}
+
+/** Whitespace-, case- and punctuation-insensitive form for comparing a note to its prompt. */
+function normalizeForMatch(s) {
+  return String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+/**
+ * Does `note` hold an image it cannot show? A note with an `[Anhang]`
+ * description, or an `[Anhang-Datei]` line, but no `[Anhang-Datei]` path that
+ * still exists on disk.
+ */
+function noteLacksImageFile(note) {
+  const lines = String(note.text || '').split(/\r?\n/);
+  const fileLines = lines.filter(l => /^\s*\[Anhang-Datei\]/.test(l));
+  const hasLive = fileLines.some((l) => {
+    const p = l.replace(/^\s*\[Anhang-Datei\]\s*/, '').replace(/\s+\(.*$/, '').trim();
+    try { return Boolean(p) && fs.statSync(p).isFile(); } catch { return false; }
+  });
+  if (hasLive) return false;
+  return fileLines.length > 0 || lines.some(l => /^\s*\[Anhang\]/.test(l));
+}
+
+/**
+ * Match rescued transcript prompts to the notes that lack their image. The
+ * link is the TEXT, not the time: an attachment note is written by the turn,
+ * often minutes after the prompt, but its text is the prompt verbatim (the
+ * attachment guard demands it). A prompt matches when the first 60 normalised
+ * characters of one contain those of the other.
+ * @returns {Map<number, string[]>} note index → image copies
+ */
+function matchRescuedToNotes(notes, rescued) {
+  const byNote = new Map();
+  const used = new Set();
+  notes.forEach((note, i) => {
+    if (!noteLacksImageFile(note)) return;
+    const body = normalizeForMatch(String(note.text).split(/\r?\n/).filter(l => !/^\s*\[Anhang/.test(l)).join(' '));
+    if (body.length < 8) return;
+    const hit = rescued.find((p, k) => {
+      if (used.has(k)) return false;
+      const pt = normalizeForMatch(p.text);
+      if (pt.length < 8) return false;
+      return body.includes(pt.slice(0, 60)) || pt.includes(body.slice(0, 60));
+    });
+    if (!hit) return;
+    used.add(rescued.indexOf(hit));
+    byNote.set(i, hit.files);
+  });
+  return byNote;
 }
 
 // ── activity clock ─────────────────────────────────────────────────────────
@@ -1078,6 +1234,8 @@ module.exports = {
   appendNote, readNotes, countNotes, clearNotes, archiveNotes,
   IMAGE_MATCH_WINDOW_MS, IMAGE_LATE_MATCH_MAX_MS, assetsDir, sessionImageDirs, listImagesIn, unclaimedImages,
   claimImages, imagesNear, captureSessionImages, assignImagesToNotes, attachmentFileLines,
+  IMAGE_LEAD_MS, isCertainImageGap, addNoteLines,
+  rescueTranscriptImages, noteLacksImageFile, matchRescuedToNotes,
   ASSET_MAX_AGE_DAYS, pruneAssets,
   touchActivity, readActivity,
   isMachinePrompt, isExpandedCommand, hasAttachment, attachmentRefs, detectActivation,

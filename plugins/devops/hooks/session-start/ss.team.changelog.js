@@ -47,7 +47,10 @@ function runOk(cmd, cwd, timeout = 15000) {
   }
 }
 
-const cwd = process.cwd();
+// The session's directory, not the hook process's: Desktop starts hooks of a
+// worktree session in the repo root (see hook-input sessionCwd).
+// Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
+const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
 
 // --- Persistent "last shown" timestamp (worktree-independent) ---
 const remoteUrl = run('git remote get-url origin', cwd);

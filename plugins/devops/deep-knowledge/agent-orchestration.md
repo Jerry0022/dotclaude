@@ -203,6 +203,15 @@ Every spawned agent MUST receive:
    refuses a spawn without it. It overrides item 5's "make reasonable decisions
    independently" on the scope axis: decisions cover unnamed attributes only,
    never the deliverable. See `code-defaults.md` § Strict Mode.
+11. **Image and file attachments** — every `[Anhang-Datei] <path>` line of a
+   note the agent implements (do-batch notes, a concept's note list) goes into
+   its prompt verbatim, with the instruction *"Open each attached file with
+   Read before you change anything — it shows what the note means."* Also any
+   screenshot the user pasted for the task, as its saved path. The `[Anhang]`
+   description is a summary, not a substitute: an agent working a UI note from
+   the description alone builds what the merge turn understood, not what the
+   user showed. Transcript analysis 2026-10-03: two of four batch runs handed
+   11 screenshots to no agent at all.
 
 ### Interaction Directives
 

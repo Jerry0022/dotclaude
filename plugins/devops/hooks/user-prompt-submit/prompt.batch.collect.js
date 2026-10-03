@@ -305,7 +305,10 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     'Anhänge gehören zu ihrer Notiz. Zeilen "[Anhang]" und "[Anhang-Datei]" innerhalb',
     'einer Notiz beschreiben genau diese Notiz — nie ein eigenes Thema, nie einer',
     'anderen Notiz zugeordnet. Wo eine "[Anhang-Datei]" existiert, sieh sie dir an,',
-    'bevor du die Notiz bewertest.',
+    'bevor du die Notiz bewertest. Jede "[Anhang-Datei]"-Zeile wandert WÖRTLICH in',
+    'das Bündel ihrer Notiz und von dort in den Prompt des Agents, der es umsetzt —',
+    'mit dem Auftrag, die Datei vor jeder Änderung per Read zu öffnen. Die',
+    '"[Anhang]"-Beschreibung ersetzt das Bild nicht.',
     '',
     'Arbeite NICHT die Notizen einzeln ab. Gehe so vor:',
     '1. Führe die Notizen zu EINEM Gesamtvorhaben zusammen.',
@@ -486,7 +489,9 @@ function buildAttachmentGuard(marker, refs) {
   } else {
     lines.push(
       '3. Ist ein Pfad bekannt (@Datei, gespeicherter Screenshot), zusätzlich eine',
-      '   Zeile "[Anhang-Datei] <pfad>".',
+      '   Zeile "[Anhang-Datei] <pfad>". Ist keiner bekannt, schreib KEINE',
+      '   Platzhalterzeile — der Merge holt das Bild aus dem Sitzungsprotokoll und',
+      '   ordnet es über den Notiztext zu (deshalb Schritt 1: WÖRTLICH).',
     );
   }
   lines.push(
@@ -593,29 +598,50 @@ function captureNoteImages(cwd, sessionId, at) {
  * written after their note's hook looked, or collected by an older plugin —
  * go to the NEAREST note (`assignImagesToNotes`). A match beyond the certain
  * window says so on its line, so the merge checks it instead of trusting it.
- * One scan for all notes. Only the injected copy changes; `.claude/batch.md`
- * stays as the user left it.
+ * One scan for all notes.
+ *
+ * Second source: images that never reached the harness's images folder — a
+ * prompt sent while a turn was running (queued) — are decoded from the session
+ * transcript and matched to the note by its TEXT (`matchRescuedToNotes`).
+ *
+ * Every line found here is also written into `.claude/batch.md` (only lines are
+ * appended, nothing the user wrote changes), so the archived collection names
+ * the image the merge opened.
  */
-function attachLateImages(cwd, sessionId, notes, markerAt) {
+function attachLateImages(cwd, sessionId, notes, markerAt, transcriptPath) {
+  if (!notes.length) return notes;
+  const extra = new Map();
+  const add = (i, lines) => extra.set(i, [...(extra.get(i) || []), ...lines]);
   try {
     const dirs = B.sessionImageDirs(sessionId);
-    if (!dirs.length || !notes.length) return notes;
-    const byNote = B.assignImagesToNotes(notes, B.unclaimedImages(cwd, dirs), markerAt);
-    return notes.map((note, i) => {
-      const matched = (byNote.get(i) || []).sort((a, b) => a.img.mtimeMs - b.img.mtimeMs);
-      if (!matched.length) return note;
-      const copies = B.claimImages(cwd, matched.map(m => m.img), Date.parse(note.at));
-      const lines = copies.map((copy, k) => {
-        const gap = matched[k].gapMs;
-        return gap <= B.IMAGE_MATCH_WINDOW_MS
+    if (dirs.length) {
+      const byNote = B.assignImagesToNotes(notes, B.unclaimedImages(cwd, dirs), markerAt);
+      notes.forEach((note, i) => {
+        const matched = (byNote.get(i) || []).sort((a, b) => a.img.mtimeMs - b.img.mtimeMs);
+        if (!matched.length) return;
+        const noteMs = Date.parse(note.at);
+        const copies = B.claimImages(cwd, matched.map(m => m.img), noteMs);
+        add(i, copies.map((copy, k) => (B.isCertainImageGap(matched[k].img.mtimeMs, noteMs)
           ? `[Anhang-Datei] ${copy}`
-          : `[Anhang-Datei] ${copy} (per Zeitstempel zugeordnet, ${Math.round(gap / 1000)} s Abstand — prüfen, ob das Bild zu dieser Notiz passt)`;
+          : `[Anhang-Datei] ${copy} (per Zeitstempel zugeordnet, ${Math.round(matched[k].gapMs / 1000)} s Abstand — prüfen, ob das Bild zu dieser Notiz passt)`)));
       });
-      return { ...note, text: `${note.text}\n${lines.join('\n')}` };
-    });
-  } catch {
-    return notes;
-  }
+    }
+  } catch { /* the folder path is best effort */ }
+  try {
+    if (transcriptPath && notes.some(n => B.noteLacksImageFile(n))) {
+      const rescued = B.rescueTranscriptImages(cwd, transcriptPath);
+      for (const [i, files] of B.matchRescuedToNotes(notes, rescued)) {
+        add(i, files.map(f => `[Anhang-Datei] ${f} (aus dem Sitzungsprotokoll gerettet — über den Prompt-Text zugeordnet)`));
+      }
+    }
+  } catch { /* the transcript path is best effort */ }
+  if (!extra.size) return notes;
+  return notes.map((note, i) => {
+    const lines = extra.get(i);
+    if (!lines) return note;
+    try { B.addNoteLines(cwd, note.at, lines); } catch { /* the injected copy still carries them */ }
+    return { ...note, text: `${note.text}\n${lines.join('\n')}` };
+  });
 }
 
 /**
@@ -695,10 +721,10 @@ function leftoverMerge(cwd) {
  * @param {{cwd:string,text:string,marker:string,modeActive:boolean,sessionId?:string}} ctx
  * @param {{buildMergeContext?:Function, write?:Function}} [deps] test seam
  */
-function fireMerge({ cwd, text, marker, modeActive, sessionId, rest: restOverride }, deps = {}) {
+function fireMerge({ cwd, text, marker, modeActive, sessionId, transcriptPath, rest: restOverride }, deps = {}) {
   const build = deps.buildMergeContext || buildMergeContext;
   const write = deps.write || ((s) => process.stdout.write(s));
-  const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd), Date.now());
+  const notes = attachLateImages(cwd, sessionId, B.readNotes(cwd), Date.now(), transcriptPath);
   if (notes.length === 0) {
     // Nothing parsed. Never a silent exit — see buildEmptyQueueNotice.
     let exists = false;
@@ -765,7 +791,7 @@ process.stdin.on('end', () => {
     // the text beside the trigger, as after a marker.
     let rest;
     try { const inv = B.parseBatchCommand(text); if (inv?.route === 'go') rest = inv.residue; } catch { /* marker path */ }
-    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id || null, rest }); } catch { /* non-fatal — the turn still runs */ }
+    try { fireMerge({ cwd, text, marker, modeActive, sessionId: hook.session_id || null, transcriptPath: hook.transcript_path || null, rest }); } catch { /* non-fatal — the turn still runs */ }
     process.exit(0);
   }
 

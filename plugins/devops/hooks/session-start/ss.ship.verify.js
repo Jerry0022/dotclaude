@@ -306,7 +306,7 @@ module.exports = {
 if (require.main === module) {
   require('../lib/plugin-guard');
 
-  const cwd = process.cwd();
+  const cwd = require('../lib/hook-input').sessionCwd().cwd; // session dir, not the root (hook-input)
   const watcherDir = resolveStateDir(cwd);
 
   if (!fs.existsSync(watcherDir)) process.exit(0);
