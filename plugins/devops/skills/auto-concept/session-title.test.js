@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { SESSION_PREFIX } from "../../mcp-server/lib/mode-state.js";
 
 // A concept turns the session into a waiting room, and from the sidebar that
@@ -11,7 +12,7 @@ import { SESSION_PREFIX } from "../../mcp-server/lib/mode-state.js";
 // string lives in mode-state.js next to the card's emoji; these tests pin the
 // skill prose to it so title and card can never drift apart.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const SKILL = readSkill();
 
 function section(start, end) {
   const a = SKILL.indexOf(start);

@@ -56,8 +56,9 @@ const NOT_RUNTIME = new Set([
 /**
  * Runtime artifacts that are keyed to the SESSION cwd on purpose, not the repo
  * root: the /auto-concept skill writes its state file into `{session-cwd}/.claude/`
- * and every reader must look in that same place (concept/SKILL.md § state
- * file). Anything else joined onto the raw cwd is a finding.
+ * and every reader must look in that same place (auto-concept: deep-knowledge/step3-open-browser.md § Bridge server,
+ * background tasks, sidebar title, user notice — the state file). Anything else
+ * joined onto the raw cwd is a finding.
  */
 const CWD_ANCHORED_BY_DESIGN = new Set(['concept-active.json', 'concepts']);
 

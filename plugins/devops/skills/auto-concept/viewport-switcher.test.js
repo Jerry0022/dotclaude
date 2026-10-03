@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { readTemplates } from "./templates-source.js";
 
 // The device-view switcher lets a design concept render its mockup inside
@@ -31,7 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DK = path.join(__dirname, "deep-knowledge");
 const md = readTemplates();
 const gate = fs.readFileSync(path.join(DK, "validation-gate.md"), "utf8");
-const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+const skill = readSkill();
 
 // Line-based scanner, not a lazy regex: a `(?:javascript|js)\n([\s\S]*?)```
 // pattern desynchronises as soon as one block's content contains a fence, and

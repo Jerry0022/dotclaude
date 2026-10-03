@@ -323,7 +323,7 @@ function tabs(rounds, live) {
 
 // The reference CSS consumes design tokens (`var(--panel-bg)`, `var(--accent-color)`,
 // …) but defines none — every generated page carries its own `:root` block,
-// written by Claude per project (SKILL.md Step 2 § Design). The fixture needs
+// written by Claude per project (SKILL.md Step 2 → deep-knowledge/step2-generate.md § Design). The fixture needs
 // one too, or every state colour collapses to the browser default. This set
 // mirrors the newest sample page in docs/concepts/ plus the names the
 // reference CSS additionally reads (both the `--bg` and the `--bg-color`

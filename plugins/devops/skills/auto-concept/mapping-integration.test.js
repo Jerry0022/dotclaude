@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { readSkill } from "./skill-source.js";
 import { md, scanBlocks, page, mappingSection, VEHICLE_SPEC } from "./mapping-harness.js";
 
 // The information-mapping engine (templates-mapping.md § Information Mapping (engine))
@@ -248,7 +249,7 @@ describe("mapping reference docs", () => {
 });
 
 describe("mapping skill + gate + freeze docs", () => {
-  const skill = fs.readFileSync(path.join(__dirname, "SKILL.md"), "utf8");
+  const skill = readSkill();
   const gate = fs.readFileSync(path.join(__dirname, "deep-knowledge", "validation-gate.md"), "utf8");
   const iter = fs.readFileSync(path.join(__dirname, "deep-knowledge", "iteration-rules.md"), "utf8");
   test("SKILL.md: views list, free-round sentence, Step 1c, 5a/5b/5c handling", () => {
