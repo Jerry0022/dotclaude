@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.245.5] — 2026-10-03
+
+### Changed
+- **auto-concept SKILL.md 2,277 → 487 lines.** Execution detail moved verbatim into 9 new `skills/auto-concept/deep-knowledge/step*.md` files behind 41 mandatory "Before executing this step, Read … completely" pointers (Step 5 pointers re-read on every round, against compaction). All decisions and guards stay inline (ship gates, forbidden browser paths, implement step 0). `skill-source.js` `readSkill()` reassembles the original text exactly (+8 documented cross-reference qualifications); the 13 text tests read through it.
+
+### Fixed
+- **Copy verbs trigger the Web-Guide (follow-up to #617).** `guide-handoff.js` counts kopieren/kopiere/copy as hand-off verbs when a service and a credential are named (kopiert/copied = self-performed); the original "CRON_SECRET aus Vercel kopieren → gh secret set" wording now gets the Web-Guide button.
+- **Concept disposition before the ship (follow-up to #618).** auto-concept part C step 0 stages and commits the disposition's git half before the ship (files stay on disk for the bridge), so close-out no longer leaves uncommitted changes after the release.
+- **Token guard never cuts mandatory skill reads.** `pre.tokens.guard` lets Reads of `devops/[<version>/]skills/<skill>/{deep-knowledge,modes}/*.md` pass, so a "read completely" file is never truncated by an offset+limit hint at a low threshold.
+
+### Decisions
+- Target is the < 500-line ceiling, not the 250-line budget: reaching 250 would move decisions out of SKILL.md and cost determinism.
+- A redteam review of the extraction found 0 high / 5 medium / 4 low risks; R1–R9 fixed in this release (guards back inline, file-qualified cross-refs, re-read wording, raw guard test), R10 is the token-guard exemption above.
+- Copy-verb false positives are bounded by the service + credential conditions (plain file copy → no hit).
+
+### Tests
+- New `skill-source.test.js` (dead/duplicate/missing pointers, SKILL.md < 500 lines, 16 guard sentences in the raw file), `pre.tokens.guard.skilldk.test.js`, 4 copy-verb cases. Reconstruction: 0 of 1,970 original lines missing. Branch suites 895/895 at ship; full suite 8318 passed, 4 load flakes green in isolation; eslint clean.
+
 ## [0.245.4] — 2026-10-03
 
 ### Fixed
