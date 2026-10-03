@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.245.2] — 2026-10-03
+
+### Fixed
+- **Auto-guide poll loop stays alive (#619).** While a live guide runs and no completion card was rendered, `stop.flow.guard` (via `card-guard` `decideAction`) blocks the turn end once with "guide loop still active — continue 5c …"; `stop_hook_active` lets the follow-up through, so it never loops. A Weiter click no longer sits unread in the overlay queue because Claude ended its turn on a hidden-tab timeout.
+- **Guide marker can be paused.** The guide-active marker takes an optional `paused: true` (`pauseGuide`, `isGuideLoopLive` = fresh AND not paused in `scripts/guide-active-state.js`); new CLI `web-guide.js guide pause`, `guide status` reports `paused`; refresh / `recordGuideStep` drop `paused`. A paused guide keeps the old card exemption without the stop block.
+- **auto-guide docs.** `recovery.md` § Waiting: a hidden tab is no reason to end the turn, chat only after the „Frage im Chat" step; § Ends: the paused row runs `W guide pause`. `protocol.md` marker shape and command table, `SKILL.md` Ends table updated.
+
+### Decisions
+- Root cause: the guide-active marker only exempted the card, it never kept the turn alive, so nothing enforced the "keep polling" rule.
+- Pause is a marker field, not a cleared marker — the channel token must stay valid. "Block once" reuses `stop_hook_active`, no extra counter state.
+- Known trade-off: a short chat reply in the middle of a live guide gets one extra stop nudge.
+
+### Tests
+- New `guide-active-state`, `web-guide`, `card-guard` and stop-guard e2e cases; the e2e case "fresh marker suppresses the card block" now expects the block (new contract). Full suite 8274 passed, 0 failed, 3 skipped (pre-existing); eslint clean.
+
 ## [0.245.1] — 2026-10-03
 
 ### Fixed
