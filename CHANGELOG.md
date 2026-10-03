@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.245.0] — 2026-10-03
+
+### Changed
+- **`/do-batch` keeps every image with its note.** The collect window takes images written up to 10 s before the hook stamped the note (was ±3 s), so a screenshot saved 3.7 s early now gets its 📎 at collect time. Images of a prompt sent while a turn was running (queued — the harness never saves those to the images folder) are rescued from the session transcript into `batch-assets/`, deduplicated by sha1 and matched to their note by text. Late and rescued `[Anhang-Datei]` lines are appended to `batch.md`, so the archived collection names them. The attachment guard no longer asks for a "(keine …)" placeholder.
+- **Implementing agents get the screenshots.** Every `[Anhang-Datei]` path goes verbatim into the bundle and into the implementing agent's prompt with the order to Read it first (`auto-agents`, `do-batch` 4.4, `agent-orchestration.md` Agent Prompt Template item 11).
+- **Session-start hooks act on the session's worktree.** Desktop starts SessionStart hooks of a worktree session with `process.cwd()` = repo root; `ss.git.check` warned "On `main` in repo root" in every worktree session and forced a question, and `ss.git.sync`, `ss.concept.resume`, `ss.graphify`, `ss.team.changelog` and `ss.ship.verify` acted on the root. New `sessionCwd()` in `hooks/lib/hook-input.js` reads the payload `cwd` (stdin only when it is not a TTY, fallback `process.cwd()`), used only when the hook runs as the main module.
+
+### Decisions
+- Basis: transcript analysis of the last 5 `/do-batch` sessions — all 26 collected images landed on the right note, but in 2 of 4 runs no agent prompt carried a batch-assets path, one image missed the symmetric window, and one queued prompt's image existed only as base64 in the transcript.
+- Rescued images are matched by note text, not time: a queued note is written ~2 min after its prompt, beyond the 60 s late-match window.
+- Rejected: rewriting the user's note lines — the hook only appends.
+
+### Tests
+- `batch-state`, `prompt.batch.collect` (e2e: 4 s lead, queued-prompt rescue, archive persistence) and `hook-input` (`sessionCwd`) cases; all 12 session-start test files green.
+
 ## [0.244.0] — 2026-10-03
 
 ### Changed
