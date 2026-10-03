@@ -82,7 +82,9 @@ the auto-end bounds.
    the note usable without it — what is visible, and what is wrong with it. "Bild
    angehängt" is not a description.
 4. Add `[Anhang-Datei] <pfad>` for every path you know (`@file` targets, saved
-   screenshots). The guard lists the ones the hook could extract.
+   screenshots). The guard lists the ones the hook could extract. No path
+   known → no placeholder line: the merge rescues the image from the session
+   transcript by the verbatim note text (step 2).
 5. Store it as ONE note via `appendNote`, then answer with a single line naming
    the note number.
 
@@ -95,7 +97,8 @@ The Desktop app sends a pasted image as its own content block: the prompt
 carries no `[Image #N]` and no attachment key, so it IS collected (the user
 sees the red collect panel, as for any note). The harness has already saved
 the image to `<tmp>/claude/<project-slug>/<session_id>/images/`; the hook
-copies every image whose mtime matches the prompt (±3 s) to
+copies every image whose mtime matches the prompt (up to 10 s before the
+hook ran, 3 s after) to
 `.claude/batch-assets/<note-timestamp>-<n>.<ext>` and appends
 `[Anhang-Datei] <copy>` to the note. The panel says "📎 Das Bild ist mit der
 Notiz gespeichert". The same holds for `/do-batch <text>` while collecting;

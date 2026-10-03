@@ -729,8 +729,10 @@ describe("mode on — a pasted Desktop image is kept with its note (#490)", () =
     expect(r.stdout).toContain("siehe Screenshot");
     expect(r.stdout).toContain("[Anhang-Datei] ");
     expect(r.stdout).toContain(".webp");
-    // The notes file itself is left as the user wrote it.
-    expect(fs.readFileSync(path.join(cwd, ".claude", "batch.md"), "utf8")).not.toContain("[Anhang-Datei]");
+    // The late match is written into the notes file too, so the archive names it.
+    const file = fs.readFileSync(path.join(cwd, ".claude", "batch.md"), "utf8");
+    expect(file).toMatch(/siehe Screenshot\r?\n\[Anhang-Datei\] /);
+    expect(readNotes(cwd)).toHaveLength(1);
   });
 
   test("without a session images folder the note is stored as before", () => {
@@ -754,21 +756,74 @@ describe("merge fallback marks an uncertain image match (#490)", () => {
     try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best effort */ }
   });
 
-  test("an image 10 s from its nearest note is attached with a check-this hint", () => {
+  test("an image 15 s before its nearest note is attached with a check-this hint", () => {
     const imagesDir = path.join(tmpRoot, "claude", "C--some-project", SID, "images");
     fs.mkdirSync(imagesDir, { recursive: true });
     const at = Date.now() - 120_000;
     appendNote(cwd, "siehe Bild", at);
     const img = path.join(imagesDir, "1.png");
     fs.writeFileSync(img, "png-bytes");
-    fs.utimesSync(img, new Date(at - 10_000), new Date(at - 10_000));
+    fs.utimesSync(img, new Date(at - 15_000), new Date(at - 15_000));
     const r = runHook(
       { prompt: ">> leg los", session_id: SID },
       { TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot, DEVOPS_BATCH_NO_SYNC: "1" },
     );
     expect(r.stdout).toContain("[Anhang-Datei] ");
-    expect(r.stdout).toContain("10 s Abstand");
+    expect(r.stdout).toContain("15 s Abstand");
     expect(r.stdout).toContain("prüfen");
+  });
+});
+
+describe("image tracking — the cases seen in real batch sessions (2026-10-03)", () => {
+  const SID = "0f1e2d3c-aaaa-bbbb-cccc-490490490492";
+  let tmpRoot;
+  let imagesDir;
+  const tmpEnv = () => ({ TEMP: tmpRoot, TMP: tmpRoot, TMPDIR: tmpRoot });
+
+  beforeEach(() => {
+    activate(cwd, { marker: ">>" });
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-img-real-"));
+    imagesDir = path.join(tmpRoot, "claude", "C--some-project", SID, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+  });
+  afterEach(() => {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
+
+  test("an image written 4 s before the hook ran is still taken at collect time", () => {
+    const img = path.join(imagesDir, "1.webp");
+    fs.writeFileSync(img, "webp-bytes");
+    const before = new Date(Date.now() - 4000);
+    fs.utimesSync(img, before, before);
+    const r = runHook({ prompt: "Rotationsicon näher ans Label", session_id: SID }, tmpEnv());
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("Das Bild ist mit der Notiz gespeichert");
+    expect(readNotes(cwd)[0].text).toContain("[Anhang-Datei] ");
+  });
+
+  test("a queued prompt's image is rescued from the transcript and matched by the note text", () => {
+    const promptText = "Wenn der titel in phase 2 zu lang ist, cutted die fund karte";
+    appendNote(cwd, `${promptText}\n[Anhang] Screenshot: Fundkarte abgeschnitten\n[Anhang-Datei] (keine — Desktop-App-Bild wurde nicht im images-Ordner gefunden)`, Date.now() - 120_000);
+    appendNote(cwd, "andere Notiz ohne Bild", Date.now() - 60_000);
+    const data = Buffer.from("real-webp").toString("base64");
+    const transcript = path.join(tmpRoot, "t.jsonl");
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: "user", timestamp: new Date().toISOString(), message: { content: [{ type: "tool_result", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from("tool-shot").toString("base64") } }] }] } }),
+      JSON.stringify({ type: "attachment", timestamp: new Date(Date.now() - 125_000).toISOString(), attachment: { type: "queued_command", prompt: [{ type: "image", source: { type: "base64", media_type: "image/webp", data } }, { type: "text", text: promptText }] } }),
+    ].join("\n"));
+    const r = runHook({ prompt: ">> leg los", session_id: SID, transcript_path: transcript }, { ...tmpEnv(), DEVOPS_BATCH_NO_SYNC: "1" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("aus dem Sitzungsprotokoll gerettet");
+    const line = r.stdout.split("\n").find(l => l.includes("gerettet"));
+    const copy = line.replace(/^\s*\[Anhang-Datei\]\s*/, "").replace(/\s+\(.*$/, "");
+    expect(copy.endsWith(".webp")).toBe(true);
+    expect(fs.readFileSync(copy, "utf8")).toBe("real-webp");
+    // The tool-result screenshot (Claude's own Read) is never a user attachment.
+    expect(fs.readdirSync(path.join(cwd, ".claude", "batch-assets")).filter(f => !f.endsWith(".json"))).toHaveLength(1);
+    // Persisted with the right note, the other note untouched.
+    const [first, second] = readNotes(cwd);
+    expect(first.text).toContain("gerettet");
+    expect(second.text).toBe("andere Notiz ohne Bild");
   });
 });
 

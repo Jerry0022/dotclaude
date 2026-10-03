@@ -23,7 +23,10 @@ require('../lib/plugin-guard');
 const { execSync } = require('child_process');
 const { claimSyncSlot, startBackgroundSync } = require('../lib/git-sync-bg');
 
-const cwd = process.cwd();
+// The session's directory, not the hook process's: Desktop starts hooks of a
+// worktree session in the repo root (see hook-input sessionCwd).
+// Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
+const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
 
 function git(cmd) {
   try {

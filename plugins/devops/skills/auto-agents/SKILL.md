@@ -63,7 +63,11 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 implement click) is the parallel split already made. Build the waves from it:
 one agent per bundle, each owning the files it lists, a bundle with `nach: Bx`
 in a wave after Bx. Keep the bundle's note details in that agent's prompt
-word for word. Split again only where a bundle is still too large for one agent,
+word for word — **including every `[Anhang-Datei] <path>` line of its notes**,
+with the order to Read each file before changing anything (Agent Prompt
+Template item 11 in `agent-orchestration.md`). A UI note implemented from the
+`[Anhang]` description alone misses what the screenshot shows. Split again only
+where a bundle is still too large for one agent,
 and never give two agents the same file. Hand each bundle's `Befunde:` line
 over verbatim as the agent's starting point, with the instruction to verify
 the one assumption the change rests on and then build — not to explore the

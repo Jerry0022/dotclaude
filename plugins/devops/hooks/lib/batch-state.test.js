@@ -977,3 +977,59 @@ describe("AUD-C031 — pruning never takes an image an archive still names", () 
     expect(fs.existsSync(orphan)).toBe(false);
   });
 });
+
+describe("image tracking helpers (2026-10-03 session analysis)", () => {
+  test("isCertainImageGap — up to 10 s before the note, 3 s after", async () => {
+    const { isCertainImageGap } = await import("./batch-state.js");
+    const T = 1_000_000;
+    expect(isCertainImageGap(T - 3700, T)).toBe(true);
+    expect(isCertainImageGap(T - 10_000, T)).toBe(true);
+    expect(isCertainImageGap(T - 10_001, T)).toBe(false);
+    expect(isCertainImageGap(T + 3000, T)).toBe(true);
+    expect(isCertainImageGap(T + 3001, T)).toBe(false);
+  });
+
+  test("addNoteLines extends exactly the stamped note and keeps the rest", async () => {
+    const { appendNote, readNotes, addNoteLines } = await import("./batch-state.js");
+    appendNote(cwd, "erste", Date.parse("2026-10-03T08:00:00.000Z"));
+    appendNote(cwd, "zweite", Date.parse("2026-10-03T08:01:00.000Z"));
+    appendNote(cwd, "dritte", Date.parse("2026-10-03T08:02:00.000Z"));
+    expect(addNoteLines(cwd, "2026-10-03T08:01:00.000Z", ["[Anhang-Datei] /x/a.png"])).toBe(true);
+    expect(addNoteLines(cwd, "2026-10-03T08:02:00.000Z", ["[Anhang-Datei] /x/b.png"])).toBe(true);
+    expect(addNoteLines(cwd, "2026-10-03T09:00:00.000Z", ["nope"])).toBe(false);
+    expect(readNotes(cwd).map(n => n.text)).toEqual([
+      "erste",
+      "zweite\n[Anhang-Datei] /x/a.png",
+      "dritte\n[Anhang-Datei] /x/b.png",
+    ]);
+  });
+
+  test("rescueTranscriptImages is idempotent per image content", async () => {
+    const { rescueTranscriptImages } = await import("./batch-state.js");
+    const t = path.join(cwd, "t.jsonl");
+    const img = { type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from("px").toString("base64") } };
+    fs.writeFileSync(t, JSON.stringify({ type: "user", timestamp: "2026-10-03T08:00:00.000Z", message: { content: [img, { type: "text", text: "so" }] } }));
+    const a = rescueTranscriptImages(cwd, t);
+    const b = rescueTranscriptImages(cwd, t);
+    expect(a).toHaveLength(1);
+    expect(a[0].text).toBe("so");
+    expect(b[0].files).toEqual(a[0].files);
+    expect(fs.readFileSync(a[0].files[0], "utf8")).toBe("px");
+    expect(rescueTranscriptImages(cwd, path.join(cwd, "missing.jsonl"))).toEqual([]);
+  });
+
+  test("matchRescuedToNotes only fills notes that lack a live image file", async () => {
+    const { matchRescuedToNotes } = await import("./batch-state.js");
+    const live = path.join(cwd, "live.png");
+    fs.writeFileSync(live, "x");
+    const notes = [
+      { at: "a", text: "Titel zu lang in Phase zwei\n[Anhang] Karte abgeschnitten" },
+      { at: "b", text: `Titel zu lang in Phase zwei\n[Anhang-Datei] ${live}` },
+      { at: "c", text: "Nur Text ohne Bild hier" },
+    ];
+    const rescued = [{ at: "x", text: "Titel zu lang in Phase zwei", files: ["/r/1.webp"] }];
+    const m = matchRescuedToNotes(notes, rescued);
+    expect([...m.keys()]).toEqual([0]);
+    expect(m.get(0)).toEqual(["/r/1.webp"]);
+  });
+});
