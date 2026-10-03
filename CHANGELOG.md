@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.244.0] — 2026-10-03
+
+### Changed
+- **`/do-batch` merges into one bundle per coherent area.** The merge plan cuts 2–6 bundles for 5–15 notes, splits an area beyond ~6 notes or ~15 files and never cuts one bundle per note; the hook merge context carries the same rules. Each bundle carries a `Befunde:` line (file:line facts, approach, traps from the feasibility check) that `auto-agents` hands verbatim to the bundle agent, so implementing agents stop re-reading code the merge already analysed.
+- **`do-batch` SKILL.md slimmed from 610 to 488 lines.** Activation and merge detail moved to `skills/do-batch/deep-knowledge/activation.md` and `merge.md`.
+- **Ship without a connected MCP server.** New `mcp-server/ship/cli.js` runs the same ship tool handlers (same zod schema, same checkpoint) from the shell; `run-contract` counts `cli.js ship_release` as a release. `do-ship` Step 0.5, promote mode and `deep-knowledge/mcp-deferred-tools.md` use it when the server is installed but this session's connect was skipped — instead of the manual checklist, which contradicted "never ship by hand" and stalled delegated ships.
+- **`ss.mcp.failcache` demands a one-line notice in the first reply** when Claude Code's machine-wide MCP failure cache skipped the devops servers, and names the offline paths (card renderer, ship CLI).
+
+### Decisions
+- Basis: the last 5 `/do-batch` sessions (56 notes) against 60 normal sessions — batch was roughly token-neutral (0–10 %); 53 % of batch cost sat in subagents, and implementing agents spent 55 % of their tool calls re-reading code the merge had already analysed. Expected effect of the two levers: agent reads −25–40 %, overall ~−10–20 %, to be measured after release.
+- Ship stall root cause: `~/.claude/mcp-needs-auth-cache.json` skipped the devops servers for the whole session after another session's connect timeout, with no in-session reconnect (still skipped 2.5 h later); the start hook only warned conditionally and the warning was not relayed.
+- Rejected: shipping by hand with `gh`; waiting for a restart.
+
+### Tests
+- New `mcp-server/ship/cli.test.js`; run-contract CLI release, stdout-discipline exception, do-batch skill-text (+3), `prompt.batch.collect` (+1) and failcache assertions.
+
 ## [0.243.1] — 2026-10-03
 
 ### Changed
