@@ -64,7 +64,10 @@ with no user prompt: if nothing changed (same variant, same build-id, same
 evidence — nothing to report), answer with nothing — no "Stand bleibt", no
 card repeat, no line at all. Only a real change since the last card (a test
 went red, a new error, work finished) gets one line and, if it ends the
-turn, a new card.
+turn, a new card. A watcher or server exit after a concept close
+(`*_EXIT reason=STATE_GONE` / `HTML_GONE`, the bridge server exiting after
+`/shutdown`) is such a no-change notification: answer with nothing and
+leave the session title as it is.
 
 "Continue from where you left off." is never such a turn. It follows a tool
 call that was interrupted or rejected, so the step that call belonged to is

@@ -113,11 +113,14 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
   // works now, so it yields to the hourglass (or Shipping) like any outcome;
   // the turn's card brings it back while the page still waits. A machine turn
   // (a task notification — the concept's own watchers exit that way) is no
-  // proof of work: it may end without a card, so it keeps its hands off.
-  const owned = machine ? MODE_PREFIX_EMOJI : [BATCH_EMOJI];
-  const strippable = machine ? OUTCOME_PREFIX_EMOJI : [CONCEPT_EMOJI, ...OUTCOME_PREFIX_EMOJI];
+  // proof of work: it may end without a card, so it keeps its hands off —
+  // off the compass and off every outcome a card left (#618: a watcher exit
+  // after a concept close flipped "🚀 Shipped –" to ⏳). Only a plain title
+  // (or the legacy worded hourglass) is marked.
+  const owned = machine ? [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI.filter(e => e !== '⏳')] : [BATCH_EMOJI];
+  const strippable = machine ? ['⏳'] : [CONCEPT_EMOJI, ...OUTCOME_PREFIX_EMOJI];
   const ownedNote = machine
-    ? 'a mode owns it (this turn is no user prompt — an open concept page keeps its compass).'
+    ? 'a mode or a card owns it (this turn is no user prompt — an open concept page keeps its compass, an outcome stays).'
     : 'batch mode owns it.';
   const already = shipping
     ? [`  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — the ship is already marked.`]
@@ -131,7 +134,7 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
     ? 'The word is exactly "Shipping" — this is the do-ship skill\'s Pre-Step C done early; the skill finds the title marked and leaves it.'
     : 'The icon is icon-only — no word after it, the title text stays as it is.';
   const examples = machine
-    ? `"🧪 Test – ", "📦 Ready – ", "🚀 Shipped – ", "${LEGACY_PENDING_PREFIX}", "🎊 Released Stable – "`
+    ? `"${LEGACY_PENDING_PREFIX}"`
     : `"${CONCEPT_PREFIX}", "🧪 Test – ", "📦 Ready – ", "🚀 Shipped – ", "${LEGACY_PENDING_PREFIX}", "🎊 Released Stable – "`;
   const conceptNote = machine ? [] : [
     `A "${CONCEPT_PREFIX}" title yields too: the compass means the page waits for the user, and now Claude works.`,
