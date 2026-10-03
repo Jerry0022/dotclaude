@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.243.1] — 2026-10-03
+
+### Changed
+- **Concept card heading uses the hourglass while Claude works.** With a concept page in iteration or implementation the completion card heading now starts with ⏳ (`⏳ Concept in Implementierung — ich melde mich`) — the same bare hourglass the session title carries. The compass 🧭 stays for "wartet auf deine Entscheidungen", where the next move is the user's.
+
 ## [0.243.0] — 2026-10-03
 
 ### Changed
