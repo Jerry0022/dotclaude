@@ -44,6 +44,9 @@
  *   guide status                      → prints JSON {active, ageMinutes,
  *     lastStep} (never the token) so a resumed/compacted turn can recover
  *     which step the overlay was showing.
+ *   guide pause                       → sets `paused: true` on the marker
+ *     (#619, the 20-min pause step) so stop.flow.guard lets the turn end;
+ *     exits 1 when no marker exists.
  *   guide clear                       → clears that marker (guide ended).
  */
 
@@ -51,7 +54,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const {
-  markGuideActive, clearGuideActive, touchGuideToken, readGuideToken, recordGuideStep, getGuideStatus,
+  markGuideActive, clearGuideActive, pauseGuide, touchGuideToken, readGuideToken, recordGuideStep, getGuideStatus,
 } = require('./guide-active-state');
 
 // touchGuideToken writes the marker to disk (extends its TTL); a write
@@ -97,6 +100,10 @@ const USAGE = `usage:
   node web-guide.js guide status                       (JSON {active,
                                                         ageMinutes, lastStep},
                                                         never the token)
+  node web-guide.js guide pause                        (#619: mark the guide
+                                                        paused so the stop
+                                                        guard lets the turn
+                                                        end; token kept)
   node web-guide.js guide clear                        (clear that marker)
   node web-guide.js --help
 
@@ -750,6 +757,16 @@ function main(argv) {
     if (sub === 'status') {
       const status = getGuideStatus(process.cwd());
       process.stdout.write(`${JSON.stringify(status)}\n`);
+      return;
+    }
+    if (sub === 'pause') {
+      const file = pauseGuide(process.cwd());
+      if (file) {
+        process.stdout.write(`guide-paused ${file}\n`);
+      } else {
+        process.stderr.write('guide-pause-failed: no active guide\n');
+        process.exitCode = 1;
+      }
       return;
     }
     if (sub === 'clear') {

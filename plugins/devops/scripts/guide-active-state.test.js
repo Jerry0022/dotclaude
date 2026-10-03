@@ -9,6 +9,8 @@ import {
   readGuideToken,
   touchGuideToken,
   isGuideActive,
+  isGuideLoopLive,
+  pauseGuide,
   recordGuideStep,
   hasValueField,
   getGuideStatus,
@@ -28,6 +30,52 @@ afterEach(() => {
   while (tmpDirs.length) {
     fs.rmSync(tmpDirs.pop(), { recursive: true, force: true });
   }
+});
+
+describe("guide-active-state — paused (#619)", () => {
+  test("pauseGuide without a marker is a no-op returning null", () => {
+    const dir = makeTmpDir();
+    expect(pauseGuide(dir)).toBeNull();
+    expect(fs.existsSync(guideActiveFilePath(dir))).toBe(false);
+  });
+
+  test("pauseGuide keeps token/lastStep, refreshes ts, and stops the loop being live", () => {
+    const dir = makeTmpDir();
+    const t0 = 1_000_000;
+    markGuideActive(dir, t0);
+    const token = readGuideToken(dir);
+    const step = { id: "s1", index: 1, total: 2, title: "T" };
+    recordGuideStep(dir, step, t0 + 10);
+    expect(isGuideLoopLive(dir, t0 + 20)).toBe(true);
+
+    expect(pauseGuide(dir, t0 + 50)).toBe(guideActiveFilePath(dir));
+    const data = JSON.parse(fs.readFileSync(guideActiveFilePath(dir), "utf8"));
+    expect(data).toEqual({ ts: t0 + 50, token, paused: true, lastStep: step, lastStepTs: t0 + 10 });
+    expect(isGuideActive(dir, t0 + 60)).toBe(true);
+    expect(isGuideLoopLive(dir, t0 + 60)).toBe(false);
+    expect(getGuideStatus(dir, t0 + 60).paused).toBe(true);
+  });
+
+  test("markGuideActive and recordGuideStep un-pause the guide", () => {
+    const dir = makeTmpDir();
+    const t0 = 2_000_000;
+    markGuideActive(dir, t0);
+    pauseGuide(dir, t0 + 1);
+    markGuideActive(dir, t0 + 2);
+    expect(isGuideLoopLive(dir, t0 + 3)).toBe(true);
+    expect(getGuideStatus(dir, t0 + 3).paused).toBe(false);
+
+    pauseGuide(dir, t0 + 4);
+    recordGuideStep(dir, { id: "s2", index: 2, total: 2, title: "T" }, t0 + 5);
+    expect(isGuideLoopLive(dir, t0 + 6)).toBe(true);
+  });
+
+  test("an expired marker is never live, paused or not", () => {
+    const dir = makeTmpDir();
+    markGuideActive(dir, 0);
+    expect(isGuideLoopLive(dir, GUIDE_ACTIVE_TTL_MS + 1)).toBe(false);
+    expect(isGuideLoopLive(makeTmpDir())).toBe(false);
+  });
 });
 
 describe("guide-active-state", () => {

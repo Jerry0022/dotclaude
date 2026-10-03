@@ -270,7 +270,7 @@ with `done: true` — what was created, where each value went — and wait for
 |-----|-----------|
 | **closed** | The tab closed before the done step. Clear the guide-active marker (Step 6.2) and report per Step 6.3. |
 | **aborted** | User pressed Abbrechen, or a tool failed twice. `destroy()` if possible, clear the guide-active marker (Step 6.2), report per Step 6.3 incl. the error. |
-| **paused** | 20 min without a real event: show the „Guide pausiert" step, keep overlay and marker, report where it paused and that „weiter" in the chat resumes it (recovery.md § Ends). |
+| **paused** | 20 min without a real event: show the „Guide pausiert" step, keep overlay and marker, run `W guide pause` (the stop guard otherwise blocks the turn end once, #619), report where it paused and that „weiter" in the chat resumes it (recovery.md § Ends). |
 
 ## Rules
 
