@@ -6,7 +6,9 @@ import path from "node:path";
 
 // #526 end-to-end through the real Stop hook: a fresh guide-active marker
 // under <project>/.claude/ must stop the card gate from forcing the turn to
-// end, and a stale one must not.
+// end, and a stale one must not. #619: a live (fresh, unpaused) marker now
+// blocks a card-less turn end ONCE with the guide-loop reason; a paused marker
+// keeps the old silent pass.
 const STOP_HOOK = path.join(__dirname, "stop.flow.guard.js");
 const SESSION = "guide-active-e2e";
 
@@ -23,8 +25,8 @@ function cleanup(dir) {
   for (const d of [dir, dir + "-tmp"]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
 }
 
-function writeMarker(dir, ts) {
-  fs.writeFileSync(path.join(dir, ".claude", "auto-guide-active.json"), JSON.stringify({ ts }));
+function writeMarker(dir, ts, extra = {}) {
+  fs.writeFileSync(path.join(dir, ".claude", "auto-guide-active.json"), JSON.stringify({ ts, ...extra }));
 }
 
 function setFlag(dir, name) {
@@ -53,11 +55,48 @@ function stop(dir, extra = {}) {
 }
 
 describe("stop.flow.guard — guide-active exemption (#526)", () => {
-  test("a fresh marker suppresses the card block", async () => {
+  test("a fresh unpaused marker blocks the turn end with the guide-loop reason, not the card reason (#619)", async () => {
     const dir = project();
     try {
       setFlag(dir, "work-happened");
       writeMarker(dir, Date.now());
+      const out = await stop(dir);
+      expect(out).toMatch(/"decision":"block"/);
+      expect(out).toContain("guide loop still active");
+      expect(out).not.toContain("render_completion_card");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("a fresh unpaused marker blocks even without tracked work (#619)", async () => {
+    const dir = project();
+    try {
+      writeMarker(dir, Date.now());
+      const out = await stop(dir);
+      expect(out).toContain("guide loop still active");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("the follow-up stop (stop_hook_active) passes — the block fires once (#619)", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      writeMarker(dir, Date.now());
+      const out = await stop(dir, { stop_hook_active: true });
+      expect(out).toBe("");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("a fresh paused marker suppresses the card block and does not block (#619)", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      writeMarker(dir, Date.now(), { paused: true });
       const out = await stop(dir);
       expect(out).toBe("");
     } finally {

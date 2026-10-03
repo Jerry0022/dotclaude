@@ -74,6 +74,14 @@ returns the queued event or `{"type":"timeout"}` at once), then `W pause 25`
 before the next probe — never a tight loop. The time counters above keep
 running; switch back to the real `W payload wait` once `hidden` is `false`.
 
+A hidden tab is **no reason to end the turn** (#619). Keep draining with
+`W payload wait 0` + `W pause 25` until `next`/`abort`/`closed` or the 20-min
+paused end — a turn that ends here strands the user's next Weiter click in the
+overlay queue until they write in chat. Speak in chat only when the panel
+cannot carry the message, and only after sending the „Frage im Chat" step.
+`stop.flow.guard` blocks a card-less turn end once while the guide is active
+and not paused (protocol.md § Not ending the turn mid-loop).
+
 ## Resuming in a new turn (also after compaction or a restart)
 
 A turn can end mid-guide (an interrupted `wait()`, a card, a chat question).
@@ -127,4 +135,4 @@ in the chat leaves them staring at a spinner.
 | **done** | `next` from the Fertig button, or the tab closed after the done step was shown. Step 6. |
 | **closed** | The tab closed before the done step. Clear the marker (Step 6.2), report per Step 6.3: which step was last, what is still missing — never claim the goal is reached. |
 | **aborted** | The user pressed Abbrechen (the panel says „Abbruch gesendet – Claude beendet den Guide …"), or a tool failed twice. `W payload destroy` if possible, clear the marker, report incl. the error. |
-| **paused** | 20 min without a real event. Send a step with the current `index`, a new `id`, title „Guide pausiert", text „Ich warte gerade nicht aktiv. Schreib im Chat „weiter", wenn du weitermachen willst." — keep the overlay and the marker (its token stays valid), report in chat at which step the guide paused and how to resume, end the turn. „weiter" later resumes via § Resuming in a new turn. |
+| **paused** | 20 min without a real event. Send a step with the current `index`, a new `id`, title „Guide pausiert", text „Ich warte gerade nicht aktiv. Schreib im Chat „weiter", wenn du weitermachen willst." — keep the overlay and the marker (its token stays valid), run `W guide pause` (sets `paused` on the marker so the stop guard lets the turn end), report in chat at which step the guide paused and how to resume, end the turn. „weiter" later resumes via § Resuming in a new turn. |

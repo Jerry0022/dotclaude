@@ -14,6 +14,7 @@ import {
   showWidgetCalledThisTurn,
   decideAction,
   buildBlockReason,
+  buildGuideLoopReason,
   buildValidationReason,
   buildPendingReason,
   buildTitleStatusWordReason,
@@ -1145,6 +1146,45 @@ describe("decideAction — guide active", () => {
     });
     expect(d.action).toBe("pass");
     expect(d.exempt).toBeUndefined();
+  });
+
+  test("#619: a live (unpaused) guide loop blocks a card-less end with the guide-loop reason", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: false,
+      substantial: true,
+      guideActive: true,
+      guideLoopLive: true,
+    });
+    expect(d.action).toBe("block");
+    expect(d.resetFlags).toBe(false);
+    expect(d.reason).toBe(buildGuideLoopReason());
+    expect(d.reason).toMatch(/^\[stop\.flow\.guard\] guide loop still active — continue 5c/);
+    expect(d.reason).toContain("W guide pause");
+  });
+
+  test("#619: stopHookActive lets the follow-up stop through (block once)", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: false,
+      stopHookActive: true,
+      guideActive: true,
+      guideLoopLive: true,
+    });
+    expect(d.action).toBe("pass");
+  });
+
+  test("#619: a rendered card is never blocked by the guide-loop rule", () => {
+    const d = decideAction({
+      workHappened: true,
+      cardRendered: true,
+      stopHookActive: false,
+      substantial: true,
+      guideActive: true,
+      guideLoopLive: true,
+    });
+    expect(d.reason || "").not.toContain("guide loop still active");
   });
 
   test("guideActive false behaves exactly as before", () => {

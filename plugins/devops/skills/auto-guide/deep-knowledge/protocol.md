@@ -352,7 +352,7 @@ listening; the user's next click then queues an event nobody drains until
 the *next* prompt, and the panel visibly stalls ("Weiter" looks dead).
 
 `scripts/web-guide.js guide active` / `guide clear` write and remove
-`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms>, "token": <32 hex>, "lastStep": … }` — `lastStep` is the last step sent, for `guide status`; never a value).
+`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms>, "token": <32 hex>, "lastStep": …, "paused": true? }` — `lastStep` is the last step sent, for `guide status`; never a value; `paused` is set only by `guide pause` and dropped by any later `guide active` or `payload step`/`wait`/`inject` refresh).
 `stop.flow.guard` treats a marker younger than 30 minutes as "a guide is
 active" and skips the card requirement entirely for that turn (Gate 1 never
 fires) — see `scripts/guide-active-state.js` — `isGuideActive`. SKILL.md
@@ -361,6 +361,16 @@ Step 5's "Resuming in a new turn") and clears it in Step 6 (normal end) and
 Step 7 (aborted/closed). The 30-minute expiry means a guide that crashed
 before reaching Step 6/7 (tab killed, process crashed) does not silence the
 card gate for the rest of the session.
+
+The exemption alone did not keep the loop alive (#619): Claude could still
+end the turn on its own (e.g. after a few hidden-tab timeouts), stranding the
+next click. So while the marker is fresh **and not paused**
+(`isGuideLoopLive`), `stop.flow.guard` blocks a card-less turn end once with
+"guide loop still active — continue 5c …". `stop_hook_active` lets the
+follow-up stop through, so it never loops; a rendered card is never blocked by
+this rule. The 20-min pause step (recovery.md § Ends · paused) runs
+`guide pause` first, so a deliberate pause ends the turn without a block; a
+cleared marker (done/aborted/closed) has no marker to read at all.
 
 While the panel is genuinely unattended (Claude's turn ended without
 clearing the marker, or between turns), the overlay's own #513 heartbeat
@@ -380,4 +390,5 @@ recovery) — the "Claude is paused, type in chat" message #526 asks for.
 | `store --file <path> --key <KEY> [--b64 <value>]` | Value from `--b64` (base64, the panel's `secret` encoding) or from stdin. Upserts `KEY=value` in a dotenv-style file (creates it, keeps other lines and comments, quotes when needed). Guards: file inside CWD, no symlink, not git-tracked, no control characters, mode 0600 — and inside a git work tree the file must be gitignored (`git check-ignore`), else it refuses and names the `.gitignore` line to add: an untracked secret file is one `git add -A` away from a push. Prints only `stored KEY → <path>`. |
 | `pause <seconds>` | Sleeps 1–55 s and prints `paused Ns` — the gap between two `payload wait 0` drains while the tab is hidden, and between two probes of a redirect chain (`recovery.md`). |
 | `guide active` / `guide clear` | Writes (with the channel token, kept until `guide clear`) / removes `<project>/.claude/auto-guide-active.json` (#526 § Not ending the turn mid-loop above). A failed removal exits 1 with `guide-clear-failed`, never `guide-cleared`. |
-| `guide status` | `{active, ageMinutes, lastStep}` from the marker — the last step sent, for resuming after a compaction or restart. Never prints the token. |
+| `guide pause` | Sets `paused: true` on the marker (token and `lastStep` kept, TTL refreshed) and prints `guide-paused <file>` — the 20-min pause step, so the stop guard lets the turn end (#619). Without a marker it exits 1 with `guide-pause-failed: no active guide`. |
+| `guide status` | `{active, ageMinutes, lastStep, paused}` (`paused` only when a marker exists) from the marker — the last step sent, for resuming after a compaction or restart. Never prints the token. |

@@ -980,6 +980,31 @@ describe("CLI: guide active / clear", () => {
     expect(r.code).toBe(0);
   });
 
+  test("guide pause sets paused on the marker, keeps the token; guide active un-pauses (#619)", () => {
+    const dir = makeTmpDir();
+    run(["guide", "active"], { cwd: dir });
+    const file = path.join(dir, ".claude", "auto-guide-active.json");
+    const token = JSON.parse(fs.readFileSync(file, "utf8")).token;
+    const r = run(["guide", "pause"], { cwd: dir });
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe(`guide-paused ${file}`);
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect(data.paused).toBe(true);
+    expect(data.token).toBe(token);
+    expect(JSON.parse(run(["guide", "status"], { cwd: dir }).stdout).paused).toBe(true);
+
+    run(["guide", "active"], { cwd: dir });
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).paused).toBeUndefined();
+  });
+
+  test("guide pause without a marker exits 1 and creates nothing (#619)", () => {
+    const dir = makeTmpDir();
+    const r = run(["guide", "pause"], { cwd: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("guide-pause-failed: no active guide");
+    expect(fs.existsSync(path.join(dir, ".claude", "auto-guide-active.json"))).toBe(false);
+  });
+
   test("unknown guide subcommand prints usage on stderr, exit 2", () => {
     const r = run(["guide", "frobnicate"]);
     expect(r.code).toBe(2);

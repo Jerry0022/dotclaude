@@ -1,6 +1,6 @@
 /**
  * @module guide-active-state
- * @version 0.4.0
+ * @version 0.5.0
  * @description Small on-disk marker recording "an /auto-guide run is
  *   currently active", shared between `web-guide.js` (writer, called from
  *   SKILL.md Step 3 / Step 6 / Step 7) and `stop.flow.guard` (reader, #526):
@@ -26,6 +26,13 @@
  *   disk, keeping the marker free of anything that looks like user input.
  *   `markGuideActive` preserves whatever `lastStep`/`lastStepTs` is already on
  *   the marker across a plain refresh (it never writes step data itself).
+ *
+ *   Paused state (#619): `pauseGuide` sets `paused: true` (the 20-min pause
+ *   step in recovery.md § Ends) — the marker, token and lastStep stay, but the
+ *   poll loop is deliberately stopped. `markGuideActive` and `recordGuideStep`
+ *   drop the flag again: any resumed activity un-pauses. stop.flow.guard reads
+ *   `isGuideLoopLive` (active AND not paused) to block a premature turn end
+ *   once; a paused guide ends its turn freely.
  */
 
 const fs = require('fs');
@@ -94,6 +101,30 @@ function markGuideActive(cwd, now = Date.now()) {
   // recorded step — only recordGuideStep and guide clear ever change it.
   if (prev && prev.lastStep !== undefined) data.lastStep = prev.lastStep;
   if (prev && typeof prev.lastStepTs === 'number') data.lastStepTs = prev.lastStepTs;
+  // `paused` is deliberately not carried over: a refresh means the loop runs.
+  writeMarkerFile(file, data);
+  return file;
+}
+
+/**
+ * Mark the guide as deliberately paused (#619, the 20-min pause step): keeps
+ * token/lastStep/lastStepTs, refreshes `ts` so the token stays valid for the
+ * resume, and sets `paused: true` so stop.flow.guard lets the turn end. A
+ * no-op returning null when there is no marker — pausing must never
+ * resurrect a cleared guide.
+ * @param {string} cwd
+ * @param {number} [now]
+ * @returns {string|null} the marker file path, or null when nothing was written
+ */
+function pauseGuide(cwd, now = Date.now()) {
+  const prev = readMarker(cwd);
+  if (!prev) return null;
+  const file = guideActiveFilePath(cwd);
+  const keep = typeof prev.token === 'string' && TOKEN_RE.test(prev.token);
+  const token = keep ? prev.token : crypto.randomBytes(16).toString('hex');
+  const data = { ts: now, token, paused: true };
+  if (prev.lastStep !== undefined) data.lastStep = prev.lastStep;
+  if (typeof prev.lastStepTs === 'number') data.lastStepTs = prev.lastStepTs;
   writeMarkerFile(file, data);
   return file;
 }
@@ -207,12 +238,27 @@ function isGuideActive(cwd, now = Date.now()) {
 }
 
 /**
+ * The guide's poll loop is supposed to be running right now (#619): the
+ * marker is fresh AND not paused. stop.flow.guard blocks a card-less turn end
+ * once while this holds.
+ * @param {string} cwd
+ * @param {number} [now]
+ * @returns {boolean}
+ */
+function isGuideLoopLive(cwd, now = Date.now()) {
+  if (!isGuideActive(cwd, now)) return false;
+  const data = readMarker(cwd);
+  return !(data && data.paused === true);
+}
+
+/**
  * A resume/compaction-friendly snapshot of the marker — NEVER includes the
  * channel token (`web-guide.js guide status` prints this verbatim to
  * stdout, which can end up in a transcript).
  * @param {string} cwd
  * @param {number} [now]
- * @returns {{active: boolean, ageMinutes: number|null, lastStep: *}}
+ * @returns {{active: boolean, ageMinutes: number|null, lastStep: *, paused?: boolean}}
+ *   `paused` is only present when a marker exists.
  */
 function getGuideStatus(cwd, now = Date.now()) {
   const data = readMarker(cwd);
@@ -224,6 +270,7 @@ function getGuideStatus(cwd, now = Date.now()) {
     active: now - data.ts <= GUIDE_ACTIVE_TTL_MS,
     ageMinutes,
     lastStep: data.lastStep !== undefined ? data.lastStep : null,
+    paused: data.paused === true,
   };
 }
 
@@ -236,6 +283,8 @@ module.exports = {
   readGuideToken,
   touchGuideToken,
   isGuideActive,
+  isGuideLoopLive,
+  pauseGuide,
   recordGuideStep,
   hasValueField,
   getGuideStatus,

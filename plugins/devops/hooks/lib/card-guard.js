@@ -420,6 +420,10 @@ function lastUserEntryIsNotification(transcriptContent) {
  *                                     never forced to end — that would kill the panel's
  *                                     wait() loop. The marker itself expires after 30 min
  *                                     idle, so a crashed guide cannot disable this forever.
+ * @param {boolean} [s.guideLoopLive] — the guide marker is fresh AND not paused (#619): a
+ *                                     card-less turn end is blocked once (stopHookActive
+ *                                     lets the follow-up through) instead of exempted —
+ *                                     ending the turn mid-loop strands panel clicks.
  * @param {string}  [s.cardText]      — the rendered card's markdown (last assistant text),
  *                                     used for the content gates (title / result lines /
  *                                     points) and the notification-turn duplicate check
@@ -441,7 +445,7 @@ function decideAction({
   validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
-  widgetFile, widgetCalled, guideActive,
+  widgetFile, widgetCalled, guideActive, guideLoopLive,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -481,7 +485,16 @@ function decideAction({
   // exemptions: only when no card was actually rendered this turn (a real
   // card, e.g. because the guide just ended, still passes through the normal
   // gates below).
+  //
+  // #619: while the loop is live (marker fresh, not paused) a card-less turn
+  // end is itself the bug — a Weiter click then sits in the overlay queue
+  // until the user writes in chat. Block it once (stopHookActive above lets
+  // the follow-up stop through, so this never loops). A paused guide (the
+  // 20-min pause step) keeps the plain exemption.
   if (guideActive && !cardRendered) {
+    if (guideLoopLive) {
+      return { action: 'block', resetFlags: false, reason: buildGuideLoopReason() };
+    }
     return { action: 'pass', resetFlags: true, exempt: 'guide-active' };
   }
 
@@ -900,6 +913,16 @@ function buildPointsReason(detail) {
   ].join('\n');
 }
 
+function buildGuideLoopReason() {
+  return [
+    '[stop.flow.guard] guide loop still active — continue 5c (hidden → W payload wait 0 + W pause 25) until next/abort/closed or the 20-min pause step.',
+    '',
+    'Never end the turn while the guide waits on the panel: a click on Weiter would sit unanswered in the overlay queue.',
+    'A hidden tab is no reason to stop — keep draining; speak in chat only after sending the „Frage im Chat" step.',
+    'To end on purpose, run the pause step (`W guide pause`) or clear the guide (`W guide clear`).',
+  ].join('\n');
+}
+
 function buildDuplicateCardReason() {
   return [
     '[stop.flow.guard] Duplicate card on a notification turn — nothing changed since the last one.',
@@ -973,6 +996,7 @@ module.exports = {
   widgetCardTitle,
   decideAction,
   buildBlockReason,
+  buildGuideLoopReason,
   renderLadderLines,
   offlineRendererPath,
   buildValidationReason,

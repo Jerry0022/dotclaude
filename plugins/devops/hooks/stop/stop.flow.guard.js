@@ -77,7 +77,7 @@ const {
 const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
 const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { releaseOnce } = require('../lib/run-once');
-const { isGuideActive } = require('../../scripts/guide-active-state');
+const { isGuideActive, isGuideLoopLive } = require('../../scripts/guide-active-state');
 const { execFileSync } = require('child_process');
 
 /**
@@ -175,6 +175,8 @@ process.stdin.on('end', () => {
   // #526: a fresh <project>/.claude/auto-guide-active.json marker means an
   // /auto-guide run is mid-loop — never force the card that would end it.
   const guideActive = silent ? false : isGuideActive(hook.cwd);
+  // #619: fresh AND not paused — then a card-less turn end is blocked once.
+  const guideLoopLive = guideActive ? isGuideLoopLive(hook.cwd) : false;
 
   // The sidebar prefix belongs to the turn that just ended (📦 Ready, 🧪 Test,
   // 🚀 Shipped, …). The next real prompt starts new work, so hand the wrench
@@ -212,6 +214,7 @@ process.stdin.on('end', () => {
     widgetFile,
     widgetCalled,
     guideActive,
+    guideLoopLive,
   });
 
   if (decision.resetFlags) {
