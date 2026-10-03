@@ -224,4 +224,16 @@ describe("do-batch bundle plan — issue #483", () => {
     expect(step49).toMatch(/besitzt .*Schnittstellen: .*nach: .*Prüfung:/);
     expect(step49).toMatch(/one agent per bundle/);
   });
+
+  it("4.4 cuts bundles per area with a size recommendation, not per note", () => {
+    expect(step44).toMatch(/One bundle per area, not per note/);
+    expect(step44).toMatch(/2–6 bundles/);
+    expect(step44).toMatch(/Never one bundle\s+per note/);
+  });
+
+  it("4.4 and 4.9 hand the feasibility findings on per bundle", () => {
+    expect(step44).toMatch(/Findings per bundle — hand the 4\.3 analysis on/);
+    expect(step49).toMatch(/Befunde: <file:line facts/);
+    expect(step49).toMatch(/`Befunde:` into that agent's prompt/);
+  });
 });

@@ -382,20 +382,33 @@ The plan must carry:
    dann ~1 s Delay, in dieser 1 s kein Abwerfen" goes into the plan as
    written, never as "Zähler-Timing anpassen". A detail missing from the plan
    is lost, because the receiving skill never sees the notes.
-2. **Bundles that own separate files.** Group the work into bundles that can
-   run in parallel without editing the same files. Each bundle names the notes
-   it covers and the files or surfaces it owns. Two bundles never own the same
-   file. If a file cannot be split, the notes that touch it go into one
-   bundle.
+2. **One bundle per area, not per note.** Cut bundles along coherent areas
+   of the product — one screen or flow, one subsystem, one data path — and
+   put every note that touches that area into its bundle, so one agent
+   explores the area once instead of several agents exploring it in
+   parallel. Bundles own separate files and can run in parallel.
+   Two bundles never own the same file; notes on a file that cannot be
+   split share its bundle. Sizing, as a recommendation: a typical batch of 5–15
+   notes lands at **2–6 bundles**. One bundle only when everything really
+   touches one area; split an area once it carries more than ~6 notes or
+   ~15 files, along a seam inside it (sub-screen, layer). Never one bundle
+   per note, never a bundle for a single trivial note that an area bundle
+   next to it can absorb. Name the area in the bundle name.
 3. **Named interfaces and order.** Where bundles meet, name the contract, e.g.
    "engine emits a spawn event at turn end, UI animates it". Where one bundle
    needs another first, say so ("B2 after B1"). No dependency means the
    bundles run in parallel.
 4. **Verification per bundle.** How each bundle is shown to work: the test,
    the check, the screen.
-
-One bundle is fine when everything touches one surface. Do not split work
-just to have more bundles.
+5. **Findings per bundle — hand the 4.3 analysis on.** What the feasibility
+   check already established for this bundle: the files and lines involved,
+   the existing function or component to change, the approach chosen, the
+   traps seen (a shared helper, a test that pins the behaviour). The agent
+   that builds the bundle starts with an empty context; without this line it
+   searches the same code again, and in measured batches more than half of
+   an implementing agent's calls were reads and searches. Facts only, with
+   `file:line` — no guesses dressed as findings. A bundle the check did not
+   look at says so (`Befunde: —`).
 
 **4.5 Surface conflicts individually — never resolve them silently.**
 
@@ -480,7 +493,8 @@ Notizen: <archived path from 4.7>
 Abdeckung: #1 … #N, one line each, dispositions as in 4.2
 Plan: <the merged plan, every note detail kept (4.4.1)>
 Bündel:
-  B1 <name> — Notizen #…; besitzt <files/surfaces>; Schnittstellen: <contract with Bx>; nach: <Bx | —>; Prüfung: <verification>
+  B1 <area name> — Notizen #…; besitzt <files/surfaces>; Schnittstellen: <contract with Bx>; nach: <Bx | —>; Prüfung: <verification>
+     Befunde: <file:line facts, approach, traps from 4.3 | —>
   B2 …
 Konflikte / nicht machbar: <each one named, with the default taken or "offen">
 Offene Entscheidungen: <auto-concept only — the forks that made 4.6 route here>
@@ -494,7 +508,8 @@ Offene Entscheidungen: <auto-concept only — the forks that made 4.6 route here
   decision as a decision item (its Step 0.5 § Started from do-batch).
 - The `Bündel:` section travels unchanged on both routes. `auto-agents` uses
   it for its waves: one agent per bundle, file ownership as given, a bundle
-  with `nach:` in a later wave. It does not work the split out again.
+  with `nach:` in a later wave. It does not work the split out again, and it
+  puts each bundle's `Befunde:` into that agent's prompt as its starting point.
 
 Never both, and never implement anything here before the hand-off: the
 receiving skill owns the run from this point.

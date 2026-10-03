@@ -391,6 +391,13 @@ describe("message builders", () => {
     expect(ctx).toContain('"Bündel:"');
   });
 
+  test("the merge context bundles per area and hands the findings on", () => {
+    const ctx = buildMergeContext([{ at: "2026-08-16T10:00:00.000Z", text: "x" }], "", "/tmp/p/.claude/batch.md");
+    expect(ctx).toContain("Ein Bündel pro inhaltlichem BEREICH");
+    expect(ctx).toContain("Richtwert 2–6 Bündel");
+    expect(ctx).toMatch(/Befunde: <Datei:Zeile-Fakten/);
+  });
+
   test("the merge context hands the plan to auto-concept or do-run, never implements", () => {
     // The marker path never loads the skill, so the Step 4.6 hand-off rule has
     // to ride along: do-batch plans, the receiving skill runs.
