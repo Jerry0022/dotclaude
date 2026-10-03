@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.243.0] — 2026-10-03
+
+### Changed
+- **Concept close-out: an active choice confirms the row.** In the final report's close-out sheet, clicking an option in "Jetzt shippen?" or "Diese Seite" — the pre-selected default included — now confirms that row and opens the next one, exactly like "Weiter ›". "Weiter ›" stays the way to take the default untouched, never a forced second click. A choice click never submits (only "⚠ Ausführen" does); arrow-key browsing through the radios and the multi-item open-points row do not auto-advance.
+
+### Tests
+- 4 jsdom behaviour tests (ship click, default re-click, arrow keys, followups row) plus a wiring assertion.
+
 ## [0.242.0] — 2026-10-01
 
 ### Removed
