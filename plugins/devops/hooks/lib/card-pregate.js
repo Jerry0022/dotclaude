@@ -25,6 +25,10 @@
  *                                 running in the background, no `verification`
  *                                 skip) — asked BEFORE the card, so a skip
  *                                 lands on the card instead of as prose below it
+ *   plus one check of its own (#624):
+ *     A  `analysis` after a change — the variant claims nothing changed, but
+ *        this turn ran a write-type tool (file edit, implementing agent,
+ *        DB write, deploy, delete, push)
  *
  *   One refusal per identical finding: the same findings on the next call
  *   render anyway, so a false positive can never lock the card out — the
@@ -47,6 +51,7 @@ const {
   cardSkipReason, buildCardVerificationReason,
 } = require('./browsertest-guard');
 const { BGRUN_FLAG } = require('./light-bgrun');
+const { isPromptEntry } = require('./skill-invocations');
 
 const EXACT = { exact: true };
 const REFUSED_PREFIX = 'dotclaude-devops-card-pregate';
@@ -64,6 +69,75 @@ function findTranscript(sessionId, home = os.homedir()) {
   return null;
 }
 
+// #624 — tools whose use means the turn changed something, so `analysis`
+// ("nothing changed anywhere") is the wrong card.
+const FILE_WRITE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit']);
+const IMPLEMENTING_AGENT_RE = /(^|:)(core|frontend|feature|ai|designer)$/;
+const WRITE_MCP_RE = /(apply_migration|deploy|delete|trash|merge_branch|merge_pull_request|create_or_update_file|push_files)/i;
+const SQL_WRITE_RE = /\b(insert|update|delete|drop|alter|truncate|create)\b/i;
+const SHELL_WRITE_RE = /(\brm\s|\bgit\s+push\b|\bDELETE\s+FROM\b|\bDROP\s+TABLE\b)/i;
+
+/** The write-type tool a tool_use block counts as, or null. */
+function writeToolLabel(block) {
+  const name = String(block.name || '');
+  const input = block.input && typeof block.input === 'object' ? block.input : {};
+  if (FILE_WRITE_TOOLS.has(name)) return name;
+  if ((name === 'Agent' || name === 'Task') && IMPLEMENTING_AGENT_RE.test(String(input.subagent_type || ''))) {
+    return `${name} ${input.subagent_type}`;
+  }
+  if (name.startsWith('mcp__')) {
+    const short = name.slice(name.lastIndexOf('__') + 2);
+    if (/execute_sql/i.test(short)) return SQL_WRITE_RE.test(String(input.query || '')) ? short : null;
+    if (WRITE_MCP_RE.test(short)) return short;
+    return null;
+  }
+  if ((name === 'Bash' || name === 'PowerShell') && SHELL_WRITE_RE.test(String(input.command || ''))) return name;
+  return null;
+}
+
+/**
+ * Write-type tools used THIS turn (back to the turn's opening prompt),
+ * deduplicated, in first-seen order from the end.
+ * @param {string} transcript raw JSONL
+ * @returns {string[]}
+ */
+function writeToolsThisTurn(transcript) {
+  if (typeof transcript !== 'string' || !transcript) return [];
+  const seen = new Set();
+  const lines = transcript.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (!entry || typeof entry !== 'object') continue;
+    if (entry.type === 'user') {
+      if (isPromptEntry(entry)) break;
+      continue;
+    }
+    if (entry.type !== 'assistant') continue;
+    const content = entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (!block || block.type !== 'tool_use') continue;
+      const label = writeToolLabel(block);
+      if (label) seen.add(label);
+    }
+  }
+  return [...seen];
+}
+
+function buildAnalysisWriteReason(tools) {
+  return [
+    `[stop.flow.guard] Variant \`analysis\` but this turn changed something: ${tools.join(', ')}.`,
+    '`analysis` means nothing changed anywhere — an answer or an investigation (#624).',
+    'Work done outside the repo (DB op, delete, deploy, migration, settings) → `fallback`;',
+    'implementation handed to agents still running → `ready`/`test` + `pending`;',
+    'a mode activation (batch, concept) → its override. Pick the right variant and render again;',
+    'if `analysis` really is right, the same call renders on the next try.',
+  ].join('\n');
+}
+
 /**
  * The gate findings for a card payload. Pure apart from what it is handed.
  *
@@ -73,9 +147,10 @@ function findTranscript(sessionId, home = os.homedir()) {
  * @param {string[]|null} ctx.openTasks   — running background work by name; null = unknown
  * @param {null|{ kind?: string, red?: boolean }} ctx.verificationOwed — the Light
  *   check is owed and no test runs in the background (flags); null = not owed
+ * @param {string[]} ctx.writeTools — write-type tools used this turn (#624)
  * @returns {string[]} one reason per failed gate (card-guard wording)
  */
-function findings(input, { validationPending = false, openTasks = null, verificationOwed = null } = {}) {
+function findings(input, { validationPending = false, openTasks = null, verificationOwed = null, writeTools = [] } = {}) {
   const out = [];
   const word = titleStatusWordViolation(String(input.summary || ''));
   if (word) out.push(buildTitleStatusWordReason(word));
@@ -96,6 +171,10 @@ function findings(input, { validationPending = false, openTasks = null, verifica
 
   if (verificationOwed && !VERIFICATION_EXEMPT_VARIANTS.has(input.variant) && !cardSkipReason(input)) {
     out.push(buildCardVerificationReason(verificationOwed.kind, { red: verificationOwed.red === true }));
+  }
+
+  if (input.variant === 'analysis' && Array.isArray(writeTools) && writeTools.length > 0) {
+    out.push(buildAnalysisWriteReason(writeTools));
   }
   return out;
 }
@@ -132,7 +211,8 @@ function check(input, { home, tmp } = {}) {
     const transcript = transcriptPath ? safeReadTranscript(transcriptPath, PENDING_TAIL_BYTES) : '';
     const openTasks = transcript ? openTaskNames(scanOpenTasks(transcript)) : null;
     const verificationOwed = readVerificationOwed(sessionId);
-    const reasons = findings(input, { validationPending, openTasks, verificationOwed });
+    const writeTools = writeToolsThisTurn(transcript);
+    const reasons = findings(input, { validationPending, openTasks, verificationOwed, writeTools });
 
     const file = tmp ? path.join(tmp, `${REFUSED_PREFIX}-${sessionId}`) : sessionFile(REFUSED_PREFIX, sessionId);
     if (reasons.length === 0) {
@@ -164,4 +244,4 @@ function refusalText(reasons) {
   return [...head, '', ...body].join('\n').replace(/\[stop\.flow\.guard\] /g, '');
 }
 
-module.exports = { check, findings, findTranscript, readVerificationOwed, refusalText, REFUSED_PREFIX };
+module.exports = { check, findings, findTranscript, readVerificationOwed, refusalText, writeToolsThisTurn, REFUSED_PREFIX };

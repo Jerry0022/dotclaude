@@ -241,3 +241,45 @@ describe('card-pregate — verification owed (#612)', () => {
     } finally { clearLight(); }
   });
 });
+
+// #624 — `analysis` means nothing changed anywhere; a turn that ran a
+// write-type tool gets one refusal naming the tools.
+describe('card-pregate — analysis after a change (#624)', () => {
+  const { writeToolsThisTurn } = require('./card-pregate.js');
+  const prompt = (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
+  const analysis = { variant: 'analysis', summary: 'Ursache gefunden' };
+
+  test('collects write-type tools of this turn only', () => {
+    const t = [
+      toolUse('t0', 'Edit', { file_path: 'old.js' }),
+      prompt('neuer Turn'),
+      toolUse('t1', 'Read', { file_path: 'a.js' }),
+      toolUse('t2', 'mcp__x__execute_sql', { query: 'select 1' }),
+      toolUse('t3', 'mcp__x__execute_sql', { query: 'DELETE FROM objects' }),
+      toolUse('t4', 'Agent', { subagent_type: 'devops:core' }),
+      toolUse('t5', 'Agent', { subagent_type: 'devops:research' }),
+      toolUse('t6', 'Bash', { command: 'git status' }),
+      toolUse('t7', 'Bash', { command: 'git push origin main' }),
+    ].join('\n');
+    expect(writeToolsThisTurn(t)).toEqual(['Bash', 'Agent devops:core', 'execute_sql']);
+  });
+
+  test('findings: analysis + write tools → reason; other variants or no tools → none', () => {
+    expect(findings(analysis, { writeTools: ['Edit'] }).join('\n')).toMatch(/Variant `analysis` but this turn changed something: Edit/);
+    expect(findings(analysis, { writeTools: [] })).toEqual([]);
+    expect(findings({ ...analysis, variant: 'fallback' }, { writeTools: ['execute_sql'] })).toEqual([]);
+  });
+
+  test('check: refuses once, renders on the repeat', () => {
+    setup({ transcript: [prompt('lösch die Kopien'), toolUse('t1', 'mcp__s__execute_sql', { query: 'delete from x' })].join('\n') });
+    const first = check({ ...analysis, session_id: sid }, { home, tmp });
+    expect(first.refuse).toBe(true);
+    expect(first.text).toMatch(/fallback/);
+    expect(check({ ...analysis, session_id: sid }, { home, tmp }).refuse).toBe(false);
+  });
+
+  test('a pure investigation turn renders analysis directly', () => {
+    setup({ transcript: [prompt('warum?'), toolUse('t1', 'Read', { file_path: 'a.js' }), toolUse('t2', 'Grep', { pattern: 'x' })].join('\n') });
+    expect(check({ ...analysis, session_id: sid }, { home, tmp }).refuse).toBe(false);
+  });
+});
