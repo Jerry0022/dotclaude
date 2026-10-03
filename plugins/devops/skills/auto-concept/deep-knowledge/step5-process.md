@@ -2,6 +2,14 @@
 
 Round marking, reading a submission, checkpoints and the iterate / implement / finalize branches — execution detail of `SKILL.md` Step 5, 5a and 5b, moved here verbatim. Each `##` section below is named by exactly one mandatory pointer in `SKILL.md`, at the place the text used to stand; read it completely before executing that step — it is as binding as the step itself.
 
+## Step 5 · The cycle
+
+Feedback is processed **iteratively**, not as a one-shot. The cycle:
+
+```
+User submits → Claude reads → Claude processes → Claude updates page → User can act again
+```
+
 ## Mark the round as work
 
 A submission usually arrives as the waker's task notification, not as a user
@@ -124,20 +132,8 @@ never re-run a completed step. The checkpoint records what the previous run
 5. Proceed to Step 5c (append next iteration with refined options that
    reflect the Miteinbeziehen/Verwerfen choices)
 
-## 5b · implement — reality-check verdicts and steps 1–4
+## 5b · implement steps 1–4
 
-   - Otherwise `POST /status {"phase":"reality-check","version":$NOTED_VERSION}`
-     (before the fetch, so the longer wait stays legible), then run
-     `node "{plugin-root}/scripts/concept-drift.js" --state "{session-cwd}/.claude/concept-active.json" --owner {owner} --paths "<paths the concept names>"`.
-   - `verdict: "skip"` or `"clear"` → advance the baseline (`--capture --sha
-     <advanceTo>`) and continue with step 1 below. Every unresolvable condition
-     — no remote, offline, force-pushed baseline — lands here: the check never
-     blocks an implement order.
-   - `verdict: "candidates"` → apply the force classes. Nothing that must force
-     → continue with step 1, mentioning the drift in the final report. Something
-     must force → checkpoint `reality-check-forced`, then append ONE
-     reality-check round instead of implementing (Step 5c) and stop. Do NOT post
-     `phase: "implemented"` — no code was written.
 1. **Summarize** what was selected/rejected/commented. **Mappings:** the
    assignment IS the spec — generate the component / view / data projection
    per target with exactly the assigned items in `order`, never quietly

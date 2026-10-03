@@ -105,28 +105,21 @@ because the session feels like it is ending.
    Nachtrag. Never silently downgrade it to an issue: the user asked for code
    and has to see that they did not get it.
 
-## C · Disposition staging and the ship pipeline
+## C · Disposition staging per mode
 
    - `keep`, no `moveTo` → nothing (plus the attachments copy + `git add`
-     from § Also dispose of the durable store).
+     from `step6-closeout.md` → Also dispose of the durable store).
    - `keep` + `moveTo` → `cp` the HTML and the decisions JSON into
      `<moveTo>/`, `git add` the copies, `git rm --cached` the originals
      (if tracked).
    - `gitignore` → the `.gitignore` line and the `git rm --cached` from the
-     table in Step 6a.
+     table in Step 6a (`step6-closeout.md` § Disposition, cleanup procedure and disposition tables).
    - `discard` → `git rm --cached` the HTML and the decisions JSON if
      tracked.
    Nothing to commit → no commit. Step 6a then skips the git half of its
    table for this close-out and only moves or deletes the files on disk
    (for `keep` + `moveTo`: delete the originals, the copies are already in
    place).
-1. Run the full ship pipeline via the `do-ship` skill (ship_preflight →
-   ship_build → ship_version_bump → ship_release → ship_cleanup). The execute
-   click authorises the ship; it does NOT waive the gates `ship` already
-   enforces. If a gate blocks, report the blocker to the user and STOP —
-   never fake a completion or force past a failing gate. (A force-push to
-   main/master still requires explicit user confirmation per the user's own
-   rules — the execute click does not stand in for that.)
 
 ## D · Reload and reset per disposition
 
@@ -146,7 +139,17 @@ because the session feels like it is ending.
    report or an HTTP 404. The bridge shutdown that follows is the honest
    end-of-session signal.
 
-## Legacy rationale and the critical invariant
+## Legacy mapping, rationale and the critical invariant
+
+Pages generated before the close-out sheet submit one action at a time.
+Map each onto the part that does the SAME THING — never onto the letter it
+used to have, which shifted when the implement part was inserted:
+
+| Legacy action | Runs |
+|---|---|
+| `create-issues` | part A (issues) + Step 6 with the bundled disposition |
+| `ship` | part C (ship) + Step 6 |
+| `dispose-concept` | part D (close out) only |
 
 A legacy page has no way to express "jetzt umsetzen", so part B never runs
 for one. Keep accepting all three — a mid-session plugin update leaves such a

@@ -43,27 +43,7 @@ and read the decisions back on the next turn with `ArtifactData` — no bridge,
 no crons, no Edge start. The steps, the wrapper contract and the card:
 `deep-knowledge/artifact-fallback.md`.
 
-## Forbidden alternatives, open command, 200 gate, token check
-
-- ❌ **Never** use `preview_start` / `preview_*` (`mcp__Claude_Browser__*`, formerly `mcp__Claude_Preview__*`) to
-  display the page. The preview pane is a sandboxed in-IDE iframe — it
-  has no heartbeat connection, no cron polling, and the user cannot
-  interact with it the way the concept flow needs. `mcp__Claude_Preview__*`
-  is in `allowed-tools` ONLY for `preview_eval` during Step 5 page
-  updates, never for opening the page.
-- ❌ **Never** use `mcp__plugin_playwright_playwright__browser_navigate`
-  to open the page. Playwright spawns its own browser instance — the user
-  will not see it.
-- ❌ **Never** print "Concept opened at file:///… open it in your browser"
-  and stop. The bridge server requires the page to be loaded via
-  `http://localhost:{port}/…`, not `file://`.
-- ❌ **Never** bake a "copy the decisions JSON and paste it into the chat"
-  block (clipboard button, `navigator.clipboard`, "In Zwischenablage
-  kopieren", "füg es mir in den Chat ein") into the page. That manual
-  handoff is the failure this whole flow exists to avoid — the live bridge
-  already delivers decisions. The decision panel's two submit buttons +
-  bridge are the **only** sanctioned mechanism, and the panel may never be
-  omitted. The `post.concept.gate` hook blocks any page that violates this.
+## Open command, 200 gate, token check
 
 The **only** correct invocation is the OS `start`/`open` shell command
 that hands the URL to the user's default Edge window, which then opens

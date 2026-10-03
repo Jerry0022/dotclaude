@@ -230,7 +230,13 @@ omits the iterate/implement buttons. If the user wants more work after
 the final report, they can start a new concept session — that's a clear
 new scope, not an additional iteration on a closed one.
 
-## 5d · Re-confirm every wake
+## 5d · Re-launch the waker, re-confirm every wake
+
+**Re-launch the pickup waker.** It exited to wake you for the submission you
+just processed, so nothing is watching `/pending` until you start it again —
+exactly as in Step 3 (`bridge-server.md` § step 3, task 2), with
+`run_in_background: true`. Do this at 5c step 7, the moment `/reset` lands; by
+the time you reach 5d it should already be running.
 
 **Before processing a wake, re-confirm.** Two wakers on the same port both exit
 `PENDING_SUBMISSION`, and the second wake arrives after `/reset` has already
@@ -254,7 +260,7 @@ Skipping it is how a concept silently stops responding after iteration 1: the
 page still shows a green indicator (the pulser keeps `claude_ts` warm), the user
 submits again, and nothing picks it up until they ask in chat.
 
-## 5d · Exit reasons
+## 5d · Exit reasons, loop end, expected final-report action
 
 **Act on the exit reason.** A background task announces why it stopped; each
 reason has exactly one correct response:
@@ -275,7 +281,10 @@ reason has exactly one correct response:
 Re-launch the pulser only when you actually saw a `PULSER_EXIT` — normally it
 runs for the whole session and a second one on the same port is wasted work.
 
-## 5d · Expected action on the final report
+Then return to Step 4 (monitor for next submission). The loop continues until:
+- The user closes the page
+- The user says "fertig" / "done" in chat
+- There are no more decisions to make (all items processed)
 
 If the active section is the final report, the submission Claude expects is
 `action: "finalize"` — one payload from the close-out sheet carrying

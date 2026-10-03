@@ -2,7 +2,7 @@
 
 Mode question, count preferences, per-iteration template choice, design authoring, form factors, content variants and mapping specs — execution detail of `SKILL.md` Step 0.5 and Step 1 (1a, 1a-ii, 1b, 1c), moved here verbatim. Each `##` section below is named by exactly one mandatory pointer in `SKILL.md`, at the place the text used to stand; read it completely before executing that step — it is as binding as the step itself.
 
-## Step 0.5 · Asking, and the do-batch start
+## Step 0.5 · Asking, the do-batch start, count preferences
 
 **Ask unless it is already obvious.** If the invocation prompt names the
 mode, or it can be derived unambiguously — "design me the settings page"
@@ -32,7 +32,13 @@ decision, both → mixed) — skip the question. Never drop a coverage line:
 the list travels into the page unchanged. Implementation then runs through
 the implement click (`auto-agents`), not through a second do-run.
 
-## Count preferences
+The mode is decided **once per concept**, not once per iteration. Later
+iterations (Step 5c) still pick their own template through the 1a check —
+the mode only says which templates are in scope. Feedback that pulls the
+concept the other way ("zeig mir das mal als Mockup" on a decision concept)
+widens the mode silently; no second question.
+
+### Count preferences — recommendations, not instructions
 
 These keep the page scannable for the user. They are Claude's defaults,
 not user instructions: an explicit count from the user always wins, and
@@ -107,7 +113,7 @@ stay on one template throughout.
    design pin the **top 3 at least, top 7 at most**, ranked by how much the
    answer changes the design; below three the design is not being
    questioned enough, above seven the mock is wallpapered. See
-   § Annotation Layer (optional) below. Skip the layer only when a design
+   `step2-feedback.md` § Annotation Layer (optional). Skip the layer only when a design
    genuinely has nothing element-level to ask — a rare case, not the
    default.
 
@@ -165,7 +171,7 @@ most and then asks its own, design-independent question.
 
 | Template | Layout signature |
 |---|---|
-| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs; both FABs carry a locale tooltip (`title` + `aria-label`, swapped open/close) and the 💬 FAB pulses once until first use so it is not an unlabelled circle; view segments alongside it when ≥1 optional view (§ Views (optional)), device-view toggle bottom-left when ≥2 form factors |
+| **design** | Fullscreen content, overlay decision panel (☰ FAB top right, collapsed by default), speech-bubble feedback dock on the 💬 FAB bottom right (same 60px circle as ☰; collapsed by default; general / per-design / per-screen / per-view comments), design switcher when ≥2 designs; both FABs carry a locale tooltip (`title` + `aria-label`, swapped open/close) and the 💬 FAB pulses once until first use so it is not an unlabelled circle; view segments alongside it when ≥1 optional view (`step2-feedback.md` § Views (optional)), device-view toggle bottom-left when ≥2 form factors |
 | **decision** | Document column, variant cards, tri-state per variant; notes inline on the card; the 💬 dock (bottom right, same as design) holds the general note + attachments |
 | **free** | Document column, Claude-authored freeform body, optional tri-state per section; notes inline; the 💬 dock holds the general note + attachments |
 

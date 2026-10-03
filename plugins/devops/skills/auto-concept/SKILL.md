@@ -59,17 +59,7 @@ concept the user wants. Three modes exist:
 | **design** | Pure design concept — visual directions / mockups / click-dummies | `design` only — no decision views, no `decision` iteration |
 | **mixed** | Both — the visual call AND the non-visual calls belong to the same concept | `design` iteration(s) carrying decision views where the question is *about the mock*, and/or a separate `decision` iteration where it stands on its own (entangled-questions rule in 1a) |
 
-**Before executing this step, Read `deep-knowledge/step1-templates.md` § Step 0.5 · Asking, and the do-batch start completely** — ask exactly ONE `AskUserQuestion` (mixed first, "(Recommended)") unless the prompt names or unambiguously implies the mode or a caller pins the template — then skip it; a `--from=do-batch` start derives the mode from its open decisions and never drops a coverage line.
-
-The mode is decided **once per concept**, not once per iteration. Later
-iterations (Step 5c) still pick their own template through the 1a check —
-the mode only says which templates are in scope. Feedback that pulls the
-concept the other way ("zeig mir das mal als Mockup" on a decision concept)
-widens the mode silently; no second question.
-
-### Count preferences — recommendations, not instructions
-
-**Before executing this step, Read `deep-knowledge/step1-templates.md` § Count preferences completely** — the default counts (7 alternatives, 3 designs, top 3–7 annotations) and when the user's count wins.
+**Before executing this step, Read `deep-knowledge/step1-templates.md` § Step 0.5 · Asking, the do-batch start, count preferences completely** — ask exactly ONE `AskUserQuestion` (mixed first, "(Recommended)") unless the prompt names or unambiguously implies the mode or a caller pins the template — then skip it; lean to mixed when the prompt allows two readings; no "Erstmal in Ruhe durchlesen" prefix; a typed "Other" is a real answer; a `--from=do-batch` start derives the mode from its open decisions and never drops a coverage line; the mode is decided once per concept and feedback widens it silently; plus the count preferences (7 alternatives, 3 designs, top 3–7 annotations — the user's count wins).
 
 ## Step 1 — Pick Template, then Content Variant
 
@@ -208,7 +198,27 @@ a new tab — NEVER open a separate browser window.
 The concept page MUST be opened in the user's **real Edge browser** via the
 OS shell. **Forbidden alternatives** that will produce a broken session:
 
-**Before executing this step, Read `deep-knowledge/step3-open-browser.md` § Forbidden alternatives, open command, 200 gate, token check completely** — the forbidden ways to open the page, the per-platform open command, the HTTP 200 gate, the `--accent-color` check in an isolated profile, and what to do when the open fails.
+- ❌ **Never** use `preview_start` / `preview_*` (`mcp__Claude_Browser__*`, formerly `mcp__Claude_Preview__*`) to
+  display the page. The preview pane is a sandboxed in-IDE iframe — it
+  has no heartbeat connection, no cron polling, and the user cannot
+  interact with it the way the concept flow needs. `mcp__Claude_Preview__*`
+  is in `allowed-tools` ONLY for `preview_eval` during Step 5 page
+  updates, never for opening the page.
+- ❌ **Never** use `mcp__plugin_playwright_playwright__browser_navigate`
+  to open the page. Playwright spawns its own browser instance — the user
+  will not see it.
+- ❌ **Never** print "Concept opened at file:///… open it in your browser"
+  and stop. The bridge server requires the page to be loaded via
+  `http://localhost:{port}/…`, not `file://`.
+- ❌ **Never** bake a "copy the decisions JSON and paste it into the chat"
+  block (clipboard button, `navigator.clipboard`, "In Zwischenablage
+  kopieren", "füg es mir in den Chat ein") into the page. That manual
+  handoff is the failure this whole flow exists to avoid — the live bridge
+  already delivers decisions. The decision panel's two submit buttons +
+  bridge are the **only** sanctioned mechanism, and the panel may never be
+  omitted. The `post.concept.gate` hook blocks any page that violates this.
+
+**Before executing this step, Read `deep-knowledge/step3-open-browser.md` § Open command, 200 gate, token check completely** — the per-platform open command, the HTTP 200 gate, the `--accent-color` check in an isolated profile, and what to do when the open fails.
 
 ### Concept Bridge Server + Edge
 
@@ -226,18 +236,14 @@ The bridge server handles all communication — no JS eval injection needed.
 
 ## Step 5 — Live Feedback Loop
 
-Feedback is processed **iteratively**, not as a one-shot. The cycle:
-
-```
-User submits → Claude reads → Claude processes → Claude updates page → User can act again
-```
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § Step 5 · The cycle completely on every round — even if read earlier in this session** — submit → read → process → update the page → the user can act again.
 
 ### Mark the round as work
 
-**Before executing this step, Read `deep-knowledge/step5-process.md` § Mark the round as work completely** — the compass-to-hourglass swap on a confirmed wake and the card that ends the round.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § Mark the round as work completely on every round — even if read earlier in this session** — the compass-to-hourglass swap on a confirmed wake and the card that ends the round.
 
 ### 5a. Read & Parse
-**Before executing this step, Read `deep-knowledge/step5-process.md` § 5a · Read and parse completely** — parsing, opening every attachment, the coverage check and reading `mappings[]`.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5a · Read and parse completely on every round — even if read earlier in this session** — parsing, opening every attachment, the coverage check and reading `mappings[]`.
 
 ### 5b. Process & Act — branch by `action`
 
@@ -245,13 +251,13 @@ The submit payload carries an `action` field — `"iterate"` / `"implement"`
 from an iteration panel, `"finalize"` from the final report's close-out
 sheet. Branch on it:
 
-**Before executing this step, Read `deep-knowledge/step5-process.md` § 5b · Checkpoint duty completely** — the `/progress` checkpoints, the namespaced finalize actions and verify-never-trust on resume.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · Checkpoint duty completely on every round — even if read earlier in this session** — the `/progress` checkpoints, the namespaced finalize actions and verify-never-trust on resume.
 
 **`action: "iterate"` (default — "Zur nächsten Iteration" button):**
 1. **Summarize** what was selected/rejected/commented
 2. **Do NOT modify code, files, or external systems** — iterate ONLY updates
    the concept page
-**Before executing this step, Read `deep-knowledge/step5-process.md` § 5b · iterate steps 3–5 completely** — advancing the reality-check baseline, mapping proposals and ad-hoc items, proceeding to 5c.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · iterate steps 3–5 completely on every round — even if read earlier in this session** — advancing the reality-check baseline, mapping proposals and ad-hoc items, proceeding to 5c.
 
 **`action: "implement"` ("Mit Feedback implementieren" button):**
 
@@ -262,11 +268,23 @@ sheet. Branch on it:
    - **Skip the check entirely** when the just-submitted section carries
      `data-reality-check` — that round WAS the check, and implementing from it
      goes straight through. This is what makes a second forced round impossible.
-**Before executing this step, Read `deep-knowledge/step5-process.md` § 5b · implement — reality-check verdicts and steps 1–4 completely** — the drift run and its verdicts, mapping as spec, execution through `auto-agents`, the full approved scope, the `implemented` phase POST and the final-report append.
+   - Otherwise `POST /status {"phase":"reality-check","version":$NOTED_VERSION}`
+     (before the fetch, so the longer wait stays legible), then run
+     `node "{plugin-root}/scripts/concept-drift.js" --state "{session-cwd}/.claude/concept-active.json" --owner {owner} --paths "<paths the concept names>"`.
+   - `verdict: "skip"` or `"clear"` → advance the baseline (`--capture --sha
+     <advanceTo>`) and continue with step 1 below. Every unresolvable condition
+     — no remote, offline, force-pushed baseline — lands here: the check never
+     blocks an implement order.
+   - `verdict: "candidates"` → apply the force classes. Nothing that must force
+     → continue with step 1, mentioning the drift in the final report. Something
+     must force → checkpoint `reality-check-forced`, then append ONE
+     reality-check round instead of implementing (Step 5c) and stop. Do NOT post
+     `phase: "implemented"` — no code was written.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · implement steps 1–4 completely on every round — even if read earlier in this session** — mapping as spec, execution through `auto-agents`, the full approved scope, the `implemented` phase POST and the final-report append.
 
 **`action: "finalize"` (close-out sheet — only on the final report):**
 
-**Before executing this step, Read `deep-knowledge/step5-process.md` § 5b · finalize payload and zero-prompt invariant completely** — the one `finalize` payload, disjoint item buckets, and never a follow-up question.
+**Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · finalize payload and zero-prompt invariant completely on every round — even if read earlier in this session** — the one `finalize` payload, disjoint item buckets, and never a follow-up question.
 
 **Fixed execution order — A (issues) → B (implement) → C (ship) → D
 (cleanup).** Never reorder: issues are cheap and independent and must not
@@ -284,21 +302,28 @@ re-shipping.
 
 ### A · Issues (`issues.create === true`)
 
-**Before executing this step, Read `deep-knowledge/step5-finalize.md` § A · Issues completely** — item shape, the user-value gate, the `auto-issue` hand-over, label enrichment, body backlink and the report rewrite.
+**Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § A · Issues completely on every round — even if read earlier in this session** — item shape, the user-value gate, the `auto-issue` hand-over, label enrichment, body backlink and the report rewrite.
 
 ### B · Implement the selected follow-ups (`implement.run === true`)
 
-**Before executing this step, Read `deep-knowledge/step5-finalize.md` § B · Implement the selected follow-ups completely** — the `auto-agents` dispatch, checkpoints, the report rewrite, the Nachtrag and unbuildable items.
+**Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § B · Implement the selected follow-ups completely on every round — even if read earlier in this session** — the `auto-agents` dispatch, checkpoints, the report rewrite, the Nachtrag and unbuildable items.
 
 ### C · Ship (`ship.run === true`)
 
-0. **Stage the disposition first, index only.** Apply the `disposition`
-   from part A step 2 to the git index and commit it on the branch
+0. **Stage the disposition first, index only.** Apply the payload's `disposition`
+   (stored in part A step 2) to the git index and commit it on the branch
    (`chore(concept): close out {slug}`) before the ship, so the release
    carries it — a disposition applied after `ship_release` is left
    uncommitted on the branch. Every file stays on disk where the bridge
    serves it; Step 6a does the on-disk part after the stop:
-**Before executing this step, Read `deep-knowledge/step5-finalize.md` § C · Disposition staging and the ship pipeline completely** — what the index-only staging does per `disposition` mode, and the `do-ship` pipeline with its gates.
+**Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § C · Disposition staging per mode completely on every round — even if read earlier in this session** — what the index-only staging does per `disposition` mode; the durable-store copy and the Step 6a table it cites are in `deep-knowledge/step6-closeout.md` § Disposition, cleanup procedure and disposition tables.
+1. Run the full ship pipeline via the `do-ship` skill (ship_preflight →
+   ship_build → ship_version_bump → ship_release → ship_cleanup). The execute
+   click authorises the ship; it does NOT waive the gates `ship` already
+   enforces. If a gate blocks, report the blocker to the user and STOP —
+   never fake a completion or force past a failing gate. (A force-push to
+   main/master still requires explicit user confirmation per the user's own
+   rules — the execute click does not stand in for that.)
 2. **On a blocked ship, stop the whole finalize here.** Issues created in
    part A and follow-ups built in part B stand; part D does NOT run. POST
    `/reload` then `/reset`, leave the concept session open so the user can
@@ -315,8 +340,8 @@ re-shipping.
 
 ### D · Close out
 
-**Before executing this step, Read `deep-knowledge/step5-finalize.md` § D · Reload and reset per disposition completely** — `data-closed`, reload-before-reset for keep / gitignore, reset-only for discard.
-2. Proceed to Step 6a with the `disposition` stored in part A step 2. Treat
+**Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § D · Reload and reset per disposition completely on every round — even if read earlier in this session** — `data-closed`, reload-before-reset for keep / gitignore, reset-only for discard.
+2. Proceed to Step 6a with the payload's `disposition` (stored in part A step 2). Treat
    this submission as the explicit "fertig" signal from the user. Step 6a
    stops the bridge, the pulser and the waker and waits until all three are
    gone — that happens BEFORE any final card, so no exit notification can
@@ -328,17 +353,7 @@ re-shipping.
 
 ### Legacy final-report actions
 
-Pages generated before the close-out sheet submit one action at a time.
-Map each onto the part that does the SAME THING — never onto the letter it
-used to have, which shifted when the implement part was inserted:
-
-| Legacy action | Runs |
-|---|---|
-| `create-issues` | part A (issues) + Step 6 with the bundled disposition |
-| `ship` | part C (ship) + Step 6 |
-| `dispose-concept` | part D (close out) only |
-
-**Before executing this step, Read `deep-knowledge/step5-finalize.md` § Legacy rationale and the critical invariant completely** — part B never runs for a legacy page and `dispose-concept` never reaches the ship pipeline; `iterate` never changes anything outside the concept HTML, and within finalize only B writes code and only C reaches outside the repo.
+**Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § Legacy mapping, rationale and the critical invariant completely on every round — even if read earlier in this session** — `create-issues` → part A + Step 6, `ship` → part C + Step 6, `dispose-concept` → part D only (never the ship pipeline), part B never for a legacy page; `iterate` never changes anything outside the concept HTML, and within finalize only B writes code and only C reaches outside the repo.
 ### 5c. Update the Page
 After processing, **append a new tab** to the same HTML file and signal
 the browser to reload. This is the ONLY update path — there is no
@@ -353,7 +368,7 @@ iteration section carrying `data-reality-check` and
 `{{iteration.reality_tab}}` label on its tab and the `.reality-banner`
 explainer as its first child. Everything else about the append is identical to
 a normal iteration, including the append checklist and the `/reset` ordering.
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § Reality-check round — template and markers completely** — the forced round keeps the concept template, and both markers are read back before `/reload`.
+**Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § Reality-check round — template and markers completely on every round — even if read earlier in this session** — the forced round keeps the concept template, and both markers are read back before `/reload`.
 For `action: "finalize"` → no new section; rewrite the existing final-report
 HTML in place (linked `[Issue #NNN]` labels for routed items, a shipped note
 when part B ran) and POST `/reload`.
@@ -367,39 +382,26 @@ is on disk. The user then sees the still-active OLD iteration with
 re-enabled submit buttons and can fire a duplicate submission. The new
 iteration must be live in the browser BEFORE the server signals "processed".
 
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § 5c · Append procedure completely** — the numbered append procedure: freeze, coverage, engine drift, append, tab, /reload, /reset, re-launch the waker.
+**Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § 5c · Append procedure completely on every round — even if read earlier in this session** — the numbered append procedure: freeze, coverage, engine drift, append, tab, /reload, /reset, re-launch the waker.
 
 ### Final-report append (implement only)
 
-When `action: "implement"` is being processed, step 3 of the procedure above
+When `action: "implement"` is being processed, step 3 of the append procedure (`deep-knowledge/step5-update-page.md` § 5c · Append procedure)
 differs: instead of appending a regular iteration, append a **final-report
 section**. Everything else (freeze previous, /reload, /reset, version
 preservation) stays identical.
 
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § Final-report append — steps and verbatim copy directive completely** — freeze, the `free` final-report section, report structure, tab label, the close-out JS copied verbatim.
+**Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § Final-report append — steps and verbatim copy directive completely on every round — even if read earlier in this session** — freeze, the `free` final-report section, report structure, tab label, the close-out JS copied verbatim.
 
 **Open points section — admission gate (default: no section):**
 
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § Open points admission gate completely** — default no section; admissible only `deferred` (parked by the user in this concept) or `found` (outside the scope, found on the way), each row carrying `data-oq-origin`; never scope, next steps, nudges or harmless drift; no further iterations from the final report.
+**Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § Open points admission gate completely on every round — even if read earlier in this session** — default no section; admissible only `deferred` (parked by the user in this concept) or `found` (outside the scope, found on the way), each row carrying `data-oq-origin`; never scope, next steps, nudges or harmless drift; no further iterations from the final report.
 
 ### 5d. Resume Monitoring
 
-**Re-launch the pickup waker.** It exited to wake you for the submission you
-just processed, so nothing is watching `/pending` until you start it again —
-exactly as in Step 3 (`bridge-server.md` § step 3, task 2), with
-`run_in_background: true`. Do this at 5c step 7, the moment `/reset` lands; by
-the time you reach 5d it should already be running.
+**Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § 5d · Re-launch the waker, re-confirm every wake completely on every round — even if read earlier in this session** — re-launch the pickup waker at 5c step 7; poll `/pending` before acting on a wake — `false` = stale, equal `_version` = retry the reset, unless `GET /recovery` shows a reality-check checkpoint on it.
 
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § 5d · Re-confirm every wake completely** — the stale-wake check, equal `_version` = retry the reset, and the `GET /recovery` reality-check exception.
-
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § 5d · Exit reasons completely** — the one correct response per `*_EXIT` reason and when to re-launch the pulser.
-
-Then return to Step 4 (monitor for next submission). The loop continues until:
-- The user closes the page
-- The user says "fertig" / "done" in chat
-- There are no more decisions to make (all items processed)
-
-**Before executing this step, Read `deep-knowledge/step5-update-page.md` § 5d · Expected action on the final report completely** — the `finalize` payload the close-out sheet sends, legacy actions, and protocol errors.
+**Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § 5d · Exit reasons, loop end, expected final-report action completely on every round — even if read earlier in this session** — the one correct response per `*_EXIT` reason, when to re-launch the pulser, back to Step 4 until the user closes the page / says done / nothing is left, and only `finalize` (or the three legacy actions) from the final report — anything else is a protocol error.
 
 ### 5e. Persist
 Write a cumulative summary to `docs/concepts/{same-timestamp}-{same-slug}-decisions.json`
