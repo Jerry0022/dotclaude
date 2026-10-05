@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.245.6] — 2026-10-05
+
+### Fixed
+- **A pending device test no longer reads as a missing requirement (#631).** `validation[].status` now means *delivered*: a requirement that is implemented but only the user can verify (phone, account, listening) is `met`, with the user's check in `userTest` / `userFinalTest`. `waitsOn: "user"` is narrowed to work only the user can do (decide, approve, a manual setup step). The V&V guidance (`test-autonomy.md`), the stop-hook gap nudge and validation message (`card-guard.js`), the `render_completion_card` and `ship_release` schema descriptions and the do-ship requirement gate say the same.
+
+### Tests
+- New `validation-gaps.test.js` case: a `met` item with user-check evidence yields no gap and no user wait. Full suite 8327 passed (QA agent); eslint clean.
+
 ## [0.245.5] — 2026-10-03
 
 ### Changed
