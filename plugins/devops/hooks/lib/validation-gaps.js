@@ -8,7 +8,8 @@
  *
  *   A requirement that is not `met` may stay open only with a reason Claude
  *   cannot remove itself — `waitsOn`:
- *     user     — the user has to act or decide (listen, click, approve, choose)
+ *     user     — work only the user can do (decide, approve, a manual setup step);
+ *                delivered-but-only-user-verifiable is `met` + userTest (#631)
  *     deploy   — only verifiable once the change is shipped / deployed / restarted
  *     external — a third party (service outage, quota, review by someone else)
  *     pending  — Claude's own background work (agent, workflow) is still

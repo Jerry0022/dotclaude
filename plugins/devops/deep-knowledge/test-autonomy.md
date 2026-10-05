@@ -230,9 +230,18 @@ code-change card without `validation` is blocked once and re-requested. For a
 pure refactor/chore, one item stating the intent and how behaviour was kept
 equivalent suffices.
 
+**`status` says whether the requirement is delivered — not whether every
+check is done.** Implemented, but only the user can verify it (a phone, a
+real device, their account, their ears) → `met`: the evidence names what you
+verified and what the user still checks, and that check goes to `userTest` /
+`userFinalTest`. `partial` / `unmet` are only for a requirement that is really
+not (fully) delivered. A pending device test is never a reason for `partial` +
+`waitsOn: "user"` — the card would count a built feature as missing (#631).
+
 **Requirement gaps — close, don't report.** Every item needs a `status`. A
-partial/unmet requirement may stay open only with `waitsOn`: `user` (the user
-must act or decide), `deploy` (verifiable only after ship/deploy/restart),
+partial/unmet requirement may stay open only with `waitsOn`: `user` (work only the
+user can do: decide, approve, a manual setup step — not verifying what you
+already built), `deploy` (verifiable only after ship/deploy/restart),
 `external` (a third party) or `pending` (your own background agent/workflow is
 still running — checked against the transcript, stale once it finished), and
 its `evidence` must name what exactly it waits for.
