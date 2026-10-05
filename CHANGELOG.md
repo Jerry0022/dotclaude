@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.246.0] — 2026-10-05
+
+### Added
+- **The Desktop session archives itself after a successful ship (#632).** After a `ship-successful` / `released` card with a real merge, `render_completion_card` emits a `[SESSION ARCHIVE]` block and a flag stamped with the cwd and a nonce; the PostToolUse hook on the card widget then releases exactly one more call, `mcp__ccd_session_mgmt__archive_session({ session_id: "self" })`, instead of ending the turn. The archive call, or its failure, ends the turn. A new PreToolUse hook `pre.session.archive.js` denies `archive_session` on the own session unless the hand-over was released or the user's own prompt asks for an archive. Config switch `ship.archiveAfterShip` (default `true`). Docs: `claude-desktop-app-setup.md` § Session archiving after ship (expects `auto_archive_inactive_days = 0`), `devops-config.md`, do-ship `SKILL.md` (Step 5a, Step 6). Hook count 69 → 70.
+
+### Decisions
+- Archive after the card via a hook-released last call; only an explicit keep blocks it (the harness-worktree keep rule alone no longer does); on by default, switchable off.
+- Fail closed: the archive needs hook-seen `ship_release` merge evidence (also from a `--delegated` ship subagent, keyed by the main session id), a clean worktree including untracked files, and no `state.kept`, pending, open or userTest items, concept/batch mode, autonomous lockout/run or ship queue. Parallel sessions cannot adopt each other's flag (cwd stamp); flags are cleared on every user prompt. `ship_promote` alone gives no evidence (it never merges).
+
+### Tests
+- New `session-archive.test.js` (26) and archive hand-over + `pre.session.archive` cases in `post.flow.completion.test.js` (99/99), `session-title.test.js`, `index.cli.test.js`. Redteam round 1 (R1–R8) fixed. Not verified live: the Desktop harness behaviour of the released call after `show_widget` — first real Desktop ship after updating shows it.
+
 ## [0.245.7] — 2026-10-05
 
 ### Fixed
