@@ -46,7 +46,7 @@ export const schema = z.object({
       evidence: z.string().optional(),
       waitsOn: z.enum(["user", "deploy", "external", "pending"]).optional(),
     })).optional(),
-  ).describe("The requirements this ship delivers — the same items the completion card will carry. The merge is REFUSED while one is still your own work (no status, partial/unmet without waitsOn, or waitsOn pending — your background work has not finished). Close the gap and call ship_release again; waitsOn user/deploy/external may ship. Omitted → the not-met items of the last completion card rendered for this cwd (≤ 12 h) are checked instead; pass the current items explicitly once the gaps are closed."),
+  ).describe("The requirements this ship delivers — the same items the completion card will carry. The merge is REFUSED while one is still your own work (no status, partial/unmet without waitsOn, or waitsOn pending — your background work has not finished). Close the gap and call ship_release again; waitsOn user/deploy/external may ship. status = delivered: implemented but only user-verifiable is met (the check belongs in userTest), not partial. Omitted → the not-met items of the last completion card rendered for this cwd (≤ 12 h) are checked instead; pass the current items explicitly once the gaps are closed."),
   acceptGaps: z.boolean().default(false).describe("Ship despite open own gaps. Only when the USER explicitly asked to ship as-is — never on your own judgement."),
 });
 

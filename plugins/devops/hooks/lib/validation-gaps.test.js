@@ -20,6 +20,15 @@ describe("classify", () => {
     expect(r.gaps.map(g => g.reason)).toEqual(["no-evidence", "open", "no-status"]);
   });
 
+  test("delivered but only user-verifiable is met — no gap, nothing waiting (#631)", () => {
+    const r = vg.classify([
+      { requirement: "Skip by tap or voice", status: "met", evidence: "tap verified in tests; voice: user checks on the phone (userTest)" },
+    ], { openTasks: 0 });
+    expect(r.met).toBe(1);
+    expect(r.waiting.user || 0).toBe(0);
+    expect(r.gaps).toEqual([]);
+  });
+
   test("pending is stale once no task is open, taken at its word when unknown", () => {
     const items = [{ requirement: "Review", status: "partial", waitsOn: "pending", evidence: "redteam" }];
     expect(vg.classify(items, { openTasks: 0 }).gaps[0].reason).toBe("pending-done");
