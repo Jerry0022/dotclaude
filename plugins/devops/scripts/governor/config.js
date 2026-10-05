@@ -16,6 +16,7 @@ const MB = 1024 * 1024;
 
 const DEFAULTS = Object.freeze({
   enabled: true,
+  notify: true, // OS notifications (newly learned app, starvation); always logged
   tickMs: 3000,
   // A Claude-attributed job is "heavy" after sustainMs over one threshold.
   heavy: { cpuPct: 25, gpuPct: 20, diskBps: 20 * MB, ramMB: 1024, sustainMs: 20000, dipMs: 6000, generatorMs: 120000 },

@@ -424,3 +424,24 @@ describe('attribution scope', () => {
     expect([...P.attributedPids(ps, { extraRoots: [3], claudeRoots: false })].sort()).toEqual([3, 4]);
   });
 });
+
+describe('appKey with single game dirs', () => {
+  it('keys a game by its install dir, so its launcher is a different app', () => {
+    const dirs = ['C:/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/games/Anno 1800/'];
+    const anno = 'C:/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/games/Anno 1800/Bin/Win64/Anno1800.exe';
+    const upc = 'C:/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/upc.exe';
+    expect(P.appKey(anno, [], dirs)).toBe('c:/program files (x86)/ubisoft/ubisoft game launcher/games/anno 1800');
+    expect(P.appKey(upc, [], dirs)).toBe('c:/program files (x86)/ubisoft');
+    const ctx = { cfg, libraryRoots: [], libraryDirs: dirs, learned: {}, manual: false, foreground: null };
+    const r = P.updatePriority({}, [{ pid: 1, name: 'Anno1800.exe', path: anno, cpuPct: 0 }, { pid: 2, name: 'upc.exe', path: upc, cpuPct: 0 }], 0, ctx);
+    expect(Object.keys(r.active).length).toBe(4);
+    expect(Object.values(r.active).every((k) => k.endsWith('anno 1800'))).toBe(true);
+  });
+});
+
+describe('appKey container folders', () => {
+  it('keys WindowsApps / Microsoft / Common Files one level deeper', () => {
+    expect(P.appKey('C:/Program Files/WindowsApps/Foo_1.0_x64__abc/app/foo.exe')).toBe('c:/program files/windowsapps/foo_1.0_x64__abc');
+    expect(P.appKey('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe')).toBe('c:/program files (x86)/microsoft/edge');
+  });
+});

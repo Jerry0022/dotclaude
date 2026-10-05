@@ -75,9 +75,14 @@ function splitPath(p) { return String(p || '').split(/[\\/]+/).filter(Boolean); 
  * library root, the vendor folder below Program Files / Applications / opt,
  * else the exe's directory. Lower-case, forward slashes.
  */
-function appKey(exePath, libraryRoots = []) {
+function appKey(exePath, libraryRoots = [], gameDirs = []) {
   if (!exePath) return null;
   const norm = String(exePath).replace(/\\/g, '/').toLowerCase();
+  // A known single-game folder (Epic/GOG/Ubisoft/EA install dir) — keeps a game apart from its launcher.
+  for (const d of gameDirs) {
+    const dir = String(d).replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+    if (dir && norm.startsWith(`${dir}/`)) return dir;
+  }
   for (const r of libraryRoots) {
     const root = String(r).replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '') + '/';
     if (norm.startsWith(root)) {
@@ -85,6 +90,9 @@ function appKey(exePath, libraryRoots = []) {
       if (first && norm.slice(root.length).includes('/')) return root + first;
     }
   }
+  // Container folders hold many unrelated apps: key one level deeper.
+  const deep = norm.match(/^([a-z]:\/program files(?: \(x86\))?\/(?:windowsapps|microsoft|common files)\/[^/]+)\//);
+  if (deep) return deep[1];
   const m = norm.match(/^([a-z]:\/program files(?: \(x86\))?\/[^/]+)\//)
     || norm.match(/^([a-z]:\/users\/[^/]+\/appdata\/local\/programs\/[^/]+)\//)
     || norm.match(/^(\/applications\/[^/]+?\.app)\//)
@@ -299,7 +307,7 @@ function updatePriority(prev, foreign, now, ctx) {
   const newlyLearned = [];
   const seen = new Map();
   for (const p of foreign) {
-    const key = appKey(p.path, ctx.libraryRoots) || String(p.name || '').toLowerCase();
+    const key = appKey(p.path, ctx.libraryRoots, ctx.libraryDirs) || String(p.name || '').toLowerCase();
     if (!key || listed(cfg.neverPriority, key, p.name)) continue;
     const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, memMB: 0, pids: [], name: p.name, path: p.path };
     a.cpuPct += p.cpuPct || 0;

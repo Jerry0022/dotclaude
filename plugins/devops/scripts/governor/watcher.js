@@ -121,7 +121,7 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-  const notify = (title, text) => { log(p, `notify: ${title} - ${text}`); return adapter.notify(title, text); };
+  const notify = (title, text) => { log(p, `notify: ${title} - ${text}`); return loadConfig(p).notify ? adapter.notify(title, text) : null; };
 
   for (;;) {
     const tickStart = Date.now();
