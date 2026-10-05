@@ -120,7 +120,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(text).toContain("Anforderungen  ✓"); // two spaces between posts
   });
 
-  test("requirements that wait on someone else count honestly: 2/3 · 1 wartet auf dich, no ◐", async () => {
+  test("a gap that waits on someone else is ⚠, never a green ✓, and is named up top (#630)", async () => {
     const text = await cardText({
       variant: "ready", summary: "Wartet-Test", lang: "de", session_id: "test-anatomy-waits",
       validation: [
@@ -129,9 +129,38 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
         { requirement: "R3", status: "partial", evidence: "Anhören steht aus", waitsOn: "user" },
       ],
     });
-    expect(text).toContain("✓ 2/3 Anforderungen · 1 wartet auf dich");
+    expect(text).toContain("⚠ 2/3 Anforderungen · 1 wartet auf dich");
+    expect(text).not.toContain("✓ 2/3");
     expect(text).not.toContain("◐");
     expect(text).not.toContain("**Nicht erreicht:**");
+    const lines = text.split("\n").filter(l => l.startsWith("› "));
+    expect(lines[0]).toBe("› **⚠ Nicht voll erfüllt:** R3 — Anhören steht aus");
+  });
+
+  test("every gap gets its own top line — unmet first, then partial; a deploy wait is not named (#630)", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Mehrere Lücken", lang: "en", session_id: "test-anatomy-multigap",
+      validation: [
+        { requirement: "A", status: "partial", evidence: "phone check", waitsOn: "user" },
+        { requirement: "B", status: "unmet", evidence: "API down", waitsOn: "external" },
+        { requirement: "C", status: "partial", evidence: "after restart", waitsOn: "deploy" },
+        { requirement: "D", status: "met", evidence: "ok" },
+      ],
+      changes: [{ area: "x", description: "Something changed" }],
+    });
+    const lines = text.split("\n").filter(l => l.startsWith("› "));
+    expect(lines[0]).toBe("› **Not achieved:** B — API down");
+    expect(lines[1]).toBe("› **⚠ Not fully met:** A — phone check");
+    expect(text).not.toContain("Not fully met:** C");
+  });
+
+  test("all met keeps the green ✓ and names nothing (#630)", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Alles erfüllt", lang: "de", session_id: "test-anatomy-allmet",
+      validation: [{ requirement: "R1", status: "met", evidence: "ok — Nutzer prüft am Handy (userTest)" }],
+    });
+    expect(text).toContain("✓ 1/1 Anforderungen");
+    expect(text).not.toContain("Nicht voll erfüllt");
   });
 
   test("an own gap (partial, waits on nobody) keeps ◐ next to the waiting count", async () => {

@@ -376,7 +376,8 @@ function glyphColor(glyph) {
 /** One evidence post as a `<span>` with an app-styled Info tooltip (`data-tip`).
  *  A post with a tooltip is focusable, so the keyboard reaches it (focusin). */
 function evidencePostHtml(post) {
-  const color = glyphColor(post.glyph);
+  // tone "warn": a requirement gap that waits on someone else — amber, not red (#630).
+  const color = post.tone === "warn" ? COLOR.yellow : glyphColor(post.glyph);
   const tip = post.tooltip ? ` tabindex="0" data-tip="${escapeHtml(post.tooltip)}"` : "";
   return `<span class="card-post" style="color:${color}"${tip}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
 }
@@ -487,10 +488,12 @@ function glyphLineHtml(cls, inner, { size = 14, margin = "4px 0" } = {}) {
   return `<div class="${cls}" style="display:flex;gap:4px;margin:${margin};padding-left:6px;font-size:${size}px;line-height:1.5;color:var(--text-secondary)"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
 }
 
-/** The "changes" › lines — the deviation label (`**…**` lead-in) kept red. */
+/** The "changes" › lines — the deviation label (`**…**` lead-in) kept red; a
+ *  `⚠` partial label (#630) in amber. */
 function resultLinesHtml(resultLines, lang) {
   return (resultLines || [])
-    .map((l) => glyphLineHtml("card-result", linkifyHtml(l, lang).replace(/^\*\*([^*]+)\*\*/, `<b style="color:${COLOR.red};font-weight:500">$1</b>`)))
+    .map((l) => glyphLineHtml("card-result", linkifyHtml(l, lang).replace(/^\*\*([^*]+)\*\*/, (_, label) =>
+      `<b style="color:${label.startsWith("⚠") ? COLOR.yellow : COLOR.red};font-weight:500">${label}</b>`)))
     .join("\n  ");
 }
 
