@@ -97,7 +97,7 @@ if (require.main === module) {
     // #632: an archive hand-over belongs to the card of the turn that shipped —
     // a later widget must never release it.
     for (const prefix of ['dotclaude-devops-card-archive', 'dotclaude-devops-card-archive-released', 'dotclaude-devops-archive-shipped']) {
-      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
+      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch { /* no flag to clear */ }
     }
 
     if (!isSilent(prompt)) process.exit(0);
