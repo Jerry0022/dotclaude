@@ -49,32 +49,63 @@ describe('governor hooks', () => {
     expect(fs.existsSync(fg)).toBe(false);
   });
 
-  it.runIf(win)('allows a heavy start with a fresh watcher and no pressure, writing a reservation', () => {
-    fs.writeFileSync(path.join(home, 'state.json'), JSON.stringify({ format: 1, heartbeat: Date.now(), pressure: { priority: [], over: [] }, sys: { freeMB: 30000 } }));
-    const r = run(PRE, bash('npm test'));
-    expect(r.status).toBe(0);
-    expect(fs.existsSync(path.join(home, 'reservations', 's1-tu1.json'))).toBe(true);
-    run(POST, bash('npm test'));
-    expect(fs.existsSync(path.join(home, 'reservations', 's1-tu1.json'))).toBe(false);
+  const freshState = (o = {}) => fs.writeFileSync(path.join(home, 'state.json'), JSON.stringify({ format: 1, heartbeat: Date.now(), pressure: { priority: [], over: [] }, sys: { freeMB: 30000 }, ...o }));
+
+  it.runIf(win)('allow/defer table (D1 false positives now allowed)', () => {
+    const cases = [
+      ['git status', 0], ['git log --oneline', 0], ['gh pr list', 0], ['ffmpeg -version', 0], ['node --version', 0], ['ls -la', 0],
+      ['npm test', 0], // no pressure → allow
+    ];
+    freshState();
+    for (const [cmd, status] of cases) {
+      const r = run(PRE, bash(cmd, { tool_use_id: `c${cmd.length}` }));
+      expect([cmd, r.status]).toEqual([cmd, status]);
+    }
+    // Under CPU priority: light stays allowed, npm test (loads cpu) defers.
+    freshState({ pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo' });
+    expect(run(PRE, bash('git status', { tool_use_id: 'g2' })).status).toBe(0);
+    expect(run(PRE, bash('npm test', { tool_use_id: 'n2' })).status).toBe(2);
+    // ffmpeg loads gpu; a gpu-priority state defers it but not npm test (no gpu).
+    freshState({ pressure: { priority: ['gpu'], over: [] }, priorityBy: 'c:/games/foo' });
+    expect(run(PRE, bash('npm test', { tool_use_id: 'n3' })).status).toBe(0);
+    expect(run(PRE, bash('ffmpeg -i a.mp4 b.mkv', { tool_use_id: 'f3' })).status).toBe(2);
   });
 
-  it.runIf(win)('defers a heavy start under priority: exit 2, queued with cwd', () => {
-    fs.writeFileSync(path.join(home, 'state.json'), JSON.stringify({ format: 1, heartbeat: Date.now(), pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo', sys: { freeMB: 30000 } }));
+  it.runIf(win)('defers a heavy start under priority: exit 2, recorded (not run), message tells Claude', () => {
+    freshState({ pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo' });
     const r = run(PRE, bash('npm run build'));
     expect(r.status).toBe(2);
-    expect(r.stderr).toMatch(/Queued as/);
-    expect(r.stderr).toMatch(/report them as open/);
+    expect(r.stderr).toMatch(/recorded the command/);
+    expect(r.stderr).toMatch(/report those steps as open/);
     const q = fs.readdirSync(path.join(home, 'queue')).filter((n) => n.endsWith('.json'));
     expect(q.length).toBe(1);
     const e = JSON.parse(fs.readFileSync(path.join(home, 'queue', q[0]), 'utf8'));
-    expect(e).toMatchObject({ command: 'npm run build', cwd: home, shell: 'bash', status: 'queued' });
+    expect(e).toMatchObject({ command: 'npm run build', cwd: home, status: 'queued' });
     expect(fs.existsSync(path.join(home, 'foreground', 's1-tu1.json'))).toBe(false);
+    expect(fs.existsSync(path.join(home, 'reservations'))).toBe(false); // reservations dropped
   });
 
-  it.runIf(win)('disabled config and inline opt-out skip everything', () => {
-    fs.writeFileSync(path.join(home, 'state.json'), JSON.stringify({ format: 1, heartbeat: Date.now(), pressure: { priority: ['cpu'], over: [] } }));
-    expect(run(PRE, bash('DOTCLAUDE_GOVERNOR=off npm test')).status).toBe(0);
+  it.runIf(win)('the defer message never advertises an opt-out env var', () => {
+    freshState({ pressure: { priority: ['cpu'], over: [] } });
+    const r = run(PRE, bash('npm run build'));
+    expect(r.stderr).not.toMatch(/DOTCLAUDE_GOVERNOR/);
+  });
+
+  it.runIf(win)('resume hook offers ready commands for this repo, once', () => {
+    const RESUME = path.join(HOOKS, 'user-prompt-submit', 'prompt.governor.resume.js');
+    fs.mkdirSync(path.join(home, 'queue'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'queue', 'e1.json'), JSON.stringify({ id: 'e1', command: 'npm run build', cwd: home, branch: 'feat', head: 'abcdef12', status: 'ready', created_at: Date.now() }));
+    const r = run(RESUME, { session_id: 's1', cwd: home, prompt: 'hi' });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/can run again/);
+    expect(r.stdout).toMatch(/npm run build/);
+    expect(fs.existsSync(path.join(home, 'queue', 'e1.json'))).toBe(false); // consumed
+    expect(run(RESUME, { session_id: 's1', cwd: home, prompt: 'again' }).stdout).toBe('');
+  });
+
+  it.runIf(win)('disabled config skips everything', () => {
     fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ enabled: false }));
+    freshState({ pressure: { priority: ['cpu'], over: [] } });
     expect(run(PRE, bash('npm test')).status).toBe(0);
     expect(fs.existsSync(path.join(home, 'queue'))).toBe(false);
     run(SS, { session_id: 's1', cwd: home });

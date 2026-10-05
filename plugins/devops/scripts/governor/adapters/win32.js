@@ -61,19 +61,17 @@ class Helper {
     });
   }
 
-  /** Graceful: the helper reverts what it applied, then exits. */
+  /** Graceful: ask the helper to revert everything and exit, then wait for its exit op. */
   async stop(waitMs = 15000) {
     const p = this.proc;
     if (!p) return;
     await new Promise((resolve) => {
       const t = setTimeout(() => { try { p.kill(); } catch {} resolve(); }, waitMs);
       p.once('exit', () => { clearTimeout(t); resolve(); });
-      try { p.stdin.end(); } catch { resolve(); }
+      this.call('exit', {}, waitMs).then(() => {}).catch(() => {});
     });
   }
 }
-
-const keyOf = (entry) => String(entry.jobId || entry.key).replace(/[^A-Za-z0-9_-]/g, '-');
 
 function createWin32Adapter(cfg) {
   const h = new Helper();
@@ -83,20 +81,13 @@ function createWin32Adapter(cfg) {
     get alive() { return h.alive; },
     start: () => h.start(),
     stop: () => h.stop(),
-    sample: () => h.call('sample', {}, 60000),
-    signers: async (paths) => (paths.length ? h.call('sig', { paths }, 60000) : {}),
+    sample: (opts = {}) => h.call('sample', { gpu: opts.gpu !== false }, 60000),
     attach: (sessionId, pids) => h.call('attach', { session: String(sessionId).replace(/[^A-Za-z0-9_-]/g, ''), pids }),
-    async apply(entry) {
-      await h.call('cap', { key: keyOf(entry), pids: entry.pids, cpuPct: cfg.cap.cpuPct });
-      if (entry.level >= 2) await h.call('suspend', { pids: entry.pids });
-      else await h.call('resume', { pids: entry.pids, force: false });
-    },
-    async revert(entry) {
-      await h.call('resume', { pids: entry.pids, force: Boolean(entry.everPaused) });
-      await h.call('uncap', { key: keyOf(entry), pids: entry.pids });
-    },
+    // Key-based: the helper keeps key -> {pid -> {startMs, suspended, capped}} and merges pids.
+    apply: (key, level, pids) => h.call('apply', { key, level, pids, cpuPct: cfg.cap.cpuPct }),
+    release: (key, pids) => h.call('release', { key, pids: pids || [] }),
     notify: (title, text) => h.call('notify', { title, text }, 15000).catch(() => null),
   };
 }
 
-module.exports = { createWin32Adapter, Helper, keyOf };
+module.exports = { createWin32Adapter, Helper };

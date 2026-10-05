@@ -71,15 +71,31 @@ function isAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
+/** Process start time (ms) for pid-reuse checks, or 0 when unknown. Best effort. */
+function processStart(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return 0;
+  try {
+    if (process.platform === 'linux') {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const ticks = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]);
+      const btime = Number((fs.readFileSync('/proc/stat', 'utf8').match(/^btime (\d+)/m) || [])[1]);
+      if (Number.isFinite(ticks) && Number.isFinite(btime)) return (btime + ticks / 100) * 1000;
+    }
+  } catch { /* unknown */ }
+  return 0;
+}
+
 /**
- * Take the watcher lock. Exclusive create wins; a holder that is dead or has
- * not heartbeated for staleMs is taken over (rename is atomic: one winner).
- * A live holder with an older version gets a handover request.
+ * Take the watcher lock. Exclusive create wins; a holder is taken over ONLY
+ * when its process is gone (pid not alive, or alive but started after the
+ * lock was written — pid reuse). A stale heartbeat on a live pid is NOT a
+ * takeover (R6: a busy watcher must not be evicted). A live holder with an
+ * older plugin version gets a handover request instead.
  * @returns {{ok:boolean, holder?:object, handover?:boolean, takeover?:boolean}}
  */
-function acquireLock(p, { pid, version, now, staleMs = 15000, alive = isAlive }) {
+function acquireLock(p, { pid, version, now, startMs = now, alive = isAlive, startOf }) {
   fs.mkdirSync(path.dirname(p.lock), { recursive: true });
-  const me = { pid, version, startedAt: now, heartbeat: now };
+  const me = { pid, version, startedAt: now, startMs, heartbeat: now };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       fs.writeFileSync(p.lock, JSON.stringify(me), { flag: 'wx' });
@@ -88,14 +104,16 @@ function acquireLock(p, { pid, version, now, staleMs = 15000, alive = isAlive })
       if (e.code !== 'EEXIST') return { ok: false, error: e.code };
     }
     const holder = readJson(p.lock);
-    let fresh;
-    if (holder) fresh = alive(holder.pid) && now - (holder.heartbeat || 0) < staleMs;
-    else {
-      let mtime = now;
+    let dead;
+    if (!holder) {
+      let mtime = 0;
       try { mtime = fs.statSync(p.lock).mtimeMs; } catch { continue; }
-      fresh = now - mtime < 2000; // being written right now
+      dead = now - mtime >= 2000; // empty file left mid-write: dead only once it is no longer being written
+    } else {
+      const reused = startOf && Number.isFinite(holder.startMs) && Math.abs((startOf(holder.pid) || 0) - holder.startMs) > 2000;
+      dead = !alive(holder.pid) || reused;
     }
-    if (fresh) {
+    if (!dead) {
       if (holder && compareVersions(version, holder.version) > 0) {
         writeJson(p.handover, { pid, version, at: now });
         return { ok: false, holder, handover: true };
@@ -127,27 +145,7 @@ function handoverRequested(p, version, now, maxAgeMs = 60000) {
   return Boolean(h && compareVersions(h.version, version) > 0 && now - (h.at || 0) < maxAgeMs);
 }
 
-/**
- * Short mutual exclusion between hooks of parallel sessions (mkdir is
- * atomic). Gives up after timeoutMs and runs fn anyway — a hook never hangs;
- * a lock dir older than 5 s is a crashed holder's and is removed.
- */
-function withDirLock(dir, fn, timeoutMs = 150) {
-  const lock = `${dir}.lock`;
-  const end = Date.now() + timeoutMs;
-  let held = false;
-  while (!held) {
-    try { fs.mkdirSync(lock); held = true; } catch (e) {
-      if (e.code === 'ENOENT') { fs.mkdirSync(path.dirname(lock), { recursive: true }); continue; }
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 5000) { fs.rmdirSync(lock); continue; } } catch { continue; }
-      if (Date.now() > end) break;
-      const until = Date.now() + 5; while (Date.now() < until) { /* spin */ }
-    }
-  }
-  try { return fn(); } finally { if (held) { try { fs.rmdirSync(lock); } catch {} } }
-}
-
 module.exports = {
   FORMAT, readJson, writeJson, removeFile, readDir, readState, writeState,
-  compareVersions, isAlive, acquireLock, heartbeat, releaseLock, handoverRequested, withDirLock,
+  compareVersions, isAlive, processStart, acquireLock, heartbeat, releaseLock, handoverRequested,
 };

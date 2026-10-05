@@ -2,26 +2,27 @@
  * @module governor/policy
  * @description Pure decision logic of the Claude load governor — no I/O, no
  *   clock, no OS calls. Every function takes plain data and `now` and returns
- *   plain data, so each rule is unit-tested in isolation (policy.test.js).
+ *   plain data (policy.test.js).
  *
  *   Pipeline per tick (watcher.js):
  *     attributedPids → classify → groupJobs → trackJobs (heavy, kind)
- *     updatePriority (foreign load per resource, decay, foreground-all,
+ *     updatePriority (foreign CPU/GPU/disk load, decay, foreground-all,
  *     learning, manual) + updateBudget (80/65 hysteresis, smoothing)
  *     → plan (newest yields first, relax one step per relaxMs)
- *   PreToolUse: admit (slot / reservation / defer).
+ *   PreToolUse: classifyCommand + admit.
  */
 'use strict';
 
 const RESOURCES = Object.freeze(['cpu', 'gpu', 'disk', 'ram']);
+// Foreign apps earn priority on these only: RAM is a system-pressure signal (80 % rule), never a priority trigger.
+const PRIORITY_TRIGGERS = Object.freeze(['cpu', 'gpu', 'disk']);
 const LEVEL = Object.freeze({ NONE: 0, CAP: 1, PAUSE: 2 });
 
 // ---------------------------------------------------------------------------
 // OS exclusion
 // ---------------------------------------------------------------------------
 
-// Processes whose image path a normal user cannot read (protected/system) —
-// recognised by name only when the path is unknown.
+// Processes whose image path a normal user cannot read — recognised by name only when the path is unknown.
 const WIN_OS_NAMES = new Set([
   'system', 'idle', 'system idle process', 'registry', 'memory compression', 'secure system', 'smss.exe',
   'csrss.exe', 'wininit.exe', 'winlogon.exe', 'services.exe', 'lsass.exe', 'lsaiso.exe', 'svchost.exe',
@@ -34,7 +35,10 @@ const WIN_OS_NAMES = new Set([
 function lowerSlash(p) { return String(p || '').replace(/\//g, '\\').toLowerCase(); }
 
 /**
- * @param {{pid:number, ppid?:number, name?:string, path?:string|null, signer?:string|null, kernel?:boolean, cgroup?:string}} p
+ * Windows: anything under %SystemRoot% or Defender's folders (no signature
+ * lookup: an unknown exe there counts as OS — it never gets priority, it is
+ * never throttled, it still counts toward the 80 % rule).
+ * @param {{pid:number, ppid?:number, name?:string, path?:string|null, kernel?:boolean, cgroup?:string}} p
  * @param {{platform:string, systemRoot?:string}} env
  */
 function isOsProcess(p, env) {
@@ -44,11 +48,7 @@ function isOsProcess(p, env) {
     if (!p.path) return WIN_OS_NAMES.has(name);
     const file = lowerSlash(p.path);
     const root = lowerSlash(env.systemRoot || 'C:\\Windows').replace(/\\+$/, '') + '\\';
-    const ms = /microsoft/i.test(p.signer || '');
-    if (file.startsWith(root)) return ms;
-    // Defender lives outside %SystemRoot%.
-    if (/\\(windows defender|microsoft\\windows defender)\\/.test(file)) return ms;
-    return false;
+    return file.startsWith(root) || /\\(windows defender|microsoft\\windows defender)\\/.test(file);
   }
   if (env.platform === 'linux') {
     if (p.kernel || p.pid === 2 || p.ppid === 2) return true;
@@ -57,9 +57,7 @@ function isOsProcess(p, env) {
   }
   if (env.platform === 'darwin') {
     if (p.pid === 0 || p.pid === 1) return true;
-    const file = String(p.path || '');
-    const sysPath = /^\/(System|usr\/libexec|usr\/sbin|sbin)\//.test(file);
-    return sysPath && /apple/i.test(p.signer || 'apple');
+    return /^\/(System|usr\/libexec)\//.test(String(p.path || ''));
   }
   return false;
 }
@@ -71,14 +69,14 @@ function isOsProcess(p, env) {
 function splitPath(p) { return String(p || '').split(/[\\/]+/).filter(Boolean); }
 
 /**
- * The folder an app is remembered by: the game folder directly below a
- * library root, the vendor folder below Program Files / Applications / opt,
- * else the exe's directory. Lower-case, forward slashes.
+ * The folder an app is remembered by: a known single-game folder, the game
+ * folder directly below a library root, the vendor folder below Program Files
+ * (one level deeper for container folders) / Applications / opt, else the
+ * exe's directory. Lower-case, forward slashes.
  */
 function appKey(exePath, libraryRoots = [], gameDirs = []) {
   if (!exePath) return null;
   const norm = String(exePath).replace(/\\/g, '/').toLowerCase();
-  // A known single-game folder (Epic/GOG/Ubisoft/EA install dir) — keeps a game apart from its launcher.
   for (const d of gameDirs) {
     const dir = String(d).replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
     if (dir && norm.startsWith(`${dir}/`)) return dir;
@@ -86,11 +84,10 @@ function appKey(exePath, libraryRoots = [], gameDirs = []) {
   for (const r of libraryRoots) {
     const root = String(r).replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '') + '/';
     if (norm.startsWith(root)) {
-      const first = norm.slice(root.length).split('/')[0];
-      if (first && norm.slice(root.length).includes('/')) return root + first;
+      const rest = norm.slice(root.length);
+      if (rest.includes('/')) return root + rest.split('/')[0];
     }
   }
-  // Container folders hold many unrelated apps: key one level deeper.
   const deep = norm.match(/^([a-z]:\/program files(?: \(x86\))?\/(?:windowsapps|microsoft|common files)\/[^/]+)\//);
   if (deep) return deep[1];
   const m = norm.match(/^([a-z]:\/program files(?: \(x86\))?\/[^/]+)\//)
@@ -109,7 +106,7 @@ function appLabel(key) {
   return (parts[parts.length - 1] || String(key || '')).replace(/\.app$/, '');
 }
 
-/** True when `key` or `name` matches an entry of a config list (substring, case-insensitive). */
+/** True when `key` or `name` matches an entry of a config list (substring of the key, or exact name). */
 function listed(list, key, name) {
   const k = String(key || '').toLowerCase();
   const n = String(name || '').toLowerCase();
@@ -119,19 +116,37 @@ function listed(list, key, name) {
   });
 }
 
+// Never learned, never library-started: launchers, browsers, IDEs, chat/Electron hosts.
+const NO_LEARN = new Set([
+  'steam.exe', 'steamwebhelper.exe', 'epicgameslauncher.exe', 'epicwebhelper.exe', 'upc.exe', 'ubisoftconnect.exe',
+  'uplaywebcore.exe', 'ubisoftgamelauncher.exe', 'battle.net.exe', 'agent.exe', 'eadesktop.exe', 'eabackgroundservice.exe',
+  'origin.exe', 'galaxyclient.exe', 'galaxyclient helper.exe', 'xboxpcapp.exe', 'gamingservices.exe', 'xboxapp.exe',
+  'chrome.exe', 'msedge.exe', 'msedgewebview2.exe', 'firefox.exe', 'brave.exe', 'opera.exe', 'opera_gx.exe', 'vivaldi.exe', 'arc.exe',
+  'code.exe', 'cursor.exe', 'windsurf.exe', 'devenv.exe', 'idea64.exe', 'pycharm64.exe', 'webstorm64.exe', 'rider64.exe',
+  'clion64.exe', 'goland64.exe', 'zed.exe', 'sublime_text.exe', 'notepad++.exe',
+  'discord.exe', 'slack.exe', 'teams.exe', 'ms-teams.exe', 'spotify.exe', 'electron.exe', 'obsidian.exe', 'notion.exe', 'whatsapp.exe',
+  'steam', 'chrome', 'firefox', 'code', 'discord', 'slack', 'electron',
+]);
+
 // ---------------------------------------------------------------------------
 // Attribution
 // ---------------------------------------------------------------------------
 
-const CLAUDE_NAME = /^claude(\.exe)?$/i;
-
+/**
+ * The Claude Code CLI process. The Claude Desktop app (Electron, also
+ * `Claude.exe`) is NOT a root: its renderers and GPU process are the user's app.
+ */
 function isClaudeRoot(p) {
-  return CLAUDE_NAME.test(p.name || '') || /@anthropic-ai[\\/]claude-code/i.test(p.cmd || '');
+  const cmd = String(p.cmd || '');
+  if (/@anthropic-ai[\\/]claude-code/i.test(cmd)) return true;
+  if (!/^claude(\.exe)?$/i.test(p.name || '')) return false;
+  if (/--type=/.test(cmd)) return false;
+  return !/[\\/](windowsapps[\\/]claude_|anthropicclaude[\\/])|\/applications\/claude\.app\//i.test(String(p.path || ''));
 }
 
 /**
- * Claude-attributed pids: every claude process, every extra root (queued jobs
- * the watcher runs), all their descendants, plus the session job members.
+ * Claude-attributed pids: every Claude Code process (or only the given roots
+ * when claudeRoots is false), all their descendants, plus session job members.
  * A ppid link only counts when the parent started before the child (pid reuse).
  * @returns {Set<number>}
  */
@@ -144,8 +159,7 @@ function attributedPids(procs, { jobPids = [], extraRoots = [], claudeRoots = tr
   }
   const out = new Set();
   const stack = claudeRoots ? procs.filter((p) => isClaudeRoot(p)).map((p) => p.pid) : [];
-  for (const r of extraRoots) if (byPid.has(r)) stack.push(r);
-  for (const j of jobPids) if (byPid.has(j)) stack.push(j);
+  for (const r of [...extraRoots, ...jobPids]) if (byPid.has(r)) stack.push(r);
   while (stack.length) {
     const pid = stack.pop();
     if (out.has(pid)) continue;
@@ -160,6 +174,15 @@ function attributedPids(procs, { jobPids = [], extraRoots = [], claudeRoots = tr
   return out;
 }
 
+/** Descendants of each session's claude pid → session id. */
+function sessionMap(procs, sessions) {
+  const out = new Map();
+  for (const [sid, pid] of Object.entries(sessions || {})) {
+    for (const d of attributedPids(procs, { extraRoots: [pid], claudeRoots: false })) if (!out.has(d)) out.set(d, sid);
+  }
+  return out;
+}
+
 /** Claude itself, its MCP servers and whatever starts with a session are infrastructure. */
 function isInfra(p, { sessionStarts = [], graceMs = 20000 } = {}) {
   if (isClaudeRoot(p)) return true;
@@ -167,9 +190,7 @@ function isInfra(p, { sessionStarts = [], graceMs = 20000 } = {}) {
   return sessionStarts.some((s) => Number.isFinite(p.startMs) && p.startMs >= s - 5000 && p.startMs <= s + graceMs);
 }
 
-/**
- * @returns {'self'|'infra'|'claude'|'service'|'os'|'foreign'}
- */
+/** @returns {'self'|'infra'|'claude'|'service'|'os'|'foreign'} */
 function classify(p, ctx) {
   if (ctx.selfPids && ctx.selfPids.has(p.pid)) return 'self';
   if (ctx.attributed && ctx.attributed.has(p.pid)) {
@@ -182,27 +203,31 @@ function classify(p, ctx) {
 
 /**
  * Self-loop guard: names of Claude-driven services whose load counts as
- * Claude's right now (request in flight, or ended < selfLoopMs ago).
- * @param {Array<{names:string[], inflight:string}>} services
- * @param {Record<string,{active?:boolean, endedAt?:number}>} markers by inflight name
+ * Claude's now — a request is in flight (count > 0, updated < 30 min ago) or
+ * ended < selfLoopMs ago. Markers come one file per client process.
+ * @param {Record<string, Array<{count?:number, updatedAt?:number, endedAt?:number}>>} markers by inflight name
  */
 function activeServiceNames(services, markers, now, selfLoopMs) {
   const out = new Set();
   for (const s of services || []) {
-    const m = markers && markers[s.inflight];
-    if (!m) continue;
-    const live = m.active === true || (Number.isFinite(m.endedAt) && now - m.endedAt < selfLoopMs);
+    const live = ((markers && markers[s.inflight]) || []).some((m) => (m.count > 0 && now - (m.updatedAt || 0) < 30 * 60000)
+      || (Number.isFinite(m.endedAt) && now - m.endedAt < selfLoopMs));
     if (live) for (const n of s.names || []) out.add(String(n).toLowerCase());
   }
   return out;
 }
 
+/** Every service name (lower case) — never learned as a priority app. */
+function serviceNames(services) {
+  return new Set((services || []).flatMap((s) => s.names || []).map((n) => String(n).toLowerCase()));
+}
+
 /**
- * Group Claude processes into jobs: the subtree below the first non-infra
- * ancestor of a Claude root (the tool call's shell, a queued run). Loads sum.
+ * Group Claude processes into jobs: the subtree below the first non-Claude
+ * ancestor (the tool call's shell). Loads sum. `sessionOf` maps pid → session.
  * @returns {Map<string, object>}
  */
-function groupJobs(procs, classes, listening = new Set()) {
+function groupJobs(procs, classes, listening = new Set(), sessionOf = new Map()) {
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   const jobs = new Map();
   for (const p of procs) {
@@ -217,7 +242,7 @@ function groupJobs(procs, classes, listening = new Set()) {
     const id = `${root.pid}@${Math.round(root.startMs || 0)}`;
     let j = jobs.get(id);
     if (!j) {
-      j = { id, rootPid: root.pid, startMs: root.startMs || 0, name: root.name, cmd: root.cmd || '', pids: [], cpuPct: 0, gpuPct: 0, ioBps: 0, memMB: 0, listening: false, container: null };
+      j = { id, rootPid: root.pid, startMs: root.startMs || 0, name: root.name, cmd: root.cmd || '', session: sessionOf.get(root.pid) || null, pids: [], cpuPct: 0, gpuPct: 0, ioBps: 0, memMB: 0, listening: false };
       jobs.set(id, j);
     }
     j.pids.push({ pid: p.pid, startMs: p.startMs || 0 });
@@ -234,19 +259,25 @@ function groupJobs(procs, classes, listening = new Set()) {
 // Heavy tracking and job kind
 // ---------------------------------------------------------------------------
 
-function loadedResources(load, th, diskBusy = true) {
+function loadedResources(load, th, { diskBusy = true, ram = true } = {}) {
   const r = [];
   if ((load.cpuPct || 0) > th.cpuPct) r.push('cpu');
   if ((load.gpuPct || 0) > th.gpuPct) r.push('gpu');
   if (diskBusy && (load.ioBps || 0) > th.diskBps) r.push('disk');
-  if ((load.memMB || 0) > th.ramMB) r.push('ram');
+  if (ram && (load.memMB || 0) > th.ramMB) r.push('ram');
   return r;
+}
+
+/** The foreground record a job belongs to (same session when both are known). */
+function foregroundOf(j, records) {
+  return (records || []).find((f) => Number.isFinite(f.startedAt) && j.startMs >= f.startedAt - 2000
+    && (!j.session || !f.sessionId || f.sessionId === j.session)) || null;
 }
 
 /**
  * @param {Record<string,object>} prev tracked jobs of the last tick
  * @param {Map<string,object>} jobs this tick's jobs
- * @param {{diskBusy?:boolean, foreground?:Array<{startedAt:number}>}} ctx
+ * @param {{diskBusy?:boolean, foreground?:Array<{startedAt:number, sessionId?:string, kind?:string}>}} ctx
  * @returns {Record<string,object>} tracked jobs (dead jobs dropped)
  */
 function trackJobs(prev, jobs, now, cfg, ctx = {}) {
@@ -255,25 +286,25 @@ function trackJobs(prev, jobs, now, cfg, ctx = {}) {
   for (const j of jobs.values()) {
     const p = (prev && prev[j.id]) || { firstSeen: now, overSince: null, lastOver: null, heavySince: null, res: [], peakMB: 0, gpu: false };
     // "Heavy" is measured on CPU, GPU and disk; RAM only says which pressure the job feeds.
-    const loads = loadedResources(j, th, ctx.diskBusy !== false);
+    const loads = loadedResources(j, th, { diskBusy: ctx.diskBusy !== false });
     const over = loads.some((r) => r !== 'ram');
     let overSince = p.overSince;
     let lastOver = p.lastOver;
     if (over) { overSince = overSince ?? now; lastOver = now; } else if (lastOver === null || now - lastOver > th.dipMs) overSince = null;
     const heavyNow = overSince !== null && now - overSince >= th.sustainMs;
     const heavySince = p.heavySince ?? (heavyNow ? now : null);
-    const res = Array.from(new Set([...(p.res || []), ...(heavySince !== null || heavyNow ? loads : [])]));
+    const res = Array.from(new Set([...(p.res || []), ...(heavySince !== null ? loads : [])]));
     const gpu = p.gpu || (heavySince !== null && (j.gpuPct || 0) > th.gpuPct);
-    const fg = (ctx.foreground || []).some((f) => Number.isFinite(f.startedAt) && j.startMs >= f.startedAt - 2000);
+    const fg = foregroundOf(j, ctx.foreground);
     let kind = 'build';
     if (j.listening) kind = 'server';
     else if (fg) kind = 'foreground';
-    else if (j.container) kind = heavySince !== null && now - heavySince >= th.generatorMs ? 'generator' : 'container';
     else if (heavySince !== null && now - heavySince >= th.generatorMs) kind = 'generator';
     out[j.id] = {
-      ...p, id: j.id, rootPid: j.rootPid, startMs: j.startMs, name: j.name, cmd: j.cmd, pids: j.pids, container: j.container || null,
+      ...p, id: j.id, rootPid: j.rootPid, startMs: j.startMs, name: j.name, cmd: j.cmd, session: j.session, pids: j.pids,
       cpuPct: j.cpuPct, gpuPct: j.gpuPct, ioBps: j.ioBps, memMB: j.memMB,
       overSince, lastOver, heavySince, heavy: heavySince !== null, res, gpu, kind,
+      cmdKind: p.cmdKind || (fg && fg.kind) || null,
       peakMB: Math.max(p.peakMB || 0, j.memMB || 0),
     };
   }
@@ -282,8 +313,7 @@ function trackJobs(prev, jobs, now, cfg, ctx = {}) {
 
 /** Highest level a job may reach: only CPU generators are paused. */
 function maxLevel(job) {
-  if (job.kind === 'generator' && !job.gpu) return LEVEL.PAUSE;
-  return LEVEL.CAP;
+  return job.kind === 'generator' && !job.gpu ? LEVEL.PAUSE : LEVEL.CAP;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,63 +322,66 @@ function maxLevel(job) {
 
 /**
  * @param {{apps?:object}} prev
- * @param {Array<object>} foreign foreign processes with cpuPct/gpuPct/ioBps/memMB/path/name
- * @param {object} ctx { libraryRoots, libraryExes:Set(lower path), learned:{key:{resources}}, manual:boolean,
- *   foreground:{pid, fullscreen, idleMs}|null, cfg }
+ * @param {Array<object>} foreign foreign processes with cpuPct/gpuPct/ioBps/path/name
+ * @param {object} ctx { cfg, libraryRoots, libraryDirs, libraryExes:Set, learned:{key:{resources}}, manual,
+ *   foreground:{pid, fullscreen, idleMs}|null, noLearn:Set(lower names) }
  * @returns {{apps:object, active:Record<string,string>, all:boolean, allBy:string|null, newlyLearned:Array}}
  */
 function updatePriority(prev, foreign, now, ctx) {
   const cfg = ctx.cfg;
   const f = cfg.foreign;
-  const apps = {};
+  const th = { cpuPct: f.cpuPct, gpuPct: f.gpuPct, diskBps: f.diskBps, ramMB: Infinity };
   const prevApps = (prev && prev.apps) || {};
   const learned = ctx.learned || {};
   const libExes = ctx.libraryExes || new Set();
+  const libPrefixes = [...(ctx.libraryRoots || []), ...(ctx.libraryDirs || [])].map((r) => lowerSlash(r).replace(/\\+$/, '') + '\\');
+  const noLearn = ctx.noLearn || new Set();
+  const fgPid = ctx.foreground && ctx.foreground.pid;
+  const interactive = Boolean(fgPid && ctx.foreground.idleMs !== undefined && ctx.foreground.idleMs < f.interactiveIdleMs);
+  const apps = {};
   const newlyLearned = [];
   const seen = new Map();
   for (const p of foreign) {
     const key = appKey(p.path, ctx.libraryRoots, ctx.libraryDirs) || String(p.name || '').toLowerCase();
     if (!key || listed(cfg.neverPriority, key, p.name)) continue;
-    const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, memMB: 0, pids: [], name: p.name, path: p.path };
+    const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, pids: [], name: p.name, launcher: false, library: false };
+    const lname = String(p.name || '').toLowerCase();
     a.cpuPct += p.cpuPct || 0;
     a.gpuPct = Math.max(a.gpuPct, p.gpuPct || 0);
     a.ioBps += p.ioBps || 0;
-    a.memMB += p.memMB || 0;
     a.pids.push(p.pid);
-    a.fromLibrary = a.fromLibrary || [...(ctx.libraryRoots || []), ...(ctx.libraryDirs || [])].some((r) => lowerSlash(p.path).startsWith(lowerSlash(r).replace(/\\+$/, '') + '\\'))
-      || libExes.has(lowerSlash(p.path));
+    a.launcher = a.launcher || NO_LEARN.has(lname) || noLearn.has(lname);
+    if (!NO_LEARN.has(lname)) a.library = a.library || libPrefixes.some((r) => lowerSlash(p.path).startsWith(r)) || libExes.has(lowerSlash(p.path));
     seen.set(key, a);
   }
-  const fgPid = ctx.foreground && ctx.foreground.pid;
   for (const a of seen.values()) {
-    const old = prevApps[a.key] || { res: {}, loadSince: null, lastLoad: null };
+    const old = prevApps[a.key] || { res: {}, gpuSince: null, lastGpu: null };
     const res = { ...old.res };
-    const loads = loadedResources(a, { cpuPct: f.cpuPct, gpuPct: f.gpuPct, diskBps: f.diskBps, ramMB: f.ramMB });
+    const loads = loadedResources(a, th, { ram: false });
     for (const r of loads) res[r] = now;
-    const startRes = learned[a.key] ? (learned[a.key].resources || RESOURCES)
-      : (a.fromLibrary || listed(cfg.alwaysPriority, a.key, a.name)) ? RESOURCES : null;
-    if (startRes) for (const r of startRes) res[r] = now;
-    let loadSince = old.loadSince;
-    let lastLoad = old.lastLoad;
-    if (loads.length) { loadSince = loadSince ?? now; lastLoad = now; } else if (lastLoad === null || now - lastLoad > 5000) loadSince = null;
-    const isFg = fgPid && a.pids.includes(fgPid);
-    const fullscreen3d = isFg && ctx.foreground.fullscreen && loads.includes('gpu');
-    const learnAfter = fullscreen3d ? f.learnFullscreenMs : f.learnMs;
-    let isLearned = Boolean(learned[a.key]) || a.fromLibrary;
-    if (!isLearned && loadSince !== null && now - loadSince >= learnAfter && !old.learned) {
-      newlyLearned.push({ key: a.key, name: appLabel(a.key), resources: Array.from(new Set([...(old.learnRes || []), ...loads])), learnedAt: now });
+    const isFg = Boolean(fgPid && a.pids.includes(fgPid));
+    const always = listed(cfg.alwaysPriority, a.key, a.name);
+    const known = (a.library || learned[a.key]) && !a.launcher;
+    // Library / learned apps: priority while in the foreground (plus measured load, which decays like any app's).
+    if (known && isFg) for (const r of (learned[a.key] && learned[a.key].resources) || PRIORITY_TRIGGERS) res[r] = now;
+    if (always) for (const r of PRIORITY_TRIGGERS) res[r] = now;
+    // Learning: only a foreground app with GPU load (3D); never launchers, browsers, IDEs or Claude-driven services.
+    const canLearn = !known && !always && !a.launcher && isFg && loads.includes('gpu');
+    let gpuSince = old.gpuSince;
+    let lastGpu = old.lastGpu;
+    if (canLearn) { gpuSince = gpuSince ?? now; lastGpu = now; } else if (lastGpu === null || now - lastGpu > 5000) gpuSince = null;
+    const learnAfter = ctx.foreground && ctx.foreground.fullscreen ? f.learnFullscreenMs : f.learnMs;
+    let isLearned = Boolean(old.learned);
+    if (!isLearned && !known && gpuSince !== null && now - gpuSince >= learnAfter) {
+      newlyLearned.push({ key: a.key, name: appLabel(a.key), resources: [...PRIORITY_TRIGGERS], learnedAt: now });
       isLearned = true;
     }
-    apps[a.key] = {
-      key: a.key, name: a.name, res, loadSince, lastLoad, running: true, learned: isLearned || old.learned || false,
-      learnRes: Array.from(new Set([...(old.learnRes || []), ...loads])), pids: a.pids,
-    };
+    apps[a.key] = { key: a.key, name: a.name, res, gpuSince, lastGpu, running: true, learned: isLearned, pids: a.pids };
   }
   // Apps that stopped keep their per-resource timestamps until they decay.
   for (const [key, old] of Object.entries(prevApps)) {
-    if (apps[key]) continue;
-    if (listed(cfg.neverPriority, key, old.name)) continue;
-    if (Object.values(old.res || {}).some((t) => now - t < f.decayMs)) apps[key] = { ...old, running: false, pids: [], loadSince: null };
+    if (apps[key] || listed(cfg.neverPriority, key, old.name)) continue;
+    if (Object.values(old.res || {}).some((t) => now - t < f.decayMs)) apps[key] = { ...old, running: false, pids: [], gpuSince: null };
   }
   const active = {};
   for (const a of Object.values(apps)) {
@@ -359,7 +392,7 @@ function updatePriority(prev, foreign, now, ctx) {
   let all = false;
   let allBy = null;
   if (ctx.manual) { all = true; allBy = 'manual'; }
-  if (!all && fgPid && ctx.foreground.idleMs !== undefined && ctx.foreground.idleMs < f.interactiveIdleMs) {
+  if (!all && interactive) {
     const fgApp = Object.values(apps).find((a) => a.running && a.pids.includes(fgPid));
     if (fgApp && Object.values(fgApp.res).some((t) => now - t < f.decayMs)) { all = true; allBy = fgApp.key; }
   }
@@ -379,17 +412,20 @@ function mean(xs) { const v = xs.filter(Number.isFinite); return v.length ? v.re
  */
 function updateBudget(prev, sys, now, cfg) {
   const b = cfg.budget;
-  const window = [...((prev && prev.window) || []), { ts: now, ...sys }].filter((s) => now - s.ts <= b.smoothMs);
+  const diskMs = Number.isFinite(sys.diskMs) && sys.diskMs >= 0 && sys.diskMs < 10000 ? sys.diskMs : NaN; // counter wrap → ignore
+  const window = [...((prev && prev.window) || []), { ts: now, ...sys, diskMs }].filter((s) => now - s.ts <= b.smoothMs);
   const wasOver = (prev && prev.over) || {};
   const baseline = { ...((prev && prev.baseline) || {}) };
   if (!Number.isFinite(baseline.diskMs)) {
     baseline.since = baseline.since ?? now;
-    baseline.samples = [...(baseline.samples || []), sys.diskMs].filter(Number.isFinite).slice(-200);
+    baseline.samples = [...(baseline.samples || []), diskMs].filter(Number.isFinite).slice(-200);
     if (now - baseline.since >= b.baselineMs && baseline.samples.length) {
       const sorted = [...baseline.samples].sort((x, y) => x - y);
       baseline.diskMs = Math.max(b.minBaselineMs, sorted[Math.floor(sorted.length * 0.2)]);
       delete baseline.samples;
     }
+  } else if (Number.isFinite(diskMs) && diskMs < baseline.diskMs * 2) {
+    baseline.diskMs = Math.max(b.minBaselineMs, baseline.diskMs * 0.995 + diskMs * 0.005); // slow re-baseline on quiet samples
   }
   const ratio = b.lowPct / b.highPct;
   const m = {
@@ -403,9 +439,8 @@ function updateBudget(prev, sys, now, cfg) {
   };
   const hyst = (was, v) => (Number.isFinite(v) ? (was ? v > b.lowPct : v > b.highPct) : false);
   const over = { cpu: hyst(wasOver.cpu, m.cpu), gpu: hyst(wasOver.gpu, m.gpu), disk: false, ram: false };
-  const base = Number.isFinite(baseline.diskMs) ? baseline.diskMs : NaN;
-  if (Number.isFinite(base) && Number.isFinite(m.diskMs)) {
-    const r = m.diskMs / base;
+  if (Number.isFinite(baseline.diskMs) && Number.isFinite(m.diskMs)) {
+    const r = m.diskMs / baseline.diskMs;
     const q = Number.isFinite(m.diskQueue) ? m.diskQueue : 0;
     over.disk = wasOver.disk ? (r > b.diskLatencyFactor * ratio && q > b.diskQueue * ratio) : (r > b.diskLatencyFactor && q > b.diskQueue);
   }
@@ -426,10 +461,6 @@ function updateBudget(prev, sys, now, cfg) {
  * them yields at once to its max level. Over-budget only: one step per
  * escalateMs, newest heavy job first. Relax: one step per relaxMs, oldest
  * first (the newest returns last), only after relaxMs without a change.
- * @param {Record<string,object>} jobs tracked jobs (alive)
- * @param {Record<string,{level:number, resources:string[]}>} current throttles by jobId
- * @param {{priority:string[], over:string[]}} pressure
- * @param {{escalateAt?:number, changeAt?:number}} last
  * @returns {{desired:Record<string,{level:number, resources:string[]}>, last:object}}
  */
 function plan(jobs, current, pressure, now, cfg, last = {}) {
@@ -447,8 +478,8 @@ function plan(jobs, current, pressure, now, cfg, last = {}) {
     if (!r.length) continue;
     const cur = desired[j.id] || { level: 0, resources: [] };
     const target = maxLevel(j);
-    if (cur.level < target) { desired[j.id] = { level: target, resources: Array.from(new Set([...cur.resources, ...r])) }; changed = true; }
-    else desired[j.id] = { level: cur.level, resources: Array.from(new Set([...cur.resources, ...r])) };
+    if (cur.level < target) changed = true;
+    desired[j.id] = { level: Math.max(cur.level, target), resources: Array.from(new Set([...cur.resources, ...r])) };
   }
   if (over.size && now - next.escalateAt >= cfg.budget.escalateMs) {
     const j = heavy.find((x) => hits(x, over).length && (desired[x.id]?.level || 0) < maxLevel(x));
@@ -461,14 +492,12 @@ function plan(jobs, current, pressure, now, cfg, last = {}) {
   }
   if (changed) next.changeAt = now;
   else if (now - next.changeAt >= cfg.budget.relaxMs) {
-    const relaxable = Object.entries(desired)
+    const j = Object.entries(desired)
       .filter(([, t]) => t.level > 0 && !t.resources.some((r) => pressured.has(r)))
       .map(([id]) => jobs[id])
-      .sort((a, b) => (a.heavySince - b.heavySince) || (a.startMs - b.startMs));
-    const j = relaxable[0];
+      .sort((a, b) => (a.heavySince - b.heavySince) || (a.startMs - b.startMs))[0];
     if (j) {
       desired[j.id] = { ...desired[j.id], level: desired[j.id].level - 1 };
-      if (desired[j.id].level === 0) desired[j.id].resources = [];
       next.changeAt = now;
     }
   }
@@ -485,98 +514,102 @@ function pressureOf(priority, budget) {
 }
 
 // ---------------------------------------------------------------------------
-// Orphan reversal
+// Commands (PreToolUse)
 // ---------------------------------------------------------------------------
 
-/**
- * Every recorded throttle is reversed at watcher start; a pid whose start
- * time no longer matches (gone, or reused) is dropped without an OS call.
- * @param {Array<{pids:Array<{pid:number,startMs:number}>}>} throttles
- * @param {Map<number,{startMs:number}>|null} alive null = unknown → revert all (the adapter re-checks identity)
- */
-function reversalPlan(throttles, alive) {
-  return (throttles || []).map((t) => {
-    if (t.container) return { entry: t, action: 'revert', pids: [] };
-    const pids = (t.pids || []).filter((p) => {
-      if (!alive) return true;
-      const cur = alive.get(p.pid);
-      return cur && Math.abs((cur.startMs || 0) - (p.startMs || 0)) < 2000;
-    });
-    return { entry: t, action: pids.length ? 'revert' : 'drop', pids };
-  });
+/** Leading-command token lists of each `;` `&&` `||` `|` `&` / newline segment; quotes and heredoc bodies removed. */
+function commandSegments(cmd) {
+  let s = String(cmd || '');
+  s = s.replace(/<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, '\n');
+  s = s.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, '""');
+  const out = [];
+  for (const seg of s.split(/\|\||&&|[;|&\n]/)) {
+    const t = seg.replace(/^[\s({]+|\$\(/g, ' ').trim().split(/\s+/).filter(Boolean);
+    while (t.length && (/^[A-Za-z_]\w*=/.test(t[0]) || ['time', 'exec', 'command', 'env', 'sudo', 'npx', 'bunx', 'pnpx'].includes(t[0].toLowerCase()))) t.shift();
+    if (t.length) out.push(t);
+  }
+  return out;
 }
 
-// ---------------------------------------------------------------------------
-// Admission (PreToolUse)
-// ---------------------------------------------------------------------------
+const progOf = (tok) => String(tok).split(/[\\/]/).pop().toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, '');
+const INFO_FLAGS = new Set(['-version', '--version', '-v', '-h', '--help', '-help', 'help', 'version']);
 
-const HEAVY_CMDS = [
-  [/\b(npm|pnpm|yarn|bun)\s+(run\s+)?(test|build|ci|install|i|rebuild|e2e)\b/i, (m) => `${m[1]} ${m[3]}`.toLowerCase()],
-  [/\b(npx\s+)?(vitest|jest|mocha|playwright|cypress|tsc|webpack|vite\s+build|next\s+build|turbo|nx)\b/i, (m) => m[2].toLowerCase().replace(/\s+/g, ' ')],
-  [/\b(pytest|tox|nox)\b/i, (m) => m[1].toLowerCase()],
-  [/\b(cargo|go|dotnet|mvn|mvnw|gradle|gradlew|swift|zig)\s+(build|test|run|install|publish|bench|package|verify|compile)\b/i, (m) => `${m[1]} ${m[2]}`.toLowerCase()],
-  [/\b(make|ninja|cmake\s+--build|msbuild|bazel|meson\s+compile)\b/i, (m) => m[1].toLowerCase().replace(/\s+/g, ' ')],
-  [/\bdocker\s+(build|run|compose\s+up|compose\s+build|buildx)\b|\bdocker-compose\s+(up|build)\b/i, () => 'docker'],
-  [/\b(ffmpeg|blender|handbrakecli|ollama\s+(run|pull|create)|whisper|llama-cli)\b/i, (m) => m[1].toLowerCase().split(/\s+/)[0]],
-  [/\bpython3?\s+\S*(train|finetune|fine_tune|render|generate|benchmark)\S*/i, () => 'python generator'],
-];
-
-const ESCAPES = [
-  /(^|[\s;&|(])wsl(\.exe)?\s/i, /\bschtasks\b/i, /\bStart-Process\b[^|;]*-Verb\b/i,
-  /(^|[\s;&|(])sc(\.exe)?\s+(create|start|config)\b/i, /\bNew-Service\b/i, /\bStart-Service\b/i,
-  /\bsystemd-run\b/i, /\bsystemctl\s+(--user\s+)?start\b/i, /\blaunchctl\s+(load|bootstrap|kickstart)\b/i,
-  /\bnohup\b/i, /\bsetsid\b/i, /\bdisown\b/i,
-];
-
-/** Normalised job kind of a heavy-looking command, else null. */
-function commandKind(cmd) {
-  const s = String(cmd || '');
-  for (const [re, kind] of HEAVY_CMDS) {
-    const m = s.match(re);
-    if (m) return kind(m);
+/** One segment → {kind, gpu} or null. */
+function heavySegment(t) {
+  const prog = progOf(t[0]);
+  const a1 = (t[1] || '').toLowerCase();
+  const a2 = (t[2] || '').toLowerCase();
+  const info = t.slice(1).some((x) => INFO_FLAGS.has(x.toLowerCase()));
+  if (info) return null;
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog)) {
+    const sub = a1 === 'run' ? a2 : a1;
+    return ['test', 'build', 'ci', 'install', 'i', 'rebuild', 'e2e'].includes(sub) ? { kind: `${prog} ${sub}` } : null;
   }
+  if (['vitest', 'jest', 'mocha', 'playwright', 'cypress', 'tsc', 'webpack', 'turbo', 'nx', 'pytest', 'tox', 'nox', 'make', 'ninja', 'msbuild', 'bazel'].includes(prog)) return { kind: prog };
+  if ((prog === 'vite' || prog === 'next') && a1 === 'build') return { kind: `${prog} build` };
+  if (prog === 'cmake' && t.includes('--build')) return { kind: 'cmake' };
+  if (['cargo', 'go', 'dotnet', 'mvn', 'mvnw', 'gradle', 'gradlew', 'swift', 'zig'].includes(prog)
+    && ['build', 'test', 'run', 'install', 'publish', 'bench', 'package', 'verify', 'compile'].includes(a1)) return { kind: `${prog} ${a1}` };
+  if (prog === 'docker' && (['build', 'run', 'buildx'].includes(a1) || (a1 === 'compose' && ['up', 'build'].includes(a2)))) return { kind: 'docker' };
+  if (prog === 'docker-compose' && ['up', 'build'].includes(a1)) return { kind: 'docker' };
+  if (['ffmpeg', 'blender', 'handbrakecli', 'whisper', 'llama-cli'].includes(prog) && t.length > 1) return { kind: prog, gpu: true };
+  if (prog === 'ollama' && ['run', 'pull', 'create'].includes(a1)) return { kind: 'ollama', gpu: true };
+  if (/^(python3?|py)$/.test(prog) && /(train|finetune|fine_tune|render|generate|benchmark)/i.test(t[1] || '')) return { kind: 'python generator', gpu: true };
   return null;
 }
 
-function isEscape(cmd) { return ESCAPES.some((re) => re.test(String(cmd || ''))); }
+function escapeSegment(t) {
+  const prog = progOf(t[0]);
+  if (prog === 'wsl' || prog === 'schtasks' || prog === 'systemd-run') return true;
+  if (prog === 'sc' && (t[1] || '').toLowerCase() === 'create') return true;
+  return prog === 'start-process' && t.some((x) => /^-verb$/i.test(x));
+}
 
 /**
- * @param {object} a
- * @param {string} a.command
- * @param {object|null} a.state watcher state (heartbeat, pressure, sys.freeMB, enabled)
- * @param {Array<{mb:number, expiresAt:number}>} a.reservations
- * @param {Record<string,{peakMB:number}>} a.kinds learned per-kind peaks
- * @returns {{decision:'allow'|'defer', reason:string, kind:string|null, expectedMB:number, reserve:boolean}}
+ * @returns {{kind:string|null, escape:boolean, resources:string[]}} resources the command would load
  */
-function admit({ command, now, state, reservations = [], kinds = {}, cfg }) {
-  const kind = commandKind(command);
-  const escape = isEscape(command);
-  const none = { kind, expectedMB: 0, reserve: false };
-  if (!kind && !escape) return { decision: 'allow', reason: 'light', ...none };
-  const hb = state && Number.isFinite(state.heartbeat) ? state.heartbeat : null;
-  const alive = hb !== null && now - hb < cfg.admission.staleMs;
-  const p = (state && state.pressure) || { priority: [], over: [] };
-  const hasPressure = (p.priority || []).length > 0 || (p.over || []).length > 0;
-  // Stale state still counts while its pressure could not have decayed yet: uncertain → defer.
-  const pressure = hasPressure && (alive || (hb !== null && now - hb < cfg.foreign.decayMs));
-  if (pressure) {
-    const by = (state && state.priorityBy) || null;
-    return { decision: 'defer', reason: alive ? (by ? `priority:${by}` : `budget:${(p.over || []).join(',')}`) : 'uncertain', ...none };
+function classifyCommand(cmd) {
+  let hit = null;
+  let escape = false;
+  for (const t of commandSegments(cmd)) {
+    if (!hit) hit = heavySegment(t);
+    escape = escape || escapeSegment(t);
   }
-  if (!kind) return { decision: 'allow', reason: 'escape-no-pressure', ...none };
-  if (!alive) return { decision: 'allow', reason: 'watcher-absent', ...none };
-  const expectedMB = (kinds[kind] && kinds[kind].peakMB) || cfg.admission.defaultMB;
-  const reserved = reservations.filter((r) => r.expiresAt > now).reduce((s, r) => s + (r.mb || 0), 0);
-  const free = (state.sys && Number.isFinite(state.sys.freeMB) ? state.sys.freeMB : Infinity) - reserved;
-  if (free < expectedMB + cfg.admission.headroomMB) return { decision: 'defer', reason: 'ram', kind, expectedMB, reserve: false };
-  return { decision: 'allow', reason: 'slot', kind, expectedMB, reserve: true };
+  const resources = hit ? (hit.gpu ? ['cpu', 'gpu', 'disk', 'ram'] : ['cpu', 'disk', 'ram']) : escape ? [...RESOURCES] : [];
+  return { kind: hit ? hit.kind : null, escape, resources };
+}
+
+function commandKind(cmd) { return classifyCommand(cmd).kind; }
+
+/**
+ * Admission. Fail open: no or stale watcher state → allow. Defer only when a
+ * resource the command loads is pressed, or free RAM < expected + headroom.
+ * @returns {{decision:'allow'|'defer', reason:string, kind:string|null, resources:string[]}}
+ */
+function admit({ command, now, state, kinds = {}, cfg }) {
+  const c = classifyCommand(command);
+  const base = { kind: c.kind, resources: c.resources };
+  if (!c.kind && !c.escape) return { decision: 'allow', reason: 'light', ...base };
+  const hb = state && Number.isFinite(state.heartbeat) ? state.heartbeat : null;
+  if (hb === null || now - hb >= cfg.admission.staleMs) return { decision: 'allow', reason: 'watcher-absent', ...base };
+  const p = state.pressure || {};
+  const pressed = c.resources.filter((r) => (p.priority || []).includes(r) || (p.over || []).includes(r));
+  if (pressed.length) {
+    const byPrio = pressed.some((r) => (p.priority || []).includes(r));
+    return { decision: 'defer', reason: byPrio ? `priority:${state.priorityBy || 'app'}` : `budget:${pressed.join(',')}`, ...base };
+  }
+  if (!c.kind) return { decision: 'allow', reason: 'escape-no-pressure', ...base };
+  const expected = (kinds[c.kind] && kinds[c.kind].peakMB) || cfg.admission.defaultMB;
+  const free = state.sys && Number.isFinite(state.sys.freeMB) ? state.sys.freeMB : Infinity;
+  if (free < expected + cfg.admission.headroomMB) return { decision: 'defer', reason: 'ram', ...base };
+  return { decision: 'allow', reason: 'slot', ...base };
 }
 
 module.exports = {
-  RESOURCES, LEVEL, WIN_OS_NAMES,
+  RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN,
   isOsProcess, appKey, appLabel, listed,
-  isClaudeRoot, attributedPids, isInfra, classify, activeServiceNames, groupJobs,
+  isClaudeRoot, attributedPids, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
   loadedResources, trackJobs, maxLevel,
-  updatePriority, updateBudget, plan, pressureOf, reversalPlan,
-  commandKind, isEscape, admit,
+  updatePriority, updateBudget, plan, pressureOf,
+  commandSegments, classifyCommand, commandKind, admit,
 };

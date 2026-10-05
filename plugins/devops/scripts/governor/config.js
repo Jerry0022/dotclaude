@@ -17,12 +17,15 @@ const MB = 1024 * 1024;
 const DEFAULTS = Object.freeze({
   enabled: true,
   notify: true, // OS notifications (newly learned app, starvation); always logged
-  tickMs: 3000,
+  tickMs: 3000, // cadence while a Claude job is tracked
+  idleTickMs: 20000, // cadence with no tracked Claude job (process list only, no GPU)
+  heartbeatMs: 5000,
+  staleLockMs: 15000,
   // A Claude-attributed job is "heavy" after sustainMs over one threshold.
   heavy: { cpuPct: 25, gpuPct: 20, diskBps: 20 * MB, ramMB: 1024, sustainMs: 20000, dipMs: 6000, generatorMs: 120000 },
   // "Noticeable load" of a foreign (non-Claude, non-OS) app, per resource.
   foreign: {
-    cpuPct: 10, gpuPct: 10, diskBps: 10 * MB, ramMB: 1500,
+    cpuPct: 10, gpuPct: 10, diskBps: 10 * MB,
     decayMs: 10 * 60000, learnFullscreenMs: 15000, learnMs: 60000, interactiveIdleMs: 120000,
   },
   // The 80 % rule (always on).
@@ -31,20 +34,23 @@ const DEFAULTS = Object.freeze({
     diskLatencyFactor: 4, diskQueue: 1, ramFreePct: 15, ramFreeMB: 4096, pagingPerSec: 2500,
     baselineMs: 60000, minBaselineMs: 0.3,
   },
-  cap: { cpuPct: 10, ioPriority: 'verylow' },
-  admission: { defaultMB: 1024, headroomMB: 4096, reserveMs: 5 * 60000, staleMs: 15000 },
+  cap: { cpuPct: 10, memFactor: 1.25 }, // memFactor: Linux MemoryHigh = expected MB * factor
+  admission: { defaultMB: 1024, headroomMB: 4096, staleMs: 15000 },
   infraGraceMs: 20000,
   selfLoopMs: 60000,
   starvationMs: 30 * 60000,
   queueExpiryMs: 24 * 3600000,
+  foregroundTtlMs: 6 * 3600000,
   // Apps (top-level folder or exe name, case-insensitive substring of the app key).
   alwaysPriority: [],
   neverPriority: [],
+  noLearn: [], // extra exe names never learned as priority (launchers/browsers are built in)
   // Local services Claude drives: their load counts as Claude load while a
-  // Claude request is in flight or ended < selfLoopMs ago. `inflight` names
-  // the marker file under governor/inflight/ the client writes.
+  // Claude request is in flight or ended < selfLoopMs ago, and they are never
+  // learned as priority apps. `inflight` names the marker dir under
+  // governor/inflight/<inflight>/ the client writes.
   claudeServices: [
-    { names: ['ollama', 'ollama.exe', 'ollama_llama_server', 'ollama_llama_server.exe', 'AnythingLLM.exe', 'anythingllm', 'llama-server', 'llama-server.exe'], inflight: 'local-llm' },
+    { names: ['ollama', 'ollama.exe', 'ollama_llama_server', 'ollama_llama_server.exe', 'anythingllm.exe', 'anythingllm', 'llama-server', 'llama-server.exe'], inflight: 'local-llm' },
   ],
   ollamaUrl: 'http://127.0.0.1:11434',
 });
@@ -64,7 +70,6 @@ function paths(base = home()) {
     handover: path.join(base, 'handover.json'),
     sessions: path.join(base, 'sessions'),
     foreground: path.join(base, 'foreground'),
-    reservations: path.join(base, 'reservations'),
     inflight: path.join(base, 'inflight'),
     queue: path.join(base, 'queue'),
     logs: path.join(base, 'logs'),

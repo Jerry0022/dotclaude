@@ -5,10 +5,9 @@
  * @event PostToolUse
  * @plugin devops
  * @matcher Bash|PowerShell
- * @description Clears what pre.governor.gate recorded for this tool call: the
- *   foreground marker (Claude no longer waits on it, so the watcher may pause
- *   a leftover generator) and the RAM reservation. Also registered for
- *   PostToolUseFailure. Silent, fail open.
+ * @description Clears the foreground marker pre.governor.gate recorded for
+ *   this tool call: Claude no longer waits on it, so the watcher may pause a
+ *   leftover generator. Also registered for PostToolUseFailure. Silent, fail open.
  */
 
 require('../lib/plugin-guard');
@@ -23,9 +22,7 @@ function main(hook) {
   const sid = String(hook.session_id || 'nosession').replace(/[^A-Za-z0-9_-]/g, '');
   const tid = String(hook.tool_use_id || '').replace(/[^A-Za-z0-9_-]/g, '');
   if (!tid) return null;
-  for (const dir of [p.foreground, p.reservations]) {
-    try { fs.unlinkSync(path.join(dir, `${sid}-${tid}.json`)); } catch {}
-  }
+  try { fs.unlinkSync(path.join(p.foreground, `${sid}-${tid}.json`)); } catch {}
   return null;
 }
 

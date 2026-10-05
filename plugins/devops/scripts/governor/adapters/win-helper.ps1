@@ -1,21 +1,26 @@
-# dotclaude governor - Windows OS helper.
-# One long-lived Windows PowerShell 5.1 process per watcher, JSON lines over
-# stdin/stdout: {"id":1,"op":"sample"} -> {"id":1,"ok":true,"data":{...}}.
-# Reads foreign processes only through the normal process list and counters
-# (no injection, no handles into foreign processes - anti-cheat safe). Writes
-# only to processes the watcher names (Claude-attributed jobs).
-# When stdin closes (watcher exited or crashed) it resumes everything it
-# suspended and lifts every cap it set, then exits.
+# dotclaude governor - Windows OS helper (benign, reversible scheduling controls).
+# One long-lived Windows PowerShell process per watcher, JSON lines over
+# stdin/stdout: {"id":1,"op":"apply","key":"k","level":1,"pids":[{"pid":123,"startMs":...}]}.
+# The watcher names a KEY per throttled job; the helper keeps
+#   $throttles[key] = @{ pid -> @{ startMs; suspended; capped } }
+# and reverts BY KEY. apply() merges pid lists; release(key) resumes+uncaps all
+# pids under that key. Reads foreign processes only through the normal process
+# list and counters (no handles into foreign processes - anti-cheat safe);
+# writes only to pids the watcher names. When stdin closes (watcher gone) it
+# resumes everything it suspended and lifts every cap, then exits.
+# A pid is only ever acted on when its start time still matches (never a null
+# identity). All numbers are formatted InvariantCulture (German OS uses ',').
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [Text.Encoding]::UTF8
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
+$inv = [Globalization.CultureInfo]::InvariantCulture
 
 Add-Type -TypeDefinition @"
 using System;
+using System.Text;
 using System.Runtime.InteropServices;
-public static class GovNative {
+public static class Gov {
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr CreateJobObject(IntPtr a, string name);
-  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr OpenJobObject(uint access, bool inherit, string name);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr proc);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool IsProcessInJob(IntPtr proc, IntPtr job, out bool result);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
@@ -23,7 +28,6 @@ public static class GovNative {
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool DuplicateHandle(IntPtr srcProc, IntPtr src, IntPtr dstProc, out IntPtr dst, uint access, bool inherit, uint options);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetInformationJobObject(IntPtr job, int cls, ref CpuRate info, int len);
-  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool QueryInformationJobObject(IntPtr job, int cls, IntPtr info, int len, IntPtr ret);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetPriorityClass(IntPtr h, uint cls);
   [DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr h);
   [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr h);
@@ -38,233 +42,183 @@ public static class GovNative {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
   [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
-  public static int[] JobPids(IntPtr job) {
-    int cap = 4096; IntPtr buf = Marshal.AllocHGlobal(8 + IntPtr.Size * cap);
-    try {
-      if (!QueryInformationJobObject(job, 3, buf, 8 + IntPtr.Size * cap, IntPtr.Zero)) return new int[0];
-      int n = Marshal.ReadInt32(buf, 4); int[] r = new int[n];
-      for (int i = 0; i < n; i++) r[i] = (int)Marshal.ReadIntPtr(buf, 8 + i * IntPtr.Size).ToInt64();
-      return r;
-    } finally { Marshal.FreeHGlobal(buf); }
+  // JSON string escape in C# (fast, culture-independent).
+  public static string J(string s) {
+    if (s == null) return "null";
+    var sb = new StringBuilder(s.Length + 2); sb.Append('"');
+    foreach (char c in s) {
+      if (c == '"') sb.Append("\\\"");
+      else if (c == '\\') sb.Append("\\\\");
+      else if (c < 32) sb.Append("\\u").Append(((int)c).ToString("x4"));
+      else sb.Append(c);
+    }
+    sb.Append('"'); return sb.ToString();
   }
 }
 "@
 
-$PROC_ACCESS = 0x0001 -bor 0x0040 -bor 0x0100 -bor 0x0200 -bor 0x0800 -bor 0x1000  # terminate|dup_handle|set_quota|set_information|suspend_resume|query_limited
-$JOB_ALL = 0x1F001F
-$script:jobs = @{}        # name -> handle (session jobs and cap jobs)
-$script:capped = @{}      # cap job name -> @(pid,...)
-$script:suspended = @{}   # pid -> $true (suspended by this helper)
-$script:signers = @{}     # path -> signer subject
+$PROC_ACCESS = 0x0001 -bor 0x0040 -bor 0x0100 -bor 0x0200 -bor 0x0800 -bor 0x1000
+$script:jobs = @{}        # key -> cap job handle
+$script:throttles = @{}   # key -> @{ pid(int) -> @{ startMs; suspended; capped } }
 $script:tick = 0
 $script:listening = @()
 $totalMB = [math]::Round((Get-CimInstance Win32_ComputerSystem -Property TotalPhysicalMemory).TotalPhysicalMemory / 1MB)
 
-function Esc([string]$s) {
-  if ($null -eq $s) { return 'null' }
-  $sb = New-Object Text.StringBuilder ($s.Length + 2)
-  [void]$sb.Append('"')
-  foreach ($c in $s.ToCharArray()) {
-    switch ($c) { '"' { [void]$sb.Append('\"') } '\' { [void]$sb.Append('\\') } default { if ([int]$c -lt 32) { [void]$sb.Append(('\u{0:x4}' -f [int]$c)) } else { [void]$sb.Append($c) } } }
-  }
-  [void]$sb.Append('"'); $sb.ToString()
-}
+function N($x) { return ([double]$x).ToString($inv) }
+function Esc([string]$s) { return [Gov]::J($s) }
 
 function StartMs($pid_) {
   try { return ([DateTimeOffset][Diagnostics.Process]::GetProcessById([int]$pid_).StartTime).ToUnixTimeMilliseconds() } catch { return $null }
 }
-
-# A pid is acted on only when it is still the process the watcher means.
+# Never act on a null identity: a pid with no startMs, or whose start no longer matches, is skipped.
 function Same($p) {
-  if ($null -eq $p.startMs) { return $true }
+  if ($null -eq $p.startMs) { return $false }
   $s = StartMs $p.pid
   return ($null -ne $s) -and ([math]::Abs($s - [double]$p.startMs) -lt 2000)
 }
+function OpenProc($pid_) { [Gov]::OpenProcess($PROC_ACCESS, $false, [int]$pid_) }
 
-function OpenProc($pid_) { [GovNative]::OpenProcess($PROC_ACCESS, $false, [int]$pid_) }
-
-function Signer($path) {
-  if (-not $path) { return $null }
-  if ($script:signers.ContainsKey($path)) { return $script:signers[$path] }
-  $s = $null
-  try { $sig = Get-AuthenticodeSignature -FilePath $path; if ($sig.Status -eq 'Valid') { $s = $sig.SignerCertificate.Subject } } catch {}
-  $script:signers[$path] = $s; return $s
-}
-
-function Op-Sample {
+function Op-Sample($req) {
   $script:tick++
   $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-  $gpuByPid = @{}; $gpuByType = @{}
-  try {
-    foreach ($e in (Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -Property Name,UtilizationPercentage)) {
-      if ($e.Name -match '^pid_(\d+)_.*_engtype_(.+)$') {
-        $u = [double]$e.UtilizationPercentage; $p = [int]$Matches[1]; $t = $Matches[2]
-        if (-not $gpuByPid.ContainsKey($p) -or $gpuByPid[$p] -lt $u) { $gpuByPid[$p] = $u }
-        $gpuByType[$t] = [double]$gpuByType[$t] + $u
+  $wantGpu = ($null -eq $req.gpu) -or [bool]$req.gpu
+  $gpuByPid = @{}; $gpuSys = 0
+  if ($wantGpu) {
+    try {
+      $byType = @{}
+      foreach ($e in (Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -Property Name,UtilizationPercentage)) {
+        if ($e.Name -match '^pid_(\d+)_.*_engtype_(.+)$') {
+          $u = [double]$e.UtilizationPercentage; $pp = [int]$Matches[1]; $tp = $Matches[2]
+          if (-not $gpuByPid.ContainsKey($pp) -or $gpuByPid[$pp] -lt $u) { $gpuByPid[$pp] = $u }
+          $byType[$tp] = [double]$byType[$tp] + $u
+        }
       }
-    }
-  } catch {}
-  $gpuSys = 0; foreach ($v in $gpuByType.Values) { if ($v -gt $gpuSys) { $gpuSys = $v } }
+      foreach ($v in $byType.Values) { if ($v -gt $gpuSys) { $gpuSys = $v } }
+    } catch {}
+  }
   $sb = New-Object Text.StringBuilder 65536
-  [void]$sb.Append('{"ts":').Append($now).Append(',"cores":').Append([Environment]::ProcessorCount).Append(',"procs":[')
+  [void]$sb.Append('{"ts":').Append((N $now)).Append(',"cores":').Append($env:NUMBER_OF_PROCESSORS).Append(',"procs":[')
   $first = $true
   foreach ($p in (Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate,KernelModeTime,UserModeTime,WorkingSetSize,ReadTransferCount,WriteTransferCount)) {
-    $path = $p.ExecutablePath
     $cmd = $p.CommandLine; if ($cmd -and $cmd.Length -gt 400) { $cmd = $cmd.Substring(0, 400) }
     $start = 0; if ($p.CreationDate) { $start = ([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() }
     $cpuMs = ([double]$p.KernelModeTime + [double]$p.UserModeTime) / 10000
     $io = [double]$p.ReadTransferCount + [double]$p.WriteTransferCount
     $g = 0; if ($gpuByPid.ContainsKey([int]$p.ProcessId)) { $g = $gpuByPid[[int]$p.ProcessId] }
     if (-not $first) { [void]$sb.Append(',') }; $first = $false
-    [void]$sb.Append('{"pid":').Append($p.ProcessId).Append(',"ppid":').Append($p.ParentProcessId).Append(',"name":').Append((Esc $p.Name)).Append(',"path":').Append((Esc $path)).Append(',"cmd":').Append((Esc $cmd)).Append(',"startMs":').Append($start).Append(',"cpuMs":').Append([math]::Round($cpuMs)).Append(',"ioBytes":').Append($io).Append(',"memMB":').Append([math]::Round([double]$p.WorkingSetSize / 1MB)).Append(',"gpuPct":').Append([math]::Round($g, 1)).Append('}')
+    [void]$sb.Append('{"pid":').Append($p.ProcessId).Append(',"ppid":').Append($p.ParentProcessId).Append(',"name":').Append((Esc $p.Name)).Append(',"path":').Append((Esc $p.ExecutablePath)).Append(',"cmd":').Append((Esc $cmd)).Append(',"startMs":').Append((N $start)).Append(',"cpuMs":').Append((N ([math]::Round($cpuMs)))).Append(',"ioBytes":').Append((N $io)).Append(',"memMB":').Append((N ([math]::Round([double]$p.WorkingSetSize / 1MB)))).Append(',"gpuPct":').Append((N ([math]::Round($g, 1)))).Append('}')
   }
   [void]$sb.Append(']')
   $cpu = 0; try { $cpu = [double](Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'" -Property PercentProcessorUtility).PercentProcessorUtility } catch {}
   $d = $null; try { $d = Get-CimInstance Win32_PerfRawData_PerfDisk_PhysicalDisk -Filter "Name='_Total'" -Property AvgDisksecPerTransfer,AvgDisksecPerTransfer_Base,Frequency_PerfTime,CurrentDiskQueueLength } catch {}
   $m = $null; try { $m = Get-CimInstance Win32_PerfRawData_PerfOS_Memory -Property AvailableMBytes,PagesInputPersec } catch {}
-  [void]$sb.Append(',"sys":{"cpuPct":').Append([math]::Min(100, [math]::Round($cpu, 1))).Append(',"gpuPct":').Append([math]::Min(100, [math]::Round($gpuSys, 1)))
-  if ($d) { [void]$sb.Append(',"disk":{"num":').Append([double]$d.AvgDisksecPerTransfer).Append(',"base":').Append([double]$d.AvgDisksecPerTransfer_Base).Append(',"freq":').Append([double]$d.Frequency_PerfTime).Append('},"diskQueue":').Append([double]$d.CurrentDiskQueueLength) }
-  if ($m) { [void]$sb.Append(',"freeMB":').Append([double]$m.AvailableMBytes).Append(',"pagesIn":').Append([double]$m.PagesInputPersec) }
-  [void]$sb.Append(',"totalMB":').Append($totalMB).Append('}')
-  # foreground window: owner pid, fullscreen, user idle time
+  [void]$sb.Append(',"sys":{"cpuPct":').Append((N ([math]::Min(100, [math]::Round($cpu, 1))))).Append(',"gpuPct":').Append((N ([math]::Min(100, [math]::Round($gpuSys, 1)))))
+  if ($d) { [void]$sb.Append(',"disk":{"num":').Append((N $d.AvgDisksecPerTransfer)).Append(',"base":').Append((N $d.AvgDisksecPerTransfer_Base)).Append(',"freq":').Append((N $d.Frequency_PerfTime)).Append('},"diskQueue":').Append((N $d.CurrentDiskQueueLength)) }
+  if ($m) { [void]$sb.Append(',"freeMB":').Append((N $m.AvailableMBytes)).Append(',"pagesIn":').Append((N $m.PagesInputPersec)) }
+  [void]$sb.Append(',"totalMB":').Append((N $totalMB)).Append('}')
   try {
-    $h = [GovNative]::GetForegroundWindow(); $fp = [uint32]0; [void][GovNative]::GetWindowThreadProcessId($h, [ref]$fp)
-    $r = New-Object GovNative+RECT; [void][GovNative]::GetWindowRect($h, [ref]$r)
-    $mi = New-Object GovNative+MONITORINFO; $mi.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($mi)
-    [void][GovNative]::GetMonitorInfo([GovNative]::MonitorFromWindow($h, 2), [ref]$mi)
+    $h = [Gov]::GetForegroundWindow(); $fp = [uint32]0; [void][Gov]::GetWindowThreadProcessId($h, [ref]$fp)
+    $r = New-Object Gov+RECT; [void][Gov]::GetWindowRect($h, [ref]$r)
+    $mi = New-Object Gov+MONITORINFO; $mi.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($mi)
+    [void][Gov]::GetMonitorInfo([Gov]::MonitorFromWindow($h, 2), [ref]$mi)
     $full = ($r.Left -le $mi.rcMonitor.Left -and $r.Top -le $mi.rcMonitor.Top -and $r.Right -ge $mi.rcMonitor.Right -and $r.Bottom -ge $mi.rcMonitor.Bottom)
-    $li = New-Object GovNative+LASTINPUTINFO; $li.cbSize = 8; [void][GovNative]::GetLastInputInfo([ref]$li)
-    $idle = ([Environment]::TickCount -band 0xFFFFFFFF) - $li.dwTime; if ($idle -lt 0) { $idle += 4294967296 }
-    [void]$sb.Append(',"fg":{"pid":').Append($fp).Append(',"fullscreen":').Append($full.ToString().ToLower()).Append(',"idleMs":').Append($idle).Append('}')
+    $li = New-Object Gov+LASTINPUTINFO; $li.cbSize = 8; [void][Gov]::GetLastInputInfo([ref]$li)
+    $idle = ([Environment]::TickCount -band 0x7FFFFFFF) - ($li.dwTime -band 0x7FFFFFFF); if ($idle -lt 0) { $idle += 2147483648 }
+    [void]$sb.Append(',"fg":{"pid":').Append($fp).Append(',"fullscreen":').Append($full.ToString().ToLower()).Append(',"idleMs":').Append((N $idle)).Append('}')
   } catch { [void]$sb.Append(',"fg":null') }
-  if (($script:tick % 5) -eq 1) {
-    try { $script:listening = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) } catch { $script:listening = @() }
-  }
-  [void]$sb.Append(',"listening":[').Append(($script:listening -join ',')).Append(']')
-  [void]$sb.Append(',"jobPids":{')
-  $firstJ = $true
-  foreach ($k in @($script:jobs.Keys)) {
-    if (-not $k.StartsWith('Local\dotclaude-gov-s-')) { continue }
-    if (-not $firstJ) { [void]$sb.Append(',') }; $firstJ = $false
-    [void]$sb.Append((Esc $k)).Append(':[').Append(([GovNative]::JobPids($script:jobs[$k]) -join ',')).Append(']')
-  }
-  [void]$sb.Append('}}')
+  if (($script:tick % 5) -eq 1) { try { $script:listening = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) } catch { $script:listening = @() } }
+  [void]$sb.Append(',"listening":[').Append(($script:listening -join ',')).Append('],"jobPids":{}}')
   return $sb.ToString()
 }
 
-function GetJob($name) {
-  if ($script:jobs.ContainsKey($name)) { return $script:jobs[$name] }
-  $j = [GovNative]::CreateJobObject([IntPtr]::Zero, $name)
+function CapJob($key) {
+  if ($script:jobs.ContainsKey($key)) { return $script:jobs[$key] }
+  $j = [Gov]::CreateJobObject([IntPtr]::Zero, ("Local\dotclaude-gov-cap-" + $key))
   if ($j -eq [IntPtr]::Zero) { throw "CreateJobObject failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
-  $script:jobs[$name] = $j; return $j
+  $script:jobs[$key] = $j; return $j
 }
-
-function Assign($job, $p) {
-  $h = OpenProc $p.pid
-  if ($h -eq [IntPtr]::Zero) { return $false }
-  try {
-    $in = $false; [void][GovNative]::IsProcessInJob($h, $job, [ref]$in)
-    if (-not $in) { $in = [GovNative]::AssignProcessToJobObject($job, $h) }
-    return $in
-  } finally { [void][GovNative]::CloseHandle($h) }
-}
-
-# Session job: a named job with NO limits (never KILL_ON_JOB_CLOSE) - only for attribution.
-function Op-Attach($a) {
-  $job = GetJob ('Local\dotclaude-gov-s-' + $a.session)
-  $n = 0; foreach ($p in $a.pids) { if ((Same $p) -and (Assign $job $p)) { $n++ } }
-  return ('{"assigned":' + $n + '}')
-}
-
 function SetRate($job, [uint32]$flags, [uint32]$rate) {
-  $c = New-Object GovNative+CpuRate; $c.ControlFlags = $flags; $c.CpuRateValue = $rate
-  return [GovNative]::SetInformationJobObject($job, 15, [ref]$c, 8)
+  $c = New-Object Gov+CpuRate; $c.ControlFlags = $flags; $c.CpuRateValue = $rate
+  return [Gov]::SetInformationJobObject($job, 15, [ref]$c, 8)
 }
 
-function Op-Cap($a) {
-  $name = 'Local\dotclaude-gov-cap-' + $a.key
-  $job = GetJob $name
-  $rate = [uint32][math]::Max(100, [math]::Min(10000, [int]($a.cpuPct * 100)))
-  if (-not (SetRate $job 5 $rate)) { throw "cpu rate failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
-  if (-not $script:capped.ContainsKey($name)) { $script:capped[$name] = @() }
+function Op-Apply($a) {
+  $key = [string]$a.key
+  if (-not $script:throttles.ContainsKey($key)) { $script:throttles[$key] = @{} }
+  $entry = $script:throttles[$key]
+  $job = CapJob $key
+  $rate = [uint32][math]::Max(100, [math]::Min(10000, [int]([double]$a.cpuPct * 100)))
+  [void](SetRate $job 5 $rate)   # ENABLE | HARD_CAP
+  $pause = ([int]$a.level -ge 2)
   $n = 0
   foreach ($p in $a.pids) {
     if (-not (Same $p)) { continue }
-    if (-not (Assign $job $p)) { continue }
-    $h = OpenProc $p.pid
-    if ($h -ne [IntPtr]::Zero) {
-      [void][GovNative]::SetPriorityClass($h, 0x4000)   # BELOW_NORMAL
-      $io = 0; [void][GovNative]::NtSetInformationProcess($h, 33, [ref]$io, 4)   # IO priority very low
-      if ($script:capped[$name] -notcontains [int]$p.pid) {
-        # Keep the job name alive inside the capped process itself, so a later
-        # helper can still open it by name after a crash of this one.
-        $dup = [IntPtr]::Zero; [void][GovNative]::DuplicateHandle([GovNative]::GetCurrentProcess(), $job, $h, [ref]$dup, 0, $false, 2)
-        $script:capped[$name] += [int]$p.pid
+    $id = [int]$p.pid
+    if (-not $entry.ContainsKey($id)) { $entry[$id] = @{ startMs = [double]$p.startMs; suspended = $false; capped = $false } }
+    $h = OpenProc $id
+    if ($h -eq [IntPtr]::Zero) { continue }
+    try {
+      $in = $false; [void][Gov]::IsProcessInJob($h, $job, [ref]$in)
+      if (-not $in) { [void][Gov]::AssignProcessToJobObject($job, $h) }
+      if (-not $entry[$id].capped) {
+        [void][Gov]::SetPriorityClass($h, 0x4000)       # BELOW_NORMAL
+        $io = 0; [void][Gov]::NtSetInformationProcess($h, 33, [ref]$io, 4)  # IO priority very low
+        $dup = [IntPtr]::Zero; [void][Gov]::DuplicateHandle([Gov]::GetCurrentProcess(), $job, $h, [ref]$dup, 0, $false, 2)
+        $entry[$id].capped = $true
       }
-      [void][GovNative]::CloseHandle($h); $n++
-    }
+      if ($pause -and -not $entry[$id].suspended) { if ([Gov]::NtSuspendProcess($h) -eq 0) { $entry[$id].suspended = $true } }
+      elseif (-not $pause -and $entry[$id].suspended) { if ([Gov]::NtResumeProcess($h) -eq 0) { $entry[$id].suspended = $false } }
+      $n++
+    } finally { [void][Gov]::CloseHandle($h) }
   }
-  return ('{"capped":' + $n + '}')
+  return ('{"applied":' + $n + '}')
 }
 
-function Uncap($name, $pids) {
-  $job = [IntPtr]::Zero
-  if ($script:jobs.ContainsKey($name)) { $job = $script:jobs[$name] } else { $job = [GovNative]::OpenJobObject(0x1F001F, $false, $name) }
-  $ok = $false
-  if ($job -ne [IntPtr]::Zero) { $ok = SetRate $job 0 0 }
-  foreach ($p in $pids) {
+function RevertPid($id, $info) {
+  $h = OpenProc $id
+  if ($h -eq [IntPtr]::Zero) { return }
+  try {
+    if ($info.suspended) { [void][Gov]::NtResumeProcess($h) }
+    [void][Gov]::SetPriorityClass($h, 0x20)            # NORMAL
+    $io = 2; [void][Gov]::NtSetInformationProcess($h, 33, [ref]$io, 4)  # IO normal
+  } finally { [void][Gov]::CloseHandle($h) }
+}
+
+function Op-Release($a) {
+  $key = [string]$a.key
+  $entry = $null
+  if ($script:throttles.ContainsKey($key)) { $entry = $script:throttles[$key] }
+  # Reconstruct identities from the caller's pid list too (orphan reversal after a crash: helper has no state).
+  foreach ($p in $a.pids) {
+    $id = [int]$p.pid
+    if ($entry -and $entry.ContainsKey($id)) { continue }
+    if ($null -eq $entry) { $entry = @{} }
+    $entry[$id] = @{ startMs = [double]$p.startMs; suspended = $true; capped = $true }
+  }
+  if ($entry) { foreach ($id in @($entry.Keys)) { RevertPid $id $entry[$id] } }
+  if ($script:jobs.ContainsKey($key)) { [void](SetRate $script:jobs[$key] 0 0); [void][Gov]::CloseHandle($script:jobs[$key]); $script:jobs.Remove($key) }
+  $script:throttles.Remove($key)
+  return '{"released":true}'
+}
+
+function Op-Attach($a) {
+  $job = [Gov]::CreateJobObject([IntPtr]::Zero, ('Local\dotclaude-gov-s-' + [string]$a.session))
+  $n = 0
+  foreach ($p in $a.pids) {
     if (-not (Same $p)) { continue }
     $h = OpenProc $p.pid
-    if ($h -ne [IntPtr]::Zero) {
-      [void][GovNative]::SetPriorityClass($h, 0x20)   # NORMAL
-      $io = 2; [void][GovNative]::NtSetInformationProcess($h, 33, [ref]$io, 4)
-      [void][GovNative]::CloseHandle($h)
-    }
+    if ($h -ne [IntPtr]::Zero) { $in = $false; [void][Gov]::IsProcessInJob($h, $job, [ref]$in); if (-not $in) { if ([Gov]::AssignProcessToJobObject($job, $h)) { $n++ } }; [void][Gov]::CloseHandle($h) }
   }
-  if ($job -ne [IntPtr]::Zero) { [void][GovNative]::CloseHandle($job) }
-  $script:jobs.Remove($name); $script:capped.Remove($name)
-  return $ok
-}
-
-function Op-Uncap($a) { $ok = Uncap ('Local\dotclaude-gov-cap-' + $a.key) $a.pids; return ('{"uncapped":' + $ok.ToString().ToLower() + '}') }
-
-function Op-Suspend($a) {
-  $n = 0
-  foreach ($p in $a.pids) {
-    if ($script:suspended.ContainsKey([int]$p.pid) -or -not (Same $p)) { continue }
-    $h = OpenProc $p.pid
-    if ($h -ne [IntPtr]::Zero) { if ([GovNative]::NtSuspendProcess($h) -eq 0) { $script:suspended[[int]$p.pid] = $true; $n++ }; [void][GovNative]::CloseHandle($h) }
-  }
-  return ('{"suspended":' + $n + '}')
-}
-
-# force: resume even when this helper did not suspend it (orphan reversal after a crash).
-function Op-Resume($a) {
-  $n = 0
-  foreach ($p in $a.pids) {
-    $mine = $script:suspended.ContainsKey([int]$p.pid)
-    if (-not $mine -and -not $a.force) { continue }
-    if (-not (Same $p)) { $script:suspended.Remove([int]$p.pid); continue }
-    $h = OpenProc $p.pid
-    if ($h -ne [IntPtr]::Zero) { if ([GovNative]::NtResumeProcess($h) -eq 0) { $n++ }; [void][GovNative]::CloseHandle($h) }
-    $script:suspended.Remove([int]$p.pid)
-  }
-  return ('{"resumed":' + $n + '}')
-}
-
-# Authenticode signer of the given exe paths (only asked for OS candidates with load; cached).
-function Op-Sig($a) {
-  $parts = @(); foreach ($p in $a.paths) { $parts += ((Esc $p) + ':' + (Esc (Signer $p))) }
-  return ('{' + ($parts -join ',') + '}')
+  return ('{"assigned":' + $n + '}')
 }
 
 function Op-Notify($a) {
   try {
     [void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
     $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-    $t = $xml.GetElementsByTagName('text')
-    [void]$t.Item(0).AppendChild($xml.CreateTextNode([string]$a.title))
-    [void]$t.Item(1).AppendChild($xml.CreateTextNode([string]$a.text))
+    $tn = $xml.GetElementsByTagName('text')
+    [void]$tn.Item(0).AppendChild($xml.CreateTextNode([string]$a.title))
+    [void]$tn.Item(1).AppendChild($xml.CreateTextNode([string]$a.text))
     $app = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
     return '{"shown":true}'
@@ -272,15 +226,12 @@ function Op-Notify($a) {
 }
 
 function Cleanup {
-  foreach ($pid_ in @($script:suspended.Keys)) {
-    $h = OpenProc $pid_
-    if ($h -ne [IntPtr]::Zero) { [void][GovNative]::NtResumeProcess($h); [void][GovNative]::CloseHandle($h) }
+  foreach ($key in @($script:throttles.Keys)) {
+    $entry = $script:throttles[$key]
+    foreach ($id in @($entry.Keys)) { RevertPid $id $entry[$id] }
+    if ($script:jobs.ContainsKey($key)) { [void](SetRate $script:jobs[$key] 0 0); [void][Gov]::CloseHandle($script:jobs[$key]) }
   }
-  $script:suspended = @{}
-  foreach ($name in @($script:capped.Keys)) {
-    $pids = @($script:capped[$name] | ForEach-Object { @{ pid = $_; startMs = $null } })
-    [void](Uncap $name $pids)
-  }
+  $script:throttles = @{}; $script:jobs = @{}
 }
 
 [Console]::Out.WriteLine('{"id":0,"ok":true,"data":{"ready":true,"pid":' + $PID + '}}'); [Console]::Out.Flush()
@@ -294,25 +245,21 @@ try {
       $req = $line | ConvertFrom-Json
       $id = [int]$req.id
       $data = switch ($req.op) {
-        'sample' { Op-Sample }
-        'attach' { Op-Attach $req }
-        'cap' { Op-Cap $req }
-        'uncap' { Op-Uncap $req }
-        'suspend' { Op-Suspend $req }
-        'resume' { Op-Resume $req }
-        'notify' { Op-Notify $req }
-        'sig' { Op-Sig $req }
-        'ping' { '{"pong":true}' }
-        'exit' { Cleanup; '{"bye":true}' }
-        default { throw "unknown op $($req.op)" }
+        'sample'  { Op-Sample $req }
+        'attach'  { Op-Attach $req }
+        'apply'   { Op-Apply $req }
+        'release' { Op-Release $req }
+        'notify'  { Op-Notify $req }
+        'ping'    { '{"pong":true}' }
+        'exit'    { Cleanup; '{"bye":true}' }
+        default   { throw "unknown op $($req.op)" }
       }
       [Console]::Out.WriteLine('{"id":' + $id + ',"ok":true,"data":' + $data + '}')
-      if ($req.op -eq 'exit') { [Console]::Out.Flush(); break }
+      [Console]::Out.Flush()
+      if ($req.op -eq 'exit') { break }
     } catch {
       [Console]::Out.WriteLine('{"id":' + $id + ',"ok":false,"error":' + (Esc $_.Exception.Message) + '}')
+      [Console]::Out.Flush()
     }
-    [Console]::Out.Flush()
   }
-} finally {
-  Cleanup
-}
+} finally { Cleanup }

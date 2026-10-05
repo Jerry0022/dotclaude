@@ -1,39 +1,35 @@
 #!/usr/bin/env node
 /**
  * @module governor/watcher
- * @description The one governor process for all sessions. Started detached
- *   by ss.governor.attach (a second start exits at once: singleton lock).
- *   Each tick: sample → attribute → priority/budget → plan → apply. Every
- *   throttle is written to state.json BEFORE the OS call; on start every
- *   recorded throttle is reversed (orphans of a crashed watcher). Exits when
- *   no session and no Claude job remain, after reversing everything.
+ * @description The one governor process for all sessions. Started detached by
+ *   ss.governor.attach / the gate hook (a second start exits at once:
+ *   singleton lock). Each tick: sample → attribute → priority/budget → plan →
+ *   apply. Every throttle is recorded in state.json BEFORE the OS call; a
+ *   recorded throttle is removed ONLY after a successful release, so a crash
+ *   or a failed release leaves it for the next start to reverse (key-based,
+ *   via the adapter — no dead reversal code). Exits when no session and no
+ *   Claude job remain, after marking deferred commands ready and releasing
+ *   everything.
+ *
+ *   createWatcher() holds all tick logic with an injected adapter, so the
+ *   whole loop is unit-tested with a fake adapter (watcher.test.js); main()
+ *   only wires the real adapter, the clock and the lock.
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { spawn, execFileSync } = require('child_process');
-const { paths: govPaths, loadConfig } = require('./config');
 const S = require('./state');
 const P = require('./policy');
 const Q = require('./queue');
 const { derive } = require('./sample');
 const libraries = require('./libraries');
-const { createAdapter } = require('./adapters');
+
+const sanitize = (jobId) => String(jobId).replace(/[^A-Za-z0-9_@-]/g, '-');
 
 function pluginVersion() {
-  try { return JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '.claude-plugin', 'plugin.json'), 'utf8')).version; } catch { return '0.0.0'; }
-}
-
-function log(p, msg) {
-  try { fs.mkdirSync(p.logs, { recursive: true }); fs.appendFileSync(p.log, `${new Date().toISOString()} [${process.pid}] ${msg}\n`); } catch {}
-}
-
-function gitInfo(cwd) {
-  if (!cwd || !fs.existsSync(cwd)) return { exists: false };
-  const g = (args) => { try { return execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
-  return { exists: true, branch: g(['rev-parse', '--abbrev-ref', 'HEAD']), head: g(['rev-parse', 'HEAD']) };
+  try { return require('../../.claude-plugin/plugin.json').version; } catch { return '0.0.0'; }
 }
 
 /** Best effort: unload the models a Claude request loaded (Ollama keep_alive 0). */
@@ -54,7 +50,204 @@ function unloadOllama(baseUrl) {
   });
 }
 
+/**
+ * @param {object} o
+ * @param {object} o.adapter OS adapter (real or fake)
+ * @param {object} o.p paths
+ * @param {() => object} o.loadCfg config loader
+ * @param {() => number} o.now clock
+ * @param {{libraries?:object, gitInfo?:function, log?:function, unload?:function}} [o.deps]
+ */
+function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
+  const version = deps.version || pluginVersion();
+  const log = deps.log || ((msg) => { try { fs.mkdirSync(p.logs, { recursive: true }); fs.appendFileSync(p.log, `${new Date().toISOString()} [${process.pid}] ${msg}\n`); } catch {} });
+  const libs = deps.libraries || { discover: libraries.discover };
+  const unload = deps.unload || unloadOllama;
+
+  const st = {
+    pid: process.pid, version, throttles: {}, tracked: {}, prio: {}, budget: { baseline: {} },
+    last: {}, kinds: {}, notified: {}, attached: new Set(), prevSample: null,
+    lib: { roots: [], dirs: [], exes: [] }, libAt: 0, startedAt: now(),
+    pressure: { priority: [], over: [] }, priorityBy: null, sys: {},
+  };
+
+  const save = () => S.writeState(p, {
+    pid: st.pid, version, heartbeat: now(), helperPid: adapter.selfPids[1] || null,
+    throttles: Object.values(st.throttles),
+    pressure: st.pressure, priorityBy: st.priorityBy, sys: st.sys, kinds: st.kinds,
+    budget: { over: st.budget.over, baseline: st.budget.baseline },
+    jobs: Object.values(st.tracked).map((j) => ({ id: j.id, name: j.name, kind: j.kind, heavy: j.heavy })),
+  });
+
+  // Release a throttle by key; drop the record ONLY on success (failed release stays for next start).
+  const release = async (id, reason) => {
+    const t = st.throttles[id];
+    if (!t) return;
+    try {
+      await adapter.release(t.key, t.pids);
+      delete st.throttles[id];
+      save();
+      log(`released ${id} (${reason})`);
+    } catch (e) { log(`release failed ${id}: ${e.message} — kept for retry`); }
+  };
+
+  // init(): orphan reversal of whatever a previous watcher recorded.
+  const init = async (prevState) => {
+    st.kinds = (prevState && prevState.kinds) || {};
+    st.budget.baseline = (prevState && prevState.budget && prevState.budget.baseline) || {};
+    for (const t of (prevState && prevState.throttles) || []) {
+      try { await adapter.release(t.key, t.pids); log(`orphan reverted ${t.jobId}`); } catch (e) { log(`orphan revert failed ${t.jobId}: ${e.message}`); }
+    }
+    save();
+  };
+
+  async function tick() {
+    const cfg = loadCfg();
+    const control = S.readJson(p.control, {});
+    const t = now();
+    if (t - st.libAt > 30 * 60000) { st.lib = libs.discover(); st.libAt = t; }
+
+    const haveJobs = Object.keys(st.tracked).length > 0 || st.pressure.priority.length || st.pressure.over.length;
+    const raw = await adapter.sample({ gpu: Boolean(haveJobs) });
+    const sm = derive(st.prevSample, raw);
+    st.prevSample = sm;
+    const procs = sm.procs;
+    const byPid = new Map(procs.map((x) => [x.pid, x]));
+
+    // Sessions: resolve each to its claude pid via the recorded hookPpid chain; attach once; expire by liveness.
+    const sessions = S.readDir(p.sessions);
+    const sessionPids = {};
+    let liveSessions = 0;
+    for (const { file, data } of sessions) {
+      let claude = null;
+      for (let cur = byPid.get(data.hookPpid), i = 0; cur && i < 30; cur = byPid.get(cur.ppid), i++) if (P.isClaudeRoot(cur)) { claude = cur; break; }
+      if (!claude) {
+        if (!S.isAlive(data.hookPid) && t - (data.startedAt || 0) > 30000) S.removeFile(file);
+        continue;
+      }
+      liveSessions++;
+      sessionPids[data.sessionId] = claude.pid;
+      if (!st.attached.has(data.sessionId)) {
+        try { await adapter.attach(data.sessionId, [{ pid: claude.pid, startMs: claude.startMs }]); st.attached.add(data.sessionId); } catch (e) { log(`attach failed: ${e.message}`); }
+      }
+    }
+    const sessionStarts = sessions.map((x) => x.data.startedAt).filter(Number.isFinite);
+
+    const jobPids = Object.values(sm.jobPids || {}).flat();
+    const scopePid = Number(process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID) || 0;
+    const attributed = scopePid
+      ? P.attributedPids(procs, { extraRoots: [scopePid], claudeRoots: false })
+      : P.attributedPids(procs, { jobPids });
+    const sessionOf = scopePid ? new Map() : P.sessionMap(procs, sessionPids);
+
+    const markers = {};
+    for (const { file, data } of S.readDir(p.inflight)) {
+      const name = path.basename(path.dirname(file));
+      (markers[name] = markers[name] || []).push(data);
+    }
+    const activeServices = P.activeServiceNames(cfg.claudeServices, markers, t, cfg.selfLoopMs);
+
+    const env = { platform: process.platform, systemRoot: process.env.SystemRoot };
+    const selfPids = new Set(adapter.selfPids);
+    const classes = new Map();
+    for (const x of procs) classes.set(x.pid, P.classify({ ...x, os: P.isOsProcess(x, env) }, { selfPids, attributed, sessionStarts, graceMs: cfg.infraGraceMs, activeServices }));
+
+    // Foreground tool-call records (per session, short TTL).
+    const fgRecs = [];
+    for (const { file, data } of S.readDir(p.foreground)) {
+      if (t - (data.startedAt || 0) > cfg.foregroundTtlMs) S.removeFile(file); else fgRecs.push(data);
+    }
+
+    const jobs = P.groupJobs(procs, classes, sm.listening, sessionOf);
+    const prevTracked = st.tracked;
+    st.tracked = P.trackJobs(prevTracked, jobs, t, cfg, { diskBusy: Boolean(st.budget.over && st.budget.over.disk), foreground: fgRecs });
+    for (const [id, j] of Object.entries(prevTracked)) {
+      if (st.tracked[id]) continue;
+      const kind = j.cmdKind || P.commandKind(j.cmd);
+      if (kind && j.peakMB) st.kinds[kind] = { peakMB: Math.round(Math.max(j.peakMB, ((st.kinds[kind] && st.kinds[kind].peakMB) || 0) * 0.8)) };
+    }
+
+    const learned = S.readJson(p.learned, {});
+    const foreign = procs.filter((x) => classes.get(x.pid) === 'foreign');
+    const fg = sm.fg && classes.get(sm.fg.pid) === 'foreign' ? sm.fg : null;
+    const beforePrio = new Set(P.pressureOf(st.prio, st.budget).priority);
+    st.prio = P.updatePriority(st.prio, foreign, t, {
+      cfg, libraryRoots: st.lib.roots, libraryDirs: st.lib.dirs, libraryExes: new Set(st.lib.exes.map((e) => e.toLowerCase())),
+      learned, manual: Boolean(control.manual), foreground: fg, noLearn: new Set([...(cfg.noLearn || []).map((x) => x.toLowerCase()), ...P.serviceNames(cfg.claudeServices)]),
+    });
+    for (const a of st.prio.newlyLearned) {
+      learned[a.key] = { name: a.name, resources: a.resources, learnedAt: a.learnedAt };
+      S.writeJson(p.learned, learned);
+      await notify(cfg, `Claude yields to ${a.name}`, `Claude's heavy jobs now give way to ${a.name}. Wrong? Run: governor not-priority "${a.key}"`);
+    }
+    st.budget = P.updateBudget(st.budget, sm.sys, t, cfg);
+    st.pressure = P.pressureOf(st.prio, st.budget);
+    st.priorityBy = st.prio.allBy || Object.values(st.prio.active)[0] || null;
+    st.sys = { freeMB: sm.sys.freeMB, totalMB: sm.sys.totalMB, cpuPct: sm.sys.cpuPct, gpuPct: sm.sys.gpuPct };
+
+    const nowPrio = new Set(st.pressure.priority);
+    if (['gpu', 'ram'].some((r) => nowPrio.has(r) && !beforePrio.has(r))) {
+      if ((markers['local-llm'] || []).some((m) => m.count > 0 || t - (m.endedAt || 0) < 30 * 60000)) unload(cfg.ollamaUrl).catch(() => {});
+    }
+
+    // Plan and apply — record first, then act; release by key on removal.
+    const current = {};
+    for (const [id, tr] of Object.entries(st.throttles)) current[id] = { level: tr.level, resources: tr.resources };
+    const { desired, last } = P.plan(st.tracked, current, st.pressure, t, cfg, st.last);
+    st.last = last;
+    for (const id of Object.keys(st.throttles)) if (!desired[id]) await release(id, st.tracked[id] ? 'relaxed' : 'job-gone');
+    for (const [id, d] of Object.entries(desired)) {
+      const j = st.tracked[id];
+      if (!j) continue;
+      const old = st.throttles[id];
+      const mergedPids = old ? [...old.pids] : [];
+      for (const pid of j.pids) if (!mergedPids.some((o) => o.pid === pid.pid)) mergedPids.push(pid);
+      if (old && old.level === d.level && mergedPids.length === old.pids.length) continue;
+      const entry = {
+        jobId: id, key: sanitize(id), level: d.level, resources: d.resources, kind: j.kind, name: j.name,
+        pids: mergedPids, memMB: Math.round(j.memMB * cfg.cap.memFactor), everPaused: Boolean((old && old.everPaused) || d.level >= 2),
+        requeue: j.gpu && j.kind === 'generator', by: st.priorityBy, appliedAt: (old && old.appliedAt) || t,
+      };
+      st.throttles[id] = entry;
+      save(); // BEFORE the OS call
+      try { await adapter.apply(entry.key, d.level, entry.pids, { memMB: entry.memMB }); log(`level ${d.level} ${id} (${j.kind}, ${j.name}) for ${d.resources.join(',')}`); } catch (e) { log(`apply failed ${id}: ${e.message}`); }
+      if (d.level >= 2 && !st.notified[id]) st.notified[id] = { pausedAt: t };
+    }
+    for (const [id, n] of Object.entries(st.notified)) {
+      if (!st.throttles[id]) { delete st.notified[id]; continue; }
+      if (!n.sent && t - n.pausedAt >= cfg.starvationMs) { n.sent = true; await notify(cfg, 'Claude job waiting', `${st.throttles[id].name} has been paused for 30 min because of ${P.appLabel(st.priorityBy || 'budget')}.`); }
+    }
+
+    // Queue: expire, starvation notice, mark ready when nothing presses.
+    const noPressure = !st.pressure.priority.length && !st.pressure.over.length;
+    for (const e of Q.list(p.queue)) {
+      if (Q.isExpired(e, t, cfg)) { Q.remove(p.queue, e.id); log(`queue expired ${e.id}`); continue; }
+      if (Q.starving(e, t, cfg)) { await notify(cfg, 'Claude command waiting', `"${e.command.slice(0, 60)}" has waited 30 min.`); Q.save(p.queue, { ...e, starvationNotified: true }); }
+      if (noPressure && e.status === 'queued') { Q.save(p.queue, Q.markReady(e, t)); log(`queue ready ${e.id}`); }
+    }
+
+    st.liveSessions = liveSessions;
+    save();
+    return { liveSessions, jobs: Object.keys(st.tracked).length, throttles: Object.keys(st.throttles).length, pressure: st.pressure };
+  }
+
+  const notify = (cfg, title, text) => { log(`notify: ${title} - ${text}`); return cfg.notify ? adapter.notify(title, text).catch(() => null) : null; };
+
+  // Mark every pending command ready (so a session can re-run them) and release all throttles.
+  const drain = async () => {
+    const t = now();
+    for (const e of Q.list(p.queue)) if (e.status === 'queued' && !Q.isExpired(e, t, loadCfg())) Q.save(p.queue, Q.markReady(e, t));
+    for (const id of Object.keys(st.throttles)) await release(id, 'shutdown');
+  };
+
+  const canExit = () => st.liveSessions === 0 && Object.keys(st.tracked).length === 0 && Object.keys(st.throttles).length === 0 && now() - st.startedAt > 60000;
+
+  return { st, init, tick, drain, save, release, canExit };
+}
+
 async function main() {
+  const { paths: govPaths, loadConfig } = require('./config');
+  const { createAdapter } = require('./adapters');
   const p = govPaths();
   const cfg = loadConfig(p);
   if (!cfg.enabled) return;
@@ -62,58 +255,24 @@ async function main() {
   if (!adapter) return;
   const version = pluginVersion();
   const pid = process.pid;
+  const log = (msg) => { try { fs.mkdirSync(p.logs, { recursive: true }); fs.appendFileSync(p.log, `${new Date().toISOString()} [${pid}] ${msg}\n`); } catch {} };
 
-  let got = S.acquireLock(p, { pid, version, now: Date.now() });
-  if (!got.ok && got.handover) {
-    for (let i = 0; i < 40 && !got.ok; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      got = S.acquireLock(p, { pid, version, now: Date.now() });
-    }
-  }
+  let got = S.acquireLock(p, { pid, version, now: Date.now(), startOf: S.processStart });
+  for (let i = 0; i < 40 && !got.ok && got.handover; i++) { await new Promise((r) => setTimeout(r, 500)); got = S.acquireLock(p, { pid, version, now: Date.now(), startOf: S.processStart }); }
   if (!got.ok) return;
   const prevState = S.readState(p);
   if (prevState && prevState.newer) { S.releaseLock(p, pid); return; }
-  log(p, `start v${version}`);
+  log(`start v${version}`);
+  try { await adapter.start(); } catch (e) { log(`helper failed: ${e.message}`); S.releaseLock(p, pid); return; }
 
-  try { await adapter.start(); } catch (e) { log(p, `helper failed: ${e.message}`); S.releaseLock(p, pid); return; }
+  const w = createWatcher({ adapter, p, loadCfg: () => loadConfig(p), now: Date.now, deps: { version, log } });
+  await w.init(prevState);
 
-  // Orphan reversal: nothing in a fresh watcher is ours yet.
-  let throttles = {};
-  for (const t of (prevState && prevState.throttles) || []) {
-    try { await adapter.revert(t); log(p, `orphan reverted ${t.jobId}`); } catch (e) { log(p, `orphan revert failed ${t.jobId}: ${e.message}`); }
-  }
-  const st = {
-    pid, version, heartbeat: Date.now(), throttles: [], kinds: (prevState && prevState.kinds) || {},
-    budget: { baseline: (prevState && prevState.budget && prevState.budget.baseline) || {} },
-    prio: {}, tracked: {}, last: {}, queueRunning: {}, notified: {},
-  };
-  const save = () => {
-    S.writeState(p, {
-      pid, version, heartbeat: st.heartbeat, throttles: Object.values(throttles), pressure: st.pressure || { priority: [], over: [] },
-      priorityBy: st.priorityBy || null, sys: st.sys || {}, kinds: st.kinds, budget: { over: st.budget.over, baseline: st.budget.baseline, mean: st.budget.mean },
-      apps: Object.values(st.prio.apps || {}).map((a) => ({ key: a.key, res: a.res, running: a.running })), jobs: Object.values(st.tracked).map((j) => ({ id: j.id, name: j.name, kind: j.kind, heavy: j.heavy, cpuPct: j.cpuPct, memMB: j.memMB })),
-      queueRunning: st.queueRunning, helperPid: adapter.selfPids[1] || null,
-    });
-  };
-  save();
-
-  let libs = libraries.discover();
-  let libsAt = Date.now();
-  const signers = new Map();
-  const attached = new Set();
-  const startedAt = Date.now();
-  let prevSample = null;
   let stopping = false;
-
-  const revertAll = async () => {
-    for (const t of Object.values(throttles)) { try { await adapter.revert(t); } catch {} }
-    throttles = {};
-    save();
-  };
   const shutdown = async (why) => {
     if (stopping) return; stopping = true;
-    log(p, `stop: ${why}`);
-    await revertAll();
+    log(`stop: ${why}`);
+    await w.drain();
     await adapter.stop();
     S.releaseLock(p, pid);
     process.exit(0);
@@ -121,207 +280,33 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-  const notify = (title, text) => { log(p, `notify: ${title} - ${text}`); return loadConfig(p).notify ? adapter.notify(title, text) : null; };
-
+  let lastBeat = 0;
   for (;;) {
     const tickStart = Date.now();
-    try {
-      const control = S.readJson(p.control, {});
-      if (!S.heartbeat(p, pid, version, tickStart)) { log(p, 'lock lost'); await adapter.stop(); process.exit(0); }
-      if (S.handoverRequested(p, version, tickStart)) return shutdown('handover to newer version');
-      if (control.stop && control.at > startedAt) return shutdown('stop requested');
-      if (!adapter.alive) {
-        // Helper died: it reverted its own throttles. Restart, re-revert (idempotent), re-plan.
-        await adapter.start();
-        for (const t of Object.values(throttles)) { try { await adapter.revert({ ...t, everPaused: true }); } catch {} }
-        throttles = {};
-      }
-      const c = loadConfig(p);
-      if (!c.enabled) return shutdown('disabled');
-      if (Date.now() - libsAt > 30 * 60000) { libs = libraries.discover(); libsAt = Date.now(); }
-
-      const raw = await adapter.sample();
-      const now = raw.ts || Date.now();
-      const sm = derive(prevSample, raw);
-      prevSample = sm;
-      const procs = sm.procs;
-      const byPid = new Map(procs.map((x) => [x.pid, x]));
-
-      // Sessions: attach new ones, drop ended ones.
-      const sessions = S.readDir(p.sessions);
-      const claudeRoots = procs.filter((x) => P.isClaudeRoot(x));
-      let liveSessions = 0;
-      for (const { file, data } of sessions) {
-        let claude = null;
-        for (let cur = byPid.get(data.hookPpid), i = 0; cur && i < 20; cur = byPid.get(cur.ppid), i++) if (P.isClaudeRoot(cur)) { claude = cur; break; }
-        const targets = claude ? [claude] : claudeRoots.filter((x) => x.startMs <= (data.startedAt || now) + 5000);
-        if (!targets.length && now - (data.startedAt || 0) > 60000) { S.removeFile(file); continue; }
-        liveSessions++;
-        if (!attached.has(data.sessionId)) {
-          try { await adapter.attach(data.sessionId, targets.map((x) => ({ pid: x.pid, startMs: x.startMs }))); attached.add(data.sessionId); } catch (e) { log(p, `attach failed: ${e.message}`); }
-        }
-      }
-      const sessionStarts = sessions.map((x) => x.data.startedAt).filter(Number.isFinite);
-
-      const jobPids = Object.values(sm.jobPids).flat();
-      const queueRoots = Object.values(st.queueRunning).map((q) => q.pid);
-      // Test scope (smoke): only this pid's tree is Claude's, nothing else on the machine is touched.
-      const scopePid = Number(process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID) || 0;
-      const attributed = scopePid
-        ? P.attributedPids(procs, { extraRoots: [scopePid, ...queueRoots], claudeRoots: false })
-        : P.attributedPids(procs, { jobPids, extraRoots: queueRoots });
-      const markers = {};
-      for (const { file, data } of S.readDir(p.inflight)) markers[path.basename(file, '.json')] = data;
-      const activeServices = P.activeServiceNames(c.claudeServices, markers, now, c.selfLoopMs);
-
-      // OS check: signer only for loaded candidates under %SystemRoot% / Defender.
-      const sysRoot = (process.env.SystemRoot || 'C:\\Windows').toLowerCase();
-      const need = [];
-      for (const x of procs) {
-        if (!x.path || signers.has(x.path) || attributed.has(x.pid)) continue;
-        const lp = x.path.toLowerCase();
-        if ((lp.startsWith(sysRoot) || lp.includes('windows defender')) && P.loadedResources(x, c.foreign).length) need.push(x.path);
-      }
-      if (need.length) {
-        try { const r = await adapter.signers([...new Set(need)].slice(0, 20)); for (const [k, v] of Object.entries(r || {})) signers.set(k, v); } catch {}
-      }
-      const env = { platform: process.platform, systemRoot: process.env.SystemRoot };
-      const selfPids = new Set(adapter.selfPids);
-      const classes = new Map();
-      for (const x of procs) {
-        const known = x.path ? signers.get(x.path) : undefined;
-        const lp = String(x.path || '').toLowerCase();
-        // Unverified exe under %SystemRoot%: treated as OS until its signer is known (never priority).
-        const osFlag = x.path && known === undefined && lp.startsWith(sysRoot) ? true : P.isOsProcess({ ...x, signer: known }, env);
-        classes.set(x.pid, P.classify({ ...x, os: osFlag }, { selfPids, attributed, sessionStarts, graceMs: c.infraGraceMs, activeServices }));
-      }
-
-      // Foreground tool calls (PreToolUse writes, PostToolUse clears; 6 h safety expiry).
-      const fgRecs = [];
-      for (const { file, data } of S.readDir(p.foreground)) {
-        if (now - (data.startedAt || 0) > 6 * 3600000) S.removeFile(file); else fgRecs.push(data);
-      }
-      const jobs = P.groupJobs(procs, classes, sm.listening);
-      const prevTracked = st.tracked;
-      st.tracked = P.trackJobs(prevTracked, jobs, now, c, { diskBusy: Boolean(st.budget.over && st.budget.over.disk), foreground: fgRecs });
-      // Learn expected peak MB per command kind from finished jobs.
-      for (const [id, j] of Object.entries(prevTracked)) {
-        if (st.tracked[id]) continue;
-        const kind = P.commandKind(j.cmd);
-        if (kind && j.peakMB) st.kinds[kind] = { peakMB: Math.round(Math.max(j.peakMB, ((st.kinds[kind] && st.kinds[kind].peakMB) || 0) * 0.8)) };
-      }
-
-      const learned = S.readJson(p.learned, {});
-      const foreign = procs.filter((x) => classes.get(x.pid) === 'foreign');
-      const fg = sm.fg && classes.get(sm.fg.pid) === 'foreign' ? sm.fg : null;
-      const before = new Set(P.pressureOf(st.prio, st.budget).priority);
-      st.prio = P.updatePriority(st.prio, foreign, now, {
-        cfg: c, libraryRoots: libs.roots, libraryDirs: libs.dirs, libraryExes: new Set(libs.exes.map((e) => e.toLowerCase())),
-        learned, manual: Boolean(control.manual), foreground: fg,
-      });
-      for (const a of st.prio.newlyLearned) {
-        learned[a.key] = { name: a.name, resources: a.resources, learnedAt: a.learnedAt };
-        S.writeJson(p.learned, learned);
-        await notify('Claude yields to ' + a.name, `Claude's heavy jobs now give way to ${a.name}. Wrong? Run: node "${path.join(__dirname, 'cli.js')}" not-priority "${a.key}"`);
-      }
-      st.budget = P.updateBudget(st.budget, sm.sys, now, c);
-      const pressure = P.pressureOf(st.prio, st.budget);
-      st.pressure = pressure;
-      st.priorityBy = st.prio.allBy || Object.values(st.prio.active)[0] || null;
-      st.sys = { freeMB: sm.sys.freeMB, totalMB: sm.sys.totalMB, cpuPct: sm.sys.cpuPct, gpuPct: sm.sys.gpuPct, diskMs: sm.sys.diskMs };
-
-      // Priority started on GPU/RAM: unload models a Claude request loaded.
-      const nowPrio = new Set(pressure.priority);
-      if (['gpu', 'ram'].some((r) => nowPrio.has(r) && !before.has(r))) {
-        const m = markers['local-llm'];
-        if (m && (m.active || now - (m.endedAt || 0) < 30 * 60000)) unloadOllama(c.ollamaUrl).catch(() => {});
-      }
-
-      // Plan and apply — record first, then act.
-      const current = {};
-      for (const [id, t] of Object.entries(throttles)) current[id] = { level: t.level, resources: t.resources };
-      const { desired, last } = P.plan(st.tracked, current, pressure, now, c, st.last);
-      st.last = last;
-      for (const id of Object.keys(throttles)) {
-        if (desired[id]) continue;
-        const t = throttles[id];
-        if (st.tracked[id]) { try { await adapter.revert(t); log(p, `released ${id}`); } catch (e) { log(p, `release failed ${id}: ${e.message}`); continue; } }
-        delete throttles[id];
-        save();
-      }
-      for (const [id, d] of Object.entries(desired)) {
-        const j = st.tracked[id];
-        const old = throttles[id];
-        const newPids = old ? j.pids.filter((x) => !old.pids.some((o) => o.pid === x.pid)) : j.pids;
-        if (old && old.level === d.level && !newPids.length) continue;
-        const entry = {
-          jobId: id, level: d.level, resources: d.resources, kind: j.kind, name: j.name, pids: j.pids,
-          appliedAt: (old && old.appliedAt) || now, everPaused: Boolean((old && old.everPaused) || d.level >= 2),
-          requeue: j.gpu && j.kind === 'generator', by: st.priorityBy,
-        };
-        throttles[id] = entry;
-        save(); // BEFORE the OS call
-        try { await adapter.apply(entry); log(p, `level ${d.level} ${id} (${j.kind}, ${j.name}) for ${d.resources.join(',')}`); } catch (e) { log(p, `apply failed ${id}: ${e.message}`); }
-        if (d.level >= 2 && !st.notified[id]) st.notified[id] = { pausedAt: now };
-      }
-      for (const [id, n] of Object.entries(st.notified)) {
-        if (!throttles[id]) { delete st.notified[id]; continue; }
-        if (!n.sent && now - n.pausedAt >= c.starvationMs) { n.sent = true; await notify('Claude job waiting', `${throttles[id].name} has been paused for 30 min because of ${P.appLabel(st.priorityBy || 'budget')}.`); }
-      }
-
-      // Queue: expire, starvation notice, drift-checked run when nothing presses.
-      const entries = Q.list(p.queue);
-      for (const e of entries) {
-        if (Q.isExpired(e, now, c)) { Q.remove(p.queue, e.id); log(p, `queue expired ${e.id}`); continue; }
-        if (Q.starving(e, now, c)) { e.starvationNotified = true; Q.save(p.queue, e); await notify('Claude job waiting', `"${e.command.slice(0, 60)}" has waited 30 min for ${P.appLabel(st.priorityBy || 'free resources')}.`); }
-      }
-      for (const [id, q] of Object.entries(st.queueRunning)) {
-        if (!byPid.has(q.pid)) { delete st.queueRunning[id]; Q.remove(p.queue, id); log(p, `queue done ${id}`); }
-      }
-      const noPressure = !pressure.priority.length && !pressure.over.length;
-      if (noPressure && !Object.keys(st.queueRunning).length) {
-        const e = Q.pickNext(Q.list(p.queue), now, c);
-        if (e && P.admit({ command: e.command, now, state: { heartbeat: now, pressure, sys: st.sys }, kinds: st.kinds, cfg: c }).decision === 'allow') {
-          const drift = Q.driftCheck(e, gitInfo(e.cwd));
-          const logFile = Q.logFile(p.queue, e.id);
-          fs.mkdirSync(path.dirname(logFile), { recursive: true });
-          if (!drift.ok) {
-            fs.appendFileSync(logFile, `skipped: ${drift.reason}\n`);
-            Q.remove(p.queue, e.id); log(p, `queue skipped ${e.id}: ${drift.reason}`);
-          } else {
-            const out = fs.openSync(logFile, 'a');
-            const shell = e.shell === 'powershell' ? ['powershell.exe', ['-NoProfile', '-Command', e.command]] : ['bash', ['-c', e.command]];
-            const child = spawn(shell[0], shell[1], { cwd: e.cwd, detached: true, stdio: ['ignore', out, out], windowsHide: true });
-            child.on('error', (err) => { try { fs.appendFileSync(logFile, `spawn failed: ${err.message}\n`); } catch {} });
-            child.unref();
-            fs.closeSync(out);
-            st.queueRunning[e.id] = { pid: child.pid, startedAt: now };
-            e.status = 'running'; Q.save(p.queue, e);
-            log(p, `queue run ${e.id} pid ${child.pid}`);
-          }
-        }
-      }
-
-      // Reservations expire on their own.
-      for (const { file, data } of S.readDir(p.reservations)) if (!(data.expiresAt > now)) S.removeFile(file);
-
-      st.heartbeat = Date.now();
-      save();
-
-      const claudeJobs = Object.keys(st.tracked).length;
-      if (!liveSessions && !claudeJobs && !Object.keys(throttles).length && !Object.keys(st.queueRunning).length && now - startedAt > 60000) {
-        return shutdown('no session and no Claude job left');
-      }
-    } catch (e) {
-      log(p, `tick error: ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`);
+    const c = loadConfig(p);
+    if (!c.enabled) return shutdown('disabled');
+    if (tickStart - lastBeat >= c.heartbeatMs) {
+      if (!S.heartbeat(p, pid, version, tickStart)) { log('lock lost'); await adapter.stop(); process.exit(0); }
+      lastBeat = tickStart;
     }
-    const wait = Math.max(250, cfg.tickMs - (Date.now() - tickStart));
-    await new Promise((r) => setTimeout(r, wait));
+    if (S.handoverRequested(p, version, tickStart)) return shutdown('handover to newer version');
+    const control = S.readJson(p.control, {});
+    if (control.stop && control.at > w.st.startedAt) return shutdown('stop requested');
+    if (!adapter.alive) {
+      try { await adapter.start(); } catch (e) { log(`helper restart failed: ${e.message}`); }
+      for (const t of Object.values(w.st.throttles)) { try { await adapter.release(t.key, t.pids); } catch {} delete w.st.throttles[t.jobId]; }
+      w.save();
+    }
+    try { await w.tick(); } catch (e) { log(`tick error: ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`); }
+    if (w.canExit()) return shutdown('no session and no Claude job left');
+    const idle = Object.keys(w.st.tracked).length === 0 && !w.st.pressure.priority.length && !w.st.pressure.over.length;
+    const interval = idle ? c.idleTickMs : c.tickMs;
+    await new Promise((r) => setTimeout(r, Math.max(250, interval - (Date.now() - tickStart))));
   }
 }
 
 if (require.main === module) {
-  main().catch((e) => { try { log(govPaths(), `fatal: ${e.message}`); } catch {} process.exit(1); });
+  main().catch((e) => { try { const { paths } = require('./config'); fs.appendFileSync(paths().log, `fatal: ${e.message}\n`); } catch {} process.exit(1); });
 }
 
-module.exports = { main, gitInfo };
+module.exports = { createWatcher, main, sanitize };

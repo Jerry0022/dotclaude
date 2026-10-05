@@ -139,12 +139,7 @@ async function getPhase() {
 
 // The governor counts the local backend's load as Claude's while this runs.
 async function trackedCompletion(args) {
-  governor.mark(true);
-  try {
-    return await http.chatCompletion(BASE_URL, API_KEY, args);
-  } finally {
-    governor.mark(false);
-  }
+  return governor.during(() => http.chatCompletion(BASE_URL, API_KEY, args));
 }
 
 function registerHeartbeat(name) {

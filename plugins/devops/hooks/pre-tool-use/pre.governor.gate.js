@@ -1,21 +1,25 @@
 #!/usr/bin/env node
 /**
  * @hook pre.governor.gate
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash|PowerShell
  * @description Admission gate of the Claude load governor.
- *   1. Records a foreground tool call (not run_in_background) so the watcher
- *      only caps — never pauses — what Claude is waiting on.
+ *   1. Records a foreground tool call (not run_in_background), scoped to the
+ *      session id with a short TTL, so the watcher only caps — never pauses —
+ *      what Claude is waiting on.
  *   2. Heavy-looking starts (builds, tests, installs, docker, generators) and,
- *      while priority/over-budget is active, escape routes (wsl, schtasks,
- *      Start-Process -Verb, sc, systemd-run …) ask for a slot: policy.admit
- *      against the watcher's state file. Allowed → a RAM reservation is
- *      written; deferred → the command goes into the watcher's queue (cwd,
- *      branch, HEAD) and the call is refused with the queue id and log path.
- *   Fail open on any error; no network, no waiting beyond a 150 ms file lock.
- *   Inline `DOTCLAUDE_GOVERNOR=off` in the command skips the gate.
+ *      while a resource they need is under priority/over budget, escape routes
+ *      (wsl, schtasks, Start-Process -Verb, sc create, systemd-run) ask for a
+ *      slot: policy.admit against the watcher's state file (fail open when the
+ *      state is missing or stale). Allowed → proceed. Deferred → the command
+ *      is RECORDED in the watcher's queue; the governor does not run it. The
+ *      call is refused and Claude is told it will be offered again when
+ *      resources free up — meanwhile defer the dependent steps and report
+ *      them as open.
+ *   Spawns the watcher (detached) on both the allow and defer paths when the
+ *   state is missing/stale, so a defer is re-evaluated. Fail open on any error.
  */
 
 require('../lib/plugin-guard');
@@ -23,6 +27,14 @@ require('../lib/plugin-guard');
 const path = require('path');
 
 const SHELLS = { Bash: 'bash', PowerShell: 'powershell' };
+
+function spawnWatcher() {
+  if (process.env.DOTCLAUDE_GOVERNOR_NO_SPAWN === '1') return;
+  try {
+    const { spawn } = require('child_process');
+    spawn(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'governor', 'watcher.js')], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  } catch { /* fail open */ }
+}
 
 function main(hook, deps = {}) {
   const shell = SHELLS[hook.tool_name];
@@ -37,47 +49,36 @@ function main(hook, deps = {}) {
   if (!cfg.enabled) return null;
   const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
   const command = typeof input.command === 'string' ? input.command : '';
-  if (!command || /\bDOTCLAUDE_GOVERNOR=off\b/.test(command)) return null;
+  if (!command) return null;
   const sid = String(hook.session_id || 'nosession').replace(/[^A-Za-z0-9_-]/g, '');
   const tid = String(hook.tool_use_id || Date.now()).replace(/[^A-Za-z0-9_-]/g, '');
   const now = deps.now || Date.now();
   const fgFile = path.join(p.foreground, `${sid}-${tid}.json`);
-  if (!input.run_in_background) S.writeJson(fgFile, { sessionId: sid, startedAt: now, command: command.slice(0, 200) });
+  if (!input.run_in_background) S.writeJson(fgFile, { sessionId: sid, startedAt: now, command: command.slice(0, 160), kind: P.commandKind(command) });
 
-  if (!P.commandKind(command) && !P.isEscape(command)) return null;
+  const c = P.classifyCommand(command);
+  if (!c.kind && !c.escape) return null;
   const state = S.readState(p);
-  const res = S.withDirLock(p.reservations, () => {
-    const reservations = S.readDir(p.reservations).map((x) => x.data);
-    const r = P.admit({ command, now, state, reservations, kinds: (state && state.kinds) || {}, cfg });
-    if (r.decision === 'allow' && r.reserve) S.writeJson(path.join(p.reservations, `${sid}-${tid}.json`), { mb: r.expectedMB, kind: r.kind, expiresAt: now + cfg.admission.reserveMs });
-    return r;
-  });
+  const res = P.admit({ command, now, state, kinds: (state && state.kinds) || {}, cfg });
   if (res.decision === 'allow') {
-    if (res.reason === 'watcher-absent' && process.env.DOTCLAUDE_GOVERNOR_NO_SPAWN !== '1') {
-      const { spawn } = require('child_process');
-      spawn(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'governor', 'watcher.js')], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    }
+    if (res.reason === 'watcher-absent') spawnWatcher();
     return null;
   }
-  // Deferred: queue it with the state it must still match when it runs.
+  // Deferred: record it with the state it was deferred at (drift context for Claude); do NOT run it.
   const Q = require('../../scripts/governor/queue');
   const cwd = typeof hook.cwd === 'string' ? hook.cwd : process.cwd();
-  const git = deps.git || ((c) => {
-    const { gitOut } = require('../lib/git-timeout');
-    return { branch: gitOut(c, ['rev-parse', '--abbrev-ref', 'HEAD']), head: gitOut(c, ['rev-parse', 'HEAD']) };
-  });
+  const git = deps.git || ((cc) => { const { gitOut } = require('../lib/git-timeout'); return { branch: gitOut(cc, ['rev-parse', '--abbrev-ref', 'HEAD']), head: gitOut(cc, ['rev-parse', 'HEAD']) }; });
   let g = {};
   try { g = git(cwd) || {}; } catch { g = {}; }
-  const e = Q.newEntry({ command, shell, cwd, branch: g.branch || null, head: g.head || null, sessionId: sid, kind: res.kind, reason: res.reason, now });
+  const e = Q.newEntry({ command, cwd, branch: g.branch || null, head: g.head || null, sessionId: sid, kind: res.kind, reason: res.reason, now });
   Q.save(p.queue, e);
   S.removeFile(fgFile);
-  const cli = path.join(__dirname, '..', '..', 'scripts', 'governor', 'cli.js');
+  if (!state || now - (state.heartbeat || 0) >= cfg.admission.staleMs) spawnWatcher();
+  const yieldsTo = res.reason.startsWith('priority:') ? 'an app that has priority right now' : 'the 80 % resource budget';
   return {
-    block: `[governor] Not started now (${res.reason}): heavy work yields to ${res.reason.startsWith('priority:') ? 'an app with priority' : 'the 80 % resource budget'}.\n`
-      + `Queued as ${e.id}; the governor runs it when resources are free (cwd/branch/HEAD are re-checked first).\n`
-      + `Log: ${Q.logFile(p.queue, e.id)}\n`
-      + 'Do NOT start it another way. Defer the steps that depend on its result and report them as open; continue with other work.\n'
-      + `Queue: node "${cli}" queue`,
+    block: `[governor] Not starting this now — heavy work yields to ${yieldsTo} (${res.reason}).\n`
+      + 'The governor recorded the command and will tell you (this session or the next one in this repo) when the resources are free, so you can re-run it yourself under normal permissions.\n'
+      + 'For now: do NOT start it another way, defer the steps that depend on its result, and report those steps as open. Continue with other work.',
   };
 }
 

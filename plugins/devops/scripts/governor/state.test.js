@@ -43,40 +43,41 @@ describe('state file', () => {
   });
 });
 
-describe('singleton lock', () => {
-  const alive = (set) => (pid) => set.has(pid);
-  it('first starter wins, second backs off while the first heartbeats', () => {
-    expect(St.acquireLock(p, { pid: 1, version: '1.0.0', now: 0, alive: alive(new Set([1])) }).ok).toBe(true);
-    const r = St.acquireLock(p, { pid: 2, version: '1.0.0', now: 5000, alive: alive(new Set([1, 2])) });
+describe('singleton lock (takeover only on a dead holder)', () => {
+  it('first starter wins, second backs off while the first lives', () => {
+    expect(St.acquireLock(p, { pid: 1, version: '1.0.0', now: 0, alive: () => true }).ok).toBe(true);
+    const r = St.acquireLock(p, { pid: 2, version: '1.0.0', now: 5000, alive: () => true });
     expect(r.ok).toBe(false);
     expect(r.handover).toBeFalsy();
   });
-  it('dead holder or stale heartbeat → takeover', () => {
+  it('a stale heartbeat on a LIVE holder is NOT a takeover (R6)', () => {
     St.acquireLock(p, { pid: 1, version: '1.0.0', now: 0, alive: () => true });
-    const dead = St.acquireLock(p, { pid: 2, version: '1.0.0', now: 1000, alive: (pid) => pid === 2 });
-    expect(dead).toMatchObject({ ok: true, takeover: true });
-    const stale = St.acquireLock(p, { pid: 3, version: '1.0.0', now: 60000, alive: () => true });
-    expect(stale.ok).toBe(true);
-    expect(St.readJson(p.lock).pid).toBe(3);
-    expect(St.heartbeat(p, 2, '1.0.0', 61000)).toBe(false);
-    expect(St.heartbeat(p, 3, '1.0.0', 61000)).toBe(true);
+    expect(St.acquireLock(p, { pid: 2, version: '1.0.0', now: 10 * 60000, alive: () => true }).ok).toBe(false);
   });
-  it('a newer version asks the live holder to hand over', () => {
-    St.acquireLock(p, { pid: 1, version: '0.246.0', now: 0, alive: () => true });
-    const r = St.acquireLock(p, { pid: 2, version: '0.247.0', now: 1000, alive: () => true });
+  it('a dead holder is taken over', () => {
+    St.writeJson(p.lock, { pid: 1, version: '1.0.0', startMs: 500, heartbeat: 0 });
+    expect(St.acquireLock(p, { pid: 2, version: '1.0.0', now: 1000, alive: (pid) => pid === 2 })).toMatchObject({ ok: true, takeover: true });
+    expect(St.readJson(p.lock).pid).toBe(2);
+  });
+  it('a reused pid (alive but different start time) is taken over', () => {
+    St.writeJson(p.lock, { pid: 7, version: '1.0.0', startMs: 500, heartbeat: 0 });
+    const reused = St.acquireLock(p, { pid: 8, version: '1.0.0', now: 3000, alive: () => true, startOf: (pid) => (pid === 7 ? 999999 : 0) });
+    expect(reused.ok).toBe(true);
+    expect(St.readJson(p.lock).pid).toBe(8);
+  });
+  it('a newer version asks the live holder to hand over; an older one never evicts', () => {
+    St.acquireLock(p, { pid: 1, version: '0.246.0', now: 0, startMs: 1, alive: () => true });
+    const r = St.acquireLock(p, { pid: 2, version: '0.247.0', now: 1000, alive: () => true, startOf: () => 1 });
     expect(r).toMatchObject({ ok: false, handover: true });
     expect(St.handoverRequested(p, '0.246.0', 2000)).toBe(true);
     expect(St.handoverRequested(p, '0.247.0', 2000)).toBe(false);
-    St.releaseLock(p, 1);
-    expect(St.acquireLock(p, { pid: 2, version: '0.247.0', now: 3000, alive: () => true }).ok).toBe(true);
+    St.acquireLock(p, { pid: 3, version: '2.0.0', now: 3000, startMs: 1, alive: () => true });
+    expect(St.acquireLock(p, { pid: 4, version: '1.9.9', now: 4000, alive: () => true, startOf: () => 1 }).ok).toBe(false);
   });
-  it('an older version never takes over a live newer holder', () => {
-    St.acquireLock(p, { pid: 1, version: '2.0.0', now: 0, alive: () => true });
-    expect(St.acquireLock(p, { pid: 2, version: '1.9.9', now: 1000, alive: () => true })).toMatchObject({ ok: false });
-    expect(fs.existsSync(p.handover)).toBe(false);
-  });
-  it('release only removes our own lock', () => {
+  it('heartbeat and release only touch our own lock', () => {
     St.acquireLock(p, { pid: 1, version: '1', now: 0, alive: () => true });
+    expect(St.heartbeat(p, 2, '1', 100)).toBe(false);
+    expect(St.heartbeat(p, 1, '1', 100)).toBe(true);
     St.releaseLock(p, 2);
     expect(fs.existsSync(p.lock)).toBe(true);
     St.releaseLock(p, 1);
@@ -87,35 +88,27 @@ describe('singleton lock', () => {
     expect(St.compareVersions('1.0.0', '1.0')).toBe(0);
     expect(St.compareVersions(undefined, '0.0.1')).toBe(-1);
   });
-  it('withDirLock runs fn and cleans up, even when a stale lock dir exists', () => {
-    const d = path.join(dir, 'reservations');
-    fs.mkdirSync(`${d}.lock`, { recursive: true });
-    const old = (Date.now() - 10000) / 1000;
-    fs.utimesSync(`${d}.lock`, old, old);
-    expect(St.withDirLock(d, () => 42)).toBe(42);
-    expect(fs.existsSync(`${d}.lock`)).toBe(false);
-  });
 });
 
-describe('queue', () => {
+describe('queue (record only, no execution)', () => {
   const cfg = merge(DEFAULTS, {});
-  it('drift check: worktree gone, branch changed, HEAD moved', () => {
-    const e = Q.newEntry({ command: 'npm test', cwd: '/x', branch: 'feat', head: 'abc123', now: 0 });
-    expect(Q.driftCheck(e, { exists: true, branch: 'feat', head: 'abc123' })).toEqual({ ok: true });
-    expect(Q.driftCheck(e, { exists: false })).toMatchObject({ ok: false, reason: 'worktree-gone' });
-    expect(Q.driftCheck(e, { exists: true, branch: 'main', head: 'abc123' }).reason).toMatch(/^branch-changed/);
-    expect(Q.driftCheck(e, { exists: true, branch: 'feat', head: 'def456' }).reason).toMatch(/^head-moved/);
-    expect(Q.driftCheck(Q.newEntry({ command: 'x', cwd: '/y', now: 0 }), { exists: true, branch: 'a', head: 'b' }).ok).toBe(true);
-  });
-  it('expires after 24 h, FIFO, starvation after 30 min once', () => {
+  it('expires after 24 h; starvation after 30 min once (not once ready)', () => {
     const a = Q.newEntry({ command: 'a', cwd: '/', now: 1000 });
-    const b = Q.newEntry({ command: 'b', cwd: '/', now: 2000 });
-    expect(Q.pickNext([b, a], 3000, cfg).command).toBe('a');
     expect(Q.isExpired(a, 1000 + 24 * 3600000, cfg)).toBe(true);
-    expect(Q.pickNext([a, b], 1500 + 24 * 3600000, cfg).command).toBe('b');
     expect(Q.starving(a, 1000 + 29 * 60000, cfg)).toBe(false);
     expect(Q.starving(a, 1000 + 31 * 60000, cfg)).toBe(true);
     expect(Q.starving({ ...a, starvationNotified: true }, 1000 + 31 * 60000, cfg)).toBe(false);
+    expect(Q.starving(Q.markReady(a, 2000), 1000 + 31 * 60000, cfg)).toBe(false);
+  });
+  it('markReady, and readyFor filters by status, expiry and repo (cwd)', () => {
+    const r = Q.markReady(Q.newEntry({ command: 'npm test', cwd: '/repo', branch: 'f', head: 'abc', now: 1000 }), 2000);
+    expect(r.status).toBe('ready');
+    const other = Q.markReady(Q.newEntry({ command: 'x', cwd: '/elsewhere', now: 1000 }), 2000);
+    const queued = Q.newEntry({ command: 'y', cwd: '/repo', now: 1000 });
+    const got = Q.readyFor([r, other, queued], 3000, cfg, '/repo');
+    expect(got.map((e) => e.command)).toEqual(['npm test']);
+    expect(Q.readyFor([r], 1000 + 25 * 3600000, cfg, '/repo')).toEqual([]);
+    expect(Q.readyFor([Q.markReady(Q.newEntry({ command: 'z', cwd: null, now: 1000 }), 2000)], 3000, cfg, '/repo').length).toBe(1);
   });
   it('persists entries as files', () => {
     const e = Q.newEntry({ command: 'npm test', cwd: dir, now: 5 });
