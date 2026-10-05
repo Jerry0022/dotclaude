@@ -307,7 +307,7 @@ function updatePriority(prev, foreign, now, ctx) {
     a.ioBps += p.ioBps || 0;
     a.memMB += p.memMB || 0;
     a.pids.push(p.pid);
-    a.fromLibrary = a.fromLibrary || (ctx.libraryRoots || []).some((r) => lowerSlash(p.path).startsWith(lowerSlash(r).replace(/\\+$/, '') + '\\'))
+    a.fromLibrary = a.fromLibrary || [...(ctx.libraryRoots || []), ...(ctx.libraryDirs || [])].some((r) => lowerSlash(p.path).startsWith(lowerSlash(r).replace(/\\+$/, '') + '\\'))
       || libExes.has(lowerSlash(p.path));
     seen.set(key, a);
   }
