@@ -1306,26 +1306,54 @@ describe("post.flow.completion — the card widget ends the turn", () => {
   });
 
   // #632: a merged ship card left an archive flag — the widget releases exactly
-  // one archive_session call, and that call ends the turn instead.
+  // one archive_session call, and that call ends the turn instead. Released
+  // only with this session's own ship evidence, the same work tree and a
+  // clean tree (lib/session-archive-gate.js).
   describe("the archive hand-over after a ship card", () => {
     const ARCHIVE = "mcp__ccd_session_mgmt__archive_session";
-    const flagOf = (dir, sid) => path.join(dir, ".tmp", `dotclaude-devops-card-archive-${sid}`);
+    const RENDER = "mcp__plugin_devops_dotclaude-completion__render_completion_card";
+    const RELEASE = "mcp__plugin_devops_dotclaude-ship__ship_release";
+    const tmpFile = (dir, prefix, sid) => path.join(dir, ".tmp", `${prefix}-${sid}`);
+    const flagOf = (dir, sid) => tmpFile(dir, "dotclaude-devops-card-archive", sid);
+    const releasedOf = (dir, sid) => tmpFile(dir, "dotclaude-devops-card-archive-released", sid);
 
-    test("a fresh archive flag → one archive call released, then that call ends the turn", () => {
+    /** project() as a clean git work tree; .tmp/ and .claude/ are ignored. */
+    function gitProject() {
       const dir = project();
-      fs.writeFileSync(flagOf(dir, "s-arch-1"), String(Date.now()));
+      const git = (...args) => spawnSync("git", ["-c", "commit.gpgsign=false", "-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: dir, encoding: "utf8" });
+      git("init", "-q");
+      fs.appendFileSync(path.join(dir, ".git", "info", "exclude"), "\n.tmp/\n.claude/\n");
+      git("commit", "-q", "--allow-empty", "-m", "init");
+      return dir;
+    }
+    const stamp = (cwd) => JSON.stringify({ cwd, nonce: "abc", ts: Date.now() });
+    const shipped = (dir, sid, root) => runHookRaw(dir, sid, RELEASE, {
+      tool_input: { cwd: dir },
+      tool_response: { content: [{ type: "text", text: JSON.stringify({ merged: "main", success: true }) }] },
+    }, { CLAUDE_PLUGIN_ROOT: root });
+    const widget = (dir, sid, root) => JSON.parse(runHookRaw(dir, sid, WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
+
+    test("end to end: MCP flag under \"self\" → adopted onto the real id → released once → the archive call ends the turn", () => {
+      const dir = gitProject();
       const { root, ran } = fakeRoot();
-      const out = JSON.parse(runHookRaw(dir, "s-arch-1", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
+      fs.writeFileSync(flagOf(dir, "self"), stamp(dir));
+      runHookRaw(dir, "s-arch-1", RENDER, { tool_input: { session_id: "self", cwd: dir } }, { CLAUDE_PLUGIN_ROOT: root });
+      expect(fs.existsSync(flagOf(dir, "self"))).toBe(false);
+      expect(fs.existsSync(flagOf(dir, "s-arch-1"))).toBe(true);
+      shipped(dir, "s-arch-1", root);
+
+      const out = widget(dir, "s-arch-1", root);
       expect(out.continue).toBeUndefined();
       const text = out.hookSpecificOutput.additionalContext;
       expect(text).toContain('mcp__ccd_session_mgmt__archive_session {session_id:"self"}');
       expect(text).toMatch(/exactly ONE more tool call/);
       expect(text).toMatch(/No text before or after it/);
+      expect(text).toMatch(/reply to it with nothing/);
       expect(ran().map((r) => r.name)).toEqual(["one", "two"]);
       expect(fs.existsSync(flagOf(dir, "s-arch-1"))).toBe(false);
 
       // A second widget call releases nothing — the flag was consumed.
-      expect(JSON.parse(runHookRaw(dir, "s-arch-1", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root })).continue).toBe(false);
+      expect(widget(dir, "s-arch-1", root).continue).toBe(false);
 
       const end = JSON.parse(runHookRaw(dir, "s-arch-1", ARCHIVE, { tool_input: { session_id: "self" } }, { CLAUDE_PLUGIN_ROOT: root }));
       expect(end.continue).toBe(false);
@@ -1335,41 +1363,157 @@ describe("post.flow.completion — the card widget ends the turn", () => {
       cleanup(dir); cleanup(root);
     });
 
-    test("no flag → the card ends the turn as before", () => {
-      const dir = project();
+    test("a re-render that no longer qualifies deletes the adopted flag", () => {
+      const dir = gitProject();
+      fs.writeFileSync(flagOf(dir, "self"), stamp(dir));
+      runHookRaw(dir, "s-arch-2", RENDER, { tool_input: { session_id: "self", cwd: dir } });
+      expect(fs.existsSync(flagOf(dir, "s-arch-2"))).toBe(true);
+      // The MCP removed its flag for the new card — the adopted copy goes too.
+      runHookRaw(dir, "s-arch-2", RENDER, { tool_input: { session_id: "self", cwd: dir } });
+      expect(fs.existsSync(flagOf(dir, "s-arch-2"))).toBe(false);
+      cleanup(dir);
+    });
+
+    test("a parallel session in another work tree never adopts the shared \"self\" flag", () => {
+      const dir = gitProject();
+      const other = gitProject();
       const { root } = fakeRoot();
-      const out = JSON.parse(runHookRaw(dir, "s-arch-2", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
-      expect(out.continue).toBe(false);
+      fs.writeFileSync(flagOf(dir, "self"), stamp(other));
+      runHookRaw(dir, "s-arch-3", RENDER, { tool_input: { session_id: "self", cwd: dir } }, { CLAUDE_PLUGIN_ROOT: root });
+      expect(fs.existsSync(flagOf(dir, "s-arch-3"))).toBe(false);
+      expect(fs.existsSync(flagOf(dir, "self"))).toBe(true);
+      // Planted under the real id anyway: the release checks the work tree again.
+      fs.writeFileSync(flagOf(dir, "s-arch-3"), stamp(other));
+      shipped(dir, "s-arch-3", root);
+      expect(widget(dir, "s-arch-3", root).continue).toBe(false);
+      cleanup(dir); cleanup(other); cleanup(root);
+    });
+
+    test("no ship_release this session saw → no release, flag dropped", () => {
+      const dir = gitProject();
+      const { root } = fakeRoot();
+      fs.writeFileSync(flagOf(dir, "s-arch-4"), stamp(dir));
+      expect(widget(dir, "s-arch-4", root).continue).toBe(false);
+      expect(fs.existsSync(flagOf(dir, "s-arch-4"))).toBe(false);
+      cleanup(dir); cleanup(root);
+    });
+
+    test("a tree that got dirty after the render → no release (R1)", () => {
+      const dir = gitProject();
+      const { root } = fakeRoot();
+      fs.writeFileSync(flagOf(dir, "s-arch-5"), stamp(dir));
+      shipped(dir, "s-arch-5", root);
+      fs.writeFileSync(path.join(dir, "untracked.txt"), "x");
+      expect(widget(dir, "s-arch-5", root).continue).toBe(false);
       cleanup(dir); cleanup(root);
     });
 
     test("a stale flag (card never shown in time) releases nothing and is dropped", () => {
-      const dir = project();
-      const flag = flagOf(dir, "s-arch-3");
-      fs.writeFileSync(flag, "0");
+      const dir = gitProject();
+      const flag = flagOf(dir, "s-arch-6");
+      fs.writeFileSync(flag, stamp(dir));
       const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
       fs.utimesSync(flag, old, old);
       const { root } = fakeRoot();
-      const out = JSON.parse(runHookRaw(dir, "s-arch-3", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
-      expect(out.continue).toBe(false);
+      shipped(dir, "s-arch-6", root);
+      expect(widget(dir, "s-arch-6", root).continue).toBe(false);
       expect(fs.existsSync(flag)).toBe(false);
       cleanup(dir); cleanup(root);
     });
 
-    test("a blocking Stop hook or an orchestrator hold wins over the archive", () => {
-      const dir = project();
-      fs.writeFileSync(flagOf(dir, "s-arch-4"), String(Date.now()));
+    test("a blocking Stop hook or an orchestrator hold wins and drops the flag (R6)", () => {
+      const dir = gitProject();
+      fs.writeFileSync(flagOf(dir, "s-arch-7"), stamp(dir));
       const { root } = fakeRoot({ blockFirst: true });
-      expect(runHook(dir, "s-arch-4", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root })).not.toContain("archive_session");
+      shipped(dir, "s-arch-7", root);
+      expect(runHook(dir, "s-arch-7", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root })).not.toContain("archive_session");
+      expect(fs.existsSync(flagOf(dir, "s-arch-7"))).toBe(false);
       cleanup(root);
+      fs.writeFileSync(flagOf(dir, "s-arch-7"), stamp(dir));
       fs.writeFileSync(path.join(dir, ".claude", ".ship-queue"), "{}");
       const r2 = fakeRoot();
-      const held = runHook(dir, "s-arch-4", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: r2.root });
+      const held = runHook(dir, "s-arch-7", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: r2.root });
       expect(held).toContain("continue with the orchestrator");
       expect(held).not.toContain("archive_session");
-      expect(fs.existsSync(flagOf(dir, "s-arch-4"))).toBe(true);
+      expect(fs.existsSync(flagOf(dir, "s-arch-7"))).toBe(false);
       cleanup(dir); cleanup(r2.root);
     });
+
+    test("a failed archive call (PostToolUseFailure) still ends the turn and drops the marker (R5)", () => {
+      const dir = gitProject();
+      fs.writeFileSync(releasedOf(dir, "s-arch-8"), "1");
+      const out = JSON.parse(runHookRaw(dir, "s-arch-8", ARCHIVE, { hook_event_name: "PostToolUseFailure", tool_input: { session_id: "self" }, error: "boom" }));
+      expect(out.continue).toBe(false);
+      expect(out.stopReason).toMatch(/archived/);
+      expect(fs.existsSync(releasedOf(dir, "s-arch-8"))).toBe(false);
+      // Without a released marker a failure is none of this hook's business.
+      expect(runHookRaw(dir, "s-arch-8", ARCHIVE, { hook_event_name: "PostToolUseFailure", tool_input: { session_id: "self" } })).toBe("");
+      cleanup(dir);
+    });
+
+    test("widget then archive_session still reads as card-last (stop.guide.handoff, stop.flow.guard)", () => {
+      const { deliveredCardText } = createRequire(import.meta.url)("../lib/card-guard.js");
+      const entry = (type, content) => JSON.stringify({ type, message: { role: type, content } });
+      const transcript = [
+        entry("user", "ship it"),
+        entry("assistant", [{ type: "tool_use", id: "w", name: WIDGET, input: { title: "completion_card_body", widget_code: '<h3 class="card-title">🚀 Shipped</h3>' } }]),
+        entry("user", [{ type: "tool_result", tool_use_id: "w", content: "ok" }]),
+        entry("assistant", [{ type: "tool_use", id: "a", name: ARCHIVE, input: { session_id: "self" } }]),
+        entry("user", [{ type: "tool_result", tool_use_id: "a", content: "archived" }]),
+      ].join("\n");
+      expect(deliveredCardText(transcript)).toContain("Shipped");
+    });
+  });
+
+  // #632 R2b: only the released hand-over (or the user's own request) archives this session.
+  describe("pre.session.archive", () => {
+    const PRE = path.join(__dirname, "..", "pre-tool-use", "pre.session.archive.js");
+    const ARCHIVE = "mcp__ccd_session_mgmt__archive_session";
+    function runPre(dir, sid, toolInput, transcriptPath) {
+      const tmp = path.join(dir, ".tmp");
+      return spawnSync(process.execPath, [PRE], {
+        cwd: dir,
+        input: JSON.stringify({ tool_name: ARCHIVE, tool_input: toolInput, session_id: sid, cwd: dir, transcript_path: transcriptPath }),
+        encoding: "utf8",
+        env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+      });
+    }
+
+    test("archiving self without a released hand-over is denied", () => {
+      const dir = project();
+      for (const input of [{ session_id: "self" }, {}, { session_id: "s-pre-1" }]) {
+        const res = runPre(dir, "s-pre-1", input);
+        expect(res.status).toBe(2);
+        expect(res.stderr).toMatch(/not released/);
+      }
+      cleanup(dir);
+    });
+
+    test("allowed with the released marker, for another session's id, or when the user asked", () => {
+      const dir = project();
+      fs.writeFileSync(path.join(dir, ".tmp", "dotclaude-devops-card-archive-released-s-pre-2"), "1");
+      expect(runPre(dir, "s-pre-2", { session_id: "self" }).status).toBe(0);
+      expect(runPre(dir, "s-pre-3", { session_id: "local_other" }).status).toBe(0);
+      const transcript = path.join(dir, "t.jsonl");
+      fs.writeFileSync(transcript, JSON.stringify({ type: "user", message: { role: "user", content: "bitte archiviere diese Session" } }) + "\n");
+      expect(runPre(dir, "s-pre-3", { session_id: "self" }, transcript).status).toBe(0);
+      cleanup(dir);
+    });
+  });
+
+  test("a new user prompt clears every archive flag of the session (R8)", () => {
+    const dir = project();
+    const tmp = path.join(dir, ".tmp");
+    const names = ["dotclaude-devops-card-archive", "dotclaude-devops-card-archive-released", "dotclaude-devops-archive-shipped"];
+    for (const n of names) fs.writeFileSync(path.join(tmp, `${n}-s-ups`), "1");
+    spawnSync(process.execPath, [path.join(__dirname, "..", "user-prompt-submit", "prompt.flow.silent-turn.js")], {
+      cwd: dir,
+      input: JSON.stringify({ prompt: "next thing", session_id: "s-ups", cwd: dir }),
+      encoding: "utf8",
+      env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
+    });
+    for (const n of names) expect(fs.existsSync(path.join(tmp, `${n}-s-ups`))).toBe(false);
+    cleanup(dir);
   });
 
   test("any other widget never ends the turn", () => {

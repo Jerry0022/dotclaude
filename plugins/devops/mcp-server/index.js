@@ -2019,6 +2019,11 @@ function archiveHold(cwd, sessionId) {
     return holdReason({ cwd: cwd || process.cwd(), session_id: sessionId });
   } catch { return 'unreadable'; }
 }
+function archiveTreeClean(cwd) {
+  try {
+    return cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'session-archive-gate.js')).treeClean(cwd);
+  } catch { return false; }
+}
 function archiveEnabled(cwd) {
   try {
     const { load } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'devops-config.js'));
@@ -2040,9 +2045,10 @@ function sessionArchiveNote(params, actionsNote) {
       batchActive: (cwd) => !!readBatch(cwd),
       holdReason: (cwd) => archiveHold(cwd, params.session_id),
       enabled: archiveEnabled,
+      treeClean: archiveTreeClean,
     })
     : { archive: false };
-  writeArchiveFlag(archive, safeSessionId(params.session_id), tmpdir());
+  writeArchiveFlag(archive, safeSessionId(params.session_id), tmpdir(), { cwd: params.cwd });
   return archive ? archiveInstruction() : '';
 }
 

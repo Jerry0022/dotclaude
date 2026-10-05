@@ -124,9 +124,21 @@ of ending the turn there.
 
 Never archived: any other card (analysis, fallback, paused, ship-blocked,
 ready, test), a ship with an explicit keep (`--keep`, follow-up signals →
-`state.kept`), pending agents / tasks / workflows, an open concept or batch
-mode, and while an autonomous run, its lockout or a ship queue still works in
-the repo. A Desktop-created worktree alone does not keep the session.
+`state.kept`), pending agents / tasks / workflows, open points or user tests
+still on the card, an open concept or batch mode, and while an autonomous run,
+its lockout or a ship queue still works in the repo. A Desktop-created worktree
+alone does not keep the session.
+
+Fail closed: the work tree must be clean — no tracked change and no untracked
+file (`git status --porcelain --untracked-files=all` empty) both at render
+time and again right before the call is released. Ignored files are accepted:
+they are the user's local config. The card needs a `cwd`, and the hook only
+releases the call when it saw a merged `ship_release` in this session itself
+and the card was rendered for this session's work tree. Any other
+`archive_session` call on the session itself is denied
+(`pre.session.archive`) unless the user's own prompt asks for an archive;
+archiving another session by its id is untouched. A new user prompt drops any
+leftover hand-over.
 
 Turn it off with the devops setting `ship.archiveAfterShip false`
 (`deep-knowledge/devops-config.md`).

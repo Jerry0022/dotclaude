@@ -971,7 +971,8 @@ the widget as usual; its hook then releases exactly one more call —
 around it. Make it only when the hook says so. The renderer leaves the block
 out for an explicit keep (`state.kept` — `--keep` or a Step 5a signal),
 `pending` work (check `TaskList`, agents and workflows — declare what still
-runs), a concept or batch mode, an autonomous run / lockout or ship queue
+runs), `open` points or `userTest` items on the card, a dirty work tree
+(untracked files too; ignored files are fine), a missing `cwd`, a concept or batch mode, an autonomous run / lockout or ship queue
 (intermediate ships of a run never archive), and the devops setting
 `ship.archiveAfterShip false`. Background:
 `{PLUGIN_ROOT}/deep-knowledge/claude-desktop-app-setup.md` § Session archiving

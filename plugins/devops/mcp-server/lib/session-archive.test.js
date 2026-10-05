@@ -3,11 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { ARCHIVE_FLAG_PREFIX, archiveDecision, archiveInstruction, writeArchiveFlag } from "./session-archive.js";
 import { hasPending, hasConcept } from "./pending.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // #632: only a merged ship card in the Desktop app archives its session.
 const deps = (over = {}) => ({
@@ -17,6 +15,7 @@ const deps = (over = {}) => ({
   batchActive: () => false,
   holdReason: () => "",
   enabled: () => true,
+  treeClean: () => true,
   ...over,
 });
 const shipped = (over = {}) => ({
@@ -76,6 +75,21 @@ describe("session-archive — which cards archive the session", () => {
     expect(archiveDecision(shipped(), deps({ desktop: false })).reason).toBe("not-desktop");
   });
 
+  test("open points or user tests on the card keep the session (R7)", () => {
+    expect(archiveDecision(shipped({ open: ["Decide X"] }), deps()).reason).toBe("open");
+    expect(archiveDecision(shipped({ userTest: [{ step: "click" }] }), deps()).reason).toBe("user-test");
+    expect(archiveDecision(shipped({ open: [], userTest: [] }), deps()).archive).toBe(true);
+  });
+
+  test("a missing cwd fails closed (R6)", () => {
+    expect(archiveDecision(shipped({ cwd: "" }), deps()).reason).toBe("no-cwd");
+    expect(archiveDecision({ ...shipped(), cwd: undefined }, deps()).reason).toBe("no-cwd");
+  });
+
+  test("a dirty work tree fails closed (R1)", () => {
+    expect(archiveDecision(shipped(), deps({ treeClean: () => false })).reason).toBe("dirty-tree");
+  });
+
   test("the instruction names the one call and keeps the card last", () => {
     const text = archiveInstruction();
     expect(text).toMatch(/^\[SESSION ARCHIVE — DO NOT OUTPUT THIS BLOCK\]/);
@@ -89,16 +103,37 @@ describe("session-archive — the flag the PostToolUse hook reads", () => {
   test("written for an archiving card, removed by a re-render that no longer qualifies", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-archive-"));
     const file = path.join(dir, `${ARCHIVE_FLAG_PREFIX}-s1`);
-    expect(writeArchiveFlag(true, "s1", dir)).toBe(file);
-    expect(fs.existsSync(file)).toBe(true);
+    expect(writeArchiveFlag(true, "s1", dir, { cwd: "/repo" })).toBe(file);
+    const stamp = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect(stamp.cwd).toBe("/repo");
+    expect(stamp.nonce).toMatch(/^[0-9a-f]{16}$/);
+    expect(writeArchiveFlag(true, "s2", dir)).toBe("");
+    expect(fs.existsSync(path.join(dir, `${ARCHIVE_FLAG_PREFIX}-s2`))).toBe(false);
     expect(writeArchiveFlag(false, "s1", dir)).toBe("");
     expect(fs.existsSync(file)).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("the hook adopts and reads the same prefix", () => {
-    const hook = fs.readFileSync(path.join(__dirname, "..", "..", "hooks", "post-tool-use", "post.flow.completion.js"), "utf8");
-    expect(hook).toContain(`'${ARCHIVE_FLAG_PREFIX}'`);
+  test("the hook gate reads what the MCP writes: stamp, work tree, clean tree", () => {
+    const gate = createRequire(import.meta.url)("../../hooks/lib/session-archive-gate.js");
+    expect(gate.FLAG).toBe(ARCHIVE_FLAG_PREFIX);
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "session-archive-repo-"));
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "session-archive-other-"));
+    const git = (cwd, ...args) => execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd, stdio: "ignore" });
+    for (const d of [repo, other]) { git(d, "init", "-q"); git(d, "commit", "-q", "--allow-empty", "-m", "init"); }
+    writeArchiveFlag(true, "s3", repo, { cwd: repo });
+    const flag = path.join(repo, `${ARCHIVE_FLAG_PREFIX}-s3`);
+    fs.appendFileSync(path.join(repo, ".git", "info", "exclude"), `\n${ARCHIVE_FLAG_PREFIX}-*\n`);
+    expect(gate.flagBelongsTo(flag, path.join(repo))).toBe(true);
+    expect(gate.flagBelongsTo(flag, other)).toBe(false);
+    // Ignored files are accepted; untracked and tracked changes are not.
+    expect(gate.treeClean(repo)).toBe(true);
+    fs.writeFileSync(path.join(repo, "new.txt"), "x");
+    expect(gate.treeClean(repo)).toBe(false);
+    expect(gate.treeClean(path.join(repo, "missing"))).toBe(false);
+    expect(gate.treeClean("")).toBe(false);
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(other, { recursive: true, force: true });
   });
 });
 

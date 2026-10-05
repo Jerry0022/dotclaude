@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.silent-turn
- * @version 0.2.0
+ * @version 0.3.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detects background/cron-injected prompts and marks the turn
@@ -94,6 +94,11 @@ if (require.main === module) {
     // that turn was cut short (Esc after a Gate 4b block), the flag must not
     // block the next, unrelated turn — a new card writes its own.
     try { fs.unlinkSync(sessionFile('dotclaude-devops-validation-open', hook.session_id)); } catch {}
+    // #632: an archive hand-over belongs to the card of the turn that shipped —
+    // a later widget must never release it.
+    for (const prefix of ['dotclaude-devops-card-archive', 'dotclaude-devops-card-archive-released', 'dotclaude-devops-archive-shipped']) {
+      try { fs.unlinkSync(sessionFile(prefix, hook.session_id)); } catch {}
+    }
 
     if (!isSilent(prompt)) process.exit(0);
 

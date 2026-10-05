@@ -74,6 +74,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.session.archive.js" }
+        ],
+        "matcher": "mcp__ccd_session_mgmt__archive_session"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.strict.agent-gate.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.agent.model.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.agent.announce.js" }
@@ -173,6 +179,12 @@
       }
     ],
     "PostToolUseFailure": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.completion.js" }
+        ],
+        "matcher": "mcp__ccd_session_mgmt__archive_session"
+      },
       {
         "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.debug.js" }
