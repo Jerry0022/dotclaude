@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.245.7] — 2026-10-05
+
+### Fixed
+- **No green check while a requirement is not fully met (#630).** When a not-met requirement waits on the user or a third party, the card's requirements post is now ⚠ in amber (tone `warn`) instead of a green ✓; own gaps keep ◐, unmet owned requirements keep ✗, deploy waits still count as met. Every unmet requirement gets its own top result line ("**Nicht erreicht:**"), then every partial one ("**⚠ Nicht voll erfüllt:** <requirement> — <evidence>", en "**⚠ Not fully met:**"); deploy waits are not named, the red-test/abort fallback and the 3-line cap with "+N weitere" stay. The Desktop widget renders the warn post and the partial label amber; the unmet label and the UNVERIFIED stamp stay red. Docs: `completion-card-design.md` § result lines, `test-autonomy.md` requirement line.
+
+### Decisions
+- The ⚠ glyph stays red for the UNVERIFIED stamp, so amber is a per-post `tone` instead of a global glyph colour change. Lands after #631, so ⚠ only marks real gaps (implemented-but-user-verifiable is `met`).
+
+### Tests
+- `index.card.test.js`: the pinned "✓ 2/3 … wartet auf dich" case replaced by ⚠ + named-line test, new multi-gap ordering and all-met tests; `card-widget.test.js` amber/red test. Full suite 8330 passed (QA agent); eslint clean.
+
 ## [0.245.6] — 2026-10-05
 
 ### Fixed
