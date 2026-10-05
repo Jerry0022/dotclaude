@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.30.0
+ * @version 0.31.0
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -74,6 +74,13 @@
  *   One exception: a batch card that counts fewer notes than the queue holds
  *   (a prompt sent during the activation turn, collected mid-turn, no panel in
  *   the Desktop app) keeps the turn for exactly one ack line (lateBatchNotes).
+ *   And one hand-over (#632): when the render left an archive flag (a merged
+ *   ship card, mcp-server/lib/session-archive.js), the widget releases exactly
+ *   one more call — mcp__ccd_session_mgmt__archive_session {session_id:"self"}
+ *   — and that call ends the turn with `{"continue": false}` instead (also on
+ *   its failure: the hook is registered for PostToolUseFailure on that tool).
+ *   Released only with this session's own evidence: a merged ship_release it
+ *   saw, the same work tree, a clean tree (lib/session-archive-gate.js).
  *
  *   Stdin, parsing and the reply go through lib/hook-input.js's runHook; main()
  *   runs the numbered sections below in order and returns the reply. Its git
@@ -92,7 +99,7 @@ let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, 
   responseLaunch, responseTaskId, labelFor, isConceptInfra,
   BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns,
   SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder,
-  decideCardTurnEnd, cardTurnBlockedLines, CARD_STOP_REASON, isGuideActive,
+  decideCardTurnEnd, cardTurnBlockedLines, CARD_STOP_REASON, isGuideActive, archiveGate,
   classifyProfile, carveOutsFromProfile, domPathsFromProfile, resolveVerificationKind,
   isCodeChange, isBrowserTool, isTestRunnerTool, testRunOutcome, LIGHT_SKIPPED_FLAG;
 let loadError = false;
@@ -116,6 +123,7 @@ try {
     STOP_REASON: CARD_STOP_REASON,
   } = guardedRequire('../lib/card-turn-end'));
   ({ isGuideActive } = guardedRequire('../../scripts/guide-active-state'));
+  archiveGate = guardedRequire('../lib/session-archive-gate');
   ({
     classifyProfile,
     carveOutsFromProfile,
@@ -264,14 +272,30 @@ const CARD_FLAG_PREFIXES = [
   'dotclaude-devops-pending-attested',
   'dotclaude-devops-card-widget',
   'dotclaude-devops-validation-open',
+  'dotclaude-devops-card-archive',
 ];
 
 /**
  * Flags whose ABSENCE is a statement too: the MCP deletes validation-open when
  * a re-render closed every gap, so an already-adopted copy under the real id
  * must go with it — or Gate 4b blocks on gaps the card no longer reports.
+ * Same for the archive flag: a re-rendered card that no longer qualifies
+ * takes the hand-over back.
  */
-const MIRROR_ABSENCE_PREFIXES = new Set(['dotclaude-devops-validation-open']);
+const MIRROR_ABSENCE_PREFIXES = new Set(['dotclaude-devops-validation-open', 'dotclaude-devops-card-archive']);
+
+/** 2a. The archive hand-over (#632, lib/session-archive-gate.js). */
+const ARCHIVE_FLAG = 'dotclaude-devops-card-archive';
+/** Built lazily: NO_OUTPUT_NUDGE_REPLY comes from a guarded lib. */
+function archiveLines() {
+  return [
+    '[SESSION ARCHIVE] Card shown and the ship is done — the session archives itself now.',
+    'Make exactly ONE more tool call: mcp__ccd_session_mgmt__archive_session {session_id:"self"}.',
+    'No text before or after it. Tool unavailable or failing: end the response silently.',
+    NO_OUTPUT_NUDGE_REPLY,
+  ];
+}
+const ARCHIVE_STOP_REASON = '[devops] Card shown — session archived.';
 
 /**
  * The session key the completion MCP writes card flags under. Twin of
@@ -308,6 +332,12 @@ function adoptCardFlags(hook) {
   for (const prefix of CARD_FLAG_PREFIXES) {
     const from = sessionFile(prefix, given);
     const to = sessionFile(prefix, realId);
+    // A parallel session shares the "self" key: the archive flag is adopted
+    // only by a session in the work tree the card was rendered for (#632 R3).
+    if (prefix === ARCHIVE_FLAG && fs.existsSync(from) && !archiveGate.flagBelongsTo(from, hook.cwd)) {
+      try { fs.unlinkSync(to); } catch { /* nothing adopted earlier */ }
+      continue;
+    }
     try {
       // The widget HTML is copied, not moved: the tool result names its path
       // as the fallback source for a cut-off widget block.
@@ -454,6 +484,7 @@ function isSilentTurn(hook) {
 function handleShipAndCardFlags(hook, toolName) {
   if (toolName === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
     try { writeSessionFile(sessionFile('dotclaude-devops-shipped', hook.session_id), '1'); } catch { /* best effort */ }
+    archiveGate.recordShipped(hook.session_id);
   }
   if (toolName.endsWith('__render_completion_card')) adoptCardFlags(hook);
   const scheduledTask =
@@ -748,17 +779,36 @@ const ORCHESTRATOR_HOLD_LINE =
 function cardWidgetReply(hook) {
   let end = { end: false };
   try { end = decideCardTurnEnd(hook); } catch { /* fail open: the reminder below */ }
+  // Held or blocked: the authoritative check (real session id) says no — the
+  // flag must not linger for a later widget (#632 R6).
+  if (!end.end) archiveGate.dropArchiveFlags(hook.session_id);
   // A blocking Stop hook makes Claude re-render — that card counts afresh.
   if (end.reason) return contextOf(cardTurnBlockedLines(end));
   if (ORCHESTRATOR_HOLDS.has(end.hold)) return contextOf([ORCHESTRATOR_HOLD_LINE]);
   const late = lateBatchNotes(hook);
   if (late) return contextOf(lateBatchNoteLines(late));
-  if (end.end) return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
+  if (end.end) {
+    if (archiveGate.releaseArchive(hook)) return contextOf(archiveLines());
+    return JSON.stringify({ continue: false, stopReason: CARD_STOP_REASON });
+  }
   return contextOf([
     '[completion-flow] Card shown — the turn is over. End your response now: no text, no tool call.',
     'Nothing goes under the card: no summary, no status line, no "the card is above", no second card.',
     NO_OUTPUT_NUDGE_REPLY,
   ]);
+}
+
+/**
+ * 2a. The released archive call itself — success (PostToolUse) or failure
+ * (PostToolUseFailure): it ends the turn the way the card would have,
+ * `continue:false`, no model call after it. Archiving `self` normally stops
+ * the process before this runs; this covers a failed or refused call, so no
+ * text lands under the card either way. Only with the released marker.
+ * @returns {string|null}
+ */
+function archiveCallReply(hook) {
+  if (!archiveGate.consumeReleased(hook.session_id)) return null;
+  return JSON.stringify({ continue: false, stopReason: ARCHIVE_STOP_REASON });
 }
 
 /** The batch heading as the card renders it (mcp-server CTA `batch`, de + en). */
@@ -1060,10 +1110,26 @@ function main(hook) {
   // parent's card had written four minutes earlier — both Stop gates then
   // blocked an unchanged parent checkout. Its passing test run would equally
   // have "verified" the parent, which delegation never may.
-  if (isSubagentCall(hook)) return null;
+  if (isSubagentCall(hook)) {
+    // #632: one exception — a delegated ship (do-ship --delegated runs in a
+    // subagent) still leaves the archive evidence for the PARENT session,
+    // keyed by the parent's id the harness passes. Nothing else: the archive
+    // release stays the main session's, after its own card widget.
+    if ((hook.tool_name || '') === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
+      archiveGate.recordShipped(hook.session_id);
+    }
+    return null;
+  }
 
   const toolName = hook.tool_name || '';
   const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');
+
+  // 2a. The released archive call (also registered for PostToolUseFailure).
+  if (archiveGate.ARCHIVE_TOOL_RE.test(toolName)) {
+    const reply = archiveCallReply(hook);
+    if (reply) return reply;
+  }
+  if (hook.hook_event_name === 'PostToolUseFailure') return null;
 
   const { scheduledTask } = handleShipAndCardFlags(hook, toolName);
   const { editCount, firstOfTurn } = updateEditAndGateFlags(hook, toolName, isCodeEdit);

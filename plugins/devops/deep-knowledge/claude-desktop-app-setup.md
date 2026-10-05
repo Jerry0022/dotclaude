@@ -106,6 +106,45 @@ on startup and may restore the old value.
 
 ---
 
+## Session archiving after ship
+
+The workflow expects the Desktop app's own archive triggers to stay out of the
+way: set **`auto_archive_inactive_days = 0`** (never). An inactivity timer
+archives sessions that never shipped — one waiting on a manual login, for
+example. `auto_archive_on_pr_close` cannot replace it either: it never fires
+for a local-only repo (no remote, the ship is a local merge, there is no PR).
+
+Shipping is the only automatic archive trigger: after the card of a successful
+ship (`ship-successful` / `released`, really merged) the session archives
+itself (`mcp__ccd_session_mgmt__archive_session {session_id:"self"}`, which
+also cleans up the session's worktree). The card stays the last visible
+output — `render_completion_card` adds a `[SESSION ARCHIVE]` block, and
+`post.flow.completion` releases that one call after the card widget instead
+of ending the turn there.
+
+Never archived: any other card (analysis, fallback, paused, ship-blocked,
+ready, test), a ship with an explicit keep (`--keep`, follow-up signals →
+`state.kept`), pending agents / tasks / workflows, open points or user tests
+still on the card, an open concept or batch mode, and while an autonomous run,
+its lockout or a ship queue still works in the repo. A Desktop-created worktree
+alone does not keep the session.
+
+Fail closed: the work tree must be clean — no tracked change and no untracked
+file (`git status --porcelain --untracked-files=all` empty) both at render
+time and again right before the call is released. Ignored files are accepted:
+they are the user's local config. The card needs a `cwd`, and the hook only
+releases the call when it saw a merged `ship_release` in this session itself
+and the card was rendered for this session's work tree. Any other
+`archive_session` call on the session itself is denied
+(`pre.session.archive`) unless the user's own prompt asks for an archive;
+archiving another session by its id is untouched. A new user prompt drops any
+leftover hand-over.
+
+Turn it off with the devops setting `ship.archiveAfterShip false`
+(`deep-knowledge/devops-config.md`).
+
+---
+
 ## CLI-launcher robustness (Direct CLI, no Desktop App)
 
 For users who invoke `claude.exe` directly, the Desktop App has no influence.

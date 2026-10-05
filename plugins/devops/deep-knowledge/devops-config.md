@@ -72,3 +72,13 @@ command itself, extra released env names and a hard team-wide opt-out belong in
 the committed ship extension (`deployParity:` block in the project's
 `.claude/skills/do-ship/reference.md`), not here. Details:
 `deep-knowledge/deploy-parity.md`.
+
+### `ship` — what happens after a successful ship
+
+| Key | Default | Meaning |
+|---|---|---|
+| `archiveAfterShip` | `true` | Desktop app: right after the card of a successful ship (`ship-successful` / `released`, merged) the session archives itself. Never for any other card, with an explicit keep (`--keep`, follow-up signals), pending agents/tasks/workflows, open points or user tests on the card, a dirty work tree, or while an autonomous run or ship queue still works. `false` → the session stays in the sidebar. |
+
+"Session nach dem Ship nicht archivieren" → `ship.archiveAfterShip false`.
+Background: `deep-knowledge/claude-desktop-app-setup.md` § Session archiving
+after ship.

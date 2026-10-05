@@ -636,3 +636,74 @@ describe("--render-card CLI — a deliberate verification skip (#612)", () => {
     expect(existsSync(join(tmpdir(), `dotclaude-devops-light-skipped-${sid}`))).toBe(false);
   });
 });
+
+// #632: the renderer's archive decision end to end — variant guard first, then
+// lib/session-archive.js, then the flag the PostToolUse hook adopts.
+describe("--render-card: the [SESSION ARCHIVE] block and flag", () => {
+  const archiveFlag = (sid) => join(tmpdir(), `dotclaude-devops-card-archive-${sid}`);
+  let repo;
+  let home;
+  beforeAll(async () => {
+    repo = mkdtempSync(join(tmpdir(), "devops-card-archive-repo-"));
+    home = mkdtempSync(join(tmpdir(), "devops-card-archive-home-"));
+    const git = (...args) => run("git", ["-c", "commit.gpgsign=false", "-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: repo });
+    await git("init", "-q");
+    await git("commit", "-q", "--allow-empty", "-m", "init");
+  });
+  afterAll(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
+  const desktop = () => ({ CLAUDE_CODE_ENTRYPOINT: "claude-desktop", HOME: home, USERPROFILE: home });
+  const card = (sid, over = {}) => ({
+    variant: "ship-successful", summary: "Shipped", session_id: sid, cwd: repo,
+    state: { pushed: true, merged: "main", branch: "feat/x" },
+    changes: [{ area: "a", description: "b" }],
+    validation: [{ requirement: "r", status: "met", evidence: "e" }],
+    ...over,
+  });
+
+  test("a merged ship card in the Desktop app carries the block and writes a stamped flag", async () => {
+    const sid = S("arch-ok");
+    const { stderr } = await renderCardFull(card(sid), desktop());
+    expect(stderr).toContain("[SESSION ARCHIVE — DO NOT OUTPUT THIS BLOCK]");
+    const stamp = JSON.parse(readFileSync(archiveFlag(sid), "utf8"));
+    expect(stamp.cwd).toBe(repo);
+    unlinkSync(archiveFlag(sid));
+  });
+
+  test("a downgraded ship card (no merge) and a released card without a merge write no flag", async () => {
+    for (const [name, over] of [
+      ["arch-downgrade", { state: { pushed: true, branch: "feat/x" } }],
+      ["arch-released", { variant: "released", state: { pushed: true } }],
+    ]) {
+      const sid = S(name);
+      // A card the validator refuses (exit 2) must not archive either.
+      const { stderr } = await renderCardFull(card(sid, over), desktop()).catch((e) => e);
+      expect(stderr).not.toContain("[SESSION ARCHIVE");
+      expect(existsSync(archiveFlag(sid))).toBe(false);
+    }
+  });
+
+  test("a re-render that no longer qualifies (keep) removes the earlier flag", async () => {
+    const sid = S("arch-rerender");
+    await renderCardFull(card(sid), desktop());
+    expect(existsSync(archiveFlag(sid))).toBe(true);
+    const { stderr } = await renderCardFull(card(sid, { state: { pushed: true, merged: "main", branch: "feat/x", kept: true } }), desktop());
+    expect(stderr).not.toContain("[SESSION ARCHIVE");
+    expect(existsSync(archiveFlag(sid))).toBe(false);
+  });
+
+  test("the terminal never archives; neither does a dirty tree", async () => {
+    const sid = S("arch-cli");
+    const { stderr } = await renderCardFull(card(sid), { HOME: home, USERPROFILE: home });
+    expect(stderr).not.toContain("[SESSION ARCHIVE");
+    expect(existsSync(archiveFlag(sid))).toBe(false);
+    writeFileSync(join(repo, "dirty.txt"), "x");
+    const dirty = S("arch-dirty");
+    const res = await renderCardFull(card(dirty), desktop());
+    expect(res.stderr).not.toContain("[SESSION ARCHIVE");
+    expect(existsSync(archiveFlag(dirty))).toBe(false);
+    unlinkSync(join(repo, "dirty.txt"));
+  });
+});

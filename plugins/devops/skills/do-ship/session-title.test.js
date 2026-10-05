@@ -24,6 +24,7 @@ describe("ship SKILL.md — session title prefix", () => {
     const fm = SKILL.slice(0, SKILL.indexOf("\n---", 4));
     expect(fm).toContain("mcp__ccd_session_mgmt__get_session");
     expect(fm).toContain("mcp__ccd_session_mgmt__set_session_title");
+    expect(fm).toContain("mcp__ccd_session_mgmt__archive_session");
   });
 
   test("Pre-Step C sets the shipping prefix and strips every ship prefix first", () => {
