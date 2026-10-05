@@ -65,6 +65,12 @@ describe('singleton lock (takeover only on a dead holder)', () => {
     expect(reused.ok).toBe(true);
     expect(St.readJson(p.lock).pid).toBe(8);
   });
+  it('R1: an unknown start time (startOf → 0, win32) never evicts a live holder', () => {
+    St.writeJson(p.lock, { pid: 7, version: '1.0.0', startMs: 500, heartbeat: 0 });
+    expect(St.acquireLock(p, { pid: 8, version: '1.0.0', now: 3000, alive: () => true, startOf: () => 0 }).ok).toBe(false);
+    expect(St.readJson(p.lock).pid).toBe(7);
+    expect(St.processStart(-1)).toBe(0);
+  });
   it('a newer version asks the live holder to hand over; an older one never evicts', () => {
     St.acquireLock(p, { pid: 1, version: '0.246.0', now: 0, startMs: 1, alive: () => true });
     const r = St.acquireLock(p, { pid: 2, version: '0.247.0', now: 1000, alive: () => true, startOf: () => 1 });
@@ -105,10 +111,25 @@ describe('queue (record only, no execution)', () => {
     expect(r.status).toBe('ready');
     const other = Q.markReady(Q.newEntry({ command: 'x', cwd: '/elsewhere', now: 1000 }), 2000);
     const queued = Q.newEntry({ command: 'y', cwd: '/repo', now: 1000 });
-    const got = Q.readyFor([r, other, queued], 3000, cfg, '/repo');
+    const got = Q.readyFor([r, other, queued], 3000, cfg, { cwd: '/repo' });
     expect(got.map((e) => e.command)).toEqual(['npm test']);
-    expect(Q.readyFor([r], 1000 + 25 * 3600000, cfg, '/repo')).toEqual([]);
-    expect(Q.readyFor([Q.markReady(Q.newEntry({ command: 'z', cwd: null, now: 1000 }), 2000)], 3000, cfg, '/repo').length).toBe(1);
+    expect(Q.readyFor([r], 1000 + 25 * 3600000, cfg, { cwd: '/repo' })).toEqual([]);
+    expect(Q.readyFor([Q.markReady(Q.newEntry({ command: 'z', cwd: null, now: 1000 }), 2000)], 3000, cfg, { cwd: '/repo' }).length).toBe(1);
+  });
+  it('R10: prefers the deferring session; others in the repo only once it is gone; dedupe by command+cwd', () => {
+    const mine = Q.markReady(Q.newEntry({ command: 'npm test', cwd: '/repo', sessionId: 'A', now: 1 }), 2);
+    const dupe = Q.markReady(Q.newEntry({ command: 'npm test', cwd: '/repo', sessionId: 'A', now: 3 }), 4);
+    expect(Q.readyFor([mine, dupe], 10, cfg, { cwd: '/repo', sessionId: 'A' }).length).toBe(1);
+    expect(Q.readyFor([mine], 10, cfg, { cwd: '/repo', sessionId: 'B', liveSessions: new Set(['A']) })).toEqual([]);
+    expect(Q.readyFor([mine], 10, cfg, { cwd: '/repo', sessionId: 'B', liveSessions: new Set() }).length).toBe(1);
+  });
+  it('record() reuses an existing command+cwd entry instead of duplicating', () => {
+    const a = Q.record(p.queue, Q.newEntry({ command: 'npm test', cwd: '/r', now: 1 }), 2, cfg);
+    Q.save(p.queue, Q.markReady(a, 3));
+    const b = Q.record(p.queue, Q.newEntry({ command: 'npm test', cwd: '/r', now: 4 }), 5, cfg);
+    expect(b.id).toBe(a.id);
+    expect(Q.list(p.queue).length).toBe(1);
+    expect(Q.list(p.queue)[0].status).toBe('queued');
   });
   it('persists entries as files', () => {
     const e = Q.newEntry({ command: 'npm test', cwd: dir, now: 5 });

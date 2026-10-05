@@ -89,17 +89,91 @@ describe('watcher tick with a fake adapter', () => {
     delete process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID;
   });
 
-  it('attaches each live session once and resolves its claude pid', async () => {
+  it('R6: resolves the session from the recorded pid (walking up to the Claude root) and expires it when gone', async () => {
     const clock = { t: 0 };
-    S.writeJson(path.join(p.sessions, 's1.json'), { sessionId: 's1', hookPid: process.pid, hookPpid: 150, startedAt: 0 });
-    const procs = [claudeProc(), { pid: 150, ppid: 100, name: 'bash.exe', path: 'x', cmd: '', startMs: 10, cpuPct: 0 }];
-    const adapter = createFakeAdapter({ samples: [sample(0, procs)] });
+    S.writeJson(path.join(p.sessions, 's1.json'), { sessionId: 's1', claudePid: 150, startedAt: 0 });
+    const shell = { pid: 150, ppid: 100, name: 'bash.exe', path: 'x', cmd: '', startMs: 10, cpuPct: 0 };
+    const adapter = createFakeAdapter({ samples: [sample(0, [claudeProc(), shell])] });
     const w = mkWatcher(adapter, clock);
     await w.init(null);
-    await w.tick();
-    clock.t = 3000; adapter.samples = [sample(3000, procs)]; await w.tick();
-    expect(adapter.calls.filter((c) => c[0] === 'attach').length).toBe(1);
-    expect(adapter.calls.find((c) => c[0] === 'attach')[2]).toEqual([100]);
+    expect((await w.tick()).liveSessions).toBe(1);
+    expect(S.readJson(path.join(p.sessions, 's1.json')).claudePid).toBe(100);
+    clock.t = 40000; adapter.samples = [sample(40000, [])];
+    expect((await w.tick()).liveSessions).toBe(0);
+    expect(fs.existsSync(path.join(p.sessions, 's1.json'))).toBe(false);
+  });
+
+  it('R3: a failed orphan revert keeps the record (carried into the throttles), retried on reapply', async () => {
+    let fail = true;
+    const adapter = createFakeAdapter({ samples: [sample(0, [claudeProc()])], failRelease: () => fail });
+    const w = mkWatcher(adapter, { t: 0 });
+    await w.init({ throttles: [{ jobId: '200@1000', key: '200-1000', level: 2, resources: ['cpu'], pids: [{ pid: 200, startMs: 1000 }] }] });
+    expect(Object.keys(w.st.throttles)).toEqual(['200@1000']);
+    expect(S.readState(p).throttles.length).toBe(1);
+    await w.reapply(); // helper restart, still failing
+    expect(Object.keys(w.st.throttles)).toEqual(['200@1000']);
+    fail = false;
+    await w.reapply();
+    expect(Object.keys(w.st.throttles)).toEqual([]);
+  });
+
+  it('R5: a reused pid is pruned from a throttle record and never released by identity again', async () => {
+    const clock = { t: 0 };
+    fs.writeFileSync(p.control, JSON.stringify({ manual: true, at: -1 }));
+    process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID = '100';
+    const child = { pid: 201, ppid: 200, name: 'node.exe', path: 'C:/x/node.exe', cmd: '', startMs: 1500, cpuPct: 40, memMB: 10 };
+    const adapter = createFakeAdapter({ samples: [sample(0, [claudeProc(), busy(), child])] });
+    const w = mkWatcher(adapter, clock);
+    await w.init(null);
+    for (clock.t = 0; clock.t <= 8000; clock.t += 2000) { adapter.samples = [sample(clock.t, [claudeProc(), busy(), child])]; await w.tick(); }
+    expect(w.st.throttles['200@1000'].pids.map((x) => x.pid).sort()).toEqual([200, 201]);
+    // pid 201 exits and the OS reuses it for an unrelated, later process
+    clock.t = 10000; adapter.samples = [sample(clock.t, [claudeProc(), busy(), { ...child, ppid: 999, startMs: 99999 }])]; await w.tick();
+    expect(w.st.throttles['200@1000'].pids.map((x) => x.pid)).toEqual([200]);
+    delete process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID;
+  });
+
+  it('R2: the app hosting Claude (Desktop Claude.exe chain) never gets priority, even under GPU load in the foreground', async () => {
+    const clock = { t: 0 };
+    const DESK = 'C:/Program Files/WindowsApps/Claude_2.19675.0.0_x64__pzs8/app/Claude.exe';
+    const procs = [
+      { pid: 13716, ppid: 9028, name: 'Claude.exe', path: DESK, cmd: '"Claude.exe"', startMs: 0, cpuPct: 1 },
+      { pid: 15080, ppid: 13716, name: 'Claude.exe', path: DESK, cmd: 'Claude.exe --type=gpu-process', startMs: 5, cpuPct: 30, gpuPct: 60 },
+      { ...claudeProc({ pid: 28064, ppid: 13716, startMs: 100 }) },
+    ];
+    const adapter = createFakeAdapter({ samples: [{ ...sample(0, procs), fg: { pid: 15080, fullscreen: true, idleMs: 0 } }] });
+    const w = mkWatcher(adapter, clock);
+    await w.init(null);
+    for (clock.t = 0; clock.t <= 70000; clock.t += 5000) { adapter.samples = [{ ...sample(clock.t, procs), fg: { pid: 15080, fullscreen: true, idleMs: 0 } }]; await w.tick(); }
+    expect(w.st.pressure.priority).toEqual([]);
+    expect(fs.existsSync(p.learned)).toBe(false);
+  });
+
+  it('R6: stays alive while pressure is active, exits once everything is idle', async () => {
+    const clock = { t: 0 };
+    fs.writeFileSync(p.control, JSON.stringify({ manual: true, at: -1 }));
+    const adapter = createFakeAdapter({ samples: [sample(0, [])] });
+    const w = mkWatcher(adapter, clock);
+    await w.init(null);
+    clock.t = 120000; await w.tick();
+    expect(w.canExit()).toBe(false);
+    fs.writeFileSync(p.control, JSON.stringify({ manual: false, at: -1 }));
+    clock.t = 125000; await w.tick();
+    expect(w.canExit()).toBe(true);
+  });
+
+  it('notify:false logs but never calls the adapter notify', async () => {
+    const clock = { t: 0 };
+    const Q = require('./queue');
+    Q.save(p.queue, Q.newEntry({ command: 'npm test', cwd: dir, now: 0 }));
+    fs.writeFileSync(p.control, JSON.stringify({ manual: true, at: -1 })); // pressure → stays queued → starves
+    const adapter = createFakeAdapter({ samples: [sample(0, [])] });
+    const w = mkWatcher(adapter, clock);
+    await w.init(null);
+    clock.t = 31 * 60000; await w.tick();
+    expect(adapter.calls.some((c) => c[0] === 'notify')).toBe(false);
+    expect(Q.list(p.queue)[0].starvationNotified).toBe(true);
+    expect(Q.list(p.queue)[0].status).toBe('queued'); // R10: never marked ready under pressure
   });
 
   it('marks deferred commands ready when no pressure, and drains them on shutdown', async () => {

@@ -48,7 +48,14 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
     }
     case 'stop': {
       S.writeJson(p.control, { ...S.readJson(p.control, {}), stop: true, at: now });
-      out('stop requested');
+      const st = S.readState(p);
+      const running = st && S.isAlive(st.pid) && now - (st.heartbeat || 0) < loadConfig(p).admission.staleMs;
+      if (!running && st && (st.throttles || []).length) {
+        // No watcher to drain them: a revert-only watcher takes the lock, reverses the records and exits.
+        const { spawnSync } = require('child_process');
+        spawnSync(process.execPath, [require('path').join(__dirname, 'watcher.js'), '--revert-only'], { stdio: 'ignore', windowsHide: true, timeout: 120000 });
+        out('stop: reverted recorded throttles');
+      } else out('stop requested');
       return 0;
     }
     case 'status':

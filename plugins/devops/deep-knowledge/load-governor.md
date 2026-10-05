@@ -22,16 +22,21 @@ MCP servers are never throttled. Concept:
 
 ## Flow
 
-1. **SessionStart** writes `~/.claude/governor/sessions/<id>.json` and starts
-   the watcher detached. A second watcher exits at once (lock file with
-   heartbeat; a dead or silent holder is taken over; a newer plugin version
-   asks the running one to hand over). The watcher puts the session's claude
-   process into the named job `Local\dotclaude-gov-s-<id>` (no limits).
-2. **Every tick** (3 s) the helper samples processes, GPU engines, disk
-   latency (raw counters), available RAM, paging and the foreground window.
-   Claude's processes are the descendants of `claude.exe` plus the session
-   job members; processes that start with a session (and MCP servers) are
-   infrastructure. A job is the subtree of one tool call.
+1. **SessionStart** writes `~/.claude/governor/sessions/<id>.json` with the
+   session's Claude Code pid (`CLAUDE_PID`, exported by Claude Code) and
+   starts the watcher detached. A second watcher exits at once (lock file; a
+   holder is taken over only when its pid is dead — an unknown start time is
+   never treated as reuse; a newer plugin version asks the running one to hand
+   over). A session expires when its claude pid is gone.
+2. **Every tick** (3 s busy, 20 s idle — process list only, no GPU query) the
+   helper samples processes, disk latency (raw counters), available RAM,
+   paging and the foreground window. Attribution is **claude ancestry only**
+   (no session job object): Claude's processes are the descendants of the
+   Claude Code CLI; processes that start with a session (and MCP servers) are
+   infrastructure. A job is the subtree of one tool call. The app **hosting**
+   Claude — every ancestor of a Claude root (the Desktop `Claude.exe`, VS
+   Code, a terminal, an IDE) and every process sharing its app folder — is the
+   host: never priority, never learned.
 3. A job is **heavy** after 20 s over 25 % CPU, 20 % GPU or high disk IO while
    the disk is pressed. Kinds: server (listens on a port), foreground (Claude
    waits on it), generator (heavy > 2 min), build.
@@ -50,13 +55,22 @@ MCP servers are never throttled. Concept:
    job. A record is removed **only after a successful release** — a crash or a
    failed release leaves it for the next start to reverse. The adapter reverts
    by key (`apply(key, level, pids)` / `release(key, pids)`, pid lists merged,
-   never replaced); on start the watcher calls `release` for every recorded
-   throttle (orphan reversal). When the watcher dies, the helper also sees its
-   stdin close and resumes/uncaps everything it applied.
+   never replaced, pruned each tick to live (pid, start time) pairs); on start
+   the watcher adopts every recorded throttle and releases it (orphan
+   reversal) — a failed revert stays recorded. Release always opens the cap
+   job **by name** and sets its CPU rate to 0, so a cap survives no crash; the
+   name outlives a killed helper because each capped process holds a
+   duplicated handle to its cap job. When the watcher dies, the helper also
+   sees its stdin close and reverts everything it applied; a helper that
+   times out 3 times in a row is killed and restarted, and its records are
+   released again. Disabling the governor, or `governor stop` with no watcher
+   running, starts a revert-only watcher that reverses the records and exits.
 7. **PreToolUse** gates heavy-looking starts (and the minimal escape list
    `wsl`, `schtasks`, `Start-Process -Verb`, `sc create`, `systemd-run`,
    segment-anchored) only when a resource that command would load is actually
-   pressed, or free RAM < expected-per-kind + 4096 MB. Matching looks only at
+   pressed, or free RAM < expected-per-kind + 4096 MB. Foreign disk IO earns
+   priority only while the disk budget is pressed (IO counters include
+   network). Matching looks only at
    the LEADING command of each `;`/`&&`/`||`/`|` segment (quotes and heredocs
    stripped); `git`, `gh` and `--version`/`--help` invocations are never
    heavy.

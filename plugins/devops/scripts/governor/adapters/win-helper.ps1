@@ -21,6 +21,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 public static class Gov {
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr CreateJobObject(IntPtr a, string name);
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr OpenJobObject(uint access, bool inherit, string name);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr proc);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool IsProcessInJob(IntPtr proc, IntPtr job, out bool result);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
@@ -127,7 +128,7 @@ function Op-Sample($req) {
     [void]$sb.Append(',"fg":{"pid":').Append($fp).Append(',"fullscreen":').Append($full.ToString().ToLower()).Append(',"idleMs":').Append((N $idle)).Append('}')
   } catch { [void]$sb.Append(',"fg":null') }
   if (($script:tick % 5) -eq 1) { try { $script:listening = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) } catch { $script:listening = @() } }
-  [void]$sb.Append(',"listening":[').Append(($script:listening -join ',')).Append('],"jobPids":{}}')
+  [void]$sb.Append(',"listening":[').Append(($script:listening -join ',')).Append(']}')
   return $sb.ToString()
 }
 
@@ -175,6 +176,7 @@ function Op-Apply($a) {
 }
 
 function RevertPid($id, $info) {
+  if (-not (Same @{ pid = $id; startMs = $info.startMs })) { return }   # gone or pid reused: never touch it
   $h = OpenProc $id
   if ($h -eq [IntPtr]::Zero) { return }
   try {
@@ -196,20 +198,13 @@ function Op-Release($a) {
     $entry[$id] = @{ startMs = [double]$p.startMs; suspended = $true; capped = $true }
   }
   if ($entry) { foreach ($id in @($entry.Keys)) { RevertPid $id $entry[$id] } }
-  if ($script:jobs.ContainsKey($key)) { [void](SetRate $script:jobs[$key] 0 0); [void][Gov]::CloseHandle($script:jobs[$key]); $script:jobs.Remove($key) }
+  # Always lift the CPU cap through the job's NAME - after a crash this helper never held the handle.
+  # The name survives the old helper because each capped process holds a duplicated handle (Op-Apply).
+  $j = [Gov]::OpenJobObject(0x1F001F, $false, ("Local\dotclaude-gov-cap-" + $key))
+  if ($j -ne [IntPtr]::Zero) { [void](SetRate $j 0 0); [void][Gov]::CloseHandle($j) }
+  if ($script:jobs.ContainsKey($key)) { [void][Gov]::CloseHandle($script:jobs[$key]); $script:jobs.Remove($key) }
   $script:throttles.Remove($key)
   return '{"released":true}'
-}
-
-function Op-Attach($a) {
-  $job = [Gov]::CreateJobObject([IntPtr]::Zero, ('Local\dotclaude-gov-s-' + [string]$a.session))
-  $n = 0
-  foreach ($p in $a.pids) {
-    if (-not (Same $p)) { continue }
-    $h = OpenProc $p.pid
-    if ($h -ne [IntPtr]::Zero) { $in = $false; [void][Gov]::IsProcessInJob($h, $job, [ref]$in); if (-not $in) { if ([Gov]::AssignProcessToJobObject($job, $h)) { $n++ } }; [void][Gov]::CloseHandle($h) }
-  }
-  return ('{"assigned":' + $n + '}')
 }
 
 function Op-Notify($a) {
@@ -246,7 +241,6 @@ try {
       $id = [int]$req.id
       $data = switch ($req.op) {
         'sample'  { Op-Sample $req }
-        'attach'  { Op-Attach $req }
         'apply'   { Op-Apply $req }
         'release' { Op-Release $req }
         'notify'  { Op-Notify $req }

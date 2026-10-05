@@ -32,14 +32,32 @@ function markReady(e, now) { return { ...e, status: 'ready', readyAt: now }; }
 
 function starving(e, now, cfg) { return e.status !== 'ready' && !e.starvationNotified && now - e.created_at >= cfg.starvationMs; }
 
-/** Entries a session may be told about: ready, unexpired, for this repo (cwd match) or unscoped. */
-function readyFor(entries, now, cfg, cwd) {
-  return entries.filter((e) => e.status === 'ready' && !isExpired(e, now, cfg) && (!cwd || !e.cwd || e.cwd === cwd))
-    .sort((a, b) => a.created_at - b.created_at);
+/**
+ * Entries a session may be told about: ready and unexpired; the deferring
+ * session gets its own, another session in the same cwd only once the
+ * deferring session is gone. De-duplicated by command + cwd.
+ * @param {{cwd?:string, sessionId?:string, liveSessions?:Set<string>}} who
+ */
+function readyFor(entries, now, cfg, who = {}) {
+  const live = who.liveSessions || new Set();
+  const seen = new Set();
+  return entries.filter((e) => e.status === 'ready' && !isExpired(e, now, cfg))
+    .filter((e) => (e.sessionId && e.sessionId === who.sessionId)
+      || ((!who.cwd || !e.cwd || e.cwd === who.cwd) && !(e.sessionId && live.has(e.sessionId))))
+    .sort((a, b) => a.created_at - b.created_at)
+    .filter((e) => { const k = `${e.cwd}\n${e.command}`; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 function save(dir, e) { writeJson(path.join(dir, `${e.id}.json`), e); }
+
+/** Record a deferral; the same command + cwd already recorded is reused (back to `queued`), never duplicated. */
+function record(dir, e, now, cfg) {
+  const dup = list(dir).find((x) => x.command === e.command && x.cwd === e.cwd && !isExpired(x, now, cfg));
+  const out = dup ? { ...dup, status: 'queued', sessionId: e.sessionId || dup.sessionId, reason: e.reason } : e;
+  save(dir, out);
+  return out;
+}
 function list(dir) { return readDir(dir).map((x) => x.data).filter((e) => e && e.id); }
 function remove(dir, id) { return removeFile(path.join(dir, `${id}.json`)); }
 
-module.exports = { newEntry, isExpired, markReady, starving, readyFor, save, list, remove };
+module.exports = { newEntry, isExpired, markReady, starving, readyFor, record, save, list, remove };

@@ -13,7 +13,7 @@ const { spawn } = require('child_process');
 const SCRIPT = path.join(__dirname, 'win-helper.ps1');
 
 class Helper {
-  constructor(script = SCRIPT) { this.script = script; this.proc = null; this.pending = new Map(); this.seq = 0; this.buf = ''; }
+  constructor(script = SCRIPT) { this.script = script; this.proc = null; this.pending = new Map(); this.seq = 0; this.buf = ''; this.timeouts = 0; }
 
   start(readyMs = 180000) {
     return new Promise((resolve, reject) => {
@@ -55,8 +55,13 @@ class Helper {
     if (!this.proc) return Promise.reject(new Error('helper not running'));
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`helper ${op} timeout`)); }, timeoutMs);
-      this.pending.set(id, { resolve: (d) => { clearTimeout(timer); resolve(d); }, reject: (e) => { clearTimeout(timer); reject(e); } });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        // A wedged helper: after MAX_TIMEOUTS consecutive timeouts kill it; the watcher restarts it and re-releases.
+        if (++this.timeouts >= Helper.MAX_TIMEOUTS && this.proc) { try { this.proc.kill(); } catch {} }
+        reject(new Error(`helper ${op} timeout`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve: (d) => { clearTimeout(timer); this.timeouts = 0; resolve(d); }, reject: (e) => { clearTimeout(timer); reject(e); } });
       this.proc.stdin.write(`${JSON.stringify({ id, op, ...args })}\n`);
     });
   }
@@ -82,12 +87,13 @@ function createWin32Adapter(cfg) {
     start: () => h.start(),
     stop: () => h.stop(),
     sample: (opts = {}) => h.call('sample', { gpu: opts.gpu !== false }, 60000),
-    attach: (sessionId, pids) => h.call('attach', { session: String(sessionId).replace(/[^A-Za-z0-9_-]/g, ''), pids }),
     // Key-based: the helper keeps key -> {pid -> {startMs, suspended, capped}} and merges pids.
     apply: (key, level, pids) => h.call('apply', { key, level, pids, cpuPct: cfg.cap.cpuPct }),
     release: (key, pids) => h.call('release', { key, pids: pids || [] }),
     notify: (title, text) => h.call('notify', { title, text }, 15000).catch(() => null),
   };
 }
+
+Helper.MAX_TIMEOUTS = 3;
 
 module.exports = { createWin32Adapter, Helper };

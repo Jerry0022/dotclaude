@@ -65,9 +65,10 @@ describe('attribution', () => {
     expect(P.isClaudeRoot(procs[0])).toBe(true);
     expect(P.isClaudeRoot(proc({ name: 'node', cmd: 'node /x/@anthropic-ai/claude-code/cli.js' }))).toBe(true);
   });
-  it('collects CLI descendants, job members, extra roots; ignores pid reuse', () => {
-    const a = P.attributedPids(procs, { jobPids: [200] });
-    expect([...a].sort((x, y) => x - y)).toEqual([100, 101, 102, 103, 200]);
+  it('collects CLI descendants and extra roots by ancestry; ignores pid reuse', () => {
+    const a = P.attributedPids(procs);
+    expect([...a].sort((x, y) => x - y)).toEqual([100, 101, 102, 103]);
+    expect(P.attributedPids(procs, { extraRoots: [200] }).has(200)).toBe(true);
     expect(P.attributedPids(procs, { extraRoots: [200], claudeRoots: false }).has(100)).toBe(false);
   });
   it('sessionMap maps descendants to their session', () => {
@@ -350,5 +351,40 @@ describe('admit', () => {
   it('no or stale watcher → allow (fail open)', () => {
     expect(P.admit({ command: 'npm test', now, state: null, cfg }).reason).toBe('watcher-absent');
     expect(P.admit({ command: 'npm test', now, state: st({ heartbeat: now - 2 * MIN, pressure: { priority: ['cpu'], over: [] } }), cfg }).decision).toBe('allow');
+  });
+});
+
+describe('wave 5', () => {
+  it('R2: hostKeys = app keys of every ancestor of a Claude root (real Desktop chain shape)', () => {
+    const DESK = 'C:/Program Files/WindowsApps/Claude_2.19675.0.0_x64__pzs8sxrjxfjjc/app/Claude.exe';
+    const procs = [
+      { pid: 9028, ppid: 1, name: 'explorer.exe', path: 'C:/Windows/explorer.exe', startMs: 0 },
+      { pid: 13716, ppid: 9028, name: 'Claude.exe', path: DESK, cmd: '"Claude.exe"', startMs: 10 },
+      { pid: 15080, ppid: 13716, name: 'Claude.exe', path: DESK, cmd: 'Claude.exe --type=gpu-process', startMs: 11 },
+      { pid: 28064, ppid: 13716, name: 'claude.exe', path: 'C:/Users/J/AppData/Roaming/Claude/claude-code/2.1.286/x/claude.exe', startMs: 100 },
+      { pid: 777, ppid: 1, name: 'Code.exe', path: 'C:/Users/J/AppData/Local/Programs/Microsoft VS Code/Code.exe', startMs: 5 },
+    ];
+    const keys = P.hostKeys(procs, (x) => P.appKey(x.path));
+    expect(keys.has(P.appKey(DESK))).toBe(true);
+    expect(P.isClaudeRoot(procs[2])).toBe(false);
+    expect(keys.has(P.appKey(procs[4].path))).toBe(false); // VS Code is not hosting this Claude
+    const viaCode = [...procs, { pid: 30000, ppid: 777, name: 'claude.exe', path: 'C:/x/claude-code/claude.exe', startMs: 200 }];
+    expect(P.hostKeys(viaCode, (x) => P.appKey(x.path)).has(P.appKey(procs[4].path))).toBe(true);
+  });
+  it('R8: foreign disk IO earns priority only while the disk budget is pressed', () => {
+    const ctx = (diskPressed) => ({ cfg, libraryRoots: [], libraryDirs: [], learned: {}, manual: false, foreground: null, diskPressed });
+    const io = [proc({ pid: 5, name: 'sync.exe', path: 'C:/Sync/sync.exe', ioBps: 500 * 1024 * 1024 })];
+    expect(P.updatePriority({}, io, 0, ctx(false)).active).toEqual({});
+    expect(P.updatePriority({}, io, 0, ctx(true)).active.disk).toBeTruthy();
+  });
+  it('R9: shell wrappers, script prefixes, -v only as version for a known set', () => {
+    expect(P.commandKind('bash -c "npm test"')).toBe('npm test');
+    expect(P.commandKind('cmd /c "cargo build"')).toBe('cargo build');
+    expect(P.commandKind('pwsh -NoProfile -Command "npm run build:prod"')).toBe('npm build');
+    expect(P.commandKind('npm run test:unit')).toBe('npm test');
+    expect(P.commandKind('node -v')).toBe(null);
+    expect(P.commandKind('cargo build -v')).toBe('cargo build');
+    expect(P.commandKind('ffmpeg -v quiet -i a.mp4 b.mkv')).toBe('ffmpeg');
+    expect(P.commandKind('git commit -m "npm test"')).toBe(null);
   });
 });

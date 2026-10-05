@@ -146,11 +146,11 @@ function isClaudeRoot(p) {
 
 /**
  * Claude-attributed pids: every Claude Code process (or only the given roots
- * when claudeRoots is false), all their descendants, plus session job members.
+ * when claudeRoots is false) and all their descendants.
  * A ppid link only counts when the parent started before the child (pid reuse).
  * @returns {Set<number>}
  */
-function attributedPids(procs, { jobPids = [], extraRoots = [], claudeRoots = true } = {}) {
+function attributedPids(procs, { extraRoots = [], claudeRoots = true } = {}) {
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   const children = new Map();
   for (const p of procs) {
@@ -159,7 +159,7 @@ function attributedPids(procs, { jobPids = [], extraRoots = [], claudeRoots = tr
   }
   const out = new Set();
   const stack = claudeRoots ? procs.filter((p) => isClaudeRoot(p)).map((p) => p.pid) : [];
-  for (const r of [...extraRoots, ...jobPids]) if (byPid.has(r)) stack.push(r);
+  for (const r of extraRoots) if (byPid.has(r)) stack.push(r);
   while (stack.length) {
     const pid = stack.pop();
     if (out.has(pid)) continue;
@@ -169,6 +169,30 @@ function attributedPids(procs, { jobPids = [], extraRoots = [], claudeRoots = tr
       if (c.pid === pid) continue;
       if (parent && Number.isFinite(parent.startMs) && Number.isFinite(c.startMs) && c.startMs + 1000 < parent.startMs) continue;
       stack.push(c.pid);
+    }
+  }
+  return out;
+}
+
+/**
+ * App keys of the programs HOSTING Claude Code — every ancestor of a Claude
+ * root (the Desktop app, VS Code, a terminal, an IDE). Every process sharing
+ * such a key is the host, not a foreign app: it never gets priority and is
+ * never learned (its renderers/GPU process would otherwise make Claude yield
+ * to itself).
+ * @param {(p:object) => string|null} keyOf
+ * @returns {Set<string>}
+ */
+function hostKeys(procs, keyOf) {
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  const out = new Set();
+  for (const root of procs.filter((p) => isClaudeRoot(p))) {
+    const seen = new Set();
+    for (let cur = byPid.get(root.ppid); cur && !seen.has(cur.pid); cur = byPid.get(cur.ppid)) {
+      seen.add(cur.pid);
+      if (Number.isFinite(cur.startMs) && Number.isFinite(root.startMs) && cur.startMs > root.startMs + 1000) break; // pid reuse
+      const k = keyOf(cur);
+      if (k) out.add(k);
     }
   }
   return out;
@@ -324,7 +348,7 @@ function maxLevel(job) {
  * @param {{apps?:object}} prev
  * @param {Array<object>} foreign foreign processes with cpuPct/gpuPct/ioBps/path/name
  * @param {object} ctx { cfg, libraryRoots, libraryDirs, libraryExes:Set, learned:{key:{resources}}, manual,
- *   foreground:{pid, fullscreen, idleMs}|null, noLearn:Set(lower names) }
+ *   foreground:{pid, fullscreen, idleMs}|null, noLearn:Set(lower names), diskPressed:boolean }
  * @returns {{apps:object, active:Record<string,string>, all:boolean, allBy:string|null, newlyLearned:Array}}
  */
 function updatePriority(prev, foreign, now, ctx) {
@@ -357,7 +381,8 @@ function updatePriority(prev, foreign, now, ctx) {
   for (const a of seen.values()) {
     const old = prevApps[a.key] || { res: {}, gpuSince: null, lastGpu: null };
     const res = { ...old.res };
-    const loads = loadedResources(a, th, { ram: false });
+    // Disk IO counters include network transfers: disk earns priority only while the disk is actually pressed.
+    const loads = loadedResources(a, th, { ram: false, diskBusy: Boolean(ctx.diskPressed) });
     for (const r of loads) res[r] = now;
     const isFg = Boolean(fgPid && a.pids.includes(fgPid));
     const always = listed(cfg.alwaysPriority, a.key, a.name);
@@ -532,18 +557,22 @@ function commandSegments(cmd) {
 }
 
 const progOf = (tok) => String(tok).split(/[\\/]/).pop().toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, '');
-const INFO_FLAGS = new Set(['-version', '--version', '-v', '-h', '--help', '-help', 'help', 'version']);
+const INFO_FLAGS = new Set(['-version', '--version', '-h', '--help', '-help', 'help', 'version']);
+// `-v` means "version" only for these; elsewhere (cargo, ffmpeg, make …) it is verbose/loglevel.
+const V_IS_VERSION = new Set(['node', 'npm', 'pnpm', 'yarn', 'bun', 'deno', 'python', 'python3', 'py', 'java', 'go']);
+const SCRIPT_SUBS = ['test', 'build', 'ci', 'install', 'i', 'rebuild', 'e2e'];
 
 /** One segment → {kind, gpu} or null. */
 function heavySegment(t) {
   const prog = progOf(t[0]);
   const a1 = (t[1] || '').toLowerCase();
   const a2 = (t[2] || '').toLowerCase();
-  const info = t.slice(1).some((x) => INFO_FLAGS.has(x.toLowerCase()));
+  const info = t.slice(1).some((x) => INFO_FLAGS.has(x.toLowerCase()) || (x === '-v' && V_IS_VERSION.has(prog)));
   if (info) return null;
   if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog)) {
     const sub = a1 === 'run' ? a2 : a1;
-    return ['test', 'build', 'ci', 'install', 'i', 'rebuild', 'e2e'].includes(sub) ? { kind: `${prog} ${sub}` } : null;
+    const base = sub.split(':')[0]; // npm run test:unit / build:prod
+    return SCRIPT_SUBS.includes(base) ? { kind: `${prog} ${base}` } : null;
   }
   if (['vitest', 'jest', 'mocha', 'playwright', 'cypress', 'tsc', 'webpack', 'turbo', 'nx', 'pytest', 'tox', 'nox', 'make', 'ninja', 'msbuild', 'bazel'].includes(prog)) return { kind: prog };
   if ((prog === 'vite' || prog === 'next') && a1 === 'build') return { kind: `${prog} build` };
@@ -568,12 +597,28 @@ function escapeSegment(t) {
 /**
  * @returns {{kind:string|null, escape:boolean, resources:string[]}} resources the command would load
  */
+// Shell wrappers whose quoted argument is itself a command line: bash -c "…", cmd /c "…", pwsh -Command "…".
+const WRAPPER = /(?:^|[\s;&|(])(?:bash|sh|zsh|cmd|pwsh|powershell)(?:\.exe)?\s+(?:-l\s+|-NoProfile\s+|-NonInteractive\s+)*(?:-c|\/c|-Command)\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))/gi;
+
+function innerCommands(cmd, depth = 0) {
+  const out = [];
+  if (depth > 2) return out;
+  // matchAll clones the regex: the recursion cannot reset the outer scan (a shared lastIndex looped forever).
+  for (const m of String(cmd || '').matchAll(WRAPPER)) {
+    const inner = m[1] ?? m[2] ?? m[3] ?? '';
+    if (inner) out.push(inner, ...innerCommands(inner, depth + 1));
+  }
+  return out;
+}
+
 function classifyCommand(cmd) {
   let hit = null;
   let escape = false;
-  for (const t of commandSegments(cmd)) {
-    if (!hit) hit = heavySegment(t);
-    escape = escape || escapeSegment(t);
+  for (const line of [cmd, ...innerCommands(cmd)]) {
+    for (const t of commandSegments(line)) {
+      if (!hit) hit = heavySegment(t);
+      escape = escape || escapeSegment(t);
+    }
   }
   const resources = hit ? (hit.gpu ? ['cpu', 'gpu', 'disk', 'ram'] : ['cpu', 'disk', 'ram']) : escape ? [...RESOURCES] : [];
   return { kind: hit ? hit.kind : null, escape, resources };
@@ -608,7 +653,7 @@ function admit({ command, now, state, kinds = {}, cfg }) {
 module.exports = {
   RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN,
   isOsProcess, appKey, appLabel, listed,
-  isClaudeRoot, attributedPids, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
+  isClaudeRoot, attributedPids, hostKeys, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
   loadedResources, trackJobs, maxLevel,
   updatePriority, updateBudget, plan, pressureOf,
   commandSegments, classifyCommand, commandKind, admit,

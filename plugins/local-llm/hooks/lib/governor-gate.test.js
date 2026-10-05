@@ -13,7 +13,8 @@ describe('local-llm governor gate', () => {
   it('fails open without a governor or with a stale one', () => {
     expect(G.check(1000).defer).toBe(false);
     state({ pressure: { priority: ['gpu'], over: [] } });
-    expect(G.check(1000 + 20000).defer).toBe(false);
+    expect(G.check(1000 + 20000).defer).toBe(true);
+    expect(G.check(1000 + 61000).defer).toBe(false);
   });
   it('defers on GPU/RAM priority or over budget, not on CPU-only priority', () => {
     state({ pressure: { priority: ['gpu'], over: [] }, priorityBy: 'c:/games/x' });
@@ -35,7 +36,14 @@ describe('local-llm governor gate', () => {
   });
   it('during() brackets an async body even on throw', async () => {
     const file = path.join(dir, 'inflight', 'local-llm', `${process.pid}.json`);
-    await expect(G.during(async () => { throw new Error('x'); })).rejects.toThrow('x');
+    await expect(G.during(async () => { throw new Error('x'); }, async () => [])).rejects.toThrow('x');
     expect(JSON.parse(fs.readFileSync(file, 'utf8')).count).toBe(0);
+  });
+  it('records only models that appeared during a Claude request (resident ones are never unloaded)', async () => {
+    const file = path.join(dir, 'inflight', 'local-llm', `${process.pid}.json`);
+    let calls = 0;
+    const list = async () => (calls++ === 0 ? ['resident:7b'] : ['resident:7b', 'coder:14b']);
+    await G.during(async () => 'ok', list);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).models).toEqual(['coder:14b']);
   });
 });

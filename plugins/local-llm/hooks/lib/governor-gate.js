@@ -10,7 +10,8 @@
  *     process don't race: the count only reaches 0 after the last one ends.
  *     One file per process (inflight/local-llm/<pid>.json) so several MCP
  *     processes don't clobber each other.
- *   Fail open: no state, a stale heartbeat (> 15 s) or any read error → run.
+ *   Fail open: no state, a stale heartbeat (> 60 s; the governor ticks every
+ *   20 s when idle) or any read error → run.
  */
 'use strict';
 
@@ -23,7 +24,7 @@ function home() {
 }
 
 /** @returns {{defer:boolean, reason?:string}} */
-function check(now = Date.now(), staleMs = 15000) {
+function check(now = Date.now(), staleMs = 60000) {
   try {
     const s = JSON.parse(fs.readFileSync(path.join(home(), 'state.json'), 'utf8'));
     if (!s || !Number.isFinite(s.heartbeat) || now - s.heartbeat > staleMs) return { defer: false };
@@ -36,8 +37,24 @@ function check(now = Date.now(), staleMs = 15000) {
 }
 
 let count = 0;
+const models = new Set(); // models that appeared in Ollama while a Claude request ran — the only ones the governor unloads
+
+/** Names of models Ollama has loaded right now; [] when Ollama is absent (1 s timeout). */
+function loadedModels(baseUrl = 'http://127.0.0.1:11434') {
+  return new Promise((resolve) => {
+    try {
+      const http = require('http');
+      const r = http.get(new URL('/api/ps', baseUrl), { timeout: 1000 }, (res) => {
+        let d = ''; res.on('data', (c) => { d += c; });
+        res.on('end', () => { try { resolve((JSON.parse(d).models || []).map((m) => m.name)); } catch { resolve([]); } });
+      });
+      r.on('error', () => resolve([])); r.on('timeout', () => { r.destroy(); resolve([]); });
+    } catch { resolve([]); }
+  });
+}
 
 function write(obj) {
+  if (models.size) obj.models = [...models];
   try {
     const dir = path.join(home(), 'inflight', 'local-llm');
     fs.mkdirSync(dir, { recursive: true });
@@ -51,7 +68,17 @@ function write(obj) {
 function begin(now = Date.now()) { count += 1; write({ count, updatedAt: now }); }
 function end(now = Date.now()) { count = Math.max(0, count - 1); write(count > 0 ? { count, updatedAt: now } : { count: 0, endedAt: now }); }
 
-/** Wrap an async body with begin/end even on throw. */
-async function during(fn) { begin(); try { return await fn(); } finally { end(); } }
+/**
+ * Wrap an async body with begin/end even on throw; models that newly appear in
+ * Ollama during it are recorded as Claude-loaded. `list` is a test seam.
+ */
+async function during(fn, list = loadedModels) {
+  const before = new Set(await list());
+  begin();
+  try { return await fn(); } finally {
+    for (const m of await list()) if (!before.has(m)) models.add(m);
+    end();
+  }
+}
 
-module.exports = { check, begin, end, during, home };
+module.exports = { check, begin, end, during, loadedModels, home };

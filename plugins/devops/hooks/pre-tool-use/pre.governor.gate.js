@@ -71,7 +71,7 @@ function main(hook, deps = {}) {
   let g = {};
   try { g = git(cwd) || {}; } catch { g = {}; }
   const e = Q.newEntry({ command, cwd, branch: g.branch || null, head: g.head || null, sessionId: sid, kind: res.kind, reason: res.reason, now });
-  Q.save(p.queue, e);
+  Q.record(p.queue, e, now, cfg);
   S.removeFile(fgFile);
   if (!state || now - (state.heartbeat || 0) >= cfg.admission.staleMs) spawnWatcher();
   const yieldsTo = res.reason.startsWith('priority:') ? 'an app that has priority right now' : 'the 80 % resource budget';

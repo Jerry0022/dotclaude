@@ -110,7 +110,9 @@ function acquireLock(p, { pid, version, now, startMs = now, alive = isAlive, sta
       try { mtime = fs.statSync(p.lock).mtimeMs; } catch { continue; }
       dead = now - mtime >= 2000; // empty file left mid-write: dead only once it is no longer being written
     } else {
-      const reused = startOf && Number.isFinite(holder.startMs) && Math.abs((startOf(holder.pid) || 0) - holder.startMs) > 2000;
+      // startOf() === 0 means "unknown" (win32 has no cheap lookup): never evidence of reuse.
+      const seen = startOf ? startOf(holder.pid) : 0;
+      const reused = seen > 0 && Number.isFinite(holder.startMs) && Math.abs(seen - holder.startMs) > 2000;
       dead = !alive(holder.pid) || reused;
     }
     if (!dead) {

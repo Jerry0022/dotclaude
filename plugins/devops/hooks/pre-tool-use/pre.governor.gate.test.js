@@ -112,12 +112,15 @@ describe('governor hooks', () => {
     expect(fs.existsSync(path.join(home, 'sessions'))).toBe(false);
   });
 
-  it.runIf(win)('SessionStart registers the session', () => {
-    const r = run(SS, { session_id: 'abc-1', cwd: home });
+  it.runIf(win)('SessionStart registers the session with the claude pid from CLAUDE_PID (R6)', () => {
+    const r = spawnSync(process.execPath, [SS], {
+      input: JSON.stringify({ session_id: 'abc-1', cwd: home }),
+      env: { ...process.env, DOTCLAUDE_GOVERNOR_HOME: home, DOTCLAUDE_GOVERNOR_NO_SPAWN: '1', CLAUDE_PID: '4242' },
+      encoding: 'utf8',
+    });
     expect(r.status).toBe(0);
     const s = JSON.parse(fs.readFileSync(path.join(home, 'sessions', 'abc-1.json'), 'utf8'));
-    expect(s).toMatchObject({ sessionId: 'abc-1', cwd: home });
-    expect(Number.isInteger(s.hookPpid)).toBe(true);
+    expect(s).toMatchObject({ sessionId: 'abc-1', cwd: home, claudePid: 4242 });
   });
 
   it.runIf(win)('hooks stay fast (median of 5 < 300 ms per call beyond bare node start)', () => {

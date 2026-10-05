@@ -27,7 +27,9 @@ function main(hook) {
   if (!cfg.enabled) return null;
   const cwd = typeof hook.cwd === 'string' ? hook.cwd : process.cwd();
   const now = Date.now();
-  const ready = Q.readyFor(Q.list(p.queue), now, cfg, cwd);
+  const liveSessions = new Set(S.readDir(p.sessions).map((x) => x.data.sessionId).filter(Boolean));
+  const sessionId = String(hook.session_id || '').replace(/[^A-Za-z0-9_-]/g, '');
+  const ready = Q.readyFor(Q.list(p.queue), now, cfg, { cwd, sessionId, liveSessions });
   if (!ready.length) return null;
   const lines = ready.map((e) => {
     const drift = e.branch ? ` (deferred on branch ${e.branch}@${String(e.head || '').slice(0, 8)}; re-check the tree still matches before running)` : '';

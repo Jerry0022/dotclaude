@@ -6,9 +6,9 @@
  * @plugin devops
  * @description Registers the session with the Claude load governor and starts
  *   its watcher detached (a running watcher makes the new one exit at once).
- *   Writes ~/.claude/governor/sessions/<id>.json (hook pids, cwd, plugin
- *   version); the watcher puts the session's claude process into the named
- *   job `Local\dotclaude-gov-s-<id>` and reverses orphaned throttles on start.
+ *   Writes ~/.claude/governor/sessions/<id>.json (the session's claude pid,
+ *   cwd, plugin version); the watcher attributes by claude ancestry, expires
+ *   the session when that pid is gone, and reverses orphaned throttles on start.
  *   No-op when disabled (`"enabled": false` in governor/config.json) or on a
  *   platform without an adapter. Never blocks: fail open, no waiting.
  */
@@ -29,7 +29,9 @@ function main(hook) {
   let version = '0.0.0';
   try { version = require('../../.claude-plugin/plugin.json').version; } catch {}
   S.writeJson(path.join(p.sessions, `${id}.json`), {
-    sessionId: id, hookPid: process.pid, hookPpid: process.ppid, cwd: hook.cwd || null, startedAt: Date.now(), pluginVersion: version,
+    // The session's Claude Code process: Claude exports CLAUDE_PID to its children; the hook's own
+    // parent may be a short-lived shell. The watcher walks up from here to the Claude root.
+    sessionId: id, claudePid: Number(process.env.CLAUDE_PID) || process.ppid, hookPid: process.pid, cwd: hook.cwd || null, startedAt: Date.now(), pluginVersion: version,
   });
   if (process.env.DOTCLAUDE_GOVERNOR_NO_SPAWN === '1') return null; // test seam
   const { spawn } = require('child_process');

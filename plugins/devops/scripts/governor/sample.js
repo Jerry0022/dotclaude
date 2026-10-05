@@ -8,7 +8,7 @@
  *
  * raw = { ts, cores, procs:[{pid, ppid, name, path, cmd, startMs, cpuMs, ioBytes, memMB, gpuPct}],
  *         sys:{ cpuPct, gpuPct, disk:{num, base, freq} | {ticksMs, ios} | {ms}, diskQueue,
- *               totalMB, freeMB, pagesIn }, fg, listening, jobPids }
+ *               totalMB, freeMB, pagesIn }, fg, listening }
  */
 'use strict';
 
@@ -27,7 +27,7 @@ function diskMs(prev, cur) {
   return NaN;
 }
 
-/** @returns {{ts, procs:object[], sys:object, fg, listening:Set<number>, jobPids:object}} */
+/** @returns {{ts, procs:object[], sys:object, fg, listening:Set<number>}} */
 function derive(prev, raw) {
   const cores = raw.cores || 1;
   const dt = prev ? raw.ts - prev.ts : 0;
@@ -46,7 +46,7 @@ function derive(prev, raw) {
     cpuPct: s.cpuPct, gpuPct: s.gpuPct || 0, diskMs: diskMs(ps.disk, s.disk), diskQueue: s.diskQueue || 0,
     totalMB: s.totalMB, freeMB: s.freeMB, pagesPerSec, disk: s.disk, pagesIn: s.pagesIn,
   };
-  return { ts: raw.ts, procs, sys, fg: raw.fg || null, listening: new Set(raw.listening || []), jobPids: raw.jobPids || {} };
+  return { ts: raw.ts, procs, sys, fg: raw.fg || null, listening: new Set(raw.listening || []) };
 }
 
 module.exports = { derive, diskMs };
