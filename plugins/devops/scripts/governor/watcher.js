@@ -92,7 +92,7 @@ async function main() {
       pid, version, heartbeat: st.heartbeat, throttles: Object.values(throttles), pressure: st.pressure || { priority: [], over: [] },
       priorityBy: st.priorityBy || null, sys: st.sys || {}, kinds: st.kinds, budget: { over: st.budget.over, baseline: st.budget.baseline, mean: st.budget.mean },
       apps: Object.values(st.prio.apps || {}).map((a) => ({ key: a.key, res: a.res, running: a.running })), jobs: Object.values(st.tracked).map((j) => ({ id: j.id, name: j.name, kind: j.kind, heavy: j.heavy, cpuPct: j.cpuPct, memMB: j.memMB })),
-      queueRunning: st.queueRunning,
+      queueRunning: st.queueRunning, helperPid: adapter.selfPids[1] || null,
     });
   };
   save();
@@ -165,7 +165,11 @@ async function main() {
 
       const jobPids = Object.values(sm.jobPids).flat();
       const queueRoots = Object.values(st.queueRunning).map((q) => q.pid);
-      const attributed = P.attributedPids(procs, { jobPids, extraRoots: queueRoots });
+      // Test scope (smoke): only this pid's tree is Claude's, nothing else on the machine is touched.
+      const scopePid = Number(process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID) || 0;
+      const attributed = scopePid
+        ? P.attributedPids(procs, { extraRoots: [scopePid, ...queueRoots], claudeRoots: false })
+        : P.attributedPids(procs, { jobPids, extraRoots: queueRoots });
       const markers = {};
       for (const { file, data } of S.readDir(p.inflight)) markers[path.basename(file, '.json')] = data;
       const activeServices = P.activeServiceNames(c.claudeServices, markers, now, c.selfLoopMs);

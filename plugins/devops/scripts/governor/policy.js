@@ -127,7 +127,7 @@ function isClaudeRoot(p) {
  * A ppid link only counts when the parent started before the child (pid reuse).
  * @returns {Set<number>}
  */
-function attributedPids(procs, { jobPids = [], extraRoots = [] } = {}) {
+function attributedPids(procs, { jobPids = [], extraRoots = [], claudeRoots = true } = {}) {
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   const children = new Map();
   for (const p of procs) {
@@ -135,7 +135,7 @@ function attributedPids(procs, { jobPids = [], extraRoots = [] } = {}) {
     children.get(p.ppid).push(p);
   }
   const out = new Set();
-  const stack = procs.filter((p) => isClaudeRoot(p)).map((p) => p.pid);
+  const stack = claudeRoots ? procs.filter((p) => isClaudeRoot(p)).map((p) => p.pid) : [];
   for (const r of extraRoots) if (byPid.has(r)) stack.push(r);
   for (const j of jobPids) if (byPid.has(j)) stack.push(j);
   while (stack.length) {

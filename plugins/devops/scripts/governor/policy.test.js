@@ -417,3 +417,10 @@ describe('admission', () => {
     expect(P.admit({ command: 'npm test', now, state: old, cfg }).decision).toBe('allow');
   });
 });
+
+describe('attribution scope', () => {
+  it('claudeRoots:false attributes only the given roots (test scope)', () => {
+    const ps = [{ pid: 1, ppid: 0, name: 'claude.exe', startMs: 0 }, { pid: 2, ppid: 1, startMs: 1 }, { pid: 3, ppid: 0, startMs: 1 }, { pid: 4, ppid: 3, startMs: 2 }];
+    expect([...P.attributedPids(ps, { extraRoots: [3], claudeRoots: false })].sort()).toEqual([3, 4]);
+  });
+});
