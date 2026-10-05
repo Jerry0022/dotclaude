@@ -64,7 +64,10 @@ Two visual blocks. Nothing between them, nothing under the second one.
   live where.
 - **A deviation is line 1**, bright, prefixed `**Nicht erreicht:**` /
   `**Not achieved:**` (red tests, unbuilt part, cut scope, aborted reason).
-  Never hidden in the evidence row, never parked as an open point.
+  Never hidden in the evidence row, never parked as an open point. Every
+  unmet requirement gets its own line, then every partial one as
+  `**⚠ Nicht voll erfüllt:**` / `**⚠ Not fully met:**` (amber on Desktop) —
+  also when it waits on the user; a deploy wait counts as met (#630).
 - The `Changes` block is gone. On Desktop the app shows the file list itself;
   in the terminal the pipeline line (branch, build) is enough. Files are
   never listed on the card.

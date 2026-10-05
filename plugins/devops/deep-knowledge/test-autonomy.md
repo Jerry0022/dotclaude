@@ -250,7 +250,9 @@ once to close it (together with every other failing card gate, in one block),
 and `ship_release` refuses to merge over it — also when the caller passes no
 `validation`: then the last card rendered for the checkout (≤ 12 h) counts. When a gap truly
 cannot be closed, ask the user instead of reporting done. The card counts
-"2/3 Anforderungen · 1 wartet auf dich" — the ◐/✗ glyph only for own gaps.
+"2/3 Anforderungen · 1 wartet auf dich" — ◐/✗ for own gaps, ⚠ (amber) for a
+gap that waits on someone else, a green ✓ only when every requirement is met;
+each not-met requirement is also named in the card's top lines (#630).
 A `deploy` wait counts as met: when the work is done and only its proof has
 to wait for ship/deploy/restart, the card reads "3/3 Anforderungen · 1 erst
 nach Deploy prüfbar", never "2/3" (the user reads a short count as unfinished

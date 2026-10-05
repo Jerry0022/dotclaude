@@ -523,6 +523,18 @@ describe("cardWidgetHtml", () => {
     expect(html).toContain(`class="card-post" style="color:${RED}"`); // red for a failed post
   });
 
+  test("a requirement gap waiting on someone else is amber, the partial label too; unmet stays red (#630)", () => {
+    const html = cardWidgetHtml(baseModel({
+      resultLines: ["**Nicht erreicht:** B", "**⚠ Nicht voll erfüllt:** A — Handy-Test"],
+      evidence: [{ glyph: "⚠", tone: "warn", text: "2/3 Anforderungen · 1 wartet auf dich", dim: false },
+        { glyph: "⚠", text: "ungeprüft — kein Test lief", dim: false }],
+    }), "");
+    expect(html).toContain(`<span class="card-post" style="color:${YELLOW}">⚠ 2/3 Anforderungen`);
+    expect(html).toContain(`<span class="card-post" style="color:${RED}">⚠ ungeprüft`);
+    expect(html).toContain(`<b style="color:${YELLOW};font-weight:500">⚠ Nicht voll erfüllt:</b>`);
+    expect(html).toContain(`<b style="color:${RED};font-weight:500">Nicht erreicht:</b>`);
+  });
+
   // Polish 2026-09-26: the palette was tuned for the dark theme and measured
   // 1.5–2.2:1 (status colours) and 3.3:1 (dim lines) on the light card
   // surface. Every text colour now resolves through a host token; a literal

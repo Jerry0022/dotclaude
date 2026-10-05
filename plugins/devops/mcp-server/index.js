@@ -602,33 +602,43 @@ function renderTitle(summary) {
 // ---------------------------------------------------------------------------
 // Result lines (§ 2.2) — replace the old Changes block. Derived from
 // `changes[]`: each entry's `description` (falling back to `area`) becomes
-// one `›` line, capped at 3 with a "+N weitere" tail. A deviation — an unmet
-// requirement, a red test, or an abort reason — is ALWAYS line 1, prefixed
-// `**Nicht erreicht:**` / `**Not achieved:**`, never folded into the evidence
-// row or an open point.
+// one `›` line, capped at 3 with a "+N weitere" tail. Deviations lead: every
+// unmet requirement (`**Nicht erreicht:**` / `**Not achieved:**`), then every
+// partial one (`**⚠ Nicht voll erfüllt:**` / `**⚠ Not fully met:**`, #630) —
+// each on its own line; without one, a red test or an abort reason. Never
+// folded into the evidence row or an open point.
 // ---------------------------------------------------------------------------
 
 const DEVIATION_LABEL = { de: '**Nicht erreicht:**', en: '**Not achieved:**' };
+const PARTIAL_LABEL = { de: '**⚠ Nicht voll erfüllt:**', en: '**⚠ Not fully met:**' };
 const RESULT_TAIL = { de: (n) => '+' + n + ' weitere', en: (n) => '+' + n + ' more' };
 const RESULT_LINE_MAX = 120;
 const RESULT_LINE_LIMIT = 3;
 
-/** A single free-text deviation, or '' when the turn has none. */
-function deviationText(input, lang) {
-  // Every unmet requirement is named, also one that waits on the user: the
-  // card must say what was not reached, only the red routing is Claude's own.
+/** The turn's deviations as `{ label, text }`, unmet before partial; [] when none. */
+function deviations(input, lang) {
+  // Every not-met requirement is named, also one that waits on the user: the
+  // card must say what was not (fully) delivered, only the red routing is
+  // Claude's own. A deploy wait counts as met (requirementsPost) — not named.
   const validation = Array.isArray(input.validation) ? input.validation : [];
-  const unmet = validation.find(v => v && v.status === 'unmet');
-  if (unmet) return unmet.requirement + (unmet.evidence ? ' — ' + unmet.evidence : '');
+  const name = (v) => v.requirement + (v.evidence ? ' — ' + v.evidence : '');
+  const unmet = validation.filter(v => v && v.status === 'unmet');
+  const partial = validation.filter(v => v && v.status === 'partial' && v.waitsOn !== 'deploy');
+  if (unmet.length || partial.length) {
+    const U = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
+    const P = PARTIAL_LABEL[lang] || PARTIAL_LABEL.de;
+    return [...unmet.map(v => ({ label: U, text: name(v) })), ...partial.map(v => ({ label: P, text: name(v) }))];
+  }
+  const L = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
   const tests = Array.isArray(input.tests) ? input.tests : [];
   const badTest = tests.find(t => t && glyphForResult(t.result) === '✗');
   if (badTest) {
     // The tests lane reads as "2 Tests rot (npm test)"; any other gate keeps its own words.
-    if (classifyGate(badTest) === 'test') return testsPostText(badTest.result, '✗', lang) + (badTest.method ? ' (' + badTest.method + ')' : '');
-    return (badTest.method ? badTest.method + ': ' : '') + badTest.result;
+    if (classifyGate(badTest) === 'test') return [{ label: L, text: testsPostText(badTest.result, '✗', lang) + (badTest.method ? ' (' + badTest.method + ')' : '') }];
+    return [{ label: L, text: (badTest.method ? badTest.method + ': ' : '') + badTest.result }];
   }
-  if (input.variant === 'aborted' && input.cta && input.cta.reason) return input.cta.reason;
-  return '';
+  if (input.variant === 'aborted' && input.cta && input.cta.reason) return [{ label: L, text: input.cta.reason }];
+  return [];
 }
 
 /**
@@ -640,13 +650,11 @@ function deviationText(input, lang) {
  * 2026-09-21). The three-line cap and the "+N weitere" tail apply either way.
  */
 function buildResultLines(input, lang, { clamp = true } = {}) {
-  const L = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
   const tail = RESULT_TAIL[lang] || RESULT_TAIL.de;
   const cut = (text, max) => (clamp ? clampEllipsis(text, max) : String(text || '').trim());
   const lines = [];
 
-  const dev = deviationText(input, lang);
-  if (dev) lines.push(L + ' ' + cut(dev, RESULT_LINE_MAX));
+  for (const d of deviations(input, lang)) lines.push(d.label + ' ' + cut(d.text, RESULT_LINE_MAX));
 
   const changes = Array.isArray(input.changes) ? input.changes : [];
   // test-minimal: the one line is what was started (§ 3), carried in cta.description.
@@ -764,10 +772,13 @@ function requirementsPost(validation, lang) {
   const waitingText = Object.keys(labels).filter(k => waiting[k] > 0).map(k => waiting[k] + ' ' + labels[k]);
   const tail = waitingText.length ? ' · ' + waitingText.join(' · ') : '';
   if (unmet > 0) return { glyph: '✗', text: unmet + (lang === 'en' ? ' unmet' : ' unerfüllt') + tail, dim: false };
-  // ✓ only when nothing is left to Claude: no own gap and no background work
-  // still running (pending is "not done yet", not "done, waiting on you").
+  // ◐ while something is left to Claude (an own gap, or background work still
+  // running — pending is "not done yet"). A gap that only waits on the user or
+  // a third party is still not delivered: ⚠ in amber, never a green ✓ (#630).
   const ownGap = owned.some(v => v.status !== 'met') || waiting.pending > 0;
-  if (met < total) return { glyph: ownGap ? '◐' : '✓', text: met + '/' + total + ' ' + noun + tail, dim: false };
+  if (met < total) return ownGap
+    ? { glyph: '◐', text: met + '/' + total + ' ' + noun + tail, dim: false }
+    : { glyph: '⚠', tone: 'warn', text: met + '/' + total + ' ' + noun + tail, dim: false };
   return { glyph: '✓', text: total + '/' + total + ' ' + noun + tail, dim: !tail };
 }
 
