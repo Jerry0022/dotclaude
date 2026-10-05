@@ -1110,7 +1110,16 @@ function main(hook) {
   // parent's card had written four minutes earlier — both Stop gates then
   // blocked an unchanged parent checkout. Its passing test run would equally
   // have "verified" the parent, which delegation never may.
-  if (isSubagentCall(hook)) return null;
+  if (isSubagentCall(hook)) {
+    // #632: one exception — a delegated ship (do-ship --delegated runs in a
+    // subagent) still leaves the archive evidence for the PARENT session,
+    // keyed by the parent's id the harness passes. Nothing else: the archive
+    // release stays the main session's, after its own card widget.
+    if ((hook.tool_name || '') === SHIP_RELEASE_TOOL && shipReleaseMerged(hook.tool_response)) {
+      archiveGate.recordShipped(hook.session_id);
+    }
+    return null;
+  }
 
   const toolName = hook.tool_name || '';
   const isCodeEdit = (toolName === 'Edit' || toolName === 'Write');

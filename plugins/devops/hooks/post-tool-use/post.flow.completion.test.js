@@ -1363,6 +1363,38 @@ describe("post.flow.completion — the card widget ends the turn", () => {
       cleanup(dir); cleanup(root);
     });
 
+    test("a delegated ship: the subagent's merged ship_release is the parent's evidence, the parent's widget releases", () => {
+      const dir = gitProject();
+      const { root } = fakeRoot();
+      const shippedMarker = tmpFile(dir, "dotclaude-devops-archive-shipped", "s-arch-sub");
+      // The harness passes the PARENT's session_id plus the subagent's agent_id.
+      const sub = runHookRaw(dir, "s-arch-sub", RELEASE, {
+        agent_id: "agent-42",
+        tool_input: { cwd: dir },
+        tool_response: { content: [{ type: "text", text: JSON.stringify({ merged: "main", success: true }) }] },
+      }, { CLAUDE_PLUGIN_ROOT: root });
+      expect(sub).toBe("");
+      expect(fs.existsSync(shippedMarker)).toBe(true);
+      // A subagent never gets the release itself, even with a flag present.
+      fs.writeFileSync(flagOf(dir, "s-arch-sub"), stamp(dir));
+      expect(runHookRaw(dir, "s-arch-sub", WIDGET, { agent_id: "agent-42", tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root })).toBe("");
+      expect(fs.existsSync(flagOf(dir, "s-arch-sub"))).toBe(true);
+      // The main session's own widget releases the one archive call.
+      const out = widget(dir, "s-arch-sub", root);
+      expect(out.hookSpecificOutput.additionalContext).toContain("mcp__ccd_session_mgmt__archive_session");
+      cleanup(dir); cleanup(root);
+    });
+
+    test("a subagent's unmerged ship_release leaves no evidence", () => {
+      const dir = gitProject();
+      runHookRaw(dir, "s-arch-sub2", RELEASE, {
+        agent_id: "agent-43",
+        tool_response: { content: [{ type: "text", text: JSON.stringify({ merged: false, success: true }) }] },
+      });
+      expect(fs.existsSync(tmpFile(dir, "dotclaude-devops-archive-shipped", "s-arch-sub2"))).toBe(false);
+      cleanup(dir);
+    });
+
     test("a re-render that no longer qualifies deletes the adopted flag", () => {
       const dir = gitProject();
       fs.writeFileSync(flagOf(dir, "self"), stamp(dir));
@@ -1495,8 +1527,17 @@ describe("post.flow.completion — the card widget ends the turn", () => {
       expect(runPre(dir, "s-pre-2", { session_id: "self" }).status).toBe(0);
       expect(runPre(dir, "s-pre-3", { session_id: "local_other" }).status).toBe(0);
       const transcript = path.join(dir, "t.jsonl");
-      fs.writeFileSync(transcript, JSON.stringify({ type: "user", message: { role: "user", content: "bitte archiviere diese Session" } }) + "\n");
-      expect(runPre(dir, "s-pre-3", { session_id: "self" }, transcript).status).toBe(0);
+      const ask = (text) => {
+        fs.writeFileSync(transcript, JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n");
+        return runPre(dir, "s-pre-3", { session_id: "self" }, transcript).status;
+      };
+      for (const text of ["bitte archiviere diese Session", "Archive this session", "jetzt archivieren", "archiv", "go ahead with archiving"]) {
+        expect(ask(text)).toBe(0);
+      }
+      // Whole words only: a substring inside another word is no request.
+      for (const text of ["look at the archived logs", "check the Archivordner", "read architecture.md"]) {
+        expect(ask(text)).toBe(2);
+      }
       cleanup(dir);
     });
   });

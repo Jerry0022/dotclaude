@@ -22,8 +22,8 @@ try {
   process.exit(0);
 }
 
-/** The user's latest prompt asks to archive (de + en). */
-const USER_ASKS_ARCHIVE = /\barchiv/i;
+/** The user's latest prompt asks to archive (de + en) — whole words only. */
+const USER_ASKS_ARCHIVE = /\barchiv(?:e|iere|ieren|ing)?\b/i;
 
 function userAskedForArchive(hook) {
   try {
