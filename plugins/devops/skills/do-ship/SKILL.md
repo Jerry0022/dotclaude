@@ -21,7 +21,7 @@ triggers:
   en: ["ship it", "push and merge", "release", "promote", "promotion", "channel release", "promote to beta", "promote to stable"]
   de: ["auf stable heben"]
 argument-hint: "[beta|stable|promote] [<version>] [--cwd <path>] [--keep] [--queued] [--delegated] [--inline]"
-allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, Agent, SendMessage, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title
+allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *), Bash(nohup *), Read, Glob, Grep, AskUserQuestion, ExitWorktree, Agent, SendMessage, TaskList, TaskCreate, TaskUpdate, Skill, mcp__plugin_devops_dotclaude-ship__*, mcp__plugin_devops_dotclaude-completion__*, mcp__plugin_devops_dotclaude-issues__*, mcp__ccd_session_mgmt__get_session, mcp__ccd_session_mgmt__set_session_title, mcp__ccd_session_mgmt__archive_session
 ---
 
 # Ship
@@ -756,6 +756,9 @@ keep: true })`, normal DONE CTA (no `state.kept`, see 5c). The remote branch was
 already deleted by `ship_release` (`remoteBranchDeleted`); the local branch and
 worktree are the app's to remove. **Never print git commands for the user to run after
 a ship** — no "close the session, then `git worktree remove …`" note, ever.
+This rule alone does **not** keep the session: the card still archives it (Step 6 →
+*Session archive on exit*). Check the signals below anyway — a hit (or `--keep`)
+passes `state.kept: true`, which is what keeps the session open for the follow-up.
 
 ### Signals that trigger keep-mode
 
@@ -958,6 +961,21 @@ The block also strips a stale `🚀 Shipping – ` when the title carries one. A
 title with none of the devops prefixes is left untouched — the user renamed it
 meanwhile, and that name wins. Desktop app only; skip silently elsewhere or on
 any failure.
+
+### Session archive on exit (carried by the card result, #632)
+
+A merged `ship-successful` / `released` card in the Desktop app also returns a
+`[SESSION ARCHIVE]` block: the session archives itself **after** the card. Show
+the widget as usual; its hook then releases exactly one more call —
+`mcp__ccd_session_mgmt__archive_session {session_id:"self"}` — with no text
+around it. Make it only when the hook says so. The renderer leaves the block
+out for an explicit keep (`state.kept` — `--keep` or a Step 5a signal),
+`pending` work (check `TaskList`, agents and workflows — declare what still
+runs), a concept or batch mode, an autonomous run / lockout or ship queue
+(intermediate ships of a run never archive), and the devops setting
+`ship.archiveAfterShip false`. Background:
+`{PLUGIN_ROOT}/deep-knowledge/claude-desktop-app-setup.md` § Session archiving
+after ship.
 
 ### Promotion-gap nudge (final ship to main without a promotion — MANDATORY)
 

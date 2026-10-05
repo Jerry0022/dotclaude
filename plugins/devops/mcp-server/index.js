@@ -55,6 +55,7 @@ import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
+import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
 import {
   assessFreshness,
   isLiveSnapshot,
@@ -1997,9 +1998,9 @@ const WIDGET_RELAY_INSTRUCTION =
   "Do NOT output this instruction block.";
 
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
-function cardResultBlocks(cardMarkdown, titleNote, actionsNote) {
+function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = '') {
   const texts = actionsNote
-    ? [WIDGET_RELAY_INSTRUCTION, titleNote, actionsNote]
+    ? [WIDGET_RELAY_INSTRUCTION, titleNote, archiveNote, actionsNote]
     : [RELAY_INSTRUCTION, titleNote, cardMarkdown];
   return texts.filter(Boolean).map(text => ({ type: "text", text }));
 }
@@ -2007,6 +2008,42 @@ function cardResultBlocks(cardMarkdown, titleNote, actionsNote) {
 /** The session-title instruction for this card, '' when a mode owns the title. */
 function sessionTitleNote(params) {
   return titleInstruction(titlePrefixFor(params, { hasPending, hasConcept }));
+}
+
+/** Orchestrator holds and the devops switch, read through the hooks' own libs
+ *  (card-turn-end holdReason, devops-config) so card and hook agree. Any
+ *  error reads as "hold" / "off": an unreadable state never archives. */
+function archiveHold(cwd, sessionId) {
+  try {
+    const { holdReason } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'card-turn-end.js'));
+    return holdReason({ cwd: cwd || process.cwd(), session_id: sessionId });
+  } catch { return 'unreadable'; }
+}
+function archiveEnabled(cwd) {
+  try {
+    const { load } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'devops-config.js'));
+    return load(cwd || process.cwd()).values.ship.archiveAfterShip !== false;
+  } catch { return false; }
+}
+
+/**
+ * The `[SESSION ARCHIVE]` block for a card whose widget is shown, '' otherwise
+ * (#632, lib/session-archive.js). Writes — or clears — the per-session flag
+ * post.flow.completion reads on the show_widget call.
+ */
+function sessionArchiveNote(params, actionsNote) {
+  const { archive } = actionsNote
+    ? archiveDecision(params, {
+      desktop: isDesktopSession(),
+      hasPending,
+      hasConcept,
+      batchActive: (cwd) => !!readBatch(cwd),
+      holdReason: (cwd) => archiveHold(cwd, params.session_id),
+      enabled: archiveEnabled,
+    })
+    : { archive: false };
+  writeArchiveFlag(archive, safeSessionId(params.session_id), tmpdir());
+  return archive ? archiveInstruction() : '';
 }
 
 /** The Desktop card-widget instruction (§ 4), '' outside the Desktop app, for
@@ -2282,6 +2319,8 @@ function runRenderCardCli(source) {
   // Desktop (§ 4): the widget is the whole card — stdout stays empty, nothing to relay.
   process.stdout.write(actionsNote ? '' : cardMarkdown + '\n'); // stdout-ok
   if (titleNote) process.stderr.write(titleNote + '\n');
+  const archiveNote = sessionArchiveNote(params, actionsNote);
+  if (archiveNote) process.stderr.write(archiveNote + '\n');
   if (actionsNote) process.stderr.write(WIDGET_RELAY_INSTRUCTION + '\n' + actionsNote + '\n');
   process.exit(0);
 }
@@ -2611,8 +2650,9 @@ server.registerTool(
     const cardMarkdown = buildCompletionCard(params);
     const titleNote = sessionTitleNote(params);
     const actionsNote = ctaActionsNote(params);
+    const archiveNote = sessionArchiveNote(params, actionsNote);
 
-    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote) };
+    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote) };
   }
 );
 
@@ -2622,7 +2662,7 @@ export {
   insideWorkTree, withDetectedRepoMode,
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
-  ctaInput, resolveCardKey, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
+  ctaInput, resolveCardKey, sessionArchiveNote, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
   renderExpiredNote, formatLastReading,
 };
 

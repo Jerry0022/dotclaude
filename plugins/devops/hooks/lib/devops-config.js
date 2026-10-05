@@ -79,6 +79,12 @@ const SCHEMA = Object.freeze({
       doc: 'Time budget in seconds for the deploy-parity install + build; running out reads as inconclusive, never as failed.',
     }),
   }),
+  ship: Object.freeze({
+    archiveAfterShip: Object.freeze({
+      type: 'boolean', default: true,
+      doc: 'Desktop app: archive the session right after the card of a successful, merged ship (never with keep or pending work).',
+    }),
+  }),
 });
 
 /** `section.key` for every setting, in SCHEMA order. */

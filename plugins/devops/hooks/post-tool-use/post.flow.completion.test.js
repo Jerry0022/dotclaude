@@ -1305,6 +1305,73 @@ describe("post.flow.completion — the card widget ends the turn", () => {
     });
   });
 
+  // #632: a merged ship card left an archive flag — the widget releases exactly
+  // one archive_session call, and that call ends the turn instead.
+  describe("the archive hand-over after a ship card", () => {
+    const ARCHIVE = "mcp__ccd_session_mgmt__archive_session";
+    const flagOf = (dir, sid) => path.join(dir, ".tmp", `dotclaude-devops-card-archive-${sid}`);
+
+    test("a fresh archive flag → one archive call released, then that call ends the turn", () => {
+      const dir = project();
+      fs.writeFileSync(flagOf(dir, "s-arch-1"), String(Date.now()));
+      const { root, ran } = fakeRoot();
+      const out = JSON.parse(runHookRaw(dir, "s-arch-1", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
+      expect(out.continue).toBeUndefined();
+      const text = out.hookSpecificOutput.additionalContext;
+      expect(text).toContain('mcp__ccd_session_mgmt__archive_session {session_id:"self"}');
+      expect(text).toMatch(/exactly ONE more tool call/);
+      expect(text).toMatch(/No text before or after it/);
+      expect(ran().map((r) => r.name)).toEqual(["one", "two"]);
+      expect(fs.existsSync(flagOf(dir, "s-arch-1"))).toBe(false);
+
+      // A second widget call releases nothing — the flag was consumed.
+      expect(JSON.parse(runHookRaw(dir, "s-arch-1", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root })).continue).toBe(false);
+
+      const end = JSON.parse(runHookRaw(dir, "s-arch-1", ARCHIVE, { tool_input: { session_id: "self" } }, { CLAUDE_PLUGIN_ROOT: root }));
+      expect(end.continue).toBe(false);
+      expect(end.stopReason).toMatch(/archived/);
+      // Released once: a later archive call is an ordinary tool call.
+      expect(runHookRaw(dir, "s-arch-1", ARCHIVE, { tool_input: { session_id: "self" } }, { CLAUDE_PLUGIN_ROOT: root })).not.toContain('"continue":false');
+      cleanup(dir); cleanup(root);
+    });
+
+    test("no flag → the card ends the turn as before", () => {
+      const dir = project();
+      const { root } = fakeRoot();
+      const out = JSON.parse(runHookRaw(dir, "s-arch-2", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
+      expect(out.continue).toBe(false);
+      cleanup(dir); cleanup(root);
+    });
+
+    test("a stale flag (card never shown in time) releases nothing and is dropped", () => {
+      const dir = project();
+      const flag = flagOf(dir, "s-arch-3");
+      fs.writeFileSync(flag, "0");
+      const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      fs.utimesSync(flag, old, old);
+      const { root } = fakeRoot();
+      const out = JSON.parse(runHookRaw(dir, "s-arch-3", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root }));
+      expect(out.continue).toBe(false);
+      expect(fs.existsSync(flag)).toBe(false);
+      cleanup(dir); cleanup(root);
+    });
+
+    test("a blocking Stop hook or an orchestrator hold wins over the archive", () => {
+      const dir = project();
+      fs.writeFileSync(flagOf(dir, "s-arch-4"), String(Date.now()));
+      const { root } = fakeRoot({ blockFirst: true });
+      expect(runHook(dir, "s-arch-4", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: root })).not.toContain("archive_session");
+      cleanup(root);
+      fs.writeFileSync(path.join(dir, ".claude", ".ship-queue"), "{}");
+      const r2 = fakeRoot();
+      const held = runHook(dir, "s-arch-4", WIDGET, { tool_input: CARD }, { CLAUDE_PLUGIN_ROOT: r2.root });
+      expect(held).toContain("continue with the orchestrator");
+      expect(held).not.toContain("archive_session");
+      expect(fs.existsSync(flagOf(dir, "s-arch-4"))).toBe(true);
+      cleanup(dir); cleanup(r2.root);
+    });
+  });
+
   test("any other widget never ends the turn", () => {
     const dir = project();
     const { root, ran } = fakeRoot();
