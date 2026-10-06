@@ -61,10 +61,11 @@ describe('governor hooks', () => {
       const r = run(PRE, bash(cmd, { tool_use_id: `c${cmd.length}` }));
       expect([cmd, r.status]).toEqual([cmd, status]);
     }
-    // Under CPU priority: light stays allowed, npm test (loads cpu) defers.
+    // Under CPU priority: light commands and tests stay allowed, a generator (loads cpu) defers.
     freshState({ pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo' });
     expect(run(PRE, bash('git status', { tool_use_id: 'g2' })).status).toBe(0);
-    expect(run(PRE, bash('npm test', { tool_use_id: 'n2' })).status).toBe(2);
+    expect(run(PRE, bash('npm test', { tool_use_id: 'n2' })).status).toBe(0);
+    expect(run(PRE, bash('docker build .', { tool_use_id: 'd2' })).status).toBe(2);
     // ffmpeg loads gpu; a gpu-priority state defers it but not npm test (no gpu).
     freshState({ pressure: { priority: ['gpu'], over: [] }, priorityBy: 'c:/games/foo' });
     expect(run(PRE, bash('npm test', { tool_use_id: 'n3' })).status).toBe(0);
@@ -73,21 +74,21 @@ describe('governor hooks', () => {
 
   it.runIf(win)('defers a heavy start under priority: exit 2, recorded (not run), message tells Claude', () => {
     freshState({ pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo' });
-    const r = run(PRE, bash('npm run build'));
+    const r = run(PRE, bash('ffmpeg -i a.wav b.mp3'));
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/recorded the command/);
     expect(r.stderr).toMatch(/report those steps as open/);
     const q = fs.readdirSync(path.join(home, 'queue')).filter((n) => n.endsWith('.json'));
     expect(q.length).toBe(1);
     const e = JSON.parse(fs.readFileSync(path.join(home, 'queue', q[0]), 'utf8'));
-    expect(e).toMatchObject({ command: 'npm run build', cwd: home, status: 'queued' });
+    expect(e).toMatchObject({ command: 'ffmpeg -i a.wav b.mp3', cwd: home, status: 'queued' });
     expect(fs.existsSync(path.join(home, 'foreground', 's1-tu1.json'))).toBe(false);
     expect(fs.existsSync(path.join(home, 'reservations'))).toBe(false); // reservations dropped
   });
 
   it.runIf(win)('the defer message never advertises an opt-out env var', () => {
     freshState({ pressure: { priority: ['cpu'], over: [] } });
-    const r = run(PRE, bash('npm run build'));
+    const r = run(PRE, bash('ffmpeg -i a.wav b.mp3'));
     expect(r.stderr).not.toMatch(/DOTCLAUDE_GOVERNOR/);
   });
 
@@ -106,7 +107,7 @@ describe('governor hooks', () => {
   it.runIf(win)('disabled config skips everything', () => {
     fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ enabled: false }));
     freshState({ pressure: { priority: ['cpu'], over: [] } });
-    expect(run(PRE, bash('npm test')).status).toBe(0);
+    expect(run(PRE, bash('docker build .')).status).toBe(0);
     expect(fs.existsSync(path.join(home, 'queue'))).toBe(false);
     run(SS, { session_id: 's1', cwd: home });
     expect(fs.existsSync(path.join(home, 'sessions'))).toBe(false);

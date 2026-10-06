@@ -180,6 +180,31 @@ describe('updatePriority', () => {
     const load = P.updatePriority({}, [steam({ gpuPct: 50 })], 0, ctx({ libraryRoots: roots }));
     expect(load.active.gpu).toBeTruthy();
   });
+  it('unknown app load earns priority only while the resource is contended; known apps always', () => {
+    const calm = { cpu: 30, gpu: 20 };
+    expect(P.updatePriority({}, [game({ cpuPct: 15, gpuPct: 40 })], 0, ctx({ sysUse: calm })).active).toEqual({});
+    expect(P.updatePriority({}, [game({ cpuPct: 15 })], 0, ctx({ sysUse: { cpu: 70, gpu: 20 } })).active).toEqual({ cpu: 'c:/games/foo' });
+    const fg = { pid: 50, fullscreen: false, idleMs: 1000 };
+    expect(P.updatePriority({}, [game({ cpuPct: 15 })], 0, ctx({ sysUse: calm, foreground: fg })).all).toBe(false);
+    const learned = { 'c:/games/foo': { resources: ['cpu', 'gpu', 'disk'] } };
+    expect(P.updatePriority({}, [game({ gpuPct: 40 })], 0, ctx({ sysUse: calm, learned })).active.gpu).toBe('c:/games/foo');
+    expect(P.updatePriority({}, [game({ cpuPct: 15 })], 0, ctx({ sysUse: calm, learned, foreground: fg })).all).toBe(true);
+  });
+  it('browsers, chat hosts and script runtimes never earn priority by measured load, even when contended', () => {
+    const busy = { cpu: 95, gpu: 95 };
+    const fg = (pid) => ({ pid, fullscreen: false, idleMs: 100 });
+    const edge = proc({ pid: 60, name: 'msedge.exe', path: 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe', cpuPct: 40, gpuPct: 50 });
+    const edgeSt = P.updatePriority({}, [edge], 0, ctx({ sysUse: busy, foreground: fg(60) }));
+    expect(edgeSt.active).toEqual({});
+    expect(edgeSt.all).toBe(false);
+    const node = proc({ pid: 61, name: 'node.exe', path: 'C:\Program Files\nodejs\node.exe', cpuPct: 60 });
+    expect(P.updatePriority({}, [node], 0, ctx({ sysUse: busy })).active).toEqual({});
+    let st = {};
+    const py = proc({ pid: 62, name: 'python.exe', path: 'C:\Py\python.exe', gpuPct: 80 });
+    for (let s = 0; s <= 70; s += 5) st = P.updatePriority(st, [py], s * S, ctx({ sysUse: busy, foreground: fg(62) }));
+    expect(st.newlyLearned).toEqual([]);
+    expect(P.updatePriority({}, [edge], 0, ctx({ cfg: merge(cfg, { alwaysPriority: ['msedge.exe'] }) })).active.cpu).toBeTruthy();
+  });
   it('alwaysPriority grants priority; neverPriority ignores', () => {
     expect(P.updatePriority({}, [game()], 0, ctx({ cfg: merge(cfg, { alwaysPriority: ['c:/games'] }) })).active.cpu).toBeTruthy();
     expect(P.updatePriority({}, [game({ cpuPct: 90 })], 0, ctx({ cfg: merge(cfg, { neverPriority: ['g.exe'] }) })).active).toEqual({});
@@ -205,7 +230,7 @@ describe('updatePriority', () => {
     const launcher = (o) => proc({ pid: 50, name: 'Steam.exe', path: 'C:\\Program Files (x86)\\Steam\\steam.exe', ...o });
     let lt = {};
     for (let s = 0; s <= 70; s += 5) lt = P.updatePriority(lt, [launcher({ gpuPct: 80 })], s * S, ctx());
-    expect(lt.newlyLearned).toEqual([]); // measured load still grants priority, but a launcher is never learned/from-start
+    expect(lt.newlyLearned).toEqual([]); // a launcher is never learned/from-start
     let st = {};
     for (let s = 0; s <= 70; s += 5) st = P.updatePriority(st, [proc({ pid: 50, name: 'ollama.exe', path: 'C:/svc/ollama.exe', gpuPct: 80 })], s * S, ctx({ foreground: fg, noLearn: new Set(['ollama.exe']) }));
     expect(st.newlyLearned).toEqual([]);
@@ -337,8 +362,14 @@ describe('admit', () => {
   it('defers only when a resource the command loads is pressed', () => {
     expect(P.admit({ command: 'npm test', now, state: st({ pressure: { priority: ['gpu'], over: [] }, priorityBy: 'c:/games' }), cfg }).decision).toBe('allow'); // npm test loads cpu/disk/ram, not gpu
     expect(P.admit({ command: 'ollama run x', now, state: st({ pressure: { priority: ['gpu'], over: [] }, priorityBy: 'c:/games' }), cfg })).toMatchObject({ decision: 'defer', reason: 'priority:c:/games' });
-    expect(P.admit({ command: 'npm test', now, state: st({ pressure: { priority: ['cpu'], over: [] } }), cfg }).reason).toBe('priority:app');
-    expect(P.admit({ command: 'npm test', now, state: st({ pressure: { priority: [], over: ['disk'] } }), cfg }).reason).toBe('budget:disk');
+    expect(P.admit({ command: 'ffmpeg -i a.wav b.mp3', now, state: st({ pressure: { priority: ['cpu'], over: [] } }), cfg }).reason).toBe('priority:app');
+    expect(P.admit({ command: 'docker build .', now, state: st({ pressure: { priority: [], over: ['disk'] } }), cfg }).reason).toBe('budget:disk');
+  });
+  it('builds, tests and browser checks never wait for pressure (only for RAM)', () => {
+    const all = st({ pressure: { priority: ['cpu', 'gpu', 'disk', 'ram'], over: ['cpu', 'disk'] }, priorityBy: 'c:/games' });
+    for (const cmd of ['npm test', 'npx vitest run a.test.ts', 'npx playwright test', 'npx tsc --noEmit', 'npm run build', 'cargo build']) {
+      expect([cmd, P.admit({ command: cmd, now, state: all, cfg }).decision]).toEqual([cmd, 'allow']);
+    }
   });
   it('escape routes defer only while pressed', () => {
     expect(P.admit({ command: 'schtasks /run /tn x', now, state: st(), cfg }).decision).toBe('allow');

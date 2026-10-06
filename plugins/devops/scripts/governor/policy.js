@@ -128,6 +128,13 @@ const NO_LEARN = new Set([
   'steam', 'chrome', 'firefox', 'code', 'discord', 'slack', 'electron',
 ]);
 
+// Script runtimes: one app key covers every script they run (often Claude-driven MCP servers or dev tools
+// started by a host Claude cannot see through), so their measured load never earns priority.
+const RUNTIMES = new Set([
+  'node.exe', 'python.exe', 'pythonw.exe', 'py.exe', 'java.exe', 'javaw.exe', 'dotnet.exe', 'deno.exe', 'bun.exe', 'ruby.exe', 'php.exe',
+  'node', 'python', 'python3', 'java', 'dotnet', 'deno', 'bun', 'ruby', 'php',
+]);
+
 // ---------------------------------------------------------------------------
 // Attribution
 // ---------------------------------------------------------------------------
@@ -352,7 +359,9 @@ function maxLevel(job) {
  * @param {{apps?:object}} prev
  * @param {Array<object>} foreign foreign processes with cpuPct/gpuPct/ioBps/path/name
  * @param {object} ctx { cfg, libraryRoots, libraryDirs, libraryExes:Set, learned:{key:{resources}}, manual,
- *   foreground:{pid, fullscreen, idleMs}|null, noLearn:Set(lower names), diskPressed:boolean }
+ *   foreground:{pid, fullscreen, idleMs}|null, noLearn:Set(lower names), diskPressed:boolean,
+ *   sysUse?:{cpu, gpu} smoothed system usage % — measured load of an unknown app earns priority only at or
+ *   above foreign.contendPct (absent = contended) }
  * @returns {{apps:object, active:Record<string,string>, all:boolean, allBy:string|null, newlyLearned:Array}}
  */
 function updatePriority(prev, foreign, now, ctx) {
@@ -366,19 +375,22 @@ function updatePriority(prev, foreign, now, ctx) {
   const noLearn = ctx.noLearn || new Set();
   const fgPid = ctx.foreground && ctx.foreground.pid;
   const interactive = Boolean(fgPid && ctx.foreground.idleMs !== undefined && ctx.foreground.idleMs < f.interactiveIdleMs);
+  const sysUse = ctx.sysUse || {};
+  const contended = (r) => r === 'disk' || !Number.isFinite(sysUse[r]) || sysUse[r] >= f.contendPct;
   const apps = {};
   const newlyLearned = [];
   const seen = new Map();
   for (const p of foreign) {
     const key = appKey(p.path, ctx.libraryRoots, ctx.libraryDirs) || String(p.name || '').toLowerCase();
     if (!key || listed(cfg.neverPriority, key, p.name)) continue;
-    const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, pids: [], name: p.name, launcher: false, library: false };
+    const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, pids: [], name: p.name, launcher: false, library: false, runtime: false };
     const lname = String(p.name || '').toLowerCase();
     a.cpuPct += p.cpuPct || 0;
     a.gpuPct = Math.max(a.gpuPct, p.gpuPct || 0);
     a.ioBps += p.ioBps || 0;
     a.pids.push(p.pid);
     a.launcher = a.launcher || NO_LEARN.has(lname) || noLearn.has(lname);
+    a.runtime = a.runtime || RUNTIMES.has(lname);
     if (!NO_LEARN.has(lname)) a.library = a.library || libPrefixes.some((r) => lowerSlash(p.path).startsWith(r)) || libExes.has(lowerSlash(p.path));
     seen.set(key, a);
   }
@@ -387,15 +399,17 @@ function updatePriority(prev, foreign, now, ctx) {
     const res = { ...old.res };
     // Disk IO counters include network transfers: disk earns priority only while the disk is actually pressed.
     const loads = loadedResources(a, th, { ram: false, diskBusy: Boolean(ctx.diskPressed) });
-    for (const r of loads) res[r] = now;
     const isFg = Boolean(fgPid && a.pids.includes(fgPid));
     const always = listed(cfg.alwaysPriority, a.key, a.name);
     const known = (a.library || learned[a.key]) && !a.launcher;
+    // Measured load of an unknown app counts only while that resource is contended, and never for
+    // browsers, chat/IDE hosts or script runtimes: their load with headroom left harms no one.
+    if (known || (!a.launcher && !a.runtime)) for (const r of loads) if (known || contended(r)) res[r] = now;
     // Library / learned apps: priority while in the foreground (plus measured load, which decays like any app's).
     if (known && isFg) for (const r of (learned[a.key] && learned[a.key].resources) || PRIORITY_TRIGGERS) res[r] = now;
     if (always) for (const r of PRIORITY_TRIGGERS) res[r] = now;
     // Learning: only a foreground app with GPU load (3D); never launchers, browsers, IDEs or Claude-driven services.
-    const canLearn = !known && !always && !a.launcher && isFg && loads.includes('gpu');
+    const canLearn = !known && !always && !a.launcher && !a.runtime && isFg && loads.includes('gpu');
     let gpuSince = old.gpuSince;
     let lastGpu = old.lastGpu;
     if (canLearn) { gpuSince = gpuSince ?? now; lastGpu = now; } else if (lastGpu === null || now - lastGpu > 5000) gpuSince = null;
@@ -572,7 +586,7 @@ function isUserAppProc(p) {
   return NO_LEARN.has(String(p.name || '').toLowerCase()) && !/--headless/.test(String(p.cmd || ''));
 }
 
-/** One segment → {kind, gpu} or null. */
+/** One segment → {kind, gpu, heavy} or null. heavy = generators/containers; builds and tests are not. */
 function heavySegment(t) {
   const prog = progOf(t[0]);
   const a1 = (t[1] || '').toLowerCase();
@@ -589,11 +603,11 @@ function heavySegment(t) {
   if (prog === 'cmake' && t.includes('--build')) return { kind: 'cmake' };
   if (['cargo', 'go', 'dotnet', 'mvn', 'mvnw', 'gradle', 'gradlew', 'swift', 'zig'].includes(prog)
     && ['build', 'test', 'run', 'install', 'publish', 'bench', 'package', 'verify', 'compile'].includes(a1)) return { kind: `${prog} ${a1}` };
-  if (prog === 'docker' && (['build', 'run', 'buildx'].includes(a1) || (a1 === 'compose' && ['up', 'build'].includes(a2)))) return { kind: 'docker' };
-  if (prog === 'docker-compose' && ['up', 'build'].includes(a1)) return { kind: 'docker' };
-  if (['ffmpeg', 'blender', 'handbrakecli', 'whisper', 'llama-cli'].includes(prog) && t.length > 1) return { kind: prog, gpu: true };
-  if (prog === 'ollama' && ['run', 'pull', 'create'].includes(a1)) return { kind: 'ollama', gpu: true };
-  if (/^(python3?|py)$/.test(prog) && /(train|finetune|fine_tune|render|generate|benchmark)/i.test(t[1] || '')) return { kind: 'python generator', gpu: true };
+  if (prog === 'docker' && (['build', 'run', 'buildx'].includes(a1) || (a1 === 'compose' && ['up', 'build'].includes(a2)))) return { kind: 'docker', heavy: true };
+  if (prog === 'docker-compose' && ['up', 'build'].includes(a1)) return { kind: 'docker', heavy: true };
+  if (['ffmpeg', 'blender', 'handbrakecli', 'whisper', 'llama-cli'].includes(prog) && t.length > 1) return { kind: prog, gpu: true, heavy: true };
+  if (prog === 'ollama' && ['run', 'pull', 'create'].includes(a1)) return { kind: 'ollama', gpu: true, heavy: true };
+  if (/^(python3?|py)$/.test(prog) && /(train|finetune|fine_tune|render|generate|benchmark)/i.test(t[1] || '')) return { kind: 'python generator', gpu: true, heavy: true };
   return null;
 }
 
@@ -644,14 +658,16 @@ function classifyCommand(cmd) {
     }
   }
   const resources = hit ? (hit.gpu ? ['cpu', 'gpu', 'disk', 'ram'] : ['cpu', 'disk', 'ram']) : escape ? [...RESOURCES] : [];
-  return { kind: hit ? hit.kind : null, escape, resources };
+  return { kind: hit ? hit.kind : null, heavy: Boolean(hit && hit.heavy), escape, resources };
 }
 
 function commandKind(cmd) { return classifyCommand(cmd).kind; }
 
 /**
- * Admission. Fail open: no or stale watcher state → allow. Defer only when a
- * resource the command loads is pressed, or free RAM < expected + headroom.
+ * Admission. Fail open: no or stale watcher state → allow. Generators, containers
+ * and escapes defer while a resource they load is pressed; builds, tests and
+ * browser checks never wait for pressure (the watcher caps them only if they
+ * turn heavy). Any known kind defers when free RAM < expected + headroom.
  * @returns {{decision:'allow'|'defer', reason:string, kind:string|null, resources:string[]}}
  */
 function admit({ command, now, state, kinds = {}, cfg }) {
@@ -661,7 +677,7 @@ function admit({ command, now, state, kinds = {}, cfg }) {
   const hb = state && Number.isFinite(state.heartbeat) ? state.heartbeat : null;
   if (hb === null || now - hb >= cfg.admission.staleMs) return { decision: 'allow', reason: 'watcher-absent', ...base };
   const p = state.pressure || {};
-  const pressed = c.resources.filter((r) => (p.priority || []).includes(r) || (p.over || []).includes(r));
+  const pressed = !(c.heavy || c.escape) ? [] : c.resources.filter((r) => (p.priority || []).includes(r) || (p.over || []).includes(r));
   if (pressed.length) {
     const byPrio = pressed.some((r) => (p.priority || []).includes(r));
     return { decision: 'defer', reason: byPrio ? `priority:${state.priorityBy || 'app'}` : `budget:${pressed.join(',')}`, ...base };
@@ -674,7 +690,7 @@ function admit({ command, now, state, kinds = {}, cfg }) {
 }
 
 module.exports = {
-  RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN,
+  RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN, RUNTIMES,
   isOsProcess, appKey, appLabel, listed,
   isClaudeRoot, attributedPids, hostKeys, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
   loadedResources, trackJobs, maxLevel, isUserAppProc,
