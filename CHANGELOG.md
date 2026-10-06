@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.247.0] — 2026-10-06
+
+### Added
+- **Claude load governor (Windows).** New SessionStart / PreToolUse / PostToolUse / UserPromptSubmit hooks plus a singleton watcher (`scripts/governor/`) throttle only processes Claude caused (Claude ancestry + host class): CPU cap or pause, reversible, recorded before applying, reverted on the next start after a hard kill. Triggers: a foreign non-OS app with noticeable load (per resource; all resources when it is the interactive foreground app; 10-min decay; game libraries pre-grant), and a global 80 % ceiling for CPU / GPU / disk latency / RAM (% and MB) with 80/65 hysteresis. Heavy commands are recorded, not executed — a hook tells the session when they can be re-run. CLI `governor status|priority|log|stop`. Docs: `deep-knowledge/load-governor.md`, architecture page.
+- **Bounded governor debug log.** One JSONL file per watcher run, newest 10 kept, ≤ 2 MB per file and ≤ 20 MB in total; decisions only plus one summary per minute while active, deduplicated, never the environment.
+- **local-llm defers to the governor.** Local generation waits for the governor (fail-open) and unloads only models Claude loaded itself.
+
+### Decisions
+- Deferred commands are recorded and re-run by the session, not auto-executed by the watcher (red-team: auto-execution bypassed permissions).
+- Performance counters are localized on German Windows, so sampling uses WMI classes; the cap is a nested job object on the running claude.exe (verified inside the Desktop app's job).
+- Linux/macOS: interface and OS rules exist, the adapters do not — the governor is a no-op there. Docker container attribution is not implemented; old `learned.json` keys are not migrated.
+
+### Tests
+- New governor suites (policy 50, state 22, watcher 12, log 11, hooks 9, local-llm gate 5). Full suite 8486 passed, eslint clean. Real Windows smoke on own test processes: cap ≈ 2 % (237 ms/s), pause, release, hard-kill of watcher + helper mid-pause reversed on the next start; log retention 12 seeded → 10 kept. Red-team 2 rounds (R1–R10) and a self-check fixed.
+
 ## [0.246.0] — 2026-10-05
 
 ### Added
