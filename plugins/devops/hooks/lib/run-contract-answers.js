@@ -258,7 +258,10 @@ function parseRouterAnswers(questions, answers, opts = {}) {
 // (spec F) imports this instead of keeping its own, so the two never drift.
 const OTHER_PLACEHOLDERS = Object.freeze(['something else', 'other', 'etwas anderes', 'sonstiges', 'andere']);
 const PLACEHOLDER_RE = new RegExp(`^(${OTHER_PLACEHOLDERS.join('|')})$`, 'i');
-const NONE_RE = /^(keine?|none|nichts|nothing|no|no passes)(\s+(durchgänge|passes|davon|of these|of them))?$/i;
+const NONE_RE = /^(keine?|none|nichts|no|no passes)(\s+(durchgänge|passes))?$/i;
+// #635: Q4's "Nichts davon" option — no extra (Rethink / Budget); Harden and
+// Polish still run, they are no Q4 option any more.
+const NO_EXTRAS_RE = /^(nichts davon|none of these)$/i;
 // #635: a question whose text names what an empty answer runs
 // ("Was kommt dazu? (Leer lassen = nichts)"). The Desktop app cannot submit a
 // multi-select with nothing ticked, so an empty Other there IS that default.
@@ -291,9 +294,8 @@ function parseQ4(tokens, q4) {
   if (!tokens.length) return emptyAnswer;
   // An empty Other on a question that names its empty answer is that answer.
   if (emptyDefaultOf(q4 && q4.question) !== null && tokens.every(t => PLACEHOLDER_RE.test(t.trim()))) return emptyAnswer;
-  // "Nichts davon" / "keine" drops the extras. A Q4 that no longer offers the
-  // passes cannot drop them either — Harden and Polish always run there.
-  if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: offersPasses ? [] : recommended, rethink: false, burn: false, unresolved: false };
+  if (tokens.some(t => NO_EXTRAS_RE.test(t.trim()))) return { passes: recommended, rethink: false, burn: false, unresolved: false };
+  if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: [], rethink: false, burn: false, unresolved: false };
   const flags = { passes: new Set(), rethink: false, burn: false };
   const neg = new Set();
   let unresolved = false;
