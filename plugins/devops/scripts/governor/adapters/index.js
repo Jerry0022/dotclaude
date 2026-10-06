@@ -5,8 +5,8 @@
  */
 'use strict';
 
-function createAdapter(platform, cfg) {
-  if (platform === 'win32') return require('./win32').createWin32Adapter(cfg);
+function createAdapter(platform, cfg, opts = {}) {
+  if (platform === 'win32') return require('./win32').createWin32Adapter(cfg, opts);
   return null;
 }
 

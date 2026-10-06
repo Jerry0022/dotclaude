@@ -23,6 +23,22 @@ function home() {
   return process.env.DOTCLAUDE_GOVERNOR_HOME || path.join(os.homedir(), '.claude', 'governor');
 }
 
+/**
+ * One event line in the governor's bounded log (same format as devops'
+ * scripts/governor/log.js; no cross-plugin require): the live watcher's run
+ * file when named in a fresh state, else logs/hooks.jsonl (rotated at 1 MB).
+ */
+function logEvent(ev, fields, state, now = Date.now()) {
+  try {
+    const logs = path.join(home(), 'logs');
+    fs.mkdirSync(logs, { recursive: true });
+    let file = path.join(logs, 'hooks.jsonl');
+    if (state && state.logFile && /^run-[\w.-]+\.jsonl$/.test(state.logFile) && fs.existsSync(path.join(logs, state.logFile))) file = path.join(logs, state.logFile);
+    else { try { if (fs.statSync(file).size >= 1024 * 1024) fs.renameSync(file, path.join(logs, 'hooks.1.jsonl')); } catch {} }
+    fs.appendFileSync(file, `${JSON.stringify({ ts: new Date(now).toISOString(), src: 'local-llm', ev, ...fields })}\n`);
+  } catch { /* never throw */ }
+}
+
 /** @returns {{defer:boolean, reason?:string}} */
 function check(now = Date.now(), staleMs = 60000) {
   try {
@@ -30,9 +46,12 @@ function check(now = Date.now(), staleMs = 60000) {
     if (!s || !Number.isFinite(s.heartbeat) || now - s.heartbeat > staleMs) return { defer: false };
     const p = s.pressure || {};
     const prio = (p.priority || []).filter((r) => r === 'gpu' || r === 'ram');
-    if (prio.length) return { defer: true, reason: `priority on ${prio.join(',')}${s.priorityBy ? ` (${s.priorityBy})` : ''}` };
-    if ((p.over || []).length) return { defer: true, reason: `over budget on ${p.over.join(',')}` };
-    return { defer: false };
+    let reason = null;
+    if (prio.length) reason = `priority on ${prio.join(',')}${s.priorityBy ? ` (${s.priorityBy})` : ''}`;
+    else if ((p.over || []).length) reason = `over budget on ${p.over.join(',')}`;
+    if (!reason) return { defer: false };
+    logEvent('llm-defer', { reason }, s, now);
+    return { defer: true, reason };
   } catch { return { defer: false }; }
 }
 
@@ -81,4 +100,4 @@ async function during(fn, list = loadedModels) {
   }
 }
 
-module.exports = { check, begin, end, during, loadedModels, home };
+module.exports = { check, begin, end, during, loadedModels, logEvent, home };

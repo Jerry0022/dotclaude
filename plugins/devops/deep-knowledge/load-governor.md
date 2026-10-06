@@ -91,12 +91,39 @@ node <plugin>/scripts/governor/cli.js priority on|off
 node <plugin>/scripts/governor/cli.js not-priority "<app folder or exe>"
 node <plugin>/scripts/governor/cli.js always-priority "<app folder or exe>"
 node <plugin>/scripts/governor/cli.js queue
+node <plugin>/scripts/governor/cli.js log [--runs N] [--tail]
 node <plugin>/scripts/governor/cli.js stop
 ```
 
 Config: `~/.claude/governor/config.json`, merged over the defaults in
 `scripts/governor/config.js`; `"enabled": false` switches everything off.
 `notify: false` keeps notifications out of test/headless runs.
+
+## Debug log
+
+Bounded, so the last few sessions can always be debugged without filling the
+disk (`scripts/governor/log.js`):
+
+- **Where:** `~/.claude/governor/logs/`. One JSON-lines file per watcher run,
+  `run-<ISO start>-<pid>.jsonl`. Hooks and local-llm write into the running
+  watcher's file (named as `logFile` in `state.json`), otherwise into
+  `hooks.jsonl` (rotated at 1 MB to `hooks.1.jsonl`).
+- **Retention:** the newest `log.keepRuns` runs (default 10), then the oldest
+  runs go until everything is ≤ `log.maxTotalMB` (default 20). A run file that
+  reaches `log.maxFileMB` (default 2) gets one `log-truncated` line; after
+  that only errors and start/stop are written.
+- **What:** events, never raw samples — `start`/`stop`, `priority-gained` /
+  `priority-lost` (resource, app), `budget-over` / `budget-ok`, `job-heavy` /
+  `job-kind`, `throttle` (key, kind, name, resources, level), `release`
+  (reason) / `release-failed`, `learned`, `queue-defer` / `queue-ready` /
+  `queue-expired` / `queue-inject`, `admit` (gate decision, reason, command
+  kind, command cut to 200 chars), `llm-defer`, `helper-timeout` /
+  `helper-killed` / `helper-restart`, `tick-error`. While anything is tracked
+  or pressed, one `summary` line per minute (budget means, priority apps,
+  jobs, throttled); nothing when idle. Identical event + fields within 30 s
+  are written once with `repeated: n`. No environment, no file contents.
+- **Read:** `governor log` prints the newest run (plus `hooks.jsonl`) one
+  event per line; `--runs N` for more runs, `--tail` to follow the current one.
 
 ## Learning rules
 

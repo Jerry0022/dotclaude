@@ -60,6 +60,8 @@ function main(hook, deps = {}) {
   if (!c.kind && !c.escape) return null;
   const state = S.readState(p);
   const res = P.admit({ command, now, state, kinds: (state && state.kinds) || {}, cfg });
+  const log = require('../../scripts/governor/log').hookLogger(p, cfg, 'gate');
+  log.event('admit', { decision: res.decision, reason: res.reason, kind: res.kind, escape: c.escape || undefined, session: sid, command });
   if (res.decision === 'allow') {
     if (res.reason === 'watcher-absent') spawnWatcher();
     return null;
@@ -71,7 +73,8 @@ function main(hook, deps = {}) {
   let g = {};
   try { g = git(cwd) || {}; } catch { g = {}; }
   const e = Q.newEntry({ command, cwd, branch: g.branch || null, head: g.head || null, sessionId: sid, kind: res.kind, reason: res.reason, now });
-  Q.record(p.queue, e, now, cfg);
+  const rec = Q.record(p.queue, e, now, cfg);
+  log.event('queue-defer', { id: rec.id, kind: rec.kind, reason: res.reason, reused: rec.id !== e.id || undefined });
   S.removeFile(fgFile);
   if (!state || now - (state.heartbeat || 0) >= cfg.admission.staleMs) spawnWatcher();
   const yieldsTo = res.reason.startsWith('priority:') ? 'an app that has priority right now' : 'the 80 % resource budget';

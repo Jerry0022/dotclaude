@@ -36,6 +36,7 @@ function main(hook) {
     S.removeFile(require('path').join(p.queue, `${e.id}.json`));
     return `  - ${e.command}${drift}`;
   });
+  require('../../scripts/governor/log').hookLogger(p, cfg, 'resume').event('queue-inject', { session: sessionId, n: ready.length, ids: ready.map((e) => e.id) });
   return `[governor] ${ready.length} deferred command(s) can run again — resources are free. Re-run the ones still needed, under normal permissions:\n${lines.join('\n')}`;
 }
 

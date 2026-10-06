@@ -18,7 +18,6 @@
  */
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const S = require('./state');
@@ -51,22 +50,23 @@ function unloadOllama(baseUrl, models) {
  * @param {object} o.p paths
  * @param {() => object} o.loadCfg
  * @param {() => number} o.now
- * @param {{version?:string, log?:function, libraries?:object, unload?:function}} [o.deps]
+ * @param {{version?:string, logger?:{event:function, flush:function, name?:string}, libraries?:object, unload?:function}} [o.deps]
  */
 function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
   const version = deps.version || pluginVersion();
-  const log = deps.log || ((msg) => { try { fs.mkdirSync(p.logs, { recursive: true }); fs.appendFileSync(p.log, `${new Date().toISOString()} [${process.pid}] ${msg}\n`); } catch {} });
+  const logger = deps.logger || { event() {}, flush() {} };
+  const ev = (name, fields, level) => logger.event(name, fields, level);
   const libs = deps.libraries || { discover: libraries.discover };
   const unload = deps.unload || unloadOllama;
 
   const st = {
     pid: process.pid, throttles: {}, tracked: {}, prio: {}, budget: { baseline: {} }, last: {}, kinds: {}, notified: {},
-    prevSample: null, lib: { roots: [], dirs: [], exes: [] }, libAt: 0, startedAt: now(),
+    prevSample: null, lib: { roots: [], dirs: [], exes: [] }, libAt: 0, startedAt: now(), summaryAt: now(),
     pressure: { priority: [], over: [] }, priorityBy: null, sys: {}, liveSessions: 0,
   };
 
   const save = () => S.writeState(p, {
-    pid: st.pid, version, heartbeat: now(), helperPid: adapter.selfPids[1] || null,
+    pid: st.pid, version, heartbeat: now(), helperPid: adapter.selfPids[1] || null, logFile: logger.name || null,
     throttles: Object.values(st.throttles), pressure: st.pressure, priorityBy: st.priorityBy, sys: st.sys, kinds: st.kinds,
     budget: { over: st.budget.over, baseline: st.budget.baseline },
     jobs: Object.values(st.tracked).map((j) => ({ id: j.id, name: j.name, kind: j.kind, heavy: j.heavy })),
@@ -80,9 +80,9 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
       await adapter.release(t.key, t.pids);
       delete st.throttles[id];
       save();
-      log(`released ${id} (${reason})`);
+      ev('release', { key: t.key, name: t.name, reason });
       return true;
-    } catch (e) { log(`release failed ${id}: ${e.message} - kept for retry`); return false; }
+    } catch (e) { ev('release-failed', { key: t.key, reason, error: e.message }, 'error'); return false; }
   };
 
   // Orphan reversal: adopt every recorded throttle, then release it; failures stay recorded.
@@ -97,7 +97,7 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
   // After a helper restart the new helper knows nothing: release every record again (idempotent).
   const reapply = async () => { for (const id of Object.keys(st.throttles)) await release(id, 'helper-restart'); };
 
-  const notify = (cfg, title, text) => { log(`notify: ${title} - ${text}`); return cfg.notify ? Promise.resolve(adapter.notify(title, text)).catch(() => null) : null; };
+  const notify = (cfg, title, text) => { ev('notify', { title, shown: Boolean(cfg.notify) }); return cfg.notify ? Promise.resolve(adapter.notify(title, text)).catch(() => null) : null; };
 
   async function tick() {
     const cfg = loadCfg();
@@ -159,6 +159,11 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     const jobs = P.groupJobs(procs, classes, sm.listening, sessionOf);
     const prevTracked = st.tracked;
     st.tracked = P.trackJobs(prevTracked, jobs, t, cfg, { diskBusy: Boolean(st.budget.over && st.budget.over.disk), foreground: fgRecs });
+    for (const [id, j] of Object.entries(st.tracked)) {
+      const was = prevTracked[id];
+      if (j.heavy && !(was && was.heavy)) ev('job-heavy', { job: id, name: j.name, kind: j.kind, res: j.res, session: j.session });
+      else if (j.heavy && was && was.kind !== j.kind) ev('job-kind', { job: id, name: j.name, kind: j.kind });
+    }
     for (const [id, j] of Object.entries(prevTracked)) {
       if (st.tracked[id]) continue;
       const kind = j.cmdKind || P.commandKind(j.cmd);
@@ -177,11 +182,17 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     });
     for (const a of st.prio.newlyLearned) {
       learned[a.key] = { name: a.name, resources: a.resources, learnedAt: a.learnedAt };
+      ev('learned', { app: a.key, resources: a.resources });
       S.writeJson(p.learned, learned);
       await notify(cfg, `Claude yields to ${a.name}`, `Claude's heavy jobs now give way to ${a.name}. Wrong? Run: governor not-priority "${a.key}"`);
     }
+    const before = st.pressure;
     st.pressure = P.pressureOf(st.prio, st.budget);
     st.priorityBy = st.prio.allBy || Object.values(st.prio.active)[0] || null;
+    for (const r of st.pressure.priority) if (!before.priority.includes(r)) ev('priority-gained', { resource: r, app: st.prio.active[r], all: st.prio.all || undefined });
+    for (const r of before.priority) if (!st.pressure.priority.includes(r)) ev('priority-lost', { resource: r });
+    for (const r of st.pressure.over) if (!before.over.includes(r)) ev('budget-over', { resource: r });
+    for (const r of before.over) if (!st.pressure.over.includes(r)) ev('budget-ok', { resource: r });
     st.sys = { freeMB: sm.sys.freeMB, totalMB: sm.sys.totalMB, cpuPct: sm.sys.cpuPct, gpuPct: sm.sys.gpuPct };
 
     // GPU/RAM priority just started: unload the models Claude's local requests loaded.
@@ -212,7 +223,7 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
         requeue: j.gpu && j.kind === 'generator', by: st.priorityBy, appliedAt: (old && old.appliedAt) || t,
       };
       save(); // BEFORE the OS call
-      try { await adapter.apply(st.throttles[id].key, d.level, pids); log(`level ${d.level} ${id} (${j.kind}, ${j.name}) for ${d.resources.join(',')}`); } catch (e) { log(`apply failed ${id}: ${e.message}`); }
+      try { await adapter.apply(st.throttles[id].key, d.level, pids); ev('throttle', { key: st.throttles[id].key, kind: j.kind, name: j.name, resources: d.resources, level: d.level, by: st.priorityBy }); } catch (e) { ev('apply-failed', { key: st.throttles[id].key, error: e.message }, 'error'); }
       if (d.level >= 2 && !st.notified[id]) st.notified[id] = { pausedAt: t };
     }
     for (const [id, n] of Object.entries(st.notified)) {
@@ -223,12 +234,24 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     // Queue: expire, starvation notice, mark ready only while nothing presses.
     const noPressure = !st.pressure.priority.length && !st.pressure.over.length;
     for (const e of Q.list(p.queue)) {
-      if (Q.isExpired(e, t, cfg)) { Q.remove(p.queue, e.id); log(`queue expired ${e.id}`); continue; }
+      if (Q.isExpired(e, t, cfg)) { Q.remove(p.queue, e.id); ev('queue-expired', { id: e.id, kind: e.kind }); continue; }
       if (Q.starving(e, t, cfg)) { await notify(cfg, 'Claude command waiting', `"${e.command.slice(0, 60)}" has waited 30 min.`); Q.save(p.queue, { ...e, starvationNotified: true }); }
-      else if (noPressure && e.status === 'queued') { Q.save(p.queue, Q.markReady(e, t)); log(`queue ready ${e.id}`); }
+      else if (noPressure && e.status === 'queued') { Q.save(p.queue, Q.markReady(e, t)); ev('queue-ready', { id: e.id, kind: e.kind }); }
     }
 
     st.liveSessions = liveSessions;
+    const active = Object.keys(st.tracked).length || st.pressure.priority.length || st.pressure.over.length || Object.keys(st.throttles).length;
+    if (active && t - st.summaryAt >= ((cfg.log && cfg.log.summaryMs) || 60000)) {
+      st.summaryAt = t;
+      const m = st.budget.mean || {};
+      const r1 = (x) => (Number.isFinite(x) ? Math.round(x) : null);
+      ev('summary', {
+        cpu: r1(m.cpu), gpu: r1(m.gpu), diskMs: Number.isFinite(m.diskMs) ? Math.round(m.diskMs * 10) / 10 : null, freeMB: r1(m.freeMB),
+        priority: [...new Set(Object.values(st.prio.active || {}))], over: st.pressure.over,
+        jobs: Object.keys(st.tracked).length, heavy: Object.values(st.tracked).filter((j) => j.heavy).length, throttled: Object.keys(st.throttles).length,
+      });
+      logger.flush();
+    } else if (!active) st.summaryAt = t;
     save();
     return { liveSessions, jobs: Object.keys(st.tracked).length, throttles: Object.keys(st.throttles).length, pressure: st.pressure };
   }
@@ -258,27 +281,31 @@ async function main(argv = process.argv.slice(2)) {
   const revertOnly = argv.includes('--revert-only') || !cfg.enabled;
   const prevState = S.readState(p);
   if (revertOnly && !(prevState && (prevState.throttles || []).length)) return; // nothing to undo
-  const adapter = createAdapter(process.platform, cfg);
+  let logger = null;
+  const ev = (name, fields, level) => logger && logger.event(name, fields, level);
+  const adapter = createAdapter(process.platform, cfg, { onEvent: (n, f) => ev(n, f, 'error') });
   if (!adapter) return;
   const version = pluginVersion();
   const pid = process.pid;
-  const log = (msg) => { try { fs.mkdirSync(p.logs, { recursive: true }); fs.appendFileSync(p.log, `${new Date().toISOString()} [${pid}] ${msg}\n`); } catch {} };
+  const L = require('./log');
 
   let got = S.acquireLock(p, { pid, version, now: Date.now(), startOf: S.processStart });
   for (let i = 0; i < 40 && !got.ok && got.handover; i++) { await new Promise((r) => setTimeout(r, 500)); got = S.acquireLock(p, { pid, version, now: Date.now(), startOf: S.processStart }); }
   if (!got.ok) return;
   if (prevState && prevState.newer) { S.releaseLock(p, pid); return; }
-  log(`start v${version}${revertOnly ? ' (revert only)' : ''}`);
-  try { await adapter.start(); } catch (e) { log(`helper failed: ${e.message}`); S.releaseLock(p, pid); return; }
+  logger = L.openRun(p.logs, cfg, { pid });
+  ev('start', { version, revertOnly: revertOnly || undefined, platform: process.platform });
+  try { await adapter.start(); } catch (e) { ev('helper-failed', { error: e.message }, 'error'); ev('stop', { why: 'helper failed' }); S.releaseLock(p, pid); return; }
 
-  const w = createWatcher({ adapter, p, loadCfg: () => loadConfig(p), now: Date.now, deps: { version, log } });
+  const w = createWatcher({ adapter, p, loadCfg: () => loadConfig(p), now: Date.now, deps: { version, logger } });
   await w.init(prevState);
 
   let stopping = false;
   const shutdown = async (why) => {
     if (stopping) return; stopping = true;
-    log(`stop: ${why}`);
     await w.drain();
+    logger.flush();
+    ev('stop', { why });
     await adapter.stop();
     S.releaseLock(p, pid);
     process.exit(0);
@@ -288,7 +315,7 @@ async function main(argv = process.argv.slice(2)) {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   const beat = setInterval(() => {
-    if (!S.heartbeat(p, pid, version, Date.now())) { log('lock lost'); adapter.stop().finally(() => process.exit(0)); }
+    if (!S.heartbeat(p, pid, version, Date.now())) { ev('stop', { why: 'lock lost' }); adapter.stop().finally(() => process.exit(0)); }
   }, cfg.heartbeatMs);
   beat.unref();
 
@@ -300,9 +327,10 @@ async function main(argv = process.argv.slice(2)) {
     const control = S.readJson(p.control, {});
     if (control.stop && control.at > w.st.startedAt) return shutdown('stop requested');
     if (!adapter.alive) {
-      try { await adapter.start(); await w.reapply(); } catch (e) { log(`helper restart failed: ${e.message}`); }
+      ev('helper-restart', {});
+      try { await adapter.start(); await w.reapply(); } catch (e) { ev('helper-restart-failed', { error: e.message }, 'error'); }
     }
-    try { await w.tick(); } catch (e) { log(`tick error: ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`); }
+    try { await w.tick(); } catch (e) { ev('tick-error', { error: e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e) }, 'error'); }
     if (w.canExit()) return shutdown('no session and no Claude job left');
     const idle = !Object.keys(w.st.tracked).length && !w.st.pressure.priority.length && !w.st.pressure.over.length;
     await new Promise((r) => setTimeout(r, Math.max(250, (idle ? c.idleTickMs : c.tickMs) - (Date.now() - tickStart))));
@@ -310,7 +338,7 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 if (require.main === module) {
-  main().catch((e) => { try { const { paths } = require('./config'); fs.appendFileSync(paths().log, `fatal: ${e.message}\n`); } catch {} process.exit(1); });
+  main().catch((e) => { try { const { paths } = require('./config'); require('./log').hookLogger(paths(), null, 'watcher').event('fatal', { error: e.message }, 'error'); } catch {} process.exit(1); });
 }
 
 module.exports = { createWatcher, main, sanitize };

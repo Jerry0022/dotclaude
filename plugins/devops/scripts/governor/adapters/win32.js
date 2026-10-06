@@ -13,7 +13,7 @@ const { spawn } = require('child_process');
 const SCRIPT = path.join(__dirname, 'win-helper.ps1');
 
 class Helper {
-  constructor(script = SCRIPT) { this.script = script; this.proc = null; this.pending = new Map(); this.seq = 0; this.buf = ''; this.timeouts = 0; }
+  constructor(script = SCRIPT) { this.script = script; this.proc = null; this.pending = new Map(); this.seq = 0; this.buf = ''; this.timeouts = 0; this.onEvent = () => {}; }
 
   start(readyMs = 180000) {
     return new Promise((resolve, reject) => {
@@ -58,7 +58,8 @@ class Helper {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         // A wedged helper: after MAX_TIMEOUTS consecutive timeouts kill it; the watcher restarts it and re-releases.
-        if (++this.timeouts >= Helper.MAX_TIMEOUTS && this.proc) { try { this.proc.kill(); } catch {} }
+        this.onEvent('helper-timeout', { op, consecutive: this.timeouts + 1 });
+        if (++this.timeouts >= Helper.MAX_TIMEOUTS && this.proc) { this.onEvent('helper-killed', { after: this.timeouts }); try { this.proc.kill(); } catch {} }
         reject(new Error(`helper ${op} timeout`));
       }, timeoutMs);
       this.pending.set(id, { resolve: (d) => { clearTimeout(timer); this.timeouts = 0; resolve(d); }, reject: (e) => { clearTimeout(timer); reject(e); } });
@@ -78,8 +79,9 @@ class Helper {
   }
 }
 
-function createWin32Adapter(cfg) {
+function createWin32Adapter(cfg, opts = {}) {
   const h = new Helper();
+  if (opts.onEvent) h.onEvent = (n, f) => { try { opts.onEvent(n, f); } catch {} };
   return {
     name: 'win32',
     get selfPids() { return [process.pid, h.pid].filter(Boolean); },

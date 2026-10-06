@@ -53,6 +53,8 @@ const DEFAULTS = Object.freeze({
     { names: ['ollama', 'ollama.exe', 'ollama_llama_server', 'ollama_llama_server.exe', 'anythingllm.exe', 'anythingllm', 'llama-server', 'llama-server.exe'], inflight: 'local-llm' },
   ],
   ollamaUrl: 'http://127.0.0.1:11434',
+  // Bounded debug log (scripts/governor/log.js): one JSONL file per watcher run.
+  log: { keepRuns: 10, maxTotalMB: 20, maxFileMB: 2, hooksMaxMB: 1, dedupeMs: 30000, summaryMs: 60000 },
 });
 
 function home() {
@@ -73,7 +75,6 @@ function paths(base = home()) {
     inflight: path.join(base, 'inflight'),
     queue: path.join(base, 'queue'),
     logs: path.join(base, 'logs'),
-    log: path.join(base, 'logs', 'governor.log'),
   };
 }
 

@@ -40,6 +40,26 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
       out(`${arg} added to ${listKey}`);
       return 0;
     }
+    case 'log': {
+      const L = require('./log');
+      const i = argv.indexOf('--runs');
+      const runs = i >= 0 ? Math.max(1, parseInt(argv[i + 1], 10) || 1) : 1;
+      for (const l of L.readable(p.logs, runs)) out(l);
+      if (argv.includes('--tail')) {
+        const files = L.runFiles(p.logs);
+        const file = require('path').join(p.logs, files[files.length - 1] || 'hooks.jsonl');
+        let pos = (() => { try { return require('fs').statSync(file).size; } catch { return 0; } })();
+        const fs = require('fs');
+        setInterval(() => {
+          try {
+            const size = fs.statSync(file).size;
+            if (size > pos) { const fd = fs.openSync(file, 'r'); const b = Buffer.alloc(size - pos); fs.readSync(fd, b, 0, b.length, pos); fs.closeSync(fd); pos = size; process.stdout.write(b.toString('utf8')); }
+          } catch {}
+        }, 1000);
+        return null; // keep running until Ctrl+C
+      }
+      return 0;
+    }
     case 'queue': {
       const list = Q.list(p.queue);
       if (!list.length) out('queue empty');
@@ -72,11 +92,11 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
       return 0;
     }
     default:
-      out('usage: governor status | priority on|off | not-priority <app> | always-priority <app> | queue | stop');
+      out('usage: governor status | priority on|off | not-priority <app> | always-priority <app> | queue | log [--runs N] [--tail] | stop');
       return 2;
   }
 }
 
-if (require.main === module) process.exitCode = run(process.argv.slice(2));
+if (require.main === module) { const code = run(process.argv.slice(2)); if (code !== null) process.exitCode = code; }
 
 module.exports = { run };

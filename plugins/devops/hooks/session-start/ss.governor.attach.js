@@ -33,6 +33,7 @@ function main(hook) {
     // parent may be a short-lived shell. The watcher walks up from here to the Claude root.
     sessionId: id, claudePid: Number(process.env.CLAUDE_PID) || process.ppid, hookPid: process.pid, cwd: hook.cwd || null, startedAt: Date.now(), pluginVersion: version,
   });
+  require('../../scripts/governor/log').hookLogger(p, loadConfig(p), 'attach').event('session-start', { session: id, claudePid: Number(process.env.CLAUDE_PID) || process.ppid });
   if (process.env.DOTCLAUDE_GOVERNOR_NO_SPAWN === '1') return null; // test seam
   const { spawn } = require('child_process');
   const child = spawn(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'governor', 'watcher.js')], {
