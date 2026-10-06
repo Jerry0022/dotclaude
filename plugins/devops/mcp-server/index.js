@@ -1583,7 +1583,11 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   const guideHandoff = detectGuideHandoff(input);
 
   if (hasConcept(input.concept)) {
-    const url = conceptUrl(input.cwd, input.concept);
+    // The page link is a call to act on the page — only while it waits for
+    // the user. Iterating / implementing means Claude works and the page has
+    // no round to answer yet; earlier cards keep the link (#637).
+    const { phase } = normalizeConcept(input.concept) || { phase: 'waiting' };
+    const url = phase === 'waiting' ? conceptUrl(input.cwd, input.concept) : '';
     const what = conceptHeadingWhat(input.concept, input.pending, lang);
     // Background work of an iterating/implementing concept is listed like the
     // pending block's items — the user sees WHO is working, not only that.
@@ -2578,10 +2582,10 @@ server.registerTool(
           z.enum(["waiting", "iterating", "implementing"]),
           z.object({
             phase: z.enum(["waiting", "iterating", "implementing"]).optional().describe("'waiting' (default) = the page is open and the next step is the user's submission; 'iterating' = a submission was processed and the next iteration is being produced; 'implementing' = an implement submission is being executed."),
-            url: z.string().optional().describe("Override for the page URL shown above the CTA. Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
+            url: z.string().optional().describe("Override for the page URL shown above the CTA while the phase is 'waiting' (no link while iterating or implementing). Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich' (⏳ instead of 🧭 while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: the card then shows the page's http://localhost:{port}/… link above the CTA."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich' (⏳ instead of 🧭 while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
       pause: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
