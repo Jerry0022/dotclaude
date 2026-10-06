@@ -1,0 +1,243 @@
+[
+  {
+    "iteration": 1,
+    "action": "iterate",
+    "general": "Nur von Claude verursachte Last drosseln, nicht eigene Programme ohne Claude-Zutun. Empfehlungen/Architektur schaut der User danach an.",
+    "decisions": "alle Miteinbeziehen (unbewertet)",
+    "result": "Iteration 2: Zuschnitt auf Claude-verursachte Last (Job-Objekt-Zuordnung, gemessen statt Namensliste, Wächter per SessionStart statt Autostart-Dienst)"
+  },
+  {
+    "iteration": 2,
+    "action": "iterate",
+    "general": "gehe nochmal superkritisch an das konzept ran, refine es mit gernerellen erkenntnissen, schlupflöchern und ob wir letztlich das ziel zuallermeist erreichen.",
+    "decisions": [
+      {
+        "id": "i2-attr-job",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i2-attr-tree",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i2-attr-wrap",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i2-heavy-measured",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i2-heavy-list",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i2-defer-queue",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i2-defer-wait",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i2-home-devops",
+        "evaluation": "include",
+        "note": "bitte linux kompatibel, das greift nur bei windows oder sonst auch auf linux / macos den mechanismus bauen."
+      },
+      {
+        "id": "i2-home-plugin",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i2-tech-node",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i2-tech-dotnet",
+        "evaluation": "discard",
+        "note": ""
+      }
+    ],
+    "result": "Iteration 3: kritische Prüfung, Schlupflöcher, OS-Adapter Windows/Linux/macOS"
+  },
+  {
+    "iteration": 3,
+    "action": "iterate",
+    "general": "untersuche auch das verhalten bei mehreren parlaleln sessions und auch bei neuen spielen",
+    "decisions": [
+      {
+        "id": "i3-orphan",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-foreground",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-builds",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-escape",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-http",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-queue",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-disk",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-manual",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-anticheat",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-macos",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i3-spike",
+        "evaluation": "include",
+        "note": ""
+      }
+    ],
+    "result": "Iteration 4: parallele Sessions + neue Spiele"
+  },
+  {
+    "iteration": 4,
+    "action": "iterate",
+    "general": "",
+    "decisions": [
+      {
+        "id": "i4-par-singleton",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i4-par-admission",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i4-fair-newest",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i4-fair-biggest",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i4-par-ended",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i4-new-learn",
+        "evaluation": "include",
+        "note": "lastkann auch gpu last sein vs cpu last, vs ram. Ein spiel mag nur eins oder mehrere davon belasten.! Aber dann lass uns nicht spiel sagen sondern jeglich e anderr enicht durch claude inititierte app die nicht windows ist."
+      },
+      {
+        "id": "i4-new-folder",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i4-new-fast",
+        "evaluation": "include",
+        "note": ""
+      }
+    ],
+    "result": "Iteration 5: Spiel → jede fremde Nicht-OS-App mit Last hat Vorrang"
+  },
+  {
+    "iteration": 5,
+    "action": "iterate",
+    "general": "",
+    "decisions": [
+      {
+        "id": "i5-yield-specific",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i5-yield-all",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i5-ram",
+        "evaluation": "include",
+        "note": "auch MB bei arbeitsspeicher, wichtig!"
+      },
+      {
+        "id": "i5-selfloop",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i5-os",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i5-sticky-decay",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "i5-sticky-exit",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "i5-starve",
+        "evaluation": "include",
+        "note": ""
+      }
+    ],
+    "result": "Iteration 6: RAM in % und MB + Gesamtbild"
+  },
+  {
+    "iteration": 6,
+    "action": "implement",
+    "general": "ausführliche QA und Red-Team danach; robust aber nicht zu komplex",
+    "decisions": [
+      {
+        "id": "i6-ram-mb",
+        "evaluation": "include"
+      }
+    ],
+    "result": "Implementiert (Windows); Linux/macOS offen; Abschlussbericht angehängt"
+  }
+]

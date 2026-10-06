@@ -22,7 +22,8 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.verify.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.resume.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.concept.resume.js", "timeout": 10 },
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js", "timeout": 20 }
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js", "timeout": 20 },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.governor.attach.js", "timeout": 5 }
         ]
       }
     ],
@@ -102,6 +103,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.run.contract.js", "timeout": 20 }
         ],
         "matcher": "Edit|Write|NotebookEdit|Bash|PowerShell|Skill|mcp__plugin_devops_dotclaude-ship__ship_release|mcp__plugin_devops_dotclaude-completion__render_completion_card|mcp__.*__merge_pull_request"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.governor.gate.js", "timeout": 5 }
+        ],
+        "matcher": "Bash|PowerShell"
       }
     ],
     "SubagentStart": [
@@ -176,6 +183,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.project.setup.js" }
         ],
         "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.governor.clear.js", "timeout": 5 }
+        ],
+        "matcher": "Bash|PowerShell"
       }
     ],
     "PostToolUseFailure": [
@@ -188,6 +201,12 @@
       {
         "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.debug.js" }
+        ],
+        "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.governor.clear.js", "timeout": 5 }
         ],
         "matcher": "Bash|PowerShell"
       }
@@ -222,7 +241,8 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.ship.detect.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.flow.appstart.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.burn.resume.js" },
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.worktree.branch-guard.js" }
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.worktree.branch-guard.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.governor.resume.js", "timeout": 5 }
         ]
       }
     ]

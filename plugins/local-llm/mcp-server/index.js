@@ -33,6 +33,7 @@ const LIB_ROOT = resolve(__dirname, "..", "hooks", "lib");
 const http = require(join(LIB_ROOT, "anythingllm-http.js"));
 const lifecycle = require(join(LIB_ROOT, "anythingllm-lifecycle.js"));
 const tierCache = require(join(LIB_ROOT, "anythingllm-tier-cache.js"));
+const governor = require(join(LIB_ROOT, "governor-gate.js"));
 const { resolveConfig, hasApiKey, USER_CONFIG_PATH } = require(join(LIB_ROOT, "anythingllm-config.js"));
 
 const CONFIG = resolveConfig();
@@ -136,6 +137,11 @@ async function getPhase() {
 // Heartbeat (matches devops MCP servers)
 // ---------------------------------------------------------------------------
 
+// The governor counts the local backend's load as Claude's while this runs.
+async function trackedCompletion(args) {
+  return governor.during(() => http.chatCompletion(BASE_URL, API_KEY, args));
+}
+
 function registerHeartbeat(name) {
   const pidFile = join(tmpdir(), `dotclaude-mcp-${name}.pid`);
   try {
@@ -194,6 +200,21 @@ server.registerTool(
     }),
   },
   async ({ task, context, language, temperature, instructions }) => {
+    // devops load governor: an app with GPU/RAM priority or an exceeded 80 %
+    // budget means the local model must not compete — Claude does it itself.
+    const gate = governor.check();
+    if (gate.defer) {
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            deferred: "governor",
+            reason: gate.reason,
+            hint: "Local generation is paused by the load governor. Do this task yourself instead of retrying.",
+          }),
+        }],
+      };
+    }
     const phase = await getPhase();
     if (!phase.ready) {
       return {
@@ -249,7 +270,7 @@ server.registerTool(
       maxTokens: MAX_TOKENS_DEFAULT,
     };
 
-    let result = await http.chatCompletion(BASE_URL, API_KEY, completionArgs);
+    let result = await trackedCompletion(completionArgs);
 
     // Auto-fallback: 1× retry on transient backend failure (5xx or timeout).
     // Ollama frequently 500's on first request after a model swap (cold load)
@@ -260,7 +281,7 @@ server.registerTool(
       result.errorType === "timeout"
     );
     if (isTransient) {
-      result = await http.chatCompletion(BASE_URL, API_KEY, completionArgs);
+      result = await trackedCompletion(completionArgs);
     }
 
     if (!result.ok) {

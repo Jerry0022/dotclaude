@@ -34,6 +34,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/auto-harden` and `/auto-polish`. Covers |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |
 | [issue-trust.md](issue-trust.md) | Issue Trust — Who May Fill an Autonomous Queue | Cross-cutting rule for every skill that turns GitHub issues into **autonomously |
+| [load-governor.md](load-governor.md) | Claude load governor | Only heavy load that Claude caused yields: to any foreign, non-OS app with |
 | [local-llm-delegation.md](local-llm-delegation.md) | Local LLM Delegation | Rule for the main session on when to delegate mechanical code generation to |
 | [mcp-deferred-tools.md](mcp-deferred-tools.md) | MCP Deferred Tools | Cross-cutting rule: in sessions with a large tool inventory (Computer Use, Ch... |
 | [merge-safety.md](merge-safety.md) | Merge Safety — Parallel Development | Cross-cutting reference for preventing silent overwrites when multiple develo... |
