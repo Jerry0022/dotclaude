@@ -158,7 +158,9 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
 
     const jobs = P.groupJobs(procs, classes, sm.listening, sessionOf);
     const prevTracked = st.tracked;
-    st.tracked = P.trackJobs(prevTracked, jobs, t, cfg, { diskBusy: Boolean(st.budget.over && st.budget.over.disk), foreground: fgRecs });
+    const userPids = new Set(procs.filter((x) => attributed.has(x.pid) && P.isUserAppProc(x)).map((x) => x.pid));
+    if (sm.fg && attributed.has(sm.fg.pid)) userPids.add(sm.fg.pid);
+    st.tracked = P.trackJobs(prevTracked, jobs, t, cfg, { diskBusy: Boolean(st.budget.over && st.budget.over.disk), foreground: fgRecs, userPids });
     for (const [id, j] of Object.entries(st.tracked)) {
       const was = prevTracked[id];
       if (j.heavy && !(was && was.heavy)) ev('job-heavy', { job: id, name: j.name, kind: j.kind, res: j.res, session: j.session });
@@ -325,7 +327,7 @@ async function main(argv = process.argv.slice(2)) {
     if (!c.enabled) return shutdown('disabled');
     if (S.handoverRequested(p, version, tickStart)) return shutdown('handover to newer version');
     const control = S.readJson(p.control, {});
-    if (control.stop && control.at > w.st.startedAt) return shutdown('stop requested');
+    if (control.stopAt > w.st.startedAt) return shutdown('stop requested');
     if (!adapter.alive) {
       ev('helper-restart', {});
       try { await adapter.start(); await w.reapply(); } catch (e) { ev('helper-restart-failed', { error: e.message }, 'error'); }

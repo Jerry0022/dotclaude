@@ -24,7 +24,7 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
   switch (cmd) {
     case 'priority': {
       if (arg !== 'on' && arg !== 'off') { out('usage: priority on|off'); return 2; }
-      S.writeJson(p.control, { ...S.readJson(p.control, {}), manual: arg === 'on', at: now });
+      S.writeJson(p.control, { ...S.readJson(p.control, {}), manual: arg === 'on', manualAt: now });
       out(`manual priority ${arg}`);
       return 0;
     }
@@ -67,7 +67,7 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
       return 0;
     }
     case 'stop': {
-      S.writeJson(p.control, { ...S.readJson(p.control, {}), stop: true, at: now });
+      S.writeJson(p.control, { ...S.readJson(p.control, {}), stopAt: now });
       const st = S.readState(p);
       const running = st && S.isAlive(st.pid) && now - (st.heartbeat || 0) < loadConfig(p).admission.staleMs;
       if (!running && st && (st.throttles || []).length) {

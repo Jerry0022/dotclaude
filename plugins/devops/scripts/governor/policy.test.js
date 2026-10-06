@@ -388,3 +388,28 @@ describe('wave 5', () => {
     expect(P.commandKind('git commit -m "npm test"')).toBe(null);
   });
 });
+
+describe('self-check (wave 6)', () => {
+  const tj = (id, o = {}) => ({ id, heavy: true, heavySince: 0, startMs: 0, res: ['cpu'], kind: 'build', gpu: false, ...o });
+  it('a Claude-launched app the user works in (foreground / non-headless browser) is never throttled, and an existing throttle is dropped', () => {
+    const jobs = new Map([['j', { id: 'j', rootPid: 1, startMs: 0, pids: [{ pid: 1, startMs: 0 }, { pid: 2, startMs: 0 }], cpuPct: 90, gpuPct: 0, ioBps: 0, memMB: 0, listening: false }]]);
+    let t = {};
+    for (let s = 0; s <= 30; s += 2) t = P.trackJobs(t, jobs, s * 1000, cfg, { userPids: new Set([2]) });
+    expect(t.j.kind).toBe('user-app');
+    expect(P.maxLevel(t.j)).toBe(0);
+    expect(P.plan(t, {}, { priority: ['cpu'], over: ['cpu'] }, 60000, cfg).desired).toEqual({});
+    expect(P.plan(t, { j: { level: 2, resources: ['cpu'] } }, { priority: ['cpu'], over: [] }, 60000, cfg).desired).toEqual({});
+    expect(P.isUserAppProc({ name: 'chrome.exe', cmd: 'chrome.exe https://x' })).toBe(true);
+    expect(P.isUserAppProc({ name: 'chrome.exe', cmd: 'chrome.exe --headless=new' })).toBe(false);
+    expect(P.isUserAppProc({ name: 'node.exe', cmd: 'node build' })).toBe(false);
+    expect(P.maxLevel(tj('x'))).toBe(1);
+  });
+  it('`npm i -g @anthropic-ai/claude-code` is not a Claude root; the installed CLI path is', () => {
+    expect(P.isClaudeRoot({ name: 'npm.cmd', cmd: 'npm i -g @anthropic-ai/claude-code' })).toBe(false);
+    expect(P.isClaudeRoot({ name: 'node.exe', cmd: 'node C:/npm/node_modules/@anthropic-ai/claude-code/cli.js' })).toBe(true);
+  });
+  it('wsl / schtasks management commands are not escape routes; workloads are', () => {
+    for (const c of ['wsl --list', 'wsl -l -v', 'wsl --shutdown', 'wsl --status', 'schtasks /query /tn x', 'wsl -d Ubuntu --cd ~ --version']) expect([c, P.classifyCommand(c).escape]).toEqual([c, false]);
+    for (const c of ['wsl -e make', 'wsl make', 'wsl -d Ubuntu -- npm test', 'schtasks /create /tn x', 'schtasks /run /tn x']) expect([c, P.classifyCommand(c).escape]).toEqual([c, true]);
+  });
+});

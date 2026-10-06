@@ -138,7 +138,7 @@ const NO_LEARN = new Set([
  */
 function isClaudeRoot(p) {
   const cmd = String(p.cmd || '');
-  if (/@anthropic-ai[\\/]claude-code/i.test(cmd)) return true;
+  if (/@anthropic-ai[\\/]claude-code[\\/]/i.test(cmd)) return true; // the installed CLI path, not `npm i -g @anthropic-ai/claude-code`
   if (!/^claude(\.exe)?$/i.test(p.name || '')) return false;
   if (/--type=/.test(cmd)) return false;
   return !/[\\/](windowsapps[\\/]claude_|anthropicclaude[\\/])|\/applications\/claude\.app\//i.test(String(p.path || ''));
@@ -321,7 +321,10 @@ function trackJobs(prev, jobs, now, cfg, ctx = {}) {
     const gpu = p.gpu || (heavySince !== null && (j.gpuPct || 0) > th.gpuPct);
     const fg = foregroundOf(j, ctx.foreground);
     let kind = 'build';
-    if (j.listening) kind = 'server';
+    // An app the user interacts with (owns the foreground window, or a non-headless browser/IDE/chat
+    // process) that Claude happened to launch is the user's now: never throttled.
+    if (ctx.userPids && j.pids.some((x) => ctx.userPids.has(x.pid))) kind = 'user-app';
+    else if (j.listening) kind = 'server';
     else if (fg) kind = 'foreground';
     else if (heavySince !== null && now - heavySince >= th.generatorMs) kind = 'generator';
     out[j.id] = {
@@ -335,8 +338,9 @@ function trackJobs(prev, jobs, now, cfg, ctx = {}) {
   return out;
 }
 
-/** Highest level a job may reach: only CPU generators are paused. */
+/** Highest level a job may reach: only CPU generators are paused; a user-app is never touched. */
 function maxLevel(job) {
+  if (job.kind === 'user-app') return LEVEL.NONE;
   return job.kind === 'generator' && !job.gpu ? LEVEL.PAUSE : LEVEL.CAP;
 }
 
@@ -493,7 +497,7 @@ function plan(jobs, current, pressure, now, cfg, last = {}) {
   const over = new Set(pressure.over || []);
   const pressured = new Set([...prio, ...over]);
   const desired = {};
-  for (const [id, t] of Object.entries(current || {})) if (jobs[id]) desired[id] = { level: t.level, resources: [...(t.resources || [])] };
+  for (const [id, t] of Object.entries(current || {})) if (jobs[id] && maxLevel(jobs[id]) > 0) desired[id] = { level: Math.min(t.level, maxLevel(jobs[id])), resources: [...(t.resources || [])] };
   const next = { escalateAt: last.escalateAt ?? -Infinity, changeAt: last.changeAt ?? -Infinity };
   const heavy = Object.values(jobs).filter((j) => j.heavy).sort((a, b) => (b.heavySince - a.heavySince) || (b.startMs - a.startMs));
   const hits = (j, set) => (j.res || []).filter((r) => set.has(r));
@@ -503,6 +507,7 @@ function plan(jobs, current, pressure, now, cfg, last = {}) {
     if (!r.length) continue;
     const cur = desired[j.id] || { level: 0, resources: [] };
     const target = maxLevel(j);
+    if (!target) continue;
     if (cur.level < target) changed = true;
     desired[j.id] = { level: Math.max(cur.level, target), resources: Array.from(new Set([...cur.resources, ...r])) };
   }
@@ -562,6 +567,11 @@ const INFO_FLAGS = new Set(['-version', '--version', '-h', '--help', '-help', 'h
 const V_IS_VERSION = new Set(['node', 'npm', 'pnpm', 'yarn', 'bun', 'deno', 'python', 'python3', 'py', 'java', 'go']);
 const SCRIPT_SUBS = ['test', 'build', 'ci', 'install', 'i', 'rebuild', 'e2e'];
 
+/** Process names that mark a Claude-launched job as the user's interactive app (unless headless). */
+function isUserAppProc(p) {
+  return NO_LEARN.has(String(p.name || '').toLowerCase()) && !/--headless/.test(String(p.cmd || ''));
+}
+
 /** One segment → {kind, gpu} or null. */
 function heavySegment(t) {
   const prog = progOf(t[0]);
@@ -587,9 +597,22 @@ function heavySegment(t) {
   return null;
 }
 
+const WSL_VALUE_FLAGS = new Set(['-d', '--distribution', '-u', '--user', '--cd']);
+
 function escapeSegment(t) {
   const prog = progOf(t[0]);
-  if (prog === 'wsl' || prog === 'schtasks' || prog === 'systemd-run') return true;
+  if (prog === 'wsl') {
+    // A workload (`wsl -e make`, `wsl make`, `wsl -- npm test`), not management (`wsl --list`, `--shutdown`).
+    for (let i = 1; i < t.length; i++) {
+      const a = t[i].toLowerCase();
+      if (a === '-e' || a === '--exec' || a === '--') return true;
+      if (WSL_VALUE_FLAGS.has(a)) { i++; continue; }
+      if (!a.startsWith('-')) return true;
+    }
+    return false;
+  }
+  if (prog === 'schtasks') return t.some((x) => /^[/-](create|run)$/i.test(x));
+  if (prog === 'systemd-run') return true;
   if (prog === 'sc' && (t[1] || '').toLowerCase() === 'create') return true;
   return prog === 'start-process' && t.some((x) => /^-verb$/i.test(x));
 }
@@ -654,7 +677,7 @@ module.exports = {
   RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN,
   isOsProcess, appKey, appLabel, listed,
   isClaudeRoot, attributedPids, hostKeys, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
-  loadedResources, trackJobs, maxLevel,
+  loadedResources, trackJobs, maxLevel, isUserAppProc,
   updatePriority, updateBudget, plan, pressureOf,
   commandSegments, classifyCommand, commandKind, admit,
 };

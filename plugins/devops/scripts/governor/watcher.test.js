@@ -162,6 +162,21 @@ describe('watcher tick with a fake adapter', () => {
     expect(w.canExit()).toBe(true);
   });
 
+  it('self-check: `priority on` after an earlier `stop` never shuts a running watcher down (separate stopAt)', () => {
+    const { run } = require('./cli');
+    const prev = process.env.DOTCLAUDE_GOVERNOR_HOME;
+    process.env.DOTCLAUDE_GOVERNOR_HOME = dir;
+    try {
+      run(['stop'], () => {});
+      const startedAt = Date.now() + 5;
+      const until = Date.now() + 10; while (Date.now() < until) { /* move the clock */ }
+      run(['priority', 'on'], () => {});
+      const c = S.readJson(p.control, {});
+      expect(c.manual).toBe(true);
+      expect(c.stopAt > startedAt).toBe(false); // the watcher compares stopAt with its own start
+    } finally { if (prev === undefined) delete process.env.DOTCLAUDE_GOVERNOR_HOME; else process.env.DOTCLAUDE_GOVERNOR_HOME = prev; }
+  });
+
   it('notify:false logs but never calls the adapter notify', async () => {
     const clock = { t: 0 };
     const Q = require('./queue');
