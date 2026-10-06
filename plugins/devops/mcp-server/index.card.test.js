@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as RC from "../hooks/lib/run-contract.js";
@@ -1013,6 +1013,27 @@ describe("render_completion_card — every input. field lands somewhere", () => 
       concept: { phase: "implementing" },
     });
     expect(en).toMatch(/^## ⏳ Concept in implementation — I will report back$/m);
+  });
+
+  // #637: the page link reads as a call to act on the page — it belongs only
+  // to the card that waits for the user, never to iterating / implementing.
+  test("concept page link shows only while the page waits: neither iterating nor implementing carries it", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "card-concept-link-"));
+    try {
+      mkdirSync(join(cwd, ".claude"), { recursive: true });
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
+      const link = "http://localhost:4321/docs/concepts/x.html";
+      for (const [phase, shown] of [["waiting", true], ["iterating", false], ["implementing", false]]) {
+        const viaFile = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-concept-link-file-" + phase, cwd, concept: { phase } });
+        const viaUrl = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-concept-link-url-" + phase, concept: { phase, url: link } });
+        for (const text of [viaFile, viaUrl]) {
+          if (shown) expect(text).toContain("› " + link);
+          else expect(text).not.toContain(link);
+        }
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
 
