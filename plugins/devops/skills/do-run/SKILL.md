@@ -132,10 +132,11 @@ Q3  header: "Umfang?"       multiSelect: false
     1. "Flexibel (Recommended)"         — Zieht Nötiges mit: Aufrufer, Tests, Doku.
     2. "Strikt"                         — Nur was der Prompt nennt; jede offene Wahl wird berichtet.
 
-Q4  header: "Durchgänge?"   multiSelect: true   [only when an option below applies, else dropped; one option: questions.md § Reading Q4]
+Q4  header: "Durchgänge?"   multiSelect: true   [only when option 1 or 2 applies, else dropped; questions.md § Reading Q4]
     question: "Was kommt dazu? (Leer lassen = nichts)"   [with Rethink recommended: "(Leer lassen = Rethink vorher)"]
     1. "Rethink vorher"                 — Erst frisch neu denken, dann umsetzen; Concept-Seite nur bei echter Weichenstellung.   [only for Prompt umsetzen; + " (Recommended)" when the prompt reads stuck]
     2. "Budget verbrennen"              — Restbudget, das sonst verfällt, als Tiefe pro Task verbrauchen.   [only when burn-plan.js offer says so; never recommended]
+    3. "Nichts davon"                   — Direkt umsetzen.   [always last whenever Q4 is asked — the Desktop app cannot submit a multi-select with nothing ticked]
 ```
 
 ## Step 4 — Follow-up: at most one more call

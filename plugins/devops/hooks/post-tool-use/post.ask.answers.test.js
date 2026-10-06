@@ -50,6 +50,32 @@ describe("answerChecks", () => {
   test("no questions → synthesized from the answer keys", () => {
     expect(answerChecks([], { "X?": "Something else" })).toHaveLength(1);
   });
+  // #635: the Desktop app cannot submit a multi-select with nothing ticked —
+  // an empty Other on a question that names its empty answer is that answer.
+  const q4 = { header: "Durchgänge?", question: "Was kommt dazu? (Leer lassen = nichts)", multiSelect: true,
+    options: [{ label: "Budget verbrennen" }, { label: "Nichts davon" }] };
+
+  test("#635: empty Other on a 'Leer lassen =' question takes that default — no ask", () => {
+    for (const a of ["Something else", ["Sonstiges"], "Other"]) {
+      const notes = answerChecks([q4], { [q4.question]: a });
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toContain("(= nichts): take that default. Do not ask.");
+      expect(notes[0]).not.toMatch(/Ask what/);
+    }
+    const en = { question: "What else? (Leave empty = nothing)", options: [{ label: "A" }] };
+    expect(answerChecks([en], { [en.question]: "Other" })[0]).not.toMatch(/Ask what/);
+  });
+
+  test("#635: an Autonom answer in the same call never asks — the user is leaving", () => {
+    const ablauf = { header: "Ablauf?", question: "Bleibst du erreichbar?", options: [{ label: "Interaktiv · Ship manuell (Recommended)" }, { label: "Autonom · Ship automatisch" }] };
+    const notes = answerChecks([ablauf, q], { [ablauf.question]: "Autonom · Ship automatisch", "Welche Issues?": "Something else" });
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(/user is leaving \(Autonom\): do not ask/);
+    expect(notes[0]).not.toMatch(/Ask what/);
+    // Interaktiv in the same call keeps the ask.
+    const stay = answerChecks([ablauf, q], { [ablauf.question]: "Interaktiv · Ship manuell (Recommended)", "Welche Issues?": "Something else" });
+    expect(stay[0]).toMatch(/Ask what, in ONE/);
+  });
 });
 
 describe("hook", () => {
@@ -62,6 +88,15 @@ describe("hook", () => {
     const out = JSON.parse(res.stdout);
     expect(out.hookSpecificOutput.hookEventName).toBe("PostToolUse");
     expect(out.hookSpecificOutput.additionalContext).toContain('[answer-check] "Q?"');
+  });
+
+  test("#635: empty Other on the do-run Q4 ('Leer lassen = nichts') emits no ask instruction", () => {
+    const question = "Was kommt dazu? (Leer lassen = nichts)";
+    const res = run({ tool_name: "AskUserQuestion", tool_input: { questions: [{ header: "Durchgänge?", question, multiSelect: true, options: [{ label: "Budget verbrennen" }, { label: "Nichts davon" }] }] }, tool_response: { answers: { [question]: "Something else" } } });
+    expect(res.status).toBe(0);
+    const ctx = JSON.parse(res.stdout).hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("Do not ask.");
+    expect(ctx).not.toMatch(/Ask what/);
   });
 
   test("silent otherwise, and for other tools / bad input", () => {

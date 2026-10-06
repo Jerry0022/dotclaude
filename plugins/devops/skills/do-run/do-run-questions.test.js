@@ -94,7 +94,7 @@ describe("base call: fixed option order", () => {
     Q1: ["Prompt umsetzen", "Audit", "Backlog"],
     Q2: ["Interaktiv · Ship manuell", "Interaktiv · Ship automatisch", "Autonom · Ship manuell", "Autonom · Ship automatisch"],
     Q3: ["Flexibel", "Strikt"],
-    Q4: ["Rethink vorher", "Budget verbrennen"],
+    Q4: ["Rethink vorher", "Budget verbrennen", "Nichts davon"],
   };
 
   test.each(Object.entries(EXPECTED))("%s options in spec order", (id, labels) => {
@@ -139,10 +139,13 @@ describe("base call: conditional options", () => {
     expect(questions).toMatch(/omit it silently/);
   });
 
-  test("Budget verbrennen is last, gated on burn-plan.js offer (not on > 80 % used)", () => {
+  test("Budget verbrennen is the last extra (before Nichts davon), gated on burn-plan.js offer (not on > 80 % used)", () => {
     const q4 = byId(base, "Q4");
-    const budget = q4.options.at(-1);
+    const budget = q4.options.at(-2);
     expect(budget.label).toBe("Budget verbrennen");
+    // #635: "Nichts davon" closes Q4 whenever it is asked.
+    expect(q4.options.at(-1).label).toBe("Nichts davon");
+    expect(q4.options.at(-1).note).toMatch(/always last whenever Q4 is asked/);
     expect(budget.note).toMatch(/only when burn-plan\.js offer says so/);
     expect(questions).toMatch(/get_usage/);
     expect(questions).toContain('scripts/burn-plan.js" offer');
@@ -183,7 +186,7 @@ describe("base call: empty multi-select answer", () => {
 
   test("Harden always, Polish on UI changes — Q4 dropped when neither extra applies", () => {
     expect(skill).toMatch(/Leer lassen = nichts\)/);
-    expect(skill).toMatch(/only when an option below applies, else dropped/);
+    expect(skill).toMatch(/only when option 1 or 2 applies, else dropped/);
     expect(skill).toMatch(/\*\*Harden, always\*\*/);
     expect(skill).toMatch(/\*\*Polish, on UI changes\*\*/);
     expect(questions).toMatch(/no pre-selection: an option can be marked, never\s+pre-ticked/);
@@ -223,7 +226,7 @@ describe("label rules (base call and follow-up)", () => {
 
   test("Q4 labels share one shape: <noun> <when/verb>", () => {
     for (const o of byId(base, "Q4").options) {
-      expect(o.label).toMatch(/^\S+ (danach|vorher|verbrennen)$/);
+      expect(o.label).toMatch(/^\S+ (danach|vorher|verbrennen|davon)$/);
     }
   });
 

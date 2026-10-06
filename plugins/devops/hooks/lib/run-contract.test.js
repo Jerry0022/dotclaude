@@ -105,6 +105,24 @@ describe("passes without a Q4 answer (Harden always, Polish on UI changes)", () 
     expect(r).toMatchObject({ passes: ["harden", "polish"], rethink: true });
   });
 
+  // #635: "Nichts davon" is always Q4's last option; an empty Other on the
+  // "Leer lassen = …" question is the empty answer.
+  test("#635: 'Nichts davon' → no extras, passes stay; empty Other on a 'Leer lassen' Q4 → the empty answer", () => {
+    const q4 = { header: "Durchgänge?", question: "Was kommt dazu? (Leer lassen = Rethink vorher)", options: [
+      { label: "Rethink vorher (Recommended)" }, { label: "Budget verbrennen" }, { label: "Nichts davon" }] };
+    const qs = [Q.was, Q.ablauf, Q.umfang, q4];
+    const base = ans("Prompt umsetzen", "Autonom · Ship automatisch", "Flexibel");
+    expect(R.parseRouterAnswers(qs, { ...base, [q4.question]: ["Nichts davon"] }))
+      .toMatchObject({ passes: ["harden", "polish"], rethink: false, burn: false, unresolved: false });
+    for (const other of ["Something else", ["Sonstiges"]]) {
+      expect(R.parseRouterAnswers(qs, { ...base, [q4.question]: other }))
+        .toMatchObject({ passes: ["harden", "polish"], rethink: true, burn: false, unresolved: false });
+    }
+    // Without a named empty answer an empty Other stays unresolved.
+    const plain = { ...q4, question: "Was kommt dazu?" };
+    expect(R.parseRouterAnswers([Q.was, Q.ablauf, Q.umfang, plain], { ...base, [plain.question]: "Something else" }).unresolved).toBe(true);
+  });
+
   test("Flow + Scope alone stays a partial call (H-B13)", () => {
     expect(R.isPartialRouterCall([Q.ablauf, Q.umfang])).toBe(true);
   });
