@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.247.1] — 2026-10-06
+
+### Fixed
+- **The completion card shows the concept page link only while the page waits for the user (#637).** Cards with `concept.phase` `iterating` or `implementing` no longer carry the `› http://localhost:{port}/…` line or the open button — the page has no round to answer yet. Gated in `buildDecisionBlock`, so widget and terminal markdown follow; earlier cards keep their link. Schema text updated.
+
+### Tests
+- Regression test over all three phases, for an explicit `concept.url` and the `concept-active.json` fallback. Full suite 8487 passed, eslint clean.
+
 ## [0.247.0] — 2026-10-06
 
 ### Added
