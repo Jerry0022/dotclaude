@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.247.3] — 2026-10-06
+
+### Fixed
+- **do-run Q4 can be answered empty without a second question (#635).** Q4 had no "nothing" option when two extras applied, and the Desktop app cannot submit an empty multi-select, so the user picked an empty "Sonstiges" and the answer-check hook forced a needless follow-up `AskUserQuestion`. Q4 now always ends with **"Nichts davon"**, which the run contract reads as no extras (no rethink/burn, Harden/Polish as recommended). The answer-check hook (`post.ask.answers` v0.3.0) takes the named default for an empty Other on a question that states its empty answer ("Leer lassen = …" / "Leave empty = …") instead of asking again; with an "Autonom · …" answer in the same call it takes the recommended option and names it on the card.
+- **Run contract:** new `emptyDefaultOf` (re-exported by the facade); `parseQ4` reads "Nichts davon" and an empty Other on a "Leer lassen =" Q4 as the empty answer. Free text "keine"/"none" keeps its old meaning — broadening it broke two `pre.run.contract` cases, so it was narrowed deliberately.
+
+### Docs
+- do-run `SKILL.md` Step 3 Q4 block, `deep-knowledge/questions.md` § Reading Q4 and the run-contract spec Q4 row list "Nichts davon".
+
+### Tests
+- Regression tests in `post.ask.answers`, `run-contract`, `do-run-questions` and the facade snapshot; all four #635 cases fail on the old code. Affected suites 284/284; full suite 8494 passed (2 git-sync timeouts under full-suite load, green in isolation), eslint clean.
+
 ## [0.247.2] — 2026-10-06
 
 ### Fixed
