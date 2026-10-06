@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.ask.answers
- * @version 0.2.0
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin devops
  * @matcher AskUserQuestion
@@ -12,6 +12,9 @@
  *   of that question means the user picked Other WITHOUT typing. Injects
  *   `[answer-check]` context so the model asks what, instead of silently
  *   ignoring the answer. Works for every AskUserQuestion, contract or not.
+ *   Two cases never ask (#635): a question whose text names its empty
+ *   answer ("Leer lassen = …") takes that default, and a call whose answers
+ *   include "Autonom · …" (the user is leaving) takes the recommended option.
  */
 
 require('../lib/plugin-guard');
@@ -26,11 +29,13 @@ require('../lib/plugin-guard');
 // broken lib never takes the hook down; kept in sync with run-contract.js
 // by the AUD-015d comment there.
 let OTHER_PLACEHOLDERS;
+let emptyDefaultOf;
 try {
-  ({ OTHER_PLACEHOLDERS } = require('../lib/run-contract'));
+  ({ OTHER_PLACEHOLDERS, emptyDefaultOf } = require('../lib/run-contract'));
 } catch {
   OTHER_PLACEHOLDERS = ['something else', 'other', 'etwas anderes', 'sonstiges', 'andere'];
 }
+if (typeof emptyDefaultOf !== 'function') emptyDefaultOf = () => null;
 const PLACEHOLDERS = new Set(OTHER_PLACEHOLDERS.map(s => s.toLowerCase()));
 
 function clean(s) {
@@ -67,6 +72,10 @@ function answerChecks(questions, answers) {
   const qs = Array.isArray(questions) && questions.length
     ? questions
     : Object.keys(answers).map(k => ({ question: k }));
+  // #635: an "Autonom · …" answer in the same call means the user is leaving —
+  // a follow-up question would wait for nobody.
+  const leaving = Object.values(answers)
+    .some(v => tokensOf(v, []).some(t => /^autonom/i.test(t)));
   for (const q of qs) {
     const text = q && typeof q.question === 'string' ? q.question : '';
     let value;
@@ -76,8 +85,27 @@ function answerChecks(questions, answers) {
     const labels = labelsOf(q);
     const hit = tokensOf(value, labels).find(t => PLACEHOLDERS.has(t.toLowerCase()) && !labels.includes(t.toLowerCase()));
     if (!hit) continue;
+    const label = text || q.header;
+    const emptyDefault = emptyDefaultOf(text);
+    if (emptyDefault !== null) {
+      // The question names what an empty answer runs; the Desktop app cannot
+      // submit a multi-select with nothing ticked, so Other is that default.
+      notes.push([
+        `[answer-check] "${label}" was answered with "${hit}" and no text.`,
+        `The question names its empty answer (= ${emptyDefault}): take that default. Do not ask.`,
+      ].join('\n'));
+      continue;
+    }
+    if (leaving) {
+      notes.push([
+        `[answer-check] "${label}" was answered with "${hit}" and no text.`,
+        'The same call says the user is leaving (Autonom): do not ask. Take the',
+        "question's recommended option and name the assumption on the card.",
+      ].join('\n'));
+      continue;
+    }
     notes.push([
-      `[answer-check] "${text || q.header}" was answered with "${hit}" and no text.`,
+      `[answer-check] "${label}" was answered with "${hit}" and no text.`,
       'The user wants something the options did not offer. Ask what, in ONE',
       "AskUserQuestion, before acting on this question's answer.",
     ].join('\n'));

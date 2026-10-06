@@ -259,6 +259,19 @@ function parseRouterAnswers(questions, answers, opts = {}) {
 const OTHER_PLACEHOLDERS = Object.freeze(['something else', 'other', 'etwas anderes', 'sonstiges', 'andere']);
 const PLACEHOLDER_RE = new RegExp(`^(${OTHER_PLACEHOLDERS.join('|')})$`, 'i');
 const NONE_RE = /^(keine?|none|nichts|no|no passes)(\s+(durchgänge|passes))?$/i;
+// #635: Q4's "Nichts davon" option — no extra (Rethink / Budget); Harden and
+// Polish still run, they are no Q4 option any more.
+const NO_EXTRAS_RE = /^(nichts davon|none of these)$/i;
+// #635: a question whose text names what an empty answer runs
+// ("Was kommt dazu? (Leer lassen = nichts)"). The Desktop app cannot submit a
+// multi-select with nothing ticked, so an empty Other there IS that default.
+const EMPTY_DEFAULT_RE = /\((?:leer lassen|leave (?:it )?empty)\s*=\s*([^)]*)\)/i;
+
+/** The default an empty answer runs, as the question text names it — or null. */
+function emptyDefaultOf(questionText) {
+  const m = typeof questionText === 'string' ? questionText.match(EMPTY_DEFAULT_RE) : null;
+  return m ? m[1].trim() : null;
+}
 const NEG_RE = /^(?:ohne|kein(?:e|en)?|without|no)\s+(.+)$/i;
 
 /**
@@ -277,7 +290,11 @@ function parseQ4(tokens, q4) {
   if (recLabels.length) passFlagsOf(recLabels, rec);
   if (!offersPasses || !recLabels.length) { rec.passes.add('harden'); rec.passes.add('polish'); }
   const recommended = ['harden', 'polish'].filter(p => rec.passes.has(p));
-  if (!tokens.length) return { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false };
+  const emptyAnswer = { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false };
+  if (!tokens.length) return emptyAnswer;
+  // An empty Other on a question that names its empty answer is that answer.
+  if (emptyDefaultOf(q4 && q4.question) !== null && tokens.every(t => PLACEHOLDER_RE.test(t.trim()))) return emptyAnswer;
+  if (tokens.some(t => NO_EXTRAS_RE.test(t.trim()))) return { passes: recommended, rethink: false, burn: false, unresolved: false };
   if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: [], rethink: false, burn: false, unresolved: false };
   const flags = { passes: new Set(), rethink: false, burn: false };
   const neg = new Set();
@@ -506,7 +523,7 @@ function machinePatch(active, text) {
 }
 
 module.exports = {
-  OTHER_PLACEHOLDERS,
+  OTHER_PLACEHOLDERS, emptyDefaultOf,
   applyFollowUp, answeredFields, isPartialRouterCall, mergeRouterAnswers, hasHeader, followUpModeHint, machinePatch,
   extractAnswers, isRouterCall, parseRouterAnswers, parseFollowUp, parseMachinePrompt,
 };

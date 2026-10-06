@@ -64,14 +64,22 @@ vorher (Prompt umsetzen only) and Budget verbrennen (only on a
 runs after the implementation, Polish whenever the change touched UI files
 (the 48 h session scan of 2026-09-27: the passes were picked in 10 of 13
 runs, and Polish ran on UI-free backlog items for nothing). When neither
-option applies, Q4 is dropped. When only one applies, the tool still needs
-two options: add `"Nichts davon"` — Direkt umsetzen, after it.
+option applies, Q4 is dropped. Whenever Q4 is asked, `"Nichts davon"` —
+Direkt umsetzen — is its last option, however many others apply (#635): the
+Desktop app cannot submit a multi-select with nothing ticked, and without it
+the only way to say "nothing" was an empty Other.
 
 `AskUserQuestion` has no pre-selection: an option can be marked, never
 pre-ticked. The question text therefore names what an empty answer runs.
 
 - **Nothing ticked** → every option whose label carries `(Recommended)`
   (Rethink vorher when the prompt reads stuck), else nothing extra.
+- **"Nichts davon"** → nothing extra; Harden and Polish run as always.
+- **An empty Other** ("Sonstiges" / "Something else" without text) → the
+  same as nothing ticked: the question text names the empty answer, so an
+  empty Other is that answer. Never ask again (`post.ask.answers` says so;
+  it also never asks when the same call answered Q2 with `Autonom · …` —
+  the user is leaving).
 - **Anything ticked** → exactly the ticked options, nothing added.
 - **A pass that should not run** → not an answer here: a conscious skip goes
   through `run-contract.js skip harden|polish --reason "<why>"` and shows

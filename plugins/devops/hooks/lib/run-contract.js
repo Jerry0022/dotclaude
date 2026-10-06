@@ -31,6 +31,7 @@
  * `module.exports`; AUD-016: grep the sibling `run-contract-*.js` files for
  * the implementation of each):
  *   OTHER_PLACEHOLDERS                            the "Other" answer tokens (post.ask.answers imports them)
+ *   emptyDefaultOf                                the empty-answer default a question text names (#635)
  *   LIB_PATH / rearmHint({replace})               this file's path / the `arm … --replace` re-arm line ({replace:false} → plain `arm`)
  *   disabled()                                    → boolean  kill switch on
  *   readContract(cwd, {now})                      → header | null (active only)
@@ -107,7 +108,7 @@ const obligations = require('./run-contract-obligations');
 const cliModule = require('./run-contract-cli');
 
 module.exports = {
-  OTHER_PLACEHOLDERS: answers.OTHER_PLACEHOLDERS, LIB_PATH: store.LIB_PATH, rearmHint: store.rearmHint,
+  OTHER_PLACEHOLDERS: answers.OTHER_PLACEHOLDERS, emptyDefaultOf: answers.emptyDefaultOf, LIB_PATH: store.LIB_PATH, rearmHint: store.rearmHint,
   disabled: store.disabled,
   claim: store.claim, applyFollowUp: answers.applyFollowUp, answeredFields: answers.answeredFields,
   isPartialRouterCall: answers.isPartialRouterCall, mergeRouterAnswers: answers.mergeRouterAnswers,

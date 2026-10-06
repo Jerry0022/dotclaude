@@ -25,7 +25,7 @@ const cli = require("./run-contract-cli.js");
 // Snapshot of the pre-split run-contract.js `module.exports` (AUD-016), minus
 // the seven entries dropped on 2026-09-26 — see DROPPED below.
 const EXPECTED_KEYS = [
-  "OTHER_PLACEHOLDERS", "LIB_PATH", "rearmHint",
+  "OTHER_PLACEHOLDERS", "emptyDefaultOf", "LIB_PATH", "rearmHint",
   "disabled",
   "claim", "applyFollowUp", "answeredFields", "isPartialRouterCall", "mergeRouterAnswers",
   "hasHeader", "machinePatch",
@@ -74,7 +74,7 @@ describe("run-contract.js facade (AUD-016)", () => {
         "claim", "readContract", "readContractForCard", "expiryNotice", "arm", "update",
         "record", "close", "events", "markPendingArm", "pendingArm", "clearPendingArm",
         "markBatchHandoff", "batchHandoffPending", "clearBatchHandoff", "LIB_PATH", "rearmHint"],
-      answers: ["OTHER_PLACEHOLDERS", "applyFollowUp", "answeredFields", "isPartialRouterCall", "mergeRouterAnswers",
+      answers: ["OTHER_PLACEHOLDERS", "emptyDefaultOf", "applyFollowUp", "answeredFields", "isPartialRouterCall", "mergeRouterAnswers",
         "hasHeader", "machinePatch", "extractAnswers", "isRouterCall", "parseRouterAnswers",
         "parseFollowUp", "parseMachinePrompt"],
       obligations: ["skillName", "segments", "currentSegment", "segmentHasWork", "openObligations",
