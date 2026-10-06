@@ -22,9 +22,10 @@ const DEFAULTS = Object.freeze({
   heartbeatMs: 5000,
   // A Claude-attributed job is "heavy" after sustainMs over one threshold.
   heavy: { cpuPct: 25, gpuPct: 20, diskBps: 20 * MB, ramMB: 1024, sustainMs: 20000, dipMs: 6000, generatorMs: 120000 },
-  // "Noticeable load" of a foreign (non-Claude, non-OS) app, per resource.
+  // "Noticeable load" of a foreign (non-Claude, non-OS) app, per resource. An unknown app's load earns
+  // priority only while the system uses >= contendPct of that resource (games/learned apps: always).
   foreign: {
-    cpuPct: 10, gpuPct: 10, diskBps: 10 * MB,
+    cpuPct: 10, gpuPct: 10, diskBps: 10 * MB, contendPct: 60,
     decayMs: 10 * 60000, learnFullscreenMs: 15000, learnMs: 60000, interactiveIdleMs: 120000,
   },
   // The 80 % rule (always on).

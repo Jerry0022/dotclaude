@@ -41,7 +41,10 @@ MCP servers are never throttled. Concept:
    the disk is pressed. Kinds: server (listens on a port), foreground (Claude
    waits on it), generator (heavy > 2 min), build.
 4. **Pressure** = foreign priority per resource (decays 10 min after the
-   app's last load; all resources while it is the interactive foreground app;
+   app's last load; an unknown app's load counts only while the system uses
+   ≥ `foreign.contendPct` (60 %) of that resource — disk: while pressed —
+   and never for browsers, chat/IDE hosts or script runtimes such as
+   node/python; all resources while it is the interactive foreground app;
    game-library, learned and `alwaysPriority` apps from process start; manual
    switch) ∪ over budget (CPU/GPU 80/65 hysteresis, disk latency > 4× idle
    baseline with a queue, RAM free < max(15 %, 4096 MB) or hard paging; 10 s
@@ -65,10 +68,14 @@ MCP servers are never throttled. Concept:
    times out 3 times in a row is killed and restarted, and its records are
    released again. Disabling the governor, or `governor stop` with no watcher
    running, starts a revert-only watcher that reverses the records and exits.
-7. **PreToolUse** gates heavy-looking starts (and the minimal escape list
-   `wsl`, `schtasks`, `Start-Process -Verb`, `sc create`, `systemd-run`,
-   segment-anchored) only when a resource that command would load is actually
-   pressed, or free RAM < expected-per-kind + 4096 MB. Foreign disk IO earns
+7. **PreToolUse** gates generators and containers (ffmpeg, blender,
+   whisper, llama/ollama, python train/render/generate, docker) and the
+   minimal escape list (`wsl`, `schtasks`, `Start-Process -Verb`,
+   `sc create`, `systemd-run`, segment-anchored) only when a resource that
+   command would load is actually pressed. Builds, tests and browser checks
+   (npm test/build, vitest, playwright, tsc, cargo …) never wait for
+   pressure — the watcher caps them only if they turn heavy. Any recognised
+   kind still waits while free RAM < expected-per-kind + 4096 MB. Foreign disk IO earns
    priority only while the disk budget is pressed (IO counters include
    network). Matching looks only at
    the LEADING command of each `;`/`&&`/`||`/`|` segment (quotes and heredocs

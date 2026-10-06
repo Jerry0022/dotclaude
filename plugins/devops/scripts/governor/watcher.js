@@ -180,6 +180,7 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     st.prio = P.updatePriority(st.prio, foreign, t, {
       cfg, libraryRoots: st.lib.roots, libraryDirs: st.lib.dirs, libraryExes: new Set(st.lib.exes.map((e) => e.toLowerCase())),
       learned, manual: Boolean(control.manual), foreground: fg, diskPressed: Boolean(st.budget.over.disk),
+      sysUse: { cpu: st.budget.mean.cpu, gpu: st.budget.mean.gpu },
       noLearn: new Set([...(cfg.noLearn || []).map((x) => x.toLowerCase()), ...P.serviceNames(cfg.claudeServices)]),
     });
     for (const a of st.prio.newlyLearned) {

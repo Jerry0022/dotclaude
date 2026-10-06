@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.247.2] — 2026-10-06
+
+### Fixed
+- **Governor yielded to light apps with headroom left.** Edge, Discord, node and python got priority — on every resource as the foreground app — from 10 % CPU while the machine still had 40–80 % free. An unknown app's measured load now earns priority only while the system uses ≥ `foreign.contendPct` (60 %) of that resource; browsers, chat/IDE hosts and script runtimes (node, python, java, dotnet, …) never earn it from load. Games, learned, library and `alwaysPriority` apps are unchanged.
+- **Tests, builds and browser checks were deferred.** The PreToolUse gate now defers only generators, containers and escapes (ffmpeg, blender, whisper, llama/ollama, python train/render/generate, docker, wsl/schtasks …) under pressure; vitest, playwright, tsc, npm test/build, cargo etc. always start and are capped by the watcher only if they turn heavy. The free-RAM admission check still applies to every recognised kind.
+
+### Tests
+- New policy cases (contention gate, host/runtime exclusion, builds under full pressure), gate hook table updated. Full suite 8489 passed, eslint clean.
+
 ## [0.247.1] — 2026-10-06
 
 ### Fixed
