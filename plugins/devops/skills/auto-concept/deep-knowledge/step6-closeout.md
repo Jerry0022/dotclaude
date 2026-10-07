@@ -37,7 +37,7 @@ watchers see the state file gone within ~1 min. Every exit lands inside this
 turn, before the card. One that still arrives after the card (a stray
 duplicate watcher) is a silent turn: no text, no title change.
 
-**Restore the session title** (Desktop app only — skip silently elsewhere):
+**Restore the session title** (Desktop app only — skip silently elsewhere; deferred is not unavailable — load both tools via `ToolSearch` first, `deep-knowledge/mcp-deferred-tools.md`):
 `mcp__ccd_session_mgmt__get_session` `self`; strip every leading devops
 prefix (`🧭 Concept – `, `⏳ `, `🚀 Shipping – `, … — the `SESSION_PREFIX`
 and `LEGACY_PREFIXES` values). If part C shipped successfully, its ship card

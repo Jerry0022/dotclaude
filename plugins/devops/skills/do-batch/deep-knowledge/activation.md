@@ -38,6 +38,10 @@ works.
 
 ## Session title prefix (Step 2.2b)
 
+Deferred is not unavailable: when both tools are only in the deferred-tools
+list, load them first with one `ToolSearch`
+`select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`.
+
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
 2. If `title` already starts with `📥 Batch – `: done.
 3. Strip any leading devops prefix (`⏳ `, `📦 Ready – `, `🧪 Test – `,

@@ -49,6 +49,25 @@ The result contains a `<functions>` block with one `<function>{...}</function>` 
 - `/do-ship` skill: mandatory, see `SKILL.md` Step 0.5.
 - Any skill that calls MCP tools from a non-completion server: load schemas upfront in the Step 0 / setup phase.
 - Guard-hook recovery: if `pre.ship.guard.js` fires and you cannot see ship tools, ToolSearch first — do NOT retry the blocked Bash command.
+- Session-title instructions (see below).
+
+## Session title tools
+
+`mcp__ccd_session_mgmt__get_session` and `set_session_title` are the canonical
+"deferred ≠ unavailable" case. Every title instruction — the
+`prompt.flow.title-work` hook, the completion card's `[SESSION TITLE]` block,
+`/do-ship` Pre-Step C, the concept and batch title steps — says "if either tool
+is unavailable or fails: skip silently". A deferred tool is **not** unavailable:
+reading it that way skipped every title change of a whole Desktop session and
+nothing surfaced the miss (#661). When both sit in the deferred-tools list, load
+them once and then call:
+
+```
+ToolSearch({ query: "select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title", max_results: 2 })
+```
+
+"Unavailable" means absent from both the loaded and the deferred list — a
+terminal session, where the tools do not exist.
 
 ## When the server is genuinely down: `Connection closed`
 

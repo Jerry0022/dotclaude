@@ -183,7 +183,8 @@ Subagents inherit all output contracts:
   A mode skill strips any earlier prefix before adding
   its own (`🧭 Concept – ⏳ Foo` is the bug). Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
-  (`mcp__ccd_session_mgmt__set_session_title` `self`) — elsewhere skip silently.
+  (`mcp__ccd_session_mgmt__set_session_title` `self`; deferred is not
+  unavailable — `mcp-deferred-tools.md` § Session title tools) — elsewhere skip silently.
 
 ## Extension Model
 
