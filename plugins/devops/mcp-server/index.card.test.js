@@ -137,6 +137,22 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(lines[0]).toBe("› **⚠ Nicht voll erfüllt:** R3 — Anhören steht aus");
   });
 
+  test("a user's own check is no requirement: rerouted to the user checks, not counted (#643)", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Sichtprüfung", lang: "de", session_id: "test-anatomy-usercheck",
+      validation: [
+        { requirement: "Merken pro Account", status: "partial", evidence: "nur localStorage", waitsOn: "user" },
+        { requirement: "R2", status: "met", evidence: "ok" },
+        { requirement: "Sichtprüfung im echten Holodeck", status: "partial", evidence: "nur DOM/Spec-geprüft; Route braucht Login", waitsOn: "user" },
+      ],
+    });
+    expect(text).not.toContain("Nicht voll erfüllt:** Sichtprüfung");
+    expect(text).toContain("Sichtprüfung im echten Holodeck");
+    expect(text).toContain("2/3 Anforderungen · 1 wartet auf dich");
+    const lines = text.split("\n").filter(l => l.startsWith("› "));
+    expect(lines[0]).toBe("› **⚠ Nicht voll erfüllt:** Merken pro Account — nur localStorage");
+  });
+
   test("every gap gets its own top line — unmet first, then partial; a deploy wait is not named (#630)", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Mehrere Lücken", lang: "en", session_id: "test-anatomy-multigap",

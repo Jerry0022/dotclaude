@@ -237,6 +237,11 @@ verified and what the user still checks, and that check goes to `userTest` /
 `userFinalTest`. `partial` / `unmet` are only for a requirement that is really
 not (fully) delivered. A pending device test is never a reason for `partial` +
 `waitsOn: "user"` — the card would count a built feature as missing (#631).
+A verification activity (Sichtprüfung, browser check, manual test) is never a
+requirement of its own either: it belongs in `userTest` / `userFinalTest`, not
+in `validation[]`. The card enforces it — a not-met, `waitsOn: "user"` item
+whose requirement reads as a check is turned `met` and moved to the user's
+check list, outside the requirement count (#643).
 
 **Requirement gaps — close, don't report.** Every item needs a `status`. A
 partial/unmet requirement may stay open only with `waitsOn`: `user` (work only the

@@ -2118,6 +2118,7 @@ function normalizeCardParams(raw, { strictVariant = false } = {}) {
   // them; on the CLI path this is what turns a guessed payload into readable
   // text instead of three empty '*  → ' bullets (#396).
   coerceCardInput(params);
+  validationGaps.rerouteUserChecks(params);
   sanitizeSessionId(params);
 
   return params;
@@ -2676,6 +2677,9 @@ server.registerTool(
   async (params) => {
     sanitizeSessionId(params);
     withDetectedRepoMode(params);
+    // A user's own check is no requirement of the feature (#643): before the
+    // pregate and the render, so neither counts it as a gap.
+    validationGaps.rerouteUserChecks(params);
     const localShip = localShipInstruction(params);
     if (localShip) return { content: [{ type: 'text', text: localShip }] };
     // stop.flow.guard's payload gates, before anything renders — a refused

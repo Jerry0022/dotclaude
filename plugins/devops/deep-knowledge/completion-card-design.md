@@ -84,7 +84,7 @@ between posts, no `·` separators:
 
 | Slot | Post | Source | Text pattern (number + noun + state) |
 |---|---|---|---|
-| 1 | Requirements | `validation[]` | `✓ 3/3 Anforderungen` · `◐ 2/3 Anforderungen` · `✗ 1/3 unerfüllt` |
+| 1 | Requirements | `validation[]` — a user-waiting check (Sichtprüfung, manual test) is rerouted to the user checks and not counted (#643) | `✓ 3/3 Anforderungen` · `◐ 2/3 Anforderungen` · `✗ 1/3 unerfüllt` |
 | 2 | Tests | `tests[]` (test/lint/build/typecheck entries) | `✓ 3464 Tests grün` · `✗ 2 Tests rot` · `⏭ 3 übersprungen` folded into the tooltip |
 | 3 | Live check | `tests[]` entry with real data / browser | `✓ 4 Live-Checks ok` · `◐ Overlay: nicht live geprüft` — after a ship: `✓ PR #416 → main` |
 

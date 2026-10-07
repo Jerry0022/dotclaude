@@ -69,6 +69,66 @@ function classify(validation, { openTasks = null } = {}) {
   return { total: items.length, met, waiting, gaps };
 }
 
+// ---------------------------------------------------------------------------
+// A check the user should run is not a requirement of the feature (#643).
+// `waitsOn: "user"` on a not-met item whose requirement text is a
+// verification activity ("Sichtprüfung im echten Holodeck", "manual test on
+// the phone") turned the user's to-do into a "Nicht voll erfüllt" line and a
+// missing "N/M Anforderungen" point. The rule (#631) says such an item is
+// `met` + userTest; this enforces it at render time instead of trusting it.
+// Scoped to not-met + waitsOn:user, so a met requirement that merely mentions
+// a visual check, and every real deviation, stay untouched.
+// ---------------------------------------------------------------------------
+
+const VERIFICATION_ACTIVITY = new RegExp([
+  'sicht(prüfung|pruefung|kontrolle|check)',
+  'visuell(e|er|en)?\\s+(prüf|pruef|kontroll|check)',
+  'manuell(e|er|en)?\\s+(test|prüf|pruef|check|verifi)',
+  'browser[- ]?(test|check|prüf|pruef)',
+  '(im|in the|on the)\\s+browser\\s+(prüf|pruef|test|check|verif)',
+  '(live|echt(en|er)?|real)\\s+(prüf|pruef|test|check|verif)',
+  'nutzer[- ]?(test|check|prüf|pruef)',
+  'user[- ]?(test|check|verification)',
+  'visual(ly)?\\s+(check|verif|inspect|review|test)',
+  'manual(ly)?\\s+(test|check|verif|qa)',
+  'smoke[- ]?test',
+  '(gerät|geraet|device|handy|phone)[- ]?(test|check|prüf|pruef)',
+].join('|'), 'i');
+
+/** True when the requirement text describes checking, not building. */
+function isVerificationActivity(requirement) {
+  return typeof requirement === 'string' && VERIFICATION_ACTIVITY.test(requirement);
+}
+
+/**
+ * Move every not-met, user-waiting verification activity out of the
+ * requirement count and into the card's user-check list: the item becomes
+ * `met` (marked `rerouted`), its text lands in `userTest` on a test card and
+ * in `userFinalTest` everywhere else — the list the card's points read for
+ * that variant. Mutates and returns `params`; returns the moved texts too.
+ */
+function rerouteUserChecks(params) {
+  const moved = [];
+  if (!params || typeof params !== 'object' || !Array.isArray(params.validation)) return { params, moved };
+  for (const item of params.validation) {
+    if (!item || typeof item !== 'object' || item.status === 'met') continue;
+    if (item.waitsOn !== 'user' || !isVerificationActivity(item.requirement)) continue;
+    item.status = 'met';
+    item.rerouted = 'userTest';
+    delete item.waitsOn;
+    moved.push(item.requirement.trim());
+  }
+  if (!moved.length) return { params, moved };
+  const key = params.variant === 'test' ? 'userTest' : 'userFinalTest';
+  const list = Array.isArray(params[key]) ? params[key] : [];
+  const seen = new Set(list.map(e => String(typeof e === 'object' && e ? e.action : e).trim().toLowerCase()));
+  for (const text of moved) {
+    if (!seen.has(text.toLowerCase())) { list.push(text); seen.add(text.toLowerCase()); }
+  }
+  params[key] = list;
+  return { params, moved };
+}
+
 /** The not-met items the MCP hands to the Stop gate (evidence clipped to 200 chars). */
 function openItems(validation) {
   return asItems(validation)
@@ -142,4 +202,5 @@ function readRepoOpen(cwd, { dir, maxAgeMs = REPO_FLAG_MAX_AGE_MS, now = Date.no
 module.exports = {
   WAITS_ON, GAP_EXEMPT_VARIANTS, REPO_FLAG_MAX_AGE_MS,
   classify, openItems, repoFlagPath, writeRepoOpen, readRepoOpen,
+  isVerificationActivity, rerouteUserChecks,
 };
