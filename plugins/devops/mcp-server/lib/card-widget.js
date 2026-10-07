@@ -530,8 +530,19 @@ function pipelineHtml(pipeline, pipelinePr, repoUrl) {
 // so the whole card is drawn once and nothing follows the widget. card-guard
 // reads this h3 as the card title. h3 = the contract's 16px/500 — one step
 // below h2, which read too large in the chat column.
-function titleHtml(title) {
-  return title ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(title)}</h3>` : "";
+function titleHtml(title, builtAt) {
+  if (!title) return "";
+  const h3 = `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(title)}</h3>`;
+  if (!builtAt) return h3;
+  // In flow beside the title, not absolutely positioned: the widget host
+  // dropped an absolute corner stamp (2026-10-07).
+  return `<div class="card-title-row" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">${h3}${builtAtHtml(builtAt)}</div>`;
+}
+
+// When the card was built (local "HH:MM"), right of the title and dim: tells a
+// reader coming back later how old the state on the card is.
+function builtAtHtml(builtAt) {
+  return `<span class="card-time" style="flex:none;font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums">${escapeHtml(builtAt)}</span>`;
 }
 
 /**
@@ -543,7 +554,7 @@ function titleHtml(title) {
 function blockAHtml(model, lang, repoUrl) {
   return [
     `<div class="card-panel" style="display:flex;flex-direction:column;gap:6px;padding:0 0 2px">`,
-    titleHtml(model.title),
+    titleHtml(model.title, model.builtAt),
     resultLinesHtml(model.resultLines, lang),
     evidenceHtml(model.evidence),
     pipelineHtml(model.pipeline, model.pipelinePr, repoUrl),

@@ -584,6 +584,15 @@ describe("cardWidgetHtml", () => {
     expect(cardWidgetHtml(baseModel({ title: "" }), "")).not.toContain("card-title");
   });
 
+  // 2026-10-07: the build time, dim in the top-right corner, says how old the
+  // card's state is when the user comes back to it later.
+  test("draws the build time top-right only when the model carries one", () => {
+    const html = cardWidgetHtml(baseModel({ title: "Zeitstempel", builtAt: "09:05" }), "");
+    expect(html).toMatch(/<div class="card-title-row" style="display:flex;justify-content:space-between[^"]*"><h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">Zeitstempel<\/h3><span class="card-time" style="[^"]*">09:05<\/span><\/div>/);
+    expect(html).not.toMatch(/class="card-time" style="position/);
+    expect(cardWidgetHtml(baseModel({ title: "Zeitstempel" }), "")).not.toContain("card-time");
+  });
+
   // 2026-09-21 feedback: both titles too large, detail text one step too large,
   // and two bordered boxes did not read as ONE card. Now: one outer surface
   // (no border) around everything, the decision box a quiet tint at the
