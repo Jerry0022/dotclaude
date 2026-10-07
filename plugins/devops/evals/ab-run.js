@@ -168,9 +168,9 @@ function main(argv) {
   }
 
   const runDir = path.join(opts.out, `ab-${new Date().toISOString().replace(/[:.]/g, "-")}`);
-  fs.mkdirSync(runDir, { recursive: true });
   const results = [];
   try {
+    fs.mkdirSync(runDir, { recursive: true });
     for (const c of cases) {
       const graders = loadGraders(c);
       for (let run = 1; run <= opts.runs; run++) {

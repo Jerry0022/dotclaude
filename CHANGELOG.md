@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.249.0] — 2026-10-08
+
+### Added
+- **Skill-trim A/B harness on `claude -p` (#649).** `claude plugin eval` is gone from the installed CLI (2.1.175) and `/doctor prompt-audit` needs ≥ 2.1.283, so the evidence method for skill trims (#651–#653) is a reusable runner: `node plugins/devops/evals/ab-run.js --case <dir|glob> [--a-ref <ref> | --a <dir>] [--b <dir>] --runs N`. Each run scaffolds a temp project, calls `claude -p --output-format stream-json --verbose --no-session-persistence --plugin-dir <variant> --settings '{"enabledPlugins":{"devops@dotclaude":false}}'` (only the variant under test loads, as `devops@inline`), and writes a per-run JSON (exit code, duration, final text, tool calls, Skill invocations, Agent spawns, tokens, cost, grades) plus `summary.json` (pass rate per case × grader per variant, token totals, cost, mean duration). Variant B defaults to the working tree's `plugins/devops`; `--a-ref` checks the ref out into a temp git worktree and removes it afterwards. `--dry-run` prints the commands; `--summarize <dir>` re-summarises a run. Grading is deterministic: the existing `graders/*.md` (`tool_used`, `regex`, `file_exists`) compile to predicates, a case may add `graders.js`, and a failed or errored run grades as undecided, never as a fail of the variant.
+- **`evals/TRIM-TEMPLATE.md`** — per-skill record of what a trim removed and kept, with the A/B table; used by #651–#653.
+
+### Changed
+- The stale `claude plugin eval` command in `CLAUDE.md` and `plugins/devops/evals/README.md` is replaced by the `ab-run.js` invocation.
+
+### Not changed (decisions)
+- A case's `max_turns` is recorded but not enforced: the CLI has no `--max-turns`.
+- Real plugin hooks fire in `claude -p` (unlike the retired sandbox); identical for both variants, so A/B comparisons are unaffected.
+
+### Tests
+- 19 new unit tests (`evals/lib/ab.test.js`: argument building, settings JSON, stream-json parsing from a fixture, graders, summary — no model call); eslint clean. One real smoke run reached the model call and stopped at `401 OAuth access token has been revoked` (environment, not harness): scaffold, stream parsing, result and summary files all worked, the working-tree plugin loaded as `devops@inline` and the installed one did not. Full suite not verifiable under machine load (83 min, load timeouts in untouched files). Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.9] — 2026-10-07
 
 ### Fixed
