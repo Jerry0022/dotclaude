@@ -465,6 +465,25 @@ function insideWorkTree(cwd) {
 }
 
 /**
+ * Is the work tree at `cwd` clean (no modified, staged or untracked file)?
+ * true / false, or null when that cannot be told — same rules as
+ * insideWorkTree, so a failed probe never hides the pipeline line.
+ */
+function workTreeClean(cwd) {
+  if (!cwd) return null;
+  try {
+    if (!statSync(cwd).isDirectory()) return null;
+    const out = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+      cwd, encoding: 'utf8', timeout: GIT_PROBE_OPTS.timeout, windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, LC_ALL: 'C', LANGUAGE: 'C' },
+    });
+    return String(out).trim() === '';
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Card callers outside /do-ship never ran ship_preflight, so they rarely pass
  * `state.mode`. Without it a local-only repo still got the Ship button and the
  * push → PR → merge track (#500). Fill it in the way repo-mode.js decides it:
@@ -1021,6 +1040,16 @@ function renderBudgetLineMd(budget) {
 function renderPipelineLine(input, lang, buildId) {
   const state = input.state || {};
   const delivery = input.delivery || {};
+  const commitDone = !!(state.commit || state.pushed || state.merged);
+
+  // Work that changed no file of a repo — analysing the PC, a scheduled task,
+  // a setting, folders outside the repo — has no track to show: an
+  // all-pending commit → push → PR → merge (or a "no changes" line) is noise.
+  const touched = commitDone || !!state.pr || !!delivery.ship || !!delivery.promote;
+  if (!touched) {
+    if (input.variant === 'analysis' || input.variant === 'fallback') return '';
+    if (state.mode !== 'file-only' && workTreeClean(input.cwd) === true) return '';
+  }
 
   if (state.mode === 'file-only') {
     const n = state.filesModified;
@@ -1031,12 +1060,6 @@ function renderPipelineLine(input, lang, buildId) {
     const count = typeof n === 'number' ? n + ' ' + noun + ' · ' : '';
     return '📂 ' + count + noRepo + (input.cwd ? ' · ' + input.cwd : '');
   }
-  if (input.variant === 'analysis') {
-    const none = lang === 'en' ? 'no changes to repo' : 'keine Änderungen im Repo';
-    return '➖ ' + none + (state.branch ? ' · ' + state.branch : '');
-  }
-
-  const commitDone = !!(state.commit || state.pushed || state.merged);
   // No remote: the track ends at the local commit — push, PR and merge have
   // nowhere to go, so they are not drawn as pending steps (#500).
   const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';

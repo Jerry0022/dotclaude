@@ -262,6 +262,20 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(test).toMatch(/^## 🧪 Test first\?$/m);
   });
 
+  test("fallback work that touched no repo draws no commit → push → PR → merge track", async () => {
+    const text = await cardText({
+      variant: "fallback", summary: "Scheduled Tasks umgestellt", lang: "de", session_id: "test-anatomy-8d",
+      changes: [{ area: "Fix", description: "Task startet headless" }],
+    });
+    expect(text).not.toMatch(/commit|push|merge|Build /);
+
+    const withPr = await cardText({
+      variant: "fallback", summary: "Issue", lang: "de", session_id: "test-anatomy-8f",
+      state: { commit: "abc1234", pr: { number: 7 } },
+    });
+    expect(withPr).toContain("✓ commit");
+  });
+
   test("an open point about another worktree's branch is dropped — that session ships it itself", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
@@ -558,9 +572,25 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(text).toMatch(/^## 📦 Lokal fertig/m);
   });
 
-  test("analysis pipeline says no changes to the repo", async () => {
-    const text = await cardText({ variant: "analysis", summary: "Nur gelesen", lang: "de", session_id: "test-anatomy-9" });
-    expect(text).toContain("➖ keine Änderungen im Repo");
+  test("analysis draws no pipeline line — nothing in the repo changed", async () => {
+    const text = await cardText({ variant: "analysis", summary: "Nur gelesen", lang: "de", session_id: "test-anatomy-9", state: { branch: "main" } });
+    expect(text).not.toMatch(/keine Änderungen im Repo|commit|Build /);
+  });
+
+  test("a clean work tree with nothing committed draws no pipeline line, a dirty one does", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const { execFileSync } = await import("node:child_process");
+    const root = fs.mkdtempSync(join(os.tmpdir(), "card-clean-"));
+    const git = (...a) => execFileSync("git", a, { cwd: root, stdio: "ignore" });
+    git("init", "-q");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init");
+    const base = { variant: "ready", summary: "PC analysiert", lang: "de", cwd: root, state: { mode: "git" } };
+    const clean = await cardText({ ...base, session_id: "test-anatomy-9b" });
+    expect(clean).not.toMatch(/○ commit/);
+    fs.writeFileSync(join(root, "a.txt"), "x");
+    const dirty = await cardText({ ...base, session_id: "test-anatomy-9c" });
+    expect(dirty).toMatch(/○ commit → ○ push/);
   });
 
   test("no run-contract on the project → no line, byte-identical to a card without cwd", async () => {

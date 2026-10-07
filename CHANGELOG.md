@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.247.5] — 2026-10-07
+
+### Fixed
+- **No pipeline line on cards for work that changed no repo file.** An `analysis` or `fallback` card, or any card whose `cwd` work tree is clean, with no commit, PR or delivery no longer draws an all-pending `○ commit → ○ push → ○ PR → ○ merge · Build …` (nor the `➖ keine Änderungen im Repo` line) — analysing the PC, switching a scheduled task or editing folders outside the repo has no track to show. New probe `workTreeClean` (`git status --porcelain`); a failed probe keeps the line.
+
+### Docs
+- `completion-card-design.md` lists the rule with the pipeline forms.
+
+### Tests
+- Fallback without repo, analysis, clean vs. dirty work tree; card suites 218/218, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.247.4] — 2026-10-07
 
 ### Fixed
