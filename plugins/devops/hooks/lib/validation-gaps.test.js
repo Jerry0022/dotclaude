@@ -56,3 +56,48 @@ describe("checkout copy for ship_release", () => {
     expect(vg.repoFlagPath("c:/users/ME/proj")).toBe(a);
   });
 });
+
+describe("rerouteUserChecks (#643)", () => {
+  test("detects verification activities in DE and EN", () => {
+    for (const s of ["Sichtprüfung im echten Holodeck", "Manueller Test auf dem Handy", "visual check of the dialog", "Browser-Test der Seite", "manual verification by the user"]) {
+      expect(vg.isVerificationActivity(s)).toBe(true);
+    }
+    for (const s of ["Merken pro Account", "Skip by tap or voice", "Dark mode toggle"]) {
+      expect(vg.isVerificationActivity(s)).toBe(false);
+    }
+  });
+
+  test("moves a not-met user-waiting check to userFinalTest and marks it met", () => {
+    const params = { variant: "ready", validation: [
+      { requirement: "Sichtprüfung im Browser", status: "partial", waitsOn: "user", evidence: "Login nötig" },
+      { requirement: "Merken pro Account", status: "partial", waitsOn: "user", evidence: "localStorage" },
+    ] };
+    const { moved } = vg.rerouteUserChecks(params);
+    expect(moved).toEqual(["Sichtprüfung im Browser"]);
+    expect(params.validation[0]).toMatchObject({ status: "met", rerouted: "userTest" });
+    expect(params.validation[0].waitsOn).toBeUndefined();
+    expect(params.validation[1].status).toBe("partial");
+    expect(params.userFinalTest).toEqual(["Sichtprüfung im Browser"]);
+    expect(vg.classify(params.validation).waiting.user).toBe(1);
+  });
+
+  test("a test card gets it in userTest, without duplicates", () => {
+    const params = { variant: "test", userTest: ["sichtprüfung im browser"], validation: [
+      { requirement: "Sichtprüfung im Browser", status: "unmet", waitsOn: "user", evidence: "x" },
+    ] };
+    vg.rerouteUserChecks(params);
+    expect(params.userTest).toEqual(["sichtprüfung im browser"]);
+    expect(params.userFinalTest).toBeUndefined();
+  });
+
+  test("leaves met items, other waits and own gaps alone", () => {
+    const params = { variant: "ready", validation: [
+      { requirement: "Visual check passes", status: "met", evidence: "ok" },
+      { requirement: "Manual test after deploy", status: "partial", waitsOn: "deploy", evidence: "restart" },
+      { requirement: "Browser test", status: "partial", evidence: "todo" },
+    ] };
+    const { moved } = vg.rerouteUserChecks(params);
+    expect(moved).toEqual([]);
+    expect(params.userFinalTest).toBeUndefined();
+  });
+});
