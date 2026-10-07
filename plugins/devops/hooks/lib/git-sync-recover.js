@@ -126,15 +126,17 @@ function headState(run, preHead, source) {
  * inode, mtime and size — across a settle window. One that changed or
  * vanished in that window had a live writer: left alone, reported 'held', and
  * the recovery ends in "manual repair".
- * @param {{gitDir:string, startedAt:number, timedOut:boolean, settleMs?:number}} o
+ * `sleep` is the settle wait — tests replace it to act as the live writer at
+ * exactly that point instead of racing a child process against the clock.
+ * @param {{gitDir:string, startedAt:number, timedOut:boolean, settleMs?:number, sleep?:(ms:number)=>void}} o
  * @returns {'absent'|'removed'|'held'}
  */
-function releaseKilledIndexLock({ gitDir, startedAt, timedOut, settleMs = LOCK_SETTLE_MS }) {
+function releaseKilledIndexLock({ gitDir, startedAt, timedOut, settleMs = LOCK_SETTLE_MS, sleep = sleepSync }) {
   const lock = path.join(gitDir, 'index.lock');
   let st;
   try { st = fs.statSync(lock); } catch { return 'absent'; }
   if (!timedOut || st.mtimeMs < startedAt - LOCK_SLACK_MS) return 'held';
-  if (settleMs > 0) sleepSync(settleMs);
+  if (settleMs > 0) sleep(settleMs);
   let again;
   try { again = fs.statSync(lock); } catch { return 'held'; }
   if (again.ino !== st.ino || again.mtimeMs !== st.mtimeMs || again.size !== st.size) return 'held';

@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from "vitest";
-import { execFileSync, spawn } from "child_process";
+import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -70,9 +70,13 @@ function put(dir, files) {
 const bytes = (dir, file) => fs.readFileSync(path.join(dir, file), "utf8");
 const exists = (dir, file) => fs.existsSync(path.join(dir, file));
 // Porcelain lines start with a space for unstaged changes — never trimmed.
+// Every case builds a real repository (~10 git spawns): ~2 s alone, 60 s+
+// when a second vitest run shares the machine. Nothing here measures speed.
+const SPAWN_TEST_MS = 300_000;
+
 const status = dir => raw(dir, ["status", "--porcelain", "--untracked-files=all"]).split("\n").filter(Boolean).sort();
 
-describe("restoreIncomingTree — a fast-forward that died mid-checkout", () => {
+describe("restoreIncomingTree — a fast-forward that died mid-checkout", { timeout: SPAWN_TEST_MS }, () => {
   test("puts back what the merge wrote, keeps the user's work, names what matches neither side", () => {
     const { dir, run, preHead, gitDir } = makeRepo(
       {
@@ -157,7 +161,7 @@ describe("restoreIncomingTree — a fast-forward that died mid-checkout", () => 
   });
 });
 
-describe("releaseKilledIndexLock — only the killed child's lock", () => {
+describe("releaseKilledIndexLock — only the killed child's lock", { timeout: SPAWN_TEST_MS }, () => {
   const withLock = (mtimeMs) => {
     const { gitDir } = makeRepo({ "a.txt": "a\n" }, { "a.txt": "A\n" });
     const lock = path.join(gitDir, "index.lock");
@@ -192,39 +196,26 @@ describe("releaseKilledIndexLock — only the killed child's lock", () => {
 
   // AUD-039: a lock the session's own git took in the kill gap is newer than
   // the merge start too — only one that sits still is the killed child's.
-  // The settle wait blocks this thread, so the live writer is a child process.
-  const liveWriter = (lock, script) => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["-e", script, lock], { stdio: ["ignore", "pipe", "ignore"] });
-    child.stdout.once("data", () => resolve(child));
-    child.on("error", reject);
+  // The live writer acts inside the settle wait itself (the injected `sleep`):
+  // a child process writing on a timer lost that race on a loaded machine.
+  test("a lock still being written during the settle window → held, left in place (AUD-039)", () => {
+    const { gitDir, lock } = withLock();
+    const sleep = () => fs.appendFileSync(lock, "x");
+    expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, sleep })).toBe("held");
+    expect(fs.existsSync(lock)).toBe(true);
   });
 
-  test("a lock still being written during the settle window → held, left in place (AUD-039)", async () => {
+  test("a lock that vanishes during the settle window → held, not reported free (AUD-039)", () => {
     const { gitDir, lock } = withLock();
-    const child = await liveWriter(lock, `
-      const fs = require("fs"); const lock = process.argv[1];
-      process.stdout.write("go");
-      const t = setInterval(() => { try { fs.appendFileSync(lock, "x"); } catch {} }, 40);
-      setTimeout(() => { clearInterval(t); process.exit(0); }, 3000);`);
-    try {
-      expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, settleMs: 400 })).toBe("held");
-      expect(fs.existsSync(lock)).toBe(true);
-    } finally {
-      child.kill();
-    }
+    const sleep = () => fs.unlinkSync(lock);
+    expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, sleep })).toBe("held");
   });
 
-  test("a lock that vanishes during the settle window → held, not reported free (AUD-039)", async () => {
+  test("a lock replaced during the settle window (same size, new inode) → held (AUD-039)", () => {
     const { gitDir, lock } = withLock();
-    const child = await liveWriter(lock, `
-      const fs = require("fs"); const lock = process.argv[1];
-      process.stdout.write("go");
-      setTimeout(() => { try { fs.unlinkSync(lock); } catch {} process.exit(0); }, 100);`);
-    try {
-      expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, settleMs: 600 })).toBe("held");
-    } finally {
-      child.kill();
-    }
+    const sleep = () => { fs.unlinkSync(lock); fs.writeFileSync(lock, ""); };
+    expect(R.releaseKilledIndexLock({ gitDir, startedAt: Date.now() - 500, timedOut: true, sleep })).toBe("held");
+    expect(fs.existsSync(lock)).toBe(true);
   });
 
   test("the default settle window is ~1.5 s and a still lock is removed after it (AUD-039)", () => {
@@ -237,7 +228,7 @@ describe("releaseKilledIndexLock — only the killed child's lock", () => {
   });
 });
 
-describe("headState", () => {
+describe("headState", { timeout: SPAWN_TEST_MS }, () => {
   test("unchanged, completed (the merge landed before it was stopped), moved", () => {
     const { dir, run, preHead } = makeRepo({ "a.txt": "a\n" }, { "a.txt": "A\n" });
     expect(R.headState(run, preHead, "main")).toBe("unchanged");
@@ -280,7 +271,7 @@ describe("firstErrorLine", () => {
   });
 });
 
-describe("gitRunner — env forwarding (AUD-C059)", () => {
+describe("gitRunner — env forwarding (AUD-C059)", { timeout: SPAWN_TEST_MS }, () => {
   test("passes a custom env through to the child, not just process.env", () => {
     // Two independent repos. Pointing GIT_DIR at the SECOND repo while running
     // in the FIRST repo's directory only succeeds if the runner's env option
