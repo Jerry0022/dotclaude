@@ -148,9 +148,9 @@ launched via the Bash tool with `run_in_background: true` (exact invocations in
    submission lands, which wakes Claude immediately. It also owns the
    self-cleanup gate (state file gone / OUR file on a foreign port / page
    deleted ⇒ `/shutdown` + exit; a file another session owns is left alone,
-   #417) and page liveness (no tab registered any more — the
-   last tab said `/bye`, or 15 min of silence from every tab ⇒ the page is
-   re-opened in Edge, once per window; a hidden tab never counts as closed,
+   #417) and page liveness (no tab registered any more and the
+   last tab said `/bye` ⇒ the page is re-opened in Edge, once per close;
+   silence never counts — a hidden or sleeping tab is not a closed one,
    #397) — token-free, see
    `deep-knowledge/bridge-server.md` § step 3 (#363).
 

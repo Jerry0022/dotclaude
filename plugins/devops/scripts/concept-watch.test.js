@@ -440,32 +440,13 @@ describe("run — waker owns cleanup, liveness and the structured exit (#363)", 
     expect(asked).toBe(path.join(root, "docs/concepts/gone.html"));   // resolved against the project root
   });
 
-  test("no browser poll for longer than --liveness → the page is re-opened exactly once per silence window", async () => {
-    const w = watcher({
-      responses: [
-        idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0),   // 11 polls × 20 s = 220 s of silence
-        { ok: true, body: '{"pending": true, "version": 1, "action": "iterate"}' },
-      ],
-    });
+  test("silence alone never reopens, even against a server without a tab registry", async () => {
+    const responses = [];
+    for (let i = 0; i < 60; i++) responses.push(idle(0));   // 60 × 20 s = 20 min, no tab ever polled
+    responses.push({ ok: true, body: '{"pending": true, "version": 1, "action": "iterate"}' });
+    const w = watcher({ responses });
     await w.done;
-    const reopens = w.calls.filter(c => c.reopen);
-    expect(reopens).toEqual([{ reopen: "http://localhost:8883/docs/concepts/x.html" }]);
-  });
-
-  test("a fresh browser poll re-arms the reopen; the next silence window reopens again", async () => {
-    // clock starts at 1_000_000; browser_ts values are absolute ms on that clock
-    const w = watcher({
-      responses: [
-        idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0),          // silent → reopen #1 at ~200 s
-        idle(1_000_000 + 200_000),                                                                        // the tab is back
-        idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000),
-        idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000), idle(1_000_000 + 200_000),
-        idle(1_000_000 + 200_000), idle(1_000_000 + 200_000),                                               // silent again → reopen #2
-        { ok: true, body: '{"pending": true}' },
-      ],
-    });
-    await w.done;
-    expect(w.calls.filter(c => c.reopen)).toHaveLength(2);
+    expect(w.calls.some(c => c.reopen)).toBe(false);
   });
 
   test("a tab that keeps polling is never re-opened", async () => {
@@ -476,8 +457,9 @@ describe("run — waker owns cleanup, liveness and the structured exit (#363)", 
     expect(w.calls.some(c => c.reopen)).toBe(false);
   });
 
-  test("--liveness 0 switches the reopen off", async () => {
-    const w = watcher({ liveness: 0, responses: [idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), idle(0), { ok: true, body: '{"pending": true}' }] });
+  test("--liveness 0 switches the reopen off — even after a /bye", async () => {
+    const bye = { ok: true, body: JSON.stringify({ pending: false, browser_ts: 1_000_000, browser_tabs: 0, browser_bye_ts: 1_000_000 + 1_000 }) };
+    const w = watcher({ liveness: 0, responses: [...Array(8).fill(bye), { ok: true, body: '{"pending": true}' }] });
     await w.done;
     expect(w.calls.some(c => c.reopen)).toBe(false);
   });
@@ -577,16 +559,30 @@ describe("run — liveness tells a hidden tab from a closed one (#397)", () => {
     expect(w.reopens()).toBe(0);
   });
 
-  test("no tab registered and no bye → the silence rule at --liveness still applies (tab died without a beacon)", async () => {
+  test("REGRESSION: sleeping tabs dropped from the registry are never re-opened (duplicate tabs)", async () => {
+    // Edge's Sleeping Tabs freeze a background tab, heartbeat Worker included;
+    // after TAB_STALE_MS the server forgets it → browser_tabs 0, browser_ts
+    // frozen, the last bye (a reload long ago) predates the last poll. The
+    // old silence rule opened a fresh tab here every 15 min: 4 and 6 tabs for
+    // two concepts after a few hours.
     const responses = [];
-    for (let i = 0; i < 50; i++) responses.push(poll(T0, 0)); // 50 × 20 s = 1000 s > 900 s
+    for (let i = 0; i < 540; i++) responses.push(poll(T0, 0, T0 - 60_000)); // 540 × 20 s = 3 h
     responses.push(pend);
     const w = watcher({ responses });
     await w.done;
-    expect(w.reopens()).toBe(1);
-    const idx = w.calls.findIndex(c => c.reopen);
-    const pollsBefore = w.calls.slice(0, idx).filter(c => c.reqPath === "/pending").length;
-    expect(pollsBefore * 20_000).toBeGreaterThanOrEqual(DEFAULTS.liveness * 1000); // not a second earlier
+    expect(w.reopens()).toBe(0);
+  });
+
+  test("a new waker against the same closed page reopens it only after a bye that follows the last poll", async () => {
+    // A waker restart (every submission, every session start) has no memory;
+    // the bye stamp is what keeps the verdict from repeating: a tab that
+    // registered after the reopen moved browser_ts past the bye.
+    const responses = [];
+    for (let i = 0; i < 10; i++) responses.push(poll(T0 + 90_000, 0, T0 + 1_000)); // reopened tab polled at +90 s, then slept
+    responses.push(pend);
+    const w = watcher({ responses });
+    await w.done;
+    expect(w.reopens()).toBe(0);
   });
 
   test("after a reopen, a tab registering again re-arms; a later bye reopens once more", async () => {
@@ -603,7 +599,7 @@ describe("run — liveness tells a hidden tab from a closed one (#397)", () => {
     expect(w.reopens()).toBe(2);
   });
 
-  test("DEFAULTS.liveness is 900 s and BYE_GRACE_MS 60 s — the Edge throttling numbers", () => {
+  test("DEFAULTS.liveness stays 900 (on) and BYE_GRACE_MS 60 s", () => {
     expect(DEFAULTS.liveness).toBe(900);
     expect(BYE_GRACE_MS).toBe(60_000);
     expect(parseArgs([]).liveness).toBe(900);
