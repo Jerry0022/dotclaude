@@ -151,6 +151,16 @@ describe('sample.derive', () => {
     expect(d.sys.diskMs).toBeCloseTo(1, 5);
     expect(d.sys.pagesPerSec).toBe(3000);
   });
+  it('disk active time = busiest physical disk; IO operations per second per process', () => {
+    const a = { ts: 0, cores: 1, procs: [{ pid: 1, startMs: 0, cpuMs: 0, ioOps: 100 }], sys: { disks: [{ name: '0 C:', idle: 0, ts: 0 }, { name: '1 D:', idle: 0, ts: 0 }] } };
+    const b = { ts: 1000, cores: 1, procs: [{ pid: 1, startMs: 0, cpuMs: 0, ioOps: 700 }], sys: { disks: [{ name: '0 C:', idle: 8e6, ts: 1e7 }, { name: '1 D:', idle: 1e6, ts: 1e7 }] } };
+    const d = derive(derive(null, a), b);
+    expect(d.sys.diskBusyPct).toBeCloseTo(90, 5);
+    expect(d.procs[0].iops).toBe(600);
+    expect(derive(null, b).sys.diskBusyPct).toBeNaN();
+    const gone = derive(derive(null, a), { ...b, sys: { disks: [{ name: '2 E:', idle: 0, ts: 1e7 }] } });
+    expect(gone.sys.diskBusyPct).toBeNaN();
+  });
   it('a reused pid gets no rate; Linux disk ticks', () => {
     const a = { ts: 0, cores: 1, procs: [{ pid: 1, startMs: 0, cpuMs: 0 }], sys: { disk: { ticksMs: 0, ios: 0 } } };
     const b = { ts: 1000, cores: 1, procs: [{ pid: 1, startMs: 999999, cpuMs: 900 }], sys: { disk: { ticksMs: 40, ios: 20 } } };

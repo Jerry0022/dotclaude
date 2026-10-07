@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.248.1] — 2026-10-07
+
+### Fixed
+- **Load governor: disk pressure now follows Task Manager's "Active time".** The disk budget compared `_Total` transfer latency against a learned idle baseline (0.6 ms on a DRAM-less NVMe) and flapped about 460 times in one day (latency median 27.7 ms, p90 129 ms), causing needless deferrals. Pressure is now the active time of the busiest physical disk (100 − %Idle from `Win32_PerfRawData_PerfDisk_PhysicalDisk`), with the same 80/65 % hysteresis and 10 s smoothing as CPU/GPU. The latency baseline/queue logic and the config keys `diskLatencyFactor`, `diskQueue`, `baselineMs`, `minBaselineMs` are gone; latency is only logged.
+- **Disk load counts accesses, not only MB/s.** Per-process IO operations/s (read + write operation counts) now count as disk load next to bytes: a Claude job is disk-heavy above 500 ops/s, a foreign app above 300 ops/s (only while the disk is pressed). IOPS-heavy jobs such as vitest, esbuild or npm with few MB/s were invisible before.
+
+### Changed
+- The governor's minute summary logs the disk active % and the top 3 disk users (`name:class:ops/MB`).
+
+### Docs
+- `deep-knowledge/load-governor.md` describes active-time disk pressure and IO operations.
+
+### Tests
+- policy (80/65 on active time; latency alone never trips), trackJobs (800 ops/s with few MB/s = heavy), state (ops/s per process); governor + gate 108/108, eslint clean. Live smoke with the Windows helper: active time 34–75 %, per-process ops visible. Full suite 8495 passed, 2 unrelated flaky under load (green in isolation). Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.0] — 2026-10-07
 
 ### Added

@@ -60,7 +60,7 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
   const unload = deps.unload || unloadOllama;
 
   const st = {
-    pid: process.pid, throttles: {}, tracked: {}, prio: {}, budget: { baseline: {} }, last: {}, kinds: {}, notified: {},
+    pid: process.pid, throttles: {}, tracked: {}, prio: {}, budget: {}, last: {}, kinds: {}, notified: {},
     prevSample: null, lib: { roots: [], dirs: [], exes: [] }, libAt: 0, startedAt: now(), summaryAt: now(),
     pressure: { priority: [], over: [] }, priorityBy: null, sys: {}, liveSessions: 0,
   };
@@ -68,7 +68,7 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
   const save = () => S.writeState(p, {
     pid: st.pid, version, heartbeat: now(), helperPid: adapter.selfPids[1] || null, logFile: logger.name || null,
     throttles: Object.values(st.throttles), pressure: st.pressure, priorityBy: st.priorityBy, sys: st.sys, kinds: st.kinds,
-    budget: { over: st.budget.over, baseline: st.budget.baseline },
+    budget: { over: st.budget.over },
     jobs: Object.values(st.tracked).map((j) => ({ id: j.id, name: j.name, kind: j.kind, heavy: j.heavy })),
   });
 
@@ -88,7 +88,6 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
   // Orphan reversal: adopt every recorded throttle, then release it; failures stay recorded.
   const init = async (prevState) => {
     st.kinds = (prevState && prevState.kinds) || {};
-    st.budget.baseline = (prevState && prevState.budget && prevState.budget.baseline) || {};
     for (const t of (prevState && prevState.throttles) || []) st.throttles[t.jobId] = t;
     save();
     for (const id of Object.keys(st.throttles)) await release(id, 'orphan');
@@ -249,7 +248,10 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
       const m = st.budget.mean || {};
       const r1 = (x) => (Number.isFinite(x) ? Math.round(x) : null);
       ev('summary', {
-        cpu: r1(m.cpu), gpu: r1(m.gpu), diskMs: Number.isFinite(m.diskMs) ? Math.round(m.diskMs * 10) / 10 : null, freeMB: r1(m.freeMB),
+        cpu: r1(m.cpu), gpu: r1(m.gpu), disk: r1(m.disk), diskMs: Number.isFinite(m.diskMs) ? Math.round(m.diskMs * 10) / 10 : null, freeMB: r1(m.freeMB),
+        diskTop: procs.filter((x) => (x.iops || 0) >= 50 || (x.ioBps || 0) >= 1048576)
+          .sort((a, b) => (b.iops || 0) - (a.iops || 0)).slice(0, 3)
+          .map((x) => `${x.name}:${classes.get(x.pid) || '?'}:${Math.round(x.iops || 0)}ops/${Math.round((x.ioBps || 0) / 1048576)}MB`),
         priority: [...new Set(Object.values(st.prio.active || {}))], over: st.pressure.over,
         jobs: Object.keys(st.tracked).length, heavy: Object.values(st.tracked).filter((j) => j.heavy).length, throttled: Object.keys(st.throttles).length,
       });

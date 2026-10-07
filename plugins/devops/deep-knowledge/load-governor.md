@@ -29,7 +29,8 @@ MCP servers are never throttled. Concept:
    never treated as reuse; a newer plugin version asks the running one to hand
    over). A session expires when its claude pid is gone.
 2. **Every tick** (3 s busy, 20 s idle — process list only, no GPU query) the
-   helper samples processes, disk latency (raw counters), available RAM,
+   helper samples processes (incl. IO bytes and IO operations), per-disk idle
+   time and latency (raw counters), available RAM,
    paging and the foreground window. Attribution is **claude ancestry only**
    (no session job object): Claude's processes are the descendants of the
    Claude Code CLI; processes that start with a session (and MCP servers) are
@@ -37,8 +38,9 @@ MCP servers are never throttled. Concept:
    Claude — every ancestor of a Claude root (the Desktop `Claude.exe`, VS
    Code, a terminal, an IDE) and every process sharing its app folder — is the
    host: never priority, never learned.
-3. A job is **heavy** after 20 s over 25 % CPU, 20 % GPU or high disk IO while
-   the disk is pressed. Kinds: server (listens on a port), foreground (Claude
+3. A job is **heavy** after 20 s over 25 % CPU, 20 % GPU or high disk IO
+   (> 20 MB/s or > 500 operations/s — many small accesses count) while the
+   disk is pressed. Kinds: server (listens on a port), foreground (Claude
    waits on it), generator (heavy > 2 min), build.
 4. **Pressure** = foreign priority per resource (decays 10 min after the
    app's last load; an unknown app's load counts only while the system uses
@@ -46,8 +48,9 @@ MCP servers are never throttled. Concept:
    and never for browsers, chat/IDE hosts or script runtimes such as
    node/python; all resources while it is the interactive foreground app;
    game-library, learned and `alwaysPriority` apps from process start; manual
-   switch) ∪ over budget (CPU/GPU 80/65 hysteresis, disk latency > 4× idle
-   baseline with a queue, RAM free < max(15 %, 4096 MB) or hard paging; 10 s
+   switch) ∪ over budget (CPU/GPU 80/65 hysteresis, disk = active time of
+   the busiest physical disk, as Task Manager shows it, 80/65 — latency is
+   only logged, RAM free < max(15 %, 4096 MB) or hard paging; 10 s
    smoothing).
 5. **Plan**: on priority every heavy job on that resource yields at once —
    CPU generators are paused, everything else (servers, foreground, builds,
@@ -126,8 +129,9 @@ disk (`scripts/governor/log.js`):
   `queue-expired` / `queue-inject`, `admit` (gate decision, reason, command
   kind, command cut to 200 chars), `llm-defer`, `helper-timeout` /
   `helper-killed` / `helper-restart`, `tick-error`. While anything is tracked
-  or pressed, one `summary` line per minute (budget means, priority apps,
-  jobs, throttled); nothing when idle. Identical event + fields within 30 s
+  or pressed, one `summary` line per minute (budget means incl. disk active
+  time and latency, the top 3 disk users as `name:class:ops/MB`, priority
+  apps, jobs, throttled); nothing when idle. Identical event + fields within 30 s
   are written once with `repeated: n`. No environment, no file contents.
 - **Read:** `governor log` prints the newest run (plus `hooks.jsonl`) one
   event per line; `--runs N` for more runs, `--tail` to follow the current one.

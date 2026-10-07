@@ -21,18 +21,17 @@ const DEFAULTS = Object.freeze({
   idleTickMs: 20000, // cadence with no tracked Claude job (process list only, no GPU)
   heartbeatMs: 5000,
   // A Claude-attributed job is "heavy" after sustainMs over one threshold.
-  heavy: { cpuPct: 25, gpuPct: 20, diskBps: 20 * MB, ramMB: 1024, sustainMs: 20000, dipMs: 6000, generatorMs: 120000 },
+  heavy: { cpuPct: 25, gpuPct: 20, diskBps: 20 * MB, diskOps: 500, ramMB: 1024, sustainMs: 20000, dipMs: 6000, generatorMs: 120000 },
   // "Noticeable load" of a foreign (non-Claude, non-OS) app, per resource. An unknown app's load earns
   // priority only while the system uses >= contendPct of that resource (games/learned apps: always).
   foreign: {
-    cpuPct: 10, gpuPct: 10, diskBps: 10 * MB, contendPct: 60,
+    cpuPct: 10, gpuPct: 10, diskBps: 10 * MB, diskOps: 300, contendPct: 60,
     decayMs: 10 * 60000, learnFullscreenMs: 15000, learnMs: 60000, interactiveIdleMs: 120000,
   },
-  // The 80 % rule (always on).
+  // The 80 % rule (always on). Disk = active time of the busiest physical disk, IO bytes OR operations count.
   budget: {
     highPct: 80, lowPct: 65, smoothMs: 10000, escalateMs: 10000, relaxMs: 30000,
-    diskLatencyFactor: 4, diskQueue: 1, ramFreePct: 15, ramFreeMB: 4096, pagingPerSec: 2500,
-    baselineMs: 60000, minBaselineMs: 0.3,
+    ramFreePct: 15, ramFreeMB: 4096, pagingPerSec: 2500,
   },
   cap: { cpuPct: 10 },
   // staleMs: state older than this = no watcher (fail open). Must exceed 2 x idleTickMs + the longest tick.
