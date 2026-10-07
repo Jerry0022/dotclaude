@@ -268,7 +268,7 @@ self-pulse refreshed every 30s, so the page showed "Claude verbunden"
 indefinitely no matter what Claude was actually doing.
 
 **Tab liveness — three page-side duties (#397).** The pickup waker re-opens
-the page when the server no longer knows an open tab. For that verdict to be
+the page when the user closed its last tab (no tab registered + `/bye`). For that verdict to be
 right the page must (a) identify itself, (b) keep polling while hidden, and
 (c) say goodbye when it really closes:
 

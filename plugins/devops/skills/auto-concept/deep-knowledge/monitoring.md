@@ -251,9 +251,9 @@ Three tiers, and only one of them is primary:
   covers: during a processing round the REPL is busy. Re-launch the waker at
   SKILL.md 5c step 7 instead of leaving that gap to the cron.
 - **Page liveness — the waker, per-tab.** The page is re-opened in Edge once
-  when the server knows no open tab any more — the last tab beaconed `/bye`
-  (60 s grace), or every tab has been silent for 15 min. A hidden, throttled
-  tab is still a registered tab and is never touched (#397)
+  when the user closed the last tab — no tab registered and a `/bye` after
+  the last poll (60 s grace). Silence never reopens: a hidden or sleeping
+  tab is still an open tab, even after the server forgot it (#397)
   (`bridge-server.md` § step 3, #363).
 - **Timeout**: NONE — monitoring runs indefinitely until the user explicitly
   ends it (says "fertig"/"done", closes the page, or closes Claude). Never

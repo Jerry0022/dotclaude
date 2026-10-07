@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script concept-watch
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description The concept bridge's two detached watchers, as a script instead
  *   of a shell loop pasted into three documents.
@@ -19,14 +19,13 @@
  *                     - self-cleanup gate: state file gone / foreign port /
  *                       concept HTML gone ⇒ POST /shutdown, exit with the reason;
  *                     - page liveness: the page is re-opened in the user's
- *                       browser when NO tab is known to the server any more —
- *                       the last tab sent its unload beacon (POST /bye) and
- *                       nothing polled since, or every tab has been silent
- *                       for `--liveness` seconds. At most once per window.
- *                       Silence alone while a tab is still registered never
+ *                       browser when the user closed its last tab — no tab
+ *                       registered and an unload beacon (POST /bye) after
+ *                       the last poll. At most once per close. Silence never
  *                       reopens: a hidden Edge tab is throttled to one timer
  *                       wake-up per minute after 5 min and, with Sleeping
- *                       Tabs, to none at all (#397);
+ *                       Tabs, to none at all, so a silent tab is still an
+ *                       open tab (#397, and the duplicate tabs after it);
  *                     - structured exit on a submission —
  *                       `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=…`
  *                       — so the woken Claude reads one line instead of
@@ -103,16 +102,12 @@ const DEFAULTS = {
   // Claude relaunch it, which is right when the process is gone and wrong
   // when it is only busy — and the busy case is by far the common one.
   deadAfter: 300,
-  // Seconds every tab must be silent before the page is re-opened (watch
-  // mode; 0 = off). 900 and not 180: Edge's intensive throttling coalesces a
-  // hidden tab's timers to ONE wake-up per minute after 5 min, and Sleeping
-  // Tabs / efficiency mode suspend it completely — measured on a live bridge:
-  // browser_ts advanced once per ~60 s, then not at all. 180 s read every
-  // coffee break as "tab closed" and opened a fresh foreground tab each time,
-  // which was then backgrounded and throttled in turn — the tab storm of
-  // #397. A real close is detected by the page's /bye beacon (see
-  // BYE_GRACE_MS), so this value only has to cover the "tab vanished without
-  // saying goodbye" case (crash, kill) and can be generous.
+  // Watch mode: 0 switches the page reopen off; any positive value keeps it
+  // on. It used to be the seconds of silence after which the page counted as
+  // closed (180, then 900 for #397) — but Sleeping Tabs suspend a background
+  // tab with no time limit, so every silence threshold eventually read a
+  // sleeping tab as closed and opened a duplicate. Only the /bye beacon
+  // decides now (see BYE_GRACE_MS); the number stays for CLI compatibility.
   liveness: 900,
 };
 
@@ -339,19 +334,17 @@ async function run(opts, deps = {}) {
   //   browser_tabs   — tabs currently registered (polled within the server's
   //                    TAB_STALE_MS and no /bye yet)          — since #397,
   //   browser_bye_ts — last unload beacon                     — since #397.
-  // "Closed" is decided in this order:
-  //   1. a tab is registered            → open, whatever browser_ts says
-  //                                       (hidden + throttled ≠ closed);
-  //   2. none registered, a /bye landed after the last poll and BYE_GRACE_MS
-  //      have passed                    → closed (the user closed the last tab);
-  //   3. none registered, silent for `liveness` → closed (tab died without
-  //      a beacon, or an old page build without tab ids).
-  // Against a server without `browser_tabs` (older build) only rule 3 applies.
+  // The page counts as closed ONLY when no tab is registered AND a /bye
+  // landed after the last poll, BYE_GRACE_MS ago — the user closed the last
+  // tab. Silence never counts, however long: Edge's Sleeping Tabs suspend a
+  // background tab completely (its heartbeat Worker included), the server
+  // drops it from the registry after TAB_STALE_MS, and a silence rule then
+  // read every sleeping tab as dead and opened a fresh one — 4 and 6 tabs
+  // for two concepts after a few hours. A tab that dies without a beacon
+  // (crash, kill) is not reopened; the completion card prints the URL.
+  // Against a server without `browser_tabs` (older build) nothing reopens.
   // A reopen fires ONCE; the flag re-arms only after a tab is seen again, so
-  // a browser closed on purpose gets one reopen, never a storm. Before the
-  // first poll the watcher's own start is the baseline — a page that never
-  // opened is as closed as one that was closed.
-  const startedAt = io.now();
+  // a browser closed on purpose gets one reopen, never a storm.
   let reopened = false;
   for (;;) {
     const state = io.checkState(opts.state, opts.port, watch ? io.exists : undefined, opts.owner);
@@ -387,15 +380,10 @@ async function run(opts, deps = {}) {
           return emit('PENDING_SUBMISSION', version + action);
         }
         if (opts.liveness > 0) {
-          const now = io.now();
-          const seen = Number.isFinite(body.browser_ts) && body.browser_ts > 0 ? body.browser_ts : startedAt;
-          const silentMs = now - seen;
-          const tabs = Number.isInteger(body.browser_tabs) ? body.browser_tabs : null;
+          const seen = Number.isFinite(body.browser_ts) && body.browser_ts > 0 ? body.browser_ts : 0;
           const byeTs = Number.isFinite(body.browser_bye_ts) ? body.browser_bye_ts : 0;
-          const saidBye = byeTs > seen && now - byeTs >= BYE_GRACE_MS;
-          const closed = tabs === null
-            ? silentMs >= opts.liveness * 1000
-            : tabs === 0 && (saidBye || silentMs >= opts.liveness * 1000);
+          const closed = body.browser_tabs === 0
+            && byeTs > seen && io.now() - byeTs >= BYE_GRACE_MS;
           if (!closed) {
             reopened = false;
           } else if (!reopened) {

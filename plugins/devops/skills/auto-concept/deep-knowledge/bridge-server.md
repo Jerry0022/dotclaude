@@ -471,16 +471,16 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      `/pending` reports `browser_ts` (last poll from any tab),
      `browser_tabs` (tabs registered) and `browser_bye_ts`. The waker
      re-opens `http://localhost:{port}/{html_path}` in the user's Edge only
-     when **no tab is registered** — after the last tab's `/bye` plus a
-     60 s grace, or after every tab has been silent for `--liveness`
-     seconds (default **900**). Silence alone while a tab is registered never
-     reopens: Edge throttles a hidden tab's timers to one wake-up per minute
-     after 5 min and suspends a Sleeping Tab entirely, so 180 s of silence
-     used to open a fresh tab every few minutes (#397). The page keeps the
-     registry fresh from a Worker (exempt from that throttling). Once per
-     window, re-armed only after a tab is seen again, so a tab closed on
-     purpose gets one reopen and never a storm. Before the first poll the
-     waker's own start is the baseline. `--liveness 0` switches it off.
+     when the user **closed the last tab**: no tab registered and a `/bye`
+     after the last poll, 60 s ago (grace for a reload). Silence never
+     reopens, however long: Edge throttles a hidden tab's timers to one
+     wake-up per minute after 5 min and a Sleeping Tab is suspended
+     entirely, Worker included — the server then drops it from the registry
+     after 15 min, and the old silence rule (180 s, later 900 s) read every
+     sleeping tab as closed and opened a duplicate (#397; later 4 and 6 tabs
+     for two concepts). A tab that dies without a beacon is not reopened —
+     the completion card prints the URL. Once per close, re-armed only after
+     a tab is seen again. `--liveness 0` switches it off.
    - **Structured exit.** A submission exits with
      `WAKER_EXIT reason=PENDING_SUBMISSION version=N action=iterate|implement|finalize`
      (`/pending` carries the submission's `action`), so the woken Claude reads
