@@ -2,6 +2,17 @@
 
 ## [0.248.3] — 2026-10-07
 
+### Fixed
+- **Completion card: the user's own check no longer counts as an unmet requirement (#643).** A `validation` item that is not met, waits on the user and names a verification activity (e.g. "Sichtprüfung im echten Holodeck", "manually verify …") was shown as "⚠ Nicht voll erfüllt" and counted in "N/M Anforderungen · K wartet auf dich". Such an item is now rerouted before the pre-check and the render (MCP handler and CLI path alike): it is set met and its text moves to the user's checks (`userTest` in the test variant, `userFinalTest` otherwise, deduplicated). Real deviations that wait on the user (e.g. "remember per account" implemented as localStorage) stay "Nicht voll erfüllt". Matching is DE+EN and anchored at a word start. Rerouting was chosen over rejecting: a rejection costs a re-render round trip and the intent is unambiguous.
+
+### Docs
+- `test-autonomy.md` and `completion-card-design.md`: verification activities never belong in `validation[]`.
+
+### Tests
+- `validation-gaps.test.js` (reroute cases), `index.card.test.js` #643 case (no "Nicht voll erfüllt" line, no count, real deviation still listed, reroute visible); 142 + 219 card tests green after rebase, eslint clean. Codex review skipped (limit until 2026-10-11).
+
+## [0.248.3] — 2026-10-07
+
 ### Changed
 - **Skills fit Anthropic's skill limits without losing detail.** An external skills review checked every skill against Anthropic's skill best practices and the Claude Code skills docs (code.claude.com/docs/en/skills). Two skills broke a limit, both fixed by verbatim moves only — no rule, step or trigger was dropped or reworded:
   - `do-run`: the description was 1,460 characters (Agent Skills spec limit 1,024). It is now 868; the quoted trigger list moved verbatim into a folded `when_to_use:` block (Claude Code reads description + `when_to_use`, cut at 1,536). `triggers:` is unchanged.
