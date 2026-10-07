@@ -2229,6 +2229,9 @@ function buildCompletionCard(params) {
     usageData, delta5h, deltaWk, healthLine,
     params.delivery || {}, params.state || {},
   );
+  // Local wall-clock time the card was built, drawn top-right on the widget.
+  const now = new Date();
+  params._cardModel.builtAt = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
   // 4b. A hand-off found in the card's OWN payload (#506) renders the
   //     "Web-Guide starten" button on Desktop (card-widget.js#buttonsFor

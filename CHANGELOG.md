@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.248.0] — 2026-10-07
+
+### Added
+- **Completion cards show when they were built.** The Desktop card widget draws the local build time (`HH:MM`) right-aligned in the title row, small and in the secondary text colour — a card read later tells at a glance how old its state is. `buildCompletionCard` sets the new model field `builtAt`; a model without it renders as before. The time sits in flow next to the title (flex row), not absolutely positioned, and the `h3.card-title` card-guard reads is unchanged. The terminal markdown carries no time.
+
+### Docs
+- `completion-card-design.md` § 2.1 describes the build time in the title row.
+
+### Tests
+- Widget test for the title row with and without `builtAt`; rendered in a browser and checked by screenshot. card-widget + card-guard 249/249, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.247.5] — 2026-10-07
 
 ### Fixed
