@@ -44,6 +44,9 @@ describe("ship SKILL.md — session title prefix", () => {
     expect(mark).toMatch(/fallback/);
     expect(mark).toMatch(/Desktop app/);
     expect(mark).toMatch(/skip silently/);
+    // #661: a deferred tool is not an unavailable one — load, then call.
+    expect(mark).toMatch(/Deferred is not unavailable/);
+    expect(mark).toContain("select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title");
   });
 
   test("Step 6 maps each outcome to its title before the card renders", () => {

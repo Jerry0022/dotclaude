@@ -257,7 +257,8 @@ export function titleInstruction(prefix) {
     'mcp__ccd_session_mgmt__get_session {session_id:"self"} → ' +
     `strip every leading prefix from [${list}] → ` +
     `mcp__ccd_session_mgmt__set_session_title {session_id:"self"} and ${set} ` +
-    "If either tool is unavailable or fails: skip silently — no retry, no note, no fallback. " +
+    "Deferred is not unavailable: if either tool is only in the deferred-tools list, load both once with ToolSearch `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them. " +
+    "If either tool is truly unavailable (not even deferred) or fails: skip silently — no retry, no note, no fallback. " +
     "The card stays the last output of the turn."
   );
 }

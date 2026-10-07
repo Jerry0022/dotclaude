@@ -229,7 +229,9 @@ title is `⏳ `; the card that hands the page back (`phase: "waiting"`) brings
 the compass back. The hourglass is always the bare icon, never a worded
 `⏳ Working – `.
 
-**Both tools exist only in the Desktop app.** In a terminal session, an
+**Both tools exist only in the Desktop app.** Deferred is not unavailable: when they sit in the deferred-tools list, load
+both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them
+(`{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`). In a terminal session, an
 unattended run, or when the call fails for any reason: skip silently — no
 retry, no note to the user, no fallback. The rename is a courtesy, never a
 gate. Never restore the title by re-typing a remembered value; the strip in

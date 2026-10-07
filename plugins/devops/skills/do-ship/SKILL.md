@@ -250,7 +250,9 @@ and `/do-batch` do — the prefix strings are pinned in
 The bare `⏳ ` is the fallback for "being worked on", never the override: no
 hook or skill replaces a running `🚀 Shipping – ` with it (design § 7).
 
-**Both tools exist only in the Desktop app.** In a terminal session, an
+**Both tools exist only in the Desktop app.** Deferred is not unavailable: when they sit in the deferred-tools list, load
+both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them
+(`{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`). In a terminal session, an
 unattended run, or when the call fails for any reason: skip silently — no
 retry, no note to the user, no fallback. The rename is a courtesy, never a
 gate. The completion card's `[SESSION TITLE]` block replaces the prefix with
@@ -959,7 +961,7 @@ the card (the card stays the last output of the turn). What it resolves to:
 
 The block also strips a stale `🚀 Shipping – ` when the title carries one. A
 title with none of the devops prefixes is left untouched — the user renamed it
-meanwhile, and that name wins. Desktop app only; skip silently elsewhere or on
+meanwhile, and that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere or on
 any failure.
 
 ### Session archive on exit (carried by the card result, #632)

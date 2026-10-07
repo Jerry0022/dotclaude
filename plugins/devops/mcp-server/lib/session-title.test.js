@@ -303,6 +303,9 @@ describe("titleInstruction", () => {
     for (const c of ["Alpha", "Beta", "Stable"]) expect(text).toContain(`"🎊 Released ${c} – "`);
     expect(text).toMatch(/skip silently/);
     expect(text).toMatch(/Desktop app only/);
+    // #661: a deferred tool is not an unavailable one — load, then call.
+    expect(text).toMatch(/Deferred is not unavailable/);
+    expect(text).toContain("select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title");
   });
 
   // The concept finalize ship renders its ship card while the state file is

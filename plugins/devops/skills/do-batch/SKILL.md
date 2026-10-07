@@ -145,7 +145,9 @@ says what is going on: `get_session` / `set_session_title` with
 
 The prefix is exactly `📥 Batch – ` (inbox tray, space, word, space, en dash,
 space) — the same emoji the completion card carries in its `📥 BATCH sammelt`
-CTA while the mode is armed. Both tools exist only in the Desktop app: in a
+CTA while the mode is armed. Both tools exist only in the Desktop app. Deferred is not unavailable: when they sit in the deferred-tools list, load
+both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them
+(`{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`). In a
 terminal session, an unattended run, or on any failure, skip silently — no
 retry, no note, no fallback. The rename is a courtesy, never a gate.
 

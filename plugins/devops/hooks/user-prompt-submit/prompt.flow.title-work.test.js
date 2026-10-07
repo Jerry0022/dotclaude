@@ -59,6 +59,9 @@ describe("prompt.flow.title-work", () => {
     expect(text).toMatch(/icon-only/);
     expect(text).toMatch(/skip silently/);
     expect(text).toMatch(/Desktop app only/);
+    // #661: a deferred tool is not an unavailable one — load, then call.
+    expect(text).toMatch(/Deferred is not unavailable/);
+    expect(text).toContain("select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title");
   });
 
   // Observed 2026-09-20: "🧪 Test – App-Performance-Optimierung" stayed on
