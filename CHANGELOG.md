@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.247.4] — 2026-10-07
+
+### Fixed
+- **Concept pages no longer pile up duplicate tabs.** Edge's Sleeping Tabs suspend a background concept tab completely, heartbeat Worker included; the bridge drops it from its tab registry after 15 min, and the pickup waker's silence rule (`--liveness`, 900 s) then read the sleeping tab as closed and opened a fresh one — two concepts ended up with 4 and 6 tabs after a few hours. The waker (`concept-watch.js` v0.5.0) now reopens the page only after a real close: no tab registered AND a `/bye` beacon after the last poll (60 s grace). Silence never reopens; a tab that dies without a beacon is not reopened (the completion card prints the URL). `--liveness 0` still switches the reopen off.
+
+### Docs
+- auto-concept `bridge-server.md`, `monitoring.md`, `step3-open-browser.md` and `templates-utilities.md` describe the bye-only rule.
+
+### Tests
+- Regression tests: sleeping tabs dropped from the registry for 3 h → no reopen; a restarted waker against a slept reopened tab → no reopen; silence against a legacy server → no reopen. concept-watch 73/73, auto-concept + scripts suites 2751 passed, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.247.3] — 2026-10-06
 
 ### Fixed
