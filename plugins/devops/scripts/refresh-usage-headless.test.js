@@ -381,7 +381,7 @@ describe("slimScraperProfile — one-time prune that keeps the login", () => {
   let dir;
   afterEach(() => {
     if (dir) {
-      for (const d of [dir, `${dir}.trash`]) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
+      for (const d of [dir, `${dir}.trash`]) { try { rmSync(d, { recursive: true, force: true }); } catch { /* best-effort temp cleanup */ } }
       dir = null;
     }
   });

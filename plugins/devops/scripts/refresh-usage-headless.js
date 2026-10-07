@@ -507,7 +507,7 @@ function purgeDetached(dir) {
     const child = spawn('cmd.exe', ['/d', '/c', 'rd', '/s', '/q', dir], { detached: true, stdio: 'ignore', windowsHide: true });
     child.on('error', () => {});
     child.unref();
-  } catch {}
+  } catch { /* spawn failure only skips the purge; the trash is retried next launch */ }
 }
 
 /**
@@ -563,7 +563,7 @@ function slimScraperProfile({
  */
 async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) {
   if (slimScraperProfile() === 'pruned') log('Pruned scraper profile bloat (one-time)');
-  try { fs.mkdirSync(SCRAPER_PROFILE_DIR, { recursive: true }); } catch {}
+  try { fs.mkdirSync(SCRAPER_PROFILE_DIR, { recursive: true }); } catch { /* an existing dir is fine; a real failure surfaces in the CDP poll */ }
 
   const args = buildScraperArgs({ visible, url });
 
