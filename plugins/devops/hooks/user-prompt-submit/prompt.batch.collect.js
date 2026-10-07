@@ -362,7 +362,9 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     // sidebar keeps promising a collection that ended with this prompt.
     'Session-Titel: Beginnt er mit "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
     'self), entferne genau dieses Präfix via mcp__ccd_session_mgmt__set_session_title',
-    'self. Fehlen die Tools (Terminal, unbeaufsichtigt): still überspringen.',
+    'self. Nur zurückgestellt (deferred) ist nicht fehlend: dann beide einmal per ToolSearch',
+    '"select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title" laden, dann aufrufen.',
+    'Fehlen die Tools wirklich (Terminal, unbeaufsichtigt) oder schlägt der Aufruf fehl: still überspringen.',
   );
   if (rest) {
     head.push(

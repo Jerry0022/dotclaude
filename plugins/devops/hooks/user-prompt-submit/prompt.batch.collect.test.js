@@ -380,6 +380,9 @@ describe("message builders", () => {
     expect(ctx).toContain('"📥 Batch – "');
     expect(ctx).toContain("mcp__ccd_session_mgmt__set_session_title");
     expect(ctx).toMatch(/still überspringen/);
+    // #661: deferred tools are loadable, not missing.
+    expect(ctx).toContain("ToolSearch");
+    expect(ctx).toContain("select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title");
   });
 
   test("the merge context demands the full-detail bundle plan on both routes (#483)", () => {

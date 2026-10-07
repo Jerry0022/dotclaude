@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.248.9] — 2026-10-07
+
+### Fixed
+- **Session-title renames no longer skipped when the Desktop session tools are deferred (#661).** In a large-tool-inventory Desktop session `mcp__ccd_session_mgmt__get_session` / `set_session_title` are listed as deferred (schema not loaded). Every title instruction said "if the tool is unavailable: skip silently", and Claude read deferred as unavailable — so a whole session never got its `⏳ ` / `🚀 Shipping – ` / outcome prefixes. Every title instruction now says "deferred is not unavailable": load both tools once via `ToolSearch select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them; skip silently only when the tools are truly absent (terminal) or the call fails. Covered: `prompt.flow.title-work`, the completion card's `[SESSION TITLE]` block, do-ship Pre-Step C, auto-concept steps 3, 5 and 6, do-batch (SKILL, activation, merge, and the `prompt.batch.collect` merge context), `plugin-behavior.md`. `deep-knowledge/mcp-deferred-tools.md` gets a "Session title tools" section naming this as the canonical deferred ≠ unavailable case.
+
+### Not changed (decisions)
+- No Stop-hook reminder for a missing title change: the wording fix removes the root cause, and the hook would need new per-turn state.
+
+### Tests
+- The ToolSearch clause is asserted in the hook output, the card block, do-ship Pre-Step C and the batch merge context. Branch suites green, eslint clean; full suite verified separately. Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.8] — 2026-10-07
 
 ### Fixed
