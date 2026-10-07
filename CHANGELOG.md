@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.248.6] — 2026-10-07
+
+### Changed
+- **Agent questions ask for evidence, not a replay of the reasoning (#650).** The question phrasing rule in `deep-knowledge/agent-orchestration.md` said "Always explain your reasoning inline before/after the question". Newer models refuse or degrade on requests to restate their reasoning. The rule now reads: name the deciding facts and the trade-off next to the question — the evidence and the conclusion, never a replay of your thinking — and never decide silently. A plugin-wide sweep over skills, deep-knowledge, agents and hooks (explain/show/restate your reasoning or thinking, think step by step / out loud, chain of thought, reasoning in the reply, `<thinking>`) found no other such instruction; decision `rationale` fields, step-by-step task wording and the local-llm `<thinking>` stripping are not reasoning requests and stay. Part of #644 (remaining sub-issues #649, #651–#653 stay open).
+
+### Tests
+- Docs-only change; full suite 8531 passed (run separately — the `ship_build` test step hit its 120 s ceiling), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.5] — 2026-10-07
 
 ### Fixed
