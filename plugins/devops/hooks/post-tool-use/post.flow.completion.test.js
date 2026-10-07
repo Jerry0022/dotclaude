@@ -107,6 +107,18 @@ describe("post.flow.completion — completion-card instruction completeness", ()
     cleanup(dir);
   });
 
+  // #642: "text before the card only for side questions" read as "the main
+  // answer belongs on the card" — two Q&A turns ended with a bare analysis
+  // card and no answer at all. The rule must keep the answer as prose.
+  test("keeps the answer to the user's question as text before the card (#642)", () => {
+    const dir = project();
+    const out = runHook(dir, "s-answer");
+    expect(out).toContain("The ANSWER to the user's question is no recap");
+    expect(out).toContain("the card never carries it");
+    expect(out).not.toContain("answers to side questions");
+    cleanup(dir);
+  });
+
   test("scopes `delivery` to turns that reached a pipeline stage, not every card", () => {
     const dir = project();
     const out = runHook(dir, "s-track-scope");

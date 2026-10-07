@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.248.5] — 2026-10-07
+
+### Fixed
+- **Completion card: the answer to the user's question stays as text above the card (#642).** The issue assumed the Desktop card widget hid the answer. The transcripts showed otherwise: the two failing Q&A turns had no text block at all — Claude went straight to `render_completion_card` (variant `analysis`, only a summary), while the turn whose answer stood as its own message was seen. Cause: the card and Quiet-style instructions allowed prose before the card only for "answers to side questions" and said "the card IS the summary", which reads as "the main answer belongs on the card". The post-tool hook, the `render_completion_card` tool description, the widget instruction, the Quiet output style and the do-ship "no recap" paragraph now say it plainly: the answer to the user's question is no recap — it always stands in full as text before the card, and the card never carries it.
+
+### Not changed (decisions)
+- No `answer` field on the card — the answer has nothing to do with the card.
+- Q&A turns are not exempted from the mandatory card; the stop-hook mandate is intentional (`card-guard.js` untouched).
+
+### Tests
+- `card-widget.test.js` assertion updated, new `post.flow.completion.test.js` case; `output-style-quiet.shipped.json` carries the new template hash. Branch suites 2419 passed, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.4] — 2026-10-07
 
 ### Fixed

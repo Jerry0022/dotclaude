@@ -815,10 +815,11 @@ describe("cardWidgetInstruction", () => {
     expect(text).toMatch(/never a shortcut/);
   });
 
-  test("forbids a prose recap of the card before the widget, keeps room for side questions", () => {
+  test("forbids a prose recap of the card before the widget, keeps the answer as text before it (#642)", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
     expect(text).toMatch(/No prose before the widget that restates the card/);
-    expect(text).toMatch(/only answers to side questions or other topics of the user's prompt/);
+    expect(text).toMatch(/The answer to the user's question is no restatement: it stands in full as text/);
+    expect(text).toMatch(/the card never carries it/);
   });
 
   test("names the saved widget file when one was written, and only then", () => {
