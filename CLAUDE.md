@@ -6,7 +6,7 @@ Directory structure: `.claude/project-map.md` — not auto-loaded; the token gua
 - `npm test` — run vitest suite
 - `npm run lint` — eslint check
 - `npm run lint:fix` — eslint autofix
-- `cd plugins/devops && claude plugin eval . --runs 1 --ablation none --trust-plugin --no-publish --scaffold --allow-tools Write,Edit,WebSearch,WebFetch` — behavioral evals (real model runs, costs usage); see `plugins/devops/evals/README.md`
+- `node plugins/devops/evals/ab-run.js --case <dir|glob> [--a-ref origin/main] --runs 1` — behavioral evals / skill A/B via `claude -p` (real model runs, costs usage; `--dry-run` prints the commands only); see `plugins/devops/evals/README.md`
 
 ## Architecture
 - Monorepo: `plugins/devops/` (core) + `plugins/local-llm/` (token saver)

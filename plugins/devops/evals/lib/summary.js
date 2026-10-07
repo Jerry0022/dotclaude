@@ -1,5 +1,5 @@
 // A-vs-B comparison over per-run result JSONs: pass rate per case+grader per
-// variant (null grades excluded from the denominator), token totals, cost
+// variant (null grades and failed runs excluded from the denominator), token totals, cost
 // and mean duration per variant.
 
 "use strict";
@@ -12,11 +12,14 @@ function summarize(results) {
   for (const r of results) {
     const v = (variants[r.variant] ||= { runs: 0, errors: 0, usage: emptyUsage(), costUsd: 0, durationMs: 0 });
     v.runs++;
-    if (r.exitCode !== 0 || r.isError) v.errors++;
+    // A failed run is no evidence: its grades count as undecided.
+    const failed = r.exitCode !== 0 || r.isError;
+    if (failed) v.errors++;
     addUsage(v.usage, r.usage);
     v.costUsd += Number(r.costUsd) || 0;
     v.durationMs += Number(r.durationMs) || 0;
-    for (const [name, grade] of Object.entries(r.grades || {})) {
+    for (const [name, stored] of Object.entries(r.grades || {})) {
+      const grade = failed ? null : stored;
       const key = `${r.case}::${name}`;
       const g = (graders[key] ||= { case: r.case, grader: name, variants: {} });
       const gv = (g.variants[r.variant] ||= { pass: 0, graded: 0, undecided: 0, rate: null });

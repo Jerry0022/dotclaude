@@ -71,6 +71,13 @@ function childEnv(caseEnv) {
   return env;
 }
 
+// A failed run (auth error, crash, timeout) is no evidence either way:
+// grade it as undecided instead of letting "nothing happened" pass.
+function gradeOrUndecided(graders, exitCode, ctx) {
+  if (exitCode !== 0 || ctx.parsed.isError) return Object.fromEntries(graders.map((g) => [g.name, null]));
+  return gradeRun(graders, ctx);
+}
+
 function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-case-"));
   const args = buildClaudeArgs({
@@ -89,7 +96,7 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   const wallMs = Date.now() - started;
   const raw = proc.stdout || "";
   const parsed = parseStream(raw);
-  const grades = gradeRun(graders, { parsed, raw, workdir });
+  const grades = gradeOrUndecided(graders, proc.status, { parsed, raw, workdir });
   const base = `${caseDef.id.replace(/\//g, "__")}__${variant.name}__r${run}`;
   fs.writeFileSync(path.join(runDir, `${base}.stream.jsonl`), raw);
   const result = {
@@ -104,7 +111,11 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
     grades, stderrTail: (proc.stderr || "").slice(-2000), workdir: opts.keepWorkdir ? workdir : null,
   };
   fs.writeFileSync(path.join(runDir, `${base}.json`), JSON.stringify(result, null, 2));
-  if (!opts.keepWorkdir) fs.rmSync(workdir, { recursive: true, force: true });
+  if (!opts.keepWorkdir) {
+    // A plugin process spawned by the run can still hold the dir on Windows.
+    try { fs.rmSync(workdir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 }); }
+    catch (err) { console.error(`[ab-run]   could not remove ${workdir}: ${err.code || err.message}`); }
+  }
   return result;
 }
 
@@ -190,4 +201,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, childEnv, main };
+module.exports = { parseArgs, childEnv, gradeOrUndecided, main };

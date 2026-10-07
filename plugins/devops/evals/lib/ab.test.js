@@ -7,7 +7,7 @@ const { buildSettings, buildClaudeArgs, formatCommand, resolveClaudeBin, INSTALL
 const { parseStream, totalTokens } = require("./stream.js");
 const g = require("./graders.js");
 const { summarize, formatSummary } = require("./summary.js");
-const { parseArgs, childEnv } = require("../ab-run.js");
+const { parseArgs, childEnv, gradeOrUndecided } = require("../ab-run.js");
 
 const FIXTURE = fs.readFileSync(path.join(__dirname, "fixtures", "stream-sample.jsonl"), "utf8");
 const parsed = parseStream(FIXTURE);
@@ -102,6 +102,16 @@ describe("runner args", () => {
     expect(env.CLAUDECODE).toBeUndefined();
     expect(env.EVAL_DOTCLAUDE_BUDGET).toBe("free");
     if (prev === undefined) delete process.env.CLAUDECODE; else process.env.CLAUDECODE = prev;
+  });
+});
+
+describe("failed runs", () => {
+  it("grade as undecided on non-zero exit or an error result (e.g. 401)", () => {
+    const graders = [{ name: "none", check: g.noDevopsAgent() }];
+    const authFail = parseStream('{"type":"result","subtype":"success","is_error":true,"result":"Failed to authenticate. API Error: 401"}');
+    expect(gradeOrUndecided(graders, 1, { parsed: authFail })).toEqual({ none: null });
+    expect(gradeOrUndecided(graders, 0, { parsed: authFail })).toEqual({ none: null });
+    expect(gradeOrUndecided(graders, 0, { parsed })).toEqual({ none: false });
   });
 });
 
@@ -201,7 +211,7 @@ describe("summary", () => {
     const g1 = s.graders.find((x) => x.grader === "g1");
     const g2 = s.graders.find((x) => x.grader === "g2");
     expect(g1.variants.A).toEqual({ pass: 1, graded: 2, undecided: 0, rate: 0.5 });
-    expect(g1.variants.B.rate).toBe(1);
+    expect(g1.variants.B).toEqual({ pass: 0, graded: 0, undecided: 1, rate: null }); // failed run
     expect(g2.variants.A).toEqual({ pass: 1, graded: 1, undecided: 1, rate: 1 });
     expect(g2.variants.B.rate).toBeNull();
   });
@@ -213,7 +223,7 @@ describe("summary", () => {
     expect(s.variants.A.meanDurationMs).toBe(2000);
     expect(s.variants.B.errors).toBe(1);
     const text = formatSummary(s);
-    expect(text).toContain("c :: g1 | 50% (1/2) | 100% (1/1)");
+    expect(text).toContain("c :: g1 | 50% (1/2) | n/a (0/0, 1 n/a)");
     expect(text).toContain("c :: g2 | 100% (1/1, 1 n/a) | n/a (0/0, 1 n/a)");
     expect(text).toMatch(/^B: runs=1 errors=1 tokens=5/m);
   });
