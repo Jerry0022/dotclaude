@@ -216,27 +216,35 @@ function initRepo(files) {
 
 const noInstall = { installCmd: "" };
 
+// Each case spawns git (temp worktree) and npm; a ~2 s case took 60 s+ when a
+// second vitest run shared the machine. The build budget is not under test
+// here (only "running out of the budget" sets its own), so it sits far above
+// any load: a slow machine must not turn "failed"/"passed" into
+// "inconclusive". The test timeout stays above the budget.
+const BUDGET_SEC = 240;
+const SPAWN_TEST_MS = 300_000;
+
 describe("runDeployParity", () => {
   test("passes on a clean checkout and removes the temp worktree", async () => {
     initRepo({ "package.json": { scripts: { build: "node -e \"require('fs').writeFileSync('out.txt','ok')\"" } } });
-    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: 60 });
+    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: BUDGET_SEC });
     expect(r).toMatchObject({ status: "passed", detector: "node", plan: { build: "npm run build" } });
     expect(r.cleanup.removed).toBe(true);
     expect(existsSync(r.cleanup.path)).toBe(false);
     expect(git(["worktree", "list", "--porcelain"], dir).match(/^worktree /gm)).toHaveLength(1);
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("runs the prebuild lifecycle hook — a failing guard fails the ship", async () => {
     initRepo({
       "package.json": { scripts: { prebuild: "node guard.js", build: "node -e \"0\"" } },
       "guard.js": "console.error('guard: forbidden clone URL in docs'); process.exit(1);",
     });
-    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: 60 });
+    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: BUDGET_SEC });
     expect(r.status).toBe("failed");
     expect(r.plan.lifecycle).toEqual(["prebuild"]);
     expect(r.outputTail).toMatch(/forbidden clone URL/);
     expect(existsSync(r.cleanup.path)).toBe(false);
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("an untracked file the local build relies on surfaces as a failure", async () => {
     initRepo({
@@ -245,23 +253,23 @@ describe("runDeployParity", () => {
     });
     write("generated/icons.json", "{}");
     execSync("npm run build", { cwd: dir, stdio: "ignore" }); // green locally
-    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: 60 });
+    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: BUDGET_SEC });
     expect(r.status).toBe("failed");
     expect(r.outputTail).toMatch(/ENOENT/);
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("a build that needs a withheld secret is inconclusive, not failed", async () => {
     initRepo({ "package.json": { scripts: { build: "node -e \"if(!process.env.ACME_API_TOKEN){console.error('ACME_API_TOKEN not set');process.exit(1)}\"" } } });
-    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: 60, env: { ...process.env, ACME_API_TOKEN: "secret" } });
+    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: BUDGET_SEC, env: { ...process.env, ACME_API_TOKEN: "secret" } });
     expect(r).toMatchObject({ status: "inconclusive", needsEnv: ["ACME_API_TOKEN"] });
     expect(JSON.stringify(r)).not.toMatch(/"secret"/);
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("passEnv releases a variable to the build", async () => {
     initRepo({ "package.json": { scripts: { build: "node -e \"process.exit(process.env.PUBLIC_SITE_URL?0:1)\"" } } });
-    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: 60, passEnv: ["PUBLIC_SITE_URL"], env: { ...process.env, PUBLIC_SITE_URL: "https://x" } });
+    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: BUDGET_SEC, passEnv: ["PUBLIC_SITE_URL"], env: { ...process.env, PUBLIC_SITE_URL: "https://x" } });
     expect(r.status).toBe("passed");
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("names from a local-only .env file count as host-provided env", async () => {
     initRepo({
@@ -269,9 +277,9 @@ describe("runDeployParity", () => {
       ".gitignore": ".env.local\n",
     });
     write(".env.local", "MAPS_BROWSER_KEY=abc\n");
-    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: 60 });
+    const r = await P.runDeployParity({ cwd: dir, ...noInstall, timeoutSec: BUDGET_SEC });
     expect(r).toMatchObject({ status: "inconclusive", needsEnv: ["MAPS_BROWSER_KEY"] });
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("running out of the budget is inconclusive and still cleans up", async () => {
     initRepo({ "package.json": { scripts: { build: "node -e \"setTimeout(()=>{},60000)\"" } } });
@@ -279,23 +287,23 @@ describe("runDeployParity", () => {
     expect(r.status).toBe("inconclusive");
     expect(r.reason).toMatch(/budget/);
     expect(existsSync(r.cleanup.path)).toBe(false);
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("buildCmd override, missing tool → inconclusive, nothing to build → skipped, docker absent → skipped", async () => {
     initRepo({ "README.md": "# x", "Dockerfile": "FROM scratch\n" });
-    let r = await P.runDeployParity({ cwd: dir, timeoutSec: 30, hasDocker: () => false });
+    let r = await P.runDeployParity({ cwd: dir, timeoutSec: BUDGET_SEC, hasDocker: () => false });
     expect(r).toMatchObject({ status: "skipped", detector: "docker" });
-    r = await P.runDeployParity({ cwd: dir, timeoutSec: 30, buildCmd: "definitely-not-a-tool-xyz build" });
+    r = await P.runDeployParity({ cwd: dir, timeoutSec: BUDGET_SEC, buildCmd: "definitely-not-a-tool-xyz build" });
     expect(r).toMatchObject({ status: "inconclusive", detector: "custom" });
     expect(r.reason).toMatch(/definitely-not-a-tool-xyz is not installed/);
     rmSync(join(dir, "Dockerfile"));
     git(["commit", "-qam", "rm"], dir);
-    r = await P.runDeployParity({ cwd: dir, timeoutSec: 30 });
+    r = await P.runDeployParity({ cwd: dir, timeoutSec: BUDGET_SEC });
     expect(r.status).toBe("skipped");
-  }, 60_000);
+  }, SPAWN_TEST_MS);
 
   test("outside a git repo → skipped", async () => {
-    const r = await P.runDeployParity({ cwd: dir, timeoutSec: 30 });
+    const r = await P.runDeployParity({ cwd: dir, timeoutSec: BUDGET_SEC });
     expect(r.status).toBe("skipped");
     expect(r.reason).toMatch(/not a git repository/);
   });

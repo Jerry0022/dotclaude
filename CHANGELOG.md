@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.248.8] — 2026-10-07
+
+### Fixed
+- **`git-sync.recover` and `deploy-parity` tests no longer fail under parallel load.** Both failed in a full `npx vitest run` while a second vitest run (ship_build's filtered test step, which bypasses the suite lock) shared the machine, and passed alone. Reproduced with 24 parallel runs of the two files: all 24 had 1–3 failures. Causes: cases that spawn real git/npm took over 60 s under load and hit the test timeout; one `runDeployParity` case ran out of its own 60 s build budget and turned `inconclusive`; and the AUD-039 lock tests depended on a timer-driven child process writing inside a 400/600 ms settle window — a real race. `releaseKilledIndexLock` now takes an optional injectable `sleep` (default unchanged), and the AUD-039 tests act as the live writer inside that sleep (append / unlink) — deterministic, no timer. Spawn-heavy cases get a 300 s test timeout; `runDeployParity` cases that do not test the budget run with a 240 s budget (the budget test keeps 3 s). No assertion was weakened.
+
+### Not changed (decisions)
+- The suite lock still does not queue filtered runs: that would block ship_build's 120 s test step behind a ~9 min full run.
+
+### Tests
+- New case: lock replaced during the settle window with the same size (new inode) → held; a mutation to a size-only comparison makes it fail. After the change 24/24 parallel runs green (54 tests each). Full suite alone 8532 passed before the change. Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.7] — 2026-10-07
 
 ### Fixed
