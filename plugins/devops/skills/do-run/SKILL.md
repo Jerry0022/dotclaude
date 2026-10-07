@@ -14,6 +14,7 @@ description: >-
   fork), or runs a full-spectrum audit with evidence for every finding.
   Do NOT trigger for: a single known bug (auto-fix), a pure consistency or
   UI pass, a security-only review, repo/branch hygiene, shipping, or a quick edit.
+when_to_use: >-
   Triggers: "backlog abarbeiten", "arbeite den backlog ab", "backlog runner",
   "run the backlog", "milestones abarbeiten", "arbeite die milestones ab",
   "arbeite den milestone ab", "autonomous", "run autonomous",
