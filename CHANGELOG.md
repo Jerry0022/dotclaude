@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.248.3] — 2026-10-07
+
+### Changed
+- **Skills fit Anthropic's skill limits without losing detail.** An external skills review checked every skill against Anthropic's skill best practices and the Claude Code skills docs (code.claude.com/docs/en/skills). Two skills broke a limit, both fixed by verbatim moves only — no rule, step or trigger was dropped or reworded:
+  - `do-run`: the description was 1,460 characters (Agent Skills spec limit 1,024). It is now 868; the quoted trigger list moved verbatim into a folded `when_to_use:` block (Claude Code reads description + `when_to_use`, cut at 1,536). `triggers:` is unchanged.
+  - `auto-cleanup`: SKILL.md shrank from 690 to 495 lines (best practice: body under 500). The conditional execution phases (Steps 10a–10c, Safety Invariants, Worktree Removal Safety) moved to the new `deep-knowledge/execution.md`; Filter Behavior and Important Design Details moved to `deep-knowledge/page-structure.md`. SKILL.md keeps the always-running core (Step 10 items 1–4: partition, re-check, validate) and carries mandatory read pointers at Step 8 and Step 10. A line diff confirmed every removed line exists in the new files.
+
+### Not changed (decisions)
+- The review's claim that the skill rules "completely changed" did not hold: all of its rules were already in Anthropic's best-practices page. No mass table of contents was added — "Claude reads only the first 100 lines" is not a general rule (the docs only warn about `head -100` previews of nested references).
+- `do-ship` stays one file: its remainder is the always-run gate core pinned by contract tests; splitting it would trade determinism for about 10 % fewer lines.
+- The one genuinely new point — skills written for prior models are often too prescriptive — is tracked as #644.
+
+### Docs
+- `CONVENTIONS.md` documents the length limits (description ≤ 1,024; description + `when_to_use` ≤ 1,536).
+
+### Tests
+- `skill-graph.test.js` checks the length limits for every skill (fails on the old 1,460-character description), and the trigger-preservation check reads quoted phrases from both `description` and `when_to_use`, so do-run's phrases stay covered. skill-graph + frontmatter-yaml 394/394, eslint clean, full suite after the rebase 8517 passed, 3 skipped. Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.2] — 2026-10-07
 
 ### Fixed
