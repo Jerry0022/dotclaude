@@ -65,10 +65,15 @@ function parseArgs(argv) {
   return opts;
 }
 
-function childEnv(caseEnv) {
-  const env = { ...process.env, ...caseEnv };
-  delete env.CLAUDECODE; // nested-session marker of the calling session
-  return env;
+// The calling session's CLAUDE*/ANTHROPIC* vars (nested-session marker, the
+// Desktop host's ANTHROPIC_BASE_URL and auth-refresh flags) make the child CLI
+// fail with "Not logged in" / 401 — strip them; the case env is added after.
+function childEnv(caseEnv, parentEnv = process.env) {
+  const env = {};
+  for (const [k, v] of Object.entries(parentEnv)) {
+    if (!/^(CLAUDE|ANTHROPIC)/i.test(k)) env[k] = v;
+  }
+  return { ...env, ...caseEnv };
 }
 
 // A failed run (auth error, crash, timeout) is no evidence either way:
