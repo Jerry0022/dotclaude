@@ -273,13 +273,14 @@ function groupJobs(procs, classes, listening = new Set(), sessionOf = new Map())
     const id = `${root.pid}@${Math.round(root.startMs || 0)}`;
     let j = jobs.get(id);
     if (!j) {
-      j = { id, rootPid: root.pid, startMs: root.startMs || 0, name: root.name, cmd: root.cmd || '', session: sessionOf.get(root.pid) || null, pids: [], cpuPct: 0, gpuPct: 0, ioBps: 0, memMB: 0, listening: false };
+      j = { id, rootPid: root.pid, startMs: root.startMs || 0, name: root.name, cmd: root.cmd || '', session: sessionOf.get(root.pid) || null, pids: [], cpuPct: 0, gpuPct: 0, ioBps: 0, iops: 0, memMB: 0, listening: false };
       jobs.set(id, j);
     }
     j.pids.push({ pid: p.pid, startMs: p.startMs || 0 });
     j.cpuPct += p.cpuPct || 0;
     j.gpuPct = Math.max(j.gpuPct, p.gpuPct || 0);
     j.ioBps += p.ioBps || 0;
+    j.iops += p.iops || 0;
     j.memMB += p.memMB || 0;
     if (listening.has(p.pid)) j.listening = true;
   }
@@ -294,7 +295,7 @@ function loadedResources(load, th, { diskBusy = true, ram = true } = {}) {
   const r = [];
   if ((load.cpuPct || 0) > th.cpuPct) r.push('cpu');
   if ((load.gpuPct || 0) > th.gpuPct) r.push('gpu');
-  if (diskBusy && (load.ioBps || 0) > th.diskBps) r.push('disk');
+  if (diskBusy && ((load.ioBps || 0) > th.diskBps || (load.iops || 0) > (th.diskOps ?? Infinity))) r.push('disk');
   if (ram && (load.memMB || 0) > th.ramMB) r.push('ram');
   return r;
 }
@@ -336,7 +337,7 @@ function trackJobs(prev, jobs, now, cfg, ctx = {}) {
     else if (heavySince !== null && now - heavySince >= th.generatorMs) kind = 'generator';
     out[j.id] = {
       ...p, id: j.id, rootPid: j.rootPid, startMs: j.startMs, name: j.name, cmd: j.cmd, session: j.session, pids: j.pids,
-      cpuPct: j.cpuPct, gpuPct: j.gpuPct, ioBps: j.ioBps, memMB: j.memMB,
+      cpuPct: j.cpuPct, gpuPct: j.gpuPct, ioBps: j.ioBps, iops: j.iops, memMB: j.memMB,
       overSince, lastOver, heavySince, heavy: heavySince !== null, res, gpu, kind,
       cmdKind: p.cmdKind || (fg && fg.kind) || null,
       peakMB: Math.max(p.peakMB || 0, j.memMB || 0),
@@ -367,7 +368,7 @@ function maxLevel(job) {
 function updatePriority(prev, foreign, now, ctx) {
   const cfg = ctx.cfg;
   const f = cfg.foreign;
-  const th = { cpuPct: f.cpuPct, gpuPct: f.gpuPct, diskBps: f.diskBps, ramMB: Infinity };
+  const th = { cpuPct: f.cpuPct, gpuPct: f.gpuPct, diskBps: f.diskBps, diskOps: f.diskOps, ramMB: Infinity };
   const prevApps = (prev && prev.apps) || {};
   const learned = ctx.learned || {};
   const libExes = ctx.libraryExes || new Set();
@@ -383,11 +384,12 @@ function updatePriority(prev, foreign, now, ctx) {
   for (const p of foreign) {
     const key = appKey(p.path, ctx.libraryRoots, ctx.libraryDirs) || String(p.name || '').toLowerCase();
     if (!key || listed(cfg.neverPriority, key, p.name)) continue;
-    const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, pids: [], name: p.name, launcher: false, library: false, runtime: false };
+    const a = seen.get(key) || { key, cpuPct: 0, gpuPct: 0, ioBps: 0, iops: 0, pids: [], name: p.name, launcher: false, library: false, runtime: false };
     const lname = String(p.name || '').toLowerCase();
     a.cpuPct += p.cpuPct || 0;
     a.gpuPct = Math.max(a.gpuPct, p.gpuPct || 0);
     a.ioBps += p.ioBps || 0;
+    a.iops += p.iops || 0;
     a.pids.push(p.pid);
     a.launcher = a.launcher || NO_LEARN.has(lname) || noLearn.has(lname);
     a.runtime = a.runtime || RUNTIMES.has(lname);
@@ -450,49 +452,34 @@ function updatePriority(prev, foreign, now, ctx) {
 function mean(xs) { const v = xs.filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; }
 
 /**
- * @param {object} prev { window, over, baseline:{diskMs, samples, since} }
- * @param {{cpuPct, gpuPct, diskMs, diskQueue, totalMB, freeMB, pagesPerSec}} sys
+ * @param {object} prev { window, over }
+ * @param {{cpuPct, gpuPct, diskBusyPct, diskMs, totalMB, freeMB, pagesPerSec}} sys
+ * Disk = active time of the busiest physical disk (Task Manager's "Active time"), 80/65 like CPU/GPU;
+ * latency is only averaged for the log.
  */
 function updateBudget(prev, sys, now, cfg) {
   const b = cfg.budget;
   const diskMs = Number.isFinite(sys.diskMs) && sys.diskMs >= 0 && sys.diskMs < 10000 ? sys.diskMs : NaN; // counter wrap → ignore
   const window = [...((prev && prev.window) || []), { ts: now, ...sys, diskMs }].filter((s) => now - s.ts <= b.smoothMs);
   const wasOver = (prev && prev.over) || {};
-  const baseline = { ...((prev && prev.baseline) || {}) };
-  if (!Number.isFinite(baseline.diskMs)) {
-    baseline.since = baseline.since ?? now;
-    baseline.samples = [...(baseline.samples || []), diskMs].filter(Number.isFinite).slice(-200);
-    if (now - baseline.since >= b.baselineMs && baseline.samples.length) {
-      const sorted = [...baseline.samples].sort((x, y) => x - y);
-      baseline.diskMs = Math.max(b.minBaselineMs, sorted[Math.floor(sorted.length * 0.2)]);
-      delete baseline.samples;
-    }
-  } else if (Number.isFinite(diskMs) && diskMs < baseline.diskMs * 2) {
-    baseline.diskMs = Math.max(b.minBaselineMs, baseline.diskMs * 0.995 + diskMs * 0.005); // slow re-baseline on quiet samples
-  }
   const ratio = b.lowPct / b.highPct;
   const m = {
     cpu: mean(window.map((s) => s.cpuPct)),
     gpu: mean(window.map((s) => s.gpuPct)),
+    disk: mean(window.map((s) => s.diskBusyPct)),
     diskMs: mean(window.map((s) => s.diskMs)),
-    diskQueue: mean(window.map((s) => s.diskQueue)),
     freeMB: mean(window.map((s) => s.freeMB)),
     totalMB: mean(window.map((s) => s.totalMB)),
     pages: mean(window.map((s) => s.pagesPerSec)),
   };
   const hyst = (was, v) => (Number.isFinite(v) ? (was ? v > b.lowPct : v > b.highPct) : false);
-  const over = { cpu: hyst(wasOver.cpu, m.cpu), gpu: hyst(wasOver.gpu, m.gpu), disk: false, ram: false };
-  if (Number.isFinite(baseline.diskMs) && Number.isFinite(m.diskMs)) {
-    const r = m.diskMs / baseline.diskMs;
-    const q = Number.isFinite(m.diskQueue) ? m.diskQueue : 0;
-    over.disk = wasOver.disk ? (r > b.diskLatencyFactor * ratio && q > b.diskQueue * ratio) : (r > b.diskLatencyFactor && q > b.diskQueue);
-  }
+  const over = { cpu: hyst(wasOver.cpu, m.cpu), gpu: hyst(wasOver.gpu, m.gpu), disk: hyst(wasOver.disk, m.disk), ram: false };
   if (Number.isFinite(m.freeMB) && Number.isFinite(m.totalMB) && m.totalMB > 0) {
     const need = Math.max(m.totalMB * b.ramFreePct / 100, b.ramFreeMB);
     const paging = Number.isFinite(m.pages) && m.pages > b.pagingPerSec;
     over.ram = wasOver.ram ? (m.freeMB < need / ratio || paging) : (m.freeMB < need || paging);
   }
-  return { window, over, baseline, mean: m };
+  return { window, over, mean: m };
 }
 
 // ---------------------------------------------------------------------------

@@ -123,6 +123,9 @@ describe('trackJobs', () => {
     expect(run({ gpuPct: 25 }, 20).heavy).toBe(true);
     expect(run({ ioBps: 50 * 1024 * 1024 }, 20).heavy).toBe(true);
     expect(run({ ioBps: 50 * 1024 * 1024 }, 20, { diskBusy: false }).heavy).toBe(false);
+    expect(run({ iops: 800 }, 20).heavy).toBe(true); // many small accesses, few MB/s
+    expect(run({ iops: 800 }, 20, { diskBusy: false }).heavy).toBe(false);
+    expect(run({ iops: 200 }, 20).heavy).toBe(false);
     expect(run({ memMB: 8000 }, 60).heavy).toBe(false);
   });
   it('heavy stays sticky once reached', () => {
@@ -265,16 +268,16 @@ describe('updateBudget', () => {
     expect(feed({}, { totalMB: 16384, freeMB: 4500 }, 0, 12).over.ram).toBe(false);
     expect(feed({}, { pagesPerSec: 5000 }, 0, 12).over.ram).toBe(true);
   });
-  it('disk: baseline then > 4x latency with a queue; counter wrap and quiet re-baseline', () => {
-    let st = feed({}, { diskMs: 1 }, 0, 60);
-    expect(st.baseline.diskMs).toBe(1);
-    st = feed(st, { diskMs: 5, diskQueue: 3 }, 62, 74);
+  it('disk: active time of the busiest disk, 80/65 hysteresis; latency alone never trips it', () => {
+    let st = feed({}, { diskBusyPct: 90 }, 0, 12);
     expect(st.over.disk).toBe(true);
-    st = feed(st, { diskMs: 2, diskQueue: 3 }, 76, 94);
+    st = feed(st, { diskBusyPct: 70 }, 14, 30);
+    expect(st.over.disk).toBe(true);
+    st = feed(st, { diskBusyPct: 50 }, 32, 50);
     expect(st.over.disk).toBe(false);
-    const neg = P.updateBudget(st, sys({ diskMs: -500, diskQueue: 9 }), 96 * S, cfg);
-    expect(neg.over.disk).toBe(false);
-    expect(feed({}, { diskMs: 100, diskQueue: 10 }, 0, 20).over.disk).toBe(false);
+    expect(feed({}, { diskBusyPct: 40, diskMs: 300, diskQueue: 10 }, 0, 20).over.disk).toBe(false);
+    expect(feed({}, { diskBusyPct: NaN }, 0, 20).over.disk).toBe(false);
+    expect(feed({}, { diskBusyPct: 90 }, 0, 12).mean.diskMs).toBe(1);
   });
 });
 

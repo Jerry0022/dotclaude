@@ -100,21 +100,32 @@ function Op-Sample($req) {
   $sb = New-Object Text.StringBuilder 65536
   [void]$sb.Append('{"ts":').Append((N $now)).Append(',"cores":').Append($env:NUMBER_OF_PROCESSORS).Append(',"procs":[')
   $first = $true
-  foreach ($p in (Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate,KernelModeTime,UserModeTime,WorkingSetSize,ReadTransferCount,WriteTransferCount)) {
+  foreach ($p in (Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate,KernelModeTime,UserModeTime,WorkingSetSize,ReadTransferCount,WriteTransferCount,ReadOperationCount,WriteOperationCount)) {
     $cmd = $p.CommandLine; if ($cmd -and $cmd.Length -gt 400) { $cmd = $cmd.Substring(0, 400) }
     $start = 0; if ($p.CreationDate) { $start = ([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() }
     $cpuMs = ([double]$p.KernelModeTime + [double]$p.UserModeTime) / 10000
     $io = [double]$p.ReadTransferCount + [double]$p.WriteTransferCount
+    $ops = [double]$p.ReadOperationCount + [double]$p.WriteOperationCount
     $g = 0; if ($gpuByPid.ContainsKey([int]$p.ProcessId)) { $g = $gpuByPid[[int]$p.ProcessId] }
     if (-not $first) { [void]$sb.Append(',') }; $first = $false
-    [void]$sb.Append('{"pid":').Append($p.ProcessId).Append(',"ppid":').Append($p.ParentProcessId).Append(',"name":').Append((Esc $p.Name)).Append(',"path":').Append((Esc $p.ExecutablePath)).Append(',"cmd":').Append((Esc $cmd)).Append(',"startMs":').Append((N $start)).Append(',"cpuMs":').Append((N ([math]::Round($cpuMs)))).Append(',"ioBytes":').Append((N $io)).Append(',"memMB":').Append((N ([math]::Round([double]$p.WorkingSetSize / 1MB)))).Append(',"gpuPct":').Append((N ([math]::Round($g, 1)))).Append('}')
+    [void]$sb.Append('{"pid":').Append($p.ProcessId).Append(',"ppid":').Append($p.ParentProcessId).Append(',"name":').Append((Esc $p.Name)).Append(',"path":').Append((Esc $p.ExecutablePath)).Append(',"cmd":').Append((Esc $cmd)).Append(',"startMs":').Append((N $start)).Append(',"cpuMs":').Append((N ([math]::Round($cpuMs)))).Append(',"ioBytes":').Append((N $io)).Append(',"ioOps":').Append((N $ops)).Append(',"memMB":').Append((N ([math]::Round([double]$p.WorkingSetSize / 1MB)))).Append(',"gpuPct":').Append((N ([math]::Round($g, 1)))).Append('}')
   }
   [void]$sb.Append(']')
   $cpu = 0; try { $cpu = [double](Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'" -Property PercentProcessorUtility).PercentProcessorUtility } catch {}
-  $d = $null; try { $d = Get-CimInstance Win32_PerfRawData_PerfDisk_PhysicalDisk -Filter "Name='_Total'" -Property AvgDisksecPerTransfer,AvgDisksecPerTransfer_Base,Frequency_PerfTime,CurrentDiskQueueLength } catch {}
+  # Per physical disk: idle-time counter (active time = what Task Manager shows); _Total: latency for the log.
+  $dAll = @(); try { $dAll = @(Get-CimInstance Win32_PerfRawData_PerfDisk_PhysicalDisk -Property Name,PercentIdleTime,Timestamp_Sys100NS,AvgDisksecPerTransfer,AvgDisksecPerTransfer_Base,Frequency_PerfTime,CurrentDiskQueueLength) } catch {}
+  $d = $dAll | Where-Object { $_.Name -eq '_Total' } | Select-Object -First 1
   $m = $null; try { $m = Get-CimInstance Win32_PerfRawData_PerfOS_Memory -Property AvailableMBytes,PagesInputPersec } catch {}
   [void]$sb.Append(',"sys":{"cpuPct":').Append((N ([math]::Min(100, [math]::Round($cpu, 1))))).Append(',"gpuPct":').Append((N ([math]::Min(100, [math]::Round($gpuSys, 1)))))
   if ($d) { [void]$sb.Append(',"disk":{"num":').Append((N $d.AvgDisksecPerTransfer)).Append(',"base":').Append((N $d.AvgDisksecPerTransfer_Base)).Append(',"freq":').Append((N $d.Frequency_PerfTime)).Append('},"diskQueue":').Append((N $d.CurrentDiskQueueLength)) }
+  [void]$sb.Append(',"disks":[')
+  $firstDisk = $true
+  foreach ($x in $dAll) {
+    if ($x.Name -eq '_Total') { continue }
+    if (-not $firstDisk) { [void]$sb.Append(',') }; $firstDisk = $false
+    [void]$sb.Append('{"name":').Append((Esc $x.Name)).Append(',"idle":').Append((N $x.PercentIdleTime)).Append(',"ts":').Append((N $x.Timestamp_Sys100NS)).Append('}')
+  }
+  [void]$sb.Append(']')
   if ($m) { [void]$sb.Append(',"freeMB":').Append((N $m.AvailableMBytes)).Append(',"pagesIn":').Append((N $m.PagesInputPersec)) }
   [void]$sb.Append(',"totalMB":').Append((N $totalMB)).Append('}')
   try {
