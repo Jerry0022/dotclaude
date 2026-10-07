@@ -157,7 +157,10 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   lag context line under the heading.
 - `#416` is a quiet link on the widget: no colour, underline on hover only.
 - `ready-files`: `📂 9 Dateien geändert · kein Repo · H:\notes\budget`.
-- `analysis` / no changes: `➖ keine Änderungen im Repo · branch`.
+- No repo file changed (no commit, PR or delivery, and `analysis`,
+  `fallback`, or a clean work tree at `cwd` — the PC analysed, a scheduled
+  task, a setting, folders outside the repo): no pipeline line at all; an
+  all-pending `○ commit → ○ push → ○ PR → ○ merge` says nothing there.
 - No remote, after a local ship (`state.merged` set): `✓ commit → ✓ merge
   main · nur lokal, kein Remote · v1.2.3 · Build abc1234`.
 - No remote (`state.mode: "git-no-remote"`): `✓ commit · nur lokal, kein
