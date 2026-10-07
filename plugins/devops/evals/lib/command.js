@@ -74,7 +74,7 @@ function resolveBash(env = process.env, platform = process.platform) {
     const execPath = execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
     const candidate = path.join(execPath, "..", "..", "..", "bin", "bash.exe");
     if (fs.existsSync(candidate)) return candidate;
-  } catch {}
+  } catch { /* no git on PATH: fall back to whatever bash resolves to */ }
   return "bash";
 }
 
@@ -90,7 +90,7 @@ function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops")
     pluginDir: path.join(dir, subdir),
     sha,
     cleanup: () => {
-      try { execFileSync("git", ["-C", root, "worktree", "remove", "--force", dir], { stdio: "pipe" }); } catch {}
+      try { execFileSync("git", ["-C", root, "worktree", "remove", "--force", dir], { stdio: "pipe" }); } catch { /* best effort: a locked temp worktree is left for `git worktree prune` */ }
     },
   };
 }
