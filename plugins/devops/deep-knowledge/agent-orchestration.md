@@ -296,8 +296,9 @@ the page via auto-concept and re-enters auto-agents with the answer):
   followed by 1–3 alternatives
 - Never ask open questions ("What do you think?", "How should we do this?") —
   always give choices
-- Always explain your reasoning inline before/after the question, never decide
-  silently
+- Name the deciding facts and the trade-off next to the question — the
+  evidence and the conclusion, never a replay of your thinking — and never
+  decide silently
 
 ### Spawning Mechanics
 
