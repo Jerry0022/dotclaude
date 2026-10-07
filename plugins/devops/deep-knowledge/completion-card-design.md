@@ -51,6 +51,11 @@ Two visual blocks. Nothing between them, nothing under the second one.
   running", "waiting", "pending", "noch nicht") — status belongs in the
   decision heading. Never a version or pipeline word ("gemergt", "shipped").
 - When something was NOT achieved the title says so: "… — Resume-Pfad noch offen".
+- Desktop widget only: the local time the card was built (`HH:MM`, model
+  field `builtAt`) sits right-aligned in the title row, 12px in
+  `--text-secondary`, so a reader coming back later sees how old the card's
+  state is. In flow (flex row), never absolutely positioned. The terminal
+  markdown carries no time.
 
 ### 2.2 Result lines (`›`)
 
