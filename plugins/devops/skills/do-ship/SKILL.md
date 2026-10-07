@@ -1054,8 +1054,8 @@ When such a step fails, say it in ONE line before the widget, not after it.
 summary — never restate in prose what it already shows: changes, tests, skipped
 checks, version, PR, open items, a restart hint. Everything of that belongs in
 the card fields (`tests`, `open`, `userFinalTest`, …). Text before the card only
-for what the card cannot carry: answers to side questions or other topics of the
-user's prompt, points beyond the card's three, and hook blocks that are still
+for what the card cannot carry: the answer to a question in the user's prompt
+(always in full — the card never carries it), other topics of the user's prompt, points beyond the card's three, and hook blocks that are still
 marked for the user and still true (a session-start finding this ship resolved
 is dropped, not restated with an "outdated" note).
 

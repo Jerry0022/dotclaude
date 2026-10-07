@@ -54,6 +54,10 @@ Explorer with the file selected (`explorer.exe /select,"C:\…\file"`), so one
 double-click starts it. Details: devops `browser-file-urls.md` § Files
 handed to the user.
 
+The answer to the user's question is written in full as text before the
+completion card — the card summarises the work, it never carries the answer,
+and "no recap" never means leaving the answer out.
+
 The completion card ends the turn — nothing after it: no summary, no "the
 card is above". On the Desktop app the card is a widget call, and the app
 answers it with one "[Your previous response had no visible output…]" nudge:

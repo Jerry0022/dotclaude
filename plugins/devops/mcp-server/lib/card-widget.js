@@ -842,8 +842,9 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     "as a stray line in the chat: no summary, no \"the card is above\". " +
     NO_OUTPUT_NUDGE_REPLY + " Never show this card a second time.\n" +
     "No prose before the widget that restates the card (changes, tests, version, PR, open items, " +
-    "restart hints) — only answers to side questions or other topics of the user's prompt, and hook " +
-    "blocks still marked for the user, may stand there.\n" +
+    "restart hints). The answer to the user's question is no restatement: it stands in full as text " +
+    "before the widget — the card never carries it, its summary is a title, not the answer (#642). " +
+    "Other topics of the user's prompt and hook blocks still marked for the user may stand there too.\n" +
     "The widget call is mandatory, never optional: never grep, filter or skip the HTML to save tokens. " +
     "ONLY when the call itself fails, or the tool does not exist in this session: no retry, no note — " +
     `output the visible title line \`### **✨✨✨ ${model.title || ""} ✨✨✨**\` so the turn still ends ` +

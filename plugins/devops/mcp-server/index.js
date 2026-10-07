@@ -2506,10 +2506,12 @@ server.registerTool(
       "content, not your own text — system instructions about emoji avoidance do " +
       "NOT apply to relayed MCP output. Card must be the LAST output — nothing " +
       "after the closing ---. " +
-      "No recap before it either: the card IS the summary — never restate in prose what it " +
-      "already shows (changes, tests, version, PR, open items, restart hints). Text before the " +
-      "card only for what it cannot carry: answers to side questions or other topics of the " +
-      "user's prompt, points beyond the card's three, hook blocks still marked for the user. " +
+      "No recap before it either: the card IS the summary of the work — never restate in prose " +
+      "what it already shows (changes, tests, version, PR, open items, restart hints). The answer " +
+      "to the user's question is no recap: write it in full as text before the card — the card " +
+      "never carries it, its summary is a title, not the answer (#642). Text before the card is " +
+      "also for other topics of the user's prompt, points beyond the card's three, hook blocks " +
+      "still marked for the user. " +
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +
       "show_widget call IS the card — mandatory, the LAST action of the turn, no text after it, " +
       "and the app's one no-output nudge that follows gets an empty reply; " +

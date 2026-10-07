@@ -938,10 +938,12 @@ function cardContractLines(hook, scheduledTask) {
     'show_widget call IS the card, mandatory, the LAST action, no text after it (the one-line',
     '✨ title is only for a failed call, never a shortcut).',
     NO_OUTPUT_NUDGE_REPLY,
-    'NO RECAP before the card either: the card IS the summary — never restate in prose what',
-    'it already shows (changes, tests, version, PR, open items, restart hints). Text before',
-    'the card only for what it cannot carry: answers to side questions or other topics of',
-    'the user\'s prompt, points beyond the card\'s three, hook blocks still marked for the user.',
+    'NO RECAP before the card either: the card IS the summary of the work — never restate in',
+    'prose what it already shows (changes, tests, version, PR, open items, restart hints).',
+    'The ANSWER to the user\'s question is no recap: write it in full as text before the card —',
+    'the card never carries it, its summary is a title, not the answer (#642). Text before the',
+    'card is also for other topics of the user\'s prompt, points beyond the card\'s three, and',
+    'hook blocks still marked for the user.',
   );
   return lines;
 }
