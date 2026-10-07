@@ -51,6 +51,7 @@ describe("command building", () => {
     expect(INSTALLED_PLUGIN_KEY).toBe("devops@dotclaude");
     expect(buildSettings()).toEqual({ enabledPlugins: { "devops@dotclaude": false } });
     expect(buildSettings({ disable: ["a@m", "b@m"] })).toEqual({ enabledPlugins: { "a@m": false, "b@m": false } });
+    expect(buildSettings({ deny: ["Bash(node *)"] })).toEqual({ enabledPlugins: { "devops@dotclaude": false }, permissions: { deny: ["Bash(node *)"] } });
   });
 
   it("builds the claude -p argv", () => {

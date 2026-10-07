@@ -16,10 +16,13 @@ const { execFileSync } = require("child_process");
 // Key format of `enabledPlugins` in ~/.claude/settings.json: <plugin>@<marketplace>.
 const INSTALLED_PLUGIN_KEY = "devops@dotclaude";
 
-function buildSettings({ disable = [INSTALLED_PLUGIN_KEY] } = {}) {
+// `deny` = permission deny rules; unlike --allowedTools they also hold under
+// a user's `defaultMode: bypassPermissions`, so a case can watch a command
+// being attempted without it touching the real machine.
+function buildSettings({ disable = [INSTALLED_PLUGIN_KEY], deny = [] } = {}) {
   const enabledPlugins = {};
   for (const key of disable) enabledPlugins[key] = false;
-  return { enabledPlugins };
+  return deny.length ? { enabledPlugins, permissions: { deny } } : { enabledPlugins };
 }
 
 function buildClaudeArgs({ prompt, pluginDir, allowedTools = [], settings = buildSettings(), model = null }) {

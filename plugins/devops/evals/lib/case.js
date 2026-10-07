@@ -105,6 +105,7 @@ function loadCase(dir) {
     name: caseYaml.name || path.basename(dir),
     prompt: body,
     allowedTools: Array.isArray(meta.allowed_tools) ? meta.allowed_tools : [],
+    denyTools: Array.isArray(meta.deny_tools) ? meta.deny_tools : [],
     maxTurns: meta.max_turns || null,
     tags: Array.isArray(meta.tags) ? meta.tags : [],
     env: meta.env && typeof meta.env === "object" ? meta.env : {},

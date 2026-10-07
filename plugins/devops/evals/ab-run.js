@@ -87,7 +87,7 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-case-"));
   const args = buildClaudeArgs({
     prompt: caseDef.prompt, pluginDir: variant.pluginDir, allowedTools: caseDef.allowedTools,
-    settings: buildSettings({ disable: opts.disable }), model: opts.model,
+    settings: buildSettings({ disable: opts.disable, deny: caseDef.denyTools }), model: opts.model,
   });
   if (caseDef.scaffold) {
     const s = spawnSync(bash, [caseDef.scaffold], { cwd: workdir, encoding: "utf8", stdio: "pipe" });
@@ -163,7 +163,7 @@ function main(argv) {
   if (opts.dryRun) {
     for (const c of cases) {
       for (const v of variants) {
-        const args = buildClaudeArgs({ prompt: c.prompt, pluginDir: v.pluginDir, allowedTools: c.allowedTools, settings: buildSettings({ disable: opts.disable }), model: opts.model });
+        const args = buildClaudeArgs({ prompt: c.prompt, pluginDir: v.pluginDir, allowedTools: c.allowedTools, settings: buildSettings({ disable: opts.disable, deny: c.denyTools }), model: opts.model });
         console.log(`# ${c.id} [${v.name}] x${opts.runs} (cwd <tmp>/ab-case-XXXX, env ${JSON.stringify(c.env)})`);
         if (c.scaffold) console.log(formatCommand(bash, [c.scaffold]));
         console.log(formatCommand(bin, args));
