@@ -551,6 +551,16 @@ beforeAll(async () => {
     },
     body: Buffer.from("abc"),
   });
+  // The body above is never read. Closing with unread bytes used to send RST,
+  // which could beat the 411 to the client (status 0, flaky under load) — the
+  // server now closes gracefully. Repeat the request so a regression shows up.
+  r3.noContentLengthRepeat = [];
+  for (let i = 0; i < 150; i++) {
+    r3.noContentLengthRepeat.push((await rawAttachmentRequest(port3, {
+      headers: { "Content-Type": "application/octet-stream", "X-Attach-Name": "nolen.bin" },
+      body: Buffer.from("abc"),
+    })).status);
+  }
 
   // 3. Client aborts mid-stream: declares 5000 bytes, sends only 500, then
   // half-closes (FIN, no more writes) — the server must see this as an
@@ -615,6 +625,10 @@ describe("malformed and aborted uploads fail cleanly, never a 500 or an orphan t
   it("a missing Content-Length on the streaming path is rejected with 411, not a crash", () => {
     expect(r3.noContentLength.status).toBe(411);
     expect(r3.noContentLength.json.reason).toBe("length_required");
+  });
+
+  it("the 411 always reaches the client, never a reset from the unread body", () => {
+    expect(r3.noContentLengthRepeat.filter(s => s !== 411)).toEqual([]);
   });
 
   it("a client that aborts mid-stream gets client_aborted and leaves zero orphan temp files", () => {

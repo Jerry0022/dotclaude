@@ -771,7 +771,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    `sha256` as it streams — the process never holds the full file in memory.
    `Content-Length > MAX_ATTACHMENT_BYTES` is rejected with `413`
    immediately, before any read. A missing `Content-Length` is rejected with
-   `411`. On success the temp file is `fsync`ed then `os.replace`d onto the
+   `411`, then the connection is closed gracefully (FIN, unread body bytes
+   drained for up to 1 s) so the 411 is not lost to a TCP reset. On success the temp file is `fsync`ed then `os.replace`d onto the
    content-addressed final name; on ANY failure (client aborts mid-upload,
    the per-file cap is exceeded, the disk fills, a dedup hit makes the temp
    file redundant) the temp file is removed — no orphaned `.tmp` is ever
