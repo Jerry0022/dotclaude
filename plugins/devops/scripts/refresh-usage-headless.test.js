@@ -12,6 +12,10 @@ import {
   classifyScraperPid,
   killScraperInstance,
   openLoginWindow,
+  buildScraperArgs,
+  slimScraperProfile,
+  SCRAPER_PRUNE_DIRS,
+  SCRAPER_SLIM_MARKER,
   LOGIN_RETRY_AFTER_MS,
 } from "./refresh-usage-headless.js";
 
@@ -333,5 +337,107 @@ describe('openLoginWindow — the login window must stay open', () => {
     const launch = async () => { launches++; return 1; };
     expect(await openLoginWindow({ launch, cdpAlive, sleep })).toBe(false);
     expect(launches).toBe(2);
+  });
+});
+
+// The scraper profile once grew to 2.5 GB (synced extensions, uncapped cache,
+// component updates, metrics); a cold launch read ~180 MB and wrote ~100 MB.
+describe("buildScraperArgs — lean scraper profile", () => {
+  const lean = [
+    "--disable-extensions",
+    "--disable-sync",
+    "--disable-component-update",
+    "--disable-background-networking",
+  ];
+
+  test.each([false, true])("visible=%s carries every lean switch", (visible) => {
+    const args = buildScraperArgs({ visible, url: "https://claude.ai/x", profileDir: "P", port: 1 });
+    for (const flag of lean) expect(args).toContain(flag);
+    expect(args).toContain("--user-data-dir=P");
+    expect(args).toContain("--remote-debugging-port=1");
+    expect(args.some(a => /^--disk-cache-size=\d+$/.test(a))).toBe(true);
+    expect(args[args.length - 1]).toBe("https://claude.ai/x");
+  });
+
+  test("one --disable-features switch only (Chromium honours the last one)", () => {
+    const args = buildScraperArgs({});
+    const features = args.filter(a => a.startsWith("--disable-features="));
+    expect(features).toHaveLength(1);
+    expect(features[0]).toContain("msEdgeFeatureOverrides");
+    expect(features[0]).toContain("msImplicitSignin");
+  });
+
+  test("never headless; window bounds per mode", () => {
+    const hidden = buildScraperArgs({ visible: false });
+    const shown = buildScraperArgs({ visible: true });
+    expect([...hidden, ...shown].some(a => a.startsWith("--headless"))).toBe(false);
+    expect(hidden).toContain("--window-position=-32000,-32000");
+    expect(shown).toContain("--start-maximized");
+    expect(shown).not.toContain("--window-position=-32000,-32000");
+  });
+});
+
+describe("slimScraperProfile — one-time prune that keeps the login", () => {
+  let dir;
+  afterEach(() => {
+    if (dir) {
+      for (const d of [dir, `${dir}.trash`]) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
+      dir = null;
+    }
+  });
+
+  function seed() {
+    dir = mkdtempSync(join(tmpdir(), "slim-"));
+    for (const rel of SCRAPER_PRUNE_DIRS) {
+      fs.mkdirSync(join(dir, rel), { recursive: true });
+      fs.writeFileSync(join(dir, rel, "blob"), "x");
+    }
+    for (const keep of ["Network", "Local Storage", "IndexedDB"]) {
+      fs.mkdirSync(join(dir, "Default", keep), { recursive: true });
+    }
+    fs.writeFileSync(join(dir, "Default", "Network", "Cookies"), "c");
+    fs.writeFileSync(join(dir, "Default", "Login Data"), "l");
+    fs.writeFileSync(join(dir, "Local State"), "{}");
+  }
+
+  test("moves bloat to trash, keeps cookies and storage, writes the marker", () => {
+    seed();
+    const purge = vi.fn();
+    expect(slimScraperProfile({ profileDir: dir, purge })).toBe("pruned");
+    for (const rel of SCRAPER_PRUNE_DIRS) expect(fs.existsSync(join(dir, rel))).toBe(false);
+    expect(fs.readdirSync(`${dir}.trash`)).toHaveLength(SCRAPER_PRUNE_DIRS.length);
+    expect(purge).toHaveBeenCalledWith(`${dir}.trash`);
+    expect(fs.existsSync(join(dir, "Default", "Network", "Cookies"))).toBe(true);
+    expect(fs.existsSync(join(dir, "Default", "Login Data"))).toBe(true);
+    expect(fs.existsSync(join(dir, "Default", "Local Storage"))).toBe(true);
+    expect(fs.existsSync(join(dir, "Default", "IndexedDB"))).toBe(true);
+    expect(fs.existsSync(join(dir, "Local State"))).toBe(true);
+    expect(fs.existsSync(join(dir, SCRAPER_SLIM_MARKER))).toBe(true);
+  });
+
+  test("runs once: the marker skips the prune, leftover trash is purged again", () => {
+    seed();
+    slimScraperProfile({ profileDir: dir, purge: () => {} });
+    const move = vi.fn();
+    const purge = vi.fn();
+    fs.mkdirSync(join(dir, "BrowserMetrics"));
+    expect(slimScraperProfile({ profileDir: dir, move, purge })).toBe("done");
+    expect(move).not.toHaveBeenCalled();
+    expect(purge).toHaveBeenCalledTimes(1);
+  });
+
+  test("a locked folder leaves no marker so the next launch retries", () => {
+    seed();
+    const move = vi.fn((from, to) => {
+      if (from.endsWith("Cache")) throw new Error("EPERM");
+      fs.renameSync(from, to);
+    });
+    expect(slimScraperProfile({ profileDir: dir, move, purge: () => {} })).toBe("retry");
+    expect(fs.existsSync(join(dir, SCRAPER_SLIM_MARKER))).toBe(false);
+    expect(fs.existsSync(join(dir, "Default", "Network", "Cookies"))).toBe(true);
+  });
+
+  test("no profile yet: nothing to do", () => {
+    expect(slimScraperProfile({ profileDir: join(tmpdir(), "slim-missing-" + Date.now()) })).toBe("absent");
   });
 });

@@ -418,25 +418,55 @@ function releaseLock(lockFile) {
   try { fs.unlinkSync(lockFile); } catch {}
 }
 
-/**
- * Launch a dedicated Edge instance with its own user-data-dir and CDP port.
- * Runs fully isolated from the user's main Edge — separate cookies, separate
- * processes, separate tabs. Main Edge is never touched.
- *
- * @param {{ visible?: boolean, url?: string }} opts
- *   visible: true opens a window (needed for first-time login); false runs headless.
- *   url: initial URL to load.
- * @returns {Promise<number|null>} child PID on success, null on timeout
- */
-async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) {
-  try { fs.mkdirSync(SCRAPER_PROFILE_DIR, { recursive: true }); } catch {}
+// The scraper only needs claude.ai cookies. Left alone, the profile grew to
+// 2.5 GB: implicit Windows-account sign-in turned on sync, which pulled the
+// user's extensions in, and component updates, metrics and an uncapped disk
+// cache added the rest. One cold launch then read ~180 MB and wrote ~100 MB.
+const SCRAPER_DISK_CACHE_BYTES = 32 * 1024 * 1024;
+// Chromium honours only the LAST --disable-features switch, so every feature
+// goes into this one list.
+const SCRAPER_DISABLED_FEATURES = [
+  'msEdgeFeatureOverrides',
+  'msImplicitSignin',
+];
+// Regrowable bloat removed once from profiles created before the lean flags.
+// Cookies, Login Data, Local/Session Storage, IndexedDB and Local State stay —
+// the login must survive.
+const SCRAPER_PRUNE_DIRS = [
+  'BrowserMetrics',
+  'component_crx_cache',
+  'ProvenanceData',
+  path.join('Default', 'Cache'),
+  path.join('Default', 'Code Cache'),
+  path.join('Default', 'GPUCache'),
+  path.join('Default', 'DawnWebGPUCache'),
+  path.join('Default', 'Extensions'),
+  path.join('Default', 'Local Extension Settings'),
+  path.join('Default', 'Extension State'),
+];
+const SCRAPER_SLIM_MARKER = '.dotclaude-slim-v1';
 
+/**
+ * Edge command line for the dedicated scraper instance. Both window modes share
+ * one profile, so the lean switches apply to both: a login window must not turn
+ * sync or extensions back on.
+ *
+ * @param {{ visible?: boolean, url?: string, profileDir?: string, port?: number }} opts
+ * @returns {string[]}
+ */
+function buildScraperArgs({ visible = false, url = USAGE_URL, profileDir = SCRAPER_PROFILE_DIR, port = CDP_PORT } = {}) {
   const args = [
-    `--user-data-dir=${SCRAPER_PROFILE_DIR}`,
-    `--remote-debugging-port=${CDP_PORT}`,
+    `--user-data-dir=${profileDir}`,
+    `--remote-debugging-port=${port}`,
     '--no-first-run',
     '--no-default-browser-check',
-    '--disable-features=msEdgeFeatureOverrides',
+    '--disable-extensions',
+    '--disable-sync',
+    '--disable-component-update',
+    '--disable-background-networking',
+    '--no-pings',
+    `--disk-cache-size=${SCRAPER_DISK_CACHE_BYTES}`,
+    `--disable-features=${SCRAPER_DISABLED_FEATURES.join(',')}`,
   ];
   if (!visible) {
     // Don't use --headless=new: claude.ai detects it and serves the login page
@@ -463,6 +493,79 @@ async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) 
     );
   }
   args.push(url);
+  return args;
+}
+
+/**
+ * Delete a trash folder in a detached `rd`, so the caller never waits on it.
+ * Deleting 2 GB of small cache files took minutes, far past the launch lock's
+ * staleness window, and a parallel session then launched Edge into the half-
+ * pruned profile.
+ */
+function purgeDetached(dir) {
+  try {
+    const child = spawn('cmd.exe', ['/d', '/c', 'rd', '/s', '/q', dir], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.on('error', () => {});
+    child.unref();
+  } catch {}
+}
+
+/**
+ * One-time prune of a profile that grew before the lean switches existed. Call
+ * only while no scraper instance runs (under the launch lock, after the reap).
+ * Each folder is renamed into a sibling trash folder — instant, and atomic per
+ * folder — and the trash is deleted in the background. A folder Edge still
+ * holds open cannot be renamed; the marker is then not written and the next
+ * cold launch retries. Leftover trash is purged again on every call.
+ *
+ * @param {{ profileDir?: string, move?: (from: string, to: string) => void, purge?: (dir: string) => void }} opts
+ * @returns {'pruned'|'done'|'absent'|'retry'}
+ */
+function slimScraperProfile({
+  profileDir = SCRAPER_PROFILE_DIR,
+  move = (from, to) => fs.renameSync(from, to),
+  purge = purgeDetached,
+} = {}) {
+  const marker = path.join(profileDir, SCRAPER_SLIM_MARKER);
+  const trash = `${profileDir}.trash`;
+  if (!fs.existsSync(profileDir)) return 'absent';
+  let result = 'done';
+  if (!fs.existsSync(marker)) {
+    let ok = true;
+    const stamp = Date.now();
+    for (const rel of SCRAPER_PRUNE_DIRS) {
+      const target = path.join(profileDir, rel);
+      if (!fs.existsSync(target)) continue;
+      try {
+        fs.mkdirSync(trash, { recursive: true });
+        move(target, path.join(trash, `${stamp}-${rel.replace(/[\\/ ]/g, '_')}`));
+      } catch (err) { ok = false; log(`Profile prune skipped ${rel}:`, err && err.message); }
+    }
+    if (ok) {
+      try { fs.writeFileSync(marker, new Date().toISOString()); result = 'pruned'; } catch { result = 'retry'; }
+    } else {
+      result = 'retry';
+    }
+  }
+  if (fs.existsSync(trash)) purge(trash);
+  return result;
+}
+
+/**
+ * Launch a dedicated Edge instance with its own user-data-dir and CDP port.
+ * Runs fully isolated from the user's main Edge — separate cookies, separate
+ * processes, separate tabs. Main Edge is never touched.
+ *
+ * @param {{ visible?: boolean, url?: string }} opts
+ *   visible: true opens a window (needed for first-time login); false runs headless.
+ *   url: initial URL to load.
+ * @returns {Promise<number|null>} child PID on success, null on timeout
+ */
+async function launchScraperInstance({ visible = false, url = USAGE_URL } = {}) {
+  if (slimScraperProfile() === 'pruned') log('Pruned scraper profile bloat (one-time)');
+  try { fs.mkdirSync(SCRAPER_PROFILE_DIR, { recursive: true }); } catch {}
+
+  const args = buildScraperArgs({ visible, url });
 
   log(`Launching dedicated scraper instance (${visible ? 'visible' : 'headless'})...`);
   const child = spawn(EDGE_EXE, args, { detached: true, stdio: 'ignore' });
@@ -971,6 +1074,10 @@ module.exports = {
   classifyScraperPid,
   killScraperInstance,
   openLoginWindow,
+  buildScraperArgs,
+  slimScraperProfile,
+  SCRAPER_PRUNE_DIRS,
+  SCRAPER_SLIM_MARKER,
   LOGIN_RETRY_AFTER_MS,
   FRESH_CACHE_MAX_AGE_SECONDS,
 };
