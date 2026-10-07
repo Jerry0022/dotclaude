@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.248.3] — 2026-10-07
+## [0.248.4] — 2026-10-07
 
 ### Fixed
 - **Completion card: the user's own check no longer counts as an unmet requirement (#643).** A `validation` item that is not met, waits on the user and names a verification activity (e.g. "Sichtprüfung im echten Holodeck", "manually verify …") was shown as "⚠ Nicht voll erfüllt" and counted in "N/M Anforderungen · K wartet auf dich". Such an item is now rerouted before the pre-check and the render (MCP handler and CLI path alike): it is set met and its text moves to the user's checks (`userTest` in the test variant, `userFinalTest` otherwise, deduplicated). Real deviations that wait on the user (e.g. "remember per account" implemented as localStorage) stay "Nicht voll erfüllt". Matching is DE+EN and anchored at a word start. Rerouting was chosen over rejecting: a rejection costs a re-render round trip and the intent is unambiguous.
