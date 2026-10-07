@@ -22,6 +22,34 @@ const SKILLS_DIR = path.join(PLUGIN_ROOT, "skills");
 const ALL_SKILLS = loadAllSkills(SKILLS_DIR);
 const SKILL_NAMES = Object.keys(ALL_SKILLS);
 
+// Raw text of one top-level frontmatter key: a `>-` folded block (indented
+// lines up to the next key or the closing `---`) or a single-line value.
+function foldedBlock(rawText, key) {
+  const normalized = rawText.replace(/\r\n/g, "\n");
+  const m = normalized.match(new RegExp(`\\n${key}:\\s*>-?\\n([\\s\\S]*?)\\n(?:[A-Za-z0-9_-]+:|---)`));
+  if (m) return m[1];
+  const m2 = normalized.match(new RegExp(`\\n${key}:\\s*(.+)\\n`));
+  return m2 ? m2[1] : "";
+}
+
+// The value as YAML folds it: indented lines joined by single spaces.
+function foldedValue(rawText, key) {
+  return foldedBlock(rawText, key).split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
+}
+
+// Agent Skills spec + Claude Code skill listing (code.claude.com/docs/en/skills):
+// `description` ≤ 1,024 chars; `description` + `when_to_use` are cut at 1,536
+// in the listing the model routes on — a longer text silently loses its tail.
+describe("skill frontmatter: description length limits", () => {
+  test.each(SKILL_NAMES)("%s: description ≤ 1024, description + when_to_use ≤ 1536", (name) => {
+    const raw = fs.readFileSync(path.join(SKILLS_DIR, name, "SKILL.md"), "utf8");
+    const description = foldedValue(raw, "description");
+    const whenToUse = foldedValue(raw, "when_to_use");
+    expect(description.length, `${name}: description is ${description.length} chars`).toBeLessThanOrEqual(1024);
+    expect(description.length + whenToUse.length, `${name}: description + when_to_use`).toBeLessThanOrEqual(1536);
+  });
+});
+
 describe("skill frontmatter: layer / invokes present", () => {
   test("discovers skills", () => {
     expect(SKILL_NAMES.length).toBeGreaterThan(0);
@@ -107,13 +135,10 @@ describe("trigger preservation: every quoted description-trigger phrase survives
   // sentence in each skill's raw description text (from the SKILL.md source,
   // not the parsed/folded meta.description, so multi-line quoting artifacts
   // don't matter) and asserts each one appears verbatim in some triggers[lang].
+  // A skill may carry its trigger list in `when_to_use:` instead (do-run: the
+  // description alone stays under the 1,024-char spec limit), so both blocks count.
   function extractDescriptionBlock(rawText) {
-    const normalized = rawText.replace(/\r\n/g, "\n");
-    const m = normalized.match(/\ndescription:\s*>-?\n([\s\S]*?)\n[A-Za-z0-9_-]+:/);
-    if (m) return m[1];
-    // Fallback: single-line `description: "..."` form (unused today, kept for safety).
-    const m2 = normalized.match(/\ndescription:\s*(.+)\n/);
-    return m2 ? m2[1] : "";
+    return ["description", "when_to_use"].map((key) => foldedBlock(rawText, key)).join("\n");
   }
 
   function extractTriggerPhrases(descriptionBlock) {

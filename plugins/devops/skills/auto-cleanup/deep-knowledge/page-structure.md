@@ -249,3 +249,53 @@ Keep text concise — one sentence max, no jargon.
 - Open-PR cards have exactly **one checkbox** (Shippen). There is no merge button,
   no "close PR" control and no per-PR strategy choice — every selected PR goes
   through `/do-ship` unchanged. Bulk select never touches PR checkboxes.
+
+## Filter Behavior
+
+- Filters toggle visibility of branch cards by category
+- When a filter is active and the user clicks select-all, show a Gmail-style
+  banner: "Alle N gefilterten markieren (vs. M sichtbar)" — bulk selection must
+  never silently act only on rendered rows.
+- Filter state is preserved in the decisions JSON so Claude knows what the
+  user was looking at when they submitted
+- Counter in Apply-Manifest sidebar updates based on checked items across ALL
+  categories (not just visible ones)
+
+## Important Design Details
+
+- Branch names in monospace font, visually prominent
+- Category badges with distinct colors: green (Löschbar), amber (Untersuchen),
+  blue (Aktive Session)
+- Branch action controls are a **single delete checkbox** per row (NOT a radio group):
+  - Checked = löschen, unchecked = behalten
+  - Löschbar group: safe-delete items pre-checked; clean Aktive Sessions NOT pre-checked
+  - Untersuchen group: all items unchecked (user opts in consciously)
+- Aktive Sessions section is visually distinct from Git-Session list (different
+  background tint, dedicated header, never mixed into the branch cards)
+- Aktive Sessions with changes (has-changes): amber badge, file summary, NO
+  destructive controls. Only a read-only „?" inline detail toggle is shown.
+- Aktive Sessions without changes (clean): gray badge, delete checkbox (unchecked
+  by default, i.e. keep); removes the worktree only — the branch is NOT deleted.
+- Clean Aktive Sessions that are ahead of `origin/main` keep the gray badge and
+  the checkbox; `commits_ahead` + `own_content` appear as an informational
+  secondary badge — "N ahead · Inhalt in main" (`own_content: false`, typical
+  squash-merged session) or "N ahead · eigener Inhalt" (`own_content: true`).
+  Being ahead never turns a clean session amber or removes its controls.
+- **Offene PRs section** (only when open PRs exist): its own block between
+  Aktive Sessions and the Git-Session list, blue-tinted, header
+  „🔵 Offene PRs (N)" with sub-labels „bereit: X / blockiert: Y / fremd: Z".
+  One card per PR: `#N title`, head → base, `quelle` badge (Session / lokal /
+  nur-remote / fremd), owning session title as a link when known, CI badge
+  (grün / rot / ausstehend), mergeable badge, review decision, age. Action is a
+  **single „Shippen" checkbox** — pre-checked per Step 5b, disabled (with the
+  reason as tooltip) for `session-dirty`, `draft`, `fremd`. Never a merge
+  button that bypasses `/do-ship`: the queue lands every PR through the full
+  pipeline (preflight, rebase, build, tests, version bump, CI gate).
+- Every action option has a `title` tooltip — see Tooltip Explanations table
+- "Remote-Branches auch loeschen" as a global toggle in the Apply-Manifest sidebar
+  (not per-branch) — applies to all selected branches that have a remote
+- Smooth expand/collapse for „?" inline detail panels
+- "Alles aufklappen" button per section to expand all inline details at once
+- Dark/light mode toggle in header
+- Löschbar group: expandable, **open by default**
+- Untersuchen group: expandable, **collapsed by default**

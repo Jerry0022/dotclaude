@@ -274,6 +274,12 @@ doc with **empty metadata and no error** — the skill never triggers / the agen
 never appears. Applies equally to `agents/*.md`. Guarded by
 `scripts/frontmatter-yaml.test.js`.
 
+**Length limits:** `description` ≤ 1,024 characters (Agent Skills spec), and
+`description` + `when_to_use` ≤ 1,536 — Claude Code cuts the skill listing
+there, so the key use case goes first. A long trigger list moves to a folded
+`when_to_use:` block (do-run); its quoted phrases count for the `triggers:`
+check like the description's. Guarded by `scripts/skill-graph.test.js`.
+
 ### Frontmatter — `layer` / `invokes` / `triggers`
 
 Every `SKILL.md` also carries three fields that describe the devops→devops
