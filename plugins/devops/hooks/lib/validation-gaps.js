@@ -80,7 +80,7 @@ function classify(validation, { openTasks = null } = {}) {
 // a visual check, and every real deviation, stay untouched.
 // ---------------------------------------------------------------------------
 
-const VERIFICATION_ACTIVITY = new RegExp([
+const VERIFICATION_ACTIVITY = new RegExp('\\b(?:' + [
   'sicht(prüfung|pruefung|kontrolle|check)',
   'visuell(e|er|en)?\\s+(prüf|pruef|kontroll|check)',
   'manuell(e|er|en)?\\s+(test|prüf|pruef|check|verifi)',
@@ -93,7 +93,7 @@ const VERIFICATION_ACTIVITY = new RegExp([
   'manual(ly)?\\s+(test|check|verif|qa)',
   'smoke[- ]?test',
   '(gerät|geraet|device|handy|phone)[- ]?(test|check|prüf|pruef)',
-].join('|'), 'i');
+].join('|') + ')', 'i');
 
 /** True when the requirement text describes checking, not building. */
 function isVerificationActivity(requirement) {
