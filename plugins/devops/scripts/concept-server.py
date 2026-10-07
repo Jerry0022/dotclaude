@@ -1882,6 +1882,30 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _lingering_close(self, timeout=1.0, max_bytes=1 << 20):
+        """Close gracefully after an error sent before the body was read.
+
+        A request without Content-Length may still carry body bytes (a
+        chunked streaming fetch, a raw client). Closing a socket with unread
+        bytes in its receive buffer sends RST instead of FIN, and the RST can
+        reach the client before the response does — it then sees a reset
+        (status 0) instead of the error. So: send FIN, then discard whatever
+        the client still sends, bounded by `timeout` and `max_bytes`.
+        """
+        self.close_connection = True
+        try:
+            self.wfile.flush()
+            self.connection.shutdown(socket.SHUT_WR)
+            self.connection.settimeout(timeout)
+            drained = 0
+            while drained < max_bytes:
+                chunk = self.connection.recv(65536)
+                if not chunk:
+                    break
+                drained += len(chunk)
+        except OSError:
+            pass
+
     def _same_origin_ok(self):
         """True for curl (no Origin) or a fetch from the served page itself.
 
@@ -2192,6 +2216,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         length_hdr = self.headers.get('Content-Length')
         if length_hdr is None:
             self._error_response(411, {"ok": False, "reason": "length_required"})
+            self._lingering_close()
             return
         try:
             declared_length = int(length_hdr)

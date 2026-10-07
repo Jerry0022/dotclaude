@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.248.7] — 2026-10-07
+
+### Fixed
+- **Concept bridge: a length-less upload always gets its 411, never a connection reset.** `bridge-durability.test.js` "missing Content-Length … rejected with 411" failed under full-suite load with status 0. Cause: `_handle_attachment_upload_stream` answered 411 and closed the socket without reading the body; a close with unread bytes sends RST instead of FIN, and the RST could beat the response to the client (reproduced: ~2 of 2400 raw requests got `ECONNRESET` with 0 bytes). The server now closes gracefully after the 411 — FIN first, then the unread body is drained (bounded: 1 s, 1 MiB). After the fix 0 of 3200 requests failed (8 parallel × 400). The same reset would have hit a real client that streams a chunked body.
+
+### Tests
+- New case repeats the length-less request 150 times and requires a 411 every time. auto-concept suite 686 passed, eslint clean. Full suite 8530 passed, 2 failed under load in untouched files (`git-sync.recover.test.js`, `deploy-parity.test.js`; both pass alone, 53/53). Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.6] — 2026-10-07
 
 ### Changed
