@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.248.2] — 2026-10-07
+
+### Fixed
+- **The usage scraper's Edge no longer drags a 2.5 GB profile around.** Implicit Windows-account sign-in had turned sync on in the dedicated scraper profile, which pulled in the user's extensions; component updates, metrics and an uncapped disk cache did the rest — one cold launch read ~180 MB and wrote ~100 MB. Edge now starts with `--disable-extensions`, `--disable-sync`, `--disable-component-update`, `--disable-background-networking`, `--no-pings`, a 32 MB disk cache and `msImplicitSignin` disabled (one merged `--disable-features`, since Chromium honours only the last). Existing profiles are pruned once: cache, extension, metrics and component folders are renamed into a sibling trash folder and deleted by a detached `rd`, so the prune never outlasts the launch lock; cookies, Login Data and storage stay. Measured: 2,496 MB → 485 MB, login intact, refresh LIVE in 23 s.
+
+### Tests
+- `buildScraperArgs` (lean switches in both window modes, one `--disable-features`, never headless) and `slimScraperProfile` (prune keeps the login, runs once, a locked folder retries); suite 47/47, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.248.1] — 2026-10-07
 
 ### Fixed
