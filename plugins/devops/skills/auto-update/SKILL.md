@@ -17,19 +17,9 @@ allowed-tools: Bash(git *), Bash(node *), Read, Glob
 
 # Plugin Update
 
-Manually trigger a plugin update with user-facing reporting.
-
-## Architecture
-
-The actual update logic lives in `ss.plugin.update.js` (SessionStart hook).
-This skill is a thin wrapper that:
-
-1. Captures the current state (version, SHA)
-2. Runs the hook's JS code (pull + cache rebuild + registry update + verify)
-3. Reports what changed (changelog, verify status)
-
-**No duplicated logic.** The hook is the single source of truth for the
-update mechanism. This skill only adds reporting.
+Manually trigger a plugin update with user-facing reporting. The update logic
+lives in `ss.plugin.update.js` (SessionStart hook) — the single source of
+truth; this skill captures the state before, runs the hook, and reports.
 
 ## Constants
 
@@ -42,100 +32,56 @@ HOOK_SCRIPT = ${PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js
 
 ## Step 0 — Capture current state + channel
 
-1. Read current version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
-2. Read current git SHA: `git -C MARKETPLACE_DIR rev-parse --short HEAD`
-3. Read the channel pin from `~/.claude/plugins/.channels.json` (key = marketplace
+1. Current version from `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`
+   and SHA from `git -C MARKETPLACE_DIR rev-parse --short HEAD`.
+2. Channel pin from `~/.claude/plugins/.channels.json` (key = marketplace
    name, missing/invalid → `stable`). One channel per MARKETPLACE — a single
    clone cannot serve two plugins on different channels.
-4. **`--channel <alpha|beta|stable>` flag:** re-pin by writing the sidecar
+3. **`--channel <alpha|beta|stable>` flag:** re-pin by writing the sidecar
    (`{"dotclaude": "beta"}` merged into the existing JSON), then continue with
    the update so the new pin takes effect immediately.
-5. Compute drift: latest version visible to the pin vs. latest alpha
+4. Drift: latest version visible to the pin vs. latest alpha
    (`git -C MARKETPLACE_DIR ls-remote --tags origin`, numeric compare on
    `alpha/vX.Y.Z` / `beta/vX.Y.Z` / `stable/vX.Y.Z` / bare `vX.Y.Z`).
-6. Report: `Currently installed: v{version} ({sha}) — Channel: {channel},
+5. Report: `Currently installed: v{version} ({sha}) — Channel: {channel},
    latest visible: v{N}` and, when alpha is ahead:
    `(alpha has v{M} available)`.
 
 ## Step 1 — Run update hook
 
-Execute the hook script directly:
-
 ```bash
 node HOOK_SCRIPT --force
 ```
 
-`--force` is **required here**. At SessionStart the same hook is throttled by a
-6 h cooldown so it cannot starve the MCP servers' 30 s connect window (#324);
-`--force` is the explicit path — the user asked for an update *now* — and it
-also disables the deferral of a cache repair into a detached child, so the
-result is complete by the time this step returns and can be reported.
+`--force` is required: at SessionStart the hook is throttled by a 6 h cooldown
+(#324) and defers cache repairs to a detached child; `--force` skips both so
+the result is complete when this step returns.
 
-The hook handles:
-- Channel-aware update on all marketplace clones (ring model): once a
-  `stable/*` tag exists, the clone is pinned to the highest version visible
-  to the channel pin via a detached tag checkout; before that, a bootstrap
-  fallback keeps the legacy `git pull --ff-only` behavior
-- Cache rebuild (recursive copy incl. dotfiles, `node_modules` excluded — it is
-  linked, not copied; `ss.mcp.deps` owns dependency resolution)
-- `installed_plugins.json` registry update (incl. informational `channel`)
-- Silent verification (version alignment, cache completeness)
-- Quiet output style refresh: when `~/.claude/output-styles/quiet.md` exists and
-  matches a version this plugin shipped (`templates/output-style-quiet.shipped.json`),
-  it is overwritten with the current `templates/output-style-quiet.md`. Never
-  created unprompted; a customized copy is left alone with one stderr note
-
-Capture and display the hook's stdout (update status lines).
+The hook does the channel-aware checkout of every marketplace clone, the cache
+rebuild, the `installed_plugins.json` update, a silent verification, and the
+Quiet output style refresh. Show its stdout.
 
 ## Step 2 — Changelog
 
-Read NEW version and SHA, then show what changed:
-
-```bash
-git -C MARKETPLACE_DIR log --oneline {old_sha}..HEAD
-```
-
-If no changes: report "Already up to date" and stop.
+Read the NEW version and SHA, then `git -C MARKETPLACE_DIR log --oneline
+{old_sha}..HEAD`. No changes → report "Already up to date" and stop.
 
 ## Step 3 — Verify & Report
 
-The Quiet style line in 3d comes from the hook output: a
-`**Quiet output style**: synced …` line → `synced`; a stderr
-`differs from every shipped Quiet style` note → `customized — left as is`;
-otherwise `current` when `~/.claude/output-styles/quiet.md` exists, else
-`not installed`.
+1. **Version alignment** — these three must match, else report the mismatch:
+   `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json`; the cache's
+   `.claude-plugin/plugin.json` (`installed_plugins.json` → `installPath`);
+   `installed_plugins.json` → `devops@dotclaude` → `version`.
+2. **Cache completeness** — under `installPath`: `.claude-plugin/plugin.json`,
+   `.mcp.json`, non-empty `skills/` and `hooks/`.
+3. **Skill count** — `ls -d <dir>/skills/*/ | wc -l` for marketplace and cache
+   must match.
+4. **Quiet style** — from the hook output: `**Quiet output style**: synced …`
+   → `synced`; a stderr `differs from every shipped Quiet style` note →
+   `customized — left as is`; otherwise `current` when
+   `~/.claude/output-styles/quiet.md` exists, else `not installed`.
 
-### 3a — Version alignment
-
-Read version from three sources and confirm they match:
-
-| Source | Path |
-|---|---|
-| plugin.json (marketplace) | `MARKETPLACE_DIR/PLUGIN_SUBDIR/.claude-plugin/plugin.json` |
-| plugin.json (cache) | Read `installed_plugins.json` → `installPath` → `.claude-plugin/plugin.json` |
-| installed_plugins.json | `devops@dotclaude` → `version` |
-
-All three must show the same version. If not → report mismatch.
-
-### 3b — Cache completeness
-
-Verify critical paths exist in the cache (path from `installed_plugins.json` → `installPath`):
-
-- `.claude-plugin/plugin.json`
-- `.mcp.json`
-- `skills/` (non-empty)
-- `hooks/` (non-empty)
-
-### 3c — Skill count
-
-Compare skill count between marketplace and cache:
-
-```bash
-ls -d MARKETPLACE_DIR/PLUGIN_SUBDIR/skills/*/ | wc -l
-ls -d CACHE_PATH/skills/*/ | wc -l
-```
-
-### 3d — Report
+Report:
 
 ```
 Plugin updated: v{old_version} → v{new_version}
@@ -152,23 +98,15 @@ blocked by pre.mcp.health until restart — the running MCP processes
 point at the now-deleted old installPath.
 ```
 
+The MCP warning applies only when the version changed: the hook then wipes the
+old cache dir and writes `.mcp-stale.json`, which `pre.mcp.health` enforces. A
+cache repair at the same version overwrites in place and does not block MCP.
+
 ## Known Issues
 
-- **Desktop App does not auto-rebuild cache** (anthropics/claude-code#14061):
-  The `ss.plugin.update` hook works around this by rebuilding the cache.
-
-- **Cache deleted on restart**: If `installed_plugins.json` points to a
-  non-existent cache directory, the Desktop App may skip the plugin.
-  Step 3 catches this.
-
-- **Plugin key naming**: Marketplace and plugin name must differ
-  (`devops@dotclaude`, not `devops@devops`). Identical names hide the
-  plugin from the Customize UI.
-
-- **MCP stale after upgrade**: When the plugin version changes, the
-  marketplace clone's old cache dir is wiped and a new installPath is
-  registered. MCP servers spawned earlier in the session still point at
-  the deleted path. `ss.plugin.update` writes `.mcp-stale.json` so
-  `pre.mcp.health` blocks further MCP calls until the user restarts.
-  Cache repairs at the same version overwrite files in place and do NOT
-  trigger the sentinel.
+- **Desktop App does not auto-rebuild the cache** (anthropics/claude-code#14061)
+  and may skip a plugin whose `installPath` no longer exists — the hook
+  rebuilds it; Step 3 catches the rest.
+- **Plugin key naming**: marketplace and plugin name must differ
+  (`devops@dotclaude`, not `devops@devops`), or the plugin is hidden from the
+  Customize UI.
