@@ -19,6 +19,7 @@ import {
   LOGIN_RETRY_AFTER_MS,
   AUTO_LOGIN_RETRY_MS,
   bringLoginWindowToFront,
+  powershellArgs,
 } from "./refresh-usage-headless.js";
 
 // #328 — a stale PID file + `taskkill /F /PID <pid> /T` killed the user's main
@@ -193,13 +194,14 @@ describe("powershellArgs — no shell quoting layer", () => {
 describe("bringLoginWindowToFront", () => {
   test("Windows: runs PowerShell with an encoded command scoped to the scraper profile", () => {
     const calls = [];
-    const ok = bringLoginWindowToFront({ platform: "win32", profileDir: "C:\p\edge-usage-profile", run: (cmd, args) => calls.push([cmd, args]) });
+    const ok = bringLoginWindowToFront({ platform: "win32", profileDir: String.raw`C:\p\edge-usage-profile`, run: (cmd, args) => calls.push([cmd, args]) });
     expect(ok).toBe(true);
     expect(calls[0][0]).toBe("powershell.exe");
     const script = Buffer.from(calls[0][1].at(-1), "base64").toString("utf16le");
-    expect(script).toContain("C:\p\edge-usage-profile");
+    expect(script).toContain(String.raw`C:\p\edge-usage-profile`);
     expect(script).toContain("SetForegroundWindow");
-    expect(script).toContain("ShowWindow($p.MainWindowHandle,3)"); // maximized
+    expect(script).toContain("ShowWindow($h,3)"); // maximized
+    expect(script).toContain("MoveWindow($h,$wa.X,$wa.Y"); // onto the primary work area first
   });
 
   test("never throws and does nothing off Windows", () => {
