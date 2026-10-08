@@ -99,8 +99,9 @@ describe("pinToTag — repair-then-pin with a visible failure", () => {
   // self-sync three times — the 10-min age rule alone kept it every time.
   test("young 0-byte lock (40 s, no git running): removed, said so, pin lands", () => {
     const lock = plantLock(40_000);
+    const now = fs.statSync(lock).mtimeMs + 40_000; // pinned: a slow run must not read "41 s"
     const lines = [];
-    const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: noGit });
+    const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: noGit, now });
     expect(r.ok).toBe(true);
     expect(r.lock.status).toBe("removed");
     expect(fs.existsSync(lock)).toBe(false);
@@ -110,9 +111,10 @@ describe("pinToTag — repair-then-pin with a visible failure", () => {
 
   test("young lock a git process may own: kept, failure names the pid", () => {
     const lock = plantLock(40_000);
-    const holder = () => [{ pid: 777, start: Date.now() - 60_000, cmd: "git checkout main" }];
+    const now = fs.statSync(lock).mtimeMs + 40_000;
+    const holder = () => [{ pid: 777, start: now - 60_000, cmd: "git checkout main" }];
     const lines = [];
-    const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: holder });
+    const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: holder, now });
     expect(r.ok).toBe(false);
     expect(r.lock.status).toBe("held");
     expect(fs.existsSync(lock)).toBe(true);
