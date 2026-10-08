@@ -961,7 +961,7 @@ the card (the card stays the last output of the turn). What it resolves to:
 
 The block also strips a stale `🚀 Shipping – ` when the title carries one. A
 title with none of the devops prefixes is left untouched — the user renamed it
-meanwhile, and that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere or on
+meanwhile, and that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere or on
 any failure.
 
 ### Session archive on exit (carried by the card result, #632)

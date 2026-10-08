@@ -107,7 +107,7 @@ Then restore the session title: `mcp__ccd_session_mgmt__get_session` `self`;
 if the `title` starts with `📥 Batch – `, call
 `mcp__ccd_session_mgmt__set_session_title` `self` with that prefix removed. A
 title without the prefix is left alone — the user renamed it meanwhile, and
-that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere. The injected merge
+that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere. The injected merge
 context repeats this instruction because the hook path never loads this skill.
 
 ## Hand-off gate (Step 4.9)
