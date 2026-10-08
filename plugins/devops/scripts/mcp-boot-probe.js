@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script mcp-boot-probe
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Measure how long each devops MCP server needs to answer a
  *   JSON-RPC `initialize` on stdio — the exact handshake Claude Code performs,

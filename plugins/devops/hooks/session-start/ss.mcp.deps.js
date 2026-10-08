@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.mcp.deps
- * @version 0.3.0
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-install MCP server dependencies into CLAUDE_PLUGIN_DATA,
