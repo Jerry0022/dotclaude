@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.250.0] — 2026-10-08
+
+### Added
+- **Deletion gate for `/auto-cleanup`: no answer is a no.** In the 2026-10-08 A/B eval runs the skill skipped the concept page, asked via AskUserQuestion, got no answer (headless) and still ran `git branch -d feat/merged` in all 4 runs, and `git branch -D feat/unmerged` in one run per variant; only the case's deny rules stopped it. The confirm rule lived in `execution.md`, which a page-skipping run never loads. Now enforced by hooks:
+  - `post.cleanup.gate` (Skill | AskUserQuestion) arms per-session state when auto-cleanup loads (6 h TTL) and records answered `Dry-Run…` (yes = option starting Ja/Yes, anything else revokes) and `Unmerged…` questions. An errored or denied question fires no PostToolUse, so nothing is recorded.
+  - `pre.cleanup.gate` (Bash | PowerShell) refuses `git branch -d/-D/--delete`, `push --delete`/`:ref`/`--prune`/`--mirror`, `update-ref -d refs/heads/…` and `worktree remove` whose target the last yes-answered Dry-Run question does not name, any branch that has not landed (ancestor or squash check against origin/main) without its own Unmerged yes, and any target it cannot resolve (`$var`, glob, `xargs`, non-literal `-C`). Sessions where auto-cleanup did not run are not gated.
+- `auto-cleanup` SKILL.md 0.8.0: new section "Deletion gate — no answer is a no" before Step 1 (also without a page or for a tiny repo); Step 7 body replaced by a pointer to `deep-knowledge/investigation.md`. `execution.md` Step 10a names the confirm format.
+
+### Tests
+- New `hooks/lib/cleanup-gate.test.js` (53: parser table, answer recording, real git repo with merged/squash/unmerged branches, stdin e2e of both hooks); `gate-contract.test.js` pins the new section, heading order and hook registration (16). Hooks + auto-cleanup suites 4546 passed; full suite 8652 passed, 3 failed only in `mcp-boot-probe.test.js` (missing per-server node_modules in the worktree). Eval rerun `manifest-before-delete` (3 runs): no delete attempt 3/3, no unmerged delete 3/3 (before 0/2, 1/2). Codex review skipped (limit until 2026-10-11).
+
 ## [0.249.6] — 2026-10-08
 
 ### Fixed

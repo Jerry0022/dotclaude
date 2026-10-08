@@ -1,6 +1,6 @@
 ---
 name: auto-cleanup
-version: 0.7.0
+version: 0.8.0
 description: >-
   Repository branch hygiene of the current project on an interactive concept
   page: unmerged branches, stale locals with deleted remotes, active sessions
@@ -114,6 +114,29 @@ NEVER test membership by prefix or substring (`grep -q`, `[[ $set == *$name* ]]`
 `String.includes`): branch names form suffix chains (`feat/x-abc123`,
 `feat/x-abc123-def456`), and a substring test silently hides the shorter
 independent branch from every list.
+
+## Deletion gate — no answer is a no
+
+**Never run a delete before the Dry-Run-Confirm is answered.** That holds for
+every local branch, remote branch and worktree, and also when there is no page:
+no browser, or a repo so small the page looks like overkill, is no exception.
+Without the page, print the Apply-Manifest (`deep-knowledge/execution.md`
+§ Step 10a) as text and ask the confirm right away.
+
+- **Dry-Run-Confirm** = one `AskUserQuestion`, header `Dry-Run`, the question
+  names every branch and worktree to delete by full name, options
+  `Ja, ausführen` / `Abbrechen`.
+- **Unmerged branch** (Untersuchen — content not in the default branch) =
+  additionally its own yes: one question per branch, header `Unmerged`, the
+  question names the branch, options `Ja, löschen` / `Behalten`.
+- **No answer is a no.** An error (`Answer questions?` under `claude -p`), a
+  denied or unavailable tool, `Abbrechen`, `Behalten`, an Other or free-text
+  reply: nothing is deleted. Do not ask "how else", do not retry another way —
+  end the run with the `analysis` card, the manifest listed as open.
+
+`pre.cleanup.gate` enforces this: armed when this skill loads, it refuses every
+`git branch -d/-D`, `git push --delete`, `git worktree remove` that no yes
+covers. A refusal is final for this run.
 
 ## Step 1 — Repo Context
 
@@ -311,36 +334,12 @@ Verify local `main` is up to date with `origin/main`. Flag if behind.
 
 ## Step 7 — Gather Inline Detail Data
 
-For EVERY entry (both Löschbar and Untersuchen), gather up-front the data
-needed for the inline „?" detail panel — collected once, shown on expand.
-
-For each Git-Session branch (regardless of category):
-
-1. **Full commit log** against `origin/main`:
-   ```bash
-   git log --format='%h|%s|%cr|%an' origin/main..<branch>
-   ```
-2. **Diff summary by file** (exclude CHANGELOG.md):
-   ```bash
-   git diff --numstat origin/main...<branch> -- . ':(exclude)CHANGELOG.md'
-   ```
-3. **Branch age and activity:**
-   ```bash
-   git log --reverse --format='%ct' origin/main..<branch> | head -1
-   git log -1 --format='%ct' <branch>
-   ```
-4. **PR status:** `gh pr list --head <branch> --state all --limit 5 --json number,title,state,mergedAt,createdAt,url`
-5. **Squash-merge cross-check** for Untersuchen branches with no PR.
-6. **WIP heuristic** on commit subjects.
-7. **Inline recommendation** — apply the same rules as in `deep-knowledge/investigation.md`
-   and produce a short label (e.g. "3 ungeschippte Commits — ship empfohlen").
-
-For each Aktive Session (worktree):
-- Gather modified file list, untracked files, commits-ahead data (same as investigation.md).
-- Inline recommendation label (e.g. "85 Zeilen — commit + ship empfohlen").
-
-All data is embedded in the HTML at first render, hidden behind a `<details>`
-expand. No round-trip to Claude is needed to view it.
+For EVERY entry (both Löschbar and Untersuchen, and every Aktive Session),
+gather up-front the data the inline „?" detail panel shows — commit log, diff
+by file, age, PR status, squash cross-check, WIP heuristic and a one-line
+recommendation label. Commands and recommendation rules:
+`deep-knowledge/investigation.md`. All data is embedded in the HTML at first
+render behind a `<details>` expand; no round-trip to Claude to view it.
 
 ## Step 8 — Generate Concept Page
 

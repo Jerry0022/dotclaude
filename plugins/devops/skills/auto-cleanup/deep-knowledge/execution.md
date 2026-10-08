@@ -38,7 +38,22 @@ Then show a **Dry-Run-Confirm** prompt before executing:
 > Merges und Löschungen sind NICHT rückgängig zu machen.
 > Fortfahren?  [Ja] [Abbrechen]
 
-Only proceed after explicit confirmation.
+Ask it as ONE `AskUserQuestion`: header `Dry-Run`, the question carries the
+manifest (every branch, remote branch and worktree path by full name, every
+ship PR with its `#<n>` and head branch), options `Ja, ausführen` /
+`Abbrechen`. `pre.cleanup.gate` lets through only the deletes that question
+names — a name missing from it is refused even after the yes.
+
+Then, for every unmerged branch in the delete set (Untersuchen — content not
+in the default branch), its own yes: one question per branch (up to 4 per
+call), header `Unmerged`, the question names the branch and its unshipped
+commits, options `Ja, löschen` / `Behalten`. Behalten drops that branch from
+the set; the rest proceeds.
+
+Only proceed after explicit confirmation. No answer — the tool errors
+(`Answer questions?` under `claude -p`), is denied or unavailable, or the reply
+is `Abbrechen`, Other or free text — is `Abbrechen`: nothing ships, nothing is
+deleted, the run ends with the `analysis` card.
 
 ## Step 10b — Ship Queue (before any cleanup)
 
