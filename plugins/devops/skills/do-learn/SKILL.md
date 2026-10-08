@@ -31,16 +31,12 @@ feedback belongs in auto-memory and is handled elsewhere — this skill writes
 
 ## Step 0 — Load extensions
 
-Use **Glob** to verify each path exists before reading; skip missing files
-silently (no output). Merge project > global > plugin defaults.
+Glob each path before reading; skip missing files silently. Merge project >
+global > plugin defaults.
 
 1. Global: `~/.claude/skills/do-learn/SKILL.md` + `reference.md`
 2. Project: `{project}/.claude/skills/do-learn/SKILL.md` + `reference.md`
    Fallback (pre-PR-2 name): where `do-learn/` does not exist, read `~/.claude/skills/claude-learn/` / `{project}/.claude/skills/claude-learn/` instead — an extension written before the rename keeps working.
-
-The directory name is the skill's own `name` (`do-learn`), per
-`CONVENTIONS.md` → Extension Mechanism. Any other spelling silently loads
-nothing.
 
 ## Step 1 — Collect the learning
 
@@ -52,15 +48,13 @@ work before they are a rule:
   sentence. Diagnose first with evidence (logs, code, the transcript), fix what
   the prompt asked to fix, then state the rule the root cause implies.
 - **Several learnings in one call** (numbered lists, "zwei Themen", a paragraph
-  per topic — 1 in 4 invocations): split into atomic rules and run Step 2 for
+  per topic): split into atomic rules and run Step 2 for
   **each**. Rules that land in the same target repo go into **one**
   `/auto-issue` call (it takes several issues); local writes are grouped per
   file. Never let one learning's branch decide the others'.
 
-Otherwise **mine the conversation before asking** — the bare invocation almost
-always follows a moment where Claude did something the user did not expect,
-and that moment is the learning.
-
+Otherwise **mine the conversation before asking** — a bare invocation almost
+always follows a moment where Claude did something the user did not expect.
 Walk the user's prompts backwards, newest first, and stop at the first one that
 carries a **surprise**: the user corrects a result, questions why something
 happened, states an expectation that was not met, or reverses something Claude
@@ -75,15 +69,13 @@ then confirm it in one line before routing: "Learning: `<rule>` — richtig?"
 The user's yes/edit is the learning. No surprise found within the recent
 prompts → ask once: "Was soll ich langfristig lernen?"
 
-The learning MUST end up a self-contained rule. Vague input ("die Farben waren
-falsch") → one clarifying question before continuing. Capture the **why** when
-the user gives it — without the reason the rule becomes superstition and future
-Claude cannot judge edge cases.
+The learning ends up a self-contained rule. Vague input ("die Farben waren
+falsch") → one clarifying question. Capture the **why** when the user gives it,
+so future sessions can judge edge cases.
 
 **Capture, don't audit.** Persist the rule as stated; do not survey the
-codebase to size it (counting i18n keys across 30 languages to scope one i18n
-rule cost a run 17 minutes). Scope the user did not raise is settled by the
-rule's wording — at most the one clarifying question above.
+codebase to size it (one run spent 17 minutes counting i18n keys for a single
+rule). Scope the user did not raise is settled by the rule's wording.
 
 ## Step 2 — Route
 
@@ -166,10 +158,6 @@ Three tie-breakers, in force order:
    not to a fixed branch: **Q2 = no → B**; **Q2 = yes → A**, or C when Q1 was
    the tie tie-breaker 2 covers. Filing an issue against dotclaude from inside
    dotclaude is never the answer.
-   In branch B nothing is written locally — not into this project's tree, and
-   never into `~/.claude/plugins/**`, which `pre.plugin.scope` blocks *from a
-   consumer project*. In the plugin source repo that hook stands down by
-   design, so there the rule is yours to keep, not the hook's to enforce.
 
 Worked examples — each lands in exactly one branch:
 
@@ -206,8 +194,9 @@ CLAUDE.md**, and re-route to the next-larger container rather than busting a
 budget. Sizing, re-route triggers, the reference-over-duplicate rule, and tone:
 `{PLUGIN_ROOT}/deep-knowledge/content-conventions.md`.
 
-Branches B and D persist nothing locally, and E writes outside every project —
-all three skip Step 4.
+Branches B and D persist nothing locally — not in this project, and never in
+`~/.claude/plugins/**` (an installed copy) — and E writes outside every
+project; all three skip Step 4.
 
 ## Step 4 — Prune duplicate feedback memory
 
@@ -216,7 +205,7 @@ covering the same ground is a stale duplicate: auto-memory is for personal
 style and tone, not project rules. **Index only**: read `MEMORY.md` once and
 compare its `feedback_*` one-liners; open a memory file only when its line
 matches, delete only **with per-match confirmation**. No matching line → done,
-no output (the case in every run so far).
+no output.
 
 Mechanics — memory-dir resolution, matching criteria, the confirmation
 prompt: `deep-knowledge/feedback-cleanup.md` (sibling of this file).

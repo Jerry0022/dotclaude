@@ -1,9 +1,7 @@
 # Feedback-Memory Cleanup — Mechanics
 
-Execution detail for `/do-learn` Step 4. The rule is one line — *the
-canonical file now owns this rule, so a duplicate `feedback_*.md` entry is
-stale* — but resolving the memory directory correctly is fiddly enough to
-live outside the skill body.
+Execution detail for `/do-learn` Step 4: resolving the memory directory and
+matching a stale duplicate.
 
 ## When this runs
 
@@ -34,9 +32,8 @@ ambiguous (e.g. a leading `\\server`), skip rather than guess.
 
 Read `MEMORY.md` (the index) — one Read, no Glob over the directory. Its
 `feedback_*` bullets carry a one-line hook each; those hooks are the candidate
-list. No `feedback_*` bullet → skip silently. (Across the first 23 runs of
-this skill no candidate ever matched; the index read is the whole cost this
-step is allowed to have in the common case.)
+list. No `feedback_*` bullet → skip silently — the index read is the
+whole cost of this step in the common case.
 
 **Only ever target `feedback_*.md`.** Never touch `user_*`, `project_*`, or
 `reference_*` memories — different lifecycles, and not what this skill replaces.
