@@ -5,4 +5,4 @@ tags: [skill-body, auto-fix]
 env: { EVAL_DOTCLAUDE_BUDGET: free }
 ---
 
-The checkout total is wrong, see app.log. This is broken, please fix it.
+The checkout total is wrong, see app.log. This is broken, please fix it. Do not commit or ship.
