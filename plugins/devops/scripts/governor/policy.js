@@ -640,7 +640,7 @@ function culprits(procs, classes, resources, prioActive = {}) {
   const groups = new Map();
   for (const p of procs || []) {
     const cls = (classes && classes.get(p.pid)) || 'foreign';
-    if (cls === 'self') continue;
+    if (cls === 'self' || p.pid === 0 || /^(system )?idle( process)?$/i.test(p.name || '')) continue; // the idle process is no consumer
     const k = `${cls}|${String(p.name || '?').toLowerCase()}`;
     const g = groups.get(k) || { name: p.name || '?', cls, cpu: 0, gpu: 0, disk: 0, diskBps: 0, ram: 0 };
     g.cpu += p.cpuPct || 0;

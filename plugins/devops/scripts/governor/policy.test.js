@@ -456,6 +456,7 @@ describe('24 h review: host tree, background tools, culprits', () => {
       proc({ pid: 2, name: 'OneDrive.Sync.Service.exe', memMB: 1024 }),
       proc({ pid: 3, name: 'node.exe', cpuPct: 60, memMB: 2000 }),
       proc({ pid: 4, name: 'node.exe', cpuPct: 99 }),
+      proc({ pid: 0, name: 'System Idle Process', cpuPct: 95 }),
     ];
     const c = P.culprits(procs, classes, ['ram', 'cpu', 'disk', 'gpu'], { gpu: 'c:/games/foo' });
     expect(c.ram).toMatchObject({ name: 'OneDrive.Sync.Service.exe', cls: 'foreign', text: 'RAM: OneDrive.Sync.Service.exe 34.0 GB' });
