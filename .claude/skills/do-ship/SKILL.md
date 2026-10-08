@@ -153,8 +153,9 @@ three times; the last `[finalizer] installed:` line is what Step 6.5's `userFina
 item must be based on (synced vs. the honest miss). Since 0.183.11 the hook itself
 prints one stderr line when the fetch fails or when `--force` resolves to the tag it is
 already on, so a no-op is diagnosable in the tool result. Since the channel-pin fix
-(2026-10-08) it also clears a stale 0-byte `.git/index.lock` (≥ 10 min, no git process
-that could own it) before the pin and says so, and a pin that leaves HEAD off the tag
+(2026-10-08) it also clears an orphaned 0-byte `.git/index.lock` before the pin and
+says so: any age ≥ 5 s when the process list shows no git that could own it, the
+10-min age rule only as the fallback when processes cannot be listed, and a pin that leaves HEAD off the tag
 prints one `pin to <tag> failed — HEAD stays on <tag>: <git error>` line. When the loop
 ends on a miss, carry that line into the card's honest-miss item — it is the cause.
 

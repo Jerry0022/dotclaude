@@ -6,6 +6,7 @@ import { execFileSync } from "child_process";
 import { pinToTag } from "./channel-pin.js";
 import {
   STALE_LOCK_MIN_AGE_MS,
+  YOUNG_LOCK_MIN_AGE_MS,
   parseEtime,
   parsePs,
   parseWinJson,
@@ -94,10 +95,34 @@ describe("pinToTag — repair-then-pin with a visible failure", () => {
     expect(lines[0]).toContain("git process 4242 may own it");
   });
 
-  test("young lock: kept (a git may still be working), failure names its age", () => {
-    plantLock(60_000);
+  // v0.254.0 ship (PR #677): a fresh 0-byte lock, no git running, blocked the
+  // self-sync three times — the 10-min age rule alone kept it every time.
+  test("young 0-byte lock (40 s, no git running): removed, said so, pin lands", () => {
+    const lock = plantLock(40_000);
     const lines = [];
     const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: noGit });
+    expect(r.ok).toBe(true);
+    expect(r.lock.status).toBe("removed");
+    expect(fs.existsSync(lock)).toBe(false);
+    expect(git(["rev-parse", "HEAD"])).toBe(newSha);
+    expect(lines).toEqual([expect.stringMatching(/removed stale index\.lock \(0 bytes, 40 s old, no git process holding it\)/)]);
+  });
+
+  test("young lock a git process may own: kept, failure names the pid", () => {
+    const lock = plantLock(40_000);
+    const holder = () => [{ pid: 777, start: Date.now() - 60_000, cmd: "git checkout main" }];
+    const lines = [];
+    const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: holder });
+    expect(r.ok).toBe(false);
+    expect(r.lock.status).toBe("held");
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(lines[0]).toContain("40 s old; git process 777 may own it");
+  });
+
+  test("young lock with an unreadable process list: kept by the age rule, failure names its age", () => {
+    plantLock(60_000);
+    const lines = [];
+    const r = pinToTag({ dir, tag: "alpha/v0.249.4", targetSha: newSha, report: (l) => lines.push(l), listGitProcesses: () => null });
     expect(r.ok).toBe(false);
     expect(r.lock.status).toBe("young");
     expect(lines[0]).toMatch(/younger than 10 min/);
@@ -132,11 +157,39 @@ describe("releaseStaleIndexLock — only a lock nobody can own", () => {
     expect(fs.existsSync(lock)).toBe(true);
   });
 
-  test("exactly at the age threshold → removed; just under → kept", () => {
+  test("age fallback: process list unreadable → old lock 'unknown', young lock 'young', both kept", () => {
     const lock = plantLock(STALE_LOCK_MIN_AGE_MS - 30_000);
-    expect(releaseStaleIndexLock({ gitDir: gitDir(), listGitProcesses: noGit }).status).toBe("young");
     const mtime = fs.statSync(lock).mtimeMs;
-    expect(releaseStaleIndexLock({ gitDir: gitDir(), now: mtime + STALE_LOCK_MIN_AGE_MS, listGitProcesses: noGit }).status).toBe("removed");
+    expect(releaseStaleIndexLock({ gitDir: gitDir(), listGitProcesses: () => null }).status).toBe("young");
+    expect(releaseStaleIndexLock({ gitDir: gitDir(), now: mtime + STALE_LOCK_MIN_AGE_MS, listGitProcesses: () => null }).status).toBe("unknown");
+    expect(fs.existsSync(lock)).toBe(true);
+  });
+
+  test("young lock, no git running → removed without the process list being skipped", () => {
+    const lock = plantLock(30_000);
+    let listed = 0;
+    const r = releaseStaleIndexLock({ gitDir: gitDir(), listGitProcesses: () => { listed++; return []; } });
+    expect(r.status).toBe("removed");
+    expect(listed).toBe(1);
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
+  test("a lock seconds old is never touched, not even with no git running", () => {
+    const lock = plantLock(0);
+    const mtime = fs.statSync(lock).mtimeMs;
+    let listed = 0;
+    const r = releaseStaleIndexLock({ gitDir: gitDir(), now: mtime + YOUNG_LOCK_MIN_AGE_MS - 1, listGitProcesses: () => { listed++; return []; } });
+    expect(r.status).toBe("young");
+    expect(listed).toBe(0);
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(releaseStaleIndexLock({ gitDir: gitDir(), now: mtime + YOUNG_LOCK_MIN_AGE_MS, listGitProcesses: noGit }).status).toBe("removed");
+  });
+
+  test("young lock with a git that started before it → held, kept", () => {
+    const lock = plantLock(30_000);
+    const holder = () => [{ pid: 9, start: Date.now() - 45_000, cmd: "git pull --ff-only origin main" }];
+    expect(releaseStaleIndexLock({ gitDir: gitDir(), listGitProcesses: holder })).toMatchObject({ status: "held", pids: [9] });
+    expect(fs.existsSync(lock)).toBe(true);
   });
 
   test("process list unreadable → kept as unknown", () => {
