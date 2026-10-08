@@ -801,6 +801,7 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
     <button id="anno-toggle" class="anno-toggle-fab" type="button" hidden
             aria-pressed="true"
             aria-label="{{anno.toggle_hide}}"
+            data-tip="{{anno.toggle_hide}}"
             data-label-show="{{anno.toggle_show}}"
             data-label-hide="{{anno.toggle_hide}}">
       <svg class="anno-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>

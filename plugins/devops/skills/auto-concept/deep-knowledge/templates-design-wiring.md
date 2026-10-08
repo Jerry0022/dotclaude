@@ -149,7 +149,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     toggle.hidden = all.length === 0;
     const hidden = document.body.classList.contains('anno-hidden');
     const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
-    if (label) toggle.setAttribute('aria-label', label);
+    if (label) { toggle.setAttribute('aria-label', label); toggle.setAttribute('data-tip', label); }
     toggle.setAttribute('aria-pressed', String(!hidden));
   }
   // Called from § State Persistence's DOMContentLoaded handler AFTER
