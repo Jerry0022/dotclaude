@@ -18,6 +18,7 @@ import {
   OPEN_URL_PREFIX,
   isLoopbackHttpUrl,
   safeSessionId,
+  APP_START_BUTTON,
 } from "./card-widget.js";
 
 const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
@@ -76,6 +77,57 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
 
     const en = buttonsFor("ready", "en", { guideHandoff: { service: "Supabase" } });
     expect(en.at(-1)).toMatchObject({ label: "Start web guide", prompt: "Guide me through Supabase with the web guide" });
+  });
+
+  test("appStart (#680) appends a non-primary Start-app button after the card's own verbs, before the guide", () => {
+    const de = buttonsFor("test", "de", { appStart: true, guideHandoff: { service: "Supabase" } });
+    expect(de.map((a) => a.label)).toEqual(["Ship", "Nachbessern", "App starten", "Web-Guide starten"]);
+    const start = de.find((a) => a.label === "App starten");
+    expect(start).toMatchObject({ icon: "player-play", prompt: APP_START_BUTTON.de.prompt });
+    expect(start.primary).toBeFalsy();
+    expect(start.tooltip).toBeTruthy();
+    expect(de.filter((a) => a.primary).map((a) => a.label)).toEqual(["Ship"]);
+
+    const en = buttonsFor("ship-successful", "en", { appStart: true, version: "1.2.3" });
+    expect(en.at(-1)).toMatchObject({ label: "Start app", prompt: APP_START_BUTTON.en.prompt });
+    expect(en.at(-1).tooltip).toBeTruthy();
+    expect(en.filter((a) => a.primary).length).toBe(1);
+    expect(en.find((a) => a.primary).label).not.toBe("Start app");
+  });
+
+  test("appStart rides on a ship-successful card with nothing to promote (null buttonsKey)", () => {
+    expect(buttonsFor(null, "de", { appStart: true }).map((a) => a.label)).toEqual(["App starten"]);
+  });
+
+  test("without appStart every button set stays unchanged", () => {
+    for (const key of Object.keys(BUTTONS.de)) {
+      for (const lang of ["de", "en"]) {
+        const opts = { version: "1.2.3" };
+        expect(buttonsFor(key, lang, { ...opts, appStart: false })).toEqual(buttonsFor(key, lang, opts));
+        expect(buttonsFor(key, lang, opts).some((a) => a.label === APP_START_BUTTON[lang].label)).toBe(false);
+      }
+    }
+  });
+
+  test("the Start-app prompt triggers prompt.flow.appstart's start intent (de + en)", () => {
+    const hook = readFileSync(join(import.meta.dirname, "..", "..", "hooks", "user-prompt-submit", "prompt.flow.appstart.js"), "utf8");
+    const start = hook.indexOf("const startKeywords = [");
+    expect(start).toBeGreaterThan(-1);
+    const block = hook.slice(start, hook.indexOf("];", start));
+    // One regex literal per line: `/source/,` — rebuilt exactly as the hook has them.
+    const regexes = block.split("\n").map((l) => l.trim())
+      .filter((l) => l.startsWith("/") && l.endsWith("/,"))
+      .map((l) => new RegExp(l.slice(1, -2)));
+    expect(regexes.length).toBeGreaterThan(3);
+    const sources = regexes.map((re) => re.source);
+    // The specific app-start phrasings, not only the broad "start" catch-all.
+    const de = String.raw`\bstarte?\s+(?:die\s+)?app\b`;
+    const en = String.raw`\brun\s+(?:the\s+)?(?:app|server|dev)\b`;
+    expect(sources).toContain(de);
+    expect(sources).toContain(en);
+    // The hook lowercases and trims the prompt before matching.
+    expect(new RegExp(de).test(APP_START_BUTTON.de.prompt.toLowerCase().trim())).toBe(true);
+    expect(new RegExp(en).test(APP_START_BUTTON.en.prompt.toLowerCase().trim())).toBe(true);
   });
 
   test("no guideHandoff, no extra button", () => {

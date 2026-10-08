@@ -567,6 +567,38 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(withRemote.buttonsKey).toBe("ship-successful");
   });
 
+  // #680: "App starten" on test and every ship-successful variant when the
+  // project has a launch path — keyed on the decision key, not buttonsKey.
+  test("appStart: test and ship-successful (plain/kept/deploy) with a launch path, nothing else", async () => {
+    const mod = await import("./index.js");
+    const withPath = mkdtempSync(join(tmpdir(), "app-start-680-"));
+    const without = mkdtempSync(join(tmpdir(), "app-start-680-none-"));
+    try {
+      writeFileSync(join(withPath, "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
+      const state = { mode: "git", merged: "main", pushed: true };
+      const delivery = { ship: { version: "1.2.3", base: "main" } };
+      for (const key of ["test", "ship-successful", "ship-successful-kept", "ship-successful-deploy"]) {
+        const variant = key.startsWith("ship") ? "ship-successful" : key;
+        expect(mod.buildDecisionBlock({ variant, summary: "x", cwd: withPath }, "de", key, delivery, state).appStart, key).toBe(true);
+        expect(mod.buildDecisionBlock({ variant, summary: "x", cwd: without }, "de", key, delivery, state).appStart, key).toBe(false);
+        expect(mod.buildDecisionBlock({ variant, summary: "x" }, "de", key, delivery, state).appStart, key).toBe(false);
+      }
+      // Plain merge, nothing to promote: buttonsKey null, the button still comes.
+      const plain = mod.buildDecisionBlock({ variant: "ship-successful", summary: "x", cwd: withPath }, "de", "ship-successful", delivery, state);
+      expect(plain.buttonsKey).toBeNull();
+      expect(plain.appStart).toBe(true);
+      for (const key of ["ready", "test-minimal", "ready-files", "analysis", "released-beta", "fallback"]) {
+        expect(mod.buildDecisionBlock({ variant: key, summary: "x", cwd: withPath }, "de", key, delivery, state).appStart, key).toBe(false);
+      }
+      // Overrides replace the decision block — no start button on a pending card.
+      const pending = mod.buildDecisionBlock({ variant: "test", summary: "x", cwd: withPath, pending: [{ name: "qa", doing: "läuft" }] }, "de", "test", delivery, state);
+      expect(pending.appStart).toBeFalsy();
+    } finally {
+      rmSync(withPath, { recursive: true, force: true });
+      rmSync(without, { recursive: true, force: true });
+    }
+  });
+
   test("a local merge counts as the ship: ship-successful stays, the track shows the merge", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Lokal", lang: "de", session_id: "test-anatomy-8h",
