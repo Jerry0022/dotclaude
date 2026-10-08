@@ -35,9 +35,15 @@
  *                     (the card needs only the 5h/weekly numbers, which the native
  *                     statusLine source already provides token-free). A one-time
  *                     login is offered only on an explicit manual run (no flag).
+ *   --login-prompt    the automatic hook path (SessionStart / prompt budget
+ *                     refresh): on a logged-out profile open ONE maximized login
+ *                     window in the foreground, machine-wide at most once per
+ *                     AUTO_LOGIN_RETRY_MS — the user only has to sign in. Without
+ *                     it a revoked claude.ai session stayed silent ("refresh
+ *                     failed: not logged in") until someone typed "refresh usage".
  */
 
-const { execSync, spawn } = require('child_process');
+const { execSync, execFileSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -54,6 +60,10 @@ const SCRAPER_PID_FILE = path.join(SCRIPTS_DIR, 'edge-usage-scraper.pid');
 // scrape succeeds.
 const LOGIN_MARKER_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login-pending.json');
 const LOGIN_RETRY_AFTER_MS = 30 * 60 * 1000;
+// The automatic path (--login-prompt) reopens an ignored login window far less
+// often than a manual run: every parallel session's hook would otherwise pull
+// one to the foreground every 30 min while the user is busy elsewhere.
+const AUTO_LOGIN_RETRY_MS = 4 * 60 * 60 * 1000;
 // Machine-wide locks so parallel sessions don't each spawn an Edge window.
 const LAUNCH_LOCK_FILE = path.join(SCRIPTS_DIR, 'edge-usage-launch.lock');
 const LOGIN_LOCK_FILE = path.join(SCRIPTS_DIR, 'edge-usage-login.lock');
@@ -111,6 +121,8 @@ const checkOnly = process.argv.includes('--check-only');
 // Automatic card path passes this — it must never steal focus with a login
 // window. Only an explicit manual run (without the flag) may open one.
 const noLogin = process.argv.includes('--no-login');
+// Automatic hook path — may open the login window, rate-limited machine-wide.
+const loginPrompt = process.argv.includes('--login-prompt');
 
 function log(...args) {
   if (!isQuiet) console.log(...args);
@@ -288,11 +300,19 @@ function reapScraperInstances() {
     "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | " +
     "Where-Object { $_.CommandLine -like '*" + needle + "*' } | " +
     "ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }";
+  // Encoded, not `-Command "${ps}"`: cmd stripped the inner quotes around
+  // Name='msedge.exe', Get-CimInstance rejected the filter and the reap never
+  // killed anything. The hidden off-screen scraper then survived every "reap",
+  // and the visible login window was handed to it — a ghost window at
+  // -32000,-32000 that the taskbar preview showed but no click brought up.
   try {
-    execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
-      timeout: 8000, stdio: 'ignore',
-    });
+    execFileSync('powershell.exe', powershellArgs(ps), { timeout: 8000, stdio: 'ignore', windowsHide: true });
   } catch { /* best-effort reap */ }
+}
+
+/** PowerShell argv for a script, base64-encoded so no shell quoting layer can mangle it. */
+function powershellArgs(script) {
+  return ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')];
 }
 
 /**
@@ -919,13 +939,55 @@ function isMarkerPending(marker, nowMs) {
  * sessions can't stack windows). A login window is only ever offered on an
  * explicit manual run.
  */
-function shouldOpenLoginWindow({ noLogin, loginPending }) {
-  return !noLogin && !loginPending;
+function shouldOpenLoginWindow({ noLogin, loginPending, loginPrompt = false, markerAgeMs = Infinity }) {
+  if (noLogin || loginPending) return false;
+  // Automatic path: one window per AUTO_LOGIN_RETRY_MS across all sessions.
+  if (loginPrompt) return markerAgeMs >= AUTO_LOGIN_RETRY_MS;
+  return true;
 }
 
 function loginPending() {
   try {
     return isMarkerPending(JSON.parse(fs.readFileSync(LOGIN_MARKER_FILE, 'utf8')), Date.now());
+  } catch { return false; }
+}
+
+/** Age of the login marker in ms, or Infinity when there is none. */
+function loginMarkerAgeMs(nowMs = Date.now()) {
+  try {
+    const opened = Date.parse(JSON.parse(fs.readFileSync(LOGIN_MARKER_FILE, 'utf8')).openedAt);
+    return Number.isNaN(opened) ? Infinity : nowMs - opened;
+  } catch { return Infinity; }
+}
+
+/**
+ * Pull the visible login window to the foreground, maximized. Edge launched
+ * from a detached hook process does not get the foreground on its own — Windows'
+ * foreground lock leaves it blinking in the taskbar, which is easy to miss. A
+ * synthetic Alt press lifts the lock for SetForegroundWindow. Targets only the
+ * scraper profile's browser process (its own --user-data-dir), never the
+ * user's main Edge. Best effort: Windows only, never throws.
+ */
+function bringLoginWindowToFront({ run = execFileSync, platform = process.platform, profileDir = SCRAPER_PROFILE_DIR } = {}) {
+  if (platform !== 'win32') return false;
+  const ps = [
+    "$ErrorActionPreference='SilentlyContinue'",
+    "Add-Type -Name W -Namespace D -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern void keybd_event(byte k,byte s,uint f,UIntPtr e); [DllImport(\"user32.dll\")] public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int t,bool r);'",
+    // Restore → move onto the primary work area → maximize. Edge restores the
+    // hidden scraper's persisted off-screen placement (-32000,-32000) as the
+    // window's normal bounds; maximizing alone left it reported as maximized
+    // while the user still saw nothing on screen.
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "$wa=[System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea",
+    `$dir='${profileDir.replace(/'/g, "''")}'`,
+    "$ids = Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { $_.CommandLine -like \"*$dir*\" -and $_.CommandLine -notlike '*--type=*' } | ForEach-Object { $_.ProcessId }",
+    "$hit=$false",
+    "foreach ($id in $ids) { $p = Get-Process -Id $id; if ($p.MainWindowHandle -ne 0) { $h=$p.MainWindowHandle; [D.W]::ShowWindow($h,9) | Out-Null; [D.W]::MoveWindow($h,$wa.X,$wa.Y,[Math]::Min(1280,$wa.Width),[Math]::Min(900,$wa.Height),$true) | Out-Null; [D.W]::ShowWindow($h,3) | Out-Null; [D.W]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [D.W]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [D.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; $hit=$true } }",
+    "if ($hit) { exit 0 } else { exit 1 }",
+  ].join('; ');
+  try {
+    run('powershell.exe', powershellArgs(ps), { stdio: 'ignore', timeout: 15000, windowsHide: true });
+    return true;
   } catch { return false; }
 }
 
@@ -1018,10 +1080,10 @@ async function main() {
     // come from the native statusLine source anyway). A window is offered only on
     // an explicit manual run, at most once per LOGIN_RETRY_AFTER_MS, and never
     // while one is already pending — so parallel sessions can't stack windows.
-    if (!shouldOpenLoginWindow({ noLogin, loginPending: loginPending() })) {
+    if (!shouldOpenLoginWindow({ noLogin, loginPending: loginPending(), loginPrompt, markerAgeMs: loginMarkerAgeMs() })) {
       log(noLogin
         ? 'LOGIN_REQUIRED: --no-login (automatic path) — serving cache, no window'
-        : 'LOGIN_REQUIRED: a login window is already pending — not opening another');
+        : 'LOGIN_REQUIRED: a login window is pending or was offered recently — not opening another');
       useCacheOrExit(2);
       return;
     }
@@ -1047,6 +1109,7 @@ async function main() {
     writeLoginMarker();
     log('LOGIN_REQUIRED: scraper profile is not logged in to claude.ai');
     if (!(await openLoginWindow())) log('LOGIN_REQUIRED: the login window could not be kept open');
+    else if (!bringLoginWindowToFront()) log('LOGIN_REQUIRED: could not bring the login window to the foreground');
     process.exit(2);
   }
 
@@ -1070,7 +1133,10 @@ module.exports = {
   isMarkerPending,
   shouldOpenLoginWindow,
   loginPending,
+  bringLoginWindowToFront,
+  AUTO_LOGIN_RETRY_MS,
   reapScraperInstances,
+  powershellArgs,
   classifyScraperPid,
   killScraperInstance,
   openLoginWindow,

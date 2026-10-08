@@ -37,8 +37,12 @@
  *   A snapshot past its window reset or older than STALE_MS (the Desktop app
  *   never runs the statusLine writer, so the file is only as fresh as the last
  *   completion card — typically last night's) triggers ONE detached
- *   `refresh-usage-headless.js --quiet --no-login` (maybeRefreshUsage) —
- *   exactly what the completion card does, minus the wait: the hook never
+ *   `refresh-usage-headless.js --quiet --login-prompt` (maybeRefreshUsage) —
+ *   what the completion card does, minus the wait, plus one thing the card
+ *   must not do: a signed-out scraper profile gets ONE maximized login window
+ *   in the foreground (machine-wide, rate-limited in the scraper), so a
+ *   revoked claude.ai session no longer goes silent. The card stays
+ *   --no-login. As with the card, the hook never
  *   blocks on Edge, the per-prompt re-read picks the fresh file up. Rate-
  *   limited by a tmp marker (REFRESH_COOLDOWN_MS) so parallel sessions and
  *   every prompt of a session don't stack scrapers; skipped where the
@@ -317,7 +321,7 @@ function maybeRefreshUsage(b, { home = os.homedir(), nowMs = Date.now(), env = p
   try { fs.accessSync(script); } catch { return false; }
   try {
     fs.writeFileSync(REFRESH_MARKER, String(nowMs), 'utf8');
-    const child = spawn(process.execPath, [script, '--quiet', '--no-login'], {
+    const child = spawn(process.execPath, [script, '--quiet', '--login-prompt'], {
       detached: true, stdio: 'ignore', windowsHide: true, env,
     });
     child.unref();

@@ -21,8 +21,14 @@ or the old `/auto-usage`.
 **A manual request:** call `get_usage` first and relay its meter. Only when it
 reports the scraper profile as not logged in (`failureReason`, or the card's
 "Edge fetch offline (not logged in)" line), or the user explicitly wants a
-login or `weeklySonnet`, run the scraper by hand (Step 1a) — that is the one
-path that may open a login window.
+login or `weeklySonnet`, run the scraper by hand (Step 1a).
+
+**Login windows.** The card and `get_usage` never open one (`--no-login`).
+The SessionStart/prompt budget refresh (`hooks/lib/budget.js`) runs the
+scraper with `--login-prompt`: a signed-out profile (e.g. Google revoked the
+claude.ai session) gets ONE maximized login window pulled to the foreground —
+machine-wide, never one per session, at most once per 4 h while ignored. A
+manual run (no flag) may reopen it after 30 min.
 
 ## Project overrides (former skill extension)
 

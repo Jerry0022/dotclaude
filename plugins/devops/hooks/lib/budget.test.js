@@ -177,7 +177,9 @@ describe("maybeRefreshUsage — a dead snapshot starts one detached scraper", ()
    * only as fresh as the last completion card — the morning-after session
    * classified on "week 97 %" from last night with the 5 h window unknown.
    * The fix is what the card does, minus the wait: spawn the headless
-   * scraper (--no-login) detached and let the next prompt re-read the file.
+   * scraper detached and let the next prompt re-read the file. It passes
+   * --login-prompt, not --no-login: a revoked claude.ai session must surface
+   * one login window instead of staying silent.
    */
   const stubRoot = () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "budget-root-"));
@@ -194,7 +196,7 @@ describe("maybeRefreshUsage — a dead snapshot starts one detached scraper", ()
   const waitFor = async (file) => { for (let i = 0; i < 100 && !fs.existsSync(file); i++) await new Promise((r) => setTimeout(r, 50)); };
   const clearMarker = () => { try { fs.unlinkSync(REFRESH_MARKER); } catch {} };
 
-  test("expired snapshot + scraper profile → spawns --quiet --no-login and says so in the line", async () => {
+  test("expired snapshot + scraper profile → spawns --quiet --login-prompt and says so in the line", async () => {
     clearMarker();
     const root = stubRoot();
     const h = dead();
@@ -205,7 +207,7 @@ describe("maybeRefreshUsage — a dead snapshot starts one detached scraper", ()
     expect(b.refreshing).toBe(true);
     expect(budgetLine(b)).toContain("→ ask-before-parallel (snapshot refreshing");
     await waitFor(path.join(root, "scripts", "called.json"));
-    expect(JSON.parse(fs.readFileSync(path.join(root, "scripts", "called.json"), "utf8"))).toEqual(["--quiet", "--no-login"]);
+    expect(JSON.parse(fs.readFileSync(path.join(root, "scripts", "called.json"), "utf8"))).toEqual(["--quiet", "--login-prompt"]);
   });
 
   test("second call inside the cooldown does nothing — parallel sessions and every prompt must not stack scrapers", () => {

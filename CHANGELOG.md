@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.257.0] — 2026-10-08
+
+When claude.ai signed out the usage scraper's Edge profile (Google revoked the session), nothing told the user. Every automatic refresh ran with `--no-login`, so the only sign was the `[budget]` suffix "refresh failed: not logged in".
+
+### Added
+- **`--login-prompt` for the automatic budget refresh.** `hooks/lib/budget.js` now passes `--login-prompt` instead of `--no-login`. A signed-out profile then gets ONE maximized claude.ai login window, pulled to the foreground. The existing login lock and marker make it machine-wide, not one per session. While the window is ignored it comes back at most every 4 h (`AUTO_LOGIN_RETRY_MS`). The completion card and `get_usage` stay `--no-login`.
+- `bringLoginWindowToFront`: restore → move onto the primary work area → maximize → `SetForegroundWindow` (Alt press to lift the foreground lock). It targets only the scraper profile's browser process.
+
+### Fixed
+- **The scraper reap never killed anything.** It ran `powershell -Command "…"` through cmd, which stripped the quotes around `Name='msedge.exe'`, and `Get-CimInstance` rejected the filter. The hidden off-screen scraper survived every reap, and the visible login window was handed to it: a ghost window at -32000,-32000 that the taskbar preview showed but no click brought up. PowerShell now runs via `-EncodedCommand` (`powershellArgs`).
+
+### Tests
+- refresh-usage-headless + budget 89/89, eslint clean. Full suite 8704/8706 before the last test fix; the two failures were this branch's own assertion (fixed) and a `git-sync.conflicts` timeout under RAM load (green when re-run alone). Live: the login window opened maximized in the foreground, and the user confirmed it was visible. Codex review skipped (limit until 2026-10-11).
+
 ## [0.256.0] — 2026-10-08
 
 Pays the doc debt that v0.255.0 left: do-ship Pre-Step C, the do-batch title steps and the `prompt.batch.collect` merge context still ran `get_session` → strip → `set_session_title`, three API calls that each re-read the whole context.
