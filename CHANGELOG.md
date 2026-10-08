@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.249.4] — 2026-10-08
+
+### Changed
+- **`do-ship` and `auto-cleanup` trimmed of over-prescriptive instructions, behind a pinned gate contract (#653).** Restated rules, incident stories, history and stacked emphasis cut; every gate, lockout row, confirm step and safety rule kept. Words: `do-ship` SKILL 10603 → 10097 (−4.8 %), `auto-cleanup` SKILL 3554 → 3323 (−6.5 %). Two cuts were reverted after the A/B run (Pre-Step A framing, Step 0.5 "run even when the tools look available"); the Codex gate's "MUST run" mandate and the "never mistake the other return shapes" clause were restored after the redteam review. Records: `plugins/devops/evals/trims/{do-ship,auto-cleanup}.md`.
+
+### Added
+- **Gate-contract tests** for both skills (`skills/do-ship/gate-contract.test.js`, `skills/auto-cleanup/gate-contract.test.js`): step order, every lockout row checked in its own table row, Codex mandate, Pre-Step B choices, Step 1e `--cwd`/strict, release return shapes, Step 4b skip list, delegation rule, and auto-cleanup's confirm/re-check/never-delete rules — read through blockquote rewraps.
+- **Behaviour cases** `evals/skills/do-ship/ship-it-denied` and `evals/skills/auto-cleanup/manifest-before-delete`, graded on both ship routes and on unmerged deletes.
+
 ## [0.249.3] — 2026-10-08
 
 ### Changed
