@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.255.0] — 2026-10-08
+
+Token cost of the plugin itself: an analysis of 100 real session transcripts (price-weighted tokens) put the completion card at about 10 % of all tokens (~120 k per card, ~2 cards per prompt; ~45 % of that was the widget HTML passing through the model twice, as tool result and as `show_widget` input, ~55 % extra API calls that each re-read the ~330 k context), the session-title ritual at about 3.6 % (~940 calls × ~46 k), and the graph answer-in-gate at a net loss (140 fires since August, 105 retried anyway, eligible grep output median only ~1.75 k chars — each forced retry call cost more than it saved).
+
+### Changed
+- **Completion card widget is a template plus data.** The Desktop widget is now a small template with the card as JSON (schema `v:1`); the static renderer `mcp-server/lib/card-widget.client.js` is loaded from jsDelivr pinned to this version's `alpha/v<version>` ring tag (every shipped version has it; bare `v*` tags do not exist) (`DOTCLAUDE_CARD_CLIENT_URL` overrides). The same renderer runs server-side in a `vm` sandbox for the offline `--render-card` path, so both outputs cannot drift. `widget_code` shrinks from 7.8–12.5 k to 0.9–2.1 k chars, the instruction text from 1.8 k to 1.1 k. An inline `onerror` text fallback keeps the widget readable when the CDN file is missing.
+- **Session title without its own calls.** New `hooks/lib/session-title.js` reads the current title from the transcript tail (`custom-title` / `agent-name` entries). `prompt.flow.title-work` and the card's `[SESSION TITLE]` block now give the exact new title and tell Claude to call `set_session_title` in the same message as its first tool call / the `show_widget` call — no `get_session`. An unknown title falls back to the old `get_session` instruction. `card-pregate` uses the shared transcript lookup.
+
+### Removed
+- **Graph answer-in-gate in `pre.tokens.guard`** (incl. the Bash-grep variant; `bash-grep.js` and `graphify-query-spawn.js` deleted). Exploration guidance is now query-first in `agents/scout.md`, `deep-knowledge/tool-selection.md` and `deep-knowledge/graphify.md`. Large-read blocking and project-map injection are unchanged.
+
+Rejected alternatives: one card per prompt, a once-per-turn card reminder, a light mode without card/title, and weakening `stop.flow.guard` (cards between steps are wanted). MCP Apps for the card are undocumented for the Code tab and were not pursued.
+
+Known doc debt: do-ship Pre-Step C, the do-batch title steps and `prompt.batch.collect` still spell out the `get_session` routine; gate-only helpers in `graphify-state.js` and the `gate_*` counters in `graphify-audit.js` are now dead.
+
+### Tests
+- hooks 4498/4499 (one load flake in `run-contract-store`, passes alone, untouched file), mcp-server 1013/1013, scripts+skills 3147 passed / 3 skipped, eslint clean; branch suites re-run at ship 1183/1183. jsdom equality tests: the client draws exactly the inline card. Live Desktop check: template + client renderer draws the identical card; a 404 script URL shows the text fallback. Codex review skipped (limit until 2026-10-11).
+
 ## [0.254.2] — 2026-10-08
 
 Completion card: the v0.254.1 ship card passed `tests` result "4560/4561 — pre.governor.gate timing test failed under load, passed on rerun" and rendered "✗ 4560 tests red" plus "Not achieved: 4560 tests red (hooks suite)". The renderer ignored the ratio and took the first integer as the red count.

@@ -7,11 +7,9 @@
  *   pre.tokens.guard on the first broad search of a session. Detects whether a
  *   graphify knowledge graph exists in the project and builds the one-line hint
  *   that steers Claude toward `graphify query` instead of grepping raw files.
- *   Also carries the gate ELIGIBILITY heuristic (`isEligibleSearch`) that
- *   decides which searches are worth answering from the graph at all — a
- *   default-budget query (4.7k-6.3k chars) costs more than most scoped grep
- *   results (p50 1025 chars), so the gate must stay narrow: Grep only (Glob
- *   keeps the classic block, no answer-in-gate), path-less OR a `content`-mode
+ *   Also carries the ELIGIBILITY heuristic (`isEligibleSearch`, telemetry only
+ *   since the search gate was removed) that classifies a search as one a graph
+ *   query could have covered: Grep only, path-less OR a `content`-mode
  *   directory search inside the resolved graph root, and a pattern that reads
  *   as a semantic/identifier question rather than an exact string, a path, or
  *   a version literal. Kept separate from the hook so the decision logic is
@@ -20,9 +18,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 
-// graphify's default output location (see deep-knowledge/graphify.md).
 const GRAPH_JSON_REL = path.join('graphify-out', 'graph.json');
 
 /** Absolute path to the project's graph.json under `cwd`. */
@@ -114,52 +110,11 @@ function buildGraphNudge(cwd) {
   const flag = r && r.source !== 'local' ? ` --graph "${r.file}"` : '';
   return [
     `[graphify] A knowledge graph exists at ${where}.`,
-    'For semantic questions (what defines/calls X, how do A and B relate, where is',
-    `Y handled), prefer \`graphify query "<question>"${flag}\` over grepping raw files — it`,
-    'reads the graph, not the code, so it is cheaper. Refresh with `graphify update .`',
-    'if the code changed meaningfully (deep-knowledge/graphify.md).',
+    'Exploring how/where something is wired across several files? Start with',
+    `\`graphify query "<question>"${flag}\`, then read only the files it names — cheaper`,
+    'than reading candidates one by one. A single narrow lookup stays a plain Grep.',
+    'Refresh with `graphify update .` after larger changes (deep-knowledge/graphify.md).',
   ].join('\n');
-}
-
-/**
- * Turn a search pattern into a bare-terms graph question. Deliberately dumb
- * and predictable: strip regex metacharacters/escapes, collapse separators to
- * spaces, and send ONLY the extracted terms — no "What defines or uses X?"
- * template. Two live findings drove dropping the template: (1) graphify
- * matched the template's own noise words ("what", "defines", "uses") instead
- * of the real terms, corrupting answers for on-topic queries; (2) it is dead
- * weight once the terms alone are enough for a graph traversal query. The
- * result is additionally sanitized to `[A-Za-z0-9 ]` ONLY — defence in depth:
- * this string becomes one argv element passed straight to `graphify` (see
- * pre.tokens.guard's answer-in-gate), never shell-interpolated, but a
- * corrupted/legacy spawn path must never be able to carry a shell
- * metacharacter through here regardless. Never throws; returns null when
- * nothing usable remains. Shared by `suggestQuery` (the display suggestion)
- * and the PreToolUse answer-in-gate (the actual `graphify query` argument).
- */
-function questionFromPattern(pattern) {
-  if (typeof pattern !== 'string' || !pattern.trim()) return null;
-  const words = pattern
-    .replace(/\\[a-zA-Z]/g, ' ')          // \d \w \s \b etc.
-    .replace(/[.*+?^${}()|[\]\\]/g, ' ')  // regex metacharacters
-    .replace(/[_-]/g, ' ')                // snake/kebab separators → words
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!words.length) return null;
-  const sanitized = words.join(' ').replace(/[^A-Za-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  return sanitized || null;
-}
-
-/**
- * Derive a concrete `graphify query` suggestion from the actual blocked
- * search (Gap #3) so the gate message is actionable instead of the generic
- * `<your question>` placeholder. Never throws; falls back to the generic
- * placeholder when nothing usable remains.
- */
-function suggestQuery(pattern, graphFlagSuffix = '') {
-  const q = questionFromPattern(pattern);
-  if (!q) return `graphify query "<your question>"${graphFlagSuffix}`;
-  return `graphify query "${q}"${graphFlagSuffix}`;
 }
 
 // ── Gate eligibility heuristic ────────────────────────────────────────────
@@ -285,9 +240,9 @@ function isInsideGraphScope(searchPath, cwd) {
 }
 
 /**
- * Is this Grep call worth answering from the graph? (R4/R7 — Glob is REMOVED
- * from the answer-in-gate entirely; glob patterns are shell globs, not
- * identifier questions, and keep only the classic broad-search block.) Grep
+ * Is this Grep call worth answering from the graph? (Telemetry classifier for
+ * post.graphify.search. Glob is never eligible; glob patterns are shell globs, not
+ * identifier questions.) Grep
  * is eligible when:
  *   - the pattern reads as a semantic/identifier question (`isSemanticPattern`), AND
  *   - EITHER the search is path-less (the classic full-repo block would fire
@@ -308,52 +263,6 @@ function isEligibleSearch(toolName, toolInput = {}, cwd) {
   if (toolInput.output_mode !== 'content') return false;
   if (pathKindFor(toolInput.path, cwd) !== 'dir') return false;
   return isInsideGraphScope(toolInput.path, cwd);
-}
-
-// graphify's traversal summary line, e.g. "Traversal: BFS depth=2 | 33 nodes
-// found". Anything printed BEFORE this header (warnings, deprecation notices)
-// must never be mistaken for an answer, and "No matching nodes found." (no
-// header at all, or N=0) must never count as one either.
-const TRAVERSAL_HEADER_RE = /Traversal:[^\n]*\|\s*(\d+)\s*nodes?\s*found/i;
-
-/**
- * True iff `stdout` carries a real graph answer: the `Traversal: … | N nodes
- * found` header with N>0. A bare "No matching nodes found." (no header, or a
- * header reporting 0) is never an answer, and neither is anything printed
- * only BEFORE a header that never actually appears. Never throws.
- */
-function hasGraphAnswer(stdout) {
-  const m = TRAVERSAL_HEADER_RE.exec(String(stdout || ''));
-  return !!m && Number(m[1]) > 0;
-}
-
-/**
- * The delivered answer, trimmed to start AT the traversal header — drops any
- * warning/log lines graphify printed before it. Falls back to the trimmed
- * full text when no header is present (should not happen once `hasGraphAnswer`
- * gated the call, but never throws either way).
- */
-function trimToTraversalHeader(stdout) {
-  const t = String(stdout || '');
-  const m = TRAVERSAL_HEADER_RE.exec(t);
-  return (m ? t.slice(m.index) : t).trim();
-}
-
-/**
- * Short, stable hash of the exact search a gate event is about — links a
- * `gate_bypassed` telemetry event back to the `gate_fired` it bypassed
- * without carrying the raw (possibly sensitive) pattern text. `costFieldsJson`
- * is the caller's own `JSON.stringify(costFields(toolName, toolInput))` (see
- * pre.tokens.guard) so the hash uses the SAME key the escape-hatch flag is
- * keyed on — a retry that only changes `-i`/`head_limit` still gets a fresh
- * key, exactly like that flag. Never throws.
- */
-function gateKeyHash(toolName, cwd, costFieldsJson) {
-  try {
-    return crypto.createHash('md5').update(`${toolName}:${cwd}:${costFieldsJson}`).digest('hex').slice(0, 8);
-  } catch {
-    return '';
-  }
 }
 
 /**
@@ -461,17 +370,12 @@ module.exports = {
   hasLocalGraph,
   graphFlag,
   buildGraphNudge,
-  questionFromPattern,
-  suggestQuery,
   pathKindFor,
   isSemanticPattern,
   isSpecificTerm,
   isEligibleSearch,
   resolveGraphRoot,
   isInsideGraphScope,
-  hasGraphAnswer,
-  trimToTraversalHeader,
-  gateKeyHash,
   SKIP_DIRS,
   scanSources,
   stalenessInfo,

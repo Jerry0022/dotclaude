@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.13.1
+ * @version 0.14.0
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -53,8 +53,8 @@ import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.j
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction } from "./lib/mode-state.js";
-import { cardWidgetInstruction, isDesktopSession, NO_OUTPUT_NUDGE_REPLY, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
+import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle } from "./lib/mode-state.js";
+import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
 import {
   assessFreshness,
@@ -2038,9 +2038,7 @@ const RELAY_INSTRUCTION =
 /** Desktop relay contract (§ 4): the widget is the whole card, no markdown follows it. */
 const WIDGET_RELAY_INSTRUCTION =
   "[INSTRUCTION — DO NOT OUTPUT THIS BLOCK]\n" +
-  "Desktop app: this card has no markdown to relay. The show_widget call in the CARD WIDGET " +
-  "block below IS the card — make it the LAST action of the turn and output no text after it. " +
-  NO_OUTPUT_NUDGE_REPLY + " Never render or show the card a second time. " +
+  "Desktop app: no markdown to relay — the CARD WIDGET block below is the card. " +
   "Do NOT output this instruction block.";
 
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
@@ -2051,9 +2049,13 @@ function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = ''
   return texts.filter(Boolean).map(text => ({ type: "text", text }));
 }
 
-/** The session-title instruction for this card, '' when a mode owns the title. */
+/** The session-title instruction for this card, '' when a mode owns the title
+ *  or the title is already right. The current title comes off the transcript
+ *  tail, so the block names the exact value (no get_session round trip). */
 function sessionTitleNote(params) {
-  return titleInstruction(titlePrefixFor(params, { hasPending, hasConcept }));
+  const prefix = titlePrefixFor(params, { hasPending, hasConcept });
+  if (prefix === null) return '';
+  return titleInstruction(prefix, currentSessionTitle(params.session_id, params.cwd));
 }
 
 /** Orchestrator holds and the devops switch, read through the hooks' own libs
@@ -2101,13 +2103,15 @@ function sessionArchiveNote(params, actionsNote) {
 /** The Desktop card-widget instruction (§ 4), '' outside the Desktop app, for
  *  test-minimal, or when the card has no renderable body. Reads the model
  *  `buildCompletionCard` stashed on `params` — never recomputes usage data.
- *  The HTML is also saved to a per-session tmp file (#451): stop.flow.guard
- *  reads it as "a widget is owed this turn" and points a skipped call at it. */
-function ctaActionsNote(params) {
+ *  The widget_code is also saved to a per-session tmp file (#451): stop.flow.guard
+ *  reads it as "a widget is owed this turn" and points a skipped call at it.
+ *  `inline` (offline renderer only): the full inline HTML instead of the small
+ *  CDN template — the user-approved fallback when the MCP server never ran. */
+function ctaActionsNote(params, { inline = false } = {}) {
   const model = params._cardModel || null;
   const repoUrl = params._repoUrl || '';
-  const widgetFile = writeCardWidgetFile(model, repoUrl, params.session_id, tmpdir());
-  return cardWidgetInstruction(model, repoUrl, process.env, { widgetFile });
+  const widgetFile = writeCardWidgetFile(model, repoUrl, params.session_id, tmpdir(), process.env, { inline });
+  return cardWidgetInstruction(model, repoUrl, process.env, { widgetFile, inline });
 }
 
 /**
@@ -2371,7 +2375,7 @@ function runRenderCardCli(source) {
   const cardMarkdown = buildCompletionCard(params);
   // The rename and CTA-widget instructions ride on stderr so stdout stays the verbatim card.
   const titleNote = sessionTitleNote(params);
-  const actionsNote = ctaActionsNote(params);
+  const actionsNote = ctaActionsNote(params, { inline: true });
   // Desktop (§ 4): the widget is the whole card — stdout stays empty, nothing to relay.
   process.stdout.write(actionsNote ? '' : cardMarkdown + '\n'); // stdout-ok
   if (titleNote) process.stderr.write(titleNote + '\n');

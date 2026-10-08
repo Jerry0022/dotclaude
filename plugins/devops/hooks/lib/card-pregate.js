@@ -1,6 +1,6 @@
 /**
  * @module card-pregate
- * @version 0.3.0
+ * @version 0.3.1
  * @plugin devops
  * @description stop.flow.guard's payload gates, checked by
  *   render_completion_card BEFORE it renders.
@@ -40,7 +40,6 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const {
@@ -61,18 +60,9 @@ const { isPromptEntry } = require('./skill-invocations');
 const EXACT = { exact: true };
 const REFUSED_PREFIX = 'dotclaude-devops-card-pregate';
 
-/** The session transcript: ~/.claude/projects/<any>/<sessionId>.jsonl, or null. */
-function findTranscript(sessionId, home = os.homedir()) {
-  if (!sessionId || !/^[\w-]+$/.test(sessionId)) return null;
-  const root = path.join(home, '.claude', 'projects');
-  let dirs;
-  try { dirs = fs.readdirSync(root); } catch { return null; }
-  for (const d of dirs) {
-    const p = path.join(root, d, `${sessionId}.jsonl`);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
+/** The session transcript: ~/.claude/projects/<any>/<sessionId>.jsonl, or null
+ *  (shared with the card's session-title lookup, lib/session-title.js). */
+const { findTranscript } = require('./session-title');
 
 // #624 — tools whose use means the turn changed something, so `analysis`
 // ("nothing changed anywhere") is the wrong card.
@@ -217,7 +207,7 @@ function check(input, { home, tmp } = {}) {
   if (process.env.DEVOPS_CARD_PREGATE === '0') return { refuse: false };
   try {
     const validationPending = readSessionFile('dotclaude-devops-validation-pending', sessionId, EXACT) !== null;
-    const transcriptPath = findTranscript(sessionId, home);
+    const transcriptPath = findTranscript(sessionId, home, input && input.cwd);
     const transcript = transcriptPath ? safeReadTranscript(transcriptPath, PENDING_TAIL_BYTES) : '';
     const openTasks = transcript ? openTaskNames(scanOpenTasks(transcript)) : null;
     const verificationOwed = readVerificationOwed(sessionId);

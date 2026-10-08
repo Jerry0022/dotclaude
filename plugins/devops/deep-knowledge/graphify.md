@@ -7,14 +7,14 @@ CLI. graphify stays the single source of truth — the plugin reimplements
 nothing. It **detects**, **auto-installs** if missing, **freshens the graph**,
 and **queries** it. graphify enforcement is **enabled by default** in every
 project — no consent prompt, no offer to confirm. The graph is kept fresh
-automatically and broad searches are hard-gated toward it — see
-[Enforcement](#enforcement-default-on).
+automatically; searches are never blocked or answered from it — see
+[When the graph helps](#when-the-graph-helps).
 
 ## How it reaches you
 
 Not a skill any more: the hooks do the automatic part (`ss.graphify` —
-install, freshness, the session-start nudge; `pre.tokens.guard` — the
-answer-in-gate; `post.graphify.search` / `post.graphify.query` — telemetry),
+install, freshness, the session-start nudge; `pre.tokens.guard` — a one-time
+graph hint on the first broad search; `post.graphify.search` / `post.graphify.query` — telemetry),
 and `prompt.knowledge.dispatch` points at this document when a prompt talks
 about the graph ("knowledge graph", "graphify", "code graph", or the old
 `/auto-graph`). Steps 1–4 below are what to do by hand when the user asks for
@@ -151,70 +151,38 @@ the graph is missing, stale, or fails a periodic validity check. So the graph
 follows the code purely via windowless SessionStart refresh + PreToolUse
 self-heal — never via graphify's own git hooks.
 
-**2. Answer-in-gate.** `pre.tokens.guard` does not just nudge toward
-`graphify query` — for an ELIGIBLE search it *runs the query itself*
-(`--budget 400`, ~4s timeout, `shell:false` — a real, structural
-command-injection defence, not just escaping; see
-`hooks/lib/graphify-query-spawn.js`) and either blocks with the answer
-already in the message (exit 2 — nothing further to call) or, when the graph
-has no answer, allows the search silently. Eligibility
-(`graph-nudge.isEligibleSearch`) is deliberately narrow — a default-budget
-query costs more than most scoped grep results, so the gate must not fire on
-every search, and only ever considers **Grep** (Glob keeps only the classic
-broad-search block, no answer-in-gate at all): the pattern must read as a
-semantic/identifier question (1-4 identifier-ish terms) rather than an exact
-string, a path, or a version literal, AND the search must be either path-less
-or a `content`-mode search scoped to an existing **directory** inside the
-resolved graph root (never a single file, never `node_modules`/`.git`/etc.,
-and never a `files_with_matches`/`count` search — those are already cheaper
-than a block round-trip plus a graph answer). Hot path: the cheap/pure part of
-this check (tool name, pattern shape, path/`output_mode` shape) runs with
-zero `require()`s beyond Node builtins, so a non-candidate Grep and every
-Glob call cost close to nothing extra. Safety preconditions, all enforced in
-code, never optional:
+**2. No search gate.** Until 0.16.0 of `pre.tokens.guard`, an eligible Grep
+was blocked and answered from the graph ("answer-in-gate"). Removed: of 140
+fires, 105 were retried anyway, eligible greps returned a median of ~1.75k
+chars (~470 tokens), and every forced retry is one more API call that re-reads
+the whole context. Grep and Glob now pass the token guard on size alone; the
+only graph hint is the one-time nudge on a session's first broad search.
 
-- **Bounded staleness tolerance** — the gate does not require perfect
-  freshness. `stalenessInfo` counts how many source files are newer than
-  graph.json; the gate still fires (with a "graph lags N file(s) behind —
-  background refresh started" disclosure) up to a small tolerance, and only
-  falls back to self-heal (no block) when the lag is large or cannot be
-  bounded at all (missing graph, truncated scan, nothing comparable). A graph
-  whose staleness cannot be proven is never forced onto Claude.
-- **Escape hatch** — the gate blocks a given search at most once per session;
-  *retrying the same search falls through* and ALSO pre-releases the classic
-  full-repo-search confirmation for the same key, so the retry does not fall
-  straight into a SECOND, unrelated block.
-- **Adaptive relent** — 3 consecutive bypasses with no accepted answer in
-  between (tracked across DIFFERENT searches, not just retries of one)
-  disables the gate for the rest of the session (`gate_relented`). A
-  `graphify query` run elsewhere no longer relents the gate by itself — the
-  gate answers eligible searches directly now. Every piece of this state
-  (gate flag, bypass streak, relent, last-blocked record) carries a ~12h TTL,
-  and the whole gate is skipped when the session id is missing/unstable.
-- **Machine-wide concurrency cap** — at most 2 real `graphify query` children
-  in flight at once (a small file-based semaphore, ~10s stale window); over
-  the cap the gate is skipped entirely for that search (`gate_skipped_busy`,
-  fail-open) rather than queuing.
-- **Graph resolution** — `hasGraph`/`stalenessInfo` look for the graph in this
-  order: `<cwd>/graphify-out/graph.json` → the enclosing repo root → the
-  **primary checkout** when cwd is a linked worktree (graph-nudge
-  `resolveGraphJson`). A fresh worktree is therefore gated from its first
-  search against the main graph, with staleness counted over the worktree's
-  own files (branch edits = the lag that graph has). The build side stays
-  local: `ss.graphify` still builds a per-cwd graph once it is missing or
-  drifts, so the fallback is a bridge, not a replacement.
+Graph resolution (`graph-nudge.resolveGraphJson`): `<cwd>/graphify-out/graph.json`
+→ the enclosing repo root → the **primary checkout** when cwd is a linked
+worktree. `ss.graphify` still builds a per-cwd graph once it is missing or
+drifts, so the fallback is a bridge, not a replacement.
+
+## When the graph helps
+
+- **Use it** for exploration across many files — "where/how is X wired",
+  "what calls Y", "how do A and B relate": run `graphify query "<question>"`
+  first, then read only the files it names. It replaces reading candidate
+  files one by one, which is where the tokens go.
+- **Skip it** for a single narrow lookup (one identifier, one string, a known
+  directory): a scoped Grep returns a few hundred tokens — cheaper than a
+  query answer (4.7k-6.3k chars at the default budget).
 
 ### Measuring whether it pays off
 
 Telemetry (`~/.claude/graphify-metrics.jsonl` — or `DOTCLAUDE_GRAPHIFY_METRICS`
 when set, which every test and live-QA run should use instead of the real
-file) records `gate_fired` (with `answerChars`, `outputMode`, a `keyHash`),
-`gate_noanswer`, `gate_bypassed` (also `keyHash` — links a bypass DIRECTLY
-back to the block it bypassed), `gate_relented`, `gate_skipped_busy`,
-`query_ran` (with `responseChars` and `budget`), `guard_blocked`/
-`guard_released` (the generic token guard), and — via `post.graphify.search`
-— every Grep/Glob that ran (`search_ran`, `broad`, `pathKind`, `eligible`,
-`outputMode`, `responseChars`). The audit script reads that stream **and**
+file) records `query_ran` (with `responseChars` and `budget`),
+`guard_blocked`/`guard_released` (the generic token guard), `map_injected`,
+`nudge_injected`, and — via `post.graphify.search` — every Grep/Glob that ran
+(`search_ran`, `broad`, `pathKind`, `eligible`, `outputMode`,
+`responseChars`). `gate_*` events in older lines come from the removed gate;
+the audit still counts them for history. The audit script reads that stream **and**
 the session transcripts, so it also covers sessions from before the telemetry
 existed, and prints a per-session telemetry table plus a NET tokens
 cost/saved line (not clamped to 0 — a bypassed gate is counted as a real
@@ -224,16 +192,7 @@ loss, not zero):
 node "{PLUGIN_ROOT}/scripts/graphify-audit.js" --sessions 10 --since 2026-09-01
 ```
 
-Baseline 2026-09-17 (20 sessions): 1 session with a query, 3 gate blocks
-(1 bypass), Grep/Glob output 0.03 % of new model input — the upper bound of
-what any search gate can save. Re-run after changes before arguing about the
-gate either way.
-
-This is stronger than graphify's own registration — graphify's `claude install`
-hook only emits `permissionDecision:"allow"` (a soft nudge), never a block. The
-trade-off: a real gate adds friction the bare nudge does not. Logic lives in
-`hooks/lib/graph-nudge.js` + `hooks/lib/graphify-state.js` (unit + integration
-tested).
+Logic lives in `hooks/lib/graph-nudge.js` + `hooks/lib/graphify-state.js`.
 
 ## Out of scope (v1)
 
@@ -241,8 +200,4 @@ tested).
 - Auto-build is **code-only** (`graphify update .`, AST). Doc/PDF/image semantic
   extraction via `graphify extract` (which costs API tokens) is never enabled
   automatically — only on explicit user request.
-- The gate only covers **Grep**: path-less searches, or `content`-mode
-  searches scoped to a directory inside the resolved graph root. Glob and any
-  `files_with_matches`/`count`-mode or single-file Grep are intentionally
-  left free of the answer-in-gate (Glob still hits the classic broad-search
-  threshold block on its own).
+- No search gate: Grep/Glob are never blocked or answered from the graph.

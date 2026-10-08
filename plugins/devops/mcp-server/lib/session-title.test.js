@@ -12,6 +12,7 @@ import {
   titlePrefixFor,
   titleInstruction,
   conceptUrl,
+  currentSessionTitle,
 } from "./mode-state.js";
 
 // The sidebar title names the state the last card left the session in. The
@@ -335,5 +336,84 @@ describe("titleInstruction", () => {
     const text = titleInstruction("");
     expect(text).toMatch(/no prefix/);
     expect(text).toMatch(/only if a prefix was actually removed/);
+  });
+});
+
+// Token cost: get_session → strip → set was 2–3 extra API calls per card, each
+// re-reading the whole context. With the title read off the transcript the
+// block names the exact value and the set call rides in the widget's batch.
+describe("titleInstruction — current title known", () => {
+  const SET = "mcp__ccd_session_mgmt__set_session_title";
+
+  test("the exact title, parallel to show_widget — no get_session", () => {
+    const text = titleInstruction(SESSION_PREFIX.ready, "⏳ Login fix");
+    expect(text.startsWith("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
+    expect(text).toContain(`${SET} {session_id:"self", title:"📦 Ready – Login fix"}`);
+    expect(text).toMatch(/SAME assistant message as the card's show_widget call/);
+    expect(text).toMatch(/set_session_title first in the batch/);
+    expect(text).not.toContain("mcp__ccd_session_mgmt__get_session");
+    expect(text).toContain(`ToolSearch "select:${SET}"`);
+    expect(text).toMatch(/skip silently/);
+  });
+
+  test("stacked and legacy prefixes go, the title is JSON-escaped", () => {
+    const rest = 'Fix "quotes" ' + String.fromCharCode(92) + " path";
+    const text = titleInstruction(releasedPrefix("stable"), "⏳ Working – 🚀 Shipping – " + rest);
+    expect(text).toContain(`title:${JSON.stringify("🎊 Released Stable – " + rest)}}`);
+  });
+
+  test("a title that is already right needs no block at all", () => {
+    expect(titleInstruction(SESSION_PREFIX.shipped, "🚀 Shipped – Login")).toBe("");
+    expect(titleInstruction("", "Plain title")).toBe("");
+    expect(titleInstruction(SESSION_PREFIX.ready, "📦 Ready – ")).toBe("");
+  });
+
+  test("an empty prefix strips only — the known stripped title", () => {
+    expect(titleInstruction("", "🧪 Test – X")).toContain(`title:"X"}`);
+  });
+
+  test("a mode-owned title stays untouched whatever the current title", () => {
+    expect(titleInstruction(null, "📥 Batch – X")).toBe("");
+  });
+
+  test("an unattributed concept keeps its conditional, with exact titles", () => {
+    const text = titleInstruction({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped }, "⏳ Page");
+    expect(text).toContain(`title:"🧭 Concept – Page"}`);
+    expect(text).toContain(`title:"🚀 Shipped – Page"}`);
+    expect(text).toMatch(/If THIS session runs that concept/);
+    const leave = titleInstruction({ owned: SESSION_PREFIX.concept, other: null }, "🧭 Concept – Page");
+    expect(leave).toBe("");
+    const half = titleInstruction({ owned: SESSION_PREFIX.concept, other: null }, "⏳ Page");
+    expect(half).toContain(`title:"🧭 Concept – Page"}`);
+    expect(half).toMatch(/leave the title \(no call\)/);
+  });
+
+  test("unknown title (null, blank) → the get_session fallback, unchanged", () => {
+    for (const cur of [null, undefined, "", "  "]) {
+      const text = titleInstruction(SESSION_PREFIX.ready, cur);
+      expect(text).toContain("mcp__ccd_session_mgmt__get_session");
+      expect(text).toContain(`"${SESSION_PREFIX.ready}" + <stripped title>`);
+    }
+  });
+});
+
+describe("currentSessionTitle", () => {
+  test("reads the last custom-title of the session's transcript; null when unknown", () => {
+    const home = mkdtempSync(join(tmpdir(), "cst-home-"));
+    try {
+      const cwd = join(home, "my.repo");
+      const dir = join(home, ".claude", "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "sid-1.jsonl"), [
+        JSON.stringify({ type: "custom-title", customTitle: "⏳ Old" }),
+        JSON.stringify({ type: "user", message: { content: "hi" } }),
+        JSON.stringify({ type: "custom-title", customTitle: "⏳ New" }),
+      ].join("\n") + "\n");
+      expect(currentSessionTitle("sid-1", cwd, home)).toBe("⏳ New");
+      expect(currentSessionTitle("sid-2", cwd, home)).toBeNull();
+      expect(currentSessionTitle(undefined, cwd, home)).toBeNull();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

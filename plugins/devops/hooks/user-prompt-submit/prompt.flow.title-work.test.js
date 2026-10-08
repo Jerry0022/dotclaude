@@ -1,10 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, prefixFor, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
+import { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, directInstruction, titleWorkOutput, prefixFor, shouldMark, releaseTitleWork } from "./prompt.flow.title-work.js";
 import { runOnce } from "../lib/run-once.js";
 import { SESSION_PREFIX, LEGACY_PREFIXES, releasedPrefix } from "../../mcp-server/lib/mode-state.js";
 
@@ -260,5 +260,79 @@ describe("prompt.flow.title-work — a resumed ship is shipping", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// Token cost: the get_session → strip → set ritual was 2–3 extra API calls per
+// prompt. With the title read from the transcript, the hook hands Claude the
+// exact title to set in parallel with the turn's first tool call.
+describe("prompt.flow.title-work — title known from the transcript", () => {
+  const dir = mkdtempSync(join(tmpdir(), "title-direct-"));
+  const transcript = (title) => {
+    const p = join(dir, Math.random().toString(36).slice(2) + ".jsonl");
+    writeFileSync(p, JSON.stringify({ type: "user", message: { content: "hi" } }) + "\n" +
+      (title === null ? "" : JSON.stringify({ type: "custom-title", customTitle: title, sessionId: "s" }) + "\n"));
+    return p;
+  };
+  const out = (title, prompt = "fix the login bug") => titleWorkOutput({ transcript_path: transcript(title) }, prompt, dir);
+
+  test("the direct instruction carries the exact title, set in parallel — no get_session", () => {
+    const text = out("🧪 Test – Login");
+    expect(text).toBe(directInstruction("⏳ Login"));
+    expect(text).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:"⏳ Login"}');
+    expect(text).toMatch(/SAME message as this turn's first other tool call/);
+    expect(text).not.toContain("mcp__ccd_session_mgmt__get_session");
+    expect(text).toContain('ToolSearch "select:mcp__ccd_session_mgmt__set_session_title"');
+    expect(text).toMatch(/skip silently/);
+    expect(text).toMatch(/Desktop app only/);
+    expect(text).toMatch(/Do not mention this to the user/);
+    expect(text).not.toMatch(/compass/);
+  });
+
+  test("a title that is already right → no output at all", () => {
+    expect(out("⏳ Login")).toBe("");
+    expect(out("📥 Batch – Queue")).toBe("");
+    expect(out("🚀 Shipping – Login")).toBe("");
+  });
+
+  test("a ship prompt gets the Shipping title and the Pre-Step C note", () => {
+    const text = out("⏳ Login", "/do-ship");
+    expect(text).toContain('title:"🚀 Shipping – Login"');
+    expect(text).toMatch(/Pre-Step C/);
+  });
+
+  test("a concept title yields and names the card that restores the compass", () => {
+    const text = out("🧭 Concept – Dashboard");
+    expect(text).toContain('title:"⏳ Dashboard"');
+    expect(text).toMatch(/brings it back/);
+  });
+
+  test("a machine turn leaves an outcome alone", () => {
+    expect(out("🚀 Shipped – Login", "<task-notification>\n<status>completed</status>\n</task-notification>")).toBe("");
+  });
+
+  test("title unknown (no entry, no transcript) → the get_session fallback", () => {
+    expect(out(null)).toBe(instruction(WORK_PREFIX));
+    expect(titleWorkOutput({}, "fix it", dir)).toBe(instruction(WORK_PREFIX));
+    expect(titleWorkOutput({}, "/do-ship", dir)).toBe(instruction(SHIPPING_PREFIX));
+  });
+
+  test("hook process: direct instruction with a transcript, silence when already marked", () => {
+    const HOOK = fileURLToPath(new URL("./prompt.flow.title-work.js", import.meta.url));
+    const PLUGIN_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+    const run = (title) => {
+      const sid = "title-direct-e2e-" + process.pid + "-" + Math.random().toString(36).slice(2);
+      try {
+        return execFileSync(process.execPath, [HOOK], {
+          input: JSON.stringify({ session_id: sid, prompt: "fix it", transcript_path: transcript(title), cwd: dir }),
+          env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT },
+          encoding: "utf8",
+        });
+      } finally {
+        releaseTitleWork(sid);
+      }
+    };
+    expect(run("📦 Ready – Login")).toContain('title:"⏳ Login"');
+    expect(run("⏳ Login")).toBe("");
   });
 });

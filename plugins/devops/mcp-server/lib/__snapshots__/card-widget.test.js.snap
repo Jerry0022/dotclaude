@@ -23,81 +23,81 @@ exports[`cardWidgetHtml > full rich card renders byte-identical (AUD-030 refacto
   </div>
 </div>
 <script>
-(function () {
-  var T = {"sent":"Im Eingabefeld, Enter sendet","failed":"Nicht übernommen, Eingabefeld leeren und erneut klicken"}, SPAN = 5000, GAP = 300, WAIT = 1000;
-  var nextId = 700000000 + Math.floor(Math.random() * 100000000);
-  function ok(d) { return 'result' in d && !d.error && !(d.result && d.result.isError); }
-  function deliver(text, done) {
-    var ids = {}, cur = -1, settled = false, spent = 0, timer = null;
-    function finish(success) { if (settled) return; settled = true; clearTimeout(timer); window.removeEventListener('message', onReply); done(success); }
-    function again(waited) { if (settled) return; clearTimeout(timer); spent += waited + GAP; if (spent > SPAN) { finish(false); return; } timer = setTimeout(post, GAP); }
-    function onReply(e) { var d = e.data; if (!d || typeof d !== 'object' || d.method || !ids[d.id]) return; if (ok(d)) { finish(true); } else if (d.id === cur) { again(0); } }
-    function post() {
-      if (settled) return;
-      cur = nextId++; ids[cur] = true;
-      try { window.parent.postMessage({ jsonrpc: '2.0', id: cur, method: 'ui/message', params: { role: 'user', content: [{ type: 'text', text: text }] } }, '*'); } catch (x) { again(0); return; }
-      timer = setTimeout(function () { again(WAIT); }, WAIT);
+(function wire(T, K) {
+    var SPAN = K.span, GAP = K.gap, WAIT = K.wait;
+    var nextId = 700000000 + Math.floor(Math.random() * 100000000);
+    function ok(d) { return 'result' in d && !d.error && !(d.result && d.result.isError); }
+    function deliver(text, done) {
+      var ids = {}, cur = -1, settled = false, spent = 0, timer = null;
+      function finish(success) { if (settled) return; settled = true; clearTimeout(timer); window.removeEventListener('message', onReply); done(success); }
+      function again(waited) { if (settled) return; clearTimeout(timer); spent += waited + GAP; if (spent > SPAN) { finish(false); return; } timer = setTimeout(post, GAP); }
+      function onReply(e) { var d = e.data; if (!d || typeof d !== 'object' || d.method || !ids[d.id]) return; if (ok(d)) { finish(true); } else if (d.id === cur) { again(0); } }
+      function post() {
+        if (settled) return;
+        cur = nextId++; ids[cur] = true;
+        try { window.parent.postMessage({ jsonrpc: '2.0', id: cur, method: 'ui/message', params: { role: 'user', content: [{ type: 'text', text: text }] } }, '*'); } catch { again(0); return; }
+        timer = setTimeout(function () { again(WAIT); }, WAIT);
+      }
+      window.addEventListener('message', onReply);
+      post();
     }
-    window.addEventListener('message', onReply);
-    post();
-  }
-  function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }
-  function go(b) {
-    if (b.getAttribute('data-busy')) return;
-    b.setAttribute('data-busy', '1'); b.setAttribute('aria-busy', 'true');
-    deliver(b.getAttribute('data-prompt'), function (success) {
-      b.removeAttribute('data-busy'); b.removeAttribute('aria-busy');
-      mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');
+    function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }
+    function go(b) {
+      if (b.getAttribute('data-busy')) return;
+      b.setAttribute('data-busy', '1'); b.setAttribute('aria-busy', 'true');
+      deliver(b.getAttribute('data-prompt'), function (success) {
+        b.removeAttribute('data-busy'); b.removeAttribute('aria-busy');
+        mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');
+      });
+    }
+    document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {
+      b.addEventListener('click', function () { go(b); });
+      b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });
     });
-  }
-  document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {
-    b.addEventListener('click', function () { go(b); });
-    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });
-  });
-  var TIP = { info: 1500, label: 500 }, SKIP = 300;
-  var surface = document.querySelector('.card-surface'), tip = document.createElement('div');
-  var owner = null, openT = 0, closeT = 0, lastClose = 0, viaKey = false;
-  tip.className = 'card-tip'; tip.id = 'card-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
-  if (surface) surface.appendChild(tip);
-  function place(el) {
-    var s = surface.getBoundingClientRect(), r = el.getBoundingClientRect();
-    var top = r.top - s.top - tip.offsetHeight - 6;
-    if (top < 0) top = r.bottom - s.top + 6;
-    var left = Math.max(0, Math.min(r.left - s.left + r.width / 2 - tip.offsetWidth / 2, s.width - tip.offsetWidth));
-    tip.style.top = Math.round(top) + 'px'; tip.style.left = Math.round(left) + 'px';
-  }
-  function show(el) {
-    if (!surface || !el.getAttribute('data-tip')) return;
-    owner = el; tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(el);
-    if (!el.hasAttribute('aria-label')) el.setAttribute('aria-describedby', 'card-tip');
-  }
-  function hide() {
-    clearTimeout(openT); clearTimeout(closeT);
-    if (!owner) return;
-    owner.removeAttribute('aria-describedby'); owner = null; tip.hidden = true; lastClose = Date.now();
-  }
-  function schedule(el, now) {
-    clearTimeout(openT); clearTimeout(closeT);
-    if (owner === el) return;
-    if (owner) hide();
-    var wait = now || Date.now() - lastClose < SKIP ? 0 : TIP[el.getAttribute('data-tip-tier') === 'label' ? 'label' : 'info'];
-    openT = setTimeout(function () { show(el); }, wait);
-  }
-  function trig(n) { return n && n.closest ? n.closest('[data-tip]') : null; }
-  document.addEventListener('pointerover', function (e) {
-    if (tip.contains(e.target)) { clearTimeout(closeT); return; }
-    var el = trig(e.target); if (el) schedule(el, false);
-  });
-  document.addEventListener('pointerout', function (e) {
-    var to = e.relatedTarget;
-    if (to && (tip.contains(to) || (owner && owner.contains(to)))) return;
-    if (!trig(e.target) && !tip.contains(e.target)) return;
-    clearTimeout(openT); if (owner) closeT = setTimeout(hide, 120);
-  });
-  document.addEventListener('focusin', function (e) { var el = trig(e.target); if (el && viaKey) schedule(el, true); });
-  document.addEventListener('focusout', function () { hide(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); else viaKey = true; }, true);
-  document.addEventListener('pointerdown', function (e) { viaKey = false; if (!tip.contains(e.target)) hide(); }, true);
-})();
+    var TIP = { info: K.tipInfo, label: K.tipLabel }, SKIP = K.skip;
+    var surface = document.querySelector('.card-surface'), tip = document.createElement('div');
+    var owner = null, openT = 0, closeT = 0, lastClose = 0, viaKey = false;
+    tip.className = 'card-tip'; tip.id = 'card-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
+    if (surface) surface.appendChild(tip);
+    function place(el) {
+      var s = surface.getBoundingClientRect(), r = el.getBoundingClientRect();
+      var top = r.top - s.top - tip.offsetHeight - 6;
+      if (top < 0) top = r.bottom - s.top + 6;
+      var left = Math.max(0, Math.min(r.left - s.left + r.width / 2 - tip.offsetWidth / 2, s.width - tip.offsetWidth));
+      tip.style.top = Math.round(top) + 'px'; tip.style.left = Math.round(left) + 'px';
+    }
+    function show(el) {
+      if (!surface || !el.getAttribute('data-tip')) return;
+      owner = el; tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(el);
+      if (!el.hasAttribute('aria-label')) el.setAttribute('aria-describedby', 'card-tip');
+    }
+    function hide() {
+      clearTimeout(openT); clearTimeout(closeT);
+      if (!owner) return;
+      owner.removeAttribute('aria-describedby'); owner = null; tip.hidden = true; lastClose = Date.now();
+    }
+    function schedule(el, now) {
+      clearTimeout(openT); clearTimeout(closeT);
+      if (owner === el) return;
+      if (owner) hide();
+      var wait = now || Date.now() - lastClose < SKIP ? 0 : TIP[el.getAttribute('data-tip-tier') === 'label' ? 'label' : 'info'];
+      openT = setTimeout(function () { show(el); }, wait);
+    }
+    function trig(n) { return n && n.closest ? n.closest('[data-tip]') : null; }
+    document.addEventListener('pointerover', function (e) {
+      if (tip.contains(e.target)) { clearTimeout(closeT); return; }
+      var el = trig(e.target); if (el) schedule(el, false);
+    });
+    document.addEventListener('pointerout', function (e) {
+      var to = e.relatedTarget;
+      if (to && (tip.contains(to) || (owner && owner.contains(to)))) return;
+      if (!trig(e.target) && !tip.contains(e.target)) return;
+      clearTimeout(openT); if (owner) closeT = setTimeout(hide, 120);
+    });
+    document.addEventListener('focusin', function (e) { var el = trig(e.target); if (el && viaKey) schedule(el, true); });
+    document.addEventListener('focusout', function () { hide(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); else viaKey = true; }, true);
+    document.addEventListener('pointerdown', function (e) { viaKey = false; if (!tip.contains(e.target)) hide(); }, true);
+  })({"sent":"Im Eingabefeld, Enter sendet","failed":"Nicht übernommen, Eingabefeld leeren und erneut klicken"}, {"span":5000,"gap":300,"wait":1000,"tipInfo":1500,"tipLabel":500,"skip":300});
 </script>"
 `;

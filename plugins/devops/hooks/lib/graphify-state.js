@@ -10,8 +10,8 @@
  *   OR the global, machine-wide `~/.claude/graphify.json` (`readGlobalState`)
  *   — either one being `consent:false` disables it (`isEnabled`). Hooks never
  *   WRITE either record — the user opts out manually. Also tracks a
- *   per-session "graphify query already ran" flag so the PreToolUse hard-gate
- *   can relent once Claude has consulted the graph, and provides
+ *   per-session "graphify query already ran" flag (telemetry; the former search
+ *   gate relented on it), and provides
  *   `bgWithSentinel`/`readSentinel` — a shared detached-spawn wrapper that
  *   records background `graphify update`/`hook uninstall` outcomes to a
  *   per-project sentinel file so a silent failure (stdio:'ignore') can be

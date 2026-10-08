@@ -1,6 +1,6 @@
 /**
  * @module mode-state
- * @version 1.2.1
+ * @version 1.3.0
  *
  * Mode state the card reads off the project — not off the caller.
  *
@@ -225,21 +225,71 @@ function conceptPhase(concept) {
   return (normalizeConcept(concept) || { phase: "waiting" }).phase;
 }
 
+/** Header of the out-of-band title block — never part of the card markdown. */
+const TITLE_HEADER = "[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]\n";
+const SET_TOOL = "mcp__ccd_session_mgmt__set_session_title";
+
+/**
+ * The session's current sidebar title, read from the transcript tail
+ * (hooks/lib/session-title.js), or `null` when unknown — no session id, no
+ * transcript at `~/.claude/projects/<slug of cwd>/<id>.jsonl` (or any other
+ * project dir), no title entry in reach. Never throws.
+ *
+ * @param {string|undefined} sessionId the card's `session_id`
+ * @param {string|undefined} cwd the card's `cwd`
+ * @param {string} [home] test seam, defaults to the user's home
+ * @returns {string|null}
+ */
+export function currentSessionTitle(sessionId, cwd, home = undefined) {
+  try {
+    const T = hookRequire("lib", "session-title.js");
+    return T.readCurrentTitle(T.findTranscript(sessionId, home, cwd));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The exact title `prefix` turns `current` into, or `null` for "leave it":
+ * the prefix already in place, or nothing left after stripping. `""` keeps
+ * its old rule — the stripped title, only when a prefix was removed.
+ */
+function targetTitle(prefix, current) {
+  if (prefix === null) return null;
+  const stripped = stripTitlePrefix(current);
+  if (!stripped.trim()) return null;
+  const next = prefix + stripped;
+  return next === current ? null : next;
+}
+
+/** The set call for `title`, exact and JSON-escaped. */
+function setCall(title) {
+  return `${SET_TOOL} {session_id:"self", title:${JSON.stringify(title)}}`;
+}
+
 /**
  * The out-of-band instruction that rides along with the card (a second MCP
  * content block, or stderr on the CLI path) telling Claude how to rename the
- * session before it outputs the card. Empty string when the title is owned by
- * a mode. Never part of the card markdown.
+ * session. Empty string when a mode owns the title — or when the title is
+ * known and already right. Never part of the card markdown.
+ *
+ * Title known (`current`, from `currentSessionTitle`): the block carries the
+ * exact final title and asks for ONE set call in the same assistant message
+ * as the card's show_widget call (parallel tool use) — no get_session, no
+ * round trip of its own. Each extra round trip re-reads the whole context.
+ * Title unknown (`null`): the get_session → strip → set fallback.
  *
  * A `{ owned, other }` prefix (an open concept the card could not attribute)
  * becomes a conditional: Claude knows whether it runs that concept in this
  * session and whether this turn closes it out; the renderer does not.
  *
  * @param {string|null|{ owned: string, other: string|null }} prefix from `titlePrefixFor`
+ * @param {string|null} [current] the title now, `null` when unknown
  * @returns {string}
  */
-export function titleInstruction(prefix) {
+export function titleInstruction(prefix, current = null) {
   if (prefix === null) return "";
+  if (typeof current === "string" && current.trim()) return knownTitleInstruction(prefix, current);
   const list = STRIPPABLE.map((p) => `"${p}"`).join(", ");
   const setFor = (p) => (p
     ? `set the title to "${p}" + <stripped title>`
@@ -252,13 +302,44 @@ export function titleInstruction(prefix) {
       (prefix.other === null ? "leave the title as it is." : `${setFor(prefix.other)}.`)
     : `${setFor(prefix)}.`;
   return (
-    "[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]\n" +
+    TITLE_HEADER +
     "Before outputting the card, once, Desktop app only: " +
     'mcp__ccd_session_mgmt__get_session {session_id:"self"} → ' +
     `strip every leading prefix from [${list}] → ` +
-    `mcp__ccd_session_mgmt__set_session_title {session_id:"self"} and ${set} ` +
+    `${SET_TOOL} {session_id:"self"} and ${set} ` +
     "Deferred is not unavailable: if either tool is only in the deferred-tools list, load both once with ToolSearch `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them. " +
     "If either tool is truly unavailable (not even deferred) or fails: skip silently — no retry, no note, no fallback. " +
+    "The card stays the last output of the turn."
+  );
+}
+
+/** The block for a known title: the exact set call(s), parallel to the card. */
+function knownTitleInstruction(prefix, current) {
+  let what;
+  if (typeof prefix === "object") {
+    const owned = targetTitle(prefix.owned, current);
+    const other = targetTitle(prefix.other, current);
+    if (owned === null && other === null) return "";
+    const leave = "leave the title (no call)";
+    what =
+      "this project has an open concept page (.claude/concept-active.json). " +
+      "If THIS session runs that concept (it opened or resumed the page) and the page stays open after this turn: " +
+      `${owned === null ? leave : setCall(owned)}. ` +
+      "Otherwise (another session's concept, or this turn closes the concept out): " +
+      `${other === null ? leave : setCall(other)}.`;
+  } else {
+    const target = targetTitle(prefix, current);
+    if (target === null) return "";
+    what = setCall(target);
+  }
+  return (
+    TITLE_HEADER +
+    `Desktop app only, once: ${what} ` +
+    "Exact title, nothing to look up — no get_session. Put the call in the SAME assistant message as the card's " +
+    "show_widget call (parallel tool use, set_session_title first in the batch); no message of its own. " +
+    "No widget (markdown card): same batch as your last tool call before the card text, none left → alone, just before it. " +
+    `Only deferred → ToolSearch "select:${SET_TOOL}" first, then the set call in the card's batch. ` +
+    "Truly unavailable (not even deferred) or failing: skip silently — no retry, no note. " +
     "The card stays the last output of the turn."
   );
 }

@@ -21,11 +21,17 @@
  *
  * `test-minimal` never calls this module — see `cardWidgetInstruction`.
  *
- * @version 0.10.3
+ * The markup and the button/tooltip script live in `card-widget.client.js`
+ * (one renderer for the live template path and the offline inline HTML);
+ * this module resolves the card into its data and builds the instruction.
+ *
+ * @version 0.11.0
  */
 
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 /** The env var the Desktop app sets on every process it spawns (hooks, MCP servers). */
 export const DESKTOP_ENTRYPOINT = "claude-desktop";
@@ -263,6 +269,22 @@ function escapeHtml(s) {
 }
 
 /**
+ * The shared renderer. `card-widget.client.js` is plain browser JS (one IIFE,
+ * no imports) and the ONLY place the card markup and the button/tooltip
+ * script live: the Desktop widget loads it from jsDelivr and renders the
+ * card from JSON data, and this module evaluates the same file in a `vm`
+ * context to build the full inline HTML (offline renderer, tests). Both
+ * paths therefore draw byte-identical markup.
+ */
+const CLIENT_FILE = join(dirname(fileURLToPath(import.meta.url)), "card-widget.client.js");
+export const CARD_CLIENT_SOURCE = readFileSync(CLIENT_FILE, "utf8");
+const CLIENT = (() => {
+  const sandbox = { URL };
+  vm.runInNewContext(CARD_CLIENT_SOURCE, sandbox, { filename: CLIENT_FILE });
+  return sandbox.DotclaudeCard;
+})();
+
+/**
  * Prefix of the prompt that opens a local page in the default browser — the
  * whole prompt is `<prefix> <url>`. Mirrors OPEN_URL_PREFIX in
  * hooks/lib/open-url.js, whose prompt.flow.open-url hook acts on it;
@@ -285,515 +307,232 @@ const OPEN_TEXT = {
   },
 };
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-/**
- * An http(s) URL on this machine (localhost, *.localhost, 127.x.x.x, [::1]).
- * Same rule as isLoopbackHttpUrl in hooks/lib/open-url.js — the hook opens
- * exactly what the card turns into an open button.
- */
-export function isLoopbackHttpUrl(value) {
-  let u;
-  try { u = new URL(String(value)); } catch { return false; }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-  if (u.username || u.password) return false;
-  const host = u.hostname.toLowerCase();
-  return LOOPBACK_HOSTS.has(host) || host.endsWith(".localhost") || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
-}
-
-/**
- * A loopback page as an open button: the URL stays visible (and copyable),
- * the click prefills the open prompt, and its status line sits beside it.
- */
-function openButtonHtml(url, lang) {
-  const t = OPEN_TEXT[lang] || OPEN_TEXT.de;
-  const prompt = `${OPEN_URL_PREFIX[lang] || OPEN_URL_PREFIX.de} ${url}`;
-  return `<span class="card-open">` +
-    `<span role="button" tabindex="0" class="card-link" data-prompt="${escapeHtml(prompt)}" data-sent="${escapeHtml(t.sent)}" data-tip="${escapeHtml(t.tooltip)}" style="color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer">${escapeHtml(url)}<span aria-hidden="true" style="user-select:none"> ↗</span></span>` +
-    `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span>` +
-    `</span>`;
-}
-
-/**
- * Escape a text line and make every http(s) URL in it clickable. Trailing
- * sentence punctuation stays outside the link.
- *
- * How the Desktop Code tab treats a widget link (app bundle, Claude 2.7032,
- * 2026-09-24): the widget script sends an `<a href>` as `ui/open-link`, and
- * the host opens only https — after a confirmation dialog, in the default
- * browser. An http link is dropped without a trace, and the widget frame may
- * not open popups. So an https URL stays an anchor, and a loopback page
- * (concept page, dev server) becomes an open button: it prefills
- * `Im Standardbrowser öffnen: <url>`, and prompt.flow.open-url opens the page
- * on Enter directly — the hook answers the prompt, Claude never runs. Any other http URL stays an anchor — dead on the
- * Desktop app, but still a visible, copyable address.
- */
-function linkifyHtml(s, lang = "de") {
-  return String(s == null ? "" : s)
-    .split(/(https?:\/\/[^\s<>"'`]+)/)
-    .map((part, i) => {
-      if (i % 2 === 0) return escapeHtml(part);
-      const url = part.replace(/[.,;:!?)\]]+$/, "");
-      const tail = part.slice(url.length);
-      const link = isLoopbackHttpUrl(url)
-        ? openButtonHtml(url, lang)
-        : `<a href="${escapeHtml(url)}" class="card-link" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${escapeHtml(url)}</a>`;
-      return link + escapeHtml(tail);
-    })
-    .join("");
-}
-
-// Text colours come from the host's tokens, so the light theme gets its own
-// counterpart: the dark-tuned literals (#8fae8f, #e0a0a0, #d9c58a, #aab4e6)
-// measured 1.5–2.2:1 on the light card surface. Each status colour is the
-// host's role token softened toward --text-secondary, the share fitted so
-// the dark theme keeps the muted palette it was tuned for: 7.2–7.9:1 light,
-// 8.2–8.9:1 dark. `dim` is the old watermark hue pulled 25 % toward
-// --text-primary: 5.0:1 light (the literal #7d84a8 was 3.3:1), 7.1:1 dark,
-// still a step quieter than the body text. Measured on Claude Desktop
-// 2.9939's own tokens, 2026-09-26. The bar graphics below sit on their own
-// always-dark track and keep literal colours.
-const COLOR = {
-  green: "color-mix(in srgb, var(--text-success) 30%, var(--text-secondary))",
-  red: "color-mix(in srgb, var(--text-danger) 55%, var(--text-secondary))",
-  yellow: "color-mix(in srgb, var(--text-warning) 40%, var(--text-secondary))",
-  lilac: "color-mix(in srgb, var(--text-tint-violet) 60%, var(--text-secondary))",
-  dim: "color-mix(in srgb, #7d84a8 75%, var(--text-primary))",
-  fillLilac: "#4a5384",
-  track: "#2b2d3a",
-  watermark: "#7d84a8",
-  markerWhite: "#ffffff",
-  markerYellow: "#e6c36a",
-  markerRed: "#e07a7a",
-};
-
-function glyphColor(glyph) {
-  if (glyph === "✗" || glyph === "⛔" || glyph === "⚠") return COLOR.red;
-  if (glyph === "◐") return COLOR.yellow;
-  return COLOR.green;
-}
-
-/** One evidence post as a `<span>` with an app-styled Info tooltip (`data-tip`).
- *  A post with a tooltip is focusable, so the keyboard reaches it (focusin). */
-function evidencePostHtml(post) {
-  // tone "warn": a requirement gap that waits on someone else — amber, not red (#630).
-  const color = post.tone === "warn" ? COLOR.yellow : glyphColor(post.glyph);
-  const tip = post.tooltip ? ` tabindex="0" data-tip="${escapeHtml(post.tooltip)}"` : "";
-  return `<span class="card-post" style="color:${color}"${tip}>${escapeHtml(post.glyph)} ${escapeHtml(post.text)}</span>`;
-}
-
-/** One budget bar (time fill + usage marker + watermark + sheen). */
-function budgetBarHtml(bar) {
-  const pct = Math.max(0, Math.min(100, Number(bar.pct) || 0));
-  const elapsed = Math.max(0, Math.min(100, Number(bar.elapsedPct) || 0));
-  const markerColor = bar.level === "red" ? COLOR.markerRed : bar.level === "yellow" ? COLOR.markerYellow : COLOR.markerWhite;
-  return [
-    // Label tier: the bar is a graphic, its tooltip is the only place that
-    // names the value the user is inspecting (ui-defaults.md R1). Focusable
-    // and labelled "<label>: <tooltip>" (role img hides the inner label text
-    // from assistive tech): the usage % lives nowhere else.
-    `<span class="card-budget" tabindex="0" role="img" aria-label="${escapeHtml([bar.label, bar.tooltip].filter(Boolean).join(": "))}" data-tip="${escapeHtml(bar.tooltip || "")}" data-tip-tier="label" style="display:inline-flex;align-items:center;gap:8px">`,
-    `<span style="font-size:13px;color:var(--text-secondary);min-width:20px">${escapeHtml(bar.label)}</span>`,
-    // Track: time fill with the sweep clipped INSIDE it (the glint runs over
-    // elapsed time only — never over time that has not passed), watermark in
-    // the empty part, usage marker last so it paints above both, taller than
-    // the track. The sweep is narrow and soft (24px, 12 % white) so it reads
-    // as a glint, not as a second bar inside the fill.
-    `<span style="position:relative;display:inline-block;width:220px;height:12px;background:${COLOR.track};border-radius:5px">`,
-    `<span class="card-sheen" style="position:absolute;left:0;top:0;bottom:0;width:${elapsed}%;background:${COLOR.fillLilac};border-radius:5px;overflow:hidden"></span>`,
-    `<span style="position:absolute;right:6px;top:-1px;font-size:11px;color:${COLOR.watermark};white-space:nowrap">${escapeHtml(bar.watermark || "")}</span>`,
-    `<span style="position:absolute;left:${pct}%;top:-6px;bottom:-6px;width:3px;border-radius:2px;background:${markerColor};z-index:2"></span>`,
-    `</span>`,
-    `</span>`,
-  ].join("");
-}
-
-/** The quiet PR link on the pipeline line — no colour, underline on hover only. */
-function pipelinePrHtml(pipelinePr, repoUrl) {
-  if (!pipelinePr || !pipelinePr.number) return `#${pipelinePr && pipelinePr.number || ""}`;
-  const href = repoUrl ? `${repoUrl}/pull/${pipelinePr.number}` : "";
-  const label = `#${pipelinePr.number}`;
-  return href
-    ? `<a href="${escapeHtml(href)}" class="card-pr-link" style="color:inherit;text-decoration:none">${escapeHtml(label)}</a>`
-    : escapeHtml(label);
-}
-
-/**
- * The ring model's channel ladder as plain text — no frame, no fill, nothing
- * that reads like a button next to the promote buttons. The highest version
- * leads in lilac (green once every channel serves it), the lagging channels
- * follow quieter with their distance in yellow ("−3 · 7 d").
- */
-function channelLadderHtml(ladder, lang) {
-  if (!ladder || !Array.isArray(ladder.groups) || !ladder.groups.length) return "";
-  const skipped = lang === "en" ? "skipped" : "übersprungen";
-  const lead = ladder.allEqual ? COLOR.green : COLOR.lilac;
-  const sep = `<span aria-hidden="true" style="color:${COLOR.dim}">›</span>`;
-  const parts = ladder.groups.map((g) => {
-    const name = `<span style="color:${COLOR.dim}">${escapeHtml(g.channels.join(" · "))}</span>`;
-    if (g.skipped) return `<span>${name} <span style="color:${COLOR.dim}">${skipped}</span></span>`;
-    if (!g.version) return `<span>${name} <span style="color:${COLOR.dim}">—</span></span>`;
-    const ver = g.top
-      ? `<span style="color:${lead};font-weight:500">v${escapeHtml(g.version)}${ladder.allEqual ? " ✓" : ""}</span>`
-      : `<span style="color:var(--text-secondary)">v${escapeHtml(g.version)}</span>`;
-    const lag = g.lag
-      ? ` <span style="font-size:11px;color:${COLOR.yellow}">−${g.lag.versions}${g.lag.days ? ` · ${g.lag.days} d` : ""}</span>`
-      : "";
-    return `<span>${name} ${ver}${lag}</span>`;
-  });
-  return `<div class="card-ladder" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:13px;padding:0 0 4px">${parts.join(sep)}</div>`;
-}
-
-/**
- * The do-run run-contract line (§ J) — dim treatment (`COLOR.dim`) like the
- * pipeline line right above it when every step is ✓ (purely informational),
- * but the body-text colour (`--text-secondary`, same as `card-result` lines)
- * when it carries an open step (✗) or a caveat (⚠) — AUD-021: this is the one
- * line the user must not miss. (AUD-021 also found the old watermark literal
- * below AA on the light surface; `COLOR.dim` has passed it since 0.9.0.)
- * RT2-R5: a doubtful step ("QA ?", "Durchgänge ?" / "Passes ?") contains
- * neither ✗ nor ⚠ — a token ending in ` ?` is just as much "must not miss" as
- * an open step, so it gets the same readable colour.
- * Polish: the state marks themselves carry the state, as the evidence row's
- * glyphs do (glyphColor) — ✗ / ⚠ in the danger colour, a doubtful ` ?` in
- * the warning colour — from the same host-token palette (`COLOR`), so both
- * themes keep their contrast. ✓ stays plain.
- * Spacing: right under the pipeline line (`afterPipeline`) the line drops its
- * top padding — the pipeline line's own 4px plus the panel gap already
- * separate them (14px → 10px). An inline padding beats any `<style>` rule,
- * so the renderer decides, not a sibling selector.
- *
- * @param {string} [text] the run-contract line, e.g. from `model.runContract`
- * @param {{ afterPipeline?: boolean }} [opts] the pipeline line sits right above
- * @returns {string} the `<div class="card-run-contract">…</div>` fragment, or
- *   '' when `text` is empty/nullish (H-D16).
- */
-export function runContractLineHtml(text, { afterPipeline = false } = {}) {
-  if (!text) return "";
-  const hasOpenStep = /[✗⚠]|\s\?(?:\s|$)/.test(text);
-  const color = hasOpenStep ? "var(--text-secondary)" : COLOR.dim;
-  const marked = escapeHtml(text)
-    .replace(/[✗⚠]/g, (g) => `<span style="color:${COLOR.red}">${g}</span>`)
-    .replace(/(\s)\?(?=\s|$)/g, `$1<span style="color:${COLOR.yellow}">?</span>`);
-  return `<div class="card-run-contract" style="font-size:13px;color:${color};padding:${afterPipeline ? "0 0 4px" : "4px 0"}">${marked}</div>`;
-}
-
-// › lines (result lines, context, points): the glyph visible — lilac,
-// weight 500 — and inset 6px from the heading edge; the text a step quieter
-// than the headings (`--text-secondary`), so the glyph leads and the line
-// does not shout. Deviation label kept red. Shared by resultLinesHtml,
-// contextHtml and pointsHtml below: 14px on the 4px spacing scale by
-// default, the context line passes its own size and margin.
-function glyphLineHtml(cls, inner, { size = 14, margin = "4px 0" } = {}) {
-  return `<div class="${cls}" style="display:flex;gap:4px;margin:${margin};padding-left:6px;font-size:${size}px;line-height:1.5;color:var(--text-secondary)"><span style="color:${COLOR.lilac};font-weight:500;flex:none;width:8px">›</span><span>${inner}</span></div>`;
-}
-
-/** The "changes" › lines — the deviation label (`**…**` lead-in) kept red; a
- *  `⚠` partial label (#630) in amber. */
-function resultLinesHtml(resultLines, lang) {
-  return (resultLines || [])
-    .map((l) => glyphLineHtml("card-result", linkifyHtml(l, lang).replace(/^\*\*([^*]+)\*\*/, (_, label) =>
-      `<b style="color:${label.startsWith("⚠") ? COLOR.yellow : COLOR.red};font-weight:500">${label}</b>`)))
-    .join("\n  ");
-}
-
-/** The evidence row (tooltip posts), or '' with nothing to show. */
-function evidenceHtml(evidence) {
-  return Array.isArray(evidence) && evidence.length
-    ? `<div class="card-evidence" style="display:flex;flex-wrap:wrap;gap:16px;font-size:14px">${evidence.map(evidencePostHtml).join(" ")}</div>`
-    : "";
-}
-
-/** The budget-bar row plus the optional context-health watermark, or '' when
- *  omitted. Stale usage data (`expiredNote`, index.js#buildBudgetModel) has no
- *  bars: the note itself is the row, dim, as the terminal shows it. */
-function budgetRowHtml(budget) {
-  if (budget && budget.expiredNote) {
-    return `<div class="card-budget-row" style="font-size:13px;color:${COLOR.dim};padding:4px 0 2px">${escapeHtml(budget.expiredNote)}${budget.contextHealth ? `<span style="font-size:11px;margin-left:16px">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`;
-  }
-  return budget && !budget.omitted
-    ? `<div class="card-budget-row" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:4px 0 2px">${(Array.isArray(budget.bars) ? budget.bars : []).map(budgetBarHtml).join(" ")}${budget.contextHealth ? `<span style="font-size:11px;color:${COLOR.dim}">${escapeHtml(budget.contextHealth)}</span>` : ""}</div>`
-    : "";
-}
-
-/** The pipeline line (commit → push → PR → merge), or '' without one. The
- *  first `#<n>` becomes the PR link — never an escaped entity (`&#39;`), and
- *  left as it is when the card knows no PR. */
-function pipelineHtml(pipeline, pipelinePr, repoUrl) {
-  const hasPr = !!(pipelinePr && pipelinePr.number);
-  return pipeline
-    ? `<div class="card-pipeline" style="font-size:13px;color:${COLOR.dim};padding:4px 0">${escapeHtml(pipeline).replace(/(?<!&)#(\d+)/, (m) => (hasPr ? pipelinePrHtml(pipelinePr, repoUrl) : m))}</div>`
-    : "";
-}
-
-// The title lives in the widget: on Desktop there is no card markdown (§ 4),
-// so the whole card is drawn once and nothing follows the widget. card-guard
-// reads this h3 as the card title. h3 = the contract's 16px/500 — one step
-// below h2, which read too large in the chat column.
-function titleHtml(title, builtAt) {
-  if (!title) return "";
-  const h3 = `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(title)}</h3>`;
-  if (!builtAt) return h3;
-  // In flow beside the title, not absolutely positioned: the widget host
-  // dropped an absolute corner stamp (2026-10-07).
-  return `<div class="card-title-row" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">${h3}${builtAtHtml(builtAt)}</div>`;
-}
-
-// When the card was built (local "HH:MM"), right of the title and dim: tells a
-// reader coming back later how old the state on the card is.
-function builtAtHtml(builtAt) {
-  return `<span class="card-time" style="flex:none;font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums">${escapeHtml(builtAt)}</span>`;
-}
-
-/**
- * Block 1 — the "what happened" part: no box of its own. It is the top of
- * the ONE outer surface (see `cardWidgetHtml`'s `return`), so the status and
- * the decision read as one card; a second bordered panel made them look
- * like two.
- */
-function blockAHtml(model, lang, repoUrl) {
-  return [
-    `<div class="card-panel" style="display:flex;flex-direction:column;gap:6px;padding:0 0 2px">`,
-    titleHtml(model.title, model.builtAt),
-    resultLinesHtml(model.resultLines, lang),
-    evidenceHtml(model.evidence),
-    pipelineHtml(model.pipeline, model.pipelinePr, repoUrl),
-    runContractLineHtml(model.runContract, { afterPipeline: !!model.pipeline }),
-    channelLadderHtml(model.ladder, lang),
-    budgetRowHtml(model.budget),
-    `</div>`,
-  ].filter(Boolean).join("\n  ");
-}
-
-// Heading at h3 size (16px/500, same step as the title).
-function headingHtml(heading) {
-  return heading ? `<h3 class="card-heading" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(heading)}</h3>` : "";
-}
-
-// Context line: same › glyph, one size smaller.
-function contextHtml(context, lang) {
-  return context
-    ? glyphLineHtml("card-context", linkifyHtml(context.replace(/^›\s*/, ""), lang), { size: 13, margin: "0 0 4px" })
-    : "";
-}
-
-// Points: › lines too (no numbers in the widget — the terminal markdown
-// keeps "1." for the same points), so both blocks speak the same language.
-function pointsHtml(points, lang) {
-  return Array.isArray(points) && points.length
-    ? `<div class="card-points" style="margin:2px 0 8px">${points.map((p) => glyphLineHtml("card-point", linkifyHtml(p, lang))).join("")}</div>`
-    : "";
-}
-
-/** The decision buttons row, plus the delivery-status span the script fills after a click. */
-function buttonsRowHtml(model, lang) {
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff });
-  if (!buttons.length) return "";
-  const buttonBase = "display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;line-height:1.2;cursor:pointer;user-select:none;background:transparent;color:var(--text-primary);height:30px;box-sizing:border-box";
-  return `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0 0">` +
-    buttons.map((a, i) => {
-      const accent = a.primary ? ";border-color:var(--border-accent);color:var(--text-accent)" : "";
-      // A multi-line prompt (the conclusion list) keeps its line breaks as
-      // &#10;: getAttribute hands them back as "\n", and a relayed widget
-      // cannot lose them to whitespace tidying.
-      return `<span role="button" tabindex="0" id="card-act-${i}" data-prompt="${escapeHtml(a.prompt).replace(/\n/g, "&#10;")}" data-tip="${escapeHtml(a.tooltip || "")}" style="${buttonBase}${accent}">` +
-        `<i class="ti ti-${escapeHtml(a.icon)}" aria-hidden="true" style="font-size:16px"></i>` +
-        `${escapeHtml(a.label)}<span aria-hidden="true"> ↗</span></span>`;
-    }).join("\n  ") +
-    // Delivery status: one quiet line right of the buttons, filled by the
-    // script after a click (green = in the composer, red = refused).
-    `<span class="card-act-state" role="status" aria-live="polite" style="font-size:11px;margin-left:4px"></span>` +
-    `</div>`;
-}
-
-/**
- * Block 2 — the decision box: a quiet accent wash (10 % of the accent fill —
- * visible on the dark and the light page alike), no border. The outer
- * surface already frames the card; a second line here cut it in two.
- */
-function blockBHtml(model, lang) {
-  return [
-    `<div class="card-box" style="background:var(--bg-accent-muted, rgba(55,138,221,0.10));border-radius:10px;padding:10px 12px;margin-top:10px">`,
-    headingHtml(model.heading),
-    contextHtml(model.context, lang),
-    pointsHtml(model.points, lang),
-    buttonsRowHtml(model, lang),
-    `</div>`,
-  ].filter(Boolean).join("\n  ");
-}
-
-/**
- * Render the whole card body — both § 2 blocks — as one HTML fragment.
- * Follows the widget design contract: no emoji in buttons, Tabler outline
- * icons (`ti ti-*`), CSS variables for host-matching chrome, sr-only summary,
- * `↗` on prompt controls, script last, no `position:fixed`, no nested
- * scrolling. Controls are `span[role=button]`, not `<button>` (§ 4 — verified
- * live 2026-09-18: a real `<button>`'s `sendPrompt()` call never reaches the
- * chat, a span's does).
- *
- * @param {object} model built by index.js#buildCardModel
- * @param {string} repoUrl for the quiet PR link
- * @returns {string} HTML fragment, '' when the model has no renderable body
- *   (test-minimal never reaches this — see `cardWidgetInstruction`).
- */
-export function cardWidgetHtml(model, repoUrl) {
-  if (!model) return "";
-  const lang = model.lang === "en" ? "en" : "de";
-  const summary = lang === "en"
-    ? "Completion card body: what happened, evidence, budget, and the decision with its actions."
-    : "Completion-Card-Inhalt: was passiert ist, Belege, Budget und die Entscheidung mit ihren Aktionen.";
-
-  return [
-    `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`,
-    `<style>.card-sheen::after{content:"";position:absolute;top:0;bottom:0;width:24px;background:rgba(255,255,255,.12);animation:card-sweep 4s linear infinite}@media (prefers-reduced-motion:reduce){.card-sheen::after{animation:none}}@keyframes card-sweep{from{left:-24px}to{left:100%}}.card-tip{position:absolute;z-index:5;max-width:280px;padding:6px 10px;border-radius:var(--radius);background:var(--surface-popover,var(--surface-3));color:var(--text-primary);border:0.5px solid var(--border-strong);font-size:13px;line-height:1.45;white-space:pre-line}.card-tip[hidden]{display:none}.card-pr-link:focus-visible{text-decoration:underline;text-underline-offset:2px}@media (hover:hover){.card-pr-link:hover{text-decoration:underline;text-underline-offset:2px}[role="button"]:hover{background:rgba(55,138,221,0.06)}}[role="button"]:active{background:var(--bg-accent-muted,rgba(55,138,221,0.10))}[role="button"]:focus-visible,[data-tip][tabindex]:focus-visible{outline:2px solid var(--border-accent,var(--border-strong));outline-offset:2px}[role="button"][data-busy]{opacity:.6;cursor:progress}</style>`,
-    // ONE surface around everything: a faint blue wash (6 % of the accent
-    // blue), the same hue as the decision box one step lighter, so the card is
-    // one tinted sheet with a stronger tinted foot. Fixed rgba, not a surface
-    // token: `--surface-1`/`-2` read as grey-on-grey ("too colourless") on the
-    // dark page. No border — the tint alone says "one card".
-    `<div class="card-surface" style="position:relative;background:rgba(55,138,221,0.06);border-radius:12px;padding:12px 16px 12px">`,
-    blockAHtml(model, lang, repoUrl),
-    blockBHtml(model, lang),
-    `</div>`,
-    `<script>`,
-    cardWidgetScript(lang),
-    `</script>`,
-  ].join("\n");
-}
-
 /** Per-language status texts the button script shows after a click. */
 const SEND_TEXT = {
   de: { sent: "Im Eingabefeld, Enter sendet", failed: "Nicht übernommen, Eingabefeld leeren und erneut klicken" },
   en: { sent: "In the input box, Enter sends", failed: "Not taken, clear the input box and click again" },
 };
 
+/** The channel ladder's word for a skipped channel. */
+const SKIPPED_TEXT = { de: "übersprungen", en: "skipped" };
+
 /**
- * Retry timing. The Code-tab host takes a `ui/message` only while the click's
- * user activation is still live (Chromium keeps it ~5 s), so every re-post
- * has to land inside that window.
+ * An http(s) URL on this machine (localhost, *.localhost, 127.x.x.x, [::1]).
+ * Same rule as isLoopbackHttpUrl in hooks/lib/open-url.js — the hook opens
+ * exactly what the card turns into an open button. Such a URL becomes an
+ * open button (prefills `<OPEN_URL_PREFIX> <url>`); any other URL an anchor
+ * — the Code-tab host opens only https links (§ 4).
  */
-export const SEND_RETRY_WINDOW_MS = 5000;
-export const SEND_RETRY_INTERVAL_MS = 300;
-export const SEND_REPLY_TIMEOUT_MS = 1000;
+export function isLoopbackHttpUrl(value) {
+  return CLIENT.isLoopbackHttpUrl(value);
+}
+
+/**
+ * The do-run run-contract line (§ J) — dim when every step is ✓, body-text
+ * colour with ✗ / ⚠ / a doubtful ` ?` (AUD-021, RT2-R5), its marks coloured;
+ * no top padding right under the pipeline line.
+ *
+ * @param {string} [text]
+ * @param {{ afterPipeline?: boolean }} [opts]
+ * @returns {string} the `<div class="card-run-contract">` fragment, '' without text (H-D16)
+ */
+export function runContractLineHtml(text, { afterPipeline = false } = {}) {
+  return CLIENT.runContractLineHtml(text, afterPipeline);
+}
+
+/** Retry timing (Chromium keeps a click's user activation ~5 s). */
+export const SEND_RETRY_WINDOW_MS = CLIENT.TIMING.span;
+export const SEND_RETRY_INTERVAL_MS = CLIENT.TIMING.gap;
+export const SEND_REPLY_TIMEOUT_MS = CLIENT.TIMING.wait;
 
 /** The two tooltip delay tiers and the skip window (ui-defaults.md R1). */
-export const TOOLTIP_DELAY_MS = { info: 1500, label: 500 };
-export const TOOLTIP_SKIP_MS = 300;
+export const TOOLTIP_DELAY_MS = { info: CLIENT.TIMING.tipInfo, label: CLIENT.TIMING.tipLabel };
+export const TOOLTIP_SKIP_MS = CLIENT.TIMING.skip;
+
+const URL_RE = /https?:\/\/[^\s<>"'`]+/g;
+
+/** Any loopback URL in these lines? Only then the data carries the open-button texts. */
+function hasLoopbackUrl(lines) {
+  return lines.some((l) => (String(l || "").match(URL_RE) || [])
+    .some((u) => isLoopbackHttpUrl(u.replace(/[.,;:!?)\]]+$/, ""))));
+}
 
 /**
- * The button script. How the Desktop Code-tab host handles `ui/message`
- * (read from its bundle, 2026-09-22):
+ * The card as compact JSON-ready data for the client renderer (schema in the
+ * header of `card-widget.client.js`). Empty fields are left out, buttons are
+ * resolved (`buttonsFor`), and only the localized texts this card needs ride
+ * along — the client hard-codes no user-visible string.
  *
- * - It never sends. A granted message goes into the composer via
- *   `onPrefillComposer`, and the user presses Enter. There is no auto-submit
- *   path for a widget.
- * - It rejects the message with `isError` unless the host frame has live user
- *   activation AND saw no pointer or key event of its own in the last 5250 ms.
- *   So a click within ~5 s of clicking, scrolling by the scrollbar or typing
- *   in the app window is refused.
- * - It also rejects when the composer is not empty (text, attachments, an
- *   upload in progress).
+ * @param {object} model built by index.js#buildCardModel
+ * @param {string} [repoUrl] for the quiet PR link
+ * @returns {object}
+ */
+export function cardWidgetData(model, repoUrl = "") {
+  const lang = model.lang === "en" ? "en" : "de";
+  const nz = (v) => (v ? v : undefined);
+  const arr = (a) => (Array.isArray(a) ? a : []);
+  const list = (a) => (arr(a).length ? a : undefined);
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff });
+  const prNum = model.pipelinePr && model.pipelinePr.number;
+  const b = model.budget;
+  let bu;
+  if (b && b.expiredNote) bu = { x: b.expiredNote, ch: nz(b.contextHealth) };
+  else if (b && !b.omitted) {
+    bu = {
+      bars: (Array.isArray(b.bars) ? b.bars : []).map((bar) => ({
+        lb: bar.label, p: bar.pct, e: bar.elapsedPct,
+        lv: bar.level === "red" || bar.level === "yellow" ? bar.level : undefined,
+        wm: nz(bar.watermark), tp: nz(bar.tooltip),
+      })),
+      ch: nz(b.contextHealth),
+    };
+  }
+  const ladder = model.ladder && Array.isArray(model.ladder.groups) && model.ladder.groups.length ? model.ladder : null;
+  // Only the texts this card can show: the status texts need something to click.
+  const tx = {};
+  if (ladder && ladder.groups.some((g) => g.skipped)) tx.sk = SKIPPED_TEXT[lang];
+  if (hasLoopbackUrl([...arr(model.resultLines), model.context, ...arr(model.points)])) {
+    const o = OPEN_TEXT[lang] || OPEN_TEXT.de;
+    tx.open = { pre: OPEN_URL_PREFIX[lang] || OPEN_URL_PREFIX.de, tip: o.tooltip, sent: o.sent };
+  }
+  if (buttons.length || tx.open) Object.assign(tx, SEND_TEXT[lang] || SEND_TEXT.de);
+  return {
+    v: CLIENT.SCHEMA,
+    l: lang,
+    ti: nz(model.title),
+    at: nz(model.builtAt),
+    r: list(model.resultLines),
+    ev: list(arr(model.evidence).map((p) => ({ g: p.glyph, x: p.text, tp: nz(p.tooltip), w: p.tone === "warn" ? 1 : undefined }))),
+    pl: nz(model.pipeline),
+    pr: prNum ? { n: prNum, h: repoUrl ? `${repoUrl}/pull/${prNum}` : undefined } : undefined,
+    rc: nz(model.runContract),
+    ld: ladder ? {
+      allEqual: ladder.allEqual ? true : undefined,
+      groups: ladder.groups.map((g) => ({ channels: g.channels, version: nz(g.version), top: g.top ? true : undefined, skipped: g.skipped ? true : undefined, lag: g.lag || undefined })),
+    } : undefined,
+    bu,
+    h: nz(model.heading),
+    cx: nz(model.context),
+    pt: list(model.points),
+    bt: list(buttons.map((a) => ({ l: a.label, i: a.icon, p: a.prompt, tp: nz(a.tooltip), pr: a.primary ? 1 : undefined }))),
+    tx,
+  };
+}
+
+/** The sr-only summary heading every widget starts with. */
+function summaryHtml(lang) {
+  const summary = lang === "en"
+    ? "Completion card body: what happened, evidence, budget, and the decision with its actions."
+    : "Completion-Card-Inhalt: was passiert ist, Belege, Budget und die Entscheidung mit ihren Aktionen.";
+  return `<h2 class="sr-only" style="position:absolute;left:-9999px">${escapeHtml(summary)}</h2>`;
+}
+
+/**
+ * The FULL inline card — both § 2 blocks plus the button/tooltip script — as
+ * one HTML fragment. Used by the offline renderer (`--render-card`, the MCP
+ * server never connected) and the tests; the live Desktop path sends the
+ * small `cardWidgetTemplate` instead. Widget design contract: no emoji in
+ * buttons, Tabler outline icons, host CSS tokens, sr-only summary, `↗` on
+ * prompt controls, script last, no `position:fixed`, no nested scrolling;
+ * controls are `span[role=button]` (§ 4 — a real `<button>`'s prompt never
+ * reached the chat, live 2026-09-18).
  *
- * `sendPrompt()` ignores the reply, so every one of these refusals was
- * silent, which is why the buttons seemed to work only sometimes. This
- * script posts `ui/message` itself and reads the reply. After an error or no
- * reply it re-posts every 300 ms for as long as the click's activation
- * lasts. That covers the 5250 ms gate: its lock runs out while the click
- * still counts. A re-post can never double the prompt, because a composer
- * that is already filled refuses. If every attempt fails, the likely cause
- * is a non-empty composer, and the button says so. One click at a time per
- * button (`data-busy`).
- *
- * It also draws every `data-tip` as an app-styled tooltip in the host's
- * tokens (ui-defaults.md R0/R1) — never the native `title`, which ignores the
- * theme, the delay and keyboard focus. Info 1500 ms by default, Label 500 ms
- * where `data-tip-tier="label"` (the budget bar); the next tip opens
- * instantly within 300 ms and on keyboard focus; the pointer can move onto
- * it; Escape closes it. Positioned absolutely inside `.card-surface`, never
- * fixed (a fixed element collapses the widget iframe).
+ * @param {object} model built by index.js#buildCardModel
+ * @param {string} repoUrl for the quiet PR link
+ * @returns {string} HTML fragment, '' without a model
+ */
+export function cardWidgetHtml(model, repoUrl) {
+  if (!model) return "";
+  const d = cardWidgetData(model, repoUrl);
+  return [summaryHtml(d.l), CLIENT.render(d), `<script>`, cardWidgetScript(d.l), `</script>`].join("\n");
+}
+
+/**
+ * The button + tooltip script for the inline card: `wire` from the client
+ * file, inlined via its source text and called with this language's status
+ * texts. Delivery (Code-tab host, bundle read 2026-09-22): `ui/message` only
+ * prefills the composer; the host refuses without live user activation, within
+ * 5250 ms of its own input, or with a non-empty composer — so the script
+ * posts `ui/message` itself, reads the reply and re-posts every 300 ms while
+ * the click's activation lasts (5 s), then shows sent/failed. Tooltips: app
+ * styled from `data-tip`, info 1500 ms, label 500 ms (`data-tip-tier`), the
+ * next one instant within 300 ms and on keyboard focus, Escape closes.
  *
  * @param {'de'|'en'} lang
  * @returns {string} plain ES5, no comments (widget streaming rules)
  */
 export function cardWidgetScript(lang = "de") {
   const t = JSON.stringify(SEND_TEXT[lang] || SEND_TEXT.de);
+  return `(${CLIENT.wire.toString()})(${t}, ${JSON.stringify(CLIENT.TIMING)});`;
+}
+
+/** jsDelivr's GitHub endpoint for this repo, and the client file inside it. */
+export const CARD_CLIENT_CDN = "https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude";
+export const CARD_CLIENT_PATH = "plugins/devops/mcp-server/lib/card-widget.client.js";
+
+let pluginVersionCache;
+/** The RUNNING plugin's version (`.claude-plugin/plugin.json`), '' when unreadable. */
+export function pluginVersion() {
+  if (pluginVersionCache !== undefined) return pluginVersionCache;
+  try {
+    const file = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".claude-plugin", "plugin.json");
+    const v = String(JSON.parse(readFileSync(file, "utf8")).version || "");
+    pluginVersionCache = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(v) ? v : "";
+  } catch {
+    pluginVersionCache = "";
+  }
+  return pluginVersionCache;
+}
+
+/**
+ * The client script URL: the ring tag `alpha/v<version>` of the running plugin
+ * (every ship tags alpha first and promotions re-tag the same commit, so this
+ * tag exists for every shipped version; there are no bare `v*` tags) —
+ * immutable, so jsDelivr caches it for good and the client always matches the
+ * data schema the server of that release writes. `DOTCLAUDE_CARD_CLIENT_URL`
+ * (https only) overrides it, e.g. a branch build while developing the client.
+ */
+export function cardClientUrl(env = process.env, version = pluginVersion()) {
+  const override = String((env && env.DOTCLAUDE_CARD_CLIENT_URL) || "").trim();
+  if (/^https:\/\/\S+$/.test(override)) return override;
+  return `${CARD_CLIENT_CDN}@${version ? `alpha/v${version}` : "main"}/${CARD_CLIENT_PATH}`;
+}
+
+/**
+ * Inline fallback when the client never runs (tag without the file, jsDelivr
+ * down, CSP refusal) or reports a schema it does not know: the result lines,
+ * the decision heading and the points as plain text under the title the
+ * template already shows — the widget is never empty. Runs once.
+ */
+const TEMPLATE_FALLBACK_JS =
+  "if(this.f)return;this.f=1;var D=document,d=JSON.parse(D.getElementById('dc-card-data').text),m=D.getElementById('dc-card');" +
+  "[].concat(d.r,d.h,d.pt).forEach(function(x){if(x)m.appendChild(D.createElement('p')).textContent=x})";
+
+const BACKSLASH = String.fromCharCode(92);
+
+/**
+ * The live Desktop widget_code: sr-only summary, the `#dc-card` mount with the
+ * title h3 (card-guard reads the card title from it, and it is the first
+ * paint), the card data as JSON, and the client script from jsDelivr. ~1–1.5k
+ * characters instead of the 7–12k inline HTML that passed through the model
+ * twice (tool result + show_widget input).
+ *
+ * @param {object} model built by index.js#buildCardModel
+ * @param {string} repoUrl
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string} '' without a model
+ */
+export function cardWidgetTemplate(model, repoUrl, env = process.env) {
+  if (!model) return "";
+  const d = cardWidgetData(model, repoUrl);
+  // `<` never appears raw inside the JSON, so no `</script>` can close it early.
+  const json = JSON.stringify(d).replace(/</g, `${BACKSLASH}u003c`);
+  const h3 = d.ti ? `<h3 class="card-title" style="margin:0 0 4px;font-size:16px;font-weight:500">${escapeHtml(d.ti)}</h3>` : "";
   return [
-    `(function () {`,
-    `  var T = ${t}, SPAN = ${SEND_RETRY_WINDOW_MS}, GAP = ${SEND_RETRY_INTERVAL_MS}, WAIT = ${SEND_REPLY_TIMEOUT_MS};`,
-    `  var nextId = 700000000 + Math.floor(Math.random() * 100000000);`,
-    `  function ok(d) { return 'result' in d && !d.error && !(d.result && d.result.isError); }`,
-    `  function deliver(text, done) {`,
-    `    var ids = {}, cur = -1, settled = false, spent = 0, timer = null;`,
-    `    function finish(success) { if (settled) return; settled = true; clearTimeout(timer); window.removeEventListener('message', onReply); done(success); }`,
-    `    function again(waited) { if (settled) return; clearTimeout(timer); spent += waited + GAP; if (spent > SPAN) { finish(false); return; } timer = setTimeout(post, GAP); }`,
-    `    function onReply(e) { var d = e.data; if (!d || typeof d !== 'object' || d.method || !ids[d.id]) return; if (ok(d)) { finish(true); } else if (d.id === cur) { again(0); } }`,
-    `    function post() {`,
-    `      if (settled) return;`,
-    `      cur = nextId++; ids[cur] = true;`,
-    `      try { window.parent.postMessage({ jsonrpc: '2.0', id: cur, method: 'ui/message', params: { role: 'user', content: [{ type: 'text', text: text }] } }, '*'); } catch (x) { again(0); return; }`,
-    `      timer = setTimeout(function () { again(WAIT); }, WAIT);`,
-    `    }`,
-    `    window.addEventListener('message', onReply);`,
-    `    post();`,
-    `  }`,
-    `  function mark(b, text, color) { var s = b.parentNode && b.parentNode.querySelector('.card-act-state'); if (!s) return; s.textContent = text; s.style.color = color; }`,
-    `  function go(b) {`,
-    `    if (b.getAttribute('data-busy')) return;`,
-    `    b.setAttribute('data-busy', '1'); b.setAttribute('aria-busy', 'true');`,
-    `    deliver(b.getAttribute('data-prompt'), function (success) {`,
-    `      b.removeAttribute('data-busy'); b.removeAttribute('aria-busy');`,
-    `      mark(b, success ? (b.getAttribute('data-sent') || T.sent) : T.failed, success ? 'var(--text-success)' : 'var(--text-danger)');`,
-    `    });`,
-    `  }`,
-    `  document.querySelectorAll('[role="button"][data-prompt]').forEach(function (b) {`,
-    `    b.addEventListener('click', function () { go(b); });`,
-    `    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(b); } });`,
-    `  });`,
-    `  var TIP = { info: ${TOOLTIP_DELAY_MS.info}, label: ${TOOLTIP_DELAY_MS.label} }, SKIP = ${TOOLTIP_SKIP_MS};`,
-    `  var surface = document.querySelector('.card-surface'), tip = document.createElement('div');`,
-    `  var owner = null, openT = 0, closeT = 0, lastClose = 0, viaKey = false;`,
-    `  tip.className = 'card-tip'; tip.id = 'card-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;`,
-    `  if (surface) surface.appendChild(tip);`,
-    `  function place(el) {`,
-    `    var s = surface.getBoundingClientRect(), r = el.getBoundingClientRect();`,
-    `    var top = r.top - s.top - tip.offsetHeight - 6;`,
-    `    if (top < 0) top = r.bottom - s.top + 6;`,
-    `    var left = Math.max(0, Math.min(r.left - s.left + r.width / 2 - tip.offsetWidth / 2, s.width - tip.offsetWidth));`,
-    `    tip.style.top = Math.round(top) + 'px'; tip.style.left = Math.round(left) + 'px';`,
-    `  }`,
-    `  function show(el) {`,
-    `    if (!surface || !el.getAttribute('data-tip')) return;`,
-    `    owner = el; tip.textContent = el.getAttribute('data-tip'); tip.hidden = false; place(el);`,
-    `    if (!el.hasAttribute('aria-label')) el.setAttribute('aria-describedby', 'card-tip');`,
-    `  }`,
-    `  function hide() {`,
-    `    clearTimeout(openT); clearTimeout(closeT);`,
-    `    if (!owner) return;`,
-    `    owner.removeAttribute('aria-describedby'); owner = null; tip.hidden = true; lastClose = Date.now();`,
-    `  }`,
-    `  function schedule(el, now) {`,
-    `    clearTimeout(openT); clearTimeout(closeT);`,
-    `    if (owner === el) return;`,
-    `    if (owner) hide();`,
-    `    var wait = now || Date.now() - lastClose < SKIP ? 0 : TIP[el.getAttribute('data-tip-tier') === 'label' ? 'label' : 'info'];`,
-    `    openT = setTimeout(function () { show(el); }, wait);`,
-    `  }`,
-    `  function trig(n) { return n && n.closest ? n.closest('[data-tip]') : null; }`,
-    `  document.addEventListener('pointerover', function (e) {`,
-    `    if (tip.contains(e.target)) { clearTimeout(closeT); return; }`,
-    `    var el = trig(e.target); if (el) schedule(el, false);`,
-    `  });`,
-    `  document.addEventListener('pointerout', function (e) {`,
-    `    var to = e.relatedTarget;`,
-    `    if (to && (tip.contains(to) || (owner && owner.contains(to)))) return;`,
-    `    if (!trig(e.target) && !tip.contains(e.target)) return;`,
-    `    clearTimeout(openT); if (owner) closeT = setTimeout(hide, 120);`,
-    `  });`,
-    `  document.addEventListener('focusin', function (e) { var el = trig(e.target); if (el && viaKey) schedule(el, true); });`,
-    `  document.addEventListener('focusout', function () { hide(); });`,
-    `  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); else viaKey = true; }, true);`,
-    `  document.addEventListener('pointerdown', function (e) { viaKey = false; if (!tip.contains(e.target)) hide(); }, true);`,
-    `})();`,
+    summaryHtml(d.l),
+    `<div id="dc-card">${h3}</div>`,
+    `<script type="application/json" id="dc-card-data">${json}</script>`,
+    `<script src="${escapeHtml(cardClientUrl(env))}" onerror="${TEMPLATE_FALLBACK_JS}"></script>`,
   ].join("\n");
 }
 
@@ -810,6 +549,11 @@ export const NO_OUTPUT_NUDGE_REPLY =
   'reply to it with nothing — no text, no tool call. It comes once per turn, and the ' +
   'empty reply ends the turn with the card last.';
 
+/** The widget_code for this card: the template (live MCP path) or, with `inline`, the full HTML (offline renderer). */
+function widgetCode(model, repoUrl, env, inline) {
+  return inline ? cardWidgetHtml(model, repoUrl) : cardWidgetTemplate(model, repoUrl, env);
+}
+
 /**
  * The out-of-band instruction that rides beside the card: on the Desktop app
  * the widget IS the whole card (§ 4), the LAST action of the turn, with no
@@ -821,36 +565,27 @@ export const NO_OUTPUT_NUDGE_REPLY =
  * @param {object} model built by index.js#buildCardModel
  * @param {string} repoUrl
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ widgetFile?: string, inline?: boolean }} [opts] the saved copy; `inline` = full HTML (offline renderer)
  * @returns {string}
  */
-export function cardWidgetInstruction(model, repoUrl, env = process.env, { widgetFile = "" } = {}) {
+export function cardWidgetInstruction(model, repoUrl, env = process.env, { widgetFile = "", inline = false } = {}) {
   if (!isDesktopSession(env)) return "";
   if (!model || model.variant === "test-minimal") return "";
-  const html = cardWidgetHtml(model, repoUrl);
+  const html = widgetCode(model, repoUrl, env, inline);
   if (!html) return "";
-  const fileLine = widgetFile
-    ? `The same HTML is saved in ${widgetFile} — if the block below reached you cut off or filtered, ` +
-      "Read that file and pass its content instead.\n"
-    : "";
   return (
     "[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]\n" +
-    "Desktop app only, once, as the LAST action of the turn: call mcp__visualize__show_widget with " +
-    `title "completion_card_body", loading_messages ["Card wird geladen"] and widget_code set to ` +
-    "EXACTLY the HTML below (verbatim, no edits, no read_me call needed). It draws both card blocks " +
-    "— what happened and what to decide, including the buttons — and it IS the whole card: there is " +
-    "no card markdown to output. Output NO text after the call — any line under the widget shows " +
-    "as a stray line in the chat: no summary, no \"the card is above\". " +
+    "Desktop app: this widget IS the whole card — there is no card markdown to output. Once, " +
+    "as the LAST action of the turn, call mcp__visualize__show_widget with title " +
+    `"completion_card_body", loading_messages ["Card wird geladen"] and widget_code = EXACTLY ` +
+    "the block below (verbatim, no read_me). Output NO text after the call. " +
     NO_OUTPUT_NUDGE_REPLY + " Never show this card a second time.\n" +
-    "No prose before the widget that restates the card (changes, tests, version, PR, open items, " +
-    "restart hints). The answer to the user's question is no restatement: it stands in full as text " +
-    "before the widget — the card never carries it, its summary is a title, not the answer (#642). " +
-    "Other topics of the user's prompt and hook blocks still marked for the user may stand there too.\n" +
-    "The widget call is mandatory, never optional: never grep, filter or skip the HTML to save tokens. " +
-    "ONLY when the call itself fails, or the tool does not exist in this session: no retry, no note — " +
-    `output the visible title line \`### **✨✨✨ ${model.title || ""} ✨✨✨**\` so the turn still ends ` +
-    "on the card headline. That line is the error path, never a shortcut — the Stop gate blocks a " +
-    "card turn on which show_widget was not called.\n" +
-    fileLine +
+    "Text before the widget: the full answer to the user's question (the card never carries it, " +
+    "#642), but no prose that restates the card.\n" +
+    "The call is mandatory, never optional. ONLY when the call itself fails, or the tool does not " +
+    `exist: no retry, no note — output the visible title line \`### **✨✨✨ ${model.title || ""} ✨✨✨**\` ` +
+    "(error path, never a shortcut).\n" +
+    (widgetFile ? `Copy: ${widgetFile} — if the block below reached you cut off, Read it and pass its content.\n` : "") +
     "----- widget_code -----\n" +
     html + "\n" +
     "----- end widget_code -----"
@@ -875,17 +610,17 @@ export function safeSessionId(id) {
 export const WIDGET_FILE_PREFIX = "dotclaude-devops-card-widget";
 
 /**
- * Save the widget HTML where the Stop gate and a recovering Claude can find
+ * Save the widget_code (template, or the full HTML with `inline`) where the Stop gate and a recovering Claude can find
  * it (#451): `<dir>/dotclaude-devops-card-widget-<session>`. Same rule as
  * `cardWidgetInstruction` — '' (nothing written) outside the Desktop app, for
  * test-minimal, or without a body. Best effort: a failed write returns ''.
  *
  * @returns {string} the file path, or '' when nothing was written
  */
-export function writeCardWidgetFile(model, repoUrl, sessionId, dir, env = process.env) {
+export function writeCardWidgetFile(model, repoUrl, sessionId, dir, env = process.env, { inline = false } = {}) {
   if (!isDesktopSession(env)) return "";
   if (!model || model.variant === "test-minimal") return "";
-  const html = cardWidgetHtml(model, repoUrl);
+  const html = widgetCode(model, repoUrl, env, inline);
   if (!html) return "";
   const file = join(dir, `${WIDGET_FILE_PREFIX}-${safeSessionId(sessionId)}`);
   try {

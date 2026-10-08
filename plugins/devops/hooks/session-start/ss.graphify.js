@@ -222,8 +222,8 @@ if (needsRebuild && runOnce('ss-graphify-update', cwdKey, { cooldownMs: 10 * 60 
     // indefinitely, and silently (issue #291). Hand the token back so the next
     // trigger gets a real attempt the moment a slot frees up.
     releaseOnce('ss-graphify-update', cwdKey);
-    // Losing every draw for a long stretch is not an ordinary skip: the search
-    // hard-gate steers agents toward a graph that is now weeks old. Say so —
+    // Losing every draw for a long stretch is not an ordinary skip: the graph
+    // nudge and `graphify query` would point agents at a graph that is now weeks old. Say so —
     // once per streak-threshold, not every session.
     const declines = gstate.declineCount(cwd);
     if (declines > 0 && declines % DECLINE_REPORT_EVERY === 0) {

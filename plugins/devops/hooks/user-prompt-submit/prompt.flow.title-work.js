@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.title-work
- * @version 0.5.0
+ * @version 0.6.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
@@ -48,6 +48,15 @@
  *   Silent/cron turns and scheduled-task ticks are not user work — skipped.
  *   Desktop app only — the instruction tells Claude to skip silently when the
  *   session-mgmt tools are missing (terminal, unattended run).
+ *
+ *   Cost (0.6.0): the hook reads the current title from the transcript tail
+ *   (lib/session-title.js) and computes the new one itself, so the
+ *   instruction carries the exact title and asks for set_session_title in
+ *   parallel with the turn's first other tool call — no get_session and no
+ *   round trip of its own (the old ritual was 2–3 extra API calls per prompt,
+ *   ~3.6 % of all tokens). Title already right → no output at all. Title
+ *   unknown (no transcript, no title entry yet) → the old get_session
+ *   instruction, so the semantics never break.
  */
 
 require('../lib/plugin-guard');
@@ -64,39 +73,15 @@ function resumesShip(prompt, cwd) {
 /** The runOnce token name — stop.flow.guard releases it after a card. */
 const ONCE_KEY = 'prompt-title-work';
 
-/** Pinned copy of `SESSION_PREFIX.work` — hooks are CJS, mode-state.js is ESM. */
-const WORK_PREFIX = '⏳ ';
-
-/** The worded hourglass older versions set while background work ran —
- *  legacy, never set any more (the bare `⏳ ` covers both). It shares the
- *  emoji with WORK_PREFIX, so "already bare-marked" must exclude it
- *  explicitly: a legacy title is rewritten to the bare form. Mirrors
- *  `LEGACY_PREFIXES` in mode-state.js. */
-const LEGACY_PENDING_PREFIX = '⏳ Working – ';
-
-/** The process prefix /do-ship owns while the pipeline runs — mirrors
- *  `SESSION_PREFIX.shipping`. Shares the 🚀 with the `🚀 Shipped – ` OUTCOME,
- *  so it is matched as a whole string, never on the emoji. */
-const SHIPPING_PREFIX = '🚀 Shipping – ';
-
-/** The concept mode prefix — mirrors `SESSION_PREFIX.concept`. */
-const CONCEPT_PREFIX = '\u{1F9ED} Concept – ';
-const CONCEPT_EMOJI = '\u{1F9ED}';
-const BATCH_EMOJI = '\u{1F4E5}';
-
-/** Leading emoji of the prefixes a mode skill owns. Batch is never replaced
- *  here; the concept compass only on a machine turn (see `instruction`).
- *  Mirrors `SESSION_PREFIX.concept` / `.batch` in mode-state.js. */
-const MODE_PREFIX_EMOJI = [CONCEPT_EMOJI, BATCH_EMOJI];
-
-/** Leading emoji of every outcome prefix a card may leave (the bare ⏳
- *  included, so an already-marked title is recognised). The instruction
- *  names them so a title never stacks two. Together with MODE_PREFIX_EMOJI
- *  this mirrors `STRIPPABLE` in mode-state.js (the test pins the lists). */
-const OUTCOME_PREFIX_EMOJI = ['\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '\u{1F4E6}', '⛔', '\u{1F6AB}', '\u{1F4CB}', '⏳', '\u{1F527}', '⏸️'];
-
-/** Every leading marker the card / skills may have left. */
-const KNOWN_PREFIX_EMOJI = [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI];
+// Prefix strings and rules live in lib/session-title.js (shared with the
+// completion card); re-exported here so callers and tests keep one import.
+const {
+  WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX,
+  MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI,
+  nextTitle, readCurrentTitle,
+} = require('../lib/session-title');
+const CONCEPT_EMOJI = MODE_PREFIX_EMOJI[0];
+const BATCH_EMOJI = MODE_PREFIX_EMOJI[1];
 
 /**
  * The prefix a prompt puts on the title: the process it starts when it
@@ -107,6 +92,44 @@ function prefixFor(prompt, cwd) {
   return isShipIntent(prompt) || resumesShip(prompt, cwd) ? SHIPPING_PREFIX : WORK_PREFIX;
 }
 
+/**
+ * The instruction when the hook already knows the current title: the exact
+ * new title, set in parallel with the turn's first other tool call — no
+ * get_session, no round trip of its own. Kept short: it is injected on
+ * every marking prompt.
+ */
+function directInstruction(title, { shipping = false, conceptYields = false } = {}) {
+  return [
+    '[prompt.flow.title-work] Desktop app only, once: mcp__ccd_session_mgmt__set_session_title ' +
+      `{session_id:"self", title:${JSON.stringify(title)}} in the SAME message as this turn's first other tool call ` +
+      '(parallel — no get_session, no message of its own). No other tool this turn → call it alone.',
+    'Only deferred → ToolSearch "select:mcp__ccd_session_mgmt__set_session_title" in that first batch, the set call in the next. ' +
+      'Not even deferred, or it fails: skip silently.',
+    ...(shipping ? ['This is do-ship Pre-Step C done early.'] : []),
+    ...(conceptYields ? ['The compass yields (Claude works now); if the concept page stays open after this turn, its completion card (concept field + cwd) brings it back.'] : []),
+    'Do not mention this to the user.',
+  ].join('\n');
+}
+
+/**
+ * The output for this prompt: '' (title already right — nothing to do), the
+ * direct instruction (title known), or the get_session fallback
+ * (`instruction`) when the transcript does not reveal the title.
+ */
+function titleWorkOutput(hook, prompt, cwd) {
+  const prefix = prefixFor(prompt, cwd);
+  const machine = isMachineTurn(prompt);
+  const current = readCurrentTitle(hook.transcript_path);
+  if (current === null) return instruction(prefix, { machine });
+  const next = nextTitle(current, { prefix, machine });
+  if (next === null) return '';
+  return directInstruction(next, {
+    shipping: prefix === SHIPPING_PREFIX,
+    conceptYields: current.startsWith(CONCEPT_EMOJI),
+  });
+}
+
+/** Fallback when the current title is unknown: read it via get_session. */
 function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
   const shipping = prefix === SHIPPING_PREFIX;
   // The compass says "the page waits for YOU". A user prompt means Claude
@@ -185,9 +208,10 @@ if (require.main === module) {
     if (!shouldMark(hook)) process.exit(0);
     if (!runOnce(ONCE_KEY, hook.session_id)) process.exit(0);
     const prompt = hook.prompt || hook.user_message || hook.message || '';
-    process.stdout.write(instruction(prefixFor(prompt, hook.cwd || process.cwd()), { machine: isMachineTurn(prompt) }) + '\n');
+    const out = titleWorkOutput(hook, prompt, hook.cwd || process.cwd());
+    if (out) process.stdout.write(out + '\n');
     process.exit(0);
   });
 }
 
-module.exports = { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, prefixFor, shouldMark, releaseTitleWork };
+module.exports = { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, directInstruction, titleWorkOutput, prefixFor, shouldMark, releaseTitleWork };
