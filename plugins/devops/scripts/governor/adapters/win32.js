@@ -58,7 +58,7 @@ class Helper {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         // A wedged helper: after MAX_TIMEOUTS consecutive timeouts kill it; the watcher restarts it and re-releases.
-        this.onEvent('helper-timeout', { op, consecutive: this.timeouts + 1 });
+        if (this.timeouts === 0) this.onEvent('helper-timeout', { op }); // once per streak
         if (++this.timeouts >= Helper.MAX_TIMEOUTS && this.proc) { this.onEvent('helper-killed', { after: this.timeouts }); try { this.proc.kill(); } catch {} }
         reject(new Error(`helper ${op} timeout`));
       }, timeoutMs);
@@ -88,7 +88,8 @@ function createWin32Adapter(cfg, opts = {}) {
     get alive() { return h.alive; },
     start: () => h.start(),
     stop: () => h.stop(),
-    sample: (opts = {}) => h.call('sample', { gpu: opts.gpu !== false }, 60000),
+    // procs:false = system counters + foreground only (cheap); the full process scan is the expensive part.
+    sample: (opts = {}) => h.call('sample', { gpu: opts.gpu !== false, procs: opts.procs !== false }, 60000),
     // Key-based: the helper keeps key -> {pid -> {startMs, suspended, capped}} and merges pids.
     apply: (key, level, pids) => h.call('apply', { key, level, pids, cpuPct: cfg.cap.cpuPct }),
     release: (key, pids) => h.call('release', { key, pids: pids || [] }),
