@@ -13,7 +13,8 @@ const ALL = [SKILL, ...["modes", "deep-knowledge"].flatMap((d) =>
   fs.readdirSync(path.join(__dirname, d)).filter((f) => f.endsWith(".md"))
     .map((f) => fs.readFileSync(path.join(__dirname, d, f), "utf8")))].join("\n");
 
-const flat = (s) => s.replace(/\s+/g, " ");
+// Whitespace and blockquote markers are layout, not contract.
+const flat = (s) => s.replace(/\n>[ \t]?/g, "\n").replace(/\s+/g, " ");
 function section(start, end) {
   const a = SKILL.indexOf(start);
   expect(a, `heading not found: ${start}`).toBeGreaterThan(-1);
@@ -175,7 +176,7 @@ describe("do-ship gate contract — blocked exits and sentinel hygiene", () => {
   test("every ship-blocked exit calls ship_cleanup keep:true first", () => {
     expect(section("## Pipeline at a glance", "## Target channel")).toContain("Every `ship-blocked` exit calls `ship_cleanup({ keep: true })` first");
     const hygiene = section("> **Sentinel hygiene", "## Step 0 —");
-    expect(hygiene).toMatch(/before rendering ANY `ship-blocked` card, first call > `ship_cleanup\(\{ branch, cwd, keep: true \}\)`/);
+    expect(hygiene).toMatch(/before rendering ANY `ship-blocked` card, first call `ship_cleanup\(\{ branch, cwd, keep: true \}\)`/);
   });
 
   test("each hard stop renders ship-blocked", () => {
