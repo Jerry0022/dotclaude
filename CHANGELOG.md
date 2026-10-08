@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.249.2] — 2026-10-08
+
+### Changed
+- **Four small skills trimmed of over-prescriptive instructions, each backed by an A/B run (#651).** Skills written for older models over-explain; the trims cut restated rules, history, scripted message templates, CAPS emphasis and verbatim prompt blocks, and keep every string a hook or test enforces (run-contract matches, AskUserQuestion headers, markers, frontmatter triggers). Words and A/B pass rates (A = before, B = trimmed, 2 runs per variant):
+  - `auto-extend` 765 → 565 (−26 %), 8/8 → 8/8
+  - `auto-update` 931 → 635 (−32 %), 8/8 → 8/8 — `--force` keeps a one-line why; report block, channel re-pin and the MCP-stale warning stay verbatim
+  - `do-learn` (SKILL + deep-knowledge) 4439 → 4051 (−9 %), 8/8 → 8/8 — routing gate, Q1–Q3 matrix, tie-breakers and worked examples untouched
+  - `auto-polish` (SKILL + fix-phases, retest-and-output, rules-only-path) 3361 → 3122 (−7 %), 10/10 → 14/14 decided checks
+  Each trim has its removed/kept record with the A/B table in `plugins/devops/evals/trims/<skill>.md`.
+
+### Fixed
+- **A/B runner works from a Desktop session.** `ab-run.js` strips the host session's `CLAUDE*` / `ANTHROPIC*` environment from the child `claude -p`; with them inherited the child answered "Not logged in" / 401.
+
+### Added
+- **`deny_tools` case field** in the eval runner → `settings.permissions.deny`, which holds even under a `bypassPermissions` default (the auto-update case watches the update hook being attempted without touching the real install), plus one skill-body behaviour case per trimmed skill under `plugins/devops/evals/skills/` with deterministic graders.
+
+### Not changed (decisions)
+- **`auto-fix` trim reverted.** The trimmed version (1120 → 826 words) skipped the file:line report in 1 of 2 explicit runs, and merging Steps 2–5 dropped the separate root-cause step; a partial restore did not recover it. `SKILL.md` stays as it was; the record (`evals/trims/auto-fix.md`) lists the rejected cuts. `do-run` (~29 k words) is deferred. Both moved to #665.
+
+### Tests
+- Branch suites (skill-contracts, skill-graph, hidden-skill-mentions, auto-harden skill-text, do-ship ship-flow, evals `ab.test`) 6 files / 931 tests green; eslint clean; no test changed. The full suite was not rerun for this ship (machine under heavy load — the last full run on main took 92 min). Codex review skipped (limit until 2026-10-11).
+
 ## [0.249.1] — 2026-10-08
 
 ### Fixed
