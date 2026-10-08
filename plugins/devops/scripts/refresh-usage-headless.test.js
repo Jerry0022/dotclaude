@@ -177,6 +177,19 @@ describe("shouldOpenLoginWindow — login-window policy", () => {
   });
 });
 
+// The reap ran `powershell -Command "<script>"` through cmd, which stripped the
+// quotes around Name='msedge.exe' — Get-CimInstance rejected the filter and the
+// hidden off-screen scraper was never reaped. The visible login window then
+// landed inside that instance as a ghost window nobody could bring up.
+describe("powershellArgs — no shell quoting layer", () => {
+  test("round-trips a script with nested quotes byte for byte", () => {
+    const script = "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { $_.CommandLine -like '*edge-usage-profile*' }";
+    const args = powershellArgs(script);
+    expect(args.slice(0, 3)).toEqual(["-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+    expect(Buffer.from(args[3], "base64").toString("utf16le")).toBe(script);
+  });
+});
+
 describe("bringLoginWindowToFront", () => {
   test("Windows: runs PowerShell with an encoded command scoped to the scraper profile", () => {
     const calls = [];

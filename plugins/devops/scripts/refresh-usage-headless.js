@@ -300,11 +300,19 @@ function reapScraperInstances() {
     "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | " +
     "Where-Object { $_.CommandLine -like '*" + needle + "*' } | " +
     "ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }";
+  // Encoded, not `-Command "${ps}"`: cmd stripped the inner quotes around
+  // Name='msedge.exe', Get-CimInstance rejected the filter and the reap never
+  // killed anything. The hidden off-screen scraper then survived every "reap",
+  // and the visible login window was handed to it — a ghost window at
+  // -32000,-32000 that the taskbar preview showed but no click brought up.
   try {
-    execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
-      timeout: 8000, stdio: 'ignore',
-    });
+    execFileSync('powershell.exe', powershellArgs(ps), { timeout: 8000, stdio: 'ignore', windowsHide: true });
   } catch { /* best-effort reap */ }
+}
+
+/** PowerShell argv for a script, base64-encoded so no shell quoting layer can mangle it. */
+function powershellArgs(script) {
+  return ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')];
 }
 
 /**
@@ -964,17 +972,21 @@ function bringLoginWindowToFront({ run = execFileSync, platform = process.platfo
   if (platform !== 'win32') return false;
   const ps = [
     "$ErrorActionPreference='SilentlyContinue'",
-    "Add-Type -Name W -Namespace D -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern void keybd_event(byte k,byte s,uint f,UIntPtr e);'",
+    "Add-Type -Name W -Namespace D -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); [DllImport(\"user32.dll\")] public static extern void keybd_event(byte k,byte s,uint f,UIntPtr e); [DllImport(\"user32.dll\")] public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int t,bool r);'",
+    // Restore → move onto the primary work area → maximize. Edge restores the
+    // hidden scraper's persisted off-screen placement (-32000,-32000) as the
+    // window's normal bounds; maximizing alone left it reported as maximized
+    // while the user still saw nothing on screen.
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "$wa=[System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea",
     `$dir='${profileDir.replace(/'/g, "''")}'`,
     "$ids = Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { $_.CommandLine -like \"*$dir*\" -and $_.CommandLine -notlike '*--type=*' } | ForEach-Object { $_.ProcessId }",
     "$hit=$false",
-    "foreach ($id in $ids) { $p = Get-Process -Id $id; if ($p.MainWindowHandle -ne 0) { [D.W]::ShowWindow($p.MainWindowHandle,3) | Out-Null; [D.W]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [D.W]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [D.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; $hit=$true } }",
+    "foreach ($id in $ids) { $p = Get-Process -Id $id; if ($p.MainWindowHandle -ne 0) { $h=$p.MainWindowHandle; [D.W]::ShowWindow($h,9) | Out-Null; [D.W]::MoveWindow($h,$wa.X,$wa.Y,[Math]::Min(1280,$wa.Width),[Math]::Min(900,$wa.Height),$true) | Out-Null; [D.W]::ShowWindow($h,3) | Out-Null; [D.W]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [D.W]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [D.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; $hit=$true } }",
     "if ($hit) { exit 0 } else { exit 1 }",
   ].join('; ');
   try {
-    // -EncodedCommand (UTF-16LE base64) sidesteps every cmd/PowerShell quoting layer.
-    run('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')],
-      { stdio: 'ignore', timeout: 15000, windowsHide: true });
+    run('powershell.exe', powershellArgs(ps), { stdio: 'ignore', timeout: 15000, windowsHide: true });
     return true;
   } catch { return false; }
 }
@@ -1124,6 +1136,7 @@ module.exports = {
   bringLoginWindowToFront,
   AUTO_LOGIN_RETRY_MS,
   reapScraperInstances,
+  powershellArgs,
   classifyScraperPid,
   killScraperInstance,
   openLoginWindow,
