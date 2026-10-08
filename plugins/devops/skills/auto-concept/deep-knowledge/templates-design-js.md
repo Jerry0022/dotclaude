@@ -919,6 +919,8 @@ design round has: the three row builders and the ordering of stash → rebuild
     if (idxEl) idxEl.textContent = idx + 1;
     const dockLabel = document.getElementById('dock-screen-label');
     if (dockLabel) dockLabel.textContent = label;
+    const dockScreenDesign = document.getElementById('dock-screen-design');
+    if (dockScreenDesign) dockScreenDesign.textContent = design.dataset.navLabel || design.dataset.design;
     // The dock holds every design's screen textareas, so match on the
     // owning design too — screen ids are unique per iteration, but this
     // keeps the swap correct even if a page reuses ids across designs.

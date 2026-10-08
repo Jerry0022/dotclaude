@@ -150,8 +150,8 @@ rules (`body[data-single-*]`, the view-mode swap).
    stays the padding + single-line-box height (~1.9rem) at every viewport,
    including the narrowest ones this file scopes to (≥279px, see above).
    `3.75rem` = indicator `top: 1rem` + its ~1.9rem measured height + a
-   0.5rem breathing gap, rounded up. The pill's own content-width (glyph +
-   counter) is small and fixed, so unlike the indicator/switcher it needs no
+   0.5rem breathing gap, rounded up. The pill is a fixed pin-sized circle
+   (28px), so unlike the indicator/switcher it needs no
    max-width cap — there is nothing else sharing its row. */
 .panel-fab { top: 2rem; right: 2rem; }
 .feedback-fab { bottom: 2rem; right: 2rem; }
@@ -290,10 +290,14 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
    flags the design layout sets, so the same round shape always yields the
    same dock.
    * right = FAB.right (2rem)             → bubble's right edge aligns with FAB
-   * bottom = FAB.bottom + 60 - 6px       → bubble sits directly above the 60px
-                                            FAB with a hair of overlap so the
-                                            visual connection reads as "the
-                                            bubble grows out of the FAB".
+   * bottom = FAB.bottom + 60 + 14px      → bubble floats 14px above the 60px
+                                            FAB; the FAB's own speech tail
+                                            (.feedback-fab[aria-expanded]
+                                            ::after) bridges that gap, so the
+                                            pair reads as "the bubble comes out
+                                            of the FAB". It used to overlap the
+                                            FAB by 6px, which read as the FAB
+                                            stuck in front of the dock's corner.
    The dock no longer reserves padding for the FAB: it now ends above it
    rather than spanning across it. The FAB keeps its higher z-index so it
    stays visible and clickable while the dock is open — clicking it toggles
@@ -308,11 +312,11 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
    min(--dock-ceiling, its px cap): the cap still rules on tall viewports,
    the ceiling only bites when the content would reach the ☰. */
 .feedback-dock {
-  --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px - 6px));
+  --dock-ceiling: calc(100vh - (2rem + 60px + 0.75rem) - (2rem + 60px + 14px));
   position: fixed;
   left: auto;
   right: 2rem;
-  bottom: calc(2rem + 60px - 6px);
+  bottom: calc(2rem + 60px + 14px);
   width: min(420px, calc(100vw - 4rem));
   /* 900px, not 460px: at a ~1080px-tall viewport the compact dock must show
      screen + design + general at once (§ Feedback behaviour) without
@@ -330,7 +334,9 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
   display: none;
   flex-direction: column;
   gap: 0.85rem;
-  transform-origin: 100% 100%; /* anchor: the 💬 FAB it grows out of */
+  /* anchor: the 💬 FAB's centre (30px in from the right edge, 44px below
+     the bottom edge) — the bubble grows out of the FAB, not out of a corner. */
+  transform-origin: calc(100% - 30px) calc(100% + 44px);
 }
 .feedback-dock[data-size="wide"] {
   width: min(560px, calc(100vw - 4rem));
@@ -351,11 +357,43 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
 }
 .feedback-dock[data-open="true"] {
   display: flex;
-  animation: feedback-dock-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  animation: feedback-dock-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 @keyframes feedback-dock-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.94); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: scale(0.35); border-radius: 30px; }
+  60%  { opacity: 1; }
+  to   { opacity: 1; transform: scale(1); border-radius: 18px; }
+}
+/* The FAB while its dock is open: pressed in, with a soft ring, and a
+   speech tail pointing up into the bubble — the tail lives on the FAB, not
+   on the dock, because the dock is overflow-y:auto and would clip it. Same
+   fill + border as the dock so tail and bubble read as one shape. */
+.feedback-fab[aria-expanded="true"] {
+  transform: scale(0.92);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-color) 28%, transparent), 0 4px 12px rgba(0,0,0,0.3);
+}
+.feedback-fab[aria-expanded="true"]::after {
+  content: ''; position: absolute; left: 50%; top: -19px;
+  width: 14px; height: 14px; margin-left: -7px;
+  background: var(--panel-bg, #161b22);
+  border-right: 1px solid var(--border-color, #30363d);
+  border-bottom: 1px solid var(--border-color, #30363d);
+  transform: rotate(45deg);
+  animation: feedback-tail-in 0.28s ease-out;
+  pointer-events: none;
+}
+@keyframes feedback-tail-in {
+  from { opacity: 0; top: -6px; }
+  to   { opacity: 1; top: -19px; }
+}
+/* The tail only makes sense while the dock floats above the FAB; the
+   ≤560px sheet spans the width and the tail would point at nothing. */
+@media (max-width: 560px) {
+  .feedback-fab[aria-expanded="true"]::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feedback-dock[data-open="true"],
+  .feedback-fab[aria-expanded="true"]::after { animation: none; }
 }
 
 /* Both FABs sit above the dock so they stay visible AND clickable while
@@ -430,6 +468,48 @@ body.panel-open .feedback-fab { opacity: 0; pointer-events: none; }
    textarea sits from its own label. Zeroing it here keeps the rhythm even
    without touching the shared .attach-bar rule other surfaces still rely on. */
 .feedback-dock .attach-bar { margin-top: 0; }
+
+/* ── Visual weight, specific → general (design rounds) ──
+   Three rows of identical weight made the eye land nowhere. The order is
+   also the reading order: the eye lands on the FIRST row (this page — or the
+   active view, which takes its place), the design row stays neutral (the
+   rules above), and the general row is set apart the most while being the
+   quietest: its own recessed band, no divider line, smaller label, a
+   lower-contrast field that only wakes on focus. On a single-screen design
+   the per-page row is hidden, so the design row takes the lead. Keyed on
+   html[data-template="design"]: a document round shows the general row
+   alone, and there it must not look like an afterthought. */
+html[data-template="design"] .feedback-section:has(#screen-textareas) label,
+html[data-template="design"] .feedback-section:has(#view-textareas) label,
+html[data-template="design"] body[data-single-screen="true"] .feedback-section:has(#design-textareas) label {
+  color: var(--text-color); font-size: 0.9rem; font-weight: 600;
+}
+html[data-template="design"] .feedback-section:has(#screen-textareas) textarea,
+html[data-template="design"] .feedback-section:has(#view-textareas) textarea,
+html[data-template="design"] body[data-single-screen="true"] .feedback-section:has(#design-textareas) textarea {
+  min-height: 104px;
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+.feedback-dock .dock-scope { color: var(--text-secondary); font-weight: 400; }
+body[data-single-design="true"] .feedback-dock .dock-scope { display: none; }
+html[data-template="design"] .feedback-dock .feedback-divider:nth-last-child(2) { display: none; }
+html[data-template="design"] .feedback-section:has(#design-general-feedback) {
+  margin-top: 0.5rem; padding: 0.7rem 0.75rem 0.75rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-color) 4%, transparent);
+}
+html[data-template="design"] .feedback-section:has(#design-general-feedback) label {
+  font-size: 0.76rem; font-weight: 500; opacity: 0.8;
+}
+html[data-template="design"] #design-general-feedback {
+  min-height: 60px; font-size: 0.88rem;
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+html[data-template="design"] #design-general-feedback:focus {
+  background: var(--input-bg, #0d1117); border-color: var(--accent-color);
+}
 
 /* Narrow viewports (≤560px): the two fixed widths stop making sense below
    the compact size, so the dock spans the viewport with tight margins.

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.254.0] — 2026-10-08
+
+Concept design pages: the annotation pins, the design switcher and the feedback dock were hard to use. An answer field fit half a sentence, the open switcher cut labels to "B · Zeitstr…", the eye toggle showed a number that read as a view counter, and the dock sat half behind its FAB with three equally loud fields.
+
+### Changed
+- **Annotation pins.** An open bubble widens to `min(360px, 80vw)` and the answer field shows three lines without any interaction. The eye toggle is now a pin-shaped 28px circle with an SVG eye. It swaps to a struck-through eye with a dashed ring while the layer is hidden, and carries an app tooltip. The open-question counter is gone.
+- **Design switcher (top centre).** Expanded on hover or focus, it shows two rows: designs on the first, views on the second. It takes the width free between the screen indicator (now capped at 240px) and the ☰ FAB, so labels are no longer truncated at 1280px and wider. Below about 900px a third row wraps. While open it sits above the frozen bar.
+- **Feedback dock.** It floats 14px above the 💬 FAB, which gets a speech tail and a pressed state while the dock is open. The dock scales in from the FAB centre (off with reduced motion). The rows now say what they are about: "Nur diese Seite: {Seite} in {Design}" and "Das ganze Design, alle Seiten: {Design}". On design rounds the page/view row is emphasized, the design row stays neutral and the general row is a quiet recessed band.
+
+### Tests
+- `design-chrome-overlap.test.js` follows the new dock offset. `final-report-closeout.test.js` exempts pseudo-element rules from the "one shape rule for both FABs" check. auto-concept suites: 686 passed. eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.253.0] — 2026-10-08
 
 The post-ship auto-clean never ran in a real repo. Its 30-day age gate never opened, because the last 100 sessions spread over 10 days across 9 repos and nothing removable got that old. By then the busiest consumer repo held 124 local branches and 46 worktrees, 37 of them with `node_modules` (~580 MB each, ~20 GB), and the next one 79 branches and 32 worktrees.

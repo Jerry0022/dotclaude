@@ -174,11 +174,12 @@ must see their own language. The locale hint is authoritative.
 | `proto.feedback_toggle`        | Open feedback                  | Feedback öffnen |
 | `proto.feedback_general`       | General notes on this concept  | Allgemeine Anmerkungen zum Konzept |
 | `proto.feedback_general_hint`  | Persists across all screens    | Screen-übergreifend persistent |
-| `proto.feedback_current`       | Current screen                 | Aktueller Screen |
-| `proto.feedback_placeholder`   | Write a note on this screen…   | Notiz zu diesem Screen… |
+| `proto.feedback_current`       | This page only                 | Nur diese Seite |
+| `proto.feedback_placeholder`   | A note on just this page…      | Notiz nur zu dieser Seite… |
+| `design.feedback_in`           | in                             | in |
 | `proto.screen_counter`         | Screen {n} / {total}           | Screen {n} / {total} |
-| `design.feedback_design`       | Notes on this design           | Anmerkungen zu diesem Design |
-| `design.feedback_design_placeholder` | Write a note on this design… | Notiz zu diesem Design… |
+| `design.feedback_design`       | The whole design, all pages    | Das ganze Design, alle Seiten |
+| `design.feedback_design_placeholder` | A note on the design as a whole… | Notiz zum Design als Ganzes… |
 | `design.switch_label`          | Switch design                  | Design wechseln |
 | `design.position_iteration`    | Iteration                      | Iteration |
 | `design.position_page`         | Page                           | Seite |

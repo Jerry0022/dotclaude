@@ -239,9 +239,11 @@ exception.
   time from the element's position in the mock; there is no runtime
   collision math.
 - **The eye pill (`#anno-toggle`) toggles the whole layer**, globally, for
-  every screen — not per screen. It shows a live count of annotations on
-  the *current* screen and is the only thing that stays visible once the
-  layer is hidden, so the user can always bring it back. It only renders
+  every screen — not per screen. It is shaped like a pin (same ring and
+  accent) with an eye glyph instead of a number — no count — and swaps to a
+  struck-through eye while the layer is hidden. It is the only thing that
+  stays visible once the layer is hidden, so the user can always bring it
+  back. It only renders
   when the active screen has ≥1 annotation (`updateAnnoUI()`, § Layout JS).
   Hiding the layer (`body.anno-hidden`) removes pins, leaders and bubbles
   completely — the design underneath must be pixel-clean, not just dimmed.
@@ -799,10 +801,11 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
     <button id="anno-toggle" class="anno-toggle-fab" type="button" hidden
             aria-pressed="true"
             aria-label="{{anno.toggle_hide}}"
+            data-tip="{{anno.toggle_hide}}"
             data-label-show="{{anno.toggle_show}}"
             data-label-hide="{{anno.toggle_hide}}">
-      <span class="anno-eye" aria-hidden="true">👁</span>
-      <span id="anno-count" class="anno-count">0</span>
+      <svg class="anno-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      <svg class="anno-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>
     </button>
 
     <!-- Design switcher (ghost bar, top centre) — one segment per
@@ -1081,7 +1084,11 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
         <button id="feedback-close" class="feedback-close-btn" aria-label="{{panel.minimize}}" data-tip="{{panel.minimize}}">−</button>
       </div>
       <div class="feedback-section">
-        <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong></label>
+        <!-- The scope suffix names the design this page belongs to, so the
+             row says "this page of A · Briefing" — not just a page name that
+             could belong to any design. Hidden on single-design rounds. -->
+        <label>{{proto.feedback_current}}: <strong id="dock-screen-label">Welcome</strong>
+          <span class="dock-scope">{{design.feedback_in}} <span id="dock-screen-design">Dispatch</span></span></label>
         <!-- One hidden textarea per screen. Only the active one is shown.
              Each carries data-comment="{screen-id}" AND
              data-screen-comment="{screen-id}" — so saveState/restoreState

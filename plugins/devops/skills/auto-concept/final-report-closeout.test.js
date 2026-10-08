@@ -379,7 +379,10 @@ describe("design-template chrome — FABs and feedback dock", () => {
     expect(cssSource).toMatch(sharedRe);
     // Everything the two FABs declare separately, i.e. every chance to drift.
     const rest = cssSource.replace(sharedRe, "");
-    const solo = rest.match(/^\.(?:panel|feedback)-fab[^,{]*\{[^}]*\}/gm) || [];
+    // Pseudo-elements (the 💬 FAB's speech tail) are separate boxes, not the
+    // FAB's own shape, so they may size themselves.
+    const solo = (rest.match(/^\.(?:panel|feedback)-fab[^,{]*\{[^}]*\}/gm) || [])
+      .filter((rule) => !/^[^{]*::/.test(rule));
     for (const rule of solo) {
       for (const prop of ["width", "height", "border-radius", "font-size"]) {
         expect(rule, `per-FAB rule must not redeclare ${prop}`).not.toMatch(

@@ -77,9 +77,9 @@ nothing is missing — but that is the exception, not the default.
   picker, same as every other feedback field (`deep-knowledge/templates-attachments.md`
   § Attachments).
 - The **eye pill** (top-left, directly below the screen-position indicator)
-  toggles the whole layer for the whole page. It shows how many questions
-  are open on the *current* screen and is the only thing left visible once
-  the layer is hidden, so the user can always bring it back.
+  toggles the whole layer for the whole page. It looks like a pin with an
+  eye inside (struck through while hidden) and is the only thing left
+  visible once the layer is hidden, so the user can always bring it back.
 - **The ☰ and 💬 FABs are completely unaffected** — they keep working
   exactly as before, independently of whether the annotation layer is shown
   or hidden. The feedback dock stays the normal, always-available way to
