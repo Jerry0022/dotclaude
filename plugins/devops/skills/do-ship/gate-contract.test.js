@@ -92,7 +92,7 @@ describe("do-ship gate contract — cwd on every ship call", () => {
     expect(head).toMatch(/Every `ship_\*` tool call MUST include `cwd`/);
   });
 
-  test("every ship_*/render call example in the skill passes cwd", () => {
+  test("every ship_* call example in the skill passes cwd", () => {
     const calls = flat(SKILL).match(/\b(ship_[a-z_]+)\(\{[^}]*\}\)/g) || [];
     expect(calls.length).toBeGreaterThanOrEqual(8);
     for (const c of calls) {
@@ -131,6 +131,39 @@ describe("do-ship gate contract — schemas, tools absent, no improvised ship", 
     expect(s).toContain("deep-knowledge/manual-ship.md");
   });
 
+  // Redteam #653 R1–R5: gates a trim reworded that were not pinned yet.
+  test("the Codex gate is mandatory when codex-plugin-cc is installed", () => {
+    expect(section("### Codex Review Gate", "## Step 2.5")).toMatch(/\*\*MUST run\*\* whenever codex-plugin-cc is installed/);
+  });
+
+  test("Pre-Step B offers the three choices and does not ship while activity is pending", () => {
+    const b = section("## Pre-Step B", "## Pre-Step C");
+    for (const opt of ["Warten", "Trotzdem", "Abbrechen"]) expect(b, opt).toContain(opt);
+    expect(b).toMatch(/do not ship/i);
+  });
+
+  test("Step 4 keeps the other release return shapes apart from a merge", () => {
+    const s = section("## Step 4 —", "## Step 5");
+    expect(s).toMatch(/never mistake them for the shape above/);
+    expect(s).toContain('reason: "no-remote"');
+    expect(s).toMatch(/Never read `success: true` alone as a merge/);
+  });
+
+  test("Step 1e: composed ships pass --cwd to both passes; strict applies nothing", () => {
+    const e = section("### 1e.", "## Step 2 —");
+    expect(e).toMatch(/pass the SAME `--cwd=<path>` to both/);
+    expect(e).toMatch(/nothing is applied/);
+  });
+
+  test("Step 4b skips the watcher for intermediate, unpushed, CI-less and --no-watch ships", () => {
+    const s = section("## Step 4b", "## Step 4c");
+    expect(s).toMatch(/\*\*Skip the watcher entirely\*\* when:/);
+    expect(s).toContain("`intermediate: true`");
+    expect(s).toMatch(/`merged` is absent or null, or `pushed` is false/);
+    expect(s).toContain("`.github/workflows/`");
+    expect(s).toContain("`--no-watch`");
+  });
+
   test("a large-context ship runs no ship_* call and no push in the parent", () => {
     expect(section("## Pre-Step 0", "## Pre-Step R")).toMatch(/Run no `ship_\*` call and no git push or merge/);
   });
@@ -160,7 +193,14 @@ describe("do-ship gate contract — lockout", () => {
       "Step 2 — Codex": /design\/logic\/security → \*\*BLOCK\*\*/,
       "Step 3 — major": /\*\*BLOCK\*\* \("needs major-version decision/,
     };
-    for (const [gate, re] of Object.entries(rows)) expect(lockout, gate).toMatch(re);
+    // Each rule must sit in its own gate's table row, not anywhere in the section.
+    const raw = SKILL.slice(SKILL.indexOf("## Pre-Step A"), SKILL.indexOf("## Pre-Step B"));
+    const tableRows = raw.split("\n").filter((l) => l.startsWith("| "));
+    for (const [gate, re] of Object.entries(rows)) {
+      const row = tableRows.find((l) => l.startsWith(`| ${gate}`));
+      expect(row, `no lockout row for ${gate}`).toBeDefined();
+      expect(row, gate).toMatch(re);
+    }
   });
 
   test("each interactive gate repeats its lockout branch in place", () => {

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // never one of these.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (...p) => fs.readFileSync(path.join(__dirname, ...p), "utf8");
-const flat = (s) => s.replace(/\s+/g, " ");
+const flat = (s) => s.replace(/\n>[ \t]?/g, "\n").replace(/\s+/g, " ");
 const SKILL = read("SKILL.md");
 const EXEC = read("deep-knowledge", "execution.md");
 

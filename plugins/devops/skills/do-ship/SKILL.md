@@ -499,7 +499,7 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
 
 ### Codex Review Gate (after build passes)
 
-Runs whenever codex-plugin-cc is installed.
+**MUST run** whenever codex-plugin-cc is installed — mandatory, never skipped for time or context.
 
 1. Invoke Codex via Bash with hard timeout: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
 2. Evaluate by exit code (see `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
@@ -604,7 +604,7 @@ Read the fields in this order:
   read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Merge and tag fields and follow
   it — these are card warnings or ring gaps on a landed merge, never a retry.
 
-**Two other return shapes** —
+**Two other return shapes** — never mistake them for the shape above:
 `reason: "file-only-mode"` (not a git repo) and `reason: "no-remote"` (local repo
 without an origin): when either appears, read
 `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Other return shapes and follow it.
