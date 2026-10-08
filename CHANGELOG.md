@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.253.0] — 2026-10-08
+
+The post-ship auto-clean never ran in a real repo. Its 30-day age gate never opened, because the last 100 sessions spread over 10 days across 9 repos and nothing removable got that old. By then the busiest consumer repo held 124 local branches and 46 worktrees, 37 of them with `node_modules` (~580 MB each, ~20 GB), and the next one 79 branches and 32 worktrees.
+
+### Added
+- **Count trigger `cleanup.autoCleanKeepNewest` (default 20).** When there are more removable leftovers than this, all but the newest 20 go, whatever their age. Removable still means the content provably landed. Unlanded work never counts and is never removed. A dry run on the live repos would remove 87 leftovers in the busiest consumer repo, 36 in the next one, 12 in this repo and 0 in a small one (10 of 20).
+- **Disk trigger `cleanup.autoCleanMaxGB` (default 10).** The kept removable session worktrees are summed newest first. The worktree that crosses the limit and every older one lose their checkout, but their branch stays. Sizes are measured for at most 30 s per ship and cached in `~/.claude/devops-hygiene.json`, so a large repo completes its measurement over a few ships. A cut-off measurement decides nothing.
+- The cleanup line on the ship card names the freed space ("2 Worktrees entfernt · 1.2 GB frei").
+
+### Changed
+- The age gate (30/30 days) stays as a third trigger, so small repos with fewer than 20 leftovers still get their old leftovers cleaned.
+
+### Tests
+- 7 new tests: count trigger (limit, unlanded work not counted, off at 0), disk trigger (oldest checkouts go, branches stay, cache pruned), `dirBytes` deadline, stale cache and spent budget. Ship, config and auto-cleanup suites: 497 passed. eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.252.1] — 2026-10-08
 
 ### Fixed
