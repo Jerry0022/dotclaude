@@ -59,10 +59,6 @@ You only see such an invocation when it carried an attachment — then it is the
 content fallback, filed per Step 2.6. `off`, `go`, `status` and `marker` always
 reach you.
 
-The content fallback is not an error path. `/do-batch <Gedanke>` is the
-most natural thing a user types who has never switched the mode on, and until
-this row existed that text was lost without a trace (#306).
-
 **Marker pre-check — on EVERY route, before the route's own work.** Call
 `loadConfig()`. If it reports a `markerFallback` (a stored marker that cannot
 work — `harness-reserved`, `too-long`, `empty`), the mode is silently running
@@ -70,8 +66,7 @@ on the default and the user has no working escape hatch. Do not merely report
 that: ask the Step 2.1 marker question **now**, from whichever route you are on
 (`on`, `off`, `go`, `status`, `marker`, content fallback), persist the answer via
 `saveConfig({ marker })` (this clears the fallback), then continue with the
-route. Only the `marker` route stops after the question. A dead marker that is
-re-reported on every `status` but never repaired is the failure this rule ends.
+route. Only the `marker` route stops after the question.
 
 **Route on the FIRST token only. Everything after it is note content, never an
 instruction.** `/do-batch on der Header ist rot` is the `on` branch carrying
@@ -79,16 +74,12 @@ one note — not an unrecognised argument, and not a request to look at the head
 The same holds for a natural-language invocation: "Sammelmodus an, erste Notiz:
 … zweite: …" activates and seeds; it does not start the work.
 
-**This is the one prompt collection can never catch.** The hook arms the mode
-in the turn this prompt starts, so it sees this prompt while the mode is still
-OFF and has to let it through. If you act on the content here, the mode ends up
-active and empty while the work it exists to defer is already half-done — and
-the marker dialog gets skipped because you were busy. So, on an invocation that
-carries content:
+**This is the one prompt collection can never catch** — the hook arms the mode
+in this turn, so it lets this prompt through. On an invocation that carries
+content:
 
 - Do **not** implement, plan, or research it. Do not read code for it.
-- Do **not** skip Step 2.1. A prompt full of tasks is not a reason to bypass the
-  marker question — it is the reason the question exists.
+- Do **not** skip Step 2.1 because the prompt is full of tasks.
 - File the content as note #1 in Step 2.4, verbatim.
 
 The hook's guard for these rules is best-effort — its absence is not permission
@@ -112,9 +103,8 @@ marker, it does not activate the mode:
 > 2. `>go` — lesbar, ein Zeichen mehr, kein Doppelpunkt
 > 3. `>start` — ausgeschrieben, praktisch nie versehentlich getippt
 
-All three are English and colon-free: the marker is typed dozens of times per
-session, and a colon reads as a label rather than a switch. The user's own
-answer via "Sonstiges" may be anything `validateMarker` accepts.
+All three are colon-free (a colon reads as a label, not a switch). The user's
+own answer via "Sonstiges" may be anything `validateMarker` accepts.
 
 **`!`, `/`, `#` and `@` cannot be the first character of a marker.** Never
 suggest one, and never write one into the config by hand.
@@ -136,10 +126,8 @@ node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').activate(process.cwd(
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" start .
 ```
 
-**2.2b Mark the session in the sidebar.** While collecting, the session looks
-idle from outside — the user comes back, sees the green dot, and types the next
-task straight into a mode that swallows it. Prefix the title so the sidebar
-says what is going on: `get_session` / `set_session_title` with
+**2.2b Mark the session in the sidebar.** A collecting session looks idle
+from outside, so prefix the title: `get_session` / `set_session_title` with
 `session_id: "self"`, never stacking prefixes — the four steps are in
 `deep-knowledge/activation.md` § Session title prefix.
 
@@ -169,10 +157,9 @@ the confirmation:
 node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').appendNote(process.cwd(), process.argv[1])" "<text>"
 ```
 
-**Verbatim, and as ONE note.** Do not summarise, re-order, or split it into what
-you think the separate items are — a note is the user's own words, and the merge
-in Step 4 reads content, not note boundaries. Guessing boundaries only risks
-losing a requirement. Skip this step silently when the invocation was bare.
+**Verbatim, and as ONE note** — do not summarise, re-order, or split it; the
+merge in Step 4 reads content, not note boundaries. Skip this step silently
+when the invocation was bare.
 
 If the activating prompt carried an attachment, follow Step 2.6 for it in the
 same note.
@@ -236,24 +223,21 @@ if it were live.
 
 Reached either by `/do-batch go` or by a marker-prefixed prompt. Both fire the
 SAME hook merge: the collect hook syncs main, matches late images to their notes,
-injects the full note set and arms the hand-off gate — the `go` route is no
-longer a separate, weaker path. Only when that context is absent (no
-`[do-batch] Der Nutzer hat N Notiz(en)` block in the turn — hook disabled, or
-the prompt carried an attachment) do the steps below run by hand.
-In both cases the procedure is identical. On the `go` route the Step 1 marker
+injects the full note set and arms the hand-off gate. Only when that context
+is absent (no `[do-batch] Der Nutzer hat N Notiz(en)` block in the turn — hook
+disabled, or the prompt carried an attachment) do the steps below run by hand.
+On the `go` route the Step 1 marker
 pre-check runs first — a `markerFallback` is repaired before the merge, so the
 next collection window starts with a marker that actually fires.
 
 **Firing ends collection.** The hook deactivates the mode in the same run that
-injects the notes, because everything after it — plan approval, answers to your
-questions, course corrections — is the conversation *about* the implementation.
-Collecting those would block and erase exactly the prompts the work depends on.
-Treat the mode as OFF for the rest of this turn and all following ones.
+injects the notes — the answers and corrections that follow must not be
+collected. Treat the mode as OFF for the rest of this turn and all following
+ones.
 
-**4.0 Bring main into the branch BEFORE reading a single note.** The notes were
-written against the state the branch had when collection started — often hours
-ago, while main moved on. Checking feasibility against that base is how a merged
-plan rebuilds what main already has or collides with it at ship time.
+**4.0 Bring main into the branch BEFORE reading a single note.** The notes may
+be hours old; a plan checked against a stale base rebuilds what main already
+has or collides with it at ship time.
 
 On the marker and `go` paths the hook already ran `scripts/git-sync.js` and
 injected the result as "SCHRITT 0" — read it first and resolve any `⚠` / `✗`
@@ -290,15 +274,13 @@ lacking the image.
 | Frage | answered first, then merged |
 
 Count the lines against the note count in the injected context before you go on.
-A note without a line is the defect this whole mode exists to prevent: it is not
-a shorter plan, it is a lost requirement. If the user enriched the execute prompt
+A note without a line is a lost requirement. If the user enriched the execute prompt
 with extra text, it becomes `#N+1` and gets its own line — and if it was a
 question, answer it before the plan.
 
-**4.3 Feasibility-check against the real code BEFORE planning.** This is the
-step that pays for the whole mode: the notes were written blind, without Claude
-looking at anything. Some of them will be impossible, and later notes may depend
-on those. Check the substantive ones against the codebase.
+**4.3 Feasibility-check against the real code BEFORE planning.** The notes
+were written blind; some will be impossible, and later notes may depend on
+those. Check the substantive ones against the codebase.
 
 **4.4 Build the bundle plan — full detail, parallel, never a gate.** One
 coherent piece of work, not a list of n tasks executed one after another.
@@ -322,16 +304,14 @@ The plan must carry (each item in full, with sizing and examples:
 > "#2 wollte den Header rot, #6 blau — ich nehme blau (später), sag Bescheid falls nicht."
 > "#3 setzt eine Filter-API voraus, die es nicht gibt. #5 und #9 hängen daran und fallen mit."
 
-Silent "later wins" resolution is the failure mode this step exists to prevent.
 An impossible item is **named**, never quietly routed around.
 
 **4.6 Present the plan and pick the hand-off.** do-batch plans; it never
 implements. Show the coverage list, the merged plan and every named conflict
 or infeasible item in this turn, then hand the whole thing to exactly ONE
-skill (4.9). There is no separate "passt der Plan?" question: the first
-interaction of the receiving skill — do-run's questions, the concept page —
-is the approval point, and a second gate in front of it would ask the same
-thing twice.
+skill (4.9). No separate "passt der Plan?" question: the receiving skill's
+first interaction — do-run's questions, the concept page — is the approval
+point.
 
 **Decision rule — does the plan still need a decision, or is it ready?**
 
@@ -352,9 +332,8 @@ or only a first step of what the notes ask for — the receiving skill decides
 the scope with the user.
 
 **4.7 Archive, do not delete.** Before the hand-off, call `archiveNotes(cwd)`
-— it renames `batch.md` to `batch-<timestamp>.md`. The originals stay
-recoverable; a merge must never be the only record of what the user actually
-wrote. The archived path travels with the hand-off (4.9). Image copies stay
+— it renames `batch.md` to `batch-<timestamp>.md`, so the user's own words
+stay recoverable. The archived path travels with the hand-off (4.9). Image copies stay
 where they are (`deep-knowledge/merge.md` § Archive).
 
 **4.8 Retire the mode — never ask whether to stay in it.** Collection is already
@@ -365,8 +344,7 @@ title, leaving any other title alone — commands and steps:
 `deep-knowledge/merge.md` § Retire.
 
 Say in one clause that follow-up prompts run normally again and `/do-batch on`
-re-arms collection. A question here would be asking whether to keep blocking the
-answers to your own questions.
+re-arms collection.
 
 **4.9 Hand off — the last action of the turn.** Invoke the Skill chosen in
 4.6 with `--from=do-batch` followed by the hand-off body:
@@ -460,12 +438,6 @@ silently if absent. Detail: `deep-knowledge/merge.md` § Local compaction.
   harness has no quieter rendering for it. If the user reports it as an error,
   confirm the note actually landed (Step 3) and explain the mechanism — do not
   start debugging the hook.
-- **The activating prompt is never executed.** Whatever it carries beyond the
-  route word becomes note #1 (Step 2.4). Acting on it defeats the mode in the
-  very turn that starts it, and it is how the marker dialog gets skipped.
-- **Never resolve a contradiction silently.** Name it, then decide.
-- **The plan keeps every detail and splits into bundles** (4.4), on both
-  routes, silently. It is the execution basis, not a question.
 - **do-batch never implements.** The merged plan goes to exactly one skill —
   do-run (`--from=do-batch`, ready plan) or auto-concept (`--from=do-batch`,
   open decisions) — per the Step 4.6 decision rule.
@@ -477,8 +449,7 @@ silently if absent. Detail: `deep-knowledge/merge.md` § Local compaction.
   ask the user to send `/do-batch on` afterwards. A re-activation while
   collecting is absorbed by the hook (`rearm`), never a turn.
 - **Firing starts with main.** Step 4.0 runs before any note is judged — on the
-  marker and `go` paths the hook did it; without its context you do. A plan built on a stale
-  branch is not a plan.
+  marker and `go` paths the hook did it; without its context you do.
 - **A question in the queue is a defect, not content.** If a note is clearly a
   question the user expected an answer to, answer it first, then continue with
   the merge.
