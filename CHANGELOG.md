@@ -3,6 +3,14 @@
 ## [0.249.5] — 2026-10-08
 
 ### Fixed
+- **A `ship-blocked` /do-ship no longer leaves the `.claude/.ship-lockout` marker behind.** The marker that persists `$SHIP_LOCKOUT` was written and deleted only by skill prose and deleted only in Step 5 cleanup, with no expiry. Every `ship-blocked` exit skips Step 5, so the next interactive /do-ship found the marker at its gates and took the non-interactive BLOCK branches as if no one were there to answer. Code now owns the marker (`hooks/lib/ship-lockout-marker.js`, repo-root anchored, 6 h expiry). Pre-Step A runs `autonomous-lockout.js check --ship`, which writes the marker under an active lockout and deletes any leftover otherwise. `ship_cleanup` clears it next to the ship-in-progress sentinel on every return path except the timed-out git probe. `autonomous-lockout.js ship-marker` re-derives the lockout at a gate.
+
+### Tests
+- New: `ship-lockout-marker.test.js` (6), lockout CLI `--ship` / `ship-marker` (5), `ship_cleanup` marker paths (7); `gate-contract.test.js` pins `check --ship` and the clear-on-every-exit rule. Full suite 8614 passed / 3 skipped before the ship; eslint and `check-claude-artifacts` clean. Codex review skipped (limit until 2026-10-11).
+
+## [0.249.5] — 2026-10-08
+
+### Fixed
 - **`ss.plugin.update`: a stale `index.lock` no longer makes the channel pin fail silently.** Observed 2026-10-08: a 0-byte `.git/index.lock`, left 2 h earlier by a killed git in the marketplace clone, failed every `--force` run's checkout. The right tag (alpha/v0.249.4) was resolved, HEAD stayed on alpha/v0.248.8, and the hook printed nothing. The pin now lives in `hooks/lib/channel-pin.js`:
   - It first removes a lock that is provably stale (`hooks/lib/stale-index-lock.js`): 0 bytes, at least 10 min old, no running git process started before the lock was written, and unchanged at unlink time. Long-running read-only git processes (fsmonitor, `cat-file --batch`, credential helpers) are ignored. If the process list cannot be read, the lock stays. A removal is reported on stderr.
   - If HEAD is still off the target afterwards, one stderr line names the tag, where HEAD stayed, git's own error, and why any lock was kept.
