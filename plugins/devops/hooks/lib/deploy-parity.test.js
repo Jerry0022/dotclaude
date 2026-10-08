@@ -38,6 +38,35 @@ describe("detectBuildPlan — deploy hosts first", () => {
     expect(p).toMatchObject({ build: "npm run build", lifecycle: ["prebuild", "postbuild"] });
   });
 
+  test("vercel.json buildCommand without installCommand gets the lockfile install the host runs (#685)", () => {
+    write("vercel.json", { buildCommand: "bash scripts/vercel-build.sh" });
+    write("package.json", { scripts: { build: "vite build" } });
+    write("package-lock.json", "{}");
+    expect(P.detectBuildPlan(dir)).toMatchObject({ host: "vercel", build: "bash scripts/vercel-build.sh", install: "npm ci" });
+    rmSync(join(dir, "package-lock.json"));
+    write("pnpm-lock.yaml", "");
+    expect(P.detectBuildPlan(dir)).toMatchObject({ build: "bash scripts/vercel-build.sh", install: "pnpm install --frozen-lockfile" });
+  });
+
+  test("a build command without package.json keeps install null", () => {
+    write("vercel.json", { buildCommand: "make site" });
+    expect(P.detectBuildPlan(dir)).toMatchObject({ host: "vercel", build: "make site", install: null });
+  });
+
+  test("netlify.toml command gets the lockfile install inside [build] base", () => {
+    write("netlify.toml", "[build]\n  base = \"site\"\n  command = \"npm run build:site\"\n");
+    write("site/package.json", { scripts: { "build:site": "vite build" } });
+    write("site/yarn.lock", "");
+    expect(P.detectBuildPlan(dir)).toMatchObject({ host: "netlify", build: "npm run build:site", install: "yarn install --frozen-lockfile", dir: "site" });
+  });
+
+  test("hosts that run only the configured build keep install null", () => {
+    write("render.yaml", "services:\n  - type: web\n    buildCommand: npm run build\n");
+    write("package.json", { scripts: { build: "vite build" } });
+    write("package-lock.json", "{}");
+    expect(P.detectBuildPlan(dir)).toMatchObject({ host: "render", build: "npm run build", install: null });
+  });
+
   test("netlify.toml [build] command and base", () => {
     write("netlify.toml", "[build]\n  base = \"site\"\n  command = \"npm run build:site\"\n  publish = \"dist\"\n\n[dev]\n  command = \"nope\"\n");
     expect(P.detectBuildPlan(dir)).toMatchObject({ host: "netlify", build: "npm run build:site", dir: "site" });

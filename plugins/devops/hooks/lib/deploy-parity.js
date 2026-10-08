@@ -163,8 +163,17 @@ function nodePlan(dir, scripts = ['build']) {
 // back to the ecosystem build the host would run by default.
 // ---------------------------------------------------------------------------
 
-function withNodeFallback(dir, base, scripts) {
-  if (base.build) return base;
+// `autoInstall` marks a host that installs the dependencies itself before the
+// configured build (Vercel, Netlify, Cloudflare Pages): a config that names a
+// build command but no install still gets the lockfile install there (#685).
+// Hosts that run exactly what is configured (render, firebase, fly) keep
+// `install: null`, so a default install never masks a real host failure.
+function withNodeFallback(dir, base, scripts, { autoInstall = false } = {}) {
+  if (base.build) {
+    if (!autoInstall || base.install) return base;
+    const node = nodePlan(path.join(dir, base.dir || ''), scripts);
+    return node ? { ...base, install: node.install, packageManager: node.packageManager } : base;
+  }
   const node = nodePlan(path.join(dir, base.dir || ''), scripts);
   if (node && node.build) {
     return {
@@ -193,7 +202,7 @@ const DETECTORS = [
         note: cfg.framework ? `framework: ${cfg.framework}` : undefined,
       };
       // Vercel prefers a `vercel-build` script over `build`.
-      return withNodeFallback(dir, plan, ['vercel-build', 'build']);
+      return withNodeFallback(dir, plan, ['vercel-build', 'build'], { autoInstall: true });
     },
   },
   {
@@ -210,7 +219,7 @@ const DETECTORS = [
         dir: base || undefined,
         env: { NETLIFY: 'true' },
       };
-      return withNodeFallback(dir, plan);
+      return withNodeFallback(dir, plan, undefined, { autoInstall: true });
     },
   },
   {
@@ -232,7 +241,7 @@ const DETECTORS = [
         }
       }
       if (!source) return null;
-      return withNodeFallback(dir, { host: 'cloudflare', source, install: null, build, env: { CF_PAGES: '1' } });
+      return withNodeFallback(dir, { host: 'cloudflare', source, install: null, build, env: { CF_PAGES: '1' } }, undefined, { autoInstall: true });
     },
   },
   {

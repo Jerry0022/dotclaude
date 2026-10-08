@@ -55,7 +55,10 @@ process tree is killed.
 | make · cargo · go · python | `Makefile` `build:` · `Cargo.toml` · `go.mod` · `pyproject.toml` `[build-system]` | `make build` · `cargo build --release [--locked]` · `go build ./...` · `python -m build` | `go mod download` for go |
 
 A host config without a build command falls back to the ecosystem build the
-host runs by default. Nothing recognisable → **skipped** with a note, never
+host runs by default. Vercel, Netlify and Cloudflare install the dependencies
+themselves, so a configured build command without an install command still
+gets the lockfile install there; `install: null` means the host really skips
+the install. Nothing recognisable → **skipped** with a note, never
 failed. A new stack is one more entry in `DETECTORS`.
 
 ## Environment — no secrets
