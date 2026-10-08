@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.257.3] — 2026-10-09
+
+The completion card read a test result like "8680/8683 (3 skipped)" as "✗ 3 Tests rot" and added a "Nicht erreicht: 3 Tests rot" line, although the gap was only the skipped tests.
+
+### Fixed
+- **Completion card test parser** (`mcp-server/index.js` `passRatio`): skipped tests named in an "N/M" result ("(K skipped)", "K skipped", "K übersprungen") are subtracted from the failure count. When N+K equals M the result renders "✓ N Tests grün"; skips that explain only part of the gap leave the rest red.
+
+### Tests
+- Regression test in `index.card.test.js` (both suffix forms + a partial-skip case); file 136/136 green, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.257.2] — 2026-10-09
 
 A command the user had to run themselves (Defender exclusions, admin rights) was posted only as a code block before the completion-card widget, and the user never saw it in the Desktop app.
