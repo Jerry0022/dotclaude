@@ -9,6 +9,7 @@ import {
   claimSyncSlot,
   classify,
   renderContext,
+  resultBranch,
   takeResult,
   startBackgroundSync,
 } from "./git-sync-bg.js";
@@ -34,6 +35,14 @@ describe("keyFor — worktree-scoped, not session-scoped", () => {
 
   test("case-insensitive — Windows hands the same path in both casings", () => {
     expect(keyFor("C:/Repo/WT")).toBe(keyFor("c:/repo/wt"));
+  });
+
+  test("a trailing separator does not change the key", () => {
+    expect(keyFor("C:/repo/wt/")).toBe(keyFor("C:/repo/wt"));
+  });
+
+  test.runIf(process.platform === "win32")("separators do not change the key (payload vs process cwd)", () => {
+    expect(keyFor("C:\\repo\\wt")).toBe(keyFor("C:/repo/wt"));
   });
 
   test("throttle and result files are distinct for the same worktree", () => {
@@ -91,6 +100,21 @@ describe("claimSyncSlot — one sync per worktree per window", () => {
   test("peek reports a closed window as closed", () => {
     claimSyncSlot("C:/repo", { tmpdir });
     expect(claimSyncSlot("C:/repo", { tmpdir, peek: true })).toBe(false);
+  });
+});
+
+describe("resultBranch — which branch a result is about", () => {
+  test.each([
+    ["✓", "[git-sync] ✓ origin/main → claude/x-1: 2 commit(s)"],
+    ["⚠", "[git-sync] ⚠ origin/main → claude/x-1: 1 file(s) with ambiguous conflicts"],
+    ["✗", "[git-sync] ✗ origin/main → claude/x-1: merge refused"],
+  ])("reads the target of a %s line", (_k, text) => {
+    expect(resultBranch({ text })).toBe("claude/x-1");
+  });
+
+  test("null when the text names no branch", () => {
+    expect(resultBranch({ text: "[git-sync] ✗ fetch failed" })).toBeNull();
+    expect(resultBranch(null)).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 /**
  * @module git-sync-bg
- * @version 0.1.0
+ * @version 0.2.0
  * @description Fire-and-forget background git sync — shared by ss.git.sync
  *   (SessionStart) and stop.git.sync (Stop), consumed by prompt.git.sync
  *   (UserPromptSubmit).
@@ -35,9 +35,15 @@ const THROTTLE_MS = 30 * 60 * 1000;
 
 const PREFIX = 'dotclaude-devops-git-sync';
 
-/** Stable short key for a worktree path (case-insensitive — Windows). */
+/**
+ * Stable short key for a worktree path (case-insensitive — Windows).
+ * Normalized first: the hook payload, process.cwd() and a hand-typed path
+ * spell the same worktree with different separators or a trailing slash, and
+ * a key mismatch means a result is written under one name and read under another.
+ */
 function keyFor(cwd) {
-  return crypto.createHash('sha1').update(String(cwd).toLowerCase()).digest('hex').slice(0, 12);
+  const norm = path.resolve(String(cwd)).toLowerCase();
+  return crypto.createHash('sha1').update(norm).digest('hex').slice(0, 12);
 }
 
 function throttleFile(cwd, tmpdir = os.tmpdir()) {
@@ -136,6 +142,18 @@ function renderContext(result) {
 }
 
 /**
+ * The branch a result is about — the target of its first "<source> → <branch>:"
+ * line — or null when the text names none.
+ *
+ * @param {{text: string}|null} result
+ * @returns {string|null}
+ */
+function resultBranch(result) {
+  const m = result && typeof result.text === 'string' && result.text.match(/[✓⚠✗] \S+ → (\S+?):/);
+  return m ? m[1] : null;
+}
+
+/**
  * Read and consume the pending result for this worktree.
  * Returns null when there is nothing pending.
  *
@@ -196,6 +214,7 @@ module.exports = {
   claimSyncSlot,
   classify,
   renderContext,
+  resultBranch,
   takeResult,
   startBackgroundSync: spawnSync_,
 };
