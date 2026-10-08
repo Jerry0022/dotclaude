@@ -61,13 +61,13 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
 
   const st = {
     pid: process.pid, throttles: {}, tracked: {}, prio: {}, budget: {}, last: {}, kinds: {}, notified: {},
-    prevSample: null, lib: { roots: [], dirs: [], exes: [] }, libAt: 0, startedAt: now(), summaryAt: now(),
-    pressure: { priority: [], over: [] }, priorityBy: null, sys: {}, liveSessions: 0,
+    prevSample: null, procsAt: 0, lib: { roots: [], dirs: [], exes: [] }, libAt: 0, startedAt: now(), summaryAt: now(),
+    pressure: { priority: [], over: [] }, priorityBy: null, sys: {}, liveSessions: 0, culprit: {}, hogAt: {},
   };
 
   const save = () => S.writeState(p, {
     pid: st.pid, version, heartbeat: now(), helperPid: adapter.selfPids[1] || null, logFile: logger.name || null,
-    throttles: Object.values(st.throttles), pressure: st.pressure, priorityBy: st.priorityBy, sys: st.sys, kinds: st.kinds,
+    throttles: Object.values(st.throttles), pressure: st.pressure, priorityBy: st.priorityBy, culprit: st.culprit, sys: st.sys, kinds: st.kinds,
     budget: { over: st.budget.over },
     jobs: Object.values(st.tracked).map((j) => ({ id: j.id, name: j.name, kind: j.kind, heavy: j.heavy })),
   });
@@ -85,8 +85,11 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     } catch (e) { ev('release-failed', { key: t.key, reason, error: e.message }, 'error'); return false; }
   };
 
-  // Orphan reversal: adopt every recorded throttle, then release it; failures stay recorded.
+  // Housekeeping (stale tmp/foreground/session/queue files), then orphan reversal: adopt every
+  // recorded throttle, then release it; failures stay recorded.
   const init = async (prevState) => {
+    const swept = S.sweep(p, now(), { queueExpiryMs: loadCfg().queueExpiryMs });
+    if (swept.total) ev('sweep', swept);
     st.kinds = (prevState && prevState.kinds) || {};
     for (const t of (prevState && prevState.throttles) || []) st.throttles[t.jobId] = t;
     save();
@@ -105,7 +108,10 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     if (t - st.libAt > 30 * 60000) { st.lib = libs.discover(); st.libAt = t; }
 
     const busy = Object.keys(st.tracked).length > 0 || st.pressure.priority.length || st.pressure.over.length;
-    const raw = await adapter.sample({ gpu: Boolean(busy) });
+    // The full process scan only every procScanMs; ticks in between reuse the last list (system counters stay fresh).
+    const fullScan = !st.prevSample || t - st.procsAt >= (cfg.procScanMs || 15000);
+    const raw = await adapter.sample({ gpu: Boolean(busy), procs: fullScan });
+    if (fullScan && Array.isArray(raw.procs)) st.procsAt = t;
     const sm = derive(st.prevSample, raw);
     st.prevSample = sm;
     const procs = sm.procs;
@@ -143,10 +149,12 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     const selfPids = new Set(adapter.selfPids);
     const keyOf = (x) => P.appKey(x.path, st.lib.roots, st.lib.dirs);
     const hosts = P.hostKeys(procs, keyOf);
+    const hostTree = P.hostPids(procs, (x) => P.isOsProcess(x, env));
     const classes = new Map();
     for (const x of procs) {
       let c = P.classify({ ...x, os: P.isOsProcess(x, env) }, { selfPids, attributed, sessionStarts, graceMs: cfg.infraGraceMs, activeServices });
-      if (c === 'foreign' && x.path && hosts.has(keyOf(x))) c = 'host'; // the app hosting Claude: never priority, never learned
+      // The app hosting Claude and everything it started (Desktop app, VS Code, terminal): never priority, never learned.
+      if (c === 'foreign' && (hostTree.has(x.pid) || (x.path && hosts.has(keyOf(x))))) c = 'host';
       classes.set(x.pid, c);
     }
 
@@ -197,6 +205,17 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     for (const r of before.over) if (!st.pressure.over.includes(r)) ev('budget-ok', { resource: r });
     st.sys = { freeMB: sm.sys.freeMB, totalMB: sm.sys.totalMB, cpuPct: sm.sys.cpuPct, gpuPct: sm.sys.gpuPct };
 
+    // Culprit per pressed resource (state.json → gate message, `governor wait`); a foreign app hogging a
+    // resource over budget gets one toast per hour.
+    st.culprit = P.culprits(procs, classes, [...new Set([...st.pressure.priority, ...st.pressure.over])], st.prio.active);
+    for (const r of st.pressure.over) {
+      const c = st.culprit[r];
+      if (!P.isHog(c, r, cfg, sm.sys.totalMB) || t - (st.hogAt[c.name] ?? -Infinity) < 3600000) continue;
+      st.hogAt[c.name] = t;
+      ev('hog', { resource: r, app: c.name, value: c.value });
+      await notify(cfg, `${c.name} is slowing this PC`, `${c.text}. Claude's heavy work waits until it frees up.`);
+    }
+
     // GPU/RAM priority just started: unload the models Claude's local requests loaded.
     if (['gpu', 'ram'].some((r) => st.pressure.priority.includes(r) && !beforePrio.has(r))) {
       const models = [...new Set((markers['local-llm'] || []).flatMap((m) => m.models || []))];
@@ -212,7 +231,7 @@ function createWatcher({ adapter, p, loadCfg, now, deps = {} }) {
     for (const [id, tr] of Object.entries(st.throttles)) current[id] = { level: tr.level, resources: tr.resources };
     const { desired, last } = P.plan(st.tracked, current, st.pressure, t, cfg, st.last);
     st.last = last;
-    for (const id of Object.keys(st.throttles)) if (!desired[id]) await release(id, st.tracked[id] ? 'relaxed' : 'job-gone');
+    for (const id of Object.keys(st.throttles)) if (!desired[id]) await release(id, st.tracked[id] ? 'relief' : 'job-gone');
     for (const [id, d] of Object.entries(desired)) {
       const j = st.tracked[id];
       if (!j) continue;
@@ -324,6 +343,7 @@ async function main(argv = process.argv.slice(2)) {
   }, cfg.heartbeatMs);
   beat.unref();
 
+  let skipped = 0; // consecutive ticks skipped by a helper timeout: logged once per streak
   for (;;) {
     const tickStart = Date.now();
     const c = loadConfig(p);
@@ -335,7 +355,12 @@ async function main(argv = process.argv.slice(2)) {
       ev('helper-restart', {});
       try { await adapter.start(); await w.reapply(); } catch (e) { ev('helper-restart-failed', { error: e.message }, 'error'); }
     }
-    try { await w.tick(); } catch (e) { ev('tick-error', { error: e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e) }, 'error'); }
+    try {
+      await w.tick();
+      if (skipped) { ev('tick-resumed', { skipped }); skipped = 0; }
+    } catch (e) {
+      if (/helper \w+ timeout|helper not running|helper exited/.test(String(e && e.message))) { if (!skipped++) ev('tick-skipped', { why: e.message }, 'error'); } else ev('tick-error', { error: e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e) }, 'error');
+    }
     if (w.canExit()) return shutdown('no session and no Claude job left');
     const idle = !Object.keys(w.st.tracked).length && !w.st.pressure.priority.length && !w.st.pressure.over.length;
     await new Promise((r) => setTimeout(r, Math.max(250, (idle ? c.idleTickMs : c.tickMs) - (Date.now() - tickStart))));

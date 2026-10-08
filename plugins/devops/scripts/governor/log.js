@@ -150,4 +150,60 @@ function readable(logsDir, runs = 1) {
   return out;
 }
 
-module.exports = { createLogger, openRun, hookLogger, prune, readable, runFiles, DEFAULTS };
+/**
+ * Plain-text digest of the last `hours` of logs (run files + hooks): runs (start, version, stop
+ * reason), priority minutes per app and over-budget minutes per resource (one `summary` line ≈ one
+ * active minute), throttles and release reasons, gate decisions and defers, top disk users, errors.
+ * Bounded: the newest 20 runs and the top 10 of every list.
+ * @returns {string[]}
+ */
+function report(logsDir, { hours = 24, now = Date.now() } = {}) {
+  const since = now - hours * 3600000;
+  const files = [...runFiles(logsDir), 'hooks.1.jsonl', 'hooks.jsonl'];
+  const runs = [];
+  const maps = { prio: new Map(), over: new Map(), throttles: new Map(), releases: new Map(), admits: new Map(), defers: new Map(), disk: new Map(), errors: new Map() };
+  const add = (m, k, n = 1) => m.set(k, (m.get(k) || 0) + n);
+  let summaries = 0;
+  for (const n of files) {
+    let text = '';
+    try { text = fs.readFileSync(path.join(logsDir, n), 'utf8'); } catch { continue; }
+    let run = null;
+    for (const l of text.split('\n')) {
+      if (!l.trim()) continue;
+      let e;
+      try { e = JSON.parse(l); } catch { continue; }
+      if (!(Date.parse(e.ts) >= since)) continue;
+      const times = Number(e.repeated) > 0 ? Number(e.repeated) : 1;
+      if (e.level === 'error') add(maps.errors, e.ev, times);
+      if (e.ev === 'start') { run = { start: e.ts, version: e.version, stop: null }; runs.push(run); } else if (e.ev === 'stop') {
+        if (run) run.stop = e.why; else runs.push({ start: null, version: null, stop: e.why });
+      } else if (e.ev === 'summary') {
+        summaries++;
+        for (const a of e.priority || []) add(maps.prio, a);
+        for (const r of e.over || []) add(maps.over, r);
+        const top = new Set((e.diskTop || []).map((d) => { const m = String(d).match(/^(.*):([\w?]+):\d+ops\//); return m ? `${m[1]} (${m[2]})` : null; }).filter(Boolean));
+        for (const d of top) add(maps.disk, d);
+      } else if (e.ev === 'throttle') add(maps.throttles, `${e.name || '?'} [${(e.resources || []).join(',')}] level ${e.level}`, times);
+      else if (e.ev === 'release') add(maps.releases, e.reason || '?', times);
+      else if (e.ev === 'admit') add(maps.admits, `${e.decision}:${e.reason}`, times);
+      else if (e.ev === 'queue-defer' || e.ev === 'llm-defer') add(maps.defers, `${e.kind || e.ev} — ${e.reason || '?'}`, times);
+    }
+  }
+  const top = (m, unit = '') => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `  ${String(v).padStart(5)}${unit}  ${k}`);
+  const sum = (m) => [...m.values()].reduce((a, b) => a + b, 0);
+  const out = [`governor report — last ${hours} h (since ${new Date(since).toISOString().slice(0, 16)}Z)`];
+  out.push(`runs: ${runs.length}`);
+  for (const r of runs.slice(-20)) out.push(`  ${r.start ? r.start.slice(0, 16) : '?'}  v${r.version || '?'}  → ${r.stop || 'no stop line (running or crashed)'}`);
+  out.push(`active minutes (summary lines): ${summaries}`);
+  out.push('priority minutes per app:', ...top(maps.prio, ' min'));
+  out.push('over-budget minutes per resource:', ...top(maps.over, ' min'));
+  out.push(`throttles: ${sum(maps.throttles)}`, ...top(maps.throttles));
+  out.push(`releases: ${sum(maps.releases)}`, ...top(maps.releases));
+  out.push('gate decisions:', ...top(maps.admits));
+  out.push(`gate defers: ${sum(maps.defers)}`, ...top(maps.defers));
+  out.push('top disk users (minutes in the top 3):', ...top(maps.disk, ' min'));
+  out.push(`errors: ${sum(maps.errors)}`, ...top(maps.errors));
+  return out;
+}
+
+module.exports = { createLogger, openRun, hookLogger, prune, readable, runFiles, report, DEFAULTS };

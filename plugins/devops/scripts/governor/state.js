@@ -19,17 +19,30 @@ function readJson(file, fallback = null) {
   } catch { return fallback; }
 }
 
+const RENAME_RETRY = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+function pause(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { const until = Date.now() + ms; while (Date.now() < until) { /* spin */ } }
+}
+
+/**
+ * Atomic write: tmp file + rename. The tmp file never outlives a failure — a failed write or a
+ * rename that still fails after the retries (Windows: a reader or scanner holding the target open
+ * makes rename fail briefly with EPERM/EACCES/EBUSY) removes it before rethrowing. Leftovers of a
+ * killed process are swept by sweep() on watcher start.
+ */
 function writeJson(file, obj) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 1));
-  for (let i = 0; ; i++) {
-    try { fs.renameSync(tmp, file); return; } catch (e) {
-      // Windows: a reader holding the target open makes rename fail briefly.
-      if (i >= 8 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) { try { fs.unlinkSync(tmp); } catch {} throw e; }
-      const until = Date.now() + 15; while (Date.now() < until) { /* spin briefly */ }
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 1));
+    for (let i = 0; ; i++) {
+      try { fs.renameSync(tmp, file); return; } catch (e) {
+        if (i >= 10 || !RENAME_RETRY.has(e.code)) throw e;
+        pause(5 * (i + 1));
+      }
     }
-  }
+  } catch (e) { removeFile(tmp); throw e; }
 }
 
 function removeFile(file) { try { fs.unlinkSync(file); return true; } catch { return false; } }
@@ -44,6 +57,30 @@ function readDir(dir) {
     const data = readJson(path.join(dir, n));
     if (data) out.push({ file: path.join(dir, n), data });
   }
+  return out;
+}
+
+function listDir(dir) { try { return fs.readdirSync(dir).map((n) => path.join(dir, n)); } catch { return []; } }
+
+/**
+ * Housekeeping on watcher start. Removes what is older than maxAgeMs (default 1 h): *.tmp files of
+ * interrupted atomic writes, foreground records, session records whose Claude pid is gone; and
+ * queue entries past queueExpiryMs (a younger deferred command may still be waiting for its
+ * session). Never throws.
+ * @returns {{tmp:number, foreground:number, sessions:number, queue:number, total:number}}
+ */
+function sweep(p, now, { maxAgeMs = 3600000, queueExpiryMs = 24 * 3600000, alive = isAlive } = {}) {
+  const out = { tmp: 0, foreground: 0, sessions: 0, queue: 0, total: 0 };
+  try {
+    const old = (file) => { try { return now - fs.statSync(file).mtimeMs > maxAgeMs; } catch { return false; } };
+    for (const dir of [p.home, p.sessions, p.foreground, p.queue, p.inflight, ...listDir(p.inflight)]) {
+      for (const f of listDir(dir)) if (f.endsWith('.tmp') && old(f) && removeFile(f)) out.tmp++;
+    }
+    for (const { file, data } of readDir(p.foreground)) if (now - (data.startedAt || 0) > maxAgeMs && removeFile(file)) out.foreground++;
+    for (const { file, data } of readDir(p.sessions)) if (now - (data.startedAt || 0) > maxAgeMs && !alive(data.claudePid) && removeFile(file)) out.sessions++;
+    for (const { file, data } of readDir(p.queue)) if (now - (data.created_at || 0) >= queueExpiryMs && removeFile(file)) out.queue++;
+  } catch { /* never throw */ }
+  out.total = out.tmp + out.foreground + out.sessions + out.queue;
   return out;
 }
 
@@ -148,6 +185,6 @@ function handoverRequested(p, version, now, maxAgeMs = 60000) {
 }
 
 module.exports = {
-  FORMAT, readJson, writeJson, removeFile, readDir, readState, writeState,
+  FORMAT, readJson, writeJson, removeFile, readDir, readState, writeState, sweep,
   compareVersions, isAlive, processStart, acquireLock, heartbeat, releaseLock, handoverRequested,
 };

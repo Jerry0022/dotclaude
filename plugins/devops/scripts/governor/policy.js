@@ -7,8 +7,9 @@
  *   Pipeline per tick (watcher.js):
  *     attributedPids → classify → groupJobs → trackJobs (heavy, kind)
  *     updatePriority (foreign CPU/GPU/disk load, decay, foreground-all,
- *     learning, manual) + updateBudget (80/65 hysteresis, smoothing)
- *     → plan (newest yields first, relax one step per relaxMs)
+ *     learning, manual) + updateBudget (80/65 hysteresis, smoothing; disk:
+ *     active time AND slow) → plan (newest yields first; each job relaxes on
+ *     its own once its resources were not pressed for relaxMs) → culprits
  *   PreToolUse: classifyCommand + admit.
  */
 'use strict';
@@ -135,6 +136,24 @@ const RUNTIMES = new Set([
   'node', 'python', 'python3', 'java', 'dotnet', 'deno', 'bun', 'ruby', 'php',
 ]);
 
+// Background tools: their measured load never earns priority (it counts toward the 80 % budget instead)
+// and they are never learned. Exe names, plus every exe whose name contains update/install/setup
+// (updaters, installers) and every exe under Program Files\Git (git-bash's bash/sh/ssh) or Unity Hub
+// (editor downloads/installers). Extend with cfg.noLearn; drop an app entirely with cfg.neverPriority.
+const BACKGROUND = new Set([
+  'git.exe', 'git-remote-https.exe', 'git-lfs.exe', 'onedrive.exe', 'onedrive.sync.service.exe', 'filecoauth.exe',
+  '7z.exe', '7zg.exe', '7zfm.exe', 'searchindexer.exe', 'searchprotocolhost.exe', 'searchfilterhost.exe',
+  'msmpeng.exe', 'mpdefendercoreservice.exe', 'nissrv.exe', 'mssense.exe', 'unity hub.exe', 'git',
+]);
+const BACKGROUND_KEY = /\/program files(?: \(x86\))?\/(git|unity hub)$/;
+const BACKGROUND_NAME = /update|install|setup/;
+
+/** True for a background tool (see BACKGROUND): by exe name, updater/installer name, or app key. */
+function isBackgroundTool(key, name) {
+  const n = String(name || '').toLowerCase();
+  return BACKGROUND.has(n) || BACKGROUND_NAME.test(n) || BACKGROUND_KEY.test(String(key || '').toLowerCase());
+}
+
 // ---------------------------------------------------------------------------
 // Attribution
 // ---------------------------------------------------------------------------
@@ -149,6 +168,16 @@ function isClaudeRoot(p) {
   if (!/^claude(\.exe)?$/i.test(p.name || '')) return false;
   if (/--type=/.test(cmd)) return false;
   return !/[\\/](windowsapps[\\/]claude_|anthropicclaude[\\/])|\/applications\/claude\.app\//i.test(String(p.path || ''));
+}
+
+/**
+ * The Claude Desktop app (any of its processes, any version): `Claude.exe` under
+ * `\WindowsApps\Claude_<version>…` (or AnthropicClaude / Claude.app). Version-agnostic, so an
+ * app update never turns the Desktop app into a foreign app.
+ */
+function isClaudeDesktop(p) {
+  if (!/^claude(\.exe)?$/i.test(p.name || '')) return false;
+  return /[\\/](windowsapps[\\/]claude_|anthropicclaude[\\/])|\/applications\/claude\.app\//i.test(String(p.path || ''));
 }
 
 /**
@@ -203,6 +232,28 @@ function hostKeys(procs, keyOf) {
     }
   }
   return out;
+}
+
+/**
+ * Pids of the host tree: every process of the Claude Desktop app, every non-OS ancestor of a
+ * Claude root (VS Code, a terminal, an IDE — OS processes such as explorer.exe never count, they
+ * are everyone's parent) and all their descendants. A process in this tree that is not Claude's own
+ * (e.g. a dev server the Desktop app's preview launched) is the host: never priority, never learned.
+ * @param {(p:object) => boolean} isOs
+ * @returns {Set<number>}
+ */
+function hostPids(procs, isOs = () => false) {
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  const roots = procs.filter((p) => isClaudeDesktop(p)).map((p) => p.pid);
+  for (const root of procs.filter((p) => isClaudeRoot(p))) {
+    const seen = new Set();
+    for (let cur = byPid.get(root.ppid); cur && !seen.has(cur.pid); cur = byPid.get(cur.ppid)) {
+      seen.add(cur.pid);
+      if (Number.isFinite(cur.startMs) && Number.isFinite(root.startMs) && cur.startMs > root.startMs + 1000) break; // pid reuse
+      if (!isOs(cur)) roots.push(cur.pid);
+    }
+  }
+  return roots.length ? attributedPids(procs, { extraRoots: roots, claudeRoots: false }) : new Set();
 }
 
 /** Descendants of each session's claude pid → session id. */
@@ -391,7 +442,7 @@ function updatePriority(prev, foreign, now, ctx) {
     a.ioBps += p.ioBps || 0;
     a.iops += p.iops || 0;
     a.pids.push(p.pid);
-    a.launcher = a.launcher || NO_LEARN.has(lname) || noLearn.has(lname);
+    a.launcher = a.launcher || NO_LEARN.has(lname) || noLearn.has(lname) || isBackgroundTool(key, lname) || listed(cfg.noLearn, key, p.name);
     a.runtime = a.runtime || RUNTIMES.has(lname);
     if (!NO_LEARN.has(lname)) a.library = a.library || libPrefixes.some((r) => lowerSlash(p.path).startsWith(r)) || libExes.has(lowerSlash(p.path));
     seen.set(key, a);
@@ -404,9 +455,10 @@ function updatePriority(prev, foreign, now, ctx) {
     const isFg = Boolean(fgPid && a.pids.includes(fgPid));
     const always = listed(cfg.alwaysPriority, a.key, a.name);
     const known = (a.library || learned[a.key]) && !a.launcher;
-    // Measured load of an unknown app counts only while that resource is contended, and never for
-    // browsers, chat/IDE hosts or script runtimes: their load with headroom left harms no one.
-    if (known || (!a.launcher && !a.runtime)) for (const r of loads) if (known || contended(r)) res[r] = now;
+    // Measured load of an unknown app counts only while it owns the foreground window and that resource
+    // is contended — never for background apps, browsers, chat/IDE hosts, background tools or script
+    // runtimes: their load counts toward the 80 % budget instead.
+    if (known || (!a.launcher && !a.runtime && isFg)) for (const r of loads) if (known || contended(r)) res[r] = now;
     // Library / learned apps: priority while in the foreground (plus measured load, which decays like any app's).
     if (known && isFg) for (const r of (learned[a.key] && learned[a.key].resources) || PRIORITY_TRIGGERS) res[r] = now;
     if (always) for (const r of PRIORITY_TRIGGERS) res[r] = now;
@@ -452,28 +504,54 @@ function updatePriority(prev, foreign, now, ctx) {
 function mean(xs) { const v = xs.filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; }
 
 /**
+ * Disk over budget: a DRAM-less NVMe sits near 100 % active time while still responsive, so active
+ * time alone never trips it. Over when active >= diskActivePct AND the disk is slow (latency >
+ * diskLatencyMs OR queue > diskQueue); ok again once active < diskReleasePct or latency and queue
+ * are both below half their thresholds. Without any latency/queue reading, active time decides alone.
+ */
+function diskOver(was, m, b) {
+  if (!Number.isFinite(m.disk)) return false;
+  const lat = m.diskMs;
+  const q = m.diskQueue;
+  const measured = Number.isFinite(lat) || Number.isFinite(q);
+  if (!was) return m.disk >= b.diskActivePct && (!measured || lat > b.diskLatencyMs || q > b.diskQueue);
+  if (m.disk < b.diskReleasePct) return false;
+  return !measured || lat >= b.diskLatencyMs / 2 || q >= b.diskQueue / 2;
+}
+
+/**
  * @param {object} prev { window, over }
- * @param {{cpuPct, gpuPct, diskBusyPct, diskMs, totalMB, freeMB, pagesPerSec}} sys
- * Disk = active time of the busiest physical disk (Task Manager's "Active time"), 80/65 like CPU/GPU;
- * latency is only averaged for the log.
+ * @param {{cpuPct, gpuPct, diskBusyPct, diskMs, diskQueue, totalMB, freeMB, pagesPerSec}} sys
+ * CPU/GPU: 80/65 over smoothMs. Disk (busiest physical disk, Task Manager's "Active time") over
+ * diskSmoothMs, see diskOver. RAM: free-memory floor over smoothMs, paging over ramSmoothMs (a
+ * paging spike never flips RAM over/ok).
  */
 function updateBudget(prev, sys, now, cfg) {
   const b = cfg.budget;
   const diskMs = Number.isFinite(sys.diskMs) && sys.diskMs >= 0 && sys.diskMs < 10000 ? sys.diskMs : NaN; // counter wrap → ignore
-  const window = [...((prev && prev.window) || []), { ts: now, ...sys, diskMs }].filter((s) => now - s.ts <= b.smoothMs);
+  const diskWin = b.diskSmoothMs || b.smoothMs;
+  const ramWin = b.ramSmoothMs || b.smoothMs;
+  const keep = Math.max(b.smoothMs, diskWin, ramWin);
+  const entry = {
+    ts: now, cpuPct: sys.cpuPct, gpuPct: sys.gpuPct, diskBusyPct: sys.diskBusyPct, diskMs, diskQueue: sys.diskQueue,
+    freeMB: sys.freeMB, totalMB: sys.totalMB, pagesPerSec: sys.pagesPerSec,
+  };
+  const window = [...((prev && prev.window) || []), entry].filter((s) => now - s.ts <= keep);
+  const avg = (k, ms) => mean(window.filter((s) => now - s.ts <= ms).map((s) => s[k]));
   const wasOver = (prev && prev.over) || {};
   const ratio = b.lowPct / b.highPct;
   const m = {
-    cpu: mean(window.map((s) => s.cpuPct)),
-    gpu: mean(window.map((s) => s.gpuPct)),
-    disk: mean(window.map((s) => s.diskBusyPct)),
-    diskMs: mean(window.map((s) => s.diskMs)),
-    freeMB: mean(window.map((s) => s.freeMB)),
-    totalMB: mean(window.map((s) => s.totalMB)),
-    pages: mean(window.map((s) => s.pagesPerSec)),
+    cpu: avg('cpuPct', b.smoothMs),
+    gpu: avg('gpuPct', b.smoothMs),
+    disk: avg('diskBusyPct', diskWin),
+    diskMs: avg('diskMs', diskWin),
+    diskQueue: avg('diskQueue', diskWin),
+    freeMB: avg('freeMB', b.smoothMs),
+    totalMB: avg('totalMB', b.smoothMs),
+    pages: avg('pagesPerSec', ramWin),
   };
   const hyst = (was, v) => (Number.isFinite(v) ? (was ? v > b.lowPct : v > b.highPct) : false);
-  const over = { cpu: hyst(wasOver.cpu, m.cpu), gpu: hyst(wasOver.gpu, m.gpu), disk: hyst(wasOver.disk, m.disk), ram: false };
+  const over = { cpu: hyst(wasOver.cpu, m.cpu), gpu: hyst(wasOver.gpu, m.gpu), disk: diskOver(wasOver.disk, m, b), ram: false };
   if (Number.isFinite(m.freeMB) && Number.isFinite(m.totalMB) && m.totalMB > 0) {
     const need = Math.max(m.totalMB * b.ramFreePct / 100, b.ramFreeMB);
     const paging = Number.isFinite(m.pages) && m.pages > b.pagingPerSec;
@@ -489,8 +567,10 @@ function updateBudget(prev, sys, now, cfg) {
 /**
  * Desired throttle level per job. Priority resources: every heavy job loading
  * them yields at once to its max level. Over-budget only: one step per
- * escalateMs, newest heavy job first. Relax: one step per relaxMs, oldest
- * first (the newest returns last), only after relaxMs without a change.
+ * escalateMs, newest heavy job first. Relief: each throttled job on its own
+ * steps down one level once none of its resources was pressed and the job was
+ * not changed for relaxMs (last.touched[id]) — per job, so a resource pressed
+ * elsewhere or a new throttle on another job never holds every other cap.
  * @returns {{desired:Record<string,{level:number, resources:string[]}>, last:object}}
  */
 function plan(jobs, current, pressure, now, cfg, last = {}) {
@@ -499,17 +579,18 @@ function plan(jobs, current, pressure, now, cfg, last = {}) {
   const pressured = new Set([...prio, ...over]);
   const desired = {};
   for (const [id, t] of Object.entries(current || {})) if (jobs[id] && maxLevel(jobs[id]) > 0) desired[id] = { level: Math.min(t.level, maxLevel(jobs[id])), resources: [...(t.resources || [])] };
-  const next = { escalateAt: last.escalateAt ?? -Infinity, changeAt: last.changeAt ?? -Infinity };
+  const next = { escalateAt: last.escalateAt ?? -Infinity, touched: {} };
+  const seen = last.touched || {};
   const heavy = Object.values(jobs).filter((j) => j.heavy).sort((a, b) => (b.heavySince - a.heavySince) || (b.startMs - a.startMs));
   const hits = (j, set) => (j.res || []).filter((r) => set.has(r));
-  let changed = false;
+  const changed = new Set();
   for (const j of heavy) {
     const r = hits(j, prio);
     if (!r.length) continue;
     const cur = desired[j.id] || { level: 0, resources: [] };
     const target = maxLevel(j);
     if (!target) continue;
-    if (cur.level < target) changed = true;
+    if (cur.level < target) changed.add(j.id);
     desired[j.id] = { level: Math.max(cur.level, target), resources: Array.from(new Set([...cur.resources, ...r])) };
   }
   if (over.size && now - next.escalateAt >= cfg.budget.escalateMs) {
@@ -518,21 +599,16 @@ function plan(jobs, current, pressure, now, cfg, last = {}) {
       const cur = desired[j.id] || { level: 0, resources: [] };
       desired[j.id] = { level: cur.level + 1, resources: Array.from(new Set([...cur.resources, ...hits(j, over)])) };
       next.escalateAt = now;
-      changed = true;
+      changed.add(j.id);
     }
   }
-  if (changed) next.changeAt = now;
-  else if (now - next.changeAt >= cfg.budget.relaxMs) {
-    const j = Object.entries(desired)
-      .filter(([, t]) => t.level > 0 && !t.resources.some((r) => pressured.has(r)))
-      .map(([id]) => jobs[id])
-      .sort((a, b) => (a.heavySince - b.heavySince) || (a.startMs - b.startMs))[0];
-    if (j) {
-      desired[j.id] = { ...desired[j.id], level: desired[j.id].level - 1 };
-      next.changeAt = now;
-    }
+  for (const [id, t] of Object.entries(desired)) {
+    const since = seen[id];
+    if (changed.has(id) || t.resources.some((r) => pressured.has(r)) || !Number.isFinite(since)) next.touched[id] = now;
+    else if (now - since >= cfg.budget.relaxMs) { desired[id] = { ...t, level: t.level - 1 }; next.touched[id] = now; }
+    else next.touched[id] = since;
   }
-  for (const id of Object.keys(desired)) if (desired[id].level <= 0) delete desired[id];
+  for (const id of Object.keys(desired)) if (desired[id].level <= 0) { delete desired[id]; delete next.touched[id]; }
   return { desired, last: next };
 }
 
@@ -542,6 +618,76 @@ function pressureOf(priority, budget) {
     priority: RESOURCES.filter((r) => priority && priority.active && priority.active[r]),
     over: RESOURCES.filter((r) => budget && budget.over && budget.over[r]),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Culprits (who presses a resource) — for the gate message, `governor wait` and the hog toast
+// ---------------------------------------------------------------------------
+
+const LABEL = Object.freeze({ cpu: 'CPU', gpu: 'GPU', disk: 'disk', ram: 'RAM' });
+function fmtMB(mb) { return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`; }
+
+/**
+ * The dominant consumer of each given resource. A resource under priority names the app that has
+ * it; otherwise processes are grouped by class + exe name (Claude's own jobs included, named with
+ * their class): cpu = summed CPU %, gpu = highest GPU %, disk = summed IO operations/s, ram =
+ * summed working set. The governor itself is skipped.
+ * @param {Map<number,string>} classes pid → class
+ * @param {Record<string,string>} [prioActive] resource → app key with priority
+ * @returns {Record<string,{name:string, cls:string, value:number, text:string}>}
+ */
+function culprits(procs, classes, resources, prioActive = {}) {
+  const groups = new Map();
+  for (const p of procs || []) {
+    const cls = (classes && classes.get(p.pid)) || 'foreign';
+    if (cls === 'self' || p.pid === 0 || /^(system )?idle( process)?$/i.test(p.name || '')) continue; // the idle process is no consumer
+    const k = `${cls}|${String(p.name || '?').toLowerCase()}`;
+    const g = groups.get(k) || { name: p.name || '?', cls, cpu: 0, gpu: 0, disk: 0, diskBps: 0, ram: 0 };
+    g.cpu += p.cpuPct || 0;
+    g.gpu = Math.max(g.gpu, p.gpuPct || 0);
+    g.disk += p.iops || 0;
+    g.diskBps += p.ioBps || 0;
+    g.ram += p.memMB || 0;
+    groups.set(k, g);
+  }
+  const out = {};
+  for (const r of resources || []) {
+    if (prioActive && prioActive[r]) {
+      const name = prioActive[r] === 'manual' ? 'manual priority switch' : appLabel(prioActive[r]);
+      out[r] = { name, cls: 'priority', value: 0, text: `${LABEL[r] || r}: ${name} has priority` };
+      continue;
+    }
+    let top = null;
+    for (const g of groups.values()) if (g[r] > 0 && (!top || g[r] > top[r])) top = g;
+    if (!top) continue;
+    const v = top[r];
+    const val = r === 'ram' ? fmtMB(v) : r === 'disk' ? `${Math.round(v)} IO/s, ${Math.round(top.diskBps / 1048576)} MB/s` : `${Math.round(v)} %`;
+    const who = top.cls === 'foreign' ? top.name : `${top.name} (${top.cls})`;
+    out[r] = { name: top.name, cls: top.cls, value: Math.round(v * 10) / 10, text: `${LABEL[r] || r}: ${who} ${val}` };
+  }
+  return out;
+}
+
+/**
+ * A foreign app worth a toast: the dominant consumer of a resource over budget and itself past a
+ * clear bar — CPU/GPU >= 2x the foreign noticeable-load threshold, disk >= foreign.diskOps IO/s,
+ * RAM >= 20 % of physical memory.
+ */
+function isHog(c, r, cfg, totalMB) {
+  if (!c || c.cls !== 'foreign') return false;
+  const f = cfg.foreign;
+  if (r === 'cpu') return c.value >= f.cpuPct * 2;
+  if (r === 'gpu') return c.value >= f.gpuPct * 2;
+  if (r === 'disk') return c.value >= f.diskOps;
+  if (r === 'ram') return Number.isFinite(totalMB) && totalMB > 0 && c.value >= totalMB * 0.2;
+  return false;
+}
+
+/** What a deferred command waits for: each pressed resource with its culprit (state.culprit), else the reason. */
+function pressedText(res, state) {
+  const cul = (state && state.culprit) || {};
+  const parts = ((res && res.pressed) || []).map((r) => (cul[r] && cul[r].text) || LABEL[r] || r);
+  return parts.length ? parts.join('; ') : String((res && res.reason) || '');
 }
 
 // ---------------------------------------------------------------------------
@@ -667,20 +813,20 @@ function admit({ command, now, state, kinds = {}, cfg }) {
   const pressed = !(c.heavy || c.escape) ? [] : c.resources.filter((r) => (p.priority || []).includes(r) || (p.over || []).includes(r));
   if (pressed.length) {
     const byPrio = pressed.some((r) => (p.priority || []).includes(r));
-    return { decision: 'defer', reason: byPrio ? `priority:${state.priorityBy || 'app'}` : `budget:${pressed.join(',')}`, ...base };
+    return { decision: 'defer', reason: byPrio ? `priority:${state.priorityBy || 'app'}` : `budget:${pressed.join(',')}`, pressed, ...base };
   }
   if (!c.kind) return { decision: 'allow', reason: 'escape-no-pressure', ...base };
   const expected = (kinds[c.kind] && kinds[c.kind].peakMB) || cfg.admission.defaultMB;
   const free = state.sys && Number.isFinite(state.sys.freeMB) ? state.sys.freeMB : Infinity;
-  if (free < expected + cfg.admission.headroomMB) return { decision: 'defer', reason: 'ram', ...base };
+  if (free < expected + cfg.admission.headroomMB) return { decision: 'defer', reason: 'ram', pressed: ['ram'], ...base };
   return { decision: 'allow', reason: 'slot', ...base };
 }
 
 module.exports = {
-  RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN, RUNTIMES,
-  isOsProcess, appKey, appLabel, listed,
-  isClaudeRoot, attributedPids, hostKeys, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
+  RESOURCES, PRIORITY_TRIGGERS, LEVEL, WIN_OS_NAMES, NO_LEARN, RUNTIMES, BACKGROUND,
+  isOsProcess, appKey, appLabel, listed, isBackgroundTool,
+  isClaudeRoot, isClaudeDesktop, attributedPids, hostKeys, hostPids, sessionMap, isInfra, classify, activeServiceNames, serviceNames, groupJobs,
   loadedResources, trackJobs, maxLevel, isUserAppProc,
-  updatePriority, updateBudget, plan, pressureOf,
+  updatePriority, updateBudget, diskOver, plan, pressureOf, culprits, isHog, pressedText,
   commandSegments, classifyCommand, commandKind, admit,
 };

@@ -16,9 +16,10 @@ const MB = 1024 * 1024;
 
 const DEFAULTS = Object.freeze({
   enabled: true,
-  notify: true, // OS notifications (newly learned app, starvation); always logged
+  notify: true, // OS notifications (newly learned app, starvation, a foreign app hogging a resource ≤ 1/h per app); always logged
   tickMs: 3000, // cadence while a Claude job is tracked
   idleTickMs: 20000, // cadence with no tracked Claude job (process list only, no GPU)
+  procScanMs: 15000, // full process scan at most this often; system counters every tick
   heartbeatMs: 5000,
   // A Claude-attributed job is "heavy" after sustainMs over one threshold.
   heavy: { cpuPct: 25, gpuPct: 20, diskBps: 20 * MB, diskOps: 500, ramMB: 1024, sustainMs: 20000, dipMs: 6000, generatorMs: 120000 },
@@ -28,10 +29,13 @@ const DEFAULTS = Object.freeze({
     cpuPct: 10, gpuPct: 10, diskBps: 10 * MB, diskOps: 300, contendPct: 60,
     decayMs: 10 * 60000, learnFullscreenMs: 15000, learnMs: 60000, interactiveIdleMs: 120000,
   },
-  // The 80 % rule (always on). Disk = active time of the busiest physical disk, IO bytes OR operations count.
+  // The 80 % rule (always on). Disk = busiest physical disk: active time >= diskActivePct AND slow
+  // (latency > diskLatencyMs OR queue > diskQueue), averaged over diskSmoothMs; ok below diskReleasePct
+  // or with latency and queue both under half. RAM paging is averaged over ramSmoothMs.
   budget: {
     highPct: 80, lowPct: 65, smoothMs: 10000, escalateMs: 10000, relaxMs: 30000,
-    ramFreePct: 15, ramFreeMB: 4096, pagingPerSec: 2500,
+    diskActivePct: 95, diskReleasePct: 85, diskLatencyMs: 20, diskQueue: 2, diskSmoothMs: 20000,
+    ramFreePct: 15, ramFreeMB: 4096, pagingPerSec: 2500, ramSmoothMs: 30000,
   },
   cap: { cpuPct: 10 },
   // staleMs: state older than this = no watcher (fail open). Must exceed 2 x idleTickMs + the longest tick.
@@ -44,7 +48,7 @@ const DEFAULTS = Object.freeze({
   // Apps (top-level folder or exe name, case-insensitive substring of the app key).
   alwaysPriority: [],
   neverPriority: [],
-  noLearn: [], // extra exe names never learned as priority (launchers/browsers are built in)
+  noLearn: [], // extra exe names / app-key substrings that never earn priority from load and are never learned (launchers, browsers and background tools are built in)
   // Local services Claude drives: their load counts as Claude load while a
   // Claude request is in flight or ended < selfLoopMs ago, and they are never
   // learned as priority apps. `inflight` names the marker dir under

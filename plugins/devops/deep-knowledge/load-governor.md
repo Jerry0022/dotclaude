@@ -15,7 +15,8 @@ MCP servers are never throttled. Concept:
 | Counters → rates | `scripts/governor/sample.js` |
 | Game libraries (Steam, Epic, GOG, Ubisoft, EA, Xbox, GameConfigStore) | `scripts/governor/libraries.js` |
 | Watcher loop (one for all sessions) | `scripts/governor/watcher.js` |
-| CLI | `scripts/governor/cli.js` |
+| CLI (incl. `wait`, `report`) | `scripts/governor/cli.js` |
+| Bounded JSONL log + `report` digest | `scripts/governor/log.js` |
 | Windows adapter + PowerShell helper | `scripts/governor/adapters/win32.js`, `win-helper.ps1` |
 | Hooks | `ss.governor.attach`, `pre.governor.gate`, `post.governor.clear` |
 | local-llm gate | `plugins/local-llm/hooks/lib/governor-gate.js` |
@@ -27,36 +28,76 @@ MCP servers are never throttled. Concept:
    starts the watcher detached. A second watcher exits at once (lock file; a
    holder is taken over only when its pid is dead — an unknown start time is
    never treated as reuse; a newer plugin version asks the running one to hand
-   over). A session expires when its claude pid is gone.
-2. **Every tick** (3 s busy, 20 s idle — process list only, no GPU query) the
-   helper samples processes (incl. IO bytes and IO operations), per-disk idle
-   time and latency (raw counters), available RAM,
-   paging and the foreground window. Attribution is **claude ancestry only**
+   over). A session expires when its claude pid is gone. On start the watcher
+   sweeps `~/.claude/governor`: `*.tmp` leftovers, foreground records and
+   dead sessions older than 1 h, queue entries past their 24 h expiry
+   (younger ones may still be waited on). The atomic writer itself removes its
+   tmp file on any failed write/rename (rename retried briefly on
+   EPERM/EACCES/EBUSY); only a killed process can leave one, for the sweep.
+2. **Every tick** (3 s busy, 20 s idle; GPU query only while busy) the helper
+   reads system counters — CPU, GPU, per-disk idle time, latency and queue
+   (raw counters), available RAM, paging — and the foreground window. The
+   full `Win32_Process` scan (processes incl. IO bytes and IO operations) is
+   the expensive part and runs at most every `procScanMs` (15 s); ticks in
+   between reuse the last process list and its rates (per-pid counters
+   without that scan would need handles into foreign processes). A helper
+   timeout skips the tick and is logged once per streak (`tick-skipped` /
+   `tick-resumed`). Attribution is **claude ancestry only**
    (no session job object): Claude's processes are the descendants of the
    Claude Code CLI; processes that start with a session (and MCP servers) are
    infrastructure. A job is the subtree of one tool call. The app **hosting**
-   Claude — every ancestor of a Claude root (the Desktop `Claude.exe`, VS
-   Code, a terminal, an IDE) and every process sharing its app folder — is the
-   host: never priority, never learned.
+   Claude is the host — never priority, never learned: every process of the
+   Desktop app (recognised by `Claude.exe` under `\WindowsApps\Claude_*`, any
+   version, so an app update never makes it foreign), every non-OS ancestor
+   of a Claude root (VS Code, a terminal, an IDE — never `explorer.exe` or
+   other OS processes), **everything those started** (e.g. the Vite/esbuild
+   dev server of the Desktop preview) and every process sharing a host's app
+   folder.
 3. A job is **heavy** after 20 s over 25 % CPU, 20 % GPU or high disk IO
    (> 20 MB/s or > 500 operations/s — many small accesses count) while the
    disk is pressed. Kinds: server (listens on a port), foreground (Claude
    waits on it), generator (heavy > 2 min), build.
-4. **Pressure** = foreign priority per resource (decays 10 min after the
-   app's last load; an unknown app's load counts only while the system uses
-   ≥ `foreign.contendPct` (60 %) of that resource — disk: while pressed —
-   and never for browsers, chat/IDE hosts or script runtimes such as
-   node/python; all resources while it is the interactive foreground app;
-   game-library, learned and `alwaysPriority` apps from process start; manual
-   switch) ∪ over budget (CPU/GPU 80/65 hysteresis, disk = active time of
-   the busiest physical disk, as Task Manager shows it, 80/65 — latency is
-   only logged, RAM free < max(15 %, 4096 MB) or hard paging; 10 s
-   smoothing).
+4. **Pressure** = foreign priority per resource ∪ over budget.
+   - **Priority** (decays 10 min after the app's last load). Only the
+     foreground app and known apps get it: an unknown app's measured load
+     counts only while it owns the foreground window and the system uses
+     ≥ `foreign.contendPct` (60 %) of that resource (disk: while pressed);
+     all resources while it is the interactive foreground app; game-library,
+     learned and `alwaysPriority` apps by measured load or while in the
+     foreground; manual switch. A background app's load never earns priority
+     — it counts toward the budget instead. Never: browsers, chat/IDE hosts,
+     script runtimes (node/python …) and **background tools** — `git` and
+     everything under `Program Files\Git`, OneDrive / OneDrive.Sync.Service,
+     7-Zip, the search indexer, Defender, every exe whose name contains
+     `update`/`install`/`setup`, Unity Hub (`BACKGROUND` in `policy.js`;
+     extend with `noLearn` — exe names or app-key substrings — or drop an app
+     entirely with `neverPriority`).
+   - **Budget**: CPU/GPU 80/65 hysteresis over 10 s. Disk (busiest physical
+     disk; a DRAM-less NVMe sits near 100 % active time while still
+     responsive, so active time alone never trips it): over when the 20 s
+     mean active time ≥ `budget.diskActivePct` (95) **and** the disk is slow
+     — mean latency > `diskLatencyMs` (20) or mean queue > `diskQueue` (2);
+     ok again when active < `diskReleasePct` (85) or latency and queue are
+     both under half their thresholds. RAM: free < max(15 %, 4096 MB) (10 s)
+     or hard paging averaged over 30 s (`ramSmoothMs`), so a paging spike
+     never flips RAM over/ok.
+   - **Culprit**: per pressed resource the watcher stores a small `culprit`
+     in `state.json` — the app with priority, else the dominant consumer
+     grouped by class + exe name (CPU %, GPU %, IO/s, working set), e.g.
+     `RAM: OneDrive.Sync.Service.exe 33.0 GB`. A **foreign** app dominating a
+     resource over budget past a clear bar (CPU/GPU ≥ 2× the foreign
+     threshold, disk ≥ `foreign.diskOps` IO/s, RAM ≥ 20 % of physical memory)
+     gets one toast per app per hour (`notify`, logged as `hog`).
 5. **Plan**: on priority every heavy job on that resource yields at once —
    CPU generators are paused, everything else (servers, foreground, builds,
    GPU generators — flagged `requeue`) is capped (CPU hard cap 10 %,
    below-normal priority, very-low IO priority). Over budget: one step per
-   10 s, newest job first. Relax one step per 30 s, oldest first.
+   10 s, newest job first. **Relief**: each throttled job is re-evaluated
+   every tick (≤ 20 s) and steps down one level on its own once none of its
+   resources was pressed and the job was not changed for `relaxMs` (30 s) —
+   release reason `relief`. (Before: one global relax step per 30 s that any
+   change anywhere reset, while git's priority and a permanently "busy"
+   NVMe kept the resources pressed — 1 relax vs 23 job-gone in 24 h.)
 6. Every throttle is written to `state.json` **before** the OS call, keyed by
    job. A record is removed **only after a successful release** — a crash or a
    failed release leaves it for the next start to reverse. The adapter reverts
@@ -91,7 +132,15 @@ MCP servers are never throttled. Concept:
    (UserPromptSubmit) then tells the session — or the next session in the same
    repo — which commands can run again, with the branch/HEAD they were
    deferred at as a drift reminder, and Claude re-runs the ones still needed
-   under normal permissions. Entries expire after 24 h.
+   under normal permissions. Entries expire after 24 h. The gate's refusal
+   names the culprit (`Pressed: RAM: OneDrive.Sync.Service.exe 33.0 GB`) and
+   the queue id, and tells Claude how to wait: `node "<plugin>/scripts/governor/cli.js" wait <id>`
+   (usable with Bash `run_in_background`). `wait` polls the same `admit` rule
+   as the gate, bounded (default 15 min, `--timeout 30m`), prints what it
+   waits for whenever that changes, and exits 0 when admitted (the entry is
+   dropped; Claude re-runs the same command itself under normal
+   permissions — the gate checks it again, it is never bypassed), 2 on
+   timeout, 1 for an unknown id. `wait` itself is a light command for the gate.
 
 ## Commands
 
@@ -102,6 +151,9 @@ node <plugin>/scripts/governor/cli.js not-priority "<app folder or exe>"
 node <plugin>/scripts/governor/cli.js always-priority "<app folder or exe>"
 node <plugin>/scripts/governor/cli.js queue
 node <plugin>/scripts/governor/cli.js log [--runs N] [--tail]
+node <plugin>/scripts/governor/cli.js report [--hours 24]
+node <plugin>/scripts/governor/cli.js wait <queue-id> [--timeout 15m]
+node <plugin>/scripts/governor/cli.js wait --command "<cmd>" [--timeout 15m]
 node <plugin>/scripts/governor/cli.js stop
 ```
 
@@ -127,21 +179,29 @@ disk (`scripts/governor/log.js`):
   `job-kind`, `throttle` (key, kind, name, resources, level), `release`
   (reason) / `release-failed`, `learned`, `queue-defer` / `queue-ready` /
   `queue-expired` / `queue-inject`, `admit` (gate decision, reason, command
-  kind, command cut to 200 chars), `llm-defer`, `helper-timeout` /
-  `helper-killed` / `helper-restart`, `tick-error`. While anything is tracked
+  kind, command cut to 200 chars), `llm-defer`, `hog` (foreign app toast),
+  `sweep` (housekeeping counts), `helper-timeout` (once per streak) /
+  `helper-killed` / `helper-restart`, `tick-skipped` / `tick-resumed`,
+  `tick-error`. While anything is tracked
   or pressed, one `summary` line per minute (budget means incl. disk active
   time and latency, the top 3 disk users as `name:class:ops/MB`, priority
   apps, jobs, throttled); nothing when idle. Identical event + fields within 30 s
   are written once with `repeated: n`. No environment, no file contents.
 - **Read:** `governor log` prints the newest run (plus `hooks.jsonl`) one
   event per line; `--runs N` for more runs, `--tail` to follow the current one.
+  `governor report [--hours 24]` digests the logs as plain text: runs
+  (start, version, stop reason), priority minutes per app and over-budget
+  minutes per resource (one `summary` line ≈ one active minute), throttles,
+  release reasons, gate decisions and defers, top disk users, error counts —
+  top 10 per list.
 
 ## Learning rules
 
 Learned priority is earned only by a **foreground** app showing **GPU (3D)**
 load, after 60 s (15 s fullscreen). CPU-only load, background apps, launchers
-(Steam/Epic/Ubisoft/EA/GOG/Xbox…), browsers, IDEs, chat/Electron hosts and
-Claude-driven services (Ollama, AnythingLLM) are never learned. Library and
+(Steam/Epic/Ubisoft/EA/GOG/Xbox…), browsers, IDEs, chat/Electron hosts,
+background tools, host processes and Claude-driven services (Ollama,
+AnythingLLM) are never learned. Library and
 GameConfigStore apps get priority while in the foreground or with recent
 measured load, not merely for running. RAM is never a priority trigger — it is
 only a system-pressure signal of the 80 % rule.
