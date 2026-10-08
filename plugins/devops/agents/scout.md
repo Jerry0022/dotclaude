@@ -25,6 +25,9 @@ settles it.
   for read commands (`git log`, `git grep`, `ls`, `wc`).
 - Search first (Grep/Glob), then read only the excerpts that matter — never
   whole large files.
+- When `graphify-out/` exists, start a "where/how is X wired" sweep with
+  `graphify query "<question>"`, then read only the files it points to. A
+  single narrow lookup stays a scoped Grep.
 - Stop as soon as the question is answered; ~15 tool calls is a lot.
 - No review, no refactoring advice, no risk list — that is `redteam`/`core`
   work. Report what is there.

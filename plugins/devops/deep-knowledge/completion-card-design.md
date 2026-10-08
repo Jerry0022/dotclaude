@@ -298,7 +298,7 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   that fails (Claude then prints the visible `### **✨✨✨ {title} ✨✨✨**`
   line), keeps the ✨ headline as before. That title line is the error
   path only, never a shortcut (#451): every Desktop render also saves the
-  widget HTML to `<tmp>/dotclaude-devops-card-widget-<session>` and names
+  widget_code to `<tmp>/dotclaude-devops-card-widget-<session>` and names
   it in the `[CARD WIDGET]` block, and `stop.flow.guard` blocks a card turn
   on which `show_widget` was never called, pointing at that file. The widget draws the
   title (h3) and both blocks, colours (green posts, red, yellow, lilac
@@ -394,6 +394,32 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
 - **Terminal / other clients:** the markdown body as in § 2 without buttons;
   code spans only for error texts, names in *italics*; budget as glyph bars.
 - `test-minimal` never calls the widget.
+- **Template + data (token cost).** The inline card HTML is 7–12k
+  characters and passed through the model twice (tool result, then the
+  `show_widget` input). The live path therefore sends a template of about
+  0.9–1.8k characters: the sr-only `h2`, a `#dc-card` mount holding the
+  title `h3` (card-guard reads the card title from it; it is also the first
+  paint), the card data as JSON in `<script type="application/json"
+  id="dc-card-data">` (`<` escaped), and a `<script src>` to
+  `https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude@v<version>/plugins/devops/mcp-server/lib/card-widget.client.js`.
+  The version is the running plugin's (`.claude-plugin/plugin.json`): a
+  release tag is immutable, jsDelivr caches it for good, and the client
+  always matches the data schema of the server that wrote the data (the
+  widget CSP allows `cdn.jsdelivr.net`, the repo is public).
+  `DOTCLAUDE_CARD_CLIENT_URL` (https only) points at another build, e.g. a
+  branch while developing the client.
+  `mcp-server/lib/card-widget.client.js` is the ONE renderer: plain browser
+  JS (one IIFE) that draws the card and wires buttons and tooltips. The
+  server evaluates the same file in a `vm` context for the full inline HTML,
+  so both paths draw identical markup (`card-widget.client.test.js` mounts
+  the template in jsdom and compares). Every visible string rides in the
+  data; the client hard-codes none.
+  **Fallback:** when the script cannot load (tag without the file, CDN down,
+  CSP refusal) its `onerror` adds the result lines, the heading and the
+  points as plain text under the title; the client calls the same handler
+  when it meets an unknown data schema (`v`). The widget is never empty.
+  The offline renderer (`--render-card`, MCP server never connected) keeps
+  the full inline HTML — no network dependency on that path.
 - The old CTA-actions widget (buttons above the card) is replaced by the body
   widget. The `[CTA ACTIONS]` block becomes `[CARD WIDGET]` with the same
   Desktop-only / skip-silently semantics. Controls remain `span[role=button]`.

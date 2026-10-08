@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 /**
  * @hook post.graphify.search
- * @version 0.2.0
+ * @version 0.3.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Grep|Glob
  * @description Telemetry only: record every Grep/Glob that actually RAN
  *   (`search_ran`) with its result size, so the graphify metrics file carries
- *   the denominator the gate lacked — what raw searches cost in context, and
- *   how much of that is `broad` (no `path`, i.e. gate-eligible). Also records
- *   `outputMode`, `pathKind` ('none'|'dir'|'file' — cheap statSync only, via
- *   `hooks/lib/graph-nudge.pathKindFor`) and `eligible` (whether the PreToolUse
- *   gate would have treated this exact search as answerable from the graph),
- *   so `scripts/graphify-audit.js` can estimate the median cost of an
- *   ELIGIBLE search per project — the baseline the gate's savings are measured
- *   against. Fail-silent, never blocks, never prints.
+ *   what raw searches cost in context and how much of that is `broad` (no
+ *   `path`). Also records `outputMode`, `pathKind` ('none'|'dir'|'file' —
+ *   cheap statSync only, via `hooks/lib/graph-nudge.pathKindFor`) and
+ *   `eligible` (a semantic, graph-scoped Grep — the kind a `graphify query`
+ *   could have covered), so `scripts/graphify-audit.js` can show what such
+ *   searches actually cost. Never blocks, never prints, injects nothing.
  */
 
 require('../lib/plugin-guard');

@@ -10,6 +10,7 @@ import {
   cardWidgetHtml,
   runContractLineHtml,
   cardWidgetInstruction,
+  cardWidgetTemplate,
   writeCardWidgetFile,
   WIDGET_FILE_PREFIX,
   BUTTONS,
@@ -509,7 +510,7 @@ describe("cardWidgetHtml", () => {
     expect(html).toContain('data-tip="npm test · 41s"');
     expect(html, "the bar names its value only in the tip → Label tier")
       .toContain('class="card-budget" tabindex="0" role="img" aria-label="5h: 40% verbraucht" data-tip="40% verbraucht" data-tip-tier="label"');
-    expect(html).toContain("var TIP = { info: 1500, label: 500 }, SKIP = 300;");
+    expect(html).toContain('"tipInfo":1500,"tipLabel":500,"skip":300');
     expect(html, "drawn from the host tokens").toMatch(/\.card-tip\{[^}]*var\(--surface-popover/);
     expect(html, "absolute inside the card, never fixed").not.toMatch(/\.card-tip\{[^}]*position:fixed/);
     expect(html).toMatch(/class="card-surface" style="position:relative;/);
@@ -772,7 +773,7 @@ describe("cardWidgetInstruction", () => {
     expect(cardWidgetInstruction(null, "", desktop)).toBe("");
   });
 
-  test("names the widget tool, the last-action rule, the visible-title fallback, and carries the HTML verbatim", () => {
+  test("names the widget tool, the last-action rule, the visible-title fallback, and carries the template verbatim", () => {
     const model = baseModel({ title: "Fertig" });
     const text = cardWidgetInstruction(model, "", desktop);
     expect(text.startsWith("[CARD WIDGET — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
@@ -786,8 +787,11 @@ describe("cardWidgetInstruction", () => {
     expect(text).toMatch(/output the visible title line/);
     expect(text).toContain(`### **✨✨✨ ${model.title} ✨✨✨**`);
     expect(text).not.toMatch(/skip silently/);
-    const html = cardWidgetHtml(model, "");
-    expect(text).toContain("----- widget_code -----\n" + html + "\n----- end widget_code -----");
+    const code = cardWidgetTemplate(model, "", desktop);
+    expect(text).toContain("----- widget_code -----\n" + code + "\n----- end widget_code -----");
+    // The offline renderer keeps the full inline HTML.
+    const inline = cardWidgetInstruction(model, "", desktop, { inline: true });
+    expect(inline).toContain("----- widget_code -----\n" + cardWidgetHtml(model, "") + "\n----- end widget_code -----");
   });
 
   // Regression 2026-09-24: the app nudges once for visible output after a
@@ -810,22 +814,21 @@ describe("cardWidgetInstruction", () => {
   test("the fallback line reads as the error path, never a shortcut (#451)", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
     expect(text).toMatch(/mandatory, never optional/);
-    expect(text).toMatch(/never grep, filter or skip the HTML/);
     expect(text).toMatch(/ONLY when the call itself fails, or the tool does not exist/);
     expect(text).toMatch(/never a shortcut/);
   });
 
   test("forbids a prose recap of the card before the widget, keeps the answer as text before it (#642)", () => {
     const text = cardWidgetInstruction(baseModel(), "", desktop);
-    expect(text).toMatch(/No prose before the widget that restates the card/);
-    expect(text).toMatch(/The answer to the user's question is no restatement: it stands in full as text/);
+    expect(text).toMatch(/no prose that restates the card/);
+    expect(text).toMatch(/Text before the widget: the full answer to the user's question/);
     expect(text).toMatch(/the card never carries it/);
   });
 
   test("names the saved widget file when one was written, and only then", () => {
     const withFile = cardWidgetInstruction(baseModel(), "", desktop, { widgetFile: "C:/tmp/dotclaude-devops-card-widget-s1" });
-    expect(withFile).toContain("The same HTML is saved in C:/tmp/dotclaude-devops-card-widget-s1");
-    expect(cardWidgetInstruction(baseModel(), "", desktop)).not.toContain("The same HTML is saved");
+    expect(withFile).toContain("Copy: C:/tmp/dotclaude-devops-card-widget-s1");
+    expect(cardWidgetInstruction(baseModel(), "", desktop)).not.toContain("Copy: ");
   });
 });
 
@@ -834,11 +837,13 @@ describe("writeCardWidgetFile (#451)", () => {
   const tmp = () => { const d = mkdtempSync(join(tmpdir(), "card-widget-")); dirs.push(d); return d; };
   afterEach(() => { while (dirs.length) rmSync(dirs.pop(), { recursive: true, force: true }); });
 
-  test("Desktop: writes the widget HTML per session and returns a forward-slash path", () => {
+  test("Desktop: writes the widget_code per session and returns a forward-slash path", () => {
     const dir = tmp();
     const model = baseModel();
     const file = writeCardWidgetFile(model, "", "s-42", dir, desktop);
     expect(file).toBe(join(dir, `${WIDGET_FILE_PREFIX}-s-42`).replace(/\\/g, "/"));
+    expect(readFileSync(file, "utf8")).toBe(cardWidgetTemplate(model, "", desktop));
+    writeCardWidgetFile(model, "", "s-42", dir, desktop, { inline: true });
     expect(readFileSync(file, "utf8")).toBe(cardWidgetHtml(model, ""));
   });
 

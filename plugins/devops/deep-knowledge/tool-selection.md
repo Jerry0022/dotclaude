@@ -62,5 +62,13 @@ more precise results.
 **When to skip:** If the project has no `.claude/project-map.md`, fall back to
 scoped searches using your best guess, or use the `devops:scout` agent (sonnet · low) for broad searches.
 
+## Knowledge Graph for Exploration
+
+When `graphify-out/` exists (in the project or the primary checkout), a
+"where/how is X wired" question across several files starts with
+`graphify query "<question>"`; then read only the files it names. A single
+narrow lookup stays a scoped Grep — cheaper than a graph answer. Details:
+`deep-knowledge/graphify.md` § When the graph helps.
+
 ## Priority
 Functionality > aesthetics. Get the job done with the right tool, don't optimize for pretty output.

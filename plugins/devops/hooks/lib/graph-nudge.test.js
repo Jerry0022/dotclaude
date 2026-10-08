@@ -4,9 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import {
   hasGraph, hasLocalGraph, resolveGraphJson, graphFlag, buildGraphNudge, graphJsonPath,
-  graphIsStale, stalenessInfo, suggestQuery, questionFromPattern,
-  pathKindFor, isSemanticPattern, isSpecificTerm, isEligibleSearch, hasGraphAnswer,
-  resolveGraphRoot, isInsideGraphScope, trimToTraversalHeader, gateKeyHash,
+  graphIsStale, stalenessInfo,
+  pathKindFor, isSemanticPattern, isSpecificTerm, isEligibleSearch,
+  resolveGraphRoot, isInsideGraphScope,
 } from "./graph-nudge.js";
 
 describe("hasGraph — graph.json detection", () => {
@@ -232,31 +232,6 @@ describe("stalenessInfo — bounded-tolerance gate precondition", () => {
     fs.utimesSync(gp, NOW, NOW);
     expect(stalenessInfo(d).newerCount).toBe(Infinity);
     fs.rmSync(d, { recursive: true, force: true });
-  });
-});
-
-describe("suggestQuery — Gap #3 concrete gate suggestion", () => {
-  // No "What defines or uses X?" template anymore (live finding: graphify
-  // matched the template's own noise words instead of the real terms) — just
-  // the sanitized terms themselves.
-  test("strips regex metachars and collapses into bare terms", () => {
-    expect(suggestQuery("foo.*bar")).toBe('graphify query "foo bar"');
-  });
-
-  test("collapses snake/kebab separators into words", () => {
-    expect(suggestQuery("foo_bar-baz")).toBe('graphify query "foo bar baz"');
-  });
-
-  test("falls back to the generic placeholder for empty/non-string patterns", () => {
-    expect(suggestQuery("")).toBe('graphify query "<your question>"');
-    expect(suggestQuery(undefined)).toBe('graphify query "<your question>"');
-    expect(suggestQuery("...")).toBe('graphify query "<your question>"');
-  });
-
-  test("carries a --graph suffix through, on the concrete and the placeholder form", () => {
-    const flag = ' --graph "C:\\repo\\graphify-out\\graph.json"';
-    expect(suggestQuery("foo_bar", flag)).toBe(`graphify query "foo bar"${flag}`);
-    expect(suggestQuery("", flag)).toBe(`graphify query "<your question>"${flag}`);
   });
 });
 
@@ -521,85 +496,5 @@ describe("resolveGraphRoot / isInsideGraphScope", () => {
     const hidden = path.join(dir, ".hidden", "x");
     fs.mkdirSync(hidden, { recursive: true });
     expect(isInsideGraphScope(hidden, dir)).toBe(false);
-  });
-});
-
-describe("questionFromPattern / suggestQuery", () => {
-  // No template — bare, sanitized terms only (a live finding: the old "What
-  // defines or uses X?" wrapper let graphify match its own noise words).
-  test("turns identifier terms into the bare terms, sanitized", () => {
-    expect(questionFromPattern("authService")).toBe("authService");
-  });
-
-  test("sanitizes down to [A-Za-z0-9 ] only — defence in depth", () => {
-    expect(questionFromPattern("auth;Service`rm -rf`")).toBe("auth Service rm rf");
-    expect(questionFromPattern("foo&calc&bar")).toBe("foo calc bar");
-  });
-
-  test("returns null for nothing usable", () => {
-    expect(questionFromPattern("")).toBe(null);
-    expect(questionFromPattern(undefined)).toBe(null);
-  });
-
-  test("suggestQuery wraps the question in a graphify query command", () => {
-    expect(suggestQuery("authService")).toBe('graphify query "authService"');
-    expect(suggestQuery("")).toBe('graphify query "<your question>"');
-  });
-});
-
-describe("hasGraphAnswer / trimToTraversalHeader — traversal-header gated", () => {
-  test("empty / whitespace-only output → no answer", () => {
-    expect(hasGraphAnswer("")).toBe(false);
-    expect(hasGraphAnswer("   \n  ")).toBe(false);
-    expect(hasGraphAnswer(undefined)).toBe(false);
-  });
-
-  test("the exact 'no nodes' message (no header) → no answer", () => {
-    expect(hasGraphAnswer("No matching nodes found.")).toBe(false);
-    expect(hasGraphAnswer("no matching nodes found")).toBe(false);
-    expect(hasGraphAnswer("  No matching nodes found.  \n")).toBe(false);
-  });
-
-  test("a header reporting 0 nodes → no answer", () => {
-    expect(hasGraphAnswer("Traversal: BFS depth=2 | 0 nodes found")).toBe(false);
-  });
-
-  test("text that merely CONTAINS answer-shaped words but no header → no answer", () => {
-    expect(hasGraphAnswer("Node: authService (src/auth.js:12)")).toBe(false);
-  });
-
-  test("a real header with N>0 → an answer", () => {
-    expect(hasGraphAnswer("Traversal: BFS depth=2 | 33 nodes found")).toBe(true);
-    expect(hasGraphAnswer("Traversal: BFS depth=1 | 1 node found")).toBe(true);
-  });
-
-  test("warnings printed BEFORE a valid header still count as an answer", () => {
-    expect(hasGraphAnswer("Warning: cache miss\nTraversal: BFS depth=2 | 5 nodes found\nNode: a")).toBe(true);
-  });
-
-  test("trimToTraversalHeader drops everything before the header", () => {
-    const out = "Warning: cache miss\nTraversal: BFS depth=2 | 5 nodes found\nNode: a\nNode: b";
-    expect(trimToTraversalHeader(out)).toBe("Traversal: BFS depth=2 | 5 nodes found\nNode: a\nNode: b");
-  });
-
-  test("trimToTraversalHeader falls back to the trimmed full text when no header is present", () => {
-    expect(trimToTraversalHeader("  just some text  ")).toBe("just some text");
-  });
-});
-
-describe("gateKeyHash — short stable hash for gate_fired/gate_bypassed linkage", () => {
-  test("deterministic for the same inputs", () => {
-    expect(gateKeyHash("Grep", "C:/p", '{"pattern":"authService"}'))
-      .toBe(gateKeyHash("Grep", "C:/p", '{"pattern":"authService"}'));
-  });
-
-  test("differs when any input differs", () => {
-    const base = gateKeyHash("Grep", "C:/p", '{"pattern":"authService"}');
-    expect(gateKeyHash("Grep", "C:/p", '{"pattern":"userRepo"}')).not.toBe(base);
-    expect(gateKeyHash("Grep", "C:/other", '{"pattern":"authService"}')).not.toBe(base);
-  });
-
-  test("short and stable-length", () => {
-    expect(gateKeyHash("Grep", "C:/p", "{}")).toHaveLength(8);
   });
 });

@@ -69,6 +69,18 @@ ToolSearch({ query: "select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_
 "Unavailable" means absent from both the loaded and the deferred list — a
 terminal session, where the tools do not exist.
 
+`prompt.flow.title-work` usually needs no `get_session` at all: it reads the
+current title from the transcript tail (`hooks/lib/session-title.js`, last
+`custom-title` entry) and hands Claude the exact new title, to be set in the
+same message as the turn's first other tool call (no round trip of its own).
+Only `set_session_title` is loaded then — ToolSearch
+`select:mcp__ccd_session_mgmt__set_session_title` in that first batch, the set
+call in the next. When the transcript does not reveal the title, the hook
+falls back to the get_session instruction above. The completion card's
+`[SESSION TITLE]` block works the same way: the server resolves the transcript
+from the card's `session_id` + `cwd` and names the exact title, set in the same
+message as the card's `show_widget` call.
+
 ## When the server is genuinely down: `Connection closed`
 
 The deferred-list rule above has one real exception. When the SessionStart

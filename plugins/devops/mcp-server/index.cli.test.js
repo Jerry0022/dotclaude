@@ -122,6 +122,25 @@ describe("--render-card CLI fallback", () => {
     expect(stderr).toContain('"📦 Ready – " + <stripped title>');
   });
 
+  test("a title readable from the transcript yields the exact set call — no get_session", async () => {
+    const home = mkdtempSync(join(tmpdir(), "cli-title-home-"));
+    try {
+      const sid = S("title-known");
+      const dir = join(home, ".claude", "projects", "some-project");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${sid}.jsonl`), JSON.stringify({ type: "custom-title", customTitle: "⏳ CLI task" }) + "\n");
+      const { stdout, stderr } = await renderCardFull(
+        { variant: "ready", summary: "Titel-Test", session_id: sid, changes: [{ area: "x", description: "y" }] },
+        { HOME: home, USERPROFILE: home },
+      );
+      expect(stdout).not.toContain("SESSION TITLE");
+      expect(stderr).toContain('mcp__ccd_session_mgmt__set_session_title {session_id:"self", title:"📦 Ready – CLI task"}');
+      expect(stderr).not.toContain("mcp__ccd_session_mgmt__get_session");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   test("the card-widget instruction rides on stderr on the Desktop app only (§ 4)", async () => {
     const payload = { variant: "ready", summary: "CTA-Test", session_id: S("cta"), changes: [{ area: "x", description: "y" }] };
     const desktop = await renderCardFull(payload, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" });
@@ -140,7 +159,7 @@ describe("--render-card CLI fallback", () => {
     expect(terminal.stdout).toMatch(/^## 📦 Shippen\?$/m);
     expect(terminal.stdout).toMatch(/^### \*\*✨✨✨ CTA-Test ✨✨✨\*\*/m);
     expect(desktop.stdout.trim()).toBe("");
-    expect(desktop.stderr).toContain("this card has no markdown to relay");
+    expect(desktop.stderr).toContain("no markdown to relay");
     // 2026-09-24: "answer with ONE short line" put a stray line under the card
     // on every widget turn — the app's nudge now gets an empty reply.
     expect(desktop.stderr).toMatch(/reply to it with nothing — no text, no tool call/);

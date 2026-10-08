@@ -11,7 +11,7 @@ const HOOK = path.join(__dirname, "pre.tokens.guard.js");
 const BIG = "docs/concepts/big.html";
 
 // Isolate ~/.claude from the machine running the tests (same idiom as
-// pre.tokens.guard.graphgate.test.js) so no global record can flip a verdict.
+// the former graphgate test) so no global record can flip a verdict.
 const HOME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tokguard-home-"));
 fs.mkdirSync(path.join(HOME_DIR, ".claude"), { recursive: true });
 
