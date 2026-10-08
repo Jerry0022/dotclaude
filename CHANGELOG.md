@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.258.0] — 2026-10-09
+
+After a test or a ship the card offered no direct way to start the app: the user had to type the start request themselves (#680).
+
+### Added
+- **"App starten" / "Start app" on the card widget.** `test` and `ship-successful` cards (including kept and deploy variants and a plain merge with nothing to promote) show the button when the MCP server finds a launch path in the card's cwd: `.claude/launch.json` with at least one configuration, `scripts/run-local.*`, or a `dev`/`start` script in `package.json`. It sits after the card's own verbs and before the guide button, never as the primary button, with a tooltip in de and en. Its prompt ("Starte die App" / "Run the app") matches the start keywords of `prompt.flow.appstart`, so a click runs the existing start flow. Detection happens at render time (no payload field) and is never fatal — any error means no button. `test-minimal` stays button-free: it is the card after the app already started. New lib `mcp-server/lib/launch-path.js`; `deep-knowledge/completion-card-design.md` documents the rule.
+
+### Tests
+- New `launch-path.test.js` (8), `card-widget.test.js` (+4), `index.card.test.js` (+1). Branch suites 236/236, full suite 8701 passed / 3 skipped (298 files), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.257.5] — 2026-10-09
 
 The deploy-parity build failed with `ERR_MODULE_NOT_FOUND` for a devDependency on a project whose `vercel.json` named only a `buildCommand`: the plan carried `install: null`, so the clean clone built without dependencies, while the real Vercel deploy (which installs on its own) succeeded (#685).
