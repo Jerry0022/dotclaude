@@ -1,6 +1,6 @@
 # GitHub Issue Rules
 
-## User-value gate (mandatory — checked BEFORE creating any issue)
+## User-value gate (checked before creating any issue)
 
 Every issue must deliver a positive user-experience effect **on its own**.
 The test: *"If ONLY this issue is implemented and shipped — nothing else —
@@ -10,8 +10,8 @@ Accepted value, either kind:
 - **Direct**: visible feature, UI improvement, bug fixed, fewer crashes
 - **Indirect**: performance, stability, security, lower resource usage
 
-If the honest answer is *"only in combination with other issues"* → do NOT
-create it as its own issue.
+If the honest answer is *"only in combination with other issues"*, it is not
+its own issue.
 
 **Bundling rule:** Technical sub-tasks that only produce value together
 (e.g. "change file A", "adapt module B", "extend schema C" — all serving one
@@ -28,10 +28,6 @@ line honestly, the issue fails the gate.
   value, but each member issue must still pass the gate on its own
 - `type:chore` / `type:refactor` issues — IF the body names the indirect
   user effect (e.g. "removes crash-prone code path", "cuts startup time")
-
-**Anti-pattern (never):** decomposing one use case into many file-level or
-layer-level issues that each describe a code change but no user-perceivable
-outcome. That floods the tracker without adding plannable value.
 
 ## Title format
 
