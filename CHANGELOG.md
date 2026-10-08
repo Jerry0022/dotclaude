@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.249.5] — 2026-10-08
+
+### Fixed
+- **`ss.plugin.update`: a stale `index.lock` no longer makes the channel pin fail silently.** Observed 2026-10-08: a 0-byte `.git/index.lock`, left 2 h earlier by a killed git in the marketplace clone, failed every `--force` run's checkout. The right tag (alpha/v0.249.4) was resolved, HEAD stayed on alpha/v0.248.8, and the hook printed nothing. The pin now lives in `hooks/lib/channel-pin.js`:
+  - It first removes a lock that is provably stale (`hooks/lib/stale-index-lock.js`): 0 bytes, at least 10 min old, no running git process started before the lock was written, and unchanged at unlink time. Long-running read-only git processes (fsmonitor, `cat-file --batch`, credential helpers) are ignored. If the process list cannot be read, the lock stays. A removal is reported on stderr.
+  - If HEAD is still off the target afterwards, one stderr line names the tag, where HEAD stayed, git's own error, and why any lock was kept.
+  - A failed pin hands the 6 h cooldown token back.
+  - The pin semantics are unchanged: a detached tag checkout, never a pull.
+
 ## [0.249.4] — 2026-10-08
 
 ### Changed
