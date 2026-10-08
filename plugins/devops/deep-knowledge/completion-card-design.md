@@ -220,6 +220,19 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   hit also records the pending hint `prompt.skill.enforce` offers on the
   next real prompt. Writing such a point without checking this first is the
   bug the button exists to catch.
+- **`App starten` / `Start app` button** (#680): `test` and `ship-successful`
+  cards (plain, kept, deploy, also a plain merge with nothing to promote) get
+  it when the card server finds a launch path in the card's `cwd`
+  (`mcp-server/lib/launch-path.js`: `.claude/launch.json` with at least one
+  configuration, `scripts/run-local.*`, or a `package.json` `dev`/`start`
+  script) — detected at render time, no payload field. It sits after the
+  card's own verbs and before `Web-Guide starten`, never primary (Ship /
+  Promote keep the accent). Its prompt (`Starte die App` / `Run the app`)
+  hits a start keyword of `prompt.flow.appstart`, so the click runs the
+  normal start flow (pinned by `card-widget.test.js`). No `cwd`, no launch
+  path or a detection error → no button. Not on `ready`, the overrides or
+  any other key; `test-minimal` stays button-free — it is the card shown
+  after the app already started.
 - **Prepared answer (`ready`, `test`, `ship-successful`)**: when the card has
   open points, a `Nachbessern` button carries the prepared answer:
   `ready`'s `Ändern` becomes it, `test`'s own `Nachbessern` swaps its "frag
@@ -243,14 +256,14 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | `ready` / `test`, no remote | `📦 Lokal fertig trotz {reservation} — noch etwas?` / `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
-| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points | context line = distance to beta |
-| `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter | |
-| `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy | replaces the 🚨 DEPLOY block |
+| `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points; + App starten with a launch path | context line = distance to beta |
+| `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter (+ App starten with a launch path) | |
+| `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy (+ App starten with a launch path) | replaces the 🚨 DEPLOY block |
 | `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Promote stable | evidence = promotion facts |
 | `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
 | `ready-files` | `📂 Fertig auf der Platte — noch etwas?` | final tests | — | pipeline = file line |
-| `test` | `🧪 Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (open points → prepared answer) | unverified part = `◐` post |
-| `test-minimal` | `▶️ Läuft — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget |
+| `test` | `🧪 Erst testen, dann shippen?` | open + userTest steps | Ship · Nachbessern (open points → prepared answer) · App starten with a launch path | unverified part = `◐` post |
+| `test-minimal` | `▶️ Läuft — viel Spaß` | — | — | title + one line + heading; no evidence, budget, pipeline, widget — so no `App starten` either |
 | `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage | pipeline = `➖ keine Änderungen`; only when nothing changed anywhere — an answer or investigation (#624). Work done outside the repo → `fallback`; implementation handed to still-running agents → `ready`/`test` + `pending`; a mode activation → its override |
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |
 | `fallback` | `🔧 Erledigt — noch etwas?` | — | — | also for work finished outside the repo with no repo diff: a DB op, a delete, a deploy, a data migration, a settings change (#624) |

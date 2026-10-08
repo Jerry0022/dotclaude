@@ -55,6 +55,7 @@ import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
 import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
+import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
 import {
   assessFreshness,
@@ -1580,6 +1581,8 @@ function buildContextLine(input, key, delivery, lang) {
 
 /** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
 const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback', 'paused']);
+// Decision keys whose card offers "App starten" when a launch path exists (#680).
+const APP_START_KEYS = new Set(['test', 'ship-successful', 'ship-successful-kept', 'ship-successful-deploy']);
 
 /** Decision keys whose widget offers "Nachbessern" with the prepared answer to the card's open points. */
 const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
@@ -1690,11 +1693,17 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   if (key === 'ship-successful' && !buttonsKey && replies.length) buttonsKey = 'ship-successful-plain';
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
+  // "App starten" (#680): test and ship-successful (plain, kept, deploy — also when
+  // nothing is promotable and buttonsKey is null) offer to start the app when
+  // the project has a launch path. Keyed on the decision key, not buttonsKey;
+  // the overrides above returned already, test-minimal is no key here.
+  const appStart = APP_START_KEYS.has(key) && !!detectLaunchPath(input.cwd);
+
   // The version rides on the promote buttons (card-widget.js#buttonsFor): a
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
-    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff,
+    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
   };
 }
 
@@ -1827,6 +1836,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     replies: decision.replies || [],
     noShip: !!decision.noShip,
     guideHandoff: decision.guideHandoff || null,
+    appStart: !!decision.appStart,
   };
 }
 

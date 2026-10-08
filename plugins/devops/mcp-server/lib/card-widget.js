@@ -190,6 +190,25 @@ function guideHandoffButton(service, lang) {
 }
 
 /**
+ * "App starten" (#680): offered on `test` and `ship-successful` cards when the
+ * project has a launch path (lib/launch-path.js#detectLaunchPath). index.js
+ * decides the keys and passes `opts.appStart`; buttonsFor only appends it —
+ * after the card's own verbs, before the guide button — and never as primary
+ * (Ship / Promote keep the accent). The prompt must hit a start keyword of
+ * hooks/user-prompt-submit/prompt.flow.appstart.js so the click runs the
+ * existing start flow (pinned by card-widget.test.js).
+ */
+export const APP_START_BUTTON = {
+  de: { label: "App starten", icon: "player-play", tooltip: "Startet die App lokal, damit du sie direkt ausprobieren kannst.", prompt: "Starte die App" },
+  en: { label: "Start app", icon: "player-play", tooltip: "Starts the app locally so you can try it right away.", prompt: "Run the app" },
+};
+
+function appStartButton(lang) {
+  const a = APP_START_BUTTON[lang] || APP_START_BUTTON.de;
+  return { label: a.label, icon: a.icon, prompt: a.prompt, tooltip: a.tooltip };
+}
+
+/**
  * The prepared answer to a card's open points, in their order. One answer is
  * the prompt itself; two or more become a bulleted list under the intro line.
  * A prompt the host would refuse (leading "/") gets the intro line in front.
@@ -224,7 +243,7 @@ export function conclusionPrompt(replies, lang = "de") {
  *
  * @param {string|null} buttonsKey resolved by index.js#buildCardModel
  * @param {'de'|'en'} lang
- * @param {{ version?: string|null, replies?: string[], noShip?: boolean, guideHandoff?: {service:string}|null }} [opts] the version the card is about, the prepared answers to its open points, whether a no-remote ready/test card drops its ship buttons (#500), and a detected manual web hand-off (#506)
+ * @param {{ version?: string|null, replies?: string[], noShip?: boolean, guideHandoff?: {service:string}|null, appStart?: boolean }} [opts] the version the card is about, the prepared answers to its open points, whether a no-remote ready/test card drops its ship buttons (#500), a detected manual web hand-off (#506), and whether to offer "App starten" (#680)
  * @returns {Array<{ label: string, icon: string, prompt: string, primary?: boolean, tooltip: string }>}
  */
 export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
@@ -249,6 +268,7 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
     // Dropping the Ship button must not leave a row without its accented verb.
     if (opts && opts.noShip && buttons.length && !buttons.some((a) => a.primary)) buttons[0] = { ...buttons[0], primary: true };
   }
+  if (opts && opts.appStart) buttons.push(appStartButton(lang));
   const handoff = opts && opts.guideHandoff;
   if (handoff && handoff.service) buttons.push(guideHandoffButton(handoff.service, lang));
   return buttons;
@@ -372,7 +392,7 @@ export function cardWidgetData(model, repoUrl = "") {
   const nz = (v) => (v ? v : undefined);
   const arr = (a) => (Array.isArray(a) ? a : []);
   const list = (a) => (arr(a).length ? a : undefined);
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff });
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff, appStart: model.appStart });
   const prNum = model.pipelinePr && model.pipelinePr.number;
   const b = model.budget;
   let bu;
