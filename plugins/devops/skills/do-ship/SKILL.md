@@ -108,7 +108,7 @@ Orchestrators that land several PRs from one session (auto-cleanup Step 10b,
 | Signal | Effect on this run |
 |---|---|
 | `--cwd=<path>` | **Target directory override.** Every `ship_*` MCP call passes this path as `cwd`, every git/gh command runs with `git -C <path>` / inside it, and both Step 1e passes get `--cwd=<path>`. The branch that ships is the one checked out THERE, not this session's own. Pre-Step B (session activity) and Pre-Step C (sidebar title) still refer to this session; `ExitWorktree` is **never** called (it would act on this session's worktree, not the target) — the orchestrator owns the target's teardown, so `--cwd` implies `--keep`. |
-| `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel. |
+| `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel and the lockout marker. |
 | `--queued` | This ship is one of several in a queue. The card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here, and Step 6 skips `ship_hygiene` — the orchestrator decided what stays. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
 | `--delegated` | This run is the fresh-context subagent of a delegated ship (Pre-Step 0). Follow `modes/delegated.md` → *Subagent*: gates return a decision instead of asking, the card comes back as JSON. |
@@ -159,15 +159,17 @@ ever be answered**; one modal would hang the whole night run. Detect that state
 FIRST, before any other step:
 
 ```bash
-node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check
+node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check --ship
 ```
 
-Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run
-**and persist it durably**: write a `.claude/.ship-lockout` marker in the repo
-root (`node -e "require('fs').mkdirSync('.claude',{recursive:true});require('fs').writeFileSync('.claude/.ship-lockout','1')"`).
-A compaction during the CI wait can drop the variable, so at every interactive
-gate re-derive `$SHIP_LOCKOUT=true` when the marker file exists — never trust
-recall alone. Clear the marker in Step 5 cleanup (delete `.claude/.ship-lockout`).
+Parse the JSON. If `active: true`, set `$SHIP_LOCKOUT=true` for this whole run.
+`--ship` persists it durably in the `.claude/.ship-lockout` marker (repo root)
+and, with no active lockout, deletes a marker an earlier blocked or aborted ship
+left behind. A compaction during the CI wait can drop the variable, so at every
+interactive gate re-derive `$SHIP_LOCKOUT=true` when the marker file exists — never trust
+recall alone (`autonomous-lockout.js ship-marker` answers it and expires a
+marker older than 6 h). `ship_cleanup` deletes the marker on every exit —
+success, keep-mode and each `ship-blocked` exit; never write or delete it by hand.
 If the command errors or the script is absent (older plugin), treat it as **not
 locked** and continue: the guard only ever *adds* non-interactive safety.
 
@@ -252,7 +254,8 @@ remembered title by re-typing it.
 > and would leave the sentinel stranded, silently disarming main-branch protection
 > until it ages out. **Rule:** before rendering ANY `ship-blocked` card, first call
 > `ship_cleanup({ branch, cwd, keep: true })` — keep-mode deletes no branch/worktree,
-> it only clears the sentinel so main-branch protection resumes immediately.
+> it only clears the sentinel (main-branch protection resumes immediately) and the
+> `.claude/.ship-lockout` marker (the next ship starts interactive).
 > The `ship-blocked` card's `[SESSION TITLE]` block then swaps the sidebar prefix
 > to `⛔ Blocked – ` (Step 6 → *Session title on exit*).
 

@@ -8,14 +8,26 @@ import { z } from "zod";
 import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
+import { clearLockoutMarker } from "../lib/lockout-marker.js";
 import { detectRepoMode, refusesGitWrites, probeTimeoutError } from "../lib/repo-mode.js";
 
 export const schema = z.object({
   branch: z.string().describe("Feature branch to delete"),
   base: z.string().default("main").describe("Base branch (should already be checked out)"),
   cwd: z.string().describe("Working directory of the target repo (required — must be passed by the caller)"),
-  keep: z.boolean().default(false).describe("Keep-mode: skip all branch/worktree deletion. Only clears the ship-in-progress sentinel so Edit guards reset. Use when follow-up work is expected in this same branch/worktree."),
+  keep: z.boolean().default(false).describe("Keep-mode: skip all branch/worktree deletion. Only clears the ship-in-progress sentinel (so Edit guards reset) and the do-ship lockout marker. Use when follow-up work is expected in this same branch/worktree."),
 });
+
+/**
+ * Clear the per-ship state every exit must drop: the ship-in-progress sentinel
+ * (main-branch guards resume) and do-ship's `.claude/.ship-lockout` marker (the
+ * next interactive ship must not inherit an AFK lockout). Returns the entries
+ * for `cleaned`; the marker is listed only when one was actually removed.
+ */
+function clearShipState(cwd) {
+  clearSentinel(cwd);
+  return clearLockoutMarker(cwd) ? ["sentinel", "lockout-marker"] : ["sentinel"];
+}
 
 export async function handler(params) {
   const { branch, base, cwd, keep } = params;
@@ -35,8 +47,9 @@ export async function handler(params) {
   //                         directory, so the checkout and pull silently
   //                         operated on a repository the user never targeted.
   const repoMode = detectRepoMode(cwd);
-  // Timed-out probe: keep the sentinel (the ship may still be in flight) and
-  // say so — never delete a branch on a guess, never report a cleanup (#411).
+  // Timed-out probe: keep the sentinel and the lockout marker (the ship may
+  // still be in flight) and say so — never delete a branch on a guess, never
+  // report a cleanup (#411).
   if (repoMode === "unknown") {
     return {
       success: false,
@@ -51,7 +64,7 @@ export async function handler(params) {
     };
   }
   if (refusesGitWrites(repoMode)) {
-    clearSentinel(cwd);
+    const shipState = clearShipState(cwd);
     const reason = repoMode === "none" ? "file-only-mode" : "foreign-repo-root";
     return {
       success: true,
@@ -60,7 +73,7 @@ export async function handler(params) {
       mode: repoMode,
       intermediate,
       branchBeforeCleanup: null,
-      cleaned: ["sentinel"],
+      cleaned: shipState,
       warnings: [
         repoMode === "none"
           ? "No git repository — nothing to clean up (no branch, no worktree, no remote)."
@@ -70,23 +83,24 @@ export async function handler(params) {
     };
   }
 
-  // Keep-mode: skip all destructive cleanup. Only the sentinel needs clearing
-  // so Edit/branch guards stop treating this as "ship in progress".
+  // Keep-mode (also every ship-blocked exit): skip all destructive cleanup.
+  // Only the per-ship state goes, so Edit/branch guards stop treating this as
+  // "ship in progress" and the next ship does not inherit the lockout marker.
   if (keep) {
-    clearSentinel(cwd);
+    const shipState = clearShipState(cwd);
     return {
       success: true,
       kept: true,
       intermediate,
       branchBeforeCleanup: git("rev-parse --abbrev-ref HEAD", opts) || null,
-      cleaned: ["sentinel"],
+      cleaned: shipState,
       warnings: [`Keep-mode: branch '${branch}' and worktree preserved for follow-up work`],
     };
   }
 
   // Guard: refuse to run inside a worktree
   if (isWorktree(opts)) {
-    clearSentinel(cwd);
+    clearShipState(cwd);
     return {
       success: false,
       error: "Still inside a worktree. Harness-created worktree (Claude Desktop): call ship_cleanup with keep: true — the app owns the worktree lifecycle and ship_release already deleted the remote branch. EnterWorktree-created worktree: call ExitWorktree(action: 'remove') first, then retry.",
@@ -98,7 +112,7 @@ export async function handler(params) {
   // Guard: refuse to delete a branch attached to an active worktree
   const worktreeBranches = getWorktreeBranches(opts);
   if (worktreeBranches.has(branch)) {
-    clearSentinel(cwd);
+    clearShipState(cwd);
     return {
       success: false,
       error: `Branch '${branch}' is attached to an active worktree. Cannot delete — worktree session would break. Harness-created worktree (Claude Desktop): use keep: true — the app removes worktree + branch. EnterWorktree-created: ExitWorktree(action:'remove') first, then retry.`,
@@ -117,7 +131,7 @@ export async function handler(params) {
       gitArgs(["checkout", base], opts);
       cleaned.push(`checkout:${base}`);
     } catch (e) {
-      clearSentinel(cwd);
+      clearShipState(cwd);
       return {
         success: false,
         error: `Failed to checkout ${base}: ${e.message}`,
@@ -211,7 +225,7 @@ export async function handler(params) {
     }
   }
 
-  clearSentinel(cwd);
+  cleaned.push(...clearShipState(cwd).filter((c) => c !== "sentinel"));
   return {
     success: true,
     intermediate,

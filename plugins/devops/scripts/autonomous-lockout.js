@@ -34,9 +34,18 @@
  *                 .git/info/exclude so it never surfaces as an untracked change.
  *                 `session` defaults to $CLAUDE_SESSION_ID / $CLAUDE_CODE_SESSION_ID.
  *                 → { ok, active:true, path, owner, since, session }
- *   check         Report whether a lockout is active in the cwd; a stale one is
+ *   check [--ship]
+ *                 Report whether a lockout is active in the cwd; a stale one is
  *                 removed and reported.
  *                 → { ok, active, owner?, since?, session?, stale?, removed? }  (exit 0 always)
+ *                 `--ship` (do-ship Pre-Step A) also syncs the per-ship marker
+ *                 `.claude/.ship-lockout` (hooks/lib/ship-lockout-marker.js):
+ *                 written when active, deleted otherwise, so a marker stranded
+ *                 by an earlier blocked/aborted ship never reaches a new one.
+ *                 Adds `marker: "written" | "failed" | "cleared" | "absent"`.
+ *   ship-marker   Gate re-derivation: is the per-ship marker live? A marker
+ *                 older than its 6 h TTL is removed and reported inactive.
+ *                 → { ok, active, stale?, removed?, owner?, written? }  (exit 0 always)
  *   clear         Remove the sentinel. → { ok, cleared }
  *
  * Cross-platform; no Windows dependency.
@@ -45,6 +54,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const shipMarker = require('../hooks/lib/ship-lockout-marker');
 
 const LOCKOUT_FILE = 'AUTONOMOUS-LOCKOUT.flag';
 
@@ -174,19 +184,34 @@ function runArm(args) {
   out({ ok: true, active: true, path: lockoutPathFor(dir), owner, since, session });
 }
 
-function runCheck() {
+/**
+ * `check --ship`: mirror the lockout into the per-ship marker. Never throws.
+ * @returns {"written"|"failed"|"cleared"|"absent"}
+ */
+function syncShipMarker(dir, active) {
+  if (active) return shipMarker.writeMarker(dir, active) ? 'written' : 'failed';
+  return shipMarker.clearMarker(dir) ? 'cleared' : 'absent';
+}
+
+function runCheck(args = []) {
   const dir = process.cwd();
+  const ship = args.includes('--ship');
+  const withMarker = (res, active) => (ship ? { ...res, marker: syncShipMarker(dir, active) } : res);
   const info = inspectLockout(dir);
   if (!info) {
-    out({ ok: true, active: false });
+    out(withMarker({ ok: true, active: false }, null));
     return;
   }
   if (info.stale) {
     const removed = removeLockout(dir);
-    out({ ok: true, active: false, stale: true, removed, owner: info.owner, since: info.since, session: info.session });
+    out(withMarker({ ok: true, active: false, stale: true, removed, owner: info.owner, since: info.since, session: info.session }, null));
     return;
   }
-  out({ ok: true, active: true, owner: info.owner, since: info.since, session: info.session });
+  out(withMarker({ ok: true, active: true, owner: info.owner, since: info.since, session: info.session }, info));
+}
+
+function runShipMarker() {
+  out({ ok: true, ...shipMarker.readMarker(process.cwd()) });
 }
 
 function runClear() {
@@ -206,10 +231,11 @@ function runClear() {
 if (require.main === module) {
   const [, , subcmd, ...args] = process.argv;
   if (subcmd === 'arm') runArm(args);
-  else if (subcmd === 'check') runCheck();
+  else if (subcmd === 'check') runCheck(args);
+  else if (subcmd === 'ship-marker') runShipMarker();
   else if (subcmd === 'clear') runClear();
   else {
-    out({ ok: false, error: `Unknown subcommand: ${subcmd || '(empty)'}. Use: arm | check | clear` });
+    out({ ok: false, error: `Unknown subcommand: ${subcmd || '(empty)'}. Use: arm | check [--ship] | ship-marker | clear` });
     process.exit(1);
   }
 }

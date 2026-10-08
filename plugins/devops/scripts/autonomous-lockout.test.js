@@ -129,3 +129,54 @@ describe("autonomous-lockout — CLI", () => {
     expect(parseArmArgs(["do-run"], { CLAUDE_SESSION_ID: "env-1" })).toEqual({ owner: "do-run", session: "env-1" });
   });
 });
+
+describe("autonomous-lockout — do-ship marker (`check --ship`, `ship-marker`)", () => {
+  const MARKER = (d) => path.join(d, ".claude", ".ship-lockout");
+  const repo = () => {
+    const d = mkdtemp();
+    fs.mkdirSync(path.join(d, ".git"));
+    return d;
+  };
+
+  test("active lockout: check --ship writes the marker, ship-marker reports it live", () => {
+    const d = repo();
+    cli(d, "arm", "do-run", "--session=s-1");
+    expect(cli(d, "check", "--ship")).toMatchObject({ active: true, marker: "written" });
+    expect(fs.existsSync(MARKER(d))).toBe(true);
+    expect(cli(d, "ship-marker")).toMatchObject({ ok: true, active: true, owner: "do-run" });
+  });
+
+  test("a marker stranded by a blocked ship is cleared by the next interactive check --ship", () => {
+    const d = repo();
+    fs.mkdirSync(path.join(d, ".claude"), { recursive: true });
+    fs.writeFileSync(MARKER(d), "1"); // the old prose-written shape
+    expect(cli(d, "check", "--ship")).toEqual({ ok: true, active: false, marker: "cleared" });
+    expect(fs.existsSync(MARKER(d))).toBe(false);
+    expect(cli(d, "ship-marker")).toEqual({ ok: true, active: false });
+  });
+
+  test("a stale lockout clears the marker too", () => {
+    const d = repo();
+    writeSentinel(d, { owner: "do-run", since: new Date(Date.now() - 7 * HOUR).toISOString() });
+    fs.mkdirSync(path.join(d, ".claude"), { recursive: true });
+    fs.writeFileSync(MARKER(d), "1");
+    expect(cli(d, "check", "--ship")).toMatchObject({ active: false, stale: true, marker: "cleared" });
+    expect(fs.existsSync(MARKER(d))).toBe(false);
+  });
+
+  test("plain check (no --ship) leaves the marker alone and reports no marker field", () => {
+    const d = repo();
+    fs.mkdirSync(path.join(d, ".claude"), { recursive: true });
+    fs.writeFileSync(MARKER(d), "1");
+    expect(cli(d, "check")).toEqual({ ok: true, active: false });
+    expect(fs.existsSync(MARKER(d))).toBe(true);
+  });
+
+  test("ship-marker expires a marker older than 6 h", () => {
+    const d = repo();
+    fs.mkdirSync(path.join(d, ".claude"), { recursive: true });
+    fs.writeFileSync(MARKER(d), JSON.stringify({ written: new Date(Date.now() - 7 * HOUR).toISOString() }));
+    expect(cli(d, "ship-marker")).toMatchObject({ ok: true, active: false, stale: true, removed: true });
+    expect(fs.existsSync(MARKER(d))).toBe(false);
+  });
+});
