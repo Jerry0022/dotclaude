@@ -103,12 +103,25 @@ Stop the watchdog so it does not linger for its next poll:
 node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .
 ```
 
-Then restore the session title: `mcp__ccd_session_mgmt__get_session` `self`;
-if the `title` starts with `📥 Batch – `, call
-`mcp__ccd_session_mgmt__set_session_title` `self` with that prefix removed. A
-title without the prefix is left alone — the user renamed it meanwhile, and
-that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere. The injected merge
-context repeats this instruction because the hook path never loads this skill.
+Then restore the session title. Hooks read the current title off the
+transcript tail (`hooks/lib/session-title.js` `unbatchTitle`) and name the
+exact result, so no `get_session` is needed:
+
+- **Marker / `go` path (4.8):** the injected merge context carries it —
+  `prompt.batch.collect` fires the merge and the hook path never loads this
+  skill.
+- **Step 5 and expiry:** the `deactivate` command's `[post.flow.title-mode]`
+  block carries it.
+
+Call `mcp__ccd_session_mgmt__set_session_title` `self` with that title in the
+same message as your next tool call. No title line / no block → the title
+carries no `📥 Batch – ` and is left alone — the user renamed it meanwhile,
+and that name wins.
+
+**Fallback — only when the context or block says the title is unknown:**
+`mcp__ccd_session_mgmt__get_session` `self`; if the `title` starts with
+`📥 Batch – `, call `mcp__ccd_session_mgmt__set_session_title` `self` with
+that prefix removed. Desktop app only (deferred is not unavailable — load the tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere.
 
 ## Hand-off gate (Step 4.9)
 

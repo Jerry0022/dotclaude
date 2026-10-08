@@ -127,9 +127,12 @@ node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" start .
 ```
 
 **2.2b Mark the session in the sidebar.** A collecting session looks idle
-from outside, so prefix the title: `get_session` / `set_session_title` with
-`session_id: "self"`, never stacking prefixes — the four steps are in
-`deep-knowledge/activation.md` § Session title prefix.
+from outside, so prefix the title. The 2.2 `activate` call answers with a
+`[post.flow.title-mode]` block carrying the exact title (prefixes stripped,
+never stacked): `set_session_title` with `session_id: "self"` and that title
+in the same message as your next tool call — no `get_session`. No block →
+already marked. Only a block saying the title is unknown sends you to the
+`get_session` fallback in `deep-knowledge/activation.md` § Session title prefix.
 
 The prefix is exactly `📥 Batch – ` (inbox tray, space, word, space, en dash,
 space) — the same emoji the completion card carries in its `📥 BATCH sammelt`
@@ -209,8 +212,9 @@ note unless asked; name the count and the first few.
 
 Every card rendered while the mode is armed passes `cwd` (see 2.5). When the
 mode turned out to be `expired` / `full`, the collection is over: strip the
-session-title prefix as in Step 5 in the same turn, so the sidebar stops
-promising a collection that no longer happens.
+session-title prefix as in Step 5 in the same turn (run its idempotent
+`deactivate` command — its hook block names the exact title), so the sidebar
+stops promising a collection that no longer happens.
 
 When `loadConfig()` returns a `markerFallback`, the Step 1 marker pre-check has
 already asked the marker question and saved the answer before you get here —
@@ -391,9 +395,11 @@ node "{PLUGIN_ROOT}/scripts/batch-watchdog.js" stop .
 node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').deactivate(process.cwd())"
 ```
 
-Restore the session title the same way as in Step 4.8: strip a leading
-`📥 Batch – ` via `set_session_title` `self`, leave any other title untouched,
-skip silently outside the Desktop app.
+Restore the session title the same way as in Step 4.8: the `deactivate` call
+above answers with a `[post.flow.title-mode]` block carrying the title with
+the leading `📥 Batch – ` stripped — `set_session_title` `self` with it, in
+parallel with your next tool call. No block → no prefix to strip (any other
+title stays untouched); skip silently outside the Desktop app.
 
 If notes remain, say how many and that they survive in `.claude/batch.md` for a
 later `/do-batch go`. Never discard them on deactivation.

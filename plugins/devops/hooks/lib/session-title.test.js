@@ -169,3 +169,34 @@ describe("session-title — transcript path from session_id + cwd", () => {
     }
   });
 });
+
+describe("session-title — do-batch titles", () => {
+  const { BATCH_PREFIX, batchTitle, unbatchTitle } = hookRequire("lib", "session-title.js");
+
+  test("BATCH_PREFIX mirrors SESSION_PREFIX.batch", () => {
+    expect(BATCH_PREFIX).toBe(SESSION_PREFIX.batch);
+  });
+
+  test("batchTitle prefixes, strips every devops prefix first, never stacks", () => {
+    expect(batchTitle("Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+    expect(batchTitle("⏳ Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+    expect(batchTitle("🧪 Test – 🔧 Done – Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+    expect(batchTitle(SESSION_PREFIX.concept + "Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+  });
+
+  test("batchTitle leaves an armed, empty or unknown title alone", () => {
+    expect(batchTitle(SESSION_PREFIX.batch + "Fix login")).toBeNull();
+    expect(batchTitle("")).toBeNull();
+    expect(batchTitle(null)).toBeNull();
+    expect(batchTitle("⏳ ")).toBeNull();
+  });
+
+  test("unbatchTitle strips exactly the batch prefix; a renamed title wins", () => {
+    expect(unbatchTitle(SESSION_PREFIX.batch + "Fix login")).toBe("Fix login");
+    expect(unbatchTitle(SESSION_PREFIX.batch + "⏳ Fix login")).toBe("⏳ Fix login");
+    expect(unbatchTitle("Renamed by user")).toBeNull();
+    expect(unbatchTitle("🧪 Test – Fix login")).toBeNull();
+    expect(unbatchTitle(SESSION_PREFIX.batch)).toBeNull();
+    expect(unbatchTitle(null)).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.9.1
+ * @version 0.10.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -65,6 +65,7 @@ const fs   = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const B = require('../lib/batch-state');
+const { unbatchTitle, readCurrentTitle } = require('../lib/session-title');
 
 /** Absolute path to the state module, so injected guidance can quote a command
  *  that actually runs — a relative require resolves against the wrong cwd. */
@@ -280,6 +281,39 @@ function noteIndexLine(note, i) {
  *   the merge fires off the surviving notes; sync = result of the main-sync
  *   the hook ran before injecting (see `syncMain`)
  */
+/**
+ * The session-title lines of the merge context (merge.md § Retire). `title`
+ * is the current title off the transcript tail: known → the exact stripped
+ * title, set in parallel with the turn's first other tool call, or no line at
+ * all when it carries no `📥 Batch – ` (a renamed title wins); unknown
+ * (`null` / `undefined`) → the get_session fallback.
+ *
+ * @param {string|null|undefined} title
+ * @returns {string[]}
+ */
+function retireTitleLines(title) {
+  if (typeof title === 'string') {
+    const next = unbatchTitle(title);
+    if (next === null) return [];
+    return [
+      '',
+      'Session-Titel (nur Desktop-App, einmal): mcp__ccd_session_mgmt__set_session_title',
+      `{session_id:"self", title:${JSON.stringify(next)}} in DERSELBEN Nachricht wie dein erster`,
+      'anderer Tool-Aufruf (parallel — kein get_session, keine eigene Nachricht).',
+      'Nur zurückgestellt (deferred): ToolSearch "select:mcp__ccd_session_mgmt__set_session_title" in diesem Batch,',
+      'der Aufruf im nächsten. Fehlt das Tool wirklich oder schlägt er fehl: still überspringen.',
+    ];
+  }
+  return [
+    '',
+    'Session-Titel: Beginnt er mit "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
+    'self), entferne genau dieses Präfix via mcp__ccd_session_mgmt__set_session_title',
+    'self. Nur zurückgestellt (deferred) ist nicht fehlend: dann beide einmal per ToolSearch',
+    '"select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title" laden, dann aufrufen.',
+    'Fehlen die Tools wirklich (Terminal, unbeaufsichtigt) oder schlägt der Aufruf fehl: still überspringen.',
+  ];
+}
+
 function buildMergeContext(notes, rest, notesFile, opts = {}) {
   const n = notes.length;
   const head = [
@@ -356,15 +390,10 @@ function buildMergeContext(notes, rest, notesFile, opts = {}) {
     'Der Sammelmodus ist mit diesem Prompt automatisch BEENDET. Folgeprompts sind',
     'die Unterhaltung über die Umsetzung und laufen wieder normal — frage NICHT,',
     'ob der Modus aktiv bleiben soll. Nur ein neues /do-batch on sammelt wieder.',
-    '',
     // The skill's own Step 4.8 says the same, but this path never loads the
     // skill — the marker prompt is the whole trigger. Without this line the
     // sidebar keeps promising a collection that ended with this prompt.
-    'Session-Titel: Beginnt er mit "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
-    'self), entferne genau dieses Präfix via mcp__ccd_session_mgmt__set_session_title',
-    'self. Nur zurückgestellt (deferred) ist nicht fehlend: dann beide einmal per ToolSearch',
-    '"select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title" laden, dann aufrufen.',
-    'Fehlen die Tools wirklich (Terminal, unbeaufsichtigt) oder schlägt der Aufruf fehl: still überspringen.',
+    ...retireTitleLines(opts.title),
   );
   if (rest) {
     head.push(
@@ -746,7 +775,10 @@ function fireMerge({ cwd, text, marker, modeActive, sessionId, transcriptPath, r
   // Before the notes are even shown: bring main in. The plan is checked against
   // the code as it is now, not as it was when the first note was written.
   const sync = syncMain(cwd);
-  write(`${build(notes, rest, B.notesPath(cwd), { stale: !modeActive, sync })}\n`);
+  // The title off the transcript tail, so the context names the exact value
+  // (no get_session round trip); null → the get_session fallback.
+  const title = readCurrentTitle(transcriptPath || undefined);
+  write(`${build(notes, rest, B.notesPath(cwd), { stale: !modeActive, sync, title })}\n`);
   // The hand-off is enforced, not hoped for: pre.run.contract refuses edits and
   // commits until do-run / auto-concept is invoked (run-contract spec E).
   // H-B15: written only AFTER the context went out — a merge context that
@@ -904,6 +936,7 @@ module.exports = {
   buildAck,
   buildRearmAck,
   buildMergeContext,
+  retireTitleLines,
   fireMerge,
   renderSyncLines,
   buildActivationGuard,

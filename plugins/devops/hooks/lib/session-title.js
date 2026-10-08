@@ -1,6 +1,6 @@
 /**
  * @module session-title
- * @version 0.2.0
+ * @version 0.3.0
  * @description Reads the session's CURRENT sidebar title straight from the
  *   transcript and computes the next one, so a title instruction can hand
  *   Claude the exact `set_session_title` value instead of a
@@ -36,6 +36,8 @@ const SHIPPING_PREFIX = '🚀 Shipping – ';
 const CONCEPT_PREFIX = '\u{1F9ED} Concept – ';
 const CONCEPT_EMOJI = '\u{1F9ED}';
 const BATCH_EMOJI = '\u{1F4E5}';
+/** The /do-batch mode prefix — `SESSION_PREFIX.batch`. */
+const BATCH_PREFIX = BATCH_EMOJI + ' Batch – ';
 const HOURGLASS = '⏳';
 
 /** Leading emoji of the mode prefixes a skill owns (concept, batch). */
@@ -95,6 +97,35 @@ function nextTitle(current, { prefix = WORK_PREFIX, machine = false } = {}) {
   if (!stripped.trim()) return null;
   const next = prefix + stripped;
   return next === current ? null : next;
+}
+
+/**
+ * The title arming /do-batch leaves (activation.md § Session title prefix):
+ * `📥 Batch – ` in front, every devops prefix stripped first so prefixes
+ * never stack. `null` when unknown, already marked, or nothing is left.
+ *
+ * @param {string|null} current
+ * @returns {string|null}
+ */
+function batchTitle(current) {
+  if (typeof current !== 'string' || !current.trim()) return null;
+  if (current.startsWith(BATCH_PREFIX)) return null;
+  const stripped = stripPrefixes(current);
+  return stripped.trim() ? BATCH_PREFIX + stripped : null;
+}
+
+/**
+ * The title retiring /do-batch leaves (merge.md § Retire): exactly the
+ * leading `📥 Batch – ` removed. `null` when the title does not carry it —
+ * a title the user renamed meanwhile wins — or nothing would be left.
+ *
+ * @param {string|null} current
+ * @returns {string|null}
+ */
+function unbatchTitle(current) {
+  if (typeof current !== 'string' || !current.startsWith(BATCH_PREFIX)) return null;
+  const rest = current.slice(BATCH_PREFIX.length);
+  return rest.trim() ? rest : null;
 }
 
 /** The title an entry line carries, or undefined when it is no title entry. */
@@ -187,10 +218,13 @@ module.exports = {
   LEGACY_PENDING_PREFIX,
   SHIPPING_PREFIX,
   CONCEPT_PREFIX,
+  BATCH_PREFIX,
   MODE_PREFIX_EMOJI,
   OUTCOME_PREFIX_EMOJI,
   KNOWN_PREFIX_EMOJI,
   stripPrefixes,
   nextTitle,
+  batchTitle,
+  unbatchTitle,
   readCurrentTitle,
 };

@@ -198,6 +198,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.flow.title-mode.js", "timeout": 5 }
+        ],
+        "matcher": "Skill|Bash|PowerShell"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.project.setup.js" }
         ],
         "matcher": "Bash|PowerShell"
