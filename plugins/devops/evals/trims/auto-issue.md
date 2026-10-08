@@ -80,3 +80,12 @@ regraded from their saved streams — every grader reads only the command
 already sent. The case prompt now says to report a blocked write and stop.
 The refine path and `target_repo` have no case; those cuts are rationale
 and duplicates, the marker, heredoc and verify rules stay.
+
+## Follow-up (2026-10-08)
+
+The guard block above is fixed: `post.skill.marker` records each Skill load
+in a per-turn marker (keyed by session id, + agent id for a subagent),
+`prompt.skill.enforce` resets it per prompt, and `pre.issue.guard` reads it
+only when the caller's transcript is not on disk. The case now runs the
+write against a stub `gh` (`path_prepend: [bin]`) instead of denying it, and
+grades `guard-passed` + `write-succeeded`.

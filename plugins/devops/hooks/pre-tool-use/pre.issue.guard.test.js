@@ -315,3 +315,161 @@ describe("pre.issue.guard — other write routes (R10)", () => {
     expect(run(dir, { command: "gh api repos/a/b/issues/3" }).code).toBe(0);
   });
 });
+
+// `claude -p --no-session-persistence` (the A/B eval runner) writes no
+// transcript: the guard then reads the per-turn skill marker that
+// post.skill.marker (PostToolUse Skill) and prompt.skill.enforce
+// (UserPromptSubmit) write. Every hook in a scenario shares one isolated
+// os.tmpdir(), so no marker leaks between tests or into the real temp dir.
+describe("pre.issue.guard — headless runs without a transcript (turn marker)", () => {
+  const marked = 'gh issue create --title "[BUG] x" --body "y"  # via auto-issue';
+  const SID = "99999999-8888-7777-6666-555555555555";
+  const AID = "b1ecb1d0715ce1509";
+  const HOOKS = path.join(__dirname, "..");
+  const MARKER = path.join(HOOKS, "post-tool-use", "post.skill.marker.js");
+  const PROMPT = path.join(HOOKS, "user-prompt-submit", "prompt.skill.enforce.js");
+
+  function scenario() {
+    const dir = project();
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "issueguard-tmp-"));
+    const env = { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp };
+    const spawn = (hook, payload) => {
+      const res = spawnSync(process.execPath, [hook], {
+        input: JSON.stringify({ cwd: dir, ...payload }), cwd: dir, env, encoding: "utf8",
+      });
+      return { code: res.status, stdout: res.stdout || "", stderr: res.stderr || "" };
+    };
+    // transcript_path names a file that was never written — the -p shape.
+    const missing = path.join(dir, `${SID}.jsonl`);
+    const base = { session_id: SID, transcript_path: missing };
+    return {
+      dir, tmp, base,
+      prompt: (prompt, extra = {}) => spawn(PROMPT, { ...base, hook_event_name: "UserPromptSubmit", prompt, ...extra }),
+      skill: (skill, extra = {}) =>
+        spawn(MARKER, { ...base, hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill }, tool_response: {}, ...extra }),
+      guard: (toolInput, toolName = "Bash", extra = {}) =>
+        spawn(HOOK, { ...base, hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput, ...extra }),
+    };
+  }
+
+  test("Skill(auto-issue) loaded this turn → the marked write passes", () => {
+    const s = scenario();
+    s.prompt("file a bug");
+    expect(s.skill("devops:auto-issue").code).toBe(0);
+    const r = s.guard({ command: marked });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  test("no Skill call this turn → still blocked", () => {
+    const s = scenario();
+    s.prompt("file a bug");
+    expect(s.guard({ command: marked }).code).toBe(2);
+  });
+
+  test("the marker does not rescue an UNMARKED write", () => {
+    const s = scenario();
+    s.prompt("file a bug");
+    s.skill("devops:auto-issue");
+    expect(s.guard({ command: 'gh issue create --title "[BUG] x" --body "y"' }).code).toBe(2);
+  });
+
+  test("auto-issue in an EARLIER turn does not count — the next prompt resets the marker", () => {
+    const s = scenario();
+    s.prompt("file a bug");
+    s.skill("auto-issue");
+    expect(s.guard({ command: marked }).code).toBe(0);
+    s.prompt("now something else");
+    expect(s.guard({ command: marked }).code).toBe(2);
+  });
+
+  test("a slash-started /devops:auto-issue prompt counts (no Skill tool call)", () => {
+    const s = scenario();
+    s.prompt("/devops:auto-issue bug: crash on startup");
+    expect(s.guard({ command: marked }).code).toBe(0);
+  });
+
+  test("an expanded <command-name> prompt counts too", () => {
+    const s = scenario();
+    s.prompt("<command-message>auto-issue</command-message>\n<command-name>/devops:auto-issue</command-name>");
+    expect(s.guard({ command: marked }).code).toBe(0);
+  });
+
+  test("other skills and a BARE old name setup-issue do not count", () => {
+    const s = scenario();
+    s.prompt("x");
+    s.skill("devops:auto-fix");
+    s.skill("setup-issue");
+    s.skill("other:auto-issue");
+    expect(s.guard({ command: marked }).code).toBe(2);
+    s.skill("devops:setup-issue");
+    expect(s.guard({ command: marked }).code).toBe(0);
+  });
+
+  test("a marker of ANOTHER session never counts", () => {
+    const s = scenario();
+    s.prompt("x");
+    s.skill("auto-issue", { session_id: "00000000-1111-2222-3333-444444444444" });
+    expect(s.guard({ command: marked }).code).toBe(2);
+  });
+
+  test("no session_id → no marker → blocked", () => {
+    const s = scenario();
+    s.skill("auto-issue", { session_id: undefined });
+    expect(s.guard({ command: marked }, "Bash", { session_id: undefined }).code).toBe(2);
+    expect(fs.readdirSync(s.tmp).filter((f) => f.startsWith("dotclaude-devops-skill-turn"))).toEqual([]);
+  });
+
+  test("a transcript on disk stays the only source — the marker never widens it", () => {
+    const s = scenario();
+    s.prompt("x");
+    s.skill("auto-issue");
+    const t = transcript(s.dir, [userLine("open an issue")]);
+    expect(s.guard({ command: marked }, "Bash", { transcript_path: t }).code).toBe(2);
+  });
+
+  test("MCP issue write passes on the marker alone", () => {
+    const s = scenario();
+    s.prompt("x");
+    expect(s.guard({ method: "create" }, "mcp__plugin_github_github__issue_write").code).toBe(2);
+    s.skill("auto-issue");
+    expect(s.guard({ method: "create" }, "mcp__plugin_github_github__issue_write").code).toBe(0);
+  });
+
+  test("subagent: its own Skill(auto-issue) counts, the orchestrator's does not", () => {
+    const s = scenario();
+    s.prompt("delegate");
+    s.skill("auto-issue");
+    const sub = { agent_id: AID };
+    const r = s.guard({ command: marked }, "Bash", sub);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("you are a subagent");
+    s.skill("devops:auto-issue", sub);
+    expect(s.guard({ command: marked }, "Bash", sub).code).toBe(0);
+  });
+
+  test("a subagent's marker does not license the main thread", () => {
+    const s = scenario();
+    s.prompt("delegate");
+    s.skill("auto-issue", { agent_id: AID });
+    expect(s.guard({ command: marked }).code).toBe(2);
+  });
+
+  test("path-traversal ids write no marker and stay blocked", () => {
+    const s = scenario();
+    s.prompt("x");
+    s.skill("auto-issue", { agent_id: "../../x" });
+    s.skill("auto-issue", { session_id: "../evil" });
+    expect(s.guard({ command: marked }, "Bash", { agent_id: "../../x" }).code).toBe(2);
+    expect(s.guard({ command: marked }, "Bash", { session_id: "../evil" }).code).toBe(2);
+    expect(fs.readdirSync(s.tmp).filter((f) => f.startsWith("dotclaude-devops-skill-turn"))).toEqual([]);
+  });
+
+  test("the marker hooks are silent and never block", () => {
+    const s = scenario();
+    const p = s.prompt("x");
+    expect(p.code).toBe(0);
+    const k = s.skill("auto-issue");
+    expect(k).toEqual({ code: 0, stdout: "", stderr: "" });
+  });
+});

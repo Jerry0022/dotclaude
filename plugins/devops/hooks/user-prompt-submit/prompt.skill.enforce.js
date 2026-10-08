@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.skill.enforce
- * @version 0.7.0
+ * @version 0.8.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detects inline skill commands (e.g. /do-learn, /do-ship) mentioned in a user
@@ -69,6 +69,11 @@
  *   Pending guide hint: when stop.guide.handoff recorded a web hand-off in a
  *   card turn, the next real user prompt gets ONE non-mandatory hint to
  *   offer auto-guide; the record is cleared on use.
+ *
+ *   Turn marker: every prompt (machine prompts included) resets the main
+ *   thread's per-turn skill marker (lib/skill-turn-marker) and records a
+ *   slash-started skill — pre.issue.guard's "skill ran this turn" signal
+ *   when no transcript is on disk (`claude -p --no-session-persistence`).
  */
 
 require('../lib/plugin-guard');
@@ -421,6 +426,31 @@ function runExpandedCommand(message, cwd) {
   return parts.join('\n');
 }
 
+/** A slash command opening a raw prompt: `/devops:auto-issue …`. */
+const LEADING_SLASH_RE = /^\s*\/([\w.:-]+)(?=\s|$)/;
+
+/**
+ * A prompt opens a new turn for the per-turn skill marker
+ * (lib/skill-turn-marker — pre.issue.guard's signal when no transcript is on
+ * disk): forget the previous turn's skills, then record a slash-started
+ * skill, which never passes through the Skill tool (post.skill.marker).
+ * Runs on every prompt, machine prompts included — each one is a new turn.
+ * @param {object} hook parsed UserPromptSubmit payload
+ */
+function startSkillTurn(hook) {
+  const { clearTurn, recordSkill } = require('../lib/skill-turn-marker');
+  clearTurn(hook);
+  const raw = hook.prompt || hook.user_message || hook.message || '';
+  if (typeof raw !== 'string' || !raw) return;
+  const { commandNamesIn } = require('../lib/skill-invocations');
+  const names = commandNamesIn(raw);
+  const lead = LEADING_SLASH_RE.exec(raw);
+  if (lead) names.push(lead[1]);
+  // The main thread's marker only: a prompt never belongs to a subagent.
+  const main = { session_id: hook.session_id };
+  for (const name of names) recordSkill(main, name);
+}
+
 /**
  * Compute the hook's output for one payload ('' = silent).
  * @param {object} hook parsed stdin payload
@@ -474,6 +504,7 @@ if (require.main === module) {
     try {
       const hook = parseHookInput(inputData);
       if (hook) {
+        try { startSkillTurn(hook); } catch { /* the marker is a fallback signal only */ }
         const out = run(hook);
         if (out) process.stdout.write(out);
       }
@@ -501,5 +532,6 @@ module.exports = {
   inPluginSourceRepo,
   routerMuted,
   run,
+  startSkillTurn,
   SKILLS_ROOT,
 };

@@ -192,6 +192,12 @@
       },
       {
         "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.skill.marker.js", "timeout": 5 }
+        ],
+        "matcher": "Skill"
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.project.setup.js" }
         ],
         "matcher": "Bash|PowerShell"

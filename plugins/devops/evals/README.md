@@ -82,6 +82,14 @@ they also hold when the user's settings default to `bypassPermissions`, so a
 case can grade a command being *attempted* without it running on the real
 machine (`skills/auto-update/forced-hook-run` denies `node`, `git pull`, …).
 
+`path_prepend: [dir, …]` puts workdir-relative directories in front of the
+run's `PATH` (resolved after the scaffold ran), so a case can scaffold a
+stub CLI and let the command really *succeed* without touching the real
+service: `skills/auto-issue/bug-with-marker` scaffolds `bin/gh`, which
+answers `gh issue create` with a fixed issue URL, logs every call to
+`gh-calls.log` and fails everything else (plus an invalid `GH_TOKEN` in
+`env:`, so a real `gh` that slipped past the stub cannot authenticate).
+
 ## skills/
 
 One behaviour case per trimmed skill (#651) — the skill's body, not its
@@ -91,9 +99,11 @@ file:line, `auto-extend` scaffolds both extension files minimally,
 `auto-polish --invoked-by=ship` reports findings without editing, `do-learn`
 routes a project-only rule into the project's own instructions. The #652
 cases follow the same pattern: `auto-issue` composes `gh issue create` with
-the `# via auto-issue` marker and a `**User value:**` line (real writes
-denied), `auto-agents --from=do-run` on a one-file typo prints the
-`▶ Inline` line and spawns nothing, `do-batch` activation writes the mode
+the `# via auto-issue` marker and a `**User value:**` line, and the write
+succeeds against the stub `gh` (`guard-passed`, `write-succeeded` —
+`pre.issue.guard` reads the per-turn skill marker, since `-p
+--no-session-persistence` writes no transcript), `auto-agents
+--from=do-run` on a one-file typo prints the `▶ Inline` line and spawns nothing, `do-batch` activation writes the mode
 file and parks the prompt as one verbatim note, `auto-harden
 --invoked-by=ship` returns the `ship-harden.js` JSON, and `auto-guide` with
 every browser tool denied stops without a fallback. The #653 cases deny
