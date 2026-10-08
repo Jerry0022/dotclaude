@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.249.1] — 2026-10-08
+
+### Fixed
+- **The deferred-tools reference added in #661 resolves again.** Three title-restore lines (do-ship `SKILL.md`, auto-concept `step6-closeout.md`, do-batch `merge.md`) pointed at a bare `deep-knowledge/mcp-deferred-tools.md`. Inside a skill that has its own `deep-knowledge/` directory a bare path resolves to that sibling, where the file does not exist. All three now read `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`; the instruction text is otherwise unchanged.
+
+### Tests
+- `skill-contracts.test.js` ("bare deep-knowledge/ refs resolve") and `do-ship/reference-graph.test.js` were red on main since #661; green again. Branch suites 5 files / 579 tests green, eslint clean. The full suite on main (e728fbbb) ran 92 min under heavy machine load: 31 files / 88 tests failed — 58 test timeouts, 13 hook timeouts, 6 worker timeouts, 1 EPERM temp dir; the only real assertion failures were the two above. The other assertion failures (completion subagent gates, graphify-state heartbeat, ship-unshipped no-origin, ship-harden) pass in isolation (4 files, 237/237). Codex review skipped (limit until 2026-10-11).
+
 ## [0.249.0] — 2026-10-08
 
 ### Added
