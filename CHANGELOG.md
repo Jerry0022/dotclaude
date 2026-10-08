@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.257.4] — 2026-10-09
+
+The MCP servers in a worktree failed with `ERR_MODULE_NOT_FOUND` because their `node_modules` junction pointed at a truncated install (`plugins/data/devops-inline`, whose `@modelcontextprotocol/sdk` had only `LICENSE` and `dist/`).
+
+### Fixed
+- **`ss.mcp.deps` no longer trusts a truncated install.** A required package counts only with its `package.json`. An existing junction is judged by what it reaches and is relinked when it points at an incomplete install. A truncated data dir is wiped before `npm install` (npm skipped packages whose directory existed), and nothing is linked while the install is still incomplete.
+- **`mcp-boot-probe`** applies the same `package.json` check, refuses to link an incomplete shared `node_modules`, and replaces a stale junction instead of failing on it.
+- **Eval A/B cleanup no longer deletes through junctions.** `materializeRef`'s cleanup unlinks the `node_modules` junctions the variant session created before `git worktree remove --force`, which otherwise deleted into the shared plugin-data install. That is the most likely way `devops-inline` got truncated: `--plugin-dir` sessions use the data id `<plugin>-inline`.
+
+### Tests
+- New `ss.mcp.deps.test.js` (stale junction → relinked, target untouched), truncated-SDK case in `mcp-boot-probe.test.js`, `unlinkJunctions` in `ab.test.js`. Branch suites 32/32 (3 skipped), full suite 8683/8683 (3 skipped), eslint clean. In the affected worktree `mcp-boot-probe.test.js` is 9/9 again after the repair. Codex review skipped (limit until 2026-10-11).
+
 ## [0.257.3] — 2026-10-09
 
 The completion card read a test result like "8680/8683 (3 skipped)" as "✗ 3 Tests rot" and added a "Nicht erreicht: 3 Tests rot" line, although the gap was only the skipped tests.
