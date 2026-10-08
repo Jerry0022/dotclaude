@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.252.0] — 2026-10-08
+
+Load governor improvements from a 24 h review of the live log (2026-10-07 13:48 → 2026-10-08 08:43, 918 summary minutes). In that window git held priority for 260 min and caused 23 of 44 throttles. Throttled jobs stayed capped until they ended (1 relief release in 24 h). The disk counted as "over" in 586 of 918 minutes.
+
+### Changed
+- **Priority (A).** Processes spawned by the Claude Desktop app, or by a non-system ancestor of Claude Code, never get priority. Examples are `git status` and preview dev servers (esbuild/Vite). Claude Desktop is recognised as `Claude.exe` under `\WindowsApps\Claude_*` in any version.
+  - A short list of background tools never earns priority from load: git, OneDrive, 7-Zip, Windows Search, Defender, updaters and installers, Unity Hub.
+  - An unknown app earns priority from load only while it owns the foreground window. Known games and library apps are unchanged.
+- **Release by relief (B).** Each capped job is released 30 s after the condition that triggered its cap has passed (log reason `relief`, which replaces `relaxed`). Before, a single shared 30 s timer restarted on every job change, so caps lasted until the job ended.
+- **Disk budget for DRAM-less NVMe (C).** The disk counts as over only when active time is at least 95 % and, at the same time, latency is above 20 ms or the queue is above 2 (20 s mean). It is released below 85 % active time, or when latency and queue are both below half of their limits. New config keys: `budget.diskActivePct`, `budget.diskLatencyMs` and `budget.diskQueue`.
+- **Cheaper sampling (D).** The full Win32_Process scan runs at most every 15 s (`procScanMs`). Ticks in between read counters only. A helper timeout skips the tick and is logged once per streak.
+- **RAM paging (G).** Paging is averaged over 30 s to stop budget flapping.
+
+### Added
+- **`governor wait <id>` and `governor wait --command "…"` (E).** A deferred command blocks until it is admitted, for 15 min by default. Exit codes: 0 = may run, 2 = timed out, 1 = error. The defer message names the culprit (e.g. `RAM: OneDrive.Sync.Service.exe 33.0 GB`) and gives the ready-made wait command. The system idle process is never named as the culprit.
+- **`governor report [--hours 24]` (F)**, plus a Windows toast at most once per app per hour when a foreign app dominates a resource that is over budget.
+- **Start-up sweep (G).** On start, the watcher removes stale `.tmp` files, foreground records older than 1 h and dead sessions. The atomic writer now removes its own temp file when a write fails; the 24 h log showed 112 leaked `.tmp` files.
+
+### Tests
+- Governor + gate suites: 126 passed (6 files). eslint clean. Live helper measurement: full scan 1.5–11 s, counter-only tick ~0.6 s. `governor report` was run against the real 24 h log. Codex review skipped (limit until 2026-10-11).
+
 ## [0.251.0] — 2026-10-08
 
 ### Fixed
