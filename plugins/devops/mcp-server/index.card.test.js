@@ -1110,6 +1110,26 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(summary).toContain("✓ 7286 tests green");
   });
 
+  test("'N/M' reads as N passed of M: '4560/4561' is 1 red, never 4560 red", async () => {
+    const text = await cardText({
+      variant: "ship-successful", summary: "Ratio", lang: "en", session_id: "test-ev-ratio",
+      state: { branch: "main", pushed: true, merged: "main", commit: "abc1234" },
+      tests: [{ method: "hooks suite", result: "4560/4561 — pre.governor.gate timing test failed under load, passed on rerun" }],
+    });
+    expect(text).toContain("✗ 1 test red");
+    expect(text).toContain("**Not achieved:** 1 test red (hooks suite)");
+    expect(text).not.toContain("4560 tests red");
+  });
+
+  test("'21/21 passed' is all green", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Ratio", lang: "en", session_id: "test-ev-ratio-green",
+      tests: [{ method: "npm test", result: "21/21 passed" }],
+    });
+    expect(text).toContain("✓ 21 tests green");
+    expect(text).not.toContain("Not achieved");
+  });
+
   test("'0 rot' is green; '2 rot' is ✗ 2 Tests rot and routes to the ⚠ heading", async () => {
     const green = await cardText({
       variant: "ready", summary: "Null rot", lang: "de", session_id: "test-ev-2a",
