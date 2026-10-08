@@ -39,7 +39,7 @@ The map of one run; each step's full rules are further down.
 
 | Step | What | Call | Ends the run when |
 |---|---|---|---|
-| Pre-Steps 0, R, A–C | delegate, resume, lockout, session activity, sidebar title | `autonomous-lockout.js check` | activity pending (ask; BLOCK under lockout) |
+| Pre-Steps 0, R, A–C | delegate, resume, lockout, session activity, sidebar title | `autonomous-lockout.js check --ship` | activity pending (ask; BLOCK under lockout) |
 | 0 / 0.5 | extensions, Codex detection, ship tool schemas | `ToolSearch select:…` | server skipped → same steps via `mcp-server/ship/cli.js`; tools absent → `deep-knowledge/manual-ship.md` |
 | 1 | preflight + rebase loop, purpose alignment, harden/polish passes | `ship_preflight` | `ready: false`; ambiguous conflict |
 | 2 | build + Codex gate | `ship_build`, `codex-safe.sh` | build red; Codex judgment (ask; BLOCK under lockout) |
