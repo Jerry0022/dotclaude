@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildAck, buildRearmAck, buildMergeContext, fireMerge, renderSyncLines, buildActivationGuard,
-  buildAttachmentGuard, buildEmptyQueueNotice, syncMain, INLINE_LIMIT, GIT_SYNC_SCRIPT,
+  buildAttachmentGuard, retireTitleLines, buildEmptyQueueNotice, syncMain, INLINE_LIMIT, GIT_SYNC_SCRIPT,
 } from "./prompt.batch.collect.js";
 import { activate, appendNote, readNotes, isModeActive } from "../lib/batch-state.js";
 
@@ -383,6 +383,24 @@ describe("message builders", () => {
     // #661: deferred tools are loadable, not missing.
     expect(ctx).toContain("ToolSearch");
     expect(ctx).toContain("select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title");
+  });
+
+  test("a known title rides along exactly: set in parallel, no get_session", () => {
+    const note = [{ at: "2026-08-16T10:00:00.000Z", text: "x" }];
+    const ctx = buildMergeContext(note, "", "/tmp/p/.claude/batch.md", { title: "📥 Batch – Fix login" });
+    expect(ctx).toContain('title:"Fix login"');
+    expect(ctx).toContain("mcp__ccd_session_mgmt__set_session_title");
+    expect(ctx).toMatch(/kein get_session/);
+    expect(ctx).not.toContain("mcp__ccd_session_mgmt__get_session");
+    // A title without the prefix was renamed meanwhile — that name wins, no line at all.
+    const renamed = buildMergeContext(note, "", "/tmp/p/.claude/batch.md", { title: "Renamed" });
+    expect(renamed).not.toContain("set_session_title");
+  });
+
+  test("retireTitleLines: unknown title keeps the get_session fallback", () => {
+    expect(retireTitleLines(null).join("\n")).toContain("mcp__ccd_session_mgmt__get_session");
+    expect(retireTitleLines(undefined).join("\n")).toContain('"📥 Batch – "');
+    expect(retireTitleLines("Renamed")).toEqual([]);
   });
 
   test("the merge context demands the full-detail bundle plan on both routes (#483)", () => {

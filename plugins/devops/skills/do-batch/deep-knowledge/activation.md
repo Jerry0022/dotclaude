@@ -35,8 +35,15 @@ works.
 
 ## Session title prefix (Step 2.2b)
 
-Deferred is not unavailable: when both tools are only in the deferred-tools
-list, load them first with one `ToolSearch`
+Normal path: the 2.2 `activate` command is answered by `post.flow.title-mode`
+with the exact `📥 Batch – {title}` (computed by `batchTitle` in
+`hooks/lib/session-title.js` — the rules of steps 2–4 below). Call
+`mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and that
+title in the same message as your next tool call; no block → already marked.
+
+Fallback — only when the block says the title is unknown. Deferred is not
+unavailable: when both tools are only in the deferred-tools list, load them
+first with one `ToolSearch`
 `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`.
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.

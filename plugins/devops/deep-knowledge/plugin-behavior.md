@@ -42,6 +42,9 @@ turn end (§ 7 of the design doc). The hook reads the current title from the
 transcript (`hooks/lib/session-title.js`) and passes the exact new title, set
 in parallel with the turn's first tool call — or emits nothing when the title
 is already right; only an unknown title falls back to `get_session`.
+`post.flow.title-mode` does the same for the skills' mode prefixes
+(`🚀 Shipping – ` on a `do-ship` Skill load, `📥 Batch – ` on and off with the
+do-batch `activate` / `deactivate` commands).
 
 **Hook architecture:**
 

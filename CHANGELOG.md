@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.256.0] — 2026-10-08
+
+Pays the doc debt that v0.255.0 left: do-ship Pre-Step C, the do-batch title steps and the `prompt.batch.collect` merge context still ran `get_session` → strip → `set_session_title`, three API calls that each re-read the whole context.
+
+### Added
+- **`post.flow.title-mode` (PostToolUse, Skill|Bash|PowerShell).** It answers a `do-ship` Skill load with the exact `🚀 Shipping – ` title, the do-batch `activate` command with the exact `📥 Batch – ` title and the `deactivate` command with the title minus `📥 Batch – `. Claude sets that title in the same message as its next tool call. When the title is already right the hook says nothing. When it is unknown, the hook points to the skill's `get_session` fallback.
+- `hooks/lib/session-title.js`: `BATCH_PREFIX`, `batchTitle` (strips every devops prefix, never stacks), `unbatchTitle` (strips exactly the batch prefix; a renamed title wins).
+
+### Changed
+- `prompt.batch.collect` reads the title off the transcript tail and puts the exact stripped title into the merge context. With no `📥 Batch – ` prefix it adds no title line. With an unknown title it keeps the old `get_session` line.
+- do-ship Pre-Step C, do-batch 2.2b / Step 3 expiry / Step 5, `activation.md` and `merge.md` § Retire now use the hook's title. They keep `get_session` only as the unknown-title fallback. Prefix semantics are unchanged.
+
+### Tests
+- Affected suites 439/439 (12 files incl. card, batch, skill texts, title-work), branch suites at ship 184/184, eslint clean. Codex review skipped (limit until 2026-10-11). Full repo suite not re-run: the machine was RAM-pressed and the governor held heavy runs.
+
 ## [0.255.0] — 2026-10-08
 
 Token cost of the plugin itself: an analysis of 100 real session transcripts (price-weighted tokens) put the completion card at about 10 % of all tokens (~120 k per card, ~2 cards per prompt; ~45 % of that was the widget HTML passing through the model twice, as tool result and as `show_widget` input, ~55 % extra API calls that each re-read the ~330 k context), the session-title ritual at about 3.6 % (~940 calls × ~46 k), and the graph answer-in-gate at a net loss (140 fires since August, 105 retried anyway, eligible grep output median only ~1.75 k chars — each forced retry call cost more than it saved).

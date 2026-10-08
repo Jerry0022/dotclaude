@@ -77,6 +77,9 @@ describe("do-batch SKILL.md — session title prefix", () => {
     expect(step2).toContain("`" + prefix + "`");
     expect(step2).toMatch(/session_id: "self"/);
     expect(step2).toMatch(/skip silently/);
+    // The activate call's hook names the exact title — get_session is fallback only.
+    expect(step2).toMatch(/post\.flow\.title-mode/);
+    expect(step2).toMatch(/no `get_session`/);
     // The activation card must see the mode file — that is how it swaps its CTA.
     expect(step2).toMatch(/completion\s+card \*\*with `cwd` set to the project root\*\*/);
     expect(step2).toContain("📥 BATCH sammelt");

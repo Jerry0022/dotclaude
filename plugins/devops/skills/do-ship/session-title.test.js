@@ -41,6 +41,11 @@ describe("ship SKILL.md — session title prefix", () => {
     // (and must never downgrade to the hourglass).
     expect(mark).toMatch(/already starts with `🚀 Shipping – `: done/);
     expect(mark).toMatch(/prompt\.flow\.title-work/);
+    // A Skill-tool load gets the exact title from post.flow.title-mode; the
+    // set call rides along with the next tool call, get_session is fallback only.
+    expect(mark).toMatch(/post\.flow\.title-mode/);
+    expect(mark).toMatch(/same message as your next\s+tool call/);
+    expect(mark).toMatch(/only when the block says the title is unknown/);
     expect(mark).toMatch(/fallback/);
     expect(mark).toMatch(/Desktop app/);
     expect(mark).toMatch(/skip silently/);
