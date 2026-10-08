@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.249.5] — 2026-10-08
+## [0.249.6] — 2026-10-08
 
 ### Fixed
 - **A `ship-blocked` /do-ship no longer leaves the `.claude/.ship-lockout` marker behind.** The marker that persists `$SHIP_LOCKOUT` was written and deleted only by skill prose and deleted only in Step 5 cleanup, with no expiry. Every `ship-blocked` exit skips Step 5, so the next interactive /do-ship found the marker at its gates and took the non-interactive BLOCK branches as if no one were there to answer. Code now owns the marker (`hooks/lib/ship-lockout-marker.js`, repo-root anchored, 6 h expiry). Pre-Step A runs `autonomous-lockout.js check --ship`, which writes the marker under an active lockout and deletes any leftover otherwise. `ship_cleanup` clears it next to the ship-in-progress sentinel on every return path except the timed-out git probe. `autonomous-lockout.js ship-marker` re-derives the lockout at a gate.
