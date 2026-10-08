@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.257.1] — 2026-10-08
+
+Clears the doc/code debt v0.255.0 left behind after removing the graph answer-in-gate.
+
+### Removed
+- **Gate-only helpers in `hooks/lib/graphify-state.js`**: bypass streak, relent flag, last-blocked record, declined marker and the gate-query concurrency slots. `sweepStaleGateState` stays and still removes the temp files older installs left behind (12 h TTL; old slot files after 10 s).
+- **Gate metrics in `scripts/graphify-audit.js`** (v0.6.0): the per-session `fired/byps/noans/relnt` columns, the NET savings estimate and the gate latency line. No hook writes `gate_*` events anymore; the old ones stay visible in the raw TELEMETRY tally until they roll out of the 2 MB stream.
+
+### Fixed
+- `.claude/skills/auto-polish/reference.md` lists `mcp-server/lib/card-widget.client.js` in its `files:` line, so the ship polish pass covers the new client renderer.
+- Two `channel-pin` tests pin their clock to the lock's mtime; under load they read the lock as "41 s old" and failed.
+
+### Tests
+- Branch suites 132/132 at ship (graphify-state, graphify-audit, channel-pin, post.graphify.query), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.257.0] — 2026-10-08
 
 When claude.ai signed out the usage scraper's Edge profile (Google revoked the session), nothing told the user. Every automatic refresh ran with `--no-login`, so the only sign was the `[budget]` suffix "refresh failed: not logged in".
