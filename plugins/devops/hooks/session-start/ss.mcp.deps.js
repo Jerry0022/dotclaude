@@ -45,9 +45,12 @@ const DATA_MODULES = join(PLUGIN_DATA, "node_modules");
 // failure mode in issue #190) lacks these even when the directory exists.
 const REQUIRED_PKGS = ["@modelcontextprotocol/sdk", "zod"];
 
+// A package counts only with its package.json: a directory alone is what an
+// interrupted install or a delete through a junction leaves behind (the SDK
+// with just LICENSE + dist/), and the ESM resolver cannot load it.
 function hasAllDeps(modulesDir) {
   if (!existsSync(modulesDir)) return false;
-  return REQUIRED_PKGS.every((pkg) => existsSync(join(modulesDir, ...pkg.split("/"))));
+  return REQUIRED_PKGS.every((pkg) => existsSync(join(modulesDir, ...pkg.split("/"), "package.json")));
 }
 
 function needsInstall() {
@@ -74,8 +77,9 @@ const symlinkTargets = [
 /** A link/dir that the ESM resolver will actually find the packages through. */
 function linkHealthy(target) {
   try {
-    if (!existsSync(target)) return false;
-    return lstatSync(target).isSymbolicLink() || hasAllDeps(target);
+    // A link is judged by what it reaches, not by being a link: a junction to
+    // a truncated install must be relinked, not trusted.
+    return hasAllDeps(target);
   } catch {
     return false;
   }
@@ -108,6 +112,11 @@ if (needsInstall()) {
   console.error("[dotclaude] Installing MCP dependencies...");
   try {
     mkdirSync(PLUGIN_DATA, { recursive: true });
+    // npm trusts node_modules/.package-lock.json and skips a package whose
+    // directory exists, so a truncated install would survive `npm install`.
+    if (existsSync(DATA_MODULES) && !hasAllDeps(DATA_MODULES)) {
+      rmSync(DATA_MODULES, { recursive: true, force: true });
+    }
     writeFileSync(CACHED_PKG, readFileSync(SOURCE_PKG, "utf8"));
 
     execSync("npm install --omit=dev --no-fund --no-audit", {
@@ -127,13 +136,26 @@ if (needsInstall()) {
   }
 }
 
+// Never link to an install that cannot serve the imports (#190, truncated SDK).
+if (!hasAllDeps(DATA_MODULES)) {
+  console.error("[dotclaude] MCP dependencies incomplete — not linking them.");
+  try { unlinkSync(CACHED_PKG); } catch { /* ignore */ }
+  releaseOnce("ss-mcp-deps", null);
+  process.exit(0);
+}
+
 // Step 2: Create symlinks so ESM resolver finds the packages
 for (const target of symlinkTargets) {
   try {
-    if (existsSync(target)) {
-      const stat = lstatSync(target);
-      if (stat.isSymbolicLink()) continue;
-      if (stat.isDirectory()) {
+    let stat = null;
+    try { stat = lstatSync(target); } catch { /* absent */ }
+    if (stat) {
+      if (stat.isSymbolicLink()) {
+        if (hasAllDeps(target)) continue;
+        // Stale or dangling junction (e.g. to another plugin id's truncated
+        // install): unlink removes only the link, never the target's files.
+        unlinkSync(target);
+      } else if (stat.isDirectory()) {
         // Real directory: keep it only if it is a complete install (a dev
         // checkout or a healthy cache). A partial real dir (issue #190 — the
         // cache sync dropped deps) shadows the shared node_modules and makes

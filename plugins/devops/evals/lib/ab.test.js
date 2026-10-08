@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 const { parseScalar, parseFrontmatter, parseYaml, loadCase, resolveCases, globToRegex } = require("./case.js");
-const { buildSettings, buildClaudeArgs, formatCommand, resolveClaudeBin, INSTALLED_PLUGIN_KEY } = require("./command.js");
+const { buildSettings, buildClaudeArgs, formatCommand, resolveClaudeBin, INSTALLED_PLUGIN_KEY, unlinkJunctions } = require("./command.js");
 const { parseStream, totalTokens } = require("./stream.js");
 const g = require("./graders.js");
 const { summarize, formatSummary } = require("./summary.js");
@@ -275,5 +275,27 @@ describe("summary", () => {
     expect(text).toContain("c :: g1 | 50% (1/2) | n/a (0/0, 1 n/a)");
     expect(text).toContain("c :: g2 | 100% (1/1, 1 n/a) | n/a (0/0, 1 n/a)");
     expect(text).toMatch(/^B: runs=1 errors=1 tokens=5/m);
+  });
+});
+
+describe("unlinkJunctions", () => {
+  it("drops node_modules links before a forced worktree remove, never the target's files", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ab-junction-"));
+    try {
+      const shared = path.join(root, "shared");
+      fs.mkdirSync(shared);
+      fs.writeFileSync(path.join(shared, "keep.txt"), "x");
+      const mcp = path.join(root, "mcp-server");
+      fs.mkdirSync(path.join(mcp, "ship"), { recursive: true });
+      fs.symlinkSync(shared, path.join(mcp, "node_modules"), "junction");
+      fs.symlinkSync(shared, path.join(mcp, "ship", "node_modules"), "junction");
+      unlinkJunctions(mcp);
+      expect(fs.existsSync(path.join(mcp, "node_modules"))).toBe(false);
+      expect(fs.existsSync(path.join(mcp, "ship", "node_modules"))).toBe(false);
+      fs.rmSync(mcp, { recursive: true, force: true });
+      expect(fs.readFileSync(path.join(shared, "keep.txt"), "utf8")).toBe("x");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
