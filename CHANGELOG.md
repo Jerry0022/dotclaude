@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.249.3] — 2026-10-08
+
+### Changed
+- **Four medium skills trimmed of over-prescriptive instructions, each backed by an A/B run (#652).** Same method as #651: restated rules, history, scripted templates and CAPS emphasis cut; every string a hook or test enforces kept. Words and A/B pass rates (A = before, B = trimmed, 2 runs per variant):
+  - `auto-issue` (SKILL + issue-rules) 3046 → 2674 (−12 %), 12/12 → 12/12
+  - `auto-harden` 3214 → 3047 (−5 %), 14/14 → 14/14
+  - `do-batch` (SKILL + activation) 6488 → 6034 (−7 %), 10/10 → 10/10
+  - `auto-guide` (SKILL + protocol) 9803 → 8989 (−8 %), 12/12 → 12/12
+  Each trim has its removed/kept record with the A/B table in `plugins/devops/evals/trims/<skill>.md`.
+
+### Added
+- **One skill-body behaviour case per trimmed skill** under `plugins/devops/evals/skills/` (auto-issue, auto-harden, do-batch, auto-guide, auto-agents) with deterministic graders; side effects blocked via `deny_tools`.
+
+### Not changed (decisions)
+- **`auto-agents` trim reverted.** The trimmed version lost the `▶ Inline · <reason>` line in 4 of 4 runs (before: 2 of 2). `SKILL.md` stays as it was; the record (`evals/trims/auto-agents.md`) lists the rejected cuts. `auto-concept` (~40 k words of instruction prose, many wording tests) is deferred. Both moved to #667.
+- The auto-issue A/B runs hit the 8-min timeout after the graded `gh issue create` (under `claude -p` without a transcript the issue guard blocks the marked write); they were graded from the logs, as the record documents. The auto-harden "no question" grader was narrowed to "before the result" for both variants (the end-of-turn card flow asks later).
+
+### Tests
+- Branch suites (skill-contracts, evals, auto-agents / auto-harden / do-batch skill-text) 5 files / 596 tests green; eslint clean; no test changed. The full suite was not rerun for this ship. Codex review skipped (limit until 2026-10-11).
+
 ## [0.249.2] — 2026-10-08
 
 ### Changed
