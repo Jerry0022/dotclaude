@@ -56,6 +56,14 @@ const SCHEMA = Object.freeze({
       type: 'integer', default: 30, min: 1, max: 3650,
       doc: 'The automatic cleanup removes leftovers older than this; younger ones only via the cleanup page.',
     }),
+    autoCleanKeepNewest: Object.freeze({
+      type: 'integer', default: 20, min: 0, max: 100000,
+      doc: 'Keep at most this many landed leftovers; older ones beyond it go whatever their age (0 = off).',
+    }),
+    autoCleanMaxGB: Object.freeze({
+      type: 'integer', default: 10, min: 0, max: 100000,
+      doc: 'Kept landed session worktrees above this many GB lose their checkout, oldest first; the branch stays (0 = off).',
+    }),
     nudge: Object.freeze({
       type: 'boolean', default: true,
       doc: 'After a successful ship or promote, suggest the cleanup page when too much piles up.',

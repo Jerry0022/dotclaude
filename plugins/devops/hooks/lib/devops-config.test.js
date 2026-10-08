@@ -43,6 +43,7 @@ describe("devops-config — resolution project > global > default", () => {
     const { values, sources } = cfg.load(main, { home: mkTmp("cfg-home-") });
     expect(values.cleanup).toEqual({
       autoClean: true, autoCleanGateDays: 30, autoCleanMinAgeDays: 30,
+      autoCleanKeepNewest: 20, autoCleanMaxGB: 10,
       nudge: true, nudgeThreshold: 50, nudgeCooldownDays: 7,
     });
     expect(sources["cleanup.nudgeThreshold"]).toBe("default");
