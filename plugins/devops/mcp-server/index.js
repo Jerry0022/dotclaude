@@ -731,15 +731,20 @@ function glyphForResult(result) {
 /**
  * A "passed/total" ratio in a freeform result ("4560/4561 — 1 flake" →
  * { passed: 4560, total: 4561, failed: 1 }), or null. Thousands dots
- * ("7.286/7.286") are dropped; passed > total is no ratio.
+ * ("7.286/7.286") are dropped; passed > total is no ratio. Skipped tests
+ * named in the result ("8680/8683 (3 skipped)") are no failures: the gap
+ * they explain is subtracted from `failed`.
  */
 function passRatio(text) {
-  const m = /(?<![\d.])(\d[\d.]*)\s*\/\s*(\d[\d.]*)(?![\d.]*\d)/.exec(String(text || ''));
+  const t = String(text || '');
+  const m = /(?<![\d.])(\d[\d.]*)\s*\/\s*(\d[\d.]*)(?![\d.]*\d)/.exec(t);
   if (!m) return null;
   const passed = Number(m[1].replace(/\./g, ''));
   const total = Number(m[2].replace(/\./g, ''));
   if (!total || passed > total) return null;
-  return { passed, total, failed: total - passed };
+  const sk = /(\d[\d.]*)\s*(skipped|skip|übersprungen|todo)\b/i.exec(t);
+  const skipped = sk ? Number(sk[1].replace(/\./g, '')) : 0;
+  return { passed, total, failed: Math.max(0, total - passed - skipped) };
 }
 
 /** First integer in a freeform result ("3464 grün · 3 skipped" → 3464). */
