@@ -44,6 +44,8 @@ hand. Confirm the change in one line with the new effective value.
 | `autoClean` | `true` | After a successful ship, remove old leftovers on its own (branches, clean session worktrees and a removed branch's same-commit twin on origin, all only when their content provably landed). |
 | `autoCleanGateDays` | `30` | The automatic cleanup only runs once a removable leftover is older than this. |
 | `autoCleanMinAgeDays` | `30` | …and then removes every removable leftover older than this; younger ones only via the cleanup page. Worktree removal never touches a session's conversation — transcripts follow Claude Code's own `cleanupPeriodDays`. |
+| `autoCleanKeepNewest` | `20` | Count trigger: more removable leftovers than this → all but the newest 20 go, whatever their age. A busy repo (~10 sessions a day) never reaches the age gate; the newest 20 stay as recent reference. `0` = off. |
+| `autoCleanMaxGB` | `10` | Disk trigger: the kept removable session worktrees, summed newest first, above this many GB → the one crossing the line and every older one lose their checkout (mostly `node_modules`); their branch stays. Sizes are measured at most 30 s per ship and cached in `~/.claude/devops-hygiene.json`. `0` = off. |
 | `nudge` | `true` | After a successful ship or promote, suggest the cleanup page when too much piles up. |
 | `nudgeThreshold` | `50` | Suggest it when more than this many branches/worktrees lie around. |
 | `nudgeCooldownDays` | `7` | Days of silence after a suggestion (0 = after every ship above the threshold). |

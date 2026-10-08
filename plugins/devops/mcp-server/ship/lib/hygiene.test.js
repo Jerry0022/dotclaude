@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
-  reachableFromMerged,
+  reachableFromMerged, dirBytes,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -172,6 +172,89 @@ describe("auto-clean — the age gate", () => {
     git(dir, "branch", "ten-days", c2);
     const plan = planAutoClean(scanRepo(dir, NOW), { ...SETTINGS, autoCleanMinAgeDays: 30 }, { cwd: dir, fetchMerged: offline });
     expect(plan.remove).toEqual([]);
+  });
+});
+
+describe("auto-clean — the count trigger", () => {
+  const COUNT = { ...SETTINGS, autoCleanGateDays: 3650, autoCleanMinAgeDays: 3650, autoCleanKeepNewest: 2 };
+
+  test("more removable leftovers than the limit → all but the newest go, whatever their age", () => {
+    const { dir, c0, c1, c2, c3 } = makeRepo();
+    git(dir, "branch", "b60", c0);
+    git(dir, "branch", "b40", c1);
+    git(dir, "branch", "b10", c2);
+    git(dir, "branch", "b3", c3);
+    branchWithCommit(dir, "unshipped", c0, "b.txt", "mine\n", daysAgo(90));
+    const plan = planAutoClean(scanRepo(dir, NOW), COUNT, { cwd: dir, fetchMerged: offline });
+    expect(plan.gateOpen).toBe(true);
+    expect(plan.remove.map((u) => [u.branch, u.trigger]).sort()).toEqual([["b40", "count"], ["b60", "count"]]);
+  });
+
+  test("at or below the limit nothing goes; unlanded leftovers do not count toward it", () => {
+    const { dir, c0, c3 } = makeRepo();
+    git(dir, "branch", "b60", c0);
+    git(dir, "branch", "b3", c3);
+    branchWithCommit(dir, "unshipped", c0, "b.txt", "mine\n", daysAgo(90));
+    const plan = planAutoClean(scanRepo(dir, NOW), COUNT, { cwd: dir, fetchMerged: offline });
+    expect(plan.remove).toEqual([]);
+    expect(plan.reason).toContain("2 of at most 2");
+  });
+
+  test("0 switches it off", () => {
+    const { dir, c0, c1, c2 } = makeRepo();
+    for (const [n, c] of [["x", c0], ["y", c1], ["z", c2]]) git(dir, "branch", n, c);
+    const plan = planAutoClean(scanRepo(dir, NOW), { ...COUNT, autoCleanKeepNewest: 0 }, { cwd: dir, fetchMerged: offline });
+    expect(plan.remove).toEqual([]);
+  });
+});
+
+describe("auto-clean — the disk trigger", () => {
+  const GiB = 1024 ** 3;
+  const DISK = { ...SETTINGS, autoCleanGateDays: 3650, autoCleanMinAgeDays: 3650, autoCleanKeepNewest: 0, autoCleanMaxGB: 1 };
+
+  test("dirBytes sums file sizes and stops at the deadline", () => {
+    const d = mkTmp("hy-size-");
+    fs.writeFileSync(path.join(d, "a"), "0123456789");
+    fs.mkdirSync(path.join(d, "sub"));
+    fs.writeFileSync(path.join(d, "sub", "b"), "01234");
+    expect(dirBytes(d, Date.now() + 60_000)).toBe(15);
+    expect(dirBytes(d, Date.now() - 1)).toBeNull();
+  });
+
+  test("kept worktrees above the limit: the one crossing it and older ones lose the checkout, the branch stays", () => {
+    const { dir, c1 } = makeRepo();
+    const newer = sessionWorktree(dir, "wt-new", c1, 1);
+    const older = sessionWorktree(dir, "wt-old", c1, 2);
+    const oldest = sessionWorktree(dir, "wt-oldest", c1, 3);
+    const statePath = path.join(mkTmp("hy-state-"), "s.json");
+    const sizes = {};
+    for (const wt of [newer, older, oldest]) sizes[normPath(wt)] = { bytes: 0.6 * GiB, at: NOW };
+    fs.writeFileSync(statePath, JSON.stringify({ repos: { [normPath(dir)]: { sizes } } }));
+
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: DISK, statePath, now: NOW, fetchMerged: offline });
+    expect(res.autoClean.ran).toBe(true);
+    const removed = res.autoClean.removed.map((r) => `${r.kind}:${r.name || path.basename(r.path)}`).sort();
+    expect(removed).toEqual(["worktree:wt-old", "worktree:wt-oldest"]);
+    expect(fs.existsSync(newer)).toBe(true);
+    expect(fs.existsSync(older)).toBe(false);
+    expect(branches(dir)).toEqual(["main", "wt-new", "wt-old", "wt-oldest"]);
+    expect(res.card.tests.result).toBe("2 Worktrees entfernt · 1.2 GB frei");
+    const state = JSON.parse(fs.readFileSync(statePath, "utf8")).repos[normPath(dir)];
+    expect(Object.keys(state.sizes)).toEqual([normPath(newer)]);
+  });
+
+  test("a stale cache entry is measured again; a spent budget decides nothing", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = sessionWorktree(dir, "wt-a", c1, 1);
+    sessionWorktree(dir, "wt-b", c1, 2);
+    const cache = { [normPath(wt)]: { bytes: 5 * GiB, at: NOW - 2 * DAY } };
+    let t = NOW;
+    const plan = planAutoClean(scanRepo(dir, NOW), DISK, {
+      cwd: dir, fetchMerged: offline, sizeCache: cache, sizeBudgetMs: 1, clock: () => (t += 1000),
+    });
+    expect(plan.remove).toEqual([]);
+    expect(plan.keptBytes).toBeNull();
+    expect(plan.reason).toContain("still being measured");
   });
 });
 
