@@ -485,7 +485,9 @@ export function pluginVersion() {
 }
 
 /**
- * The client script URL: the release tag `v<version>` of the running plugin —
+ * The client script URL: the ring tag `alpha/v<version>` of the running plugin
+ * (every ship tags alpha first and promotions re-tag the same commit, so this
+ * tag exists for every shipped version; there are no bare `v*` tags) —
  * immutable, so jsDelivr caches it for good and the client always matches the
  * data schema the server of that release writes. `DOTCLAUDE_CARD_CLIENT_URL`
  * (https only) overrides it, e.g. a branch build while developing the client.
@@ -493,7 +495,7 @@ export function pluginVersion() {
 export function cardClientUrl(env = process.env, version = pluginVersion()) {
   const override = String((env && env.DOTCLAUDE_CARD_CLIENT_URL) || "").trim();
   if (/^https:\/\/\S+$/.test(override)) return override;
-  return `${CARD_CLIENT_CDN}@${version ? `v${version}` : "main"}/${CARD_CLIENT_PATH}`;
+  return `${CARD_CLIENT_CDN}@${version ? `alpha/v${version}` : "main"}/${CARD_CLIENT_PATH}`;
 }
 
 /**

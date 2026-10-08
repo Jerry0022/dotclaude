@@ -401,9 +401,11 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   title `h3` (card-guard reads the card title from it; it is also the first
   paint), the card data as JSON in `<script type="application/json"
   id="dc-card-data">` (`<` escaped), and a `<script src>` to
-  `https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude@v<version>/plugins/devops/mcp-server/lib/card-widget.client.js`.
-  The version is the running plugin's (`.claude-plugin/plugin.json`): a
-  release tag is immutable, jsDelivr caches it for good, and the client
+  `https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude@alpha/v<version>/plugins/devops/mcp-server/lib/card-widget.client.js`.
+  The version is the running plugin's (`.claude-plugin/plugin.json`), as its
+  `alpha/v<version>` ring tag: every ship tags alpha and a promotion re-tags
+  the same commit, so that tag exists for every shipped version (there are no
+  bare `v*` tags). The tag is immutable, jsDelivr caches it for good, and the client
   always matches the data schema of the server that wrote the data (the
   widget CSP allows `cdn.jsdelivr.net`, the repo is public).
   `DOTCLAUDE_CARD_CLIENT_URL` (https only) points at another build, e.g. a

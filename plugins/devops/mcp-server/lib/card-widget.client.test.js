@@ -93,7 +93,7 @@ describe("card-widget.client — template + data", () => {
   test("the script URL pins the running plugin's release tag on jsDelivr; an https override wins", () => {
     const pkg = JSON.parse(readFileSync(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8"));
     expect(pluginVersion()).toBe(pkg.version);
-    expect(cardClientUrl({})).toBe(`https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude@v${pkg.version}/plugins/devops/mcp-server/lib/card-widget.client.js`);
+    expect(cardClientUrl({})).toBe(`https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude@alpha/v${pkg.version}/plugins/devops/mcp-server/lib/card-widget.client.js`);
     expect(cardWidgetTemplate(CARDS.ready, "", {})).toContain(`<script src="${cardClientUrl({})}" onerror="`);
     expect(cardClientUrl({ DOTCLAUDE_CARD_CLIENT_URL: "https://cdn.jsdelivr.net/gh/Jerry0022/dotclaude@my-branch/x.js" })).toContain("@my-branch/");
     expect(cardClientUrl({ DOTCLAUDE_CARD_CLIENT_URL: "http://evil.test/x.js" })).not.toContain("evil");
