@@ -152,7 +152,11 @@ clone's `plugin.json` after every run, refetches the tags explicitly and tries u
 three times; the last `[finalizer] installed:` line is what Step 6.5's `userFinalTest`
 item must be based on (synced vs. the honest miss). Since 0.183.11 the hook itself
 prints one stderr line when the fetch fails or when `--force` resolves to the tag it is
-already on, so a no-op is diagnosable in the tool result.
+already on, so a no-op is diagnosable in the tool result. Since the channel-pin fix
+(2026-10-08) it also clears a stale 0-byte `.git/index.lock` (≥ 10 min, no git process
+that could own it) before the pin and says so, and a pin that leaves HEAD off the tag
+prints one `pin to <tag> failed — HEAD stays on <tag>: <git error>` line. When the loop
+ends on a miss, carry that line into the card's honest-miss item — it is the cause.
 
 `--force` is mandatory here: since #324 the hook sits behind a 6 h cooldown at
 SessionStart (boot discipline — it must not race the MCP servers' connect

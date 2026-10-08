@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.plugin.update
- * @version 0.13.0
+ * @version 0.14.0
  * @event SessionStart
  * @plugin devops
  * @description Auto-update plugin marketplace clones, rebuild cache, and update registry.
@@ -14,6 +14,9 @@
  *   (~/.claude/plugins/.channels.json, default stable) via a detached tag
  *   checkout instead of branch-tip pulling. Until then a bootstrap fallback
  *   keeps the legacy pull behavior (migration safety — spec §5.2/§5.4).
+ *   The pin itself lives in ../lib/channel-pin.js: it clears a stale 0-byte
+ *   index.lock first and names a pin that left HEAD off its tag on stderr
+ *   (the post-ship finalizer reads it).
  *
  *   When a plugin with an MCP server is upgraded mid-session, the running
  *   MCP processes point at the now-deleted old installPath. A sentinel file
@@ -59,6 +62,7 @@ const { t } = require('../lib/locale');
 const { latestVisible, readChannelPin } = require('../lib/channels');
 const { runOnce, releaseOnce } = require('../lib/run-once');
 const { syncQuietStyle } = require('../lib/output-style-sync');
+const { pinToTag } = require('../lib/channel-pin');
 const {
   DEFER_DELAY_MS,
   cacheBroken,
@@ -210,6 +214,8 @@ const styleSources = [];
 // Tracks plugins whose installPath moved and that expose MCP servers.
 // Used at the end to either write or clear the stale sentinel.
 const mcpAffected = [];
+// A channel pin that left HEAD off its tag — retried next session, not in 6 h.
+let pinFailed = false;
 
 for (const marketplace of fs.readdirSync(marketplacesDir)) {
   const mDir = path.join(marketplacesDir, marketplace);
@@ -282,11 +288,17 @@ for (const marketplace of fs.readdirSync(marketplacesDir)) {
       // pull in this path — on a detached HEAD that is an ancestor of main,
       // --ff-only would silently fast-forward to the alpha tip and defeat the
       // pin (R2). Re-resolving + re-pinning every SessionStart is the
-      // self-healing property.
-      run('git reset --hard', mDir);
-      run('git clean -fd', mDir);
-      run(`git checkout --detach "${resolved.tag}" 2>&1`, mDir);
-      newHead = run('git rev-parse HEAD', mDir);
+      // self-healing property. A stale 0-byte index.lock is cleared first, and
+      // a pin that leaves HEAD off the target says why on stderr (2026-10-08:
+      // a killed git's lock failed every checkout with no output at all).
+      const pin = pinToTag({
+        dir: mDir,
+        tag: resolved.tag,
+        targetSha,
+        report: (msg) => process.stderr.write(`[ss.plugin.update] ${marketplace}: ${msg}\n`),
+      });
+      newHead = pin.head || run('git rev-parse HEAD', mDir) || localHead;
+      if (!pin.ok) pinFailed = true;
     } else if (FORCE && resolved) {
       // An explicit run that has nothing to move: name the tag it stayed on,
       // so "nothing happened" is distinguishable from "never ran".
@@ -434,10 +446,11 @@ if (mcpAffected.length > 0) {
   clearSentinel();
 }
 
-// Hand the cooldown token back when anything failed: a broken cache must retry
-// at the NEXT session start, not in six hours. runOnce() takes the token before
-// the work, so this is the "written only on success" half of the contract.
-if (updated.some(u => !u.verified)) {
+// Hand the cooldown token back when anything failed (a rebuild, or a pin that
+// left HEAD off its tag): a broken cache must retry at the NEXT session start,
+// not in six hours. runOnce() takes the token before the work, so this is the
+// "written only on success" half of the contract.
+if (pinFailed || updated.some(u => !u.verified)) {
   releaseOnce('ss-plugin-update', null);
 }
 
