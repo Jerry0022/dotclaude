@@ -137,8 +137,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     // Reconciliation with § Views (optional): showView() never clears the
     // previously-active screen's data-screen-active, so activeScreen()
     // above can still resolve to a (now hidden) screen while a view is on
-    // screen. The eye pill must not show a stale count — or render at all —
-    // over a view's own content. body[data-view-active] is undefined on
+    // screen. The eye pill must not render over a view's own content. body[data-view-active] is undefined on
     // pages that never use views, so this is a pure no-op there.
     const viewActive = document.body.dataset.viewActive === 'true';
     const all = viewActive ? [] : annotationsInScreen(screen);
@@ -148,14 +147,6 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     all.forEach(anno => recomputeAnswered(anno));
     all.forEach(anchorToTarget);
     toggle.hidden = all.length === 0;
-    // The pill counts OPEN questions, not annotations — an answered pin is
-    // done, and a pill stuck at "3" after answering all three reads as broken.
-    const open = all.filter(anno => {
-      const pin = anno.querySelector('[data-anno-pin]');
-      return !pin || pin.dataset.answered !== 'true';
-    }).length;
-    const countEl = document.getElementById('anno-count');
-    if (countEl) countEl.textContent = String(open);
     const hidden = document.body.classList.contains('anno-hidden');
     const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
     if (label) toggle.setAttribute('aria-label', label);

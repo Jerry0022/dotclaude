@@ -292,27 +292,34 @@ body[data-single-design="true"] .screen-indicator { max-width: calc(100vw - 8rem
    weight as the switcher, not as load-bearing as the FABs. Theming hooks:
    restyle via --anno-accent / --anno-bubble-bg, never by overriding this
    rule's geometry per page (same discipline as the FAB pair below). */
+/* Shaped like an annotation pin on purpose (same size, ring, accent and
+   shadow as .anno-pin below) with an eye glyph instead of a number — it
+   reads as "the pins' switch" at a glance. No count: a number next to an
+   eye was read as a view counter, not as "open pins". */
 .anno-toggle-fab {
   position: fixed; top: 3.75rem; left: 1rem; z-index: 96;
-  display: flex; align-items: center; gap: 0.35rem;
-  padding: 0.35rem 0.7rem; border-radius: 999px; border: none;
-  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary); font-size: 0.8rem;
-  backdrop-filter: blur(6px);
+  box-sizing: border-box;
+  width: var(--anno-pin-size, 28px); height: var(--anno-pin-size, 28px);
+  padding: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--anno-accent, var(--accent-color, #58a6ff));
+  background: var(--anno-bubble-bg, var(--panel-bg, #161b22));
+  color: var(--anno-accent, var(--accent-color, #58a6ff));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
   cursor: pointer;
   transition: opacity 0.15s, transform 0.15s;
 }
-.anno-toggle-fab:hover { transform: scale(1.04); }
+.anno-toggle-fab:hover { transform: scale(1.08); }
 .anno-toggle-fab[hidden] { display: none; }
-.anno-toggle-fab .anno-eye { font-size: 0.95rem; line-height: 1; }
-.anno-toggle-fab .anno-count {
-  min-width: 1.1rem; text-align: center; font-weight: 600; color: var(--text);
-}
+.anno-toggle-fab svg { width: 15px; height: 15px; display: block; }
+.anno-toggle-fab .anno-eye-off { display: none; }
 /* Hidden layer state: the eye pill itself always stays visible/clickable
    (it is the only remnant, per spec) — everything ELSE the layer owns
-   disappears completely, not just dims. */
-body.anno-hidden .anno-toggle-fab .anno-eye { opacity: 0.5; }
+   disappears completely, not just dims. The pill swaps to a struck-through
+   eye with a dimmed ring, so "layer off" is visible without a label. */
+body.anno-hidden .anno-toggle-fab { border-style: dashed; color: var(--text-secondary); opacity: 0.75; }
+body.anno-hidden .anno-toggle-fab .anno-eye-on { display: none; }
+body.anno-hidden .anno-toggle-fab .anno-eye-off { display: block; }
 body.anno-hidden .anno-layer { display: none !important; }
 /* Auto-hides while the ☰ panel is open, same treatment as the design
    switcher — both are secondary chrome the overlay panel supersedes. */
@@ -366,6 +373,9 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
    :has() rather than a JS-set attribute — same pattern as the single-screen
    collapse rules above (body[data-single-screen] .feedback-section:has(...)). */
 .anno:has(.anno-bubble[data-open="true"]) { z-index: 2; }
+/* An OPEN bubble is a writing surface, not a tooltip: it widens so a
+   two-sentence answer fits without the user dragging the field taller. */
+.anno-bubble[data-open="true"] { width: min(360px, 80vw); max-width: min(360px, 80vw); }
 .anno-bubble-summary {
   display: flex; align-items: center; gap: 0.4rem; width: 100%;
   padding: 0.55rem 0.75rem; border: none; background: none; cursor: pointer;
@@ -386,7 +396,10 @@ body.panel-open .anno-toggle-fab { opacity: 0; pointer-events: none; }
    but some engines still honour a horizontal grip). */
 .anno-answer {
   display: block; box-sizing: border-box;
-  width: 100%; max-width: 100%; min-height: 64px; resize: vertical;
+  width: 100%; max-width: 100%; resize: vertical;
+  /* Three visible lines before any interaction: 3 × line-height plus the
+     vertical padding and the 2px border (border-box). */
+  line-height: 1.4; min-height: calc(3 * 1.4em + 1rem + 2px);
   padding: 0.5rem 0.6rem; border-radius: 8px;
   border: 1px solid var(--border-color, #30363d);
   background: var(--input-bg, #0d1117); color: var(--text-color, #c9d1d9);
@@ -469,7 +482,19 @@ textarea[hidden] + .attach-bar { display: none; }
 .design-switcher:focus-within {
   background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
   border: 1px solid var(--border-color);
+  /* Many segments in the 34vw band used to shrink to "B · Zeitstr…" — not
+     even the first word readable. Expanded, the bar wraps onto further rows
+     instead: same width band (no collision with the indicator or the ☰
+     FAB), each label at full length; only a single label longer than the
+     whole band still ellipsises. The pill radius would turn a two-row bar
+     into a lozenge, so the expanded bar takes a card radius. */
+  flex-wrap: wrap; justify-content: center; row-gap: 2px;
+  border-radius: 1rem;
 }
+.design-switcher:hover .design-switch-item,
+.design-switcher:focus-within .design-switch-item,
+.design-switcher:hover .view-switch-item,
+.design-switcher:focus-within .view-switch-item { flex: 0 0 auto; max-width: 100%; }
 .design-switch-item[data-active="true"] {
   color: var(--text); font-weight: 600;
   background: color-mix(in srgb, var(--accent-color) 18%, transparent);
@@ -693,7 +718,7 @@ body:not([data-view-active="true"]) #indicator-view { display: none; }
      💬 FAB   left 100vw - 92px                (60px + 2rem margin)
    The two can only meet below 284px viewport width, which is out of scope.
    Vertically the expanded toggle tops out at 66px while .feedback-dock
-   bottoms out at calc(2rem + 60px - 6px) = 86px — a 20px gap that holds
+   bottoms out at calc(2rem + 60px + 14px) = 106px — a 40px gap that holds
    even where the dock becomes a full-width sheet at ≤560px. */
 .viewport-toggle {
   position: fixed;

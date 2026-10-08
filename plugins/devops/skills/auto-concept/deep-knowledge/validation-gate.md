@@ -496,7 +496,7 @@ a failure. Once a page contains `data-anno-layer` anywhere, run this subset:
 | P18 | `data-annotation` on a `textarea` | The answer field the payload scan (`collectDesignDecisions`) reads. |
 | P19 | `data-comment="anno-` (prefix) on that same textarea | Required for `saveState()`/`restoreState()` to persist the answer — a `data-annotation` textarea without a matching `data-comment` loses its answer on reload. |
 | P20 | `data-attach-slot="anno-` (prefix) | Dedicated attachment mount next to the answer textarea. `initCommentAttachments()` (pattern 42) places the bar inside this mount rather than appending after the textarea — see templates-attachments.md § Attachments. |
-| P21 | `wireAnnotationLayer` | The JS that wires pins, bubbles, the eye pill and the counter. Missing → every pin renders inert. |
+| P21 | `wireAnnotationLayer` | The JS that wires pins, bubbles, the eye pill and the answered-state of each pin. Missing → every pin renders inert. |
 | P21b | **every `data-anno` value is unique page-wide** | **Structural assertion, not a grep for a token:** collect all `data-anno="..."` values and fail on any duplicate. Two annotations sharing an id share ONE `text:anno-{id}` storage slot — the last one saved wins, the other answer is lost on reload, and both pins come back showing the same text. Their `annotations[]` payload entries collide too. Prefix ids with the screen id (`d1-s2-a1`) so uniqueness is structural. Caught in a browser on a page that numbered them `a1` per screen. |
 
 **Failure for P14–P21:** if `[data-anno-layer]` is present anywhere on the

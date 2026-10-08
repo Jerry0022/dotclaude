@@ -405,7 +405,7 @@ describe("the dock stops below the ☰ FAB and yields to it", () => {
     const expr = norm(decl[1]);
     expect(expr, "starts from the viewport").toMatch(/^100vh/);
     expect(expr, "subtracts the ☰ band (top 2rem + 60px + gap)").toMatch(/2rem \+ 60px \+ 0\.75rem/);
-    expect(expr, "subtracts the dock's own bottom offset").toMatch(/2rem \+ 60px - 6px/);
+    expect(expr, "subtracts the dock's own bottom offset").toMatch(/2rem \+ 60px \+ 14px/);
   });
 
   test("every .feedback-dock max-height is bounded by the ceiling — no bare vh cap survives", () => {
