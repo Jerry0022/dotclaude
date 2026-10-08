@@ -13,6 +13,7 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, ...p), "utf8");
 const flat = (s) => s.replace(/\n>[ \t]?/g, "\n").replace(/\s+/g, " ");
 const SKILL = read("SKILL.md");
 const EXEC = read("deep-knowledge", "execution.md");
+const HOOKS = JSON.parse(read("..", "..", "hooks", "hooks.json"));
 
 function section(text, start, end) {
   const a = text.indexOf(start);
@@ -28,6 +29,7 @@ describe("auto-cleanup gate contract — steps", () => {
       "## Where this skill sits",
       "## Step 0 — Repo-mode check",
       "## SAFETY: Worktree Branch Protection",
+      "## Deletion gate — no answer is a no",
       "## Step 1 — Repo Context",
       "## Step 2 — Fetch & Sync",
       "## Step 3 — Branch Classification",
@@ -72,6 +74,37 @@ describe("auto-cleanup gate contract — confirm before anything runs", () => {
     expect(s).toMatch(/NICHT rückgängig/);
     expect(s).toMatch(/\[Ja\] \[Abbrechen\]/);
     expect(s).toMatch(/Only proceed after explicit confirmation\./);
+  });
+
+  test("the gate sits before Step 1: no delete before an answered confirm, also without a page", () => {
+    const s = section(SKILL, "## Deletion gate", "## Step 1");
+    expect(s).toMatch(/\*\*Never run a delete before the Dry-Run-Confirm is answered\.\*\*/);
+    expect(s).toMatch(/no browser, or a repo so small the page looks like overkill, is no exception/);
+    expect(s).toMatch(/print the Apply-Manifest .* as text and ask the confirm right away/);
+    expect(s).toMatch(/header `Dry-Run`, the question names every branch and worktree to delete by full name/);
+    expect(s).toMatch(/header `Unmerged`, the question names the branch/);
+  });
+
+  test("a missing, errored or non-yes answer is a no — and the run ends there", () => {
+    const s = section(SKILL, "## Deletion gate", "## Step 1");
+    expect(s).toMatch(/\*\*No answer is a no\.\*\*/);
+    for (const no of ["`Answer questions?`", "denied or unavailable tool", "`Abbrechen`", "`Behalten`", "free-text"]) expect(s, no).toContain(no);
+    expect(s).toMatch(/nothing is deleted/);
+    expect(s).toMatch(/do not retry another way/);
+    expect(s).toMatch(/`analysis` card/);
+    const e = section(EXEC, "## Step 10a", "## Step 10b");
+    expect(e).toMatch(/ONE `AskUserQuestion`: header `Dry-Run`/);
+    expect(e).toMatch(/header `Unmerged`/);
+    expect(e).toMatch(/No answer .* is `Abbrechen`: nothing ships, nothing is deleted/);
+  });
+
+  test("the gate is a registered hook, not prose alone", () => {
+    expect(section(SKILL, "## Deletion gate", "## Step 1")).toContain("`pre.cleanup.gate` enforces this");
+    const cmds = (event) => (HOOKS.hooks[event] || []).flatMap((e) => e.hooks.map((h) => [e.matcher, h.command]));
+    const pre = cmds("PreToolUse").find(([, c]) => c.includes("pre.cleanup.gate.js"));
+    expect(pre && pre[0]).toBe("Bash|PowerShell");
+    const post = cmds("PostToolUse").find(([, c]) => c.includes("post.cleanup.gate.js"));
+    expect(post && post[0]).toBe("Skill|AskUserQuestion");
   });
 
   test("10c runs only after the confirm and after the ship queue", () => {

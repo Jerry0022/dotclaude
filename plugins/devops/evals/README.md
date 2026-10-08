@@ -102,8 +102,9 @@ tries to load the ship schemas, never attempts `gh pr create|merge` or a
 plain force-push and ends with a card render attempt (MCP or offline CLI —
 the plugin's MCP servers may not connect under `-p`); `auto-cleanup`
 "branches aufräumen" should build the page or the Apply-Manifest and attempt
-no delete without a confirm (measured 2026-10-08: it deletes after an
-unanswered `AskUserQuestion` — see `trims/auto-cleanup.md`). Ordering checks share
+no delete without a confirm (measured 2026-10-08: it deleted before asking;
+since the deletion gate `pre.cleanup.gate` 3/3 runs attempt no delete — see
+`trims/auto-cleanup.md`). Ordering checks share
 `skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 
