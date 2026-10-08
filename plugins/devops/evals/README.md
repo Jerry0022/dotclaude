@@ -89,8 +89,15 @@ routing: `auto-fix` names the root cause before its first edit and reports
 file:line, `auto-extend` scaffolds both extension files minimally,
 `auto-update` attempts the update hook with `--force` after capturing state,
 `auto-polish --invoked-by=ship` reports findings without editing, `do-learn`
-routes a project-only rule into the project's own instructions. Ordering
-checks share `skills/order.js`. Per-skill trim records with the A/B numbers
+routes a project-only rule into the project's own instructions. The #652
+cases follow the same pattern: `auto-issue` composes `gh issue create` with
+the `# via auto-issue` marker and a `**User value:**` line (real writes
+denied), `auto-agents --from=do-run` on a one-file typo prints the
+`▶ Inline` line and spawns nothing, `do-batch` activation writes the mode
+file and parks the prompt as one verbatim note, `auto-harden
+--invoked-by=ship` returns the `ship-harden.js` JSON, and `auto-guide` with
+every browser tool denied stops without a fallback. Ordering checks share
+`skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 
 ```bash
