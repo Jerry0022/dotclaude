@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.254.2] — 2026-10-08
+
+Completion card: the v0.254.1 ship card passed `tests` result "4560/4561 — pre.governor.gate timing test failed under load, passed on rerun" and rendered "✗ 4560 tests red" plus "Not achieved: 4560 tests red (hooks suite)". The renderer ignored the ratio and took the first integer as the red count.
+
+### Fixed
+- **"N/M" reads as N passed of M.** A new `passRatio()` parses passed/total (thousands dots allowed, passed > total is no ratio). The evidence glyph is ✗ when M−N > 0 and green when N = M, and the test post names M−N as the red count. "4560/4561 …" now renders "✗ 1 test red", "21/21 passed" renders "✓ 21 tests green". A count of 1 takes the singular noun ("1 test" / "1 Test").
+
+### Tests
+- `index.card.test.js`: the hooks-suite string (ship-successful, en) and "21/21 passed". mcp-server suites 994/994, eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.254.1] — 2026-10-08
 
 Plugin self-sync after a ship: during the v0.254.0 ship a fresh 0-byte `.git/index.lock` in the marketplace clone, with no git running, blocked the channel pin three times. The hook only removed such a lock once it was 10 min old, so it had to be deleted by hand.
