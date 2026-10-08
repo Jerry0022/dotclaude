@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.257.2] — 2026-10-09
+
+A command the user had to run themselves (Defender exclusions, admin rights) was posted only as a code block before the completion-card widget, and the user never saw it in the Desktop app.
+
+### Changed
+- **Quiet output style**: a command Claude may not run itself is never only a code block before the card. It goes into a script (a self-elevating `.ps1` when it needs admin), handed over with `explorer.exe /select` and `SendUserFile`.
+- **`deep-knowledge/browser-file-urls.md`**: new section "Commands the user must run → always a file" with the full hand-off steps.
+- `templates/output-style-quiet.shipped.json` lists the new template hash, so installed Quiet styles update on the next sync.
+
+### Tests
+- Full suite 8680/8683 (3 skipped), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.257.1] — 2026-10-08
 
 Clears the doc/code debt v0.255.0 left behind after removing the graph answer-in-gate.

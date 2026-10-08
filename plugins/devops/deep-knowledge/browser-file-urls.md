@@ -115,6 +115,24 @@ explorer.exe /select,"$(cygpath -w "$ABS_PATH")"
 failure. Open Explorer once per hand-off, not for every file an answer
 merely mentions.
 
+### Commands the user must run → always a file
+
+A command Claude may not run itself (admin rights, Defender exclusions, other
+security settings) is **never only a fenced code block** in the answer. On the
+Desktop app the text before the completion-card widget is easy to miss; a user
+asked "gib es mir" after the commands had been posted inline (2026-10-08).
+Instead:
+
+1. Write the commands to a script — a `.ps1` that re-launches itself elevated
+   (`Start-Process powershell -Verb RunAs -ArgumentList "-File `"$PSCommandPath`""`)
+   when admin is needed, ending with a verification print and a `Read-Host`
+   so the window stays open.
+2. Hand it over per the table above + `explorer.exe /select`.
+3. Send it with `SendUserFile` (`display: "attach"`), caption naming how to
+   start it ("Rechtsklick → Mit PowerShell ausführen").
+
+A short inline code block may accompany the file, never replace it.
+
 ## Cross-platform note
 
 On macOS/Linux `$(pwd)` already returns an absolute POSIX path, so
