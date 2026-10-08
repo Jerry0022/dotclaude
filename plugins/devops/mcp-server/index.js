@@ -718,11 +718,28 @@ function glyphForResult(result) {
   // "7663 grün · 1 Flake (auch auf main rot) behoben" stays green — a failure
   // word elsewhere in the prose never overrides the counted verdict.
   if (/\b[1-9][\d.]*\s*(tests?\s+)?(rot|red|fail\w*|fehler|errors?|fehlgeschlagen)\b/.test(zeroed)) return '✗';
-  const countedGreen = /\b[1-9][\d.]*\s*(tests?\s+)?(grün|green|passed|pass|bestanden|ok)(?![\p{L}\d])/u.test(r);
+  // "4560/4561" is passed/total: the ratio is the verdict, like a counted one.
+  const ratio = passRatio(r);
+  if (ratio && ratio.failed > 0) return '✗';
+  const countedGreen = !!ratio || /\b[1-9][\d.]*\s*(tests?\s+)?(grün|green|passed|pass|bestanden|ok)(?![\p{L}\d])/u.test(r);
   if (!countedGreen && /\b(rot|red|fail\w*|fehler|errors?|fehlgeschlagen|konflikt\w*|conflict\w*|blockiert|blocked)\b/.test(zeroed)) return '✗';
   // Skipped tests are detail for the tooltip, never a deviation on their own.
   if (/nicht live|not live|teilweise|partial|warnung|warning/.test(r)) return '◐';
   return '✓';
+}
+
+/**
+ * A "passed/total" ratio in a freeform result ("4560/4561 — 1 flake" →
+ * { passed: 4560, total: 4561, failed: 1 }), or null. Thousands dots
+ * ("7.286/7.286") are dropped; passed > total is no ratio.
+ */
+function passRatio(text) {
+  const m = /(?<![\d.])(\d[\d.]*)\s*\/\s*(\d[\d.]*)(?![\d.]*\d)/.exec(String(text || ''));
+  if (!m) return null;
+  const passed = Number(m[1].replace(/\./g, ''));
+  const total = Number(m[2].replace(/\./g, ''));
+  if (!total || passed > total) return null;
+  return { passed, total, failed: total - passed };
 }
 
 /** First integer in a freeform result ("3464 grün · 3 skipped" → 3464). */
@@ -745,14 +762,16 @@ function testCount(text) {
 /** "3464 Tests grün" / "2 Tests rot" — number + noun + state (§ 2.3). */
 function testsPostText(result, glyph, lang) {
   const r = String(result || '');
-  const n = testCount(r);
+  const ratio = passRatio(r);
+  const n = ratio ? String(ratio.passed) : testCount(r);
   if (!n) return r;
-  const noun = lang === 'en' ? 'tests' : 'Tests';
+  const noun = (k) => (lang === 'en' ? 'test' : 'Test') + (String(k) === '1' ? '' : 's');
   if (glyph === '✗') {
     const red = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(r);
-    return (red ? red[1] : n) + ' ' + noun + (lang === 'en' ? ' red' : ' rot');
+    const k = red ? red[1] : ratio && ratio.failed ? String(ratio.failed) : n;
+    return k + ' ' + noun(k) + (lang === 'en' ? ' red' : ' rot');
   }
-  return n + ' ' + noun + (lang === 'en' ? ' green' : ' grün');
+  return n + ' ' + noun(n) + (lang === 'en' ? ' green' : ' grün');
 }
 
 /** Which evidence lane a `tests[]` entry belongs to, from its `method`. */
