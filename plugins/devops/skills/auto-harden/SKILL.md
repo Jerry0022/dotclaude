@@ -46,10 +46,8 @@ it is the layer this skill *executes through*. Four ways in:
 3. **From `/do-ship`** — `--invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>`.
    The **ship path**: static checks on the diff's added lines, mechanical
    fixes only, no agents, no browser, no card. See § Ship path.
-4. **Under strict** — `--strict` (from do-run "Strikt", from /do-ship when
-   strict mode is active, or when the `[claude-strict contract]` is in
-   context): stay inside the named scope; everything wider is reported as a
-   finding instead of fixed. On the ship path it means *report-only*.
+4. **Under strict** — `--strict` (from do-run "Strikt" or /do-ship in strict
+   mode): see Step 1 and Rules. On the ship path it means *report-only*.
 
 When `--invoked-by=do-run` is set, the skill adjusts:
 - **No qa-agent re-spawn** if the parent already runs a qa wave/agent.
@@ -90,8 +88,8 @@ token catalog, allowed spacing values, brand colors).
 
 Scan `$ARGUMENTS` for:
 
-- `--autonomous` flag → set `$AUTONOMOUS=1`. Skips ALL `AskUserQuestion` calls
-  for the rest of the run.
+- `--autonomous` flag → set `$AUTONOMOUS=1`: no `AskUserQuestion` for the
+  rest of the run.
 - `--invoked-by=do-run|ship` → set `$PARENT_SKILL`. Adjusts behavior per
   "Invocation Context" above. Legacy values: `agents` → `do-run`;
   `autonomous` → `do-run` + `$AUTONOMOUS=1`. `--invoked-by=ship` sets
@@ -114,11 +112,9 @@ Scan `$ARGUMENTS` for:
 
 ## Ship path — `$SHIP_PATH=1`
 
-Runs instead of Steps 2–10 when `/do-ship` calls with `--invoked-by=ship`
-(approved concept item "Harden beim Ship, diff-eng wie Polish"). Every ship
-gets the cheap, mechanical half of a harden pass on exactly what it lands,
-without the full pass's cost (scout/qa/redteam agents, test plan, coverage
-writing). Mirrors `/auto-polish` § Rules-only path.
+Runs instead of Steps 2–10 when `/do-ship` calls with `--invoked-by=ship`:
+the cheap, mechanical half of a harden pass on exactly what the ship lands.
+Mirrors `/auto-polish` § Rules-only path.
 
 **Implemented by `{PLUGIN_ROOT}/scripts/ship-harden.js`** — /do-ship runs the
 script directly, so a ship never loads this skill for it. Invoked here with
@@ -188,7 +184,7 @@ and inform the user.
 
 ## Step 3 — Kick off Test Plan + QA Agent (parallel)
 
-Two things happen in parallel — do NOT block on either:
+Two things in parallel, neither blocks:
 
 1. **Determine the test tool-chain per `deep-knowledge/test-plan.md`** (detect +
    pin the profile) for this project. Store result as `$TEST_PLAN`.
@@ -197,16 +193,10 @@ Two things happen in parallel — do NOT block on either:
    When skipped, defer to parent's qa output and request a focused re-test
    after fixes (Step 9 step 2).
 
-   Otherwise:
-   ```
-   Agent(subagent_type="devops:qa", run_in_background=true,
-         description="Test pass for harden",
-         prompt="Run the full test plan for this project: build, unit tests,
-                 integration tests, E2E if available. Report PASS/FAIL counts
-                 + every failure with file:line + error message. Do NOT
-                 attempt fixes — only report. Scope: <SCOPE_FILES summary>.")
-   ```
-   The qa agent reports back when done. Continue with Step 4 immediately.
+   Otherwise spawn `devops:qa` with `run_in_background: true`: run the full
+   test plan (build, unit, integration, E2E if available) on the
+   `$SCOPE_FILES` summary, report PASS/FAIL counts and every failure with
+   file:line and error, no fixes. Continue with Step 4 immediately.
 
 ## Step 4 — Findings Scan (parallel research)
 
@@ -249,13 +239,13 @@ background qa agent:
    path, reversibility, blast radius, contract impact.
 2. **Hard-Floor check** per `harden-polish-shared.md` § 2: if the fix
    touches database schema, force-pushes, secrets, dependency versions,
-   build/CI config, or public API exports → NEVER auto-apply regardless
-   of score. Route through Step 7 (Architecture) instead.
+   build/CI config, or public API exports → never auto-apply, whatever the
+   score. Route through Step 7 (Architecture) instead.
 3. Apply per tier:
    - **Score ≥ 80**: auto-fix.
    - **Score 50–79**: auto-fix when `$AUTONOMOUS=1` or diff ≤ 80 LoC.
      Otherwise plan + confirm. Always include score breakdown in report.
-   - **Score < 50**: DO NOT auto-fix. Route through Step 7.
+   - **Score < 50**: no auto-fix. Route through Step 7.
 4. For each auto-fix:
    - Run the inline pre-mortem from `deep-knowledge/pre-mortem.md`
      focused on: "Which other callers rely on this behavior?"
@@ -264,16 +254,9 @@ background qa agent:
      with it — colocated with existing tests. If the project has no
      test setup at all for this layer, skip the regression test and
      flag it for Step 6.
-5. After the bug batch, spawn `code-simplifier` agent over the touched
-   files:
-   ```
-   Agent(subagent_type="code-simplifier:code-simplifier",
-         description="Simplify post-fix",
-         prompt="Review the recently modified files in <list>. Look for:
-                 dead code introduced by the fixes, duplicated patterns
-                 across fixes that could share a helper, over-eager error
-                 handling. Apply minimal cleanups only. Report what changed.")
-   ```
+5. After the bug batch, spawn `code-simplifier:code-simplifier` over the
+   touched files: dead code from the fixes, duplicated patterns that could
+   share a helper, over-eager error handling — minimal cleanups only.
 
 ## Step 6 — Coverage Phase: Tests for Critical Paths
 
@@ -291,7 +274,7 @@ For each, write a focused unit test:
 - Happy path + at least 2 edge cases (empty/null/boundary).
 - Use the project's existing test framework (from `$TEST_PLAN`).
 - Place next to existing tests for the same module (mirror convention).
-- If the project has no test setup → DO NOT scaffold one. Report
+- If the project has no test setup → do not scaffold one. Report
   "Coverage gap, no test framework configured" and skip.
 
 ## Step 7 — Architecture Phase
@@ -299,8 +282,8 @@ For each, write a focused unit test:
 For every Step 4 (#2) finding + every Score < 50 OR Hard-Floor item from Step 5:
 
 1. **Confidence-score** per `deep-knowledge/harden-polish-shared.md` § 1.
-2. **Hard-Floor check** per § 2 — DB schema, force-push, secrets, deps,
-   build/CI, public API → never auto, always plan+confirm or skip+flag.
+2. **Hard-Floor check** per § 2 → never auto, always plan+confirm or
+   skip+flag.
 3. Decide per tier:
    - **Score ≥ 80** AND no hard-floor: apply the refactor. One-line
      rationale in report.
@@ -341,8 +324,8 @@ runs the diff-only instance via `/auto-polish --invoked-by=ship`.
 
 3. **Hardcoded → token migration** (when a token catalog exists):
    Replace literal values that have a matching token, drive-by while
-   editing other consistency fixes in the same file. Do NOT do a
-   repo-wide migration sweep — that's a polish-level decision.
+   editing other consistency fixes in the same file. No repo-wide
+   migration sweep — that's a polish-level decision.
 
 **Hard never (this skill):**
 - Add a new button, input, link, or other interactive element.
@@ -365,18 +348,10 @@ in the final report. Do not act.
    for that one file). Cap at 2 retry loops per file.
 3. **Red-team pass** — SKIP when `$PARENT_SKILL=do-run` AND a redteam wave
    is planned (parent owns it; flag findings for parent's wave instead).
-   Otherwise spawn `redteam` agent on the cumulative diff:
-   ```
-   Agent(subagent_type="devops:redteam",
-         description="Red-team harden diff",
-         prompt="Review the diff of this harden pass: <changed files>.
-                 Find: regressions in untouched callers, partial-failure
-                 modes introduced by new error handling, race conditions
-                 added by async refactors, consistency fixes that change
-                 perceived behavior (e.g. a button now has hover where
-                 users may have relied on its lack). Report concrete risks
-                 with file:line. Do NOT fix.")
-   ```
+   Otherwise spawn `devops:redteam` on the cumulative diff, report-only:
+   regressions in untouched callers, partial-failure modes from new error
+   handling, races from async refactors, consistency fixes that change
+   perceived behaviour — concrete risks with file:line.
 4. For every redteam finding → run the Step 5 risk-classifier. Apply
    low-risk follow-ups inline. Add medium/high to the report.
 
@@ -425,16 +400,14 @@ or dismisses it.
 
 ## Rules
 
-- **No new features.** Ever. Even tiny ones. If it isn't a fix, a test,
-  a consistency snap, a state-visual addition, or a non-structural refactor
-  → it doesn't belong in `/auto-harden`.
-- **No structural UI changes.** See "Hard never" in Step 8.
+- **No new features**, not even tiny ones: only fixes, tests, consistency
+  snaps, state-visual additions and non-structural refactors. No structural
+  UI changes ("Hard never", Step 8).
 - **Tests first, then refactor** — never restructure code that has zero
   test coverage on its current behavior without writing the missing tests
   first (or routing to plan-approval).
-- **Pre-mortem inline** for every non-trivial fix (see `deep-knowledge/pre-mortem.md`).
-- **`--autonomous` is mute mode**, not yolo mode. High-risk items are still
-  skipped + flagged — autonomous never escalates risk tolerance.
+- **`--autonomous` only silences questions** — high-risk items are still
+  skipped + flagged; it never raises risk tolerance.
 - **`--strict` narrows, never widens.** Only files and symbols inside the
   named scope change; a bug, smell or drift outside it is a finding under
   "Manual review", not a fix. The ship path under strict applies nothing.

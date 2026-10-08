@@ -23,12 +23,9 @@ be dead: collection keeps swallowing everything and the advertised escape does
 nothing. `validateMarker` rejects them with `reason: 'harness-reserved'`; never
 suggest one, and never write one into the config by hand.
 
-**Otherwise the three options are suggestions, not a closed set.** A free-text
-answer via "Sonstiges" IS the answer — it is what the user wants their marker to
-be, and it outranks every offered option. Never read it as "the question wasn't
-answered" and never fall back to the recommendation instead. `validateMarker(raw)`
-from `batch-state.js` normalises it; only `ok: false` goes back to the user,
-quoting the reason (`empty`, `too-long` = over 32 characters,
+**A free-text answer via "Sonstiges" IS the answer** — never fall back to the
+recommendation instead. `validateMarker(raw)` from `batch-state.js` normalises
+it; only `ok: false` goes back to the user, quoting the reason (`empty`, `too-long` = over 32 characters,
 `harness-reserved` = starts with `!`, `/`, `#` or `@` — name the mechanism in one
 clause and ask for a different one). A `warning: 'wordy'` marker (letters only,
 e.g. `Let's go`) is **accepted** — say once, in a single clause, that a collected

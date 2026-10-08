@@ -7,27 +7,15 @@ the page side, `scripts/web-guide.js` builds the payloads, and
 
 ## Why there is no bridge server (spike 2026-09-04)
 
-The obvious design — a local HTTP bridge like the auto-concept skill's — does
-**not** work from third-party pages. Measured on `https://github.com/settings/tokens`
-in the user's Edge through the Claude-in-Chrome extension:
-
-| Probe | Result |
-|-------|--------|
-| Inject a Shadow-DOM overlay via `javascript_tool` | ✅ works, main world, survives strict CSP |
-| `fetch('http://localhost:8777/…')` / `127.0.0.1`, GET/POST/no-cors | ❌ hangs until abort — never reaches the server, no `securitypolicyviolation` |
-| `navigator.permissions.query({name:'local-network-access'})` | `prompt` → Edge's **Local Network Access** gate blocks silent loopback requests; no prompt is shown for non-gesture requests |
-| `await` inside `javascript_tool` for 30 s | ✅ returns after 30.6 s (CDP hard limit ≈ 45 s) |
-| Navigation while an eval awaits | ✅ returns **immediately** with `Inspected target navigated or closed` |
-| External `fetch('https://api.github.com/zen')` | 200 — only loopback is gated |
-| `find` / screenshot while the tab is not the visible foreground tab | ❌ content-script injection waits for `document_idle` and times out (45 s); sync `javascript_tool` keeps working. Verify page state via JS, not via `find`/`read_page`. |
-| Typing into the panel input | Page hotkeys fired (GitHub `s` → search); fixed by stopping key events at the overlay host. |
-| `await claudeGuide.wait(35000)` while the tab is **hidden** (user reads the chat, Edge behind the app) | ❌ Edge throttles page timers to one wake-up per minute in hidden tabs; the timeout fires late and the eval dies with `CDP … timed out after 45000ms`. Sync evals keep working. Overlay 1.1.1 arms the timeout only while visible; the loop treats that CDP error as a plain timeout when a sync `state()` still answers. |
-| A page global named `window.__wg` | ❌ **breaks the extension**: every `executeScript`-based tool (`find`, `read_page`, screenshot) then hangs on `document_idle` for 45 s. Renaming the global to `window.claudeGuide` fixes it — never use a `__`-prefixed global on the page. |
-
-Consequence: **the only channel is `javascript_tool` on the one tab**. It is
-used in both directions — Claude pushes a step in, and long-polls the next
-user event out. The navigation error doubles as the "overlay is gone,
-re-inject" signal. No port, no server, no network surface.
+A local HTTP bridge (like auto-concept's) does not work from third-party
+pages: Edge's Local Network Access gate silently hangs loopback `fetch`
+calls. **The only channel is `javascript_tool` on the one tab**, in both
+directions — Claude pushes a step in and long-polls the next user event out
+(an `await` survives ≈ 45 s of CDP; a navigation returns at once with
+`Inspected target navigated or closed`, which doubles as the "re-inject"
+signal). Hidden tabs throttle page timers, so the overlay arms its timeout
+only while visible. Never put a `__`-prefixed global on the page: it hangs
+every extension `executeScript` tool.
 
 ## Roles
 
@@ -318,66 +306,30 @@ project's `.env` without being pasted into chat. Rules:
 ## Surviving a reload (#515)
 
 Every reload or redirect drops the overlay — it lives only in the page's JS
-context (`javascript_tool`/CDP `Runtime.evaluate`), and a new document starts
-with none of it. Three fix ideas were weighed:
-
-1. **Persistent injection** (CDP `Page.addScriptToEvaluateOnNewDocument`, or
-   an extension-registered content script) would make every new document in
-   the guide's tab self-inject. **Not implemented**: none of the tools this
-   skill is allowed to call (`tabs_context_mcp`, `tabs_create_mcp`,
-   `navigate`, `javascript_tool`) expose that CDP method or an equivalent —
-   `javascript_tool` only runs `Runtime.evaluate` in the *current* document.
-   Open for a future skill/tool that does expose it; re-evaluate then.
-2. **Keep polling, probe on resume** — implemented. `SKILL.md` Step 5 now
-   probes `state()` at the start of any turn that resumes an already-running
-   guide and re-injects when the overlay is gone, instead of relying solely
-   on a `wait()` seeing the navigation error live (which only happens when a
-   `wait()` was in flight at the exact moment of the reload).
-3. **Smaller injection** — already covered before this issue: `payload
-   inject` defaults to `leanSource()` (strips comments/indentation), not the
-   raw ~28 KB file, specifically to cut the transcript cost of every
-   re-injection. No further "tiny loader" was added on top: the overlay may
-   not `eval` or fetch a remainder over the network (see the file's own
-   header comment), so a loader would still need the full source pasted in a
-   second call — no cheaper than lean already is, and one extra round trip.
+context. None of the allowed tools can register a script for new documents,
+so `SKILL.md` Step 5 probes `state()` at the start of every turn that resumes
+a running guide and re-injects when the overlay is gone; `payload inject`
+sends the lean build to keep each re-injection cheap.
 
 ## Not ending the turn mid-loop (#526)
 
-The step loop lives entirely inside repeated `wait()` calls, one per
-`javascript_tool` invocation — from `stop.flow.guard`'s point of view a
-guide turn can look like "many tool calls, no completion card", which is
-exactly what it blocks on for every other skill. Forcing the card there
-would end Claude's turn while the panel still expects a `wait()` to be
-listening; the user's next click then queues an event nobody drains until
-the *next* prompt, and the panel visibly stalls ("Weiter" looks dead).
-
-`scripts/web-guide.js guide active` / `guide clear` write and remove
-`<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms>, "token": <32 hex>, "lastStep": …, "paused": true? }` — `lastStep` is the last step sent, for `guide status`; never a value; `paused` is set only by `guide pause` and dropped by any later `guide active` or `payload step`/`wait`/`inject` refresh).
+A guide turn is many `wait()` calls and no completion card; forcing the card
+would end the turn while the panel still expects a listener, and the next
+click would stall. `scripts/web-guide.js guide active` / `guide clear` write
+and remove `<project>/.claude/auto-guide-active.json` (`{ "ts": <epoch ms>, "token": <32 hex>, "lastStep": …, "paused": true? }` — `lastStep` is the last step sent, for `guide status`; never a value; `paused` is set only by `guide pause` and dropped by any later `guide active` or `payload step`/`wait`/`inject` refresh).
 `stop.flow.guard` treats a marker younger than 30 minutes as "a guide is
-active" and skips the card requirement entirely for that turn (Gate 1 never
-fires) — see `scripts/guide-active-state.js` — `isGuideActive`. SKILL.md
-writes the marker in Step 3 (and again on every turn that resumes the guide,
-Step 5's "Resuming in a new turn") and clears it in Step 6 (normal end) and
-Step 7 (aborted/closed). The 30-minute expiry means a guide that crashed
-before reaching Step 6/7 (tab killed, process crashed) does not silence the
-card gate for the rest of the session.
+active" and skips the card requirement (`scripts/guide-active-state.js` —
+`isGuideActive`); the expiry keeps a crashed guide from silencing the gate
+for the rest of the session. SKILL.md writes the marker in Step 3 and on
+every resumed turn, and clears it in Step 6 and Step 7.
 
-The exemption alone did not keep the loop alive (#619): Claude could still
-end the turn on its own (e.g. after a few hidden-tab timeouts), stranding the
-next click. So while the marker is fresh **and not paused**
-(`isGuideLoopLive`), `stop.flow.guard` blocks a card-less turn end once with
-"guide loop still active — continue 5c …". `stop_hook_active` lets the
-follow-up stop through, so it never loops; a rendered card is never blocked by
-this rule. The 20-min pause step (recovery.md § Ends · paused) runs
-`guide pause` first, so a deliberate pause ends the turn without a block; a
-cleared marker (done/aborted/closed) has no marker to read at all.
-
-While the panel is genuinely unattended (Claude's turn ended without
-clearing the marker, or between turns), the overlay's own #513 heartbeat
-tells the user visibly instead of just disabling the button: a click nobody
-picked up switches the status line to "Claude hört gerade nicht zu — schreib
-im Chat „weiter"." once no listener was live for 45 s (§ Lost result
-recovery) — the "Claude is paused, type in chat" message #526 asks for.
+While the marker is fresh **and not paused** (`isGuideLoopLive`),
+`stop.flow.guard` also blocks a card-less turn end once with "guide loop
+still active — continue 5c …" (#619); `stop_hook_active` lets the follow-up
+stop through. The 20-min pause step runs `guide pause` first, so a
+deliberate pause ends the turn without a block. An unattended panel tells
+the user itself: after 45 s without a listener it shows "Claude hört gerade
+nicht zu — schreib im Chat „weiter"." (§ Lost result recovery).
 
 ## Payload helper — `scripts/web-guide.js`
 

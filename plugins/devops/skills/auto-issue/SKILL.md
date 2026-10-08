@@ -41,13 +41,11 @@ the plugin goes through this skill (`{PLUGIN_ROOT}/deep-knowledge/plugin-behavio
 
 Other skills and agents (`/do-run backlog` Step 2, `/auto-concept` `create-issues`,
 `/do-learn`, `/do-batch`, and the orchestrator on behalf of a `po` review's
-follow-ups) invoke this skill through the
-**Skill** tool with a self-contained prompt. When the hand-over carries every
-required field, **no `AskUserQuestion` fires** — the caller already made the
-decisions (or runs under a zero-prompt invariant) and a question here is a UX
-regression. Ask only when a required field is missing **and** the user is
-present; otherwise apply the documented default silently and report the
-omission in the card.
+follow-ups) invoke this skill through the **Skill** tool with a
+self-contained prompt. When the hand-over carries every required field, no
+`AskUserQuestion` fires — the caller already decided. Ask only when a
+required field is missing **and** the user is present; otherwise apply the
+documented default silently and report the omission in the card.
 
 Hand-over fields — create: `title`, `type`, `body` (with the
 `**User value:**` line), optional `target_repo`, `labels`, `milestone`.
@@ -58,8 +56,7 @@ the card.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before reading.
-Do NOT call Read on files that may not exist — skip missing files silently (no output).
+Check for optional overrides; skip missing files silently.
 
 1. Global: `~/.claude/skills/auto-issue/SKILL.md` + `reference.md`
 2. Project: `{project}/.claude/skills/auto-issue/SKILL.md` + `reference.md`
@@ -77,13 +74,13 @@ Do NOT call Read on files that may not exist — skip missing files silently (no
 Determine from user input or the caller hand-over; ask via AskUserQuestion
 only for what is still missing (see "Caller hand-over" above):
 - **Mode**: `refine` when an issue number / URL / `{issue}` is given, else `create`
-- **Title**: Must follow `[TYPE] Short imperative description` format
+- **Title**: `[TYPE] Short imperative description` (deep-knowledge/issue-rules.md;
+  never `[FIX]` — bugs are `[BUG]`)
 - **Type**: bug, feature, refactor, chore, design, docs
 - **Description**: Imperative mood, sentence case, no trailing period
 - **Target repo** (`{target_repo}`): an `owner/name` slug when the issue belongs
   to a **different** repository than the session's. Absent → the current repo.
-
-If project extension defines additional required fields (roles, modules), ask for those too.
+- Any additional required fields the project extension defines (roles, modules).
 
 In `refine` mode, title / type / description come from the existing issue
 (`gh issue view {issue} --json number,title,body,labels,milestone,state,url`
@@ -94,40 +91,32 @@ explicitly; otherwise stop and report it.
 
 ### Target repo — when a caller hands one over
 
-Callers route issues to other repositories: `/do-learn` files a plugin
-defect against the plugin source repo from inside a consumer project, and files
-a cross-project learning against that project. **An issue silently created in
-the wrong repo is worse than none** — it looks successful, returns a valid URL,
-and leaves the real repo untouched.
+Callers route issues to other repositories (`/do-learn` files plugin defects
+against the plugin source repo from a consumer project). An issue created in
+the wrong repo looks successful and leaves the real one untouched.
 
 - Carry `{target_repo}` through to Step 2 as `--repo`, to Step 3's skip
   condition, and to Step 4's check.
-- Labels, milestones, and board fields configured for the *current* project do
-  not necessarily exist in `{target_repo}`. Verify with
-  `gh label list --repo {target_repo}` before sending any label — **including
-  `type:*`**: `gh issue create` hard-fails on an unknown label, and a target
-  repo that never adopted the `type:` scheme would reject every issue. Missing
-  there → create the issue without it and say so, rather than losing the issue.
-  Drop milestone/board steps unless the target is configured for them.
+- Labels, milestones, and board fields of the *current* project may not exist
+  in `{target_repo}`. Verify with `gh label list --repo {target_repo}` before
+  sending any label — **including `type:*`**: `gh issue create` hard-fails on
+  an unknown label. Missing there → create the issue without it and say so,
+  rather than losing the issue. Drop milestone/board steps unless the target
+  is configured for them.
 
 ## Step 1a — User-value gate (mandatory)
 
-Apply the gate from deep-knowledge/issue-rules.md to EVERY issue before
+Apply the gate from deep-knowledge/issue-rules.md to every issue before
 creating or refining it: implementing this one issue alone must already
-produce a positive user effect — direct (feature, visual, bug fixed, fewer
-crashes) or indirect (performance, stability, security). In `refine` mode an
-existing body without the `**User value:**` line gets one written in R2 —
-an issue that cannot honestly carry that line is reported as failing the
-gate, not silently refined.
+produce a positive user effect, direct or indirect. Failing issues are not
+created; their sub-tasks are bundled into one issue as issue-rules.md
+describes. In `refine` mode an existing body without the `**User value:**`
+line gets one written in R2 — an issue that cannot honestly carry that line
+is reported as failing the gate, not silently refined.
 
-- Fails the gate ("only valuable together with other issues") → do NOT
-  create it. Bundle the technical sub-tasks into ONE issue scoped by the
-  user value they jointly deliver, sub-tasks as a checklist in the body.
-- Multiple issues in one request: gate each one in isolation. If several
-  only pass together, propose the merged issue(s) to the user instead of
-  creating the originals.
-- Milestones may aggregate issues into a larger goal, but never use a
-  milestone to justify member issues that fail the gate individually.
+Multiple issues in one request: gate each one in isolation. If several only
+pass together, propose the merged issue(s) to the user instead of creating
+the originals.
 
 ## Step 2 — Create the issue
 
@@ -135,8 +124,8 @@ gate, not silently refined.
 gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"  # via auto-issue
 ```
 
-**With a `{target_repo}` from Step 1, `--repo` is mandatory** — without it `gh`
-creates the issue in whatever repo the CWD happens to be:
+With a `{target_repo}` from Step 1, `--repo` is mandatory — without it `gh`
+files into whatever repo the CWD is:
 
 ```bash
 gh issue create --repo "{target_repo}" --title "[TYPE] Title" --body "Description" --label "type:X"  # via auto-issue
@@ -165,8 +154,8 @@ EOF
 
 or write the body to a temp file and pass `--body-file "{tmp}/body.md"`.
 
-The body MUST include the user-value line (see deep-knowledge/issue-rules.md):
-`**User value:** <direct or indirect effect>`
+The body always includes the `**User value:** <direct or indirect effect>`
+line.
 
 Add optional flags based on project extension:
 - `--label "role:Y,module:Z"` — if project defines these label categories
@@ -174,22 +163,19 @@ Add optional flags based on project extension:
 
 ## Step 3 — Add to project board (if configured)
 
-Only if the project extension provides owner + project ID — **and the issue
-landed in this session's own repository**. Compare `{target_repo}` against the
-current repo case-insensitively (same comparison as Step 4.5); equal, or unset,
-means the board applies. The board configured here belongs to the current
-project, and GitHub happily accepts cross-repo project items, so without this
-guard an issue filed into someone else's repository shows up on this project's
-board. A `{target_repo}` that merely names the current repo — callers pass the
-slug through rather than checking — must not lose its board item.
+Only if the project extension provides owner + project ID **and** the issue
+landed in this session's own repository: `{target_repo}` unset, or equal to
+the current repo compared case-insensitively (a `{target_repo}` that merely
+names the current repo keeps its board item). GitHub accepts cross-repo
+project items, so without this check a foreign issue lands on this board.
 
-Add the issue to the project board via the GitHub API.
-
-Set custom fields (e.g., "Agent Role") via GraphQL if field IDs are provided in project extension.
+Add the issue to the project board via the GitHub API. Set custom fields
+(e.g., "Agent Role") via GraphQL if the extension provides field IDs.
 
 ## Step 4 — Verify
 
-Confirm all required parameters are set:
+Verify what Steps 1–3 were told to produce — a requirement they deliberately
+skipped is met, not missing:
 1. User-value gate passed and body contains the `**User value:**` line
 2. Labels: at least `type:*` (plus any project-specific requirements) — unless
    Step 1 dropped a label the target repo does not have, which is a reported
@@ -197,17 +183,11 @@ Confirm all required parameters are set:
 3. Milestone: if configured
 4. Project board item: if configured **and** Step 3 did not skip it for a
    cross-repo issue
-
-Verify what Steps 1–3 were actually told to produce. A requirement that those
-steps deliberately skipped is met, not missing — reporting a successfully
-created issue as a hard failure is its own defect.
 5. **Landing repo** — when Step 1 set `{target_repo}`, the `owner/name` in the
-   returned issue URL MUST match it, **compared case-insensitively** (GitHub
-   slugs are case-insensitive, and callers pass through whatever casing their
-   metadata carries — a case-sensitive check would fail a correctly filed
-   issue). A real mismatch means the issue was created in the wrong repository:
-   say so plainly, give the wrong URL, and do not report success. Close the
-   misfiled issue only if the user asks.
+   returned issue URL must match it, compared case-insensitively (GitHub
+   slugs are case-insensitive). A real mismatch means the issue was created in
+   the wrong repository: say so plainly, give the wrong URL, and do not report
+   success. Close the misfiled issue only if the user asks.
 
 Missing required items = hard error. Fix before reporting success.
 
@@ -224,7 +204,7 @@ is one managed section the skill owns and can replace on the next run.
 milestone. Compare against the hand-over: what is new (refinement section),
 what is a correction (title format, missing `type:*`, missing milestone) and
 what is already in place (no-op — never rewrite unchanged fields, every edit
-is a notification to watchers).
+notifies watchers).
 
 ### R2 — Managed refinement section
 
@@ -276,17 +256,14 @@ Build `body.md` from the fetched body — never from memory of what the issue
 
 ### R3 — Metadata corrections
 
-Apply only what R1 flagged:
-- Title not in `[TYPE] …` form, or `[FIX]` → `gh issue edit {issue} --title "[TYPE] …"  # via auto-issue`
+Apply only what R1 flagged, each as `gh issue edit {issue} <flags>  # via
+auto-issue` (flags may be combined into one call; the marker is never
+omitted):
+- Title not in `[TYPE] …` form, or `[FIX]` → `--title "[TYPE] …"`
 - No `type:*` label → `--add-label "type:<type>"` (verify the label exists in
-  `{target_repo}` first, as in Step 1) — same `gh issue edit … # via auto-issue` form
-- Hand-over names a milestone that is not set → `--milestone "<name>"` — same
-  `gh issue edit … # via auto-issue` form
+  `{target_repo}` first, as in Step 1)
+- Hand-over names a milestone that is not set → `--milestone "<name>"`
 - Extension labels (`role:*`, `module:*`) resolved the same way as in Step 2
-
-Every metadata correction is its own `gh issue edit {issue} <flags>  # via
-auto-issue` call (or flags combined into one call) — never omit the marker,
-R3's edits are exactly the raw commands `pre.issue.guard` would otherwise block.
 
 Then verify like Step 4: re-run `gh issue view`, check exactly one
 `<!-- refinement:start -->` … `<!-- refinement:end -->` pair, exactly one
@@ -315,14 +292,7 @@ issues created / refined. Only a direct user invocation ends with the card.
 
 ## Rules
 
-- Every issue passes the user-value gate on its own (deep-knowledge/issue-rules.md) —
-  never create file-level/layer-level tasks that only deliver value in combination
 - This skill owns every issue write: other skills, agents and hooks delegate
   here via the Skill tool and never run `gh issue create` / `gh issue edit`
   themselves
-- Refine mode edits only its own managed section and flagged metadata — the
-  author's original text is never rewritten or reordered
-- Never use `[FIX]` — bugs are always `[BUG]`
-- Always link PRs to issues via `Closes #NNN` in PR body
-- Re-evaluate milestone level prefix when issues are added/removed
 - Issue status tracking (In Progress / Done) is handled by hooks, not this skill
