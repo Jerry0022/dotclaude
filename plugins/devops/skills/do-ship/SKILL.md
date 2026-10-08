@@ -29,15 +29,13 @@ allowed-tools: Bash(git *), Bash(gh *), Bash(npm *), Bash(node *), Bash(bash *),
 Ship completed work via PR using the `dotclaude-ship` MCP server tools.
 Supports two modes: **direct** (branch → main) and **intermediate** (sub-branch → feature branch).
 
-> **CRITICAL — `cwd` is required on every MCP tool call.**
-> The ship MCP server runs in the plugin directory, NOT the target repo.
-> Every `ship_*` tool call MUST include `cwd` set to the current working directory of this Claude session.
-> Omitting `cwd` will cause the tool to operate on the wrong repository.
+> **`cwd` is required on every MCP tool call.** The ship MCP server runs in the
+> plugin directory, not the target repo. Every `ship_*` tool call MUST include `cwd`
+> set to this session's working directory, or it operates on the wrong repository.
 
 ## Pipeline at a glance
 
-The map of one run. Every step keeps its full rules further down — this table
-never replaces them.
+The map of one run; each step's full rules are further down.
 
 | Step | What | Call | Ends the run when |
 |---|---|---|---|
@@ -64,8 +62,7 @@ table alone.
 ## Target channel — alpha by default, beta / stable on request
 
 A ship always lands on **alpha**. Naming a higher channel means "ship if
-anything is unshipped, then promote" — promote is no longer a separate skill
-(spec `docs/superpowers/specs/2026-09-24-skill-restructure-design.md`).
+anything is unshipped, then promote".
 
 **Read the target** from the skill arguments first — `prompt.ship.detect`
 passes it (`beta`, `stable`, `promote`, optionally a version: `stable 0.171.0`)
@@ -105,10 +102,8 @@ final (monotonicity, ancestry, immutability — `modes/promote.md` Step 3).
 
 ## Composed ships — `--cwd`, `--keep`, `--queued`, the queue marker
 
-`/do-ship` is also invoked by orchestrators that land **several** PRs from ONE
-session (the auto-cleanup skill's Step 10b ships every selected open PR this way;
-`/do-run backlog` ships every queued issue). Three arguments and one marker make
-that safe; a plain `/do-ship` with no arguments behaves exactly as before.
+Orchestrators that land several PRs from one session (auto-cleanup Step 10b,
+`/do-run backlog`) pass these; a plain `/do-ship` without them is unchanged.
 
 | Signal | Effect on this run |
 |---|---|
@@ -135,19 +130,17 @@ do not run the pipeline here.** Run no `ship_*` call and no git push or merge.
 Follow the block: write the brief, spawn the general-purpose subagent with
 `--delegated`, and relay its decisions through `AskUserQuestion`. The subagent
 renders the card with this session's id; you set the title and show the card
-it hands back. `modes/delegated.md` → *Main session* has the details for the
-case where something goes wrong. The user types nothing extra.
+it hands back. `modes/delegated.md` → *Main session* covers failures.
 
 **`--delegated`:** you are that subagent. Follow `modes/delegated.md` →
 *Subagent* for every step it names. Every other step is unchanged.
 
 This holds for a ship you start yourself through the Skill tool (concept
 finalize, `/do-run backlog`, an autonomous ship), too. Below the threshold
-the ship stays here: `pre.ship.delegate` refuses a `--delegated` spawn there,
-because the subagent's fresh context would cost more than it saves.
-A **promotion-only** prompt ("promote stable" with nothing unshipped) never
-sees it either: that run is about 4 calls, so delegating would save nothing. A
-promotion that has to ship first is a ship and is delegated like any other.
+the ship stays here (`pre.ship.delegate` refuses a `--delegated` spawn).
+A **promotion-only** prompt ("promote stable" with nothing unshipped, about
+4 calls) is never delegated; a promotion that has to ship first is a ship and
+is delegated like any other.
 
 ## Pre-Step R — Resume an interrupted ship (`--resume`)
 
@@ -206,21 +199,15 @@ every gate behaves exactly as written elsewhere in this skill — unchanged.
 
 ## Pre-Step B — Session Activity Guard
 
-Before anything else, check whether this session still has work in progress.
+Check whether this session still has work in progress: background agents
+still running, background Bash commands still executing, or `TaskList` tasks
+not `completed` / `cancelled`.
 
-1. Check for **background agents** still running (Agent tool results pending)
-2. Check for **background Bash commands** still executing
-3. Check for **tasks** (`TaskList`) that are not yet marked `completed` or `cancelled`
-
-If ANY of the above are active:
-
-> **STOP. Do not proceed with shipping.**
->
-> Inform the user which activities are still in progress (agent names, task descriptions, or command summaries).
-> Ask via AskUserQuestion:
-> - "Warten bis alles fertig ist" — pause and resume /do-ship automatically when all activity completes
-> - "Trotzdem shippen" — user accepts the risk, continue with Step 0
-> - "Abbrechen" — cancel /do-ship entirely
+If any is active, do not ship yet — name the pending activities and ask via
+AskUserQuestion:
+- "Warten bis alles fertig ist" — pause and resume /do-ship automatically when all activity completes
+- "Trotzdem shippen" — user accepts the risk, continue with Step 0
+- "Abbrechen" — cancel /do-ship entirely
 
 **If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask. If genuine in-scope activity is
 still pending, **BLOCK** (`ship-blocked`, "session activity active"); otherwise
@@ -230,10 +217,8 @@ This guard only applies to the **current chat session**, not external CI or othe
 
 ## Pre-Step C — Mark the session in the sidebar
 
-A ship takes minutes (CI wait, rebase loop) and a session that is mid-pipeline
-looks like any other idle session from the sidebar. Mark it the way `/auto-concept`
-and `/do-batch` do — the prefix strings are pinned in
-`mcp-server/lib/mode-state.js` (`SESSION_PREFIX`) next to the card emojis:
+Mark the session as mid-ship, like `/auto-concept` and `/do-batch` do — the
+prefixes are `SESSION_PREFIX` in `mcp-server/lib/mode-state.js`:
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
 2. If the title already starts with `🚀 Shipping – `: done — `prompt.flow.title-work`
@@ -273,8 +258,7 @@ remembered title by re-typing it.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before reading.
-Do NOT call Read on files that may not exist — skip missing files silently (no output).
+Check for optional overrides; Glob each path first and skip missing files silently.
 
 1. Global: `~/.claude/skills/do-ship/SKILL.md` + `reference.md`
 2. Project: `{project}/.claude/skills/do-ship/SKILL.md` + `reference.md`
@@ -294,7 +278,7 @@ Also capture, if present in the merged `reference.md`, for use later in this run
 - `deployParity:` — overrides for the deploy-parity build (Step 2.5):
   `disable`, `buildCmd`, `installCmd`, `dir`, `timeoutSec`, `passEnv`.
 
-4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill has a **mandatory** Codex review gate (§1 in that doc), which MUST be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 2 can act on it.
+4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — the Step 2 Codex review gate (§1 there) is mandatory and runs only via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, § "Hard Timeout & Failure-Tolerance"), never via the `/codex:rescue` Agent tool. Detect Codex availability now.
 
 ## Step 0.5 — Load Deferred MCP Schemas
 
@@ -339,17 +323,15 @@ The result carries `outOfBandDeploys: { detected, files, kinds, globs }` — art
 this diff touches that a code merge will NOT deploy (#243). **Carry this value
 forward to Step 4d.** It is informational, never a hard gate (`ready` is unaffected).
 
-The tool **auto-detects** the correct base branch (a sub-branch's parent, else the repo's
-default branch); override with `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`.
-Details: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Base auto-detection.
+Auto-detected base = a sub-branch's parent, else the default branch; override with
+`ship_preflight({ base: "feat/42", cwd: "<cwd>" })`. Details:
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/preflight-rebase.md` § Base auto-detection.
 
 Check the result:
 - `autoDetectedBase` — non-null if a parent branch was detected (confirms intermediate merge).
 - `intermediate` — `true` if merging into a feature branch instead of main.
 - `ready: false` → report errors and **STOP**. Do not proceed.
 - `needsRebase: true` → continue to 1b (do NOT stop).
-
-The tool checks: clean tree, commits ahead, all pushed, version consistency (skipped for intermediate), worktree detection, and unresolved conflict markers (`no-conflict-markers`).
 
 **Dirty tree from untracked files: fix the source, never park and restore.**
 Settle each untracked file where it belongs, inside this ship — read
@@ -363,9 +345,8 @@ Merge-safety issues (`base-ahead`, `file-overlap`, `config-conflictstyle`) are *
 
 ### 1a-ii. Read `mode` — the repo-mode fork
 
-`ship_preflight` returns a `mode` field. **Read it.** It decides which of the
-steps below can run at all, and ignoring it is how a ship in a repo-less
-project marched into rebase/push/PR and reported a merge that never happened.
+`ship_preflight` returns a `mode` field. **Read it** — it decides which steps
+below can run (ignoring it once reported a merge that never happened).
 
 | `mode` | What it means | How the pipeline changes |
 |---|---|---|
@@ -417,8 +398,6 @@ After rebase + push + tests pass, **re-run `ship_preflight`** with the same para
 - `needsRebase: true` → someone pushed to base during our rebase. Go back to 1b.
 - `ready: false` (hard errors) → report errors and **STOP**.
 
-This loop naturally terminates — each iteration brings the branch closer to base.
-
 ### 1d. Purpose Alignment Gate
 
 After the preflight loop stabilizes (`ready: true`), verify the ship against
@@ -455,16 +434,14 @@ items → `userFinalTest`. Silent when clean.
 
 ### 1e. Ship passes — harden + polish, diff-scoped
 
-Every ship runs the two cheap passes on exactly what it lands (spec call
-graph: `do-ship → auto-harden, auto-polish`, both `--invoked-by=ship`). Both
-are static, diff-only, run no agents and no browser, return a findings
-structure and no card — one call each, then continue:
+Every ship runs two static, diff-only passes on exactly what it lands
+(`--invoked-by=ship`; no agents, no browser, no card) — one call each, then
+continue:
 
 1. `node "{PLUGIN_ROOT}/scripts/ship-harden.js" --invoked-by=ship --base=<base> [--cwd=<path>] <files of the diff>` — every
    changed file; checks H1–H7 on the added lines and applies the mechanical
-   H1/H2 fixes itself. It is `auto-harden` § Ship path as a script — same
-   checks, same JSON — so the ship never loads the whole auto-harden skill
-   for seven regexes. Add `--strict` under strict mode (below).
+   H1/H2 fixes itself (`auto-harden` § Ship path as a script, same JSON). Add
+   `--strict` under strict mode (below).
 2. `/auto-polish --invoked-by=ship [--cwd=<path>] <ui files of the diff>` — only when the
    diff has UI files (`{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` § Detection
    allowlist (row *UI file detection*), plus the project's `## UI rules` override in
@@ -474,8 +451,7 @@ structure and no card — one call each, then continue:
 **Composed ships (`--cwd=<path>`):** pass the SAME `--cwd=<path>` to both
 passes, and compute the diff with `git -C <path>`. Both skills scope the diff
 AND their fixes to that checkout; a mechanical polish fix you apply yourself
-edits the file under `<path>` too. Without it the passes would diff and fix
-this session's own checkout instead of the branch that ships.
+edits the file under `<path>` too.
 
 Treat what they return like the other 1d findings:
 - `applicable: false` → nothing; no card entry.
@@ -494,10 +470,8 @@ more recent project convention from the mined PRs (1d) beats a standing rule.
 
 **Strict mode** (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status`
 → `active: true`, or the `[claude-strict contract]` in context): the passes
-still run — reporting costs nothing and the diff is the user's own scope —
-but with `--strict` added, and nothing is applied: every finding, mechanical
-or not, becomes a `userFinalTest` item. A drive-by line change is exactly
-what strict forbids.
+still run with `--strict` added, and nothing is applied: every finding,
+mechanical or not, becomes a `userFinalTest` item.
 
 **Skip** both when `mode: "file-only"` (no diff) or the run is
 promotion-only. `$SHIP_LOCKOUT` changes nothing here — the passes never ask.
@@ -525,7 +499,7 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
 
 ### Codex Review Gate (after build passes)
 
-**MUST run** if codex-plugin-cc is installed — not optional, not suggested.
+Runs whenever codex-plugin-cc is installed.
 
 1. Invoke Codex via Bash with hard timeout: `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" "<review prompt containing git diff>"`. Do NOT use the `/codex:rescue` Agent tool.
 2. Evaluate by exit code (see `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` "Hard Timeout & Failure-Tolerance"):
@@ -534,8 +508,7 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
    - **rc=0, judgment required** (design concerns, logic flaws, security) →
      AskUserQuestion with findings + options: "Fixen", "Ignorieren", "Abbrechen".
      **If `$SHIP_LOCKOUT` (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`,
-     naming the finding). A design/logic/security concern must not merge
-     unreviewed unattended; the caller parks the issue for the user.
+     naming the finding).
    - **rc=75** (Codex usage limit — stored per user, or just hit) → continue to Step 3 immediately; card `tests` line `{ method: "Codex-Review", result: "übersprungen — Limit bis <reset time from stderr>" }`. The wrapper skips Codex on its own until that time; the first ship after it runs Codex again. Do NOT retry. If the user says Codex is usable again before then (plan bought, limit raised), run `bash "{PLUGIN_ROOT}/scripts/codex-safe.sh" --reset-limit` once, then call the gate normally.
    - **rc=124** (timeout, 5 min) → log "Codex review timed out — proceeding without review" in the ship log, continue to Step 3. Do NOT retry, do NOT block the ship.
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
@@ -555,8 +528,7 @@ Wait for its JSON before Step 3. `failed` → **STOP** with `ship-blocked` (also
 ## Step 2.6 — Docs-Sync
 
 Reconcile living documentation against the **frozen shipped diff** before the
-version bump — so doc edits land in the same version-bump commit. This is the
-ship-time counterpart to the docs upkeep implementation agents already do.
+version bump — so doc edits land in the same version-bump commit.
 
 1. Determine what this ship actually changes — new feature, changed flow, new
    subsystem, architecture/contract change, or removal. Use the diff since the
@@ -585,8 +557,7 @@ Determine bump type based on changes. The full table: `{PLUGIN_ROOT}/skills/do-s
 - **patch/minor**: decide autonomously
 - **major**: always ask user via AskUserQuestion. **If `$SHIP_LOCKOUT`
   (Pre-Step A):** do not ask — **BLOCK** (`ship-blocked`, "needs major-version
-  decision — not shipped unattended"). A breaking change is a deliberate call,
-  never an unsupervised one; the caller parks the issue.
+  decision — not shipped unattended").
 - **none**: internal-only changes (no user-visible impact)
 
 **Before calling ship_version_bump**, update CHANGELOG.md with the new version entry.
@@ -595,7 +566,7 @@ The MCP tool updates JSON files and README — CHANGELOG is editorial and must b
 > **CHANGELOG is large** — `pre.tokens.guard` blocks a full Read. Read only the head
 > (`Read` with `limit: 40`, newest entries are on top) to satisfy the Edit
 > precondition, or retry a blocked Read once (the sanctioned bypass). Never load the
-> whole file — under `$SHIP_LOCKOUT` a surprise block would stall the pipeline.
+> whole file.
 
 Then call `ship_version_bump` MCP tool (always pass `cwd`):
 ```
@@ -622,9 +593,9 @@ The tool handles: commit (optional), rebase verification, push (explicit force-w
 
 Returns: `{ branch, commit, rebased, pushed, pr: {number, url}, checks: {status, passed, failed, pending}, merged, mergeSha, mergeVerified?, mergeWarning?, mergeStrategy, intermediate, tag, channel, tagVerified, releaseDeferred, postMergeTreeMatch, postMergeWarning, postMergeError?, titleClamped }`.
 
-**Merge and tag are reported separately (#398).** The merge is the one
-irreversible step, so once it landed the result ALWAYS carries `merged` +
-`mergeSha` — even when a later step failed. Read the fields in this order:
+**Merge and tag are reported separately (#398).** Once the merge landed, the
+result always carries `merged` + `mergeSha` — even when a later step failed.
+Read the fields in this order:
 
 - `merged` present → the PR IS on base. Never retry `ship_release` for the same
   branch (double-ship) and never conclude "nothing happened" from `success: false`.
@@ -633,7 +604,7 @@ irreversible step, so once it landed the result ALWAYS carries `merged` +
   read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Merge and tag fields and follow
   it — these are card warnings or ring gaps on a landed merge, never a retry.
 
-**Two other return shapes exist and must not be mistaken for the one above** —
+**Two other return shapes** —
 `reason: "file-only-mode"` (not a git repo) and `reason: "no-remote"` (local repo
 without an origin): when either appears, read
 `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Other return shapes and follow it.
@@ -686,30 +657,25 @@ and follow it. Default (`git+gh` or field absent): PR + merge already done in St
 
 ## Step 4b — Spawn Post-Merge Watcher (final ship only)
 
-**Skip this step for intermediate merges** — only relevant when shipping to main.
-
-**Also skip it whenever `merged` is absent or null, or `pushed` is false** —
-the `file-only` and `git-no-remote` cases: nothing reached GitHub, so there
-is no Actions run to wait for (a local merge sets `merged` but not `pushed`).
-
-After `ship_release` returns `success: true` **and** `merged: "main"`, spawn the post-merge
-watcher in the background (fire and forget): read
-`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4b — Watcher spawn and run its
-command exactly (bash `nohup` / PowerShell `Start-Process`) — unless a skip rule below applies.
-
 **Skip the watcher entirely** when:
-- `intermediate: true` (no CI on intermediate merges typically)
+- `intermediate: true` (only a ship to main has one)
+- `merged` is absent or null, or `pushed` is false — `file-only` / `git-no-remote`:
+  nothing reached GitHub (a local merge sets `merged` but not `pushed`)
 - The repo has no `.github/workflows/` directory (check with `Glob`)
 - User passed `--no-watch` to the ship trigger (interpret intent from the user's message)
+
+Otherwise, after `ship_release` returns `success: true` **and** `merged: "main"`, spawn the
+post-merge watcher in the background (fire and forget): read
+`{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4b — Watcher spawn and run its
+command exactly (bash `nohup` / PowerShell `Start-Process`).
 
 Pass `state.watcher = { spawned: true, sha: "<sha>" }` (or `spawned: false`) into the
 completion card in Step 6 so it can render "Deploy-Verify läuft im Hintergrund".
 
 ## Step 4c — Live Surface Verification (final ship only)
 
-**A green pipeline ≠ a release users can see.** This step opens the real user-facing
-surface(s) in a browser and asserts the **shipped version is live and visible** before the
-completion card declares done. (#210)
+Open the real user-facing surface(s) in a browser and assert the **shipped version is
+live and visible** before the card declares done (#210).
 
 **Skip this step entirely when ANY of:**
 - `intermediate: true` (intermediate merges have no live surface).
@@ -919,9 +885,7 @@ version = latest alpha unless one was named; a bare "promote" asks its Step
 ## Step 5e — Memory Dream (silent, before the card)
 
 Silent memory consolidation after shipping. Runs **before** the completion
-card: the card is the last action of the run (Step 6), and a memory pass after
-it left Read/Write rows under the card and a closing line the user did not ask
-for.
+card — the card is the last action of the run (Step 6).
 
 **Skip condition:** If no memory files were written or updated during this session → skip silently.
 
@@ -943,7 +907,7 @@ the ladder already shows the new state. Its `[SESSION TITLE]` block sets
 `🎊 Released <Channel> – `. Without a promotion the variants below apply
 unchanged.
 
-**CRITICAL — `cwd` is required for clickable links.** Without `cwd`, `getRepoUrl` falls back to the MCP server's own working directory (plugin dir, not your target repo) and the card renders PR/commit/branch as plain text. Always pass the same `cwd` you used for the ship tools.
+**`cwd` is required for clickable links** — without it the card renders PR/commit/branch as plain text. Pass the same `cwd` as the ship tools.
 
 ### Session title on exit (carried by the card result)
 
@@ -982,7 +946,7 @@ after ship.
 
 ### Promotion-gap nudge (final ship to main without a promotion — MANDATORY)
 
-Deliberate promotion has no heartbeat without a forcing function. **Before rendering the card**,
+**Before rendering the card**,
 read `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Promotion-gap nudge and
 compute the drift from `git ls-remote --tags origin`: every channel's latest version →
 `delivery.promote.channels`, each gap → `betaLag` / `stableLag`. No channel tags at all → skip
@@ -1034,7 +998,6 @@ keep project-specific downstream surfaces, but don't re-encode this rule.)
 This is stronger than a `userFinalTest` item: the CTA itself flips to
 "🚨 DEPLOY erforderlich (noch nicht live)" and a loud gate block names each
 undeployed artifact — so a merged-but-undeployed ship is never mistaken for done.
-Undeployed infra is the ONE thing that must not hide behind a green card.
 Example payload: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § deployGate example.
 
 **Keep-mode variant** (Step 5a chose keep, Step 5c ran):
