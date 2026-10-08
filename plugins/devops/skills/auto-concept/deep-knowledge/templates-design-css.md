@@ -276,12 +276,14 @@ html[data-template="design"] #section-nav { display: none !important; }
      padding and the border are added ON TOP of max-width and the element
      still runs into the switcher (measured: 25px over budget at 375px). */
   box-sizing: border-box;
-  max-width: calc(33vw - 1.5rem);
+  /* The 240px cap is a promise the expanded switcher relies on: it reserves
+     exactly this much on the left (see .design-switcher:hover). */
+  max-width: min(calc(33vw - 1.5rem), 240px);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* No switcher to avoid when the iteration has a single design — the only
    neighbour left is the ☰ FAB at the top right (left edge 100vw - 88px). */
-body[data-single-design="true"] .screen-indicator { max-width: calc(100vw - 8rem); }
+body[data-single-design="true"]:not(:has(.view-switch-item)) .screen-indicator { max-width: calc(100vw - 8rem); }
 .screen-indicator strong { color: var(--text); }
 
 /* ── Annotation layer eye pill — left edge, directly below the screen
@@ -482,12 +484,21 @@ textarea[hidden] + .attach-bar { display: none; }
 .design-switcher:focus-within {
   background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
   border: 1px solid var(--border-color);
-  /* Many segments in the 34vw band used to shrink to "B · Zeitstr…" — not
-     even the first word readable. Expanded, the bar wraps onto further rows
-     instead: same width band (no collision with the indicator or the ☰
-     FAB), each label at full length; only a single label longer than the
-     whole band still ellipsises. The pill radius would turn a two-row bar
-     into a lozenge, so the expanded bar takes a card radius. */
+  /* Expanded = two rows: designs on the first, views (the other topics) on
+     the second — the divider turns into the row break (rule below). In the
+     34vw resting band six segments shrank to "B · Zeitstr…", so the open
+     bar gets the width actually free between the left column and the ☰
+     FAB: 100vw minus, on each side, the indicator's offset + its hard cap
+     (.screen-indicator, 240px) + a 0.75rem gap. The left reservation is
+     the larger of the two (the ☰ band is 92px), and the bar is centred, so
+     reserving it on both sides keeps both clear. Measured: 1280px → 776px,
+     1920px → 1416px of room. Only below ~900px, where even that room
+     cannot hold a row, does a row wrap a third time.
+     z-index 98 lifts the open bar over .frozen-bar (97), which sits in the
+     row below on a frozen design round — it is only open while the user is
+     pointing at it, and the frozen bar is back the moment they leave. */
+  max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 240px) + 0.75rem));
+  z-index: 98;
   flex-wrap: wrap; justify-content: center; row-gap: 2px;
   border-radius: 1rem;
 }
@@ -495,6 +506,10 @@ textarea[hidden] + .attach-bar { display: none; }
 .design-switcher:focus-within .design-switch-item,
 .design-switcher:hover .view-switch-item,
 .design-switcher:focus-within .view-switch-item { flex: 0 0 auto; max-width: 100%; }
+.design-switcher:hover .switcher-divider,
+.design-switcher:focus-within .switcher-divider {
+  flex: 0 0 100%; width: auto; height: 1px; margin: 2px 0.6rem;
+}
 .design-switch-item[data-active="true"] {
   color: var(--text); font-weight: 600;
   background: color-mix(in srgb, var(--accent-color) 18%, transparent);
