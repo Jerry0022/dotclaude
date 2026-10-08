@@ -191,6 +191,85 @@ describe('watcher tick with a fake adapter', () => {
     expect(Q.list(p.queue)[0].status).toBe('queued'); // R10: never marked ready under pressure
   });
 
+  it('B: a cap is lifted by relief (reason relief) once its resource is no longer pressed, while the job still runs', async () => {
+    const clock = { t: 0 };
+    const events = [];
+    fs.writeFileSync(p.control, JSON.stringify({ manual: true, at: -1 }));
+    process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID = '100';
+    writeCfg();
+    const adapter = createFakeAdapter({ samples: [sample(0, [claudeProc(), busy()])] });
+    const w = createWatcher({ adapter, p, loadCfg: cfg, now: () => clock.t, deps: { version: '0.246.0', logger: { event: (n, f) => events.push([n, f]), flush() {} } } });
+    await w.init(null);
+    for (clock.t = 0; clock.t <= 8000; clock.t += 2000) { adapter.samples = [sample(clock.t, [claudeProc(), busy()])]; await w.tick(); }
+    expect(Object.keys(w.st.throttles).length).toBe(1);
+    fs.writeFileSync(p.control, JSON.stringify({ manual: false, at: -1 }));
+    for (clock.t = 10000; clock.t <= 20000; clock.t += 2000) { adapter.samples = [sample(clock.t, [claudeProc(), busy()])]; await w.tick(); }
+    delete process.env.DOTCLAUDE_GOVERNOR_SCOPE_PID;
+    expect(Object.keys(w.st.throttles).length).toBe(0);
+    expect(events.find((e) => e[0] === 'release')[1].reason).toBe('relief');
+  });
+
+  it('A: a dev server the Desktop app started (no Claude CLI involved) and git never get priority', async () => {
+    const DESK = 'C:\\Program Files\\WindowsApps\\Claude_2.26454.0.0_x64__pzs8sxrjxfjjc\\app\\Claude.exe';
+    const procs = [
+      { pid: 10, ppid: 1, name: 'Claude.exe', path: DESK, cmd: '', startMs: 10, cpuPct: 1, gpuPct: 0, memMB: 100 },
+      { pid: 11, ppid: 10, name: 'esbuild.exe', path: 'C:\\p\\node_modules\\@esbuild\\win32-x64\\esbuild.exe', cmd: '', startMs: 20, cpuPct: 70, gpuPct: 0, memMB: 100 },
+      { pid: 12, ppid: 1, name: 'git.exe', path: 'C:\\Program Files\\Git\\cmd\\git.exe', cmd: 'git status', startMs: 30, cpuPct: 70, gpuPct: 0, memMB: 50 },
+    ];
+    const clock = { t: 0 };
+    const adapter = createFakeAdapter({ samples: [] });
+    const w = mkWatcher(adapter, clock);
+    await w.init(null);
+    for (const fgPid of [10, 11, 12]) {
+      adapter.samples = [{ ...sample(clock.t, procs, { cpuPct: 95 }), fg: { pid: fgPid, fullscreen: false, idleMs: 100 } }];
+      await w.tick();
+      expect([fgPid, S.readState(p).pressure.priority]).toEqual([fgPid, []]);
+      clock.t += 3000;
+    }
+  });
+
+  it('E/F: persists the culprit of a pressed resource and toasts a foreign hog at most once per hour', async () => {
+    const clock = { t: 0 };
+    writeCfg({ notify: true });
+    const hog = { pid: 300, ppid: 1, name: 'OneDrive.Sync.Service.exe', path: 'C:\\Program Files\\Microsoft OneDrive\\OneDrive.Sync.Service.exe', cmd: '', startMs: 5, cpuPct: 1, gpuPct: 0, memMB: 33 * 1024 };
+    const adapter = createFakeAdapter({ samples: [] });
+    const w = createWatcher({ adapter, p, loadCfg: cfg, now: () => clock.t, deps: { version: '0.246.0' } });
+    await w.init(null);
+    for (clock.t = 0; clock.t <= 40 * 60000; clock.t += 10 * 60000) { adapter.samples = [sample(clock.t, [hog], { freeMB: 1000 })]; await w.tick(); }
+    expect(S.readState(p).culprit.ram).toMatchObject({ name: 'OneDrive.Sync.Service.exe', cls: 'foreign' });
+    expect(adapter.calls.filter((c) => c[0] === 'notify').length).toBe(1);
+    clock.t = 61 * 60000;
+    adapter.samples = [sample(clock.t, [hog], { freeMB: 1000 })];
+    await w.tick();
+    expect(adapter.calls.filter((c) => c[0] === 'notify').length).toBe(2);
+    expect(adapter.calls.find((c) => c[0] === 'notify')[2]).toMatch(/RAM: OneDrive\.Sync\.Service\.exe 33\.0 GB/);
+  });
+
+  it('G: sweeps stale tmp, foreground and dead-session files on start', async () => {
+    const old = (f) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, '{}'); const s = (Date.now() - 2 * 3600000) / 1000; fs.utimesSync(f, s, s); };
+    old(path.join(p.foreground, 'a.json.1.x.tmp'));
+    old(path.join(p.home, 'state.json.2.y.tmp'));
+    fs.writeFileSync(path.join(p.foreground, 'b.json'), JSON.stringify({ startedAt: 0 }));
+    fs.writeFileSync(path.join(p.foreground, 'fresh.json.3.z.tmp'), '{}');
+    fs.mkdirSync(p.sessions, { recursive: true });
+    fs.writeFileSync(path.join(p.sessions, 'dead.json'), JSON.stringify({ sessionId: 'dead', claudePid: 999999, startedAt: 0 }));
+    const w = mkWatcher(createFakeAdapter({ samples: [sample(0, [])] }), { t: Date.now() });
+    await w.init(null);
+    expect(fs.readdirSync(p.foreground)).toEqual(['fresh.json.3.z.tmp']);
+    expect(fs.existsSync(path.join(p.home, 'state.json.2.y.tmp'))).toBe(false);
+    expect(fs.existsSync(path.join(p.sessions, 'dead.json'))).toBe(false);
+  });
+
+  it('D: asks for the full process list at most every procScanMs; system counters every tick', async () => {
+    const clock = { t: 0 };
+    const adapter = createFakeAdapter({ samples: [] });
+    const w = mkWatcher(adapter, clock);
+    await w.init(null);
+    for (clock.t = 0; clock.t <= 30000; clock.t += 3000) { adapter.samples = [sample(clock.t, [claudeProc()])]; await w.tick(); }
+    const asks = adapter.calls.filter((c) => c[0] === 'sample').map((c) => c[1].procs);
+    expect([asks.length, asks.filter(Boolean).length]).toEqual([11, 3]); // full scans at 0, 15 s, 30 s
+  });
+
   it('marks deferred commands ready when no pressure, and drains them on shutdown', async () => {
     const clock = { t: 0 };
     const Q = require('./queue');

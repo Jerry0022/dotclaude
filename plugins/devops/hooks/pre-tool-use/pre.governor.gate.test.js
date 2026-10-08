@@ -76,8 +76,10 @@ describe('governor hooks', () => {
     freshState({ pressure: { priority: ['cpu'], over: [] }, priorityBy: 'c:/games/foo' });
     const r = run(PRE, bash('ffmpeg -i a.wav b.mp3'));
     expect(r.status).toBe(2);
-    expect(r.stderr).toMatch(/recorded the command/);
-    expect(r.stderr).toMatch(/report those steps as open/);
+    expect(r.stderr).toMatch(/Recorded as [\w-]+/);
+    expect(r.stderr).toMatch(/report them as open/);
+    expect(r.stderr).toMatch(/Pressed: CPU/);
+    expect(r.stderr).toMatch(/cli\.js" wait [\w-]+/);
     const q = fs.readdirSync(path.join(home, 'queue')).filter((n) => n.endsWith('.json'));
     expect(q.length).toBe(1);
     const e = JSON.parse(fs.readFileSync(path.join(home, 'queue', q[0]), 'utf8'));
@@ -122,6 +124,17 @@ describe('governor hooks', () => {
     expect(r.status).toBe(0);
     const s = JSON.parse(fs.readFileSync(path.join(home, 'sessions', 'abc-1.json'), 'utf8'));
     expect(s).toMatchObject({ sessionId: 'abc-1', cwd: home, claudePid: 4242 });
+  });
+
+  it.runIf(win)('E: the defer message names the culprit and a bounded wait command; that command passes the gate', () => {
+    freshState({ pressure: { priority: [], over: ['ram'] }, culprit: { ram: { name: 'OneDrive.Sync.Service.exe', cls: 'foreign', text: 'RAM: OneDrive.Sync.Service.exe 33.0 GB' } } });
+    const r = run(PRE, bash('docker build .', { tool_use_id: 'w1' }));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/Pressed: RAM: OneDrive\.Sync\.Service\.exe 33\.0 GB/);
+    const m = r.stderr.match(/node "([^"]+cli\.js)" wait ([\w-]+)/);
+    expect(m).toBeTruthy();
+    expect(fs.existsSync(m[1])).toBe(true);
+    expect(run(PRE, bash(`node "${m[1]}" wait ${m[2]}`, { tool_use_id: 'w2' })).status).toBe(0);
   });
 
   it.runIf(win)('hooks stay fast (median of 5 < 300 ms per call beyond bare node start)', () => {

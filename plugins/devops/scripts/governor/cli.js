@@ -2,14 +2,61 @@
 /**
  * @module governor/cli
  * @description `node cli.js status | priority on|off | not-priority <app> |
- *   always-priority <app> | queue | stop`. Writes only CLI-owned files
- *   (control.json, config.json); the watcher picks them up on its next tick.
+ *   always-priority <app> | queue | log | report [--hours N] |
+ *   wait <queue-id> | wait --command "<cmd>" [--timeout 15m] | stop`.
+ *   Writes only CLI-owned files (control.json, config.json); the watcher
+ *   picks them up on its next tick. `wait` polls the same admission rule the
+ *   gate uses: exit 0 = admitted (re-run the command now), 2 = timeout,
+ *   1 = unknown queue id / usage.
  */
 'use strict';
 
 const { paths, loadConfig } = require('./config');
 const S = require('./state');
 const Q = require('./queue');
+const P = require('./policy');
+
+/** "900", "90s", "15m", "1h" → ms; NaN when unparsable. */
+function parseDuration(s) {
+  const m = String(s || '').trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i);
+  if (!m) return NaN;
+  const mult = { ms: 1, s: 1000, m: 60000, h: 3600000 }[(m[2] || 's').toLowerCase()];
+  return Number(m[1]) * mult;
+}
+
+/**
+ * Wait until the gate would admit a command (the queue entry's, or `command`). Bounded; prints why
+ * it waits (the pressed resource and its culprit) whenever that changes. A watcher that is gone
+ * admits (fail open, like the gate).
+ * @returns {Promise<0|1|2>}
+ */
+async function waitFor({ p, cfg, id, command, timeoutMs = 15 * 60000, pollMs = 3000, now = Date.now, sleep, out }) {
+  const nap = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  let cmd = command;
+  if (id) {
+    const e = Q.list(p.queue).find((x) => x.id === id);
+    if (!e) { out(`wait: no queue entry ${id} (expired or already re-run) — just re-run the command; the gate decides again`); return 1; }
+    cmd = e.command;
+  }
+  if (!cmd) { out('usage: wait <queue-id> | wait --command "<cmd>" [--timeout 15m]'); return 1; }
+  const start = now();
+  let why = null;
+  for (;;) {
+    const state = S.readState(p);
+    const res = P.admit({ command: cmd, now: now(), state, kinds: (state && state.kinds) || {}, cfg });
+    const secs = Math.round((now() - start) / 1000);
+    if (res.decision === 'allow') {
+      out(why ? `admitted after ${secs}s (waited for ${why}) — re-run the command now` : `admitted (${res.reason}) — run the command now`);
+      if (id) Q.remove(p.queue, id);
+      return 0;
+    }
+    const cur = `${P.pressedText(res, state)} [${res.reason}]`;
+    if (cur !== why) { out(`waiting: ${cur}`); why = cur; }
+    const left = timeoutMs - (now() - start);
+    if (left <= 0) { out(`timeout after ${secs}s — still waiting for ${why}`); return 2; }
+    await nap(Math.min(pollMs, left));
+  }
+}
 
 function editConfig(p, fn) {
   const raw = S.readJson(p.config, {});
@@ -60,6 +107,21 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
       }
       return 0;
     }
+    case 'report': {
+      const i = argv.indexOf('--hours');
+      const hours = i >= 0 ? Math.max(1, Number(argv[i + 1]) || 24) : 24;
+      for (const l of require('./log').report(p.logs, { hours, now })) out(l);
+      return 0;
+    }
+    case 'wait': {
+      const ci = argv.indexOf('--command');
+      const ti = argv.indexOf('--timeout');
+      const timeoutMs = ti >= 0 ? parseDuration(argv[ti + 1]) : 15 * 60000;
+      if (!(timeoutMs > 0)) { out('usage: wait <queue-id> | wait --command "<cmd>" [--timeout 15m]'); return 1; }
+      const command = ci >= 0 ? argv[ci + 1] : null;
+      const id = ci >= 0 ? null : (arg && !arg.startsWith('--') ? arg : null);
+      return waitFor({ p, cfg: loadConfig(p), id, command, timeoutMs, out });
+    }
     case 'queue': {
       const list = Q.list(p.queue);
       if (!list.length) out('queue empty');
@@ -92,11 +154,13 @@ function run(argv, out = (s) => process.stdout.write(`${s}\n`)) {
       return 0;
     }
     default:
-      out('usage: governor status | priority on|off | not-priority <app> | always-priority <app> | queue | log [--runs N] [--tail] | stop');
+      out('usage: governor status | priority on|off | not-priority <app> | always-priority <app> | queue | log [--runs N] [--tail] | report [--hours N] | wait <queue-id> | wait --command "<cmd>" [--timeout 15m] | stop');
       return 2;
   }
 }
 
-if (require.main === module) { const code = run(process.argv.slice(2)); if (code !== null) process.exitCode = code; }
+if (require.main === module) {
+  Promise.resolve(run(process.argv.slice(2))).then((code) => { if (code !== null) process.exitCode = code; }, () => { process.exitCode = 1; });
+}
 
-module.exports = { run };
+module.exports = { run, waitFor, parseDuration };

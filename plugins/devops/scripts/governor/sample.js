@@ -46,28 +46,35 @@ function diskBusyPct(prev, cur) {
   return max;
 }
 
-/** @returns {{ts, procs:object[], sys:object, fg, listening:Set<number>}} */
+/**
+ * A snapshot without a process list (`procs: null` — the full scan runs only every procScanMs)
+ * keeps the previous list and its rates; process rates always span two full scans (procsTs).
+ * @returns {{ts, procsTs, freshProcs:boolean, procs:object[], sys:object, fg, listening:Set<number>}}
+ */
 function derive(prev, raw) {
   const cores = raw.cores || 1;
   const dt = prev ? raw.ts - prev.ts : 0;
+  const fresh = Array.isArray(raw.procs);
+  const prevProcsTs = prev ? (prev.procsTs ?? prev.ts) : raw.ts;
+  const dtP = prev ? raw.ts - prevProcsTs : 0;
   const before = new Map(((prev && prev.procs) || []).map((p) => [p.pid, p]));
-  const procs = (raw.procs || []).map((p) => {
+  const procs = !fresh ? ((prev && prev.procs) || []) : raw.procs.map((p) => {
     const b = before.get(p.pid);
     const same = b && Math.abs((b.startMs || 0) - (p.startMs || 0)) < 2000;
-    const cpuPct = same && dt > 0 && Number.isFinite(p.cpuMs) ? Math.max(0, ((p.cpuMs - b.cpuMs) / (dt * cores)) * 100) : (p.cpuPct || 0);
-    const ioBps = same && dt > 0 && Number.isFinite(p.ioBytes) ? Math.max(0, ((p.ioBytes - b.ioBytes) / dt) * 1000) : 0;
-    const iops = same && dt > 0 && Number.isFinite(p.ioOps) && Number.isFinite(b.ioOps) ? Math.max(0, ((p.ioOps - b.ioOps) / dt) * 1000) : 0;
+    const cpuPct = same && dtP > 0 && Number.isFinite(p.cpuMs) ? Math.max(0, ((p.cpuMs - b.cpuMs) / (dtP * cores)) * 100) : (p.cpuPct || 0);
+    const ioBps = same && dtP > 0 && Number.isFinite(p.ioBytes) ? Math.max(0, ((p.ioBytes - b.ioBytes) / dtP) * 1000) : 0;
+    const iops = same && dtP > 0 && Number.isFinite(p.ioOps) && Number.isFinite(b.ioOps) ? Math.max(0, ((p.ioOps - b.ioOps) / dtP) * 1000) : 0;
     return { ...p, cpuPct: Math.min(100, cpuPct), ioBps, iops };
   });
   const s = raw.sys || {};
   const ps = (prev && prev.sys) || {};
   const pagesPerSec = dt > 0 && Number.isFinite(s.pagesIn) && Number.isFinite(ps.pagesIn) ? Math.max(0, ((s.pagesIn - ps.pagesIn) / dt) * 1000) : 0;
   const sys = {
-    cpuPct: s.cpuPct, gpuPct: s.gpuPct || 0, diskMs: diskMs(ps.disk, s.disk), diskQueue: s.diskQueue || 0,
+    cpuPct: s.cpuPct, gpuPct: s.gpuPct || 0, diskMs: diskMs(ps.disk, s.disk), diskQueue: Number.isFinite(s.diskQueue) ? s.diskQueue : NaN,
     diskBusyPct: diskBusyPct(ps, s), disks: s.disks,
     totalMB: s.totalMB, freeMB: s.freeMB, pagesPerSec, disk: s.disk, pagesIn: s.pagesIn,
   };
-  return { ts: raw.ts, procs, sys, fg: raw.fg || null, listening: new Set(raw.listening || []) };
+  return { ts: raw.ts, procsTs: fresh ? raw.ts : prevProcsTs, freshProcs: fresh, procs, sys, fg: raw.fg || null, listening: new Set(raw.listening || []) };
 }
 
 module.exports = { derive, diskMs, diskBusyPct };

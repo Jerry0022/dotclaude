@@ -78,10 +78,12 @@ function main(hook, deps = {}) {
   S.removeFile(fgFile);
   if (!state || now - (state.heartbeat || 0) >= cfg.admission.staleMs) spawnWatcher();
   const yieldsTo = res.reason.startsWith('priority:') ? 'an app that has priority right now' : 'the 80 % resource budget';
+  const cli = path.resolve(__dirname, '..', '..', 'scripts', 'governor', 'cli.js').replace(/\\/g, '/');
   return {
-    block: `[governor] Not starting this now — heavy work yields to ${yieldsTo} (${res.reason}).\n`
-      + 'The governor recorded the command and will tell you (this session or the next one in this repo) when the resources are free, so you can re-run it yourself under normal permissions.\n'
-      + 'For now: do NOT start it another way, defer the steps that depend on its result, and report those steps as open. Continue with other work.',
+    block: `[governor] Not starting this now — heavy work yields to ${yieldsTo}. Pressed: ${P.pressedText(res, state)} (${res.reason}).\n`
+      + `Recorded as ${rec.id}. To wait for a slot run: node "${cli}" wait ${rec.id}  (bounded, default 15 min, --timeout 30m to change; fine with run_in_background). `
+      + 'Exit 0 = admitted: then re-run the SAME command yourself under normal permissions. Exit 2 = still pressed after the timeout.\n'
+      + 'Otherwise the governor tells you (this session or the next one in this repo) when the resources are free. Do NOT start it another way; defer the steps that depend on its result, report them as open, and continue with other work.',
   };
 }
 

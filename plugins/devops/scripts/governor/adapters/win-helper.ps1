@@ -97,8 +97,13 @@ function Op-Sample($req) {
       foreach ($v in $byType.Values) { if ($v -gt $gpuSys) { $gpuSys = $v } }
     } catch {}
   }
+  # The full Win32_Process scan is the expensive part (WMI walks every process): the watcher asks for it
+  # only every procScanMs and reuses the last list in between; system counters are read on every call.
+  $wantProcs = ($null -eq $req.procs) -or [bool]$req.procs
   $sb = New-Object Text.StringBuilder 65536
-  [void]$sb.Append('{"ts":').Append((N $now)).Append(',"cores":').Append($env:NUMBER_OF_PROCESSORS).Append(',"procs":[')
+  [void]$sb.Append('{"ts":').Append((N $now)).Append(',"cores":').Append($env:NUMBER_OF_PROCESSORS)
+  if ($wantProcs) {
+  [void]$sb.Append(',"procs":[')
   $first = $true
   foreach ($p in (Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,CreationDate,KernelModeTime,UserModeTime,WorkingSetSize,ReadTransferCount,WriteTransferCount,ReadOperationCount,WriteOperationCount)) {
     $cmd = $p.CommandLine; if ($cmd -and $cmd.Length -gt 400) { $cmd = $cmd.Substring(0, 400) }
@@ -111,6 +116,7 @@ function Op-Sample($req) {
     [void]$sb.Append('{"pid":').Append($p.ProcessId).Append(',"ppid":').Append($p.ParentProcessId).Append(',"name":').Append((Esc $p.Name)).Append(',"path":').Append((Esc $p.ExecutablePath)).Append(',"cmd":').Append((Esc $cmd)).Append(',"startMs":').Append((N $start)).Append(',"cpuMs":').Append((N ([math]::Round($cpuMs)))).Append(',"ioBytes":').Append((N $io)).Append(',"ioOps":').Append((N $ops)).Append(',"memMB":').Append((N ([math]::Round([double]$p.WorkingSetSize / 1MB)))).Append(',"gpuPct":').Append((N ([math]::Round($g, 1)))).Append('}')
   }
   [void]$sb.Append(']')
+  } else { [void]$sb.Append(',"procs":null') }
   $cpu = 0; try { $cpu = [double](Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'" -Property PercentProcessorUtility).PercentProcessorUtility } catch {}
   # Per physical disk: idle-time counter (active time = what Task Manager shows); _Total: latency for the log.
   $dAll = @(); try { $dAll = @(Get-CimInstance Win32_PerfRawData_PerfDisk_PhysicalDisk -Property Name,PercentIdleTime,Timestamp_Sys100NS,AvgDisksecPerTransfer,AvgDisksecPerTransfer_Base,Frequency_PerfTime,CurrentDiskQueueLength) } catch {}

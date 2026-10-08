@@ -140,6 +140,38 @@ describe('queue (record only, no execution)', () => {
   });
 });
 
+describe('24 h review: atomic writer, sweep, cheap sampling', () => {
+  it('G: a failed atomic write leaves no tmp file behind', () => {
+    const target = path.join(dir, 'x.json');
+    fs.mkdirSync(path.join(target, 'sub'), { recursive: true }); // a directory where the file should go: rename fails
+    expect(() => St.writeJson(target, { a: 1 })).toThrow();
+    expect(fs.readdirSync(dir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+  });
+  it('G: sweep removes dead sessions and expired queue entries, keeps live sessions and waiting entries', () => {
+    const now = Date.now();
+    fs.mkdirSync(p.sessions, { recursive: true });
+    fs.mkdirSync(p.queue, { recursive: true });
+    fs.writeFileSync(path.join(p.sessions, 'live.json'), JSON.stringify({ claudePid: 4242, startedAt: 0 }));
+    fs.writeFileSync(path.join(p.sessions, 'dead.json'), JSON.stringify({ claudePid: 999999, startedAt: 0 }));
+    fs.writeFileSync(path.join(p.queue, 'q1.json'), JSON.stringify({ id: 'q1', created_at: now - 2 * 3600000 }));
+    fs.writeFileSync(path.join(p.queue, 'q2.json'), JSON.stringify({ id: 'q2', created_at: now - 25 * 3600000 }));
+    expect(St.sweep(p, now, { alive: (pid) => pid === 4242 })).toMatchObject({ sessions: 1, queue: 1, total: 2 });
+    expect(fs.readdirSync(p.sessions)).toEqual(['live.json']);
+    expect(fs.readdirSync(p.queue)).toEqual(['q1.json']);
+  });
+  it('D: a snapshot without a process list keeps the last list and rates; the next full scan spans both', () => {
+    const a = { ts: 0, cores: 1, procs: [{ pid: 1, startMs: 0, cpuMs: 0 }], sys: { pagesIn: 0 } };
+    const b = { ts: 3000, cores: 1, procs: [{ pid: 1, startMs: 0, cpuMs: 1500 }], sys: { pagesIn: 0 } };
+    const c = { ts: 6000, cores: 1, procs: null, sys: { pagesIn: 600 } };
+    const d = { ts: 9000, cores: 1, procs: [{ pid: 1, startMs: 0, cpuMs: 3000 }], sys: { pagesIn: 600 } };
+    const db = derive(derive(null, a), b);
+    expect(db.procs[0].cpuPct).toBe(50);
+    const dc = derive(db, c);
+    expect([dc.procs[0].cpuPct, dc.sys.pagesPerSec, dc.freshProcs]).toEqual([50, 200, false]);
+    expect(derive(dc, d).procs[0].cpuPct).toBeCloseTo(25, 5); // 1500 ms CPU over the 6 s since the last full scan
+  });
+});
+
 describe('sample.derive', () => {
   it('computes machine CPU %, IO rate, disk latency and paging from counters', () => {
     const a = { ts: 0, cores: 4, procs: [{ pid: 1, startMs: 10, cpuMs: 0, ioBytes: 0 }], sys: { disk: { num: 0, base: 0, freq: 1e7 }, pagesIn: 0 } };
