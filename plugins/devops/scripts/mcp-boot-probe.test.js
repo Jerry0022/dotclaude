@@ -1,5 +1,7 @@
 import { describe, test, expect } from "vitest";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -59,6 +61,20 @@ describe("mcp-boot-probe helpers", () => {
   test("an incomplete node_modules is not accepted as resolved", () => {
     expect(probe.isCompleteModules(null)).toBe(false);
     expect(probe.isCompleteModules(path.join(HERE, "__does_not_exist__"))).toBe(false);
+  });
+
+  test("a package dir without package.json (truncated install) is not complete", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "probe-nm-"));
+    try {
+      fs.mkdirSync(path.join(dir, "@modelcontextprotocol", "sdk", "dist"), { recursive: true });
+      fs.mkdirSync(path.join(dir, "zod"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "zod", "package.json"), "{}");
+      expect(probe.isCompleteModules(dir)).toBe(false);
+      fs.writeFileSync(path.join(dir, "@modelcontextprotocol", "sdk", "package.json"), "{}");
+      expect(probe.isCompleteModules(dir)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("ensureDeps never links when link:false", () => {

@@ -81,6 +81,20 @@ function resolveBash(env = process.env, platform = process.platform) {
   return "bash";
 }
 
+// Unlink every node_modules link under mcpServerDir (top level and one level
+// down — the ship/issues servers). unlink removes the link, not its target.
+function unlinkJunctions(mcpServerDir) {
+  const candidates = [path.join(mcpServerDir, "node_modules")];
+  try {
+    for (const e of fs.readdirSync(mcpServerDir, { withFileTypes: true })) {
+      if (e.isDirectory()) candidates.push(path.join(mcpServerDir, e.name, "node_modules"));
+    }
+  } catch { /* no mcp-server dir in this ref */ }
+  for (const p of candidates) {
+    try { if (fs.lstatSync(p).isSymbolicLink()) fs.unlinkSync(p); } catch { /* absent */ }
+  }
+}
+
 // Check out <ref> into a detached temp worktree and return its plugin dir.
 // Call the returned cleanup() when done (`git worktree remove --force`).
 function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops") } = {}) {
@@ -93,6 +107,10 @@ function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops")
     pluginDir: path.join(dir, subdir),
     sha,
     cleanup: () => {
+      // The variant's SessionStart (ss.mcp.deps) junctions node_modules into
+      // its mcp-server dirs; `worktree remove --force` would delete through
+      // them into the shared plugin-data install. Drop the links first.
+      unlinkJunctions(path.join(dir, subdir, "mcp-server"));
       try { execFileSync("git", ["-C", root, "worktree", "remove", "--force", dir], { stdio: "pipe" }); } catch { /* best effort: a locked temp worktree is left for `git worktree prune` */ }
     },
   };
@@ -100,5 +118,5 @@ function materializeRef(ref, { repoRoot, subdir = path.join("plugins", "devops")
 
 module.exports = {
   INSTALLED_PLUGIN_KEY, buildSettings, buildClaudeArgs, formatCommand, quoteForDisplay,
-  resolveClaudeBin, resolveBash, materializeRef,
+  resolveClaudeBin, resolveBash, materializeRef, unlinkJunctions,
 };

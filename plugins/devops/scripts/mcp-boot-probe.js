@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @script mcp-boot-probe
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Measure how long each devops MCP server needs to answer a
  *   JSON-RPC `initialize` on stdio — the exact handshake Claude Code performs,
@@ -50,10 +50,13 @@ const SERVERS = [
 
 const REQUIRED_PKGS = ['@modelcontextprotocol/sdk', 'zod'];
 
-/** Does `dir` look like a node_modules holding every runtime dep? */
+/**
+ * Does `dir` look like a node_modules holding every runtime dep? A package
+ * counts only with its package.json — a truncated install keeps the directory.
+ */
 function isCompleteModules(dir) {
   if (!dir) return false;
-  return REQUIRED_PKGS.every((pkg) => fs.existsSync(path.join(dir, ...pkg.split('/'))));
+  return REQUIRED_PKGS.every((pkg) => fs.existsSync(path.join(dir, ...pkg.split('/'), 'package.json')));
 }
 
 /**
@@ -110,8 +113,13 @@ function ensureDeps(entryFile, { link = false, sharedModules = null } = {}) {
   const shared = sharedModules || discoverSharedModules();
   if (!shared) return { ok: false, modules: null, linked: false, reason: 'no-shared-node_modules' };
 
+  if (!isCompleteModules(shared)) return { ok: false, modules: null, linked: false, reason: `incomplete node_modules: ${shared}` };
+
   const target = path.join(path.dirname(entryFile), 'node_modules');
   try {
+    // A junction already here points at an incomplete install (resolvedModulesFor
+    // rejected it): drop the link only — unlink never touches the target's files.
+    try { if (fs.lstatSync(target).isSymbolicLink()) fs.unlinkSync(target); } catch { /* absent */ }
     fs.symlinkSync(shared, target, 'junction');
     return { ok: true, modules: shared, linked: true };
   } catch (e) {
