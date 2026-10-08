@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.252.1] — 2026-10-08
+
+### Fixed
+- **Background git-sync results reach Desktop worktree sessions again.** The Desktop app starts hooks of a worktree session in the repo root. `prompt.git.sync` read the result file under `process.cwd()`, which is the root's key, while the detached sync wrote it under the worktree's key. So no "✓ merged" note and no "⚠ conflict" reached a session after 2026-10-03. An analysis of the last 100 consumer sessions found 11 undelivered results in `%TEMP%`, one of them a 5-file conflict nobody was told about. The merges themselves stayed reliable: at 95 of 98 sampled prompts the branch had every `main` commit older than 35 min.
+  - `prompt.git.sync` v1.1.0 takes the result, and runs the batch-mode check, for the payload's `cwd`. It drops a result that names another branch, because Desktop reuses worktrees with a new branch.
+  - `stop.git.sync` v0.3.0 syncs the payload's `cwd` instead of the root, which sits on `main`.
+  - `git-sync-bg` v0.2.0 normalizes worktree keys (separators, trailing slash). The new `resultBranch()` reads which branch a result is about.
+
+### Tests
+- New e2e `git-sync-session-cwd.e2e.test.js` runs both hooks with the process cwd set to the root and the payload cwd set to the worktree. All 4 tests fail on the old hooks and pass on the new ones. Full suite: 8714 passed, 3 skipped. eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.252.0] — 2026-10-08
 
 Load governor improvements from a 24 h review of the live log (2026-10-07 13:48 → 2026-10-08 08:43, 918 summary minutes). In that window git held priority for 260 min and caused 23 of 44 throttles. Throttled jobs stayed capped until they ended (1 relief release in 24 h). The disk counted as "over" in 586 of 918 minutes.

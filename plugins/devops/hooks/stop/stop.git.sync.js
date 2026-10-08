@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.git.sync
- * @version 0.2.0
+ * @version 0.3.0
  * @event Stop
  * @plugin devops
  * @description Throttled background git sync at turn end. Replaces the former
@@ -24,9 +24,23 @@
 require('../lib/plugin-guard');
 
 const { execSync } = require('child_process');
+const fs = require('fs');
 const { claimSyncSlot, startBackgroundSync } = require('../lib/git-sync-bg');
+const { parseHookInput } = require('../lib/hook-input');
 
-const cwd = process.cwd();
+// The session's directory from the payload, not the hook process's: Desktop
+// starts hooks of a worktree session in the repo root, which sits on main —
+// the sync would bail there and never reach the worktree. Set once stdin ends.
+let cwd = process.cwd();
+
+function payloadCwd(raw) {
+  const hook = parseHookInput(raw);
+  const dir = hook && typeof hook.cwd === 'string' ? hook.cwd : '';
+  try {
+    if (dir && fs.statSync(dir).isDirectory()) return dir;
+  } catch { /* gone */ }
+  return null;
+}
 
 function git(cmd) {
   try {
@@ -73,9 +87,11 @@ function maybeSync() {
 // Drain stdin before working, like every other Stop hook here: Claude Code
 // writes the hook payload to this process, and exiting before it is consumed
 // gives the writer an EPIPE.
+let raw = '';
 process.stdin.setEncoding('utf8');
-process.stdin.on('data', () => {});
+process.stdin.on('data', (d) => { raw += d; });
 process.stdin.on('end', () => {
+  cwd = payloadCwd(raw) || cwd;
   try { maybeSync(); } catch { /* a background sync must never break turn end */ }
   process.exit(0);
 });
