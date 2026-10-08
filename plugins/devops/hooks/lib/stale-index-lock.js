@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module stale-index-lock
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Remove an `index.lock` a killed git process left behind long
  *   ago — and only that one.
@@ -18,12 +18,19 @@
  *   for a lock nobody here created, so it asks for stronger evidence instead:
  *     - 0 bytes — git writes the whole new index into the lock just before it
  *       renames it; a lock with content may be mid-commit or a real index;
- *     - older than STALE_LOCK_MIN_AGE_MS — no index write runs that long;
  *     - no running git process that started before the lock was written —
  *       git creates the lock itself, so a git started later cannot own it.
  *       Long-running read-only git processes (fsmonitor daemon, `cat-file
  *       --batch` of an IDE, credential helpers) never take the index lock and
- *       are ignored. When the process list cannot be read, the lock stays.
+ *       are ignored.
+ *     - old enough: a lock older than STALE_LOCK_MIN_AGE_MS goes on the two
+ *       checks above. A younger one goes on them too, as long as the process
+ *       list could be read — the v0.254.0 ship (2026-10-08) hit a fresh 0-byte
+ *       lock with no git running three times in a row, and waiting 10 min for
+ *       it is what the post-ship finalizer cannot do. Only a lock younger than
+ *       YOUNG_LOCK_MIN_AGE_MS stays (it may be seconds into its own write).
+ *       When the process list cannot be read, the age rule alone decides:
+ *       a young lock stays, an old one stays too ('unknown').
  *     - unchanged (inode, mtime, size) between the first look and the unlink.
  */
 
@@ -31,8 +38,10 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-/** A 0-byte lock at least this old is a candidate. */
+/** A 0-byte lock at least this old is stale by age (fallback rule). */
 const STALE_LOCK_MIN_AGE_MS = 10 * 60_000;
+/** Below this age a lock is never touched, even with no git running. */
+const YOUNG_LOCK_MIN_AGE_MS = 5_000;
 /** Timestamp slack between a process start and the lock's mtime (ps reports whole seconds). */
 const START_SLACK_MS = 2000;
 const LIST_TIMEOUT_MS = 10_000;
@@ -104,16 +113,19 @@ function gitProcesses({ platform = process.platform, now = Date.now() } = {}) {
  * @returns {{status:'absent'|'removed'|'young'|'nonempty'|'held'|'unknown'|'failed', lock:string, ageMs?:number, pids?:number[], error?:string}}
  *   'held' names the pids that may own it; 'unknown' = process list unreadable.
  */
-function releaseStaleIndexLock({ gitDir, now = Date.now(), minAgeMs = STALE_LOCK_MIN_AGE_MS, listGitProcesses = gitProcesses }) {
+function releaseStaleIndexLock({
+  gitDir, now = Date.now(), minAgeMs = STALE_LOCK_MIN_AGE_MS, youngMinAgeMs = YOUNG_LOCK_MIN_AGE_MS, listGitProcesses = gitProcesses,
+}) {
   const lock = path.join(gitDir, 'index.lock');
   let st;
   try { st = fs.statSync(lock); } catch { return { status: 'absent', lock }; }
   const ageMs = Math.max(0, now - st.mtimeMs);
   if (st.size > 0) return { status: 'nonempty', lock, ageMs };
-  if (ageMs < minAgeMs) return { status: 'young', lock, ageMs };
+  const young = ageMs < minAgeMs;
+  if (young && ageMs < youngMinAgeMs) return { status: 'young', lock, ageMs };
 
   const procs = listGitProcesses();
-  if (!Array.isArray(procs)) return { status: 'unknown', lock, ageMs };
+  if (!Array.isArray(procs)) return { status: young ? 'young' : 'unknown', lock, ageMs };
   const holders = procs.filter((p) => p.start <= st.mtimeMs + START_SLACK_MS && !NON_INDEX_GIT.test(` ${p.cmd}`));
   if (holders.length) return { status: 'held', lock, ageMs, pids: holders.map((p) => p.pid) };
 
@@ -130,12 +142,17 @@ function releaseStaleIndexLock({ gitDir, now = Date.now(), minAgeMs = STALE_LOCK
   }
 }
 
+/** `45 s old` under a minute, `12 min old` above. */
+function formatAge(ms) {
+  return ms < 60_000 ? `${Math.round(ms / 1000)} s old` : `${Math.round(ms / 60_000)} min old`;
+}
+
 /** One human line for a lock that was NOT removed, or '' when there is nothing to say. */
 function describeKeptLock(r) {
-  const age = r.ageMs != null ? `${Math.round(r.ageMs / 60_000)} min old` : '';
+  const age = r.ageMs != null ? formatAge(r.ageMs) : '';
   switch (r.status) {
     case 'nonempty': return `index.lock left in place (not empty, ${age})`;
-    case 'young': return `index.lock left in place (${age}, younger than ${STALE_LOCK_MIN_AGE_MS / 60_000} min)`;
+    case 'young': return `index.lock left in place (${age}, younger than ${STALE_LOCK_MIN_AGE_MS / 60_000} min; running git processes could not be listed)`;
     case 'held':
       return r.pids && r.pids.length
         ? `index.lock left in place (${age}; git process${r.pids.length === 1 ? '' : 'es'} ${r.pids.join(', ')} may own it)`
@@ -148,6 +165,8 @@ function describeKeptLock(r) {
 
 module.exports = {
   STALE_LOCK_MIN_AGE_MS,
+  YOUNG_LOCK_MIN_AGE_MS,
+  formatAge,
   parseEtime,
   parsePs,
   parseWinJson,

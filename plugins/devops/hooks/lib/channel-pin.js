@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module channel-pin
- * @version 0.1.0
+ * @version 0.1.1
  * @plugin devops
  * @description Repair-then-pin of a marketplace clone onto a channel tag, for
  *   ss.plugin.update (ring model, spec §5.2).
@@ -22,7 +22,7 @@
 
 const path = require('path');
 const { gitRunner, firstErrorLine } = require('./git-sync-recover');
-const { releaseStaleIndexLock, describeKeptLock } = require('./stale-index-lock');
+const { releaseStaleIndexLock, describeKeptLock, formatAge } = require('./stale-index-lock');
 
 const PIN_TIMEOUT_MS = 15_000;
 
@@ -43,7 +43,7 @@ function pinToTag({ dir, tag, targetSha, report = () => {}, timeoutMs = PIN_TIME
     if (listGitProcesses) opts.listGitProcesses = listGitProcesses;
     lock = releaseStaleIndexLock(opts);
     if (lock.status === 'removed') {
-      report(`removed stale index.lock (0 bytes, ${Math.round(lock.ageMs / 60_000)} min old, no git process holding it) — ${lock.lock}`);
+      report(`removed stale index.lock (0 bytes, ${formatAge(lock.ageMs)}, no git process holding it) — ${lock.lock}`);
     }
   }
 
