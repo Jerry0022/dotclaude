@@ -96,7 +96,12 @@ denied), `auto-agents --from=do-run` on a one-file typo prints the
 `▶ Inline` line and spawns nothing, `do-batch` activation writes the mode
 file and parks the prompt as one verbatim note, `auto-harden
 --invoked-by=ship` returns the `ship-harden.js` JSON, and `auto-guide` with
-every browser tool denied stops without a fallback. Ordering checks share
+every browser tool denied stops without a fallback. The #653 cases deny
+every real side effect: `do-ship` "ship it" attempts `ship_preflight` with
+the scaffold's `cwd` first, never falls back to a raw `git push` / `gh pr
+create` and ends with a card render; `auto-cleanup` "branches aufräumen"
+builds the page or the Apply-Manifest and attempts no delete without the
+confirm. Ordering checks share
 `skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 
