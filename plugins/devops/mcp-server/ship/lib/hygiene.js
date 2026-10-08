@@ -4,10 +4,18 @@
  *   The interactive half is the auto-cleanup skill (concept page); this module
  *   decides, after a successful ship or promote, two things on its own:
  *
- *   1. Auto-clean (after a ship only). Opens only when a REMOVABLE leftover is
- *      older than `autoCleanGateDays` (default 30); then it removes every
- *      removable leftover older than `autoCleanMinAgeDays` (default 30).
- *      Younger ones are left to the page. "Removable" means nothing can be
+ *   1. Auto-clean (after a ship only). Three triggers, each over REMOVABLE
+ *      leftovers only:
+ *        - age: once one is older than `autoCleanGateDays` (default 30),
+ *          every one older than `autoCleanMinAgeDays` (default 30) goes;
+ *        - count: more than `autoCleanKeepNewest` (default 20) → all but the
+ *          newest 20 go, whatever their age — a busy repo (~10 sessions a
+ *          day) never reaches the age gate;
+ *        - disk: the session worktrees still kept weigh more than
+ *          `autoCleanMaxGB` (default 10) → the oldest of them lose their
+ *          checkout (summed newest first; the one crossing the line and
+ *          everything older goes), but keep their branch.
+ *      The rest is left to the page. "Removable" means nothing can be
  *      lost:
  *        - branch: its tip is in the default branch — git ancestor, the head
  *          of a merged PR (squash merges), reachable from a merged PR head
@@ -59,6 +67,9 @@ import os from "node:os";
 import path from "node:path";
 
 const DAY_MS = 86_400_000;
+const GB = 1024 ** 3;
+/** Wall-clock budget for measuring worktree sizes in one run; the cache carries the rest to the next ship. */
+export const SIZE_BUDGET_MS = 30_000;
 const GIT_TIMEOUT = 15_000;
 const NETWORK_TIMEOUT = 60_000;
 /** Per-removal ceiling — a big node_modules takes minutes on Windows; a kill mid-delete leaves an orphan. */
@@ -250,6 +261,7 @@ export function scanRepo(cwd, now = Date.now()) {
       session: normPath(w.path).includes(SESSION_WORKTREE_MARKER),
       agent: AGENT_WORKTREE.test(normPath(w.path)),
       // unreadable activity → treated as fresh (fail closed)
+      activityMs: last === null ? now : last,
       ageDays: last === null ? 0 : Math.max(0, (now - last) / DAY_MS),
     });
   }
@@ -525,22 +537,64 @@ function ownCommits(sha, ctx) {
 }
 
 /**
+ * Bytes under `dir` (links not followed), or null once `deadline` passes.
+ * @param {string} dir
+ * @param {number} deadline  epoch ms
+ * @param {() => number} [clock]
+ */
+export function dirBytes(dir, deadline, clock = Date.now) {
+  let bytes = 0;
+  const walk = (d) => {
+    if (clock() > deadline) return false;
+    let entries;
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return true; }
+    for (const e of entries) {
+      const p = path.join(d, e.name);
+      if (e.isSymbolicLink()) continue;
+      if (e.isDirectory()) {
+        if (!walk(p)) return false;
+      } else {
+        try { bytes += fs.lstatSync(p).size; } catch { /* vanished */ }
+      }
+    }
+    return true;
+  };
+  return walk(dir) ? bytes : null;
+}
+
+/**
+ * A worktree's size: from `cache` when measured after its last activity,
+ * else measured now (null once the run's size budget is spent).
+ */
+function worktreeBytes(u, cache, deadline, clock) {
+  const key = normPath(u.path);
+  const hit = cache[key];
+  if (hit && typeof hit.bytes === "number" && hit.at >= u.activityMs) return hit.bytes;
+  const bytes = dirBytes(u.path, deadline, clock);
+  if (bytes !== null) cache[key] = { bytes, at: clock() };
+  return bytes;
+}
+
+/**
  * Which leftovers the auto-clean removes, and which unlanded ones are at risk.
- * Removal waits for the age gate: only once a removable leftover is older
- * than `autoCleanGateDays`, and then only what is older than
- * `autoCleanMinAgeDays` (both 30 by default — a month of worktrees to look
- * back into). The at-risk check ignores age: unpushed work is worth a warning
- * on the day it is abandoned.
+ * Only removable leftovers count, under three triggers (module header): age
+ * (`autoCleanGateDays` / `autoCleanMinAgeDays`), count (all but the
+ * `autoCleanKeepNewest` newest) and disk (kept session worktrees above
+ * `autoCleanMaxGB` lose their checkout, oldest first, the branch stays).
+ * 0 switches the count or the disk trigger off. The at-risk check ignores
+ * age: unpushed work is worth a warning on the day it is abandoned.
  * @param {{units:object[], defaultBranch:string}} scan
- * @param {{autoCleanGateDays:number, autoCleanMinAgeDays:number}} settings
- * @param {{cwd:string, fetchMerged?:Function, projectsDir?:string|null}} io
- * @returns {{gateOpen:boolean, reason:string|null, remove:object[], keep:object[], atRisk:object[], offline:boolean}}
+ * @param {{autoCleanGateDays:number, autoCleanMinAgeDays:number, autoCleanKeepNewest?:number, autoCleanMaxGB?:number}} settings
+ * @param {{cwd:string, fetchMerged?:Function, projectsDir?:string|null, sizeCache?:object, sizeBudgetMs?:number, clock?:Function}} io
+ * @returns {{gateOpen:boolean, reason:string|null, remove:object[], keep:object[], atRisk:object[], offline:boolean, keptBytes:number|null}}
  */
 export function planAutoClean(scan, settings, io) {
   const gate = settings.autoCleanGateDays;
   const minAge = settings.autoCleanMinAgeDays;
+  const keepNewest = settings.autoCleanKeepNewest ?? 0;
+  const maxBytes = (settings.autoCleanMaxGB ?? 0) * GB;
   if (scan.units.length === 0) {
-    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false };
+    return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false, keptBytes: null };
   }
   const originRef = `refs/remotes/origin/${scan.defaultBranch}`;
   const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
@@ -550,13 +604,13 @@ export function planAutoClean(scan, settings, io) {
     cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
     projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
   };
-  const remove = [];
+  const removable = [];
   const keep = [];
   const atRisk = [];
   for (const u of scan.units) {
     const reason = keepReason(u, ctx);
     if (!reason) {
-      if (u.ageDays > minAge) remove.push(u);
+      removable.push(u);
       continue;
     }
     if (u.ageDays > minAge) keep.push({ ...u, reason });
@@ -568,15 +622,60 @@ export function planAutoClean(scan, settings, io) {
       atRisk.push({ kind: u.kind, branch: u.branch, path: u.path, head: u.head, commits: ownCommits(u.head, ctx) });
     }
   }
-  const gateOpen = remove.some((u) => u.ageDays > gate);
+
+  const picked = new Map();
+  const pick = (u, trigger, extra = {}) => {
+    if (!picked.has(u.key)) picked.set(u.key, { ...u, trigger, ...extra });
+  };
+  const newestFirst = [...removable].sort((a, b) => a.ageDays - b.ageDays);
+  if (removable.some((u) => u.ageDays > gate)) {
+    for (const u of removable) if (u.ageDays > minAge) pick(u, "age");
+  }
+  if (keepNewest > 0) for (const u of newestFirst.slice(keepNewest)) pick(u, "count");
+  let keptBytes = null;
+  if (maxBytes > 0) {
+    const cache = io.sizeCache || {};
+    const clock = io.clock || Date.now;
+    const deadline = clock() + (io.sizeBudgetMs ?? SIZE_BUDGET_MS);
+    let total = 0;
+    let over = false;
+    for (const u of newestFirst.filter((x) => x.kind === "worktree" && !picked.has(x.key))) {
+      if (over) {
+        pick(u, "disk", { keepBranch: true });
+        continue;
+      }
+      const bytes = worktreeBytes(u, cache, deadline, clock);
+      // budget spent: decide nothing on a partial sum, the cache resumes next ship
+      if (bytes === null) {
+        total = null;
+        break;
+      }
+      total += bytes;
+      if (total > maxBytes) {
+        over = true;
+        pick(u, "disk", { keepBranch: true });
+      }
+    }
+    keptBytes = total;
+  }
+
+  const remove = scan.units.filter((u) => picked.has(u.key)).map((u) => picked.get(u.key));
+  const rules = [`nothing older than ${gate} days`];
+  if (keepNewest > 0) rules.push(`${removable.length} of at most ${keepNewest}`);
+  if (maxBytes > 0) {
+    rules.push(keptBytes === null
+      ? "worktree sizes still being measured"
+      : `${(keptBytes / GB).toFixed(1)} of at most ${settings.autoCleanMaxGB} GB`);
+  }
   return {
-    gateOpen,
-    reason: gateOpen ? null : `nothing removable older than ${gate} days`,
-    remove: gateOpen ? remove : [],
+    gateOpen: remove.length > 0,
+    reason: remove.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
+    remove,
     keep,
     // a detached worktree and the branch it came from are one finding
     atRisk: atRisk.filter((r, i) => atRisk.findIndex((x) => x.head === r.head) === i),
     offline: merged === null,
+    keptBytes,
   };
 }
 
@@ -674,8 +773,8 @@ export function executeAutoClean(plan, scan, {
       skipped.push({ kind: "worktree", path: u.path, branch: u.branch, reason: why });
       continue;
     }
-    removed.push({ kind: "worktree", path: u.path, branch: u.branch, sha: u.head });
-    if (u.branch) {
+    removed.push({ kind: "worktree", path: u.path, branch: u.branch, sha: u.head, trigger: u.trigger });
+    if (u.branch && !u.keepBranch) {
       const bwhy = deleteBranch(u.branch, u.head, cwd, scan.defaultBranch);
       if (bwhy) skipped.push({ kind: "branch", name: u.branch, reason: bwhy });
       else branchGone(u.branch, u.head);
@@ -750,6 +849,7 @@ export function cardLines(result, lang = "de") {
     let text = parts.length
       ? `${parts.join(" · ")} ${de ? "entfernt" : "removed"}`
       : (de ? "nichts entfernt" : "nothing removed");
+    if (ac.freedBytes >= 0.1 * GB) text += ` · ${(ac.freedBytes / GB).toFixed(1)} GB ${de ? "frei" : "freed"}`;
     if (ac.skipped.length) text += de ? ` · ${ac.skipped.length} übersprungen` : ` · ${ac.skipped.length} skipped`;
     const damaged = [...new Set([...ac.skipped.filter((x) => x.orphan).map((x) => x.orphan), ...(result.damaged || [])])];
     if (damaged.length) text += de ? ` · beschädigt, manuell prüfen: ${damaged.join(", ")}` : ` · damaged — manual check: ${damaged.join(", ")}`;
@@ -836,7 +936,17 @@ export function runHygiene(p) {
     result.autoClean.reason = "disabled (cleanup.autoClean)";
   } else {
     const projectsDir = p.projectsDir === undefined ? defaultProjectsDir() : p.projectsDir;
-    const plan = planAutoClean(scan, settings, { cwd, fetchMerged: p.fetchMerged, projectsDir });
+    const sizeCache = repo.sizes && typeof repo.sizes === "object" ? { ...repo.sizes } : {};
+    const plan = planAutoClean(scan, settings, {
+      cwd, fetchMerged: p.fetchMerged, projectsDir, sizeCache, sizeBudgetMs: p.sizeBudgetMs,
+    });
+    // sizes of worktrees that still exist only — a removed one would never expire
+    const live = new Set(scan.units.filter((u) => u.kind === "worktree").map((u) => normPath(u.path)));
+    const sizes = Object.fromEntries(Object.entries(sizeCache).filter(([k]) => live.has(k)));
+    if (JSON.stringify(sizes) !== JSON.stringify(repo.sizes || {})) {
+      repo.sizes = sizes;
+      dirty = true;
+    }
     result.autoClean.kept = plan.keep.length;
     result.autoClean.offline = plan.offline;
     result.atRisk = plan.atRisk;
@@ -849,6 +959,10 @@ export function runHygiene(p) {
       });
       result.autoClean.ran = true;
       result.autoClean.removed = done.removed;
+      result.autoClean.freedBytes = done.removed
+        .filter((x) => x.kind === "worktree")
+        .reduce((sum, x) => sum + ((sizeCache[normPath(x.path)] || {}).bytes || 0), 0);
+      for (const x of done.removed) if (x.kind === "worktree") delete repo.sizes?.[normPath(x.path)];
       result.autoClean.skipped = done.skipped;
       repo.damaged = openDamage(repo, done.skipped.filter((x) => x.orphan).map((x) => x.orphan), now);
       repo.lastAutoClean = { at: new Date(now).toISOString(), removed: done.removed.slice(0, LOG_KEEP) };

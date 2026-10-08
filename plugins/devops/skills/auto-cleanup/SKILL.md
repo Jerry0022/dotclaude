@@ -38,7 +38,7 @@ The cleanup has an automatic half and this interactive half:
 
 | Part | Runs | Removes |
 |---|---|---|
-| `ship_hygiene` auto-clean (`mcp-server/ship/lib/hygiene.js`) | after every successful ship, only once a removable leftover is older than 30 days | every leftover older than 7 days whose content provably landed (clean session worktrees, their branches, plain branches) — no page, no question; the card's **Geprüft** line reports it |
+| `ship_hygiene` auto-clean (`mcp-server/ship/lib/hygiene.js`) | after every successful ship: age (a removable leftover older than 30 days), count (more than 20 removable) or disk (kept session worktrees above 10 GB) | whatever provably landed: older than 30 days, beyond the newest 20, or — disk — the oldest worktree checkouts (branch kept) (clean session worktrees, their branches, plain branches) — no page, no question; the card's **Geprüft** line reports it |
 | `ship_hygiene` nudge | after every successful ship or promote, when more than 50 leftovers lie around, at most weekly | nothing — the card gets an ⚠ OFFEN item pointing here |
 | **this skill** | on a yes to that item, or a trigger phrase | whatever the user ticks on the page, recent items included |
 
