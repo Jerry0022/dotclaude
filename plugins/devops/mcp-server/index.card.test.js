@@ -1096,6 +1096,24 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(text).toMatch(/^## 📦 Shippen trotz 2 Vorbehalten\?$/m);
   });
 
+  test("'N/M (K skipped)' with N+K==M is green: '8680/8683 (3 skipped)' is ✓ 8680 Tests grün, no 'Nicht erreicht'", async () => {
+    for (const result of ["8680/8683 (3 skipped)", "8680/8683 · 3 skipped"]) {
+      const text = await cardText({
+        variant: "ready", summary: "Skipped-Ratio", lang: "de", session_id: "test-ev-ratio-skip",
+        tests: [{ method: "npm test", result }],
+      });
+      expect(text).toContain("✓ 8680 Tests grün");
+      expect(text).not.toContain("3 Tests rot");
+      expect(text).not.toContain("Nicht erreicht");
+    }
+    // Skips that explain only part of the gap leave the rest red.
+    const partial = await cardText({
+      variant: "ready", summary: "Skipped-Ratio", lang: "de", session_id: "test-ev-ratio-skip-partial",
+      tests: [{ method: "npm test", result: "8680/8683 (1 skipped)" }],
+    });
+    expect(partial).toContain("✗ 2 Tests rot");
+  });
+
   test("the count is the one next to 'Tests', not a file count before it", async () => {
     const text = await cardText({
       variant: "ready", summary: "Zählung", lang: "de", session_id: "test-ev-count",
