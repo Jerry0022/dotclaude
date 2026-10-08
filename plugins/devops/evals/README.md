@@ -76,6 +76,27 @@ implemented; the `.md` body stays the human-readable intent.
 
 Record skill-trim evidence with `TRIM-TEMPLATE.md`.
 
+A case can add `deny_tools: [...]` to `prompt.md` frontmatter: the entries
+become `permissions.deny` in the run's `--settings`. Unlike `allowed_tools`
+they also hold when the user's settings default to `bypassPermissions`, so a
+case can grade a command being *attempted* without it running on the real
+machine (`skills/auto-update/forced-hook-run` denies `node`, `git pull`, …).
+
+## skills/
+
+One behaviour case per trimmed skill (#651) — the skill's body, not its
+routing: `auto-fix` names the root cause before its first edit and reports
+file:line, `auto-extend` scaffolds both extension files minimally,
+`auto-update` attempts the update hook with `--force` after capturing state,
+`auto-polish --invoked-by=ship` reports findings without editing, `do-learn`
+routes a project-only rule into the project's own instructions. Ordering
+checks share `skills/order.js`. Per-skill trim records with the A/B numbers
+live in `trims/<skill>.md`.
+
+```bash
+node plugins/devops/evals/ab-run.js --case 'skills/*/*' --a-ref origin/main --runs 2
+```
+
 ## delegation/
 
 Pins the always-on delegation policy (`deep-knowledge/agent-proactivity.md`):

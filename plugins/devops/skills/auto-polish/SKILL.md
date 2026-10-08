@@ -44,16 +44,12 @@ it is the layer this skill *executes through*.
    Skip self-spawned qa/redteam when the parent owns those waves. The
    pre-PR-2 values `--invoked-by=agents` and `--invoked-by=autonomous` (the
    latter implies `--autonomous`) are read as `do-run`.
-3. **From `/do-ship`** — pass `--invoked-by=ship` plus the diff's UI files as
-   scope. This is the **rules-only path**: it runs nothing but the static
-   halves of the UI rules (Step 4 #8) over the given files and returns a
-   findings list to the caller. No test plan, no qa/redteam agents, no
-   browser, no fixes, no completion card. See § Rules-only path (ship).
-   /do-ship calls `/auto-harden --invoked-by=ship` at the same step.
+3. **From `/do-ship`** — `--invoked-by=ship` plus the diff's UI files as
+   scope: the report-only § Rules-only path (ship). /do-ship calls
+   `/auto-harden --invoked-by=ship` at the same step.
 4. **Under strict** — `--strict` (do-run "Strikt", /do-ship under strict
-   mode, or the `[claude-strict contract]` in context): only the named scope
-   changes; wider findings are reported, never fixed. The ship path is
-   report-only anyway — /do-ship then applies none of its mechanical fixes.
+   mode, or the `[claude-strict contract]` in context); on the ship path
+   /do-ship then applies none of the mechanical fixes.
 
 ## Execution — through auto-agents
 
@@ -95,9 +91,8 @@ Project extensions can declare:
 
 Scan `$ARGUMENTS` for:
 
-- `--autonomous` flag → set `$AUTONOMOUS=1`. Skips ALL `AskUserQuestion`
-  calls. Structural changes are STILL not auto-applied — they get flagged
-  in the final report. Autonomous is mute mode, not yolo mode.
+- `--autonomous` flag → set `$AUTONOMOUS=1`: no `AskUserQuestion`;
+  structural changes are still only flagged in the report, never applied.
 - `--invoked-by=do-run|ship` → set `$PARENT_SKILL`. See "Invocation
   Context". Legacy values: `agents` → `do-run`; `autonomous` → `do-run` +
   `$AUTONOMOUS=1`. `--invoked-by=ship` sets `$RULES_ONLY=1` and jumps to
@@ -146,23 +141,15 @@ If `$SCOPE_FILES` empty:
 
 ## Step 3 — Kick off Test Plan + UI-QA Agent (parallel)
 
-In parallel — do NOT block:
+Without blocking:
 
-1. **Determine UI test tools per `{PLUGIN_ROOT}/deep-knowledge/test-plan.md`** (browser
-   preview, Playwright, snapshot tests, multi-viewport setup). Store as
-   `$TEST_PLAN`.
-2. **Spawn `qa` agent** in background — SKIP when `$PARENT_SKILL=do-run`
-   AND a qa wave is already planned (parent owns qa). Otherwise:
-   ```
-   Agent(subagent_type="devops:qa", run_in_background=true,
-         description="UI test pass for polish",
-         prompt="Verify the UI: build, run UI snapshot tests if present,
-                 take screenshots of changed routes/components per
-                 $TEST_PLAN (phone/tablet/desktop if multi-viewport).
-                 Report: build PASS/FAIL, snapshot diffs, visible console
-                 errors, layout shifts, accessibility violations from
-                 axe-core if available. Do NOT fix — only report.")
-   ```
+1. **UI test tools per `{PLUGIN_ROOT}/deep-knowledge/test-plan.md`** (browser
+   preview, Playwright, snapshot tests, multi-viewport setup) → `$TEST_PLAN`.
+2. **Background `devops:qa` agent** (skip when `$PARENT_SKILL=do-run` and the
+   parent owns a qa wave), report-only: build PASS/FAIL, UI snapshot diffs,
+   screenshots of changed routes/components per `$TEST_PLAN` (phone/tablet/
+   desktop if multi-viewport), console errors, layout shifts, axe-core
+   violations if available.
 
 ## Step 4 — Findings Scan (parallel research)
 
@@ -179,8 +166,7 @@ looks for: `deep-knowledge/findings-scan.md` (this skill's directory).
 Runs instead of Steps 3 and 5–12 when `--invoked-by=ship` (Step 4 is reduced
 to its item #8, run inline): the **static** halves of the standing UI rules
 over the UI files /do-ship passed — no agents, no browser, **never fixes**,
-no card. Empty scope or no UI profile → `{ applicable: false, reason }`.
-It returns a findings list and the caller decides what to apply. Scope,
+no card. It returns a findings list; the caller decides what to apply. Scope,
 checks, return shape: `deep-knowledge/rules-only-path.md`.
 
 ## Steps 5–10 — Fix phases
@@ -235,12 +221,12 @@ items: a concept page per `deep-knowledge/retest-and-output.md` § Concept Page.
 
 - **UI-first** — every change is justified by a UI benefit. Backend
   only when UI demonstrably suffers.
-- **Structural changes ALWAYS need approval.** `--autonomous` flags
-  them, never applies.
+- **Structural changes need approval.** `--autonomous` flags them, never
+  applies.
 - **`--strict` narrows, never widens.** Only the named scope changes; a
   finding outside it is reported, not fixed.
 - **Token-first** — when a design token catalog exists, prefer tokens
-  over dominant-value-snap. Tokens are intent; dominance is accident.
+  over a dominant-value snap.
 - **Multi-viewport verify** — for web apps, never declare done without
   phone/tablet/desktop snapshots (per `{PLUGIN_ROOT}/deep-knowledge/responsive-testing.md`).
 - **Pre-mortem inline** for every change touching shared components

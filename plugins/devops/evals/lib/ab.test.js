@@ -51,6 +51,7 @@ describe("command building", () => {
     expect(INSTALLED_PLUGIN_KEY).toBe("devops@dotclaude");
     expect(buildSettings()).toEqual({ enabledPlugins: { "devops@dotclaude": false } });
     expect(buildSettings({ disable: ["a@m", "b@m"] })).toEqual({ enabledPlugins: { "a@m": false, "b@m": false } });
+    expect(buildSettings({ deny: ["Bash(node *)"] })).toEqual({ enabledPlugins: { "devops@dotclaude": false }, permissions: { deny: ["Bash(node *)"] } });
   });
 
   it("builds the claude -p argv", () => {
@@ -102,6 +103,15 @@ describe("runner args", () => {
     expect(env.CLAUDECODE).toBeUndefined();
     expect(env.EVAL_DOTCLAUDE_BUDGET).toBe("free");
     if (prev === undefined) delete process.env.CLAUDECODE; else process.env.CLAUDECODE = prev;
+  });
+
+  // 2026-10-08: from a Desktop session the child CLI said "Not logged in"
+  // until the host's CLAUDE*/ANTHROPIC* vars were stripped.
+  it("strips every host CLAUDE*/ANTHROPIC* var but keeps the rest and the case env", () => {
+    const env = childEnv({ CLAUDE_BIN: "x" }, {
+      PATH: "/bin", ANTHROPIC_BASE_URL: "http://host", CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH: "1", CLAUDECODE: "1",
+    });
+    expect(env).toEqual({ PATH: "/bin", CLAUDE_BIN: "x" });
   });
 });
 

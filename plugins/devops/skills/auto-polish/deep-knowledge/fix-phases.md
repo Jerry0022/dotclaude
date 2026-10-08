@@ -4,7 +4,7 @@ How each fix phase of a full `/auto-polish` pass applies the Step 4 findings (`f
 
 ## Step 5 — State-Visuals + Auto-Consistency Phase
 
-Apply ALL of these without prompting (they're invisible visual hygiene):
+Apply without prompting (invisible visual hygiene):
 
 1. **State-visuals** — auto-add missing `:hover`, `:focus-visible`,
    `:disabled`, `:active`, aria-labels, loading/error/empty UI states
@@ -12,11 +12,11 @@ Apply ALL of these without prompting (they're invisible visual hygiene):
    long animations.
 
 2. **Token migrations** — every hardcoded value with a clean token
-   equivalent → replace. No prompt needed; this is mechanical.
+   equivalent → replace.
 
 3. **Single-outlier consistency snaps** — if a value appears once and
    the surrounding pattern has ≥70% dominance for a different value
-   in the same category, snap to dominant. No prompt.
+   in the same category, snap to dominant.
 
 ## Step 6 — Pattern Consistency Phase (decisive analysis)
 
@@ -39,20 +39,11 @@ For each category in Step 4 (#2) where the distribution is NOT clear-cut
      system → migrate dominant TO minority (call this out explicitly
      in the report).
 
-3. **Escalate to `designer` agent when stuck** — when neither pattern
-   matches a token, distributions are split, and recency doesn't help:
-   ```
-   Agent(subagent_type="devops:designer",
-         description="Resolve UI consistency conflict",
-         prompt="In $SCOPE_FILES, we found conflicting spacing/typo/color
-                 patterns: <category> uses <value-A> in N places and
-                 <value-B> in M places. No design token catalog covers
-                 these. Analyze: which represents the better visual
-                 system for this codebase? Look at semantics, hierarchy,
-                 brand alignment. Output: recommended value + 2-3 sentence
-                 rationale. Do NOT change files.")
-   ```
-   Apply designer's recommendation. If `$AUTONOMOUS=0` and the change
+3. **Escalate to a `devops:designer` agent when stuck** — neither pattern
+   matches a token, distributions are split, recency doesn't help. Give it
+   the category, both values with their counts and the scope; ask for a
+   recommended value plus a 2–3 sentence rationale, no file changes.
+   Apply the recommendation. If `$AUTONOMOUS=0` and the change
    affects >10 files: confirm via `AskUserQuestion` with a short summary
    + designer's rationale.
 
@@ -84,10 +75,9 @@ For Step 4 (#5) findings ONLY (UI-impact backend):
 2. Apply the risk-classifier. Same boundaries: low auto, medium auto +
    mention, high plan+confirm or skip+flag.
 
-3. **Never expand beyond UI-causation** — even if Step 4 (#5) reveals
-   a beautiful backend refactor opportunity, if it's not actively
-   hurting the UI in `$SCOPE_FILES`, flag it as "Harden-candidate" for
-   the final report and stop.
+3. **Never expand beyond UI-causation** — a backend improvement that does
+   not actively hurt the UI in `$SCOPE_FILES` is flagged as
+   "Harden-candidate" in the report, not applied.
 
 ## Step 9 — Frontend Architecture Phase
 
@@ -105,7 +95,7 @@ For Step 4 (#7) findings:
 
 ## Step 10 — Structural UI Proposals (Step 4 #6 findings)
 
-These NEVER auto-apply. They are proposals for the user.
+Proposals only, never auto-applied.
 
 When `$AUTONOMOUS=0`:
 - For ≤3 proposals: ask via `AskUserQuestion`, one decision per proposal,

@@ -65,10 +65,15 @@ function parseArgs(argv) {
   return opts;
 }
 
-function childEnv(caseEnv) {
-  const env = { ...process.env, ...caseEnv };
-  delete env.CLAUDECODE; // nested-session marker of the calling session
-  return env;
+// The calling session's CLAUDE*/ANTHROPIC* vars (nested-session marker, the
+// Desktop host's ANTHROPIC_BASE_URL and auth-refresh flags) make the child CLI
+// fail with "Not logged in" / 401 — strip them; the case env is added after.
+function childEnv(caseEnv, parentEnv = process.env) {
+  const env = {};
+  for (const [k, v] of Object.entries(parentEnv)) {
+    if (!/^(CLAUDE|ANTHROPIC)/i.test(k)) env[k] = v;
+  }
+  return { ...env, ...caseEnv };
 }
 
 // A failed run (auth error, crash, timeout) is no evidence either way:
@@ -82,7 +87,7 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-case-"));
   const args = buildClaudeArgs({
     prompt: caseDef.prompt, pluginDir: variant.pluginDir, allowedTools: caseDef.allowedTools,
-    settings: buildSettings({ disable: opts.disable }), model: opts.model,
+    settings: buildSettings({ disable: opts.disable, deny: caseDef.denyTools }), model: opts.model,
   });
   if (caseDef.scaffold) {
     const s = spawnSync(bash, [caseDef.scaffold], { cwd: workdir, encoding: "utf8", stdio: "pipe" });
@@ -158,7 +163,7 @@ function main(argv) {
   if (opts.dryRun) {
     for (const c of cases) {
       for (const v of variants) {
-        const args = buildClaudeArgs({ prompt: c.prompt, pluginDir: v.pluginDir, allowedTools: c.allowedTools, settings: buildSettings({ disable: opts.disable }), model: opts.model });
+        const args = buildClaudeArgs({ prompt: c.prompt, pluginDir: v.pluginDir, allowedTools: c.allowedTools, settings: buildSettings({ disable: opts.disable, deny: c.denyTools }), model: opts.model });
         console.log(`# ${c.id} [${v.name}] x${opts.runs} (cwd <tmp>/ab-case-XXXX, env ${JSON.stringify(c.env)})`);
         if (c.scaffold) console.log(formatCommand(bash, [c.scaffold]));
         console.log(formatCommand(bin, args));

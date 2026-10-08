@@ -27,20 +27,11 @@ Step 12.
 3. **Visual diff review** — if snapshot tests produced diffs, walk
    through each: expected (consistency fix) or regression? Apply Step 7
    classifier to regressions.
-4. **Red-team pass** — spawn `redteam`:
-   ```
-   Agent(subagent_type="devops:redteam",
-         description="Red-team polish diff",
-         prompt="Review the diff of this polish pass: <changed files>.
-                 Find: visual regressions (a 'consistency snap' that
-                 hides a real signal — e.g. error states now look like
-                 normal states), state-visual fixes that change perceived
-                 affordances (button that lacked hover now suggests it's
-                 clickable but its handler is no-op), token migrations
-                 that resolve to wrong values in dark mode, layout shifts
-                 introduced by spacing changes. Report concrete risks
-                 with file:line.")
-   ```
+4. **Red-team pass** — a `devops:redteam` agent on the changed files,
+   looking for: a consistency snap that hides a real signal (error state now
+   looks normal), state visuals that suggest an affordance the handler does
+   not have, token migrations that resolve wrong in dark mode, layout shifts
+   from spacing changes; risks with file:line.
 5. Apply Step 7 to redteam findings.
 
 **Skip self-spawned redteam** when `$PARENT_SKILL=do-run` and parent owns

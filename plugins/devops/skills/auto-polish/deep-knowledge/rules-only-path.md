@@ -2,10 +2,8 @@
 
 What `/auto-polish --invoked-by=ship` does instead of the full pass. `SKILL.md` § Rules-only path decides when it runs.
 
-Runs instead of Steps 3 and 5–12 when `--invoked-by=ship` (Step 4 is reduced
-to its item #8, run inline). It exists so /do-ship can
-measure the standing UI rules on every UI ship without paying for a full
-polish pass (agents, browser, viewports).
+It lets /do-ship measure the standing UI rules on every UI ship without a
+full polish pass (agents, browser, viewports).
 
 1. **Scope** = the files /do-ship passed (its diff filtered to UI files),
    resolved against `--cwd` when given (else the session's cwd). Empty
