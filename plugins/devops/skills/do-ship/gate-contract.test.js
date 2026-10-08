@@ -173,10 +173,15 @@ describe("do-ship gate contract — lockout", () => {
   const lockout = section("## Pre-Step A", "## Pre-Step B");
 
   test("lockout is detected first, persisted in a marker and re-derived at every gate", () => {
-    expect(lockout).toContain('node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check');
+    expect(lockout).toContain('node "{PLUGIN_ROOT}/scripts/autonomous-lockout.js" check --ship');
     expect(lockout).toContain(".claude/.ship-lockout");
     expect(lockout).toMatch(/at every interactive gate re-derive `\$SHIP_LOCKOUT=true` when the marker file exists/);
-    expect(lockout).toMatch(/Clear the marker in Step 5 cleanup \(delete `\.claude\/\.ship-lockout`\)/);
+    // The marker is code-owned: Pre-Step A syncs it, ship_cleanup clears it on
+    // every exit — a ship-blocked exit skips Step 5, so a prose-only clear there
+    // stranded it and the next interactive ship ran as if locked out.
+    expect(lockout).toMatch(/deletes a marker an earlier blocked or aborted ship\s+left behind/);
+    expect(lockout).toMatch(/`ship_cleanup` deletes the marker on every exit/);
+    expect(lockout).not.toMatch(/writeFileSync\('\.claude\/\.ship-lockout'/);
     expect(lockout).toMatch(/treat it as \*\*not locked\*\*/);
   });
 
@@ -217,6 +222,7 @@ describe("do-ship gate contract — blocked exits and sentinel hygiene", () => {
     expect(section("## Pipeline at a glance", "## Target channel")).toContain("Every `ship-blocked` exit calls `ship_cleanup({ keep: true })` first");
     const hygiene = section("> **Sentinel hygiene", "## Step 0 —");
     expect(hygiene).toMatch(/before rendering ANY `ship-blocked` card, first call `ship_cleanup\(\{ branch, cwd, keep: true \}\)`/);
+    expect(hygiene).toContain("`.claude/.ship-lockout` marker");
   });
 
   test("each hard stop renders ship-blocked", () => {

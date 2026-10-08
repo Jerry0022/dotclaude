@@ -25,6 +25,10 @@ vi.mock("../lib/sentinel.js", () => ({
   clearSentinel: vi.fn(),
 }));
 
+vi.mock("../lib/lockout-marker.js", () => ({
+  clearLockoutMarker: vi.fn(() => false),
+}));
+
 // Default to a normal repo the project owns; individual tests override to
 // exercise the file-only / foreign-root refusals.
 vi.mock("../lib/repo-mode.js", () => ({
@@ -37,6 +41,8 @@ import { handler } from "./cleanup.js";
 import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
+import { clearSentinel } from "../lib/sentinel.js";
+import { clearLockoutMarker } from "../lib/lockout-marker.js";
 
 const CWD = "/fake/consumer-repo";
 
@@ -46,6 +52,7 @@ beforeEach(() => {
   isWorktree.mockReturnValue(false);
   getWorktreeBranches.mockReturnValue(new Set());
   dirtySessionWorktrees.mockReturnValue([]);
+  clearLockoutMarker.mockReturnValue(false);
   // branch/base-interpolating reads use the argv form; route them to the same fake
   gitTry.mockImplementation((args, o) => git(args.join(" "), o));
   // On base branch already, no remote branch left → minimal happy path.
@@ -164,5 +171,60 @@ describe("ship_cleanup — branch names never reach a shell (AUD-C014)", () => {
     // no shell-string git call carries the branch name
     expect(git.mock.calls.filter((c) => !gitTry.mock.calls.some((t) => t[0].join(" ") === c[0]))
       .some((c) => String(c[0]).includes(evil))).toBe(false);
+  });
+});
+
+describe("lockout marker — cleared on every exit that clears the sentinel", () => {
+  // A `.claude/.ship-lockout` left behind makes the next interactive /do-ship
+  // take every non-interactive BLOCK branch. ship-blocked exits call
+  // ship_cleanup({ keep: true }) and skip Step 5, so the clear lives here.
+  test("keep-mode (the ship-blocked exit) clears marker and sentinel", async () => {
+    clearLockoutMarker.mockReturnValue(true);
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: true });
+    expect(clearSentinel).toHaveBeenCalledWith(CWD);
+    expect(clearLockoutMarker).toHaveBeenCalledWith(CWD);
+    expect(result.cleaned).toEqual(["sentinel", "lockout-marker"]);
+  });
+
+  test("keep-mode without a marker reports only the sentinel", async () => {
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: true });
+    expect(clearLockoutMarker).toHaveBeenCalledWith(CWD);
+    expect(result.cleaned).toEqual(["sentinel"]);
+  });
+
+  test("normal cleanup (success) clears the marker", async () => {
+    clearLockoutMarker.mockReturnValue(true);
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(result.success).toBe(true);
+    expect(clearLockoutMarker).toHaveBeenCalledWith(CWD);
+    expect(result.cleaned).toContain("lockout-marker");
+  });
+
+  test("refused cleanup (still in a worktree) clears the marker too", async () => {
+    isWorktree.mockReturnValue(true);
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(result.success).toBe(false);
+    expect(clearLockoutMarker).toHaveBeenCalledWith(CWD);
+  });
+
+  test("branch attached to a worktree: refused, marker cleared", async () => {
+    getWorktreeBranches.mockReturnValue(new Set(["feat/topic"]));
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(result.success).toBe(false);
+    expect(clearLockoutMarker).toHaveBeenCalledWith(CWD);
+  });
+
+  test("file-only mode clears the marker", async () => {
+    detectRepoMode.mockReturnValue("none");
+    clearLockoutMarker.mockReturnValue(true);
+    const result = await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(result.cleaned).toEqual(["sentinel", "lockout-marker"]);
+  });
+
+  test("timed-out probe keeps the marker like the sentinel — the ship may still run", async () => {
+    detectRepoMode.mockReturnValue("unknown");
+    await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
+    expect(clearLockoutMarker).not.toHaveBeenCalled();
+    expect(clearSentinel).not.toHaveBeenCalled();
   });
 });
