@@ -17,6 +17,8 @@ import {
   SCRAPER_PRUNE_DIRS,
   SCRAPER_SLIM_MARKER,
   LOGIN_RETRY_AFTER_MS,
+  AUTO_LOGIN_RETRY_MS,
+  bringLoginWindowToFront,
 } from "./refresh-usage-headless.js";
 
 // #328 — a stale PID file + `taskkill /F /PID <pid> /T` killed the user's main
@@ -159,6 +161,37 @@ describe("shouldOpenLoginWindow — login-window policy", () => {
 
   test("manual run never stacks onto an already-pending window", () => {
     expect(shouldOpenLoginWindow({ noLogin: false, loginPending: true })).toBe(false);
+  });
+  // A revoked claude.ai session stayed silent ("refresh failed: not logged in")
+  // because every automatic caller passed --no-login. The hook path now passes
+  // --login-prompt: one window machine-wide, rate-limited while ignored.
+  test("--login-prompt opens a window when none was offered recently", () => {
+    expect(shouldOpenLoginWindow({ noLogin: false, loginPending: false, loginPrompt: true })).toBe(true);
+    expect(shouldOpenLoginWindow({ noLogin: false, loginPending: false, loginPrompt: true, markerAgeMs: AUTO_LOGIN_RETRY_MS })).toBe(true);
+  });
+
+  test("--login-prompt does not reopen an ignored window before AUTO_LOGIN_RETRY_MS", () => {
+    expect(AUTO_LOGIN_RETRY_MS).toBeGreaterThan(LOGIN_RETRY_AFTER_MS);
+    expect(shouldOpenLoginWindow({ noLogin: false, loginPending: false, loginPrompt: true, markerAgeMs: LOGIN_RETRY_AFTER_MS + 1 })).toBe(false);
+    expect(shouldOpenLoginWindow({ noLogin: false, loginPending: true, loginPrompt: true })).toBe(false);
+  });
+});
+
+describe("bringLoginWindowToFront", () => {
+  test("Windows: runs PowerShell with an encoded command scoped to the scraper profile", () => {
+    const calls = [];
+    const ok = bringLoginWindowToFront({ platform: "win32", profileDir: "C:\p\edge-usage-profile", run: (cmd, args) => calls.push([cmd, args]) });
+    expect(ok).toBe(true);
+    expect(calls[0][0]).toBe("powershell.exe");
+    const script = Buffer.from(calls[0][1].at(-1), "base64").toString("utf16le");
+    expect(script).toContain("C:\p\edge-usage-profile");
+    expect(script).toContain("SetForegroundWindow");
+    expect(script).toContain("ShowWindow($p.MainWindowHandle,3)"); // maximized
+  });
+
+  test("never throws and does nothing off Windows", () => {
+    expect(bringLoginWindowToFront({ platform: "win32", run: () => { throw new Error("x"); } })).toBe(false);
+    expect(bringLoginWindowToFront({ platform: "linux", run: () => { throw new Error("must not run"); } })).toBe(false);
   });
 });
 
