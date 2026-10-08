@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.254.1] — 2026-10-08
+
+Plugin self-sync after a ship: during the v0.254.0 ship a fresh 0-byte `.git/index.lock` in the marketplace clone, with no git running, blocked the channel pin three times. The hook only removed such a lock once it was 10 min old, so it had to be deleted by hand.
+
+### Fixed
+- **Young orphaned `index.lock` is cleared.** `stale-index-lock.js` now removes a 0-byte lock of any age from 5 s up when the process list (Win32_Process on Windows, `ps` on POSIX) shows no index-writing git that started before the lock was written. The 10-min age rule stays as the fallback: when the process list cannot be read, a young lock is kept as `young` and an old one as `unknown`. A lock younger than 5 s is never touched. Removal and kept-lock lines show seconds for sub-minute locks.
+
+### Tests
+- `channel-pin.test.js` (temp git repo): young lock with no git → removed and the pin lands; young lock with an older git → held; young lock with an unreadable process list → kept by the age rule; a lock under 5 s → untouched without listing processes. 21 passed. hooks suite 4560/4561 (one load-dependent timing test in `pre.governor.gate.test.js` failed under parallel load and passed on rerun). Codex review skipped (limit until 2026-10-11).
+
 ## [0.254.0] — 2026-10-08
 
 Concept design pages: the annotation pins, the design switcher and the feedback dock were hard to use. An answer field fit half a sentence, the open switcher cut labels to "B · Zeitstr…", the eye toggle showed a number that read as a view counter, and the dock sat half behind its FAB with three equally loud fields.
