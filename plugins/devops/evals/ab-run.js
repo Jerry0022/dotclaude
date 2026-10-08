@@ -68,12 +68,19 @@ function parseArgs(argv) {
 // The calling session's CLAUDE*/ANTHROPIC* vars (nested-session marker, the
 // Desktop host's ANTHROPIC_BASE_URL and auth-refresh flags) make the child CLI
 // fail with "Not logged in" / 401 — strip them; the case env is added after.
-function childEnv(caseEnv, parentEnv = process.env) {
+// `pathPrepend` (absolute dirs) goes in front of PATH — under whatever
+// casing the env spells it (`Path` on Windows), so no second PATH appears.
+function childEnv(caseEnv, parentEnv = process.env, pathPrepend = []) {
   const env = {};
   for (const [k, v] of Object.entries(parentEnv)) {
     if (!/^(CLAUDE|ANTHROPIC)/i.test(k)) env[k] = v;
   }
-  return { ...env, ...caseEnv };
+  const out = { ...env, ...caseEnv };
+  if (pathPrepend.length) {
+    const key = Object.keys(out).find((k) => k.toUpperCase() === "PATH") || "PATH";
+    out[key] = [...pathPrepend, out[key]].filter(Boolean).join(path.delimiter);
+  }
+  return out;
 }
 
 // A failed run (auth error, crash, timeout) is no evidence either way:
@@ -93,9 +100,10 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
     const s = spawnSync(bash, [caseDef.scaffold], { cwd: workdir, encoding: "utf8", stdio: "pipe" });
     if (s.status !== 0) throw new Error(`scaffold failed for ${caseDef.id}: ${s.stderr || s.error}`);
   }
+  const pathPrepend = (caseDef.pathPrepend || []).map((d) => path.resolve(workdir, d));
   const started = Date.now();
   const proc = spawnSync(bin, args, {
-    cwd: workdir, env: childEnv(caseDef.env), encoding: "utf8", shell: false,
+    cwd: workdir, env: childEnv(caseDef.env, process.env, pathPrepend), encoding: "utf8", shell: false,
     stdio: ["ignore", "pipe", "pipe"], timeout: opts.timeoutMin * 60000, maxBuffer: 512 * 1024 * 1024,
   });
   const wallMs = Date.now() - started;
@@ -164,7 +172,7 @@ function main(argv) {
     for (const c of cases) {
       for (const v of variants) {
         const args = buildClaudeArgs({ prompt: c.prompt, pluginDir: v.pluginDir, allowedTools: c.allowedTools, settings: buildSettings({ disable: opts.disable, deny: c.denyTools }), model: opts.model });
-        console.log(`# ${c.id} [${v.name}] x${opts.runs} (cwd <tmp>/ab-case-XXXX, env ${JSON.stringify(c.env)})`);
+        console.log(`# ${c.id} [${v.name}] x${opts.runs} (cwd <tmp>/ab-case-XXXX, env ${JSON.stringify(c.env)}${c.pathPrepend.length ? `, PATH += <cwd>/${c.pathPrepend.join(", <cwd>/")}` : ""})`);
         if (c.scaffold) console.log(formatCommand(bash, [c.scaffold]));
         console.log(formatCommand(bin, args));
       }

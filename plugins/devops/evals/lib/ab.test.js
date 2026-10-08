@@ -115,6 +115,45 @@ describe("runner args", () => {
   });
 });
 
+describe("path_prepend (stub CLIs)", () => {
+  it("prepends dirs to PATH under the env's own key casing", () => {
+    const sep = path.delimiter;
+    expect(childEnv({}, { PATH: "/usr/bin" }, ["/w/bin"])).toEqual({ PATH: `/w/bin${sep}/usr/bin` });
+    const win = childEnv({}, { Path: "C:/Windows" }, ["C:/w/bin", "C:/w/tools"]);
+    expect(Object.keys(win)).toEqual(["Path"]);
+    expect(win.Path).toBe(["C:/w/bin", "C:/w/tools", "C:/Windows"].join(sep));
+    expect(childEnv({}, {}, ["/w/bin"])).toEqual({ PATH: "/w/bin" });
+    expect(childEnv({}, { PATH: "/usr/bin" })).toEqual({ PATH: "/usr/bin" });
+  });
+
+  it("loads path_prepend from prompt.md frontmatter (auto-issue stubs gh)", () => {
+    const c = loadCase(resolveCases("skills/auto-issue/bug-with-marker")[0]);
+    expect(c.pathPrepend).toEqual(["bin"]);
+    expect(c.env.GH_TOKEN).toBeTruthy();
+    // The create is no longer denied — the stub answers it; edits stay denied.
+    expect(c.denyTools).not.toContain("Bash(gh issue create*)");
+    expect(c.denyTools).toContain("Bash(gh issue edit*)");
+    expect(loadCase(resolveCases("delegation/inline-typo-fix")[0]).pathPrepend).toEqual([]);
+  });
+
+  it("auto-issue graders: guard-passed and write-succeeded", () => {
+    const c = loadCase(resolveCases("skills/auto-issue/bug-with-marker")[0]);
+    const graders = Object.fromEntries(g.loadGraders(c).map((x) => [x.name, x.check]));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-grade-"));
+    const url = "https://github.com/example-org/settings-demo/issues/4242";
+    const ok = JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: url }] } });
+    const blocked = JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", is_error: true, content: "PreToolUse:Bash hook error: BLOCKED: Raw GitHub issue write detected" }] } });
+    const run = (raw) => ({ parsed: parseStream(raw), raw, workdir: dir });
+    expect(graders["guard-passed"](run(ok))).toBe(true);
+    expect(graders["guard-passed"](run(blocked))).toBe(false);
+    expect(graders["write-succeeded"](run(ok))).toBe(false); // the stub never ran
+    fs.writeFileSync(path.join(dir, "gh-calls.log"), ["label list", "issue create --title [BUG] X", ""].join("\n"));
+    expect(graders["write-succeeded"](run(ok))).toBe(true);
+    expect(graders["write-succeeded"](run(blocked))).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("failed runs", () => {
   it("grade as undecided on non-zero exit or an error result (e.g. 401)", () => {
     const graders = [{ name: "none", check: g.noDevopsAgent() }];

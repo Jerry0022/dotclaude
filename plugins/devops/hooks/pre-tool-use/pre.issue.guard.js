@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.issue.guard
- * @version 0.4.0
+ * @version 0.5.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash|PowerShell|mcp__.*github.*__(issue_write|create_issue|update_issue)
@@ -43,6 +43,15 @@
  *   turn" check against the subagent transcript. A blocked subagent gets a
  *   subagent-specific deny text: return the proposed issue to the
  *   orchestrator instead of writing it.
+ *
+ *   No transcript on disk (`claude -p --no-session-persistence` — the A/B
+ *   eval runner writes none — or a subagent transcript that cannot be
+ *   located): the "invoked this turn" check falls back to the hook-written
+ *   per-turn skill marker (lib/skill-turn-marker: post.skill.marker records
+ *   each Skill load, prompt.skill.enforce resets it per prompt and records a
+ *   slash-started skill), keyed by session_id (+ agent_id). Same name rule,
+ *   same per-caller scope. A session whose transcript exists keeps the
+ *   transcript as its only source — the marker never widens it.
  *
  *   Does not overlap pre.plugin.scope.js: that hook matches Edit|Write|
  *   NotebookEdit only (blocking hand-edits of an installed plugin artifact)
@@ -108,9 +117,26 @@ function callerTranscriptPath(hook) {
   return path.join(path.dirname(hook.transcript_path), sessionId, 'subagents', `agent-${agentId}.jsonl`);
 }
 
-/** Did the devops auto-issue (or `devops:setup-issue`) run in the current turn? */
-function setupIssueInvokedThisTurn(transcriptPath) {
+/** Is the caller's transcript on disk? (`claude -p --no-session-persistence` writes none.) */
+function transcriptOnDisk(transcriptPath) {
+  if (!transcriptPath) return false;
+  try { return require('fs').statSync(transcriptPath).isFile(); } catch { return false; }
+}
+
+/**
+ * Did the devops auto-issue (or `devops:setup-issue`) run in the caller's
+ * current turn? The transcript decides when it exists; only without one does
+ * the hook-written turn marker (lib/skill-turn-marker) stand in.
+ * @param {object} hook parsed payload
+ * @returns {boolean}
+ */
+function setupIssueInvokedThisTurn(hook) {
   try {
+    const transcriptPath = callerTranscriptPath(hook);
+    if (!transcriptOnDisk(transcriptPath)) {
+      // An unsafe session_id / agent_id has no marker key: stays blocked.
+      return require('../lib/skill-turn-marker').skillMarkedThisTurn(hook, 'auto-issue');
+    }
     const { safeReadTranscript } = require('../lib/card-guard');
     const { skillInvokedThisTurn } = require('../lib/skill-invocations');
     const { isDevopsSkill } = require('../lib/skill-names');
@@ -128,14 +154,14 @@ function setupIssueInvokedThisTurn(transcriptPath) {
 function decide(inputData) {
   const hook = parseHookInput(inputData);
   if (!hook) return false;
-  if (isMcpIssueWriteTool(hook.tool_name)) return !setupIssueInvokedThisTurn(callerTranscriptPath(hook));
+  if (isMcpIssueWriteTool(hook.tool_name)) return !setupIssueInvokedThisTurn(hook);
   if (!SHELL_TOOLS.has(hook.tool_name)) return false;
   const input = hook.tool_input && typeof hook.tool_input === 'object' ? hook.tool_input : {};
   const cmd = typeof input.command === 'string' ? input.command : '';
   const writes = findIssueWrites(cmd);
   if (!writes.length) return false;
   if (writes.some(w => !w.marked)) return true;
-  return !setupIssueInvokedThisTurn(callerTranscriptPath(hook));
+  return !setupIssueInvokedThisTurn(hook);
 }
 
 /** Deny text for a blocked call — subagents get the hand-back variant. */

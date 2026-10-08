@@ -109,6 +109,9 @@ function loadCase(dir) {
     maxTurns: meta.max_turns || null,
     tags: Array.isArray(meta.tags) ? meta.tags : [],
     env: meta.env && typeof meta.env === "object" ? meta.env : {},
+    // Workdir-relative dirs put in front of the run's PATH (e.g. a scaffolded
+    // `bin/` holding a stub CLI); resolved per run, after the scaffold.
+    pathPrepend: Array.isArray(meta.path_prepend) ? meta.path_prepend.filter((d) => typeof d === "string" && d) : [],
     scaffold,
     mdGraders,
     jsGradersFile: fs.existsSync(jsGraders) ? jsGraders : null,

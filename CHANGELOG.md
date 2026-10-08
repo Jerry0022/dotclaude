@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.251.0] — 2026-10-08
+
+### Fixed
+- **`pre.issue.guard` now lets a marked auto-issue write through in headless runs.** The guard licenses `gh issue create/edit … # via auto-issue` only while the auto-issue skill ran in the current turn, and it read that from the session transcript. `claude -p --no-session-persistence` (the A/B eval runner `evals/ab-run.js`) writes no transcript, so the marked write was always blocked and the model spent the run debugging the guard (observed 2026-10-08 in the #652 trim runs). Guard v0.5.0 uses the transcript whenever the caller's transcript is on disk, unchanged; only when it is missing does it fall back to a hook-written per-turn skill marker, with the same skill-name rule and the same per-caller scope (an orchestrator's skill never licenses a subagent, and the other way round). The `# via auto-issue` requirement is unchanged.
+
+### Added
+- **Per-turn skill marker** (`hooks/lib/skill-turn-marker.js`): one small JSON file per session (per subagent: `.agent-<id>`) in the temp dir, exact-id reads, safe-id validation, at most 50 names. The new PostToolUse hook **`post.skill.marker`** (matcher `Skill`) records each successfully loaded skill; `prompt.skill.enforce` v0.8.0 resets the main thread's marker on every prompt and records a slash-started `/devops:auto-issue`.
+- **Evals: `path_prepend:` case frontmatter** — workdir-relative dirs prepended to `PATH` (under the env's own key casing, e.g. Windows `Path`). `skills/auto-issue/bug-with-marker` now scaffolds a stub `bin/gh` that answers `gh issue create` and fails everything else, drops the `gh issue create` deny, and grades the successful write (`guard-passed`, `write-succeeded`).
+
+### Tests
+- `pre.issue.guard.test.js` 58 (15 new stdin-spawn headless cases with an isolated temp dir: skill → pass, no skill / unmarked / earlier turn / other skill / foreign session / no session_id / path-traversal ids → block, transcript on disk stays the sole source, MCP write, subagent ↔ orchestrator scoping); `evals/lib/ab.test.js` 23. Full suite 8704 passed / 3 skipped after the rebase onto #672; eslint clean. Live eval `auto-issue/bug-with-marker`: 8/8 graders, 186 s (before: timed out at 8 min). Codex review skipped (limit until 2026-10-11). Refs #652.
+
 ## [0.250.0] — 2026-10-08
 
 ### Added
