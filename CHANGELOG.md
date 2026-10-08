@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.257.5] — 2026-10-09
+
+The deploy-parity build failed with `ERR_MODULE_NOT_FOUND` for a devDependency on a project whose `vercel.json` named only a `buildCommand`: the plan carried `install: null`, so the clean clone built without dependencies, while the real Vercel deploy (which installs on its own) succeeded (#685).
+
+### Fixed
+- **Deploy-parity installs like the host does.** For Vercel, Netlify and Cloudflare Pages — hosts that install the dependencies themselves — a config with a build command but no install command now gets the lockfile install (`npm ci`, or pnpm/yarn/bun frozen-lockfile) when a `package.json` exists. An explicit install command is never overridden; without a `package.json` the install stays `null`. Render, Firebase and Fly keep `install: null`, so a default install never masks a real host failure. `deep-knowledge/deploy-parity.md` notes the rule.
+
+### Tests
+- New cases in `deploy-parity.test.js` (Vercel buildCommand-only → `npm ci` and pnpm frozen; no `package.json` → `null`; Netlify `base` + `yarn.lock` → `yarn install --frozen-lockfile`; Render stays `null`). Deploy-parity lib + script 43/43, full suite 8684/8687 (3 skipped), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.257.4] — 2026-10-09
 
 The MCP servers in a worktree failed with `ERR_MODULE_NOT_FOUND` because their `node_modules` junction pointed at a truncated install (`plugins/data/devops-inline`, whose `@modelcontextprotocol/sdk` had only `LICENSE` and `dist/`).
