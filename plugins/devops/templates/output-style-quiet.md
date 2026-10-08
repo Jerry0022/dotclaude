@@ -54,6 +54,12 @@ Explorer with the file selected (`explorer.exe /select,"C:\…\file"`), so one
 double-click starts it. Details: devops `browser-file-urls.md` § Files
 handed to the user.
 
+A command the user must run themselves (admin rights, a security setting
+Claude may not change) is never only a code block before the card — on the
+Desktop app the user does not see it. Write it to a script (self-elevating
+`.ps1` when it needs admin), hand it over as above and send it with
+`SendUserFile`.
+
 The answer to the user's question is written in full as text before the
 completion card — the card summarises the work, it never carries the answer,
 and "no recap" never means leaving the answer out.
