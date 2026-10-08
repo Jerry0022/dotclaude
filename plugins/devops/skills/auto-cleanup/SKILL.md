@@ -46,10 +46,8 @@ The numbers are user settings (`{PLUGIN_ROOT}/deep-knowledge/devops-config.md`,
 section `cleanup`). Scope is always the current project — there is no
 cross-repo mode.
 
-A session worktree the automatic half removes is by definition abandoned, not
-active: clean, content in main, and no git activity for longer than the minimum
-age. Everything else about sessions follows the HARD RULE below — on this page a
-worktree only goes when the user ticks it.
+On this page a session worktree only goes when the user ticks it (HARD RULE
+below).
 
 ## Step 0 — Repo-mode check
 
@@ -86,23 +84,19 @@ These branches represent active Claude Code sessions. Deleting them breaks
 the worktree and causes data loss.
 
 **The protected set is a set of subjects, not a list of verbs.** A guard that
-enumerates forbidden commands permits every command it forgot to name — the
-failure mode that let a sweep correctly refuse `branch -D` on a live session
-and then remove that session's worktree anyway. Scope rules and the four
-operation classes a guard must cover:
+enumerates forbidden commands permits every command it forgot to name. Scope
+rules and the four operation classes a guard must cover:
 `{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § Protection scope covers every
 operation class.
 
-**Re-check before every destructive action.** A sweep over many repos runs long
-enough for sessions to start, stop, or switch branches. Rebuild the protected
-set immediately before each delete/remove/kill — never once at classification
-time and then trust it for the rest of the run.
+**Re-check before every destructive action.** Sessions start, stop and switch
+branches during a run: rebuild the protected set immediately before each
+delete/remove/kill, never once at classification time.
 
 **Detection:** `git worktree list --porcelain` -> every line starting with
 `branch refs/heads/` is a protected branch, and every `worktree ` line is a
 protected **path** — including the detached ones, which have no `branch` line
-at all and would otherwise look unprotected. Rebuild this set immediately
-before each destructive action, not once at the start.
+at all and would otherwise look unprotected.
 
 A worktree registration is not the only evidence of a live session. Also treat
 as protected: any path a running process names in its cwd or argv, and any
@@ -117,23 +111,19 @@ printf '%s\n' "${PROTECTED[@]}" | grep -qxF -- "$candidate"   # exact line match
 ```
 
 NEVER test membership by prefix or substring (`grep -q`, `[[ $set == *$name* ]]`,
-`String.includes`). Branch names in this repo's workflows form suffix chains
-(`feat/x-abc123`, `feat/x-abc123-def456`): a substring test treats the shorter
-independent branch as protected too, so it silently vanishes from every list —
-nothing is deleted wrongly, but the candidate count is short with no warning.
+`String.includes`): branch names form suffix chains (`feat/x-abc123`,
+`feat/x-abc123-def456`), and a substring test silently hides the shorter
+independent branch from every list.
 
 ## Step 1 — Repo Context
 
-Gather repository identity info to display prominently on the concept page:
+Gather repository identity for the page's header card:
 
 1. **Repo name:** `basename $(git rev-parse --show-toplevel)`
 2. **Local path:** `git rev-parse --show-toplevel`
 3. **Remote URL:** `git remote get-url origin`
 4. **Current branch:** `git branch --show-current`
 5. **Default branch:** typically `main` or `master`
-
-This info appears as a header card on the concept page so the user always
-knows which repo they're looking at.
 
 ## Step 2 — Fetch & Sync
 
@@ -159,10 +149,9 @@ is excluded from ALL subsequent steps — classification, recommendations, AND c
      - `clean` — `status --porcelain` is empty
    - **Commits ahead of `origin/main` are NOT a `has-changes` criterion.** They are
      carried as the separate, non-blocking `commits_ahead` attribute
-     (`deep-knowledge/decision-schema.md`). On a squash-merge workflow every
-     worktree whose PR already landed is *by construction* ahead forever (the
-     merge-base predates the squash), so counting it locked 34 of 41 worktrees in
-     one real repo as protected work-in-progress while only 2 carried unsaved work.
+     (`deep-knowledge/decision-schema.md`): on a squash-merge workflow every
+     worktree whose PR landed stays ahead forever (the merge-base predates the
+     squash).
    - For a `clean` session that is ahead, additionally run the **own-content
      check** Step 3 already prescribes for branches (two-dot diff, status `A`
      files — `deep-knowledge/investigation.md` § Worktrees): `own_content: true`
@@ -221,9 +210,7 @@ in exactly one bucket, so
 
 If the sums differ, do NOT continue silently: print a warning naming the count
 gap and the branches that appear in no bucket (`comm -23` of all local branches
-vs. the union), and surface the same warning on the concept page header. A gap
-here is exactly how a prefix-based membership test hides a removable branch —
-this check turns that silent loss into a visible finding.
+vs. the union), and surface the same warning on the concept page header.
 
 **Truth-source audit (mandatory, after classification and again in Step 10):**
 write every candidate as `[{ "branch", "ort" }]` and run
@@ -252,9 +239,8 @@ present in `refs/heads`:
 ## Step 5 — PR Cross-Reference + Open-PR Inventory
 
 Two lists, two purposes: recent PRs of *any* state validate the branch
-classification; **every** open PR is its own entry on the page, because an
-open PR is work that still has to land — cleanup that only deletes branches
-and leaves the PRs behind is half a cleanup.
+classification; **every** open PR is its own entry on the page — work that
+still has to land.
 
 ### 5a — Recent PRs (classification cross-check)
 
@@ -326,8 +312,7 @@ Verify local `main` is up to date with `origin/main`. Flag if behind.
 ## Step 7 — Gather Inline Detail Data
 
 For EVERY entry (both Löschbar and Untersuchen), gather up-front the data
-needed for the inline „?" detail panel. This replaces the old multi-iteration
-investigate loop — data is collected once, shown on-expand, no second round.
+needed for the inline „?" detail panel — collected once, shown on expand.
 
 For each Git-Session branch (regardless of category):
 
@@ -361,8 +346,8 @@ expand. No round-trip to Claude is needed to view it.
 
 Build a **self-contained HTML concept page** using the `dashboard` variant.
 Follow the design system and full HTML/CSS/JS scaffold in
-`skills/auto-concept/deep-knowledge/templates.md` — the authoritative source,
-referenced by name (not by concept's step numbers, which drift).
+`skills/auto-concept/deep-knowledge/templates.md` (referenced by name, not by
+concept's step numbers).
 
 ### Page Structure & Tooltips
 
@@ -383,7 +368,6 @@ does NOT add a third action state.
 
 Write to: `~/.claude/devops-concepts/{date}-repo-health.html`
 (resolves to `$USERPROFILE/.claude/devops-concepts/` on Windows, `$HOME/.claude/devops-concepts/` on Unix).
-User-global, not project-scoped — reports are ephemeral review artifacts, not repo content.
 The `ss.permissions.ensure.js` SessionStart hook pre-approves writes to this path so no permission prompt fires.
 Create the directory if missing: `mkdir -p ~/.claude/devops-concepts` (Unix) or `mkdir "%USERPROFILE%\.claude\devops-concepts" 2>nul` (Windows).
 
