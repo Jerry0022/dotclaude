@@ -22,7 +22,7 @@ A header that fails to **parse** (not a transient read error — Windows EBUSY/E
 
 ## Obligations
 
-Evaluated on the current **segment** (events since the last item boundary — a successful `release`, a `park`, or in backlog mode a new item branch: not from a subagent, not `git worktree add` / `--detach`, not a `<current>-*` / `<current>/*` sub-branch):
+Evaluated on the current **segment** (events since the last item boundary — a successful `release`, a `park` of the segment's own item, or in backlog mode a new item branch: not from a subagent, not `git worktree add` / `--detach`, not a `<current>-*` / `<current>/*` sub-branch). A completion card is never a boundary, whatever its variant or `pending`. The segment's item is the issue number of its item branch (`fix/685-…`), else the first `#N` in its `auto-agents` args; in backlog mode a `park` of ANOTHER queued item while the segment has work stays inside the segment and satisfies none of its obligations (2026-10-09: three parks after #685's interim `ready` card re-opened its auto-agents / harden / qa at ship). With the own item unknown, a park still ends the segment:
 
 | Obligation | Applies when | Satisfied by |
 |---|---|---|

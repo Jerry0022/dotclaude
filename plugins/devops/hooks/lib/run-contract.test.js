@@ -491,6 +491,27 @@ describe("segments", () => {
     expect(R.segments(C({ mode: "prompt" }), evs)).toHaveLength(1);
   });
 
+  test("segmentItem: item branch number, else the first #N of auto-agents", () => {
+    expect(require("./run-contract-obligations.js").segmentItem([{ k: "branch", name: "fix/685-deploy-parity" }])).toBe("685");
+    expect(require("./run-contract-obligations.js").segmentItem([{ k: "branch", name: "feat/2" }])).toBe("2");
+    expect(require("./run-contract-obligations.js").segmentItem([sk("auto-agents", "--from=do-run #680 card button")])).toBe("680");
+    expect(require("./run-contract-obligations.js").segmentItem([edit, { k: "branch", name: "claude/zealous-elgamal" }])).toBe(null);
+  });
+
+  test("backlog: a park of the segment's own item still ends it", () => {
+    const evs = [{ k: "branch", name: "fix/685-x" }, sk("auto-agents"), edit, { k: "park", item: "685" }, edit];
+    const segs = R.segments(C({ mode: "backlog" }), evs);
+    expect(segs).toHaveLength(2);
+    expect(segs[1]).toEqual([edit]);
+  });
+
+  test("backlog: parking OTHER queued items mid-item is no boundary (2026-10-09, #685)", () => {
+    const evs = [sk("auto-agents", "#685"), edit, { k: "park", item: "665" }, { k: "park", item: "667" }, edit];
+    expect(R.segments(C({ mode: "backlog" }), evs)).toHaveLength(1);
+    // Unknown own item: the old boundary behaviour stays.
+    expect(R.segments(C({ mode: "backlog" }), [sk("auto-agents"), edit, { k: "park", item: "665" }, edit])).toHaveLength(2);
+  });
+
   test("segmentHasWork", () => {
     expect(R.segmentHasWork([edit])).toBe(true);
     expect(R.segmentHasWork([commit])).toBe(true);
@@ -524,6 +545,33 @@ describe("openObligations", () => {
     const ok = [...base, sk("devops:auto-harden", "--invoked-by=do-run"), sk("tune-polish")];
     expect(R.openObligations(C({ ship: "auto" }), ok, "release")).toEqual([]);
     expect(R.openObligations(C({ passes: [] }), [sk("auto-agents"), edit], "card")).toEqual([]);
+  });
+
+  test("2026-10-09 #685: a ready card + parks of other items keep the item's satisfied obligations", () => {
+    const c = C({ mode: "backlog", flow: "autonomous", ship: "auto", passes: ["harden", "polish"],
+      items: ["685", "680", "667", "665", "644"] });
+    const ag = (description, type = "devops:scout") => ({ k: "agent", type, description });
+    const evs = [
+      ag("Triage #685 — Deploy-parity"), ag("Triage #680 — App starten"),
+      sk("auto-issue", "refine #685 — hand-over"),
+      { k: "branch", name: "fix/685-deploy-parity-default-install" },
+      sk("auto-agents", "--from=do-run --mode=background --ship=auto #685 deploy-parity"),
+      edit, commit, ag("QA #685 — full suite", "devops:qa"),
+      sk("auto-harden", "--invoked-by=autonomous"),
+      { k: "card", variant: "ready" },
+      { k: "park", item: "665", reason: "401" }, { k: "park", item: "667", reason: "401" },
+      { k: "park", item: "644", reason: "umbrella" },
+      sk("do-ship", "--delegated --queued=1/2 --keep"),
+    ];
+    const ctx = { codeFilesChanged: 2, uiFilesChanged: 0, closes: ["685"] };
+    expect(R.openObligations(c, evs, "edit", ctx)).toEqual([]);
+    expect(R.openObligations(c, [...evs, edit], "release", ctx)).toEqual([]);
+    // The parks of other items never count as a skip of #685's own obligations.
+    const noHarden = evs.filter(e => !(e.k === "skill" && e.name === "auto-harden"));
+    expect(obs(R.openObligations(c, noHarden, "release", ctx))).toEqual(["harden"]);
+    // After #685 ships, #680 starts a fresh segment that owes everything again.
+    const next = [...evs, edit, rel(["685"]), { k: "branch", name: "feat/680-app-start-button" }, edit];
+    expect(obs(R.openObligations(c, next, "edit", ctx))).toEqual(["auto-agents"]);
   });
 
   test("skip satisfies for the current segment only", () => {
