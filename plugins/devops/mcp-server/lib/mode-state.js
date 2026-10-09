@@ -195,6 +195,11 @@ export function titlePrefixFor(params, { hasPending, hasConcept }) {
   }
   if (conceptUrl(params.cwd, undefined)) {
     const pending = hasPending(params.pending);
+    // After a merged ship whose concept only waits for its close-out (#693),
+    // the work is done: the title says the outcome, never the compass.
+    if (SHIP_OUTCOME_VARIANTS.has(params.variant) && conceptCloseoutOnly(params.cwd)) {
+      return readBatch(params.cwd) ? null : outcomePrefix(params, pending);
+    }
     return {
       owned: pending ? SESSION_PREFIX.pending : SESSION_PREFIX.concept,
       other: readBatch(params.cwd) ? null : outcomePrefix(params, pending),
@@ -342,6 +347,37 @@ function knownTitleInstruction(prefix, current) {
     "Truly unavailable (not even deferred) or failing: skip silently — no retry, no note. " +
     "The card stays the last output of the turn."
   );
+}
+
+/** Variants that follow a merged ship — the ones a close-out-only concept
+ *  must not pull back to the compass (#693). */
+const SHIP_OUTCOME_VARIANTS = new Set(["ship-successful", "released"]);
+
+/**
+ * True when the project's open concept has nothing left but its close-out:
+ * the page carries the final-report section `/auto-concept` appends after an
+ * implement (`<section … data-final-report …>`, step5-update-page.md
+ * § Final-report append) and only waits for the finalize sheet (#693). Read
+ * from disk — no bridge needed. Comments, `<script>`, `<style>` and
+ * `<template>` bodies are ignored, so a selector or a string in the page's JS
+ * never counts. Anything unreadable (no live state file, no page, a page
+ * without the marker) is `false` — the card then behaves as before.
+ *
+ * @param {string|undefined} cwd project root the card is rendered for
+ * @returns {boolean}
+ */
+export function conceptCloseoutOnly(cwd) {
+  const state = readConceptState(cwd);
+  if (!state) return false;
+  try {
+    const html = readFileSync(join(cwd, String(state.html_path)), "utf8");
+    const markup = html
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<(script|style|template)\b[\s\S]*?<\/\1\s*>/gi, "");
+    return /<section\b[^>]*\sdata-final-report(?=[\s=/>])/i.test(markup);
+  } catch {
+    return false;
+  }
 }
 
 /**

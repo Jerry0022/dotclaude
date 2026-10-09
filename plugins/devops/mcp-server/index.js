@@ -53,7 +53,7 @@ import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.j
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { batchGuide, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle } from "./lib/mode-state.js";
+import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
@@ -839,7 +839,7 @@ function testsPost(tests, lang) {
 
 /** Slot 3 — a real-data/browser check, or the post-ship PR fact. */
 function liveCheckPost(tests, key, lang) {
-  if (key === 'ship-successful' || key === 'ship-successful-kept' || key === 'ship-successful-deploy') return null;
+  if (key === 'ship-successful' || key === 'ship-successful-kept' || key === 'ship-successful-closeout' || key === 'ship-successful-deploy') return null;
   const live = tests.filter(t => classifyGate(t) === 'live');
   if (!live.length) return null;
   const worst = live.find(t => glyphForResult(t.result) !== '✓');
@@ -1240,6 +1240,8 @@ const HEADINGS = {
       ? `🚀 Released v${c.version} alpha — nach beta promoten?`
       : `🚀 Shipped v${c.version} → ${c.base}.`,
     'ship-successful-kept': (c) => `🚀 Released v${c.version} alpha — weiter in \`${c.branch}\`?`,
+    // #693: the open concept only waits for its close-out — no branch to go on in.
+    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released v${c.version} alpha` : `🚀 Shipped v${c.version} → ${c.base}`} — Konzept abschließen – Abschlussbericht wartet.`,
     'ship-successful-deploy': () => '🚨 Gemergt, aber nicht live — Migration jetzt deployen?',
     'released-beta': (c) => `🎊 Promoted v${c.version} BETA — nach stable?`,
     'released-stable': (c) => `🎊 Released v${c.version} LIVE — stable.`,
@@ -1274,6 +1276,7 @@ const HEADINGS = {
       ? `🚀 Released v${c.version} alpha — promote to beta?`
       : `🚀 Shipped v${c.version} → ${c.base}.`,
     'ship-successful-kept': (c) => `🚀 Released v${c.version} alpha — continue on \`${c.branch}\`?`,
+    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released v${c.version} alpha` : `🚀 Shipped v${c.version} → ${c.base}`} — Close out the concept – final report is waiting.`,
     'ship-successful-deploy': () => '🚨 Merged, but not live — deploy the migration now?',
     'released-beta': (c) => `🎊 Promoted v${c.version} BETA — to stable?`,
     'released-stable': (c) => `🎊 Released v${c.version} LIVE — stable.`,
@@ -1428,6 +1431,7 @@ function basePointsForKey(input, key, lang) {
     // `open` after a merge: a promotion do-ship had to skip (Step 5d), a
     // remote branch it could not delete (Step 5c) — decisions, listed first.
     case 'ship-successful':
+    case 'ship-successful-closeout':
       return [...open, ...finalTest.map(testTag)];
     case 'ship-successful-deploy':
       return deploy;
@@ -1486,6 +1490,10 @@ function resolveCardKey(input) {
   if (variant === 'ship-blocked') return 'ship-blocked';
   if (variant === 'ship-successful') {
     if (state.deployPending) return 'ship-successful-deploy';
+    // #693: an open concept whose page only waits for the close-out (final
+    // report appended) is the one step left — never "weiter in <branch>",
+    // even when the worktree was kept for exactly that close-out.
+    if (!hasConcept(input.concept) && conceptCloseoutOnly(input.cwd)) return 'ship-successful-closeout';
     if (state.kept) return 'ship-successful-kept';
     return 'ship-successful';
   }
@@ -1576,16 +1584,21 @@ function buildContextLine(input, key, delivery, lang) {
   if (key === 'aborted' && input.cta && input.cta.info) return '› ' + input.cta.info;
   // Paused (#548): the one thing left to say is how to pick it up again.
   if (key === 'paused') return '› ' + pausedResumeLine(input.pause, lang);
+  // #693: the close-out happens on the page — its URL is the one place to go.
+  if (key === 'ship-successful-closeout') {
+    const url = conceptUrl(input.cwd, undefined);
+    return url ? '› ' + url : '';
+  }
   return '';
 }
 
 /** Decision keys with nothing to decide — no buttons even when otherwise clickable. */
 const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable', 'fallback', 'paused']);
 // Decision keys whose card offers "App starten" when a launch path exists (#680).
-const APP_START_KEYS = new Set(['test', 'ship-successful', 'ship-successful-kept', 'ship-successful-deploy']);
+const APP_START_KEYS = new Set(['test', 'ship-successful', 'ship-successful-kept', 'ship-successful-closeout', 'ship-successful-deploy']);
 
 /** Decision keys whose widget offers "Nachbessern" with the prepared answer to the card's open points. */
-const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful']);
+const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful', 'ship-successful-closeout']);
 
 /**
  * The whole decision block: heading (already carrying any "+N weitere" tail),
@@ -1681,16 +1694,19 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // "+N weitere"; the (final) tests are the user's own to run.
   const replies = CONCLUDE_KEYS.has(key) ? openReplies(input, lang) : [];
 
-  let buttonsKey = key;
-  if (key === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
+  // #693: the close-out card promotes like a plain ship-successful card —
+  // the page, not a button, is where the close-out runs.
+  const promoteKey = key === 'ship-successful-closeout' ? 'ship-successful' : key;
+  let buttonsKey = promoteKey;
+  if (promoteKey === 'ship-successful' && !ctx.ring) buttonsKey = null; // plain merge — nothing to promote
   // The ladder already sits above alpha: beta offers only stable, stable nothing.
   const landed = delivery.promote && delivery.promote.current;
-  if (key === 'ship-successful' && ctx.ring && landed === 'beta') buttonsKey = 'released-beta';
-  if (key === 'ship-successful' && landed === 'stable') buttonsKey = null;
+  if (promoteKey === 'ship-successful' && ctx.ring && landed === 'beta') buttonsKey = 'released-beta';
+  if (promoteKey === 'ship-successful' && landed === 'stable') buttonsKey = null;
   // AUD-C015: without a remote nothing can be promoted — the plain set.
-  if (key === 'ship-successful' && state.mode === 'git-no-remote') buttonsKey = 'ship-successful-plain';
+  if (promoteKey === 'ship-successful' && state.mode === 'git-no-remote') buttonsKey = 'ship-successful-plain';
   // Nothing to promote, but open points: Nachbessern alone.
-  if (key === 'ship-successful' && !buttonsKey && replies.length) buttonsKey = 'ship-successful-plain';
+  if (promoteKey === 'ship-successful' && !buttonsKey && replies.length) buttonsKey = 'ship-successful-plain';
   if (NO_BUTTON_KEYS.has(key)) buttonsKey = null;
 
   // "App starten" (#680): test and ship-successful (plain, kept, deploy — also when
