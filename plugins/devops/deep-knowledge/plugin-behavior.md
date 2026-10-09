@@ -238,6 +238,26 @@ sweeper collects it later); under-retention breaks every other open session.
 is **not** a licence to prune a claimed dir: "this session upgraded" says
 nothing about what the other eight are running.
 
+## Claude Code Mods — Gates Are Not Final
+
+Claude Code 2.1.287 added mods: plugins whose `hooks/hooks.json` names a
+`"modules"` entry that runs in-process. A consumer's own mod sits **ahead of**
+every non-managed `PreToolUse` hook, ours included: a `tool.call` hook that
+answers without `next` keeps our `pre.*` gates from running at all, and a
+`tool.check` hook can approve a call our gate blocked. Only managed-settings
+hooks and `deny` rules hold. Consequences:
+
+- A report like "hook X never fired" or "the gate let it through" from a
+  consumer → ask which mods are enabled before debugging the hook itself.
+- Never treat a `pre.*` gate as a security boundary; it is a guard rail.
+- devops ships no mod yet. Command hooks, MCP servers and statusLine are not
+  deprecated. A first mod (e.g. a Desktop usage band) would ship inside this
+  plugin behind a `userConfig` opt-in, with a `.catch` on every gating hook;
+  wait until the Desktop UI bugs anthropics/claude-code#99647 and #99265 are
+  fixed. Splitting it into its own plugin is a later decision.
+
+Docs: https://code.claude.com/docs/en/plugins/mods/overview
+
 ## Issue Creation & Editing — Always Delegate
 
 When a skill, agent or hook needs a GitHub issue **created or changed**, it
