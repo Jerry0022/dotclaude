@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.258.2] — 2026-10-09
+
+A `/do-run backlog` run that parked other queued items in the middle of an item lost that item's finished obligations. On 2026-10-09 #685 had auto-agents, harden and qa done, then the run parked #665, #667 and #644 right after #685's interim `ready` card — and the delegated ship of #685 was refused for auto-agents, harden and qa, until it skipped them by hand. The card was a coincidence: every `park` ended the current segment, whatever item it named.
+
+### Fixed
+- **Run contract: a park of another backlog item is no item boundary.** The segment's own item comes from its item branch (`fix/685-…`), else the first `#N` in its `auto-agents` args. In backlog mode a `park` of a different item while the segment has work stays inside the segment, and it never counts as a skip of that segment's own obligations. A park of the segment's own item — or one whose item cannot be told — still ends the segment. `deep-knowledge/run-contract.md` now also states that a completion card is never a boundary, whatever its variant or `pending`.
+- **Flaky `run-contract-store` H4 test.** The test's fresh lock went stale (1 s window) within the 1 s default wait under load and was taken over; it now holds a 60 s stale window and also asserts the ≥ 900 ms default wait.
+
+### Tests
+- 5 new run-contract tests, one replaying the #685 event log. Run-contract suites 145/145 at ship; full suite before rebase 8705 passed / 3 skipped (298 files), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.258.1] — 2026-10-09
 
 Claude Code 2.1.287 added mods: in-process hooks modules that a consumer can install next to devops. A consumer's mod runs ahead of our non-managed `PreToolUse` hooks, so the plugin docs did not yet say that a `pre.*` gate can be skipped or overridden.

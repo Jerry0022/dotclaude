@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module run-contract-obligations
- * @version 0.4.0
+ * @version 0.5.0
  * @plugin devops
  * @description Run-contract segments, per-obligation state and gate
  *   evaluation (spec C / D), plus the messages built from them (the stderr
@@ -16,6 +16,11 @@
  *   - At release / card gates every segment obligation needs work in the
  *     segment (else the card after a successful release would re-block).
  *   - Events carry the contract id (`c`); `events()` ignores foreign lines.
+ *   - A backlog `park` ends the segment only when it parks the segment's own
+ *     item (or the item is unknown): parking OTHER queued items mid-item
+ *     (2026-10-09, #685: three parks after its `ready` card) re-opened every
+ *     obligation the item had already satisfied. Such a park also never
+ *     counts as a skip of the segment's own obligations.
  *   - The card gate owes `triage` too (backlog + presence) once the
  *     contract has work (H-B2).
  */
@@ -37,10 +42,47 @@ function segmentHasWork(seg) {
 }
 function segmentHasEditWork(seg) { return Array.isArray(seg) && seg.some(isEditWork); }
 
+function itemId(v) {
+  const t = String(v == null ? '' : v).trim().replace(/^#/, '');
+  return /^\d+$/.test(t) ? t : null;
+}
+
+/**
+ * The backlog item a segment works on: the issue number of its latest item
+ * branch (`fix/685-deploy-parity`), else the first `#N` in an auto-agents
+ * call's args (`--from=do-run … #685 …`); null when neither names one.
+ */
+function segmentItem(seg) {
+  if (!Array.isArray(seg)) return null;
+  for (let i = seg.length - 1; i >= 0; i--) {
+    const ev = seg[i];
+    if (ev && ev.k === 'branch' && typeof ev.name === 'string') {
+      const m = ev.name.match(/(?:^|[/_-])#?(\d+)(?=[-_/.]|$)/);
+      if (m) return m[1];
+    }
+  }
+  for (const ev of seg) {
+    if (!isSkill(ev, 'auto-agents')) continue;
+    const refs = hashRefs(typeof ev.args === 'string' ? ev.args : '');
+    if (refs.length) return refs[0].n;
+  }
+  return null;
+}
+
+/** A park of a queued item other than the one the segment works on. */
+function parksOtherItem(seg, ev) {
+  if (!ev || ev.k !== 'park') return false;
+  const own = segmentItem(seg);
+  const parked = itemId(ev.item);
+  return !!own && !!parked && parked !== own;
+}
+
 /**
  * Item segments. Boundary: `release` with ok:true (it closes its segment);
- * in backlog mode a `branch` event after an edit/commit starts a new segment
- * (trailing auto-agents skill events move along).
+ * a `park` of the segment's own item (backlog: a park of ANOTHER queued item
+ * while this one has work stays inside the segment); in backlog mode a
+ * `branch` event after an edit/commit starts a new segment (trailing
+ * auto-agents skill events move along).
  * @returns {object[][]} at least one (possibly empty) segment
  */
 function segments(contract, evs) {
@@ -57,6 +99,7 @@ function segments(contract, evs) {
       continue;
     }
     cur.push(ev);
+    if (ev.k === 'park' && backlog && segmentHasWork(cur) && parksOtherItem(cur, ev)) continue;
     if ((ev.k === 'release' && ev.ok === true) || ev.k === 'park') out.push([]);
   }
   return out;
@@ -78,8 +121,11 @@ function isQaAgent(ev) {
 }
 function skipOf(list, ob, item) {
   const itemOk = (ev) => item === undefined || String(ev.item) === String(item);
+  // Without an item: a park counts only for the list's own item — a park of
+  // another queued item inside this segment satisfies nothing here.
+  const parkOk = (ev) => (item === undefined ? !parksOtherItem(list, ev) : itemOk(ev));
   return list.find(ev => ev.k === 'skip' && ev.ob === ob && itemOk(ev))
-    || list.find(ev => ev.k === 'park' && ob !== 'triage' && itemOk(ev))
+    || list.find(ev => ev.k === 'park' && ob !== 'triage' && parkOk(ev))
     || null;
 }
 
@@ -415,7 +461,7 @@ function summaryForCard(contract, evs, lang = 'de', ctx = {}) {
 }
 
 module.exports = {
-  skillName, segments, currentSegment, segmentHasWork, segmentHasEditWork, openObligations,
+  skillName, segments, currentSegment, segmentItem, segmentHasWork, segmentHasEditWork, openObligations,
   formatBlock, chosenLine, summaryForCard,
   // shared with the sibling modules (not part of the facade's public list)
   isSkill, isEditWork, obState, skipOf, GATE_OBS, AUDIT_OBS, fixFor, short, issueNamed,

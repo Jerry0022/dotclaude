@@ -502,11 +502,16 @@ describe("H3: acquireLock cleans up its own orphaned lock file", () => {
 describe("H4: acquireLock rejects non-finite lockStaleMs/lockWaitMs overrides", () => {
   test("lockWaitMs: NaN falls back to the default deadline instead of spinning forever", () => {
     store.arm(cwd, { mode: "prompt" }, { now: T0 });
-    fs.writeFileSync(lockFile(cwd), "other-pid"); // fresh lock: never goes stale during this test
+    fs.writeFileSync(lockFile(cwd), "other-pid");
+    // The default stale window (1 s) equals the default wait (1 s): under load
+    // the lock aged past it before the deadline and was taken over, so
+    // update() succeeded (flaky, 2026-10-09). A long stale window keeps it
+    // held for the whole wait — only lockWaitMs is under test here.
     const start = Date.now();
-    const patched = store.update(cwd, { mode: "audit" }, { now: T0, lockWaitMs: NaN });
+    const patched = store.update(cwd, { mode: "audit" }, { now: T0, lockWaitMs: NaN, lockStaleMs: 60_000 });
     const elapsed = Date.now() - start;
     expect(patched).toBeNull();
+    expect(elapsed).toBeGreaterThanOrEqual(900); // waited the default LOCK_MAX_WAIT_MS, not 0
     expect(elapsed).toBeLessThan(3000); // gave up around the default LOCK_MAX_WAIT_MS, not never
   }, 10000);
 });
