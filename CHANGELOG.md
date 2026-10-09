@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.258.1] — 2026-10-09
+
+Claude Code 2.1.287 added mods: in-process hooks modules that a consumer can install next to devops. A consumer's mod runs ahead of our non-managed `PreToolUse` hooks, so the plugin docs did not yet say that a `pre.*` gate can be skipped or overridden.
+
+### Changed
+- **`deep-knowledge/plugin-behavior.md` § Claude Code Mods — Gates Are Not Final.** A mod's `tool.call` hook that answers without `next` stops our `pre.*` gates from running, and a `tool.check` hook can approve a call they blocked; only managed-settings hooks and `deny` rules hold. Rules: when a consumer reports a hook that never fired, ask which mods are enabled first; treat a `pre.*` gate as a guard rail, not a security boundary. devops ships no mod yet. A first one would ship inside this plugin behind a `userConfig` opt-in, once the Desktop UI bugs anthropics/claude-code#99647 and #99265 are fixed.
+
+### Tests
+- Docs only. Knowledge suites 59/59, full suite 8701 passed / 3 skipped (298 files), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.258.0] — 2026-10-09
 
 After a test or a ship the card offered no direct way to start the app: the user had to type the start request themselves (#680).
