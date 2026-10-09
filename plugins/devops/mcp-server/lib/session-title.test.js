@@ -12,6 +12,7 @@ import {
   titlePrefixFor,
   titleInstruction,
   conceptUrl,
+  conceptCloseoutOnly,
   currentSessionTitle,
 } from "./mode-state.js";
 
@@ -201,6 +202,31 @@ describe("titlePrefixFor", () => {
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
+  });
+
+  // #693: after the implement ship the page only waits for its close-out —
+  // a merged ship's title is the outcome, never the compass.
+  test("a concept-active.json whose page carries the final report: ship outcomes get the plain shipped/released prefix", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "devops-title-"));
+    try {
+      mkdirSync(join(cwd, ".claude"));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true });
+      writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
+      writeFileSync(join(cwd, "docs", "concepts", "x.html"), '<section data-iteration="2"></section><section data-iteration="3" data-final-report data-active></section>');
+      expect(conceptCloseoutOnly(cwd)).toBe(true);
+      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toBe(SESSION_PREFIX.shipped);
+      expect(titlePrefixFor({ variant: "released", cwd, delivery: { promote: { current: "beta" } } }, deps)).toBe(releasedPrefix("beta"));
+      expect(titlePrefixFor({ variant: "ship-successful", cwd, pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
+      // Not a ship outcome: the conditional stays.
+      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.ready });
+      // The marker only inside a script does not count.
+      writeFileSync(join(cwd, "docs", "concepts", "x.html"), '<section data-iteration="1"></section><script>q("<section data-final-report>")</script>');
+      expect(conceptCloseoutOnly(cwd)).toBe(false);
+      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+    expect(conceptCloseoutOnly(undefined)).toBe(false);
   });
 
   // A state file the resume hook would refuse (absolute html_path — a

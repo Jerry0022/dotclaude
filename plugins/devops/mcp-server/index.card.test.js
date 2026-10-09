@@ -1115,6 +1115,70 @@ describe("render_completion_card — every input. field lands somewhere", () => 
   });
 });
 
+// #693: after an /auto-concept implement → ship the page only waits for its
+// close-out (final report appended). The ship card must say so — never
+// "weiter in <branch>" for a worktree kept just for the close-out — and the
+// title must not fall back to the compass.
+describe("render_completion_card — concept close-out after the implement ship (#693)", () => {
+  const FINAL = '<section id="iter-3" data-iteration="3" data-iteration-template="free" data-final-report data-active><h2>Abschlussbericht</h2></section>';
+  function conceptRepo(body) {
+    const cwd = mkdtempSync(join(tmpdir(), "card-closeout-"));
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    mkdirSync(join(cwd, "docs", "concepts"), { recursive: true });
+    writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
+    writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html><html><body>" + body + "</body></html>");
+    return cwd;
+  }
+  const kept = { variant: "ship-successful", state: { mode: "git", pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha" } } };
+
+  test("kept ship with only the close-out left: close-out CTA + page URL, no 'weiter in <branch>', shipped title", async () => {
+    const cwd = conceptRepo('<section data-iteration="2"></section>' + FINAL);
+    try {
+      const de = await render({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-de", cwd });
+      const deText = de.content[de.content.length - 1].text;
+      expect(deText).toMatch(/^## 🚀 Released v0\.1\.0 alpha — Konzept abschließen – Abschlussbericht wartet\.$/m);
+      expect(deText).toContain("› http://localhost:4321/docs/concepts/x.html");
+      expect(deText).not.toMatch(/weiter in/);
+      const all = de.content.map(c => c.text).join("\n");
+      expect(all).not.toContain("\"🧭 Concept – \" +");
+      expect(all).toContain("set the title to \"🚀 Shipped – \" +");
+      const en = await cardText({ ...kept, summary: "x", lang: "en", session_id: "test-closeout-en", cwd });
+      expect(en).toMatch(/^## 🚀 Released v0\.1\.0 alpha — Close out the concept – final report is waiting\.$/m);
+      expect(en).not.toMatch(/continue on/);
+      // A plain merge (no ring) names the base instead of alpha.
+      const plain = await cardText({ variant: "ship-successful", state: { mode: "git", pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0", base: "main" } }, summary: "x", lang: "de", session_id: "test-closeout-plain", cwd });
+      expect(plain).toMatch(/^## 🚀 Shipped v0\.1\.0 → main — Konzept abschließen – Abschlussbericht wartet\.$/m);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("no final report on the page (or only in script/comment): today's kept card stays", async () => {
+    const body = '<section data-iteration="1" data-active></section>' +
+      '<!-- <section data-final-report> -->' +
+      '<script>const t = \'<section data-final-report data-active>\'; document.querySelector("section[data-final-report]");</script>';
+    const cwd = conceptRepo(body);
+    try {
+      const text = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-none", cwd });
+      expect(text).toMatch(/^## 🚀 Released v0\.1\.0 alpha — weiter in `feat\/x`\?$/m);
+      expect(text).not.toMatch(/Abschlussbericht wartet/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("a card that carries the concept field keeps the concept override", async () => {
+    const cwd = conceptRepo(FINAL);
+    try {
+      const text = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-field", cwd, concept: { phase: "waiting" } });
+      expect(text).not.toMatch(/Abschlussbericht wartet/);
+      expect(text).toMatch(/Concept wartet/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("render_completion_card — evidence heuristics (post-concept fixes)", () => {
   test("skipped tests are no deviation: '3464 grün · 3 skipped' is ✓ 3464 Tests grün and the heading stays 📦", async () => {
     const text = await cardText({
