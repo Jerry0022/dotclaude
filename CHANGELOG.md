@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.258.3] — 2026-10-09
+
+After an /auto-concept implement ship that merged, the card still offered "weiter in <branch>" and the session title fell back to "🧭 Concept – ", although the only thing left was the concept page's close-out (#693). Root cause: the card key `ship-successful-kept` was picked from `state.kept` alone, and the title treated any live `concept-active.json` as "page waits".
+
+### Fixed
+- **Concept close-out CTA after the implement ship.** When the concept page only waits for its close-out (final report appended — detected from the page's `<section … data-final-report>` marker on disk, no bridge needed; anything uncertain keeps the old behaviour), the ship-successful card uses the new key `ship-successful-closeout`: decision "Konzept abschließen – Abschlussbericht wartet" (en "Close out the concept – final report is waiting") with the concept URL as context line, and no "weiter in <branch>" / Weiter button even under `--keep`. The session title prefix is "🚀 Shipped – " (released: the channel prefix) instead of "🧭 Concept – "; before the ship the concept-waiting 🧭 stays. `deep-knowledge/completion-card-design.md` documents the key.
+
+### Tests
+- `index.card.test.js` and `lib/session-title.test.js` extended. Branch suites 180/180, full suite 8705 passed / 3 skipped (298 files), eslint clean. Codex review skipped (limit until 2026-10-11).
+
 ## [0.258.2] — 2026-10-09
 
 A `/do-run backlog` run that parked other queued items in the middle of an item lost that item's finished obligations. On 2026-10-09 #685 had auto-agents, harden and qa done, then the run parked #665, #667 and #644 right after #685's interim `ready` card — and the delegated ship of #685 was refused for auto-agents, harden and qa, until it skipped them by hand. The card was a coincidence: every `park` ended the current segment, whatever item it named.
