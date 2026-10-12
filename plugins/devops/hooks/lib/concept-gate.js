@@ -112,6 +112,9 @@ const FORBIDDEN = [
   { re: /zwischenablage/i, why: '"Zwischenablage kopieren" copy UI' },
   { re: /in den chat (ein|einf)/i, why: '"in den Chat einfügen" paste instruction' },
   { re: /paste[^.\n]{0,24}chat/i, why: '"paste … into chat" instruction' },
+  // An unresolved locale key reaches the user as raw text
+  // ("panel.submit_not_durable") exactly when a submit fails.
+  { re: /showSubmitWarning\(\s*['"][a-z_]+\.[a-z_.]+['"]\s*\)/, why: 'unresolved locale key passed to showSubmitWarning — resolve it from the UI locale table' },
 ];
 
 // Engine chrome classes a round's mock <style> must never restyle (#400).
