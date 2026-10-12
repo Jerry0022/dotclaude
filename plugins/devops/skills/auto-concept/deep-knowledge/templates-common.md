@@ -104,6 +104,9 @@ must see their own language. The locale hint is authoritative.
 | `panel.here_back`              | back to round                  | zur Runde |
 | `panel.archive_summary`        | previous rounds                | vorherige Runden |
 | `panel.submit_collect_failed`  | Could not collect your decisions — nothing was sent. Reload the page and try again | Entscheidungen konnten nicht eingesammelt werden — nichts wurde gesendet. Seite neu laden und erneut versuchen |
+| `panel.submit_queued_offline` | Bridge unreachable — it is sent automatically on reconnect. Your input is saved locally. | Bridge nicht erreichbar — wird bei Reconnect automatisch nachgeholt. Deine Eingaben sind lokal gesichert. |
+| `panel.submit_not_durable`    | The bridge could not save the submission (storage problem). Nothing is lost — your input is stored locally. Please submit again. | Die Bridge konnte die Übermittlung nicht sichern (Speicherproblem). Nichts ist verloren — deine Eingaben liegen lokal. Bitte erneut absenden. |
+| `panel.attachments_not_synced` | An image is still only stored locally and will be sent automatically. | Ein Bild liegt noch nur lokal vor und wird automatisch nachgereicht. |
 | `nav.summary_entries`          | entries                        | Einträge |
 | `nav.summary_discarded`        | discarded                      | verworfen |
 | `nav.group_context`            | Context                        | Kontext |
@@ -115,7 +118,7 @@ must see their own language. The locale hint is authoritative.
 | `variant.include`              | Include                        | Miteinbeziehen |
 | `variant.discard`              | Discard                        | Verwerfen |
 | `decision.comment_label`       | Note / override (optional)     | Notiz / Override (optional) |
-| `decision.comment_placeholder` | e.g. "only for X", "with variant Y"… | z.B. „nur für X", „mit Variante Y"… |
+| `decision.comment_placeholder` | e.g. “only for X”, “with variant Y”… | z.B. „nur für X“, „mit Variante Y“… |
 | `iteration.label`              | Iterations                     | Iterationen |
 | `iteration.active_suffix`      | · active                       | · aktiv |
 | `iteration.final_tab`          | Final report                   | Abschlussbericht |

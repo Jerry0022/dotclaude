@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +18,12 @@ import { createRequire } from "node:module";
 
 const HOOK = path.resolve(import.meta.dirname, "prompt.knowledge.dispatch.js");
 const PLUGIN_ROOT = path.resolve(import.meta.dirname, "..", "..");
+// The hook caches per-session state (dotclaude-budget-tier-<sid>, locale,
+// dk-injected) in os.tmpdir(); every run uses a fresh session id, so a shared
+// tmpdir collected one orphan per test per run (#699). Give the hook — and
+// the throwaway project dirs — a temp root of their own, removed afterwards.
+const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-test-"));
+afterAll(() => { fs.rmSync(TMP_ROOT, { recursive: true, force: true }); });
 
 function nudgeFromSource() {
   const src = fs.readFileSync(HOOK, "utf8");
@@ -34,7 +40,7 @@ function nudgeFromSource() {
  * ten consecutive Desktop sessions had no nudge, no budget suffix, no locale.
  */
 function runHook(userMessage, home, cwd, field = "prompt") {
-  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT };
+  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, TMP: TMP_ROOT, TEMP: TMP_ROOT, TMPDIR: TMP_ROOT };
   if (home) { env.HOME = home; env.USERPROFILE = home; }
   // Always hand the hook a project dir of its own: it falls back to
   // process.cwd() for the delegation mode and the AFK lockout sentinel, and a
@@ -53,12 +59,12 @@ function runHook(userMessage, home, cwd, field = "prompt") {
 
 /** A fresh project dir with no delegation.json and no lockout sentinel. */
 function emptyProject() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-cwd-"));
+  return fs.mkdtempSync(path.join(TMP_ROOT, "dispatch-cwd-"));
 }
 
 /** A fake HOME whose settings enable the plugin (plugin-guard) and whose usage snapshot says Pro. */
 function proHome() {
-  const h = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-home-"));
+  const h = fs.mkdtempSync(path.join(TMP_ROOT, "dispatch-home-"));
   fs.mkdirSync(path.join(h, ".claude"));
   fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
   fs.writeFileSync(path.join(h, ".claude", "usage-live.json"), JSON.stringify({
@@ -115,7 +121,7 @@ describe("prompt.knowledge.dispatch — delegation nudge", () => {
 
   test("kill-switch: off → no nudge and no budget suffix; ask → the ask variant, suffix kept", () => {
     const switched = (mode) => {
-      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-cwd-"));
+      const cwd = fs.mkdtempSync(path.join(TMP_ROOT, "dispatch-cwd-"));
       fs.mkdirSync(path.join(cwd, ".claude"));
       fs.writeFileSync(path.join(cwd, ".claude", "delegation.json"), JSON.stringify({ mode }));
       return runHook("compare vite and webpack for our typescript spa, please", proHome(), cwd);
@@ -156,7 +162,7 @@ describe("prompt.knowledge.dispatch — the positive budget signal after a reset
    * full line must go out on that prompt, naming the reset.
    */
   const homeWith = (usage) => {
-    const h = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-home-"));
+    const h = fs.mkdtempSync(path.join(TMP_ROOT, "dispatch-home-"));
     fs.mkdirSync(path.join(h, ".claude"));
     fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "devops@dotclaude": true } }));
     fs.writeFileSync(path.join(h, ".claude", "usage-live.json"), JSON.stringify(usage));
@@ -245,7 +251,7 @@ describe("prompt.knowledge.dispatch — the payload stays under the harness limi
 
   /** A plugin root with the real hooks' deep-knowledge replaced by given docs. */
   function fakeRoot(docs) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "dispatch-root-"));
+    const root = fs.mkdtempSync(path.join(TMP_ROOT, "dispatch-root-"));
     fs.mkdirSync(path.join(root, "deep-knowledge"));
     for (const [name, body] of Object.entries(docs)) fs.writeFileSync(path.join(root, "deep-knowledge", name), body);
     return root;

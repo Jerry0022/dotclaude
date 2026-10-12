@@ -15,6 +15,7 @@ import { writeSentinel } from "../lib/sentinel.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-deploy.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
+import { detectComponents } from "../lib/components.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -154,6 +155,7 @@ export async function handler(params) {
       version: null,
       projectType: null,
       outOfBandDeploys: { detected: false, globs: [], files: [], matched: [], kinds: [] },
+      components: [],
       checks: [{ name: "repo-mode", value: "none", ok: true }],
       warnings: [],
       errors: [],
@@ -311,6 +313,17 @@ export async function handler(params) {
     checks.push({ name: "out-of-band-deploys", ok: true, deploy: false });
   }
 
+  // 9c. Sub-app releases (#695): manifests outside the repo root whose own
+  //     version this diff changed. A hint for the completion card's
+  //     `delivery.ship.components` — the caller names, tags and channels them.
+  const components = detectComponents(branchFilesForInfra, {
+    cwd,
+    readBase: (path) => gitTry(["show", `${infraBase}:${path}`], opts),
+  });
+  if (components.length) {
+    checks.push({ name: "components", ok: true, value: components.map(c => `${c.dir} ${c.version}`) });
+  }
+
   // 10. Git config check (warning — auto-fixed by the do-ship skill)
   const conflictStyle = getConfig("merge.conflictstyle", opts);
   if (conflictStyle !== "diff3" && conflictStyle !== "zdiff3") {
@@ -443,6 +456,7 @@ export async function handler(params) {
     version: versionInfo.version,
     projectType: versionInfo.type,
     outOfBandDeploys,
+    components,
     checks,
     warnings,
     errors,

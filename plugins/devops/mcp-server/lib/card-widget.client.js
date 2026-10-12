@@ -27,7 +27,7 @@
  *   points · bt buttons [{l, i icon, p prompt, tp, pr primary}] · tx texts
  *   {sent, failed, sk skipped, open {pre, tip, sent}}
  *
- * @version 1.0.0
+ * @version 1.1.0
  */
 /* global window, document */
 (function (root) {
@@ -193,7 +193,8 @@
   function pipelineHtml(pipeline, pr) {
     if (!pipeline) return "";
     var hasPr = !!(pr && pr.n);
-    return '<div class="card-pipeline" style="font-size:13px;color:' + COLOR.dim + ';padding:4px 0">' + esc(pipeline).replace(/(?<!&)#(\d+)/, function (m) { return hasPr ? pipelinePrHtml(pr) : m; }) + "</div>";
+    // Several shipped components ride as one line each (#695).
+    return '<div class="card-pipeline" style="font-size:13px;color:' + COLOR.dim + ';padding:4px 0">' + esc(pipeline).replace(/(?<!&)#(\d+)/, function (m) { return hasPr ? pipelinePrHtml(pr) : m; }).replace(/\n/g, "<br>") + "</div>";
   }
 
   function titleHtml(title, at) {

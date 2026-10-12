@@ -254,3 +254,36 @@ describe("build-concept-fixture — engine integrity anchors (#430)", () => {
     expect(r.stale.map(e => e.token)).toContain('.concept-decision-panel {');
   });
 });
+
+// Every locale key the engine passes to the page must resolve in both locales:
+// a missing row left `showSubmitWarning('panel.submit_not_durable')` as raw text,
+// and an ASCII quote inside the German comment placeholder closed its
+// `placeholder="…"` attribute early.
+describe("build-concept-fixture — locale resolution", () => {
+  for (const locale of ['en', 'de']) {
+    for (const mode of ['decision', 'design']) {
+      test(`${mode}/${locale}: no raw locale key reaches showSubmitWarning, the gate passes`, () => {
+        const page = build({ ...BASE, mode, mapping: false, locale });
+        expect(page).not.toMatch(/showSubmitWarning\(\s*'[a-z_]+\.[a-z_.]+'\s*\)/);
+        expect(evaluate('docs/concepts/fixture.html', page).forbidden).toEqual([]);
+      });
+    }
+
+    test(`decision/${locale}: the comment placeholder survives as one intact attribute`, () => {
+      const page = build({ ...BASE, mode: 'decision', mapping: false, locale });
+      const ta = dom(page).querySelector('textarea[data-comment]');
+      expect(ta).not.toBeNull();
+      const want = locale === 'de' ? 'z.B. „nur für X“, „mit Variante Y“…' : 'e.g. “only for X”, “with variant Y”…';
+      expect(ta.getAttribute('placeholder')).toBe(want);
+    });
+  }
+
+  test("the gate flags a raw locale key passed to showSubmitWarning", () => {
+    const page = build({ ...BASE, mode: 'decision', mapping: false });
+    const broken = page.replace(/showSubmitWarning\('[^']*'\)/, "showSubmitWarning('panel.submit_not_durable')");
+    expect(broken).not.toBe(page);
+    const r = evaluate('docs/concepts/fixture.html', broken);
+    expect(r.ok).toBe(false);
+    expect(r.forbidden.map(f => f.why).join(' ')).toMatch(/unresolved locale key/);
+  });
+});

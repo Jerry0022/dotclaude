@@ -571,6 +571,23 @@ describe("ship_release — tag default from the version file (#372)", () => {
     expect(execFileSync.mock.calls.find((c) => c[0] === "git" && c[1]?.[0] === "tag")).toBeUndefined();
   });
 
+  // #694: a JSON client delivered the opt-out as the string "null" and the
+  // tool pushed refs/tags/alpha/null with tagVerified: true.
+  for (const raw of ["null", "NULL", "", "   ", "undefined"]) {
+    test(`tag ${JSON.stringify(raw)} on a final merge is the opt-out, never an alpha/<junk> tag`, async () => {
+      const res = await handler(params({ tag: raw }));
+      expect(res.success).toBe(true);
+      expect(res.tag).toBeNull();
+      expect(res.tagSkipped).toBe(true);
+      expect(res.tagVerified).toBeUndefined();
+      expect(readVersion).not.toHaveBeenCalled();
+      const { execFileSync } = await import("node:child_process");
+      const gitCalls = execFileSync.mock.calls.filter((c) => c[0] === "git");
+      expect(gitCalls.find((c) => c[1]?.[0] === "tag")).toBeUndefined();
+      expect(gitCalls.flatMap((c) => c[1] || []).join(" ")).not.toMatch(/alpha\//);
+    });
+  }
+
   test("tag omitted but no version file → merge still succeeds, tagSkipped + warning name the missing file", async () => {
     readVersion.mockReturnValueOnce({ version: null, type: null, file: null });
     const p = params(); delete p.tag;

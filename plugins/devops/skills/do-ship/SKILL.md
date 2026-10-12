@@ -334,6 +334,8 @@ Otherwise omit it — the tool uses stack-agnostic defaults.
 The result carries `outOfBandDeploys: { detected, files, kinds, globs }` — artifacts
 this diff touches that a code merge will NOT deploy (#243). **Carry this value
 forward to Step 4d.** It is informational, never a hard gate (`ready` is unaffected).
+Its `components` (sub-app manifests whose version the diff changed, #695) feed
+Step 6's `delivery.ship.components` — carry them forward.
 
 Auto-detected base = a sub-branch's parent, else the default branch; override with
 `ship_preflight({ base: "feat/42", cwd: "<cwd>" })`. Details:
@@ -994,7 +996,8 @@ before calling `render_completion_card` and build the call from it** — every f
 `pushed`, `pr`, `merged`), `cta` (`vOld`, `vNew`, `bump`) and `delivery` (`pr`, `ship`, `promote`).
 
 `delivery` rules — `ship.version` is the semver from the bump, never a commit SHA; `promote`
-**only for ring-model projects**: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Delivery track.
+**only for ring-model projects**; `ship.components` when Step 1's `components` hint is non-empty
+(multi-app repo): `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/completion-card-payloads.md` § Delivery track.
 
 **Variant reflects what the pipeline DID, not what's verified downstream.**
 `merged` (+ `tag` where applicable) ⇒ `ship-successful`. Never downgrade to

@@ -54,7 +54,7 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
 }));
 
 import { handler } from "./preflight.js";
-import { isWorktree, fileOverlap, dirtyState } from "../lib/git.js";
+import { isWorktree, fileOverlap, dirtyState, gitTry } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
@@ -217,6 +217,38 @@ describe("ship_preflight — out-of-band deploy detection (#243)", () => {
     });
     const result = await handler({ cwd: CWD, outOfBandGlobs: ["infra/**"] });
     expect(result.outOfBandDeploys.files).toEqual(["infra/terraform/main.tf"]);
+  });
+});
+
+describe("ship_preflight — components hint (#695)", () => {
+  test("no sub-app manifest in the diff → empty components, no check", async () => {
+    fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: ["src/app.ts"], baseFiles: [], overlap: [] });
+    const result = await handler({ cwd: CWD });
+    expect(result.components).toEqual([]);
+    expect(checkByName(result, "components")).toBeUndefined();
+  });
+
+  test("a sub-app whose version changed against the base is reported, never blocking", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const cwd = mkdtempSync(join(tmpdir(), "preflight-components-"));
+    try {
+      mkdirSync(join(cwd, "desktop"));
+      writeFileSync(join(cwd, "desktop", "Cargo.toml"), '[package]\nname = "desktop-app"\nversion = "0.10.0"\n');
+      fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: ["desktop/Cargo.toml", "desktop/src/main.rs"], baseFiles: [], overlap: [] });
+      gitTry.mockImplementation((args) => (args[0] === "show" && args[1] === "origin/main:desktop/Cargo.toml"
+        ? '[package]\nname = "desktop-app"\nversion = "0.9.2"\n' : ""));
+      const result = await handler({ cwd });
+      expect(result.components).toEqual([
+        { dir: "desktop", manifest: "Cargo.toml", name: "desktop-app", version: "0.10.0", previousVersion: "0.9.2" },
+      ]);
+      expect(checkByName(result, "components")).toEqual({ name: "components", ok: true, value: ["desktop 0.10.0"] });
+      expect(result.ready).toBe(true);
+    } finally {
+      gitTry.mockImplementation(() => "");
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
 

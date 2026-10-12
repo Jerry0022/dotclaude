@@ -32,7 +32,10 @@ export default defineConfig({
     // half: vitest's runner never yields to the event loop between tests, so a
     // file of synchronously spawning tests starved its own RPC reply for 60 s.
     // One loop turn after every test fixes that (the file says how).
-    setupFiles: ["./vitest.yield-setup.mjs"],
+    // Each test file also gets its own tmpdir (vitest.isolation-setup.mjs):
+    // session-scoped temp state never leaks between files or from the live
+    // session running the suite.
+    setupFiles: ["./vitest.isolation-setup.mjs", "./vitest.yield-setup.mjs"],
     minWorkers: 1,
     // Hook tests spawn real node processes (that IS the contract under test —
     // the harness invokes hooks as child processes). On Windows a single spawn
