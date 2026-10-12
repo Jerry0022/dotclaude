@@ -45,8 +45,9 @@ export function parseManifest(manifest, text) {
     const head = /^\[([^\]]+)\]$/.exec(line);
     if (head) { section = head[1].trim(); continue; }
     if (!TOML_SECTIONS.has(section)) continue;
-    const kv = /^(name|version)\s*=\s*"([^"]*)"/.exec(line);
-    if (kv && !out[kv[1]]) out[kv[1]] = kv[2];
+    // TOML strings may be basic ("…") or literal ('…').
+    const kv = /^(name|version)\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(line);
+    if (kv && !out[kv[1]]) out[kv[1]] = kv[2] ?? kv[3];
   }
   return out;
 }

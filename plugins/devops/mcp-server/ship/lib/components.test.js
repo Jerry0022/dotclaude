@@ -14,6 +14,10 @@ describe("parseManifest", () => {
     expect(parseManifest("Cargo.toml", toml)).toEqual({ name: "desktop-app", version: "0.10.0" });
   });
 
+  test("TOML literal strings ('…') count like basic ones", () => {
+    expect(parseManifest("Cargo.toml", "[package]\nname = 'desktop-app'\nversion = '0.10.0'\n")).toEqual({ name: "desktop-app", version: "0.10.0" });
+  });
+
   test("Cargo.toml with a workspace-inherited version has no own version", () => {
     expect(parseManifest("Cargo.toml", '[package]\nname = "x"\nversion.workspace = true\n').version).toBe("");
   });
