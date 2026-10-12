@@ -55,6 +55,15 @@ export const schema = z.object({
  * own work. `pending` counts too — shipping before the own review / QA pass
  * returned is exactly the "0/3 but shipped" pattern this gate exists for.
  */
+// undefined stays undefined (default to the version file); null, "null",
+// "undefined", "" and whitespace are the opt-out; anything else is trimmed.
+export function normalizeTagParam(tag) {
+  if (tag === undefined) return undefined;
+  if (tag === null) return null;
+  const t = String(tag).trim();
+  return t === "" || /^(null|undefined)$/i.test(t) ? null : t;
+}
+
 export function shipValidationGaps(validation) {
   if (!Array.isArray(validation) || !validation.length) return [];
   const { gaps } = classify(validation, { openTasks: 0 });
@@ -175,7 +184,9 @@ export async function handler(params) {
   //              exactly how an automated caller shipped v0.84.5 untagged;
   //   "vX.Y.Z" → as given.
   // Intermediate merges never tag, whatever the caller passed.
-  let tag = params.tag;
+  // A JSON client can deliver the opt-out as the string "null", "", or
+  // whitespace; those all mean null — never a literal alpha/null tag (#694).
+  let tag = normalizeTagParam(params.tag);
   let tagDefaulted = false;
   let tagDefaultSkip = null;
   if (!intermediate && tag === undefined) {
