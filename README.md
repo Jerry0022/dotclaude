@@ -296,7 +296,7 @@ from the restored marketplaces.
 
 ## Features
 
-- **<!--devops:count:hooks-->78<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->79<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
 - **<!--devops:count:agents-->11<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -307,7 +307,7 @@ from the restored marketplaces.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->78<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->79<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -329,6 +329,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.mcp.failcache` — Clear the plugin's entries from Claude Code's machine-wide MCP failure cache, so one…
 - `ss.mcp.reap` — Reclaim orphaned Claude Desktop MCP server processes leaked by previously-closed sess…
 - `ss.watchdog.reap` — Removes expired ClaudeAutonomousWatchdog-* scheduled tasks left behind by earlier aut…
+- `ss.tmp.sweep` — Removes the plugin's own dotclaude-* temp markers older than 48 h from the OS temp di…
 - `ss.tokens.scan` — Scan project for expensive files and update config for the pre.tokens.guard hook.
 - `ss.project.setup` — The automatic part of project setup (the former /setup-project skill; its interactive…
 - `ss.git.check` — Check for stale changes AND workspace setup issues at session start.
@@ -689,7 +690,7 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->78<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->79<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
