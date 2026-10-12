@@ -73,7 +73,23 @@ render_completion_card({
 The card renders `delivery` as ONE block at the foot of the body (PR · base +
 bump · commit · build-id · channel ladder) and drops the separate 📌 footer and
 state line — every pipeline fact appears once. `ship.version` must be the
-semver from the bump, never a commit SHA.
+semver from the bump, never a commit SHA. The card adds the "v" only to a bare
+semver; any other string renders as given.
+
+**Multi-app repos (`ship.components`, #695).** `ship_preflight` returns a
+`components` hint: `[{ dir, manifest, name, version, previousVersion }]`, the
+manifests outside the repo root (package.json, Cargo.toml, pyproject.toml)
+whose own version this diff changed — empty in a single-app repo. When it is
+non-empty, pass one entry per released component:
+`ship: { version, base, components: [{ name, version, tag?, channel?, root? }] }`.
+`name` is the human name ("Desktop app"), not the folder; `tag` and `channel`
+come from the project's own release flow (ship extension, tag step). Add the
+root/web app as an entry with `root: true` only when it shipped too (its
+version was bumped). Without a `root: true` entry the card drops the root
+version and the root Build-ID — they belong to an app that did not ship. One
+component renders inline: "🚀 Shipped Desktop app 0.10.0 → main ·
+desktop-v0.10.0 · alpha."; several render one line each under the pipeline
+line. Never glue a component name into `ship.version` ("Desktop 0.10.0").
 
 **Delivery track (`delivery`).** Populate it so the card shows WHERE in the
 pipeline this ship sits (PR → Ship → Promote). `pr` + `ship` are known

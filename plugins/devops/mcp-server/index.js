@@ -1087,7 +1087,18 @@ function renderPipelineLine(input, lang, buildId) {
   }
   // No remote: the track ends at the local commit — push, PR and merge have
   // nowhere to go, so they are not drawn as pending steps (#500).
-  const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
+  // Multi-app repos (#695): named components replace the root version, and
+  // the root Build-ID only shows when the root app itself shipped.
+  const components = shipComponents(delivery);
+  const rootShipped = !components.length || components.some(c => c.root);
+  const version = components.length ? ''
+    : (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version) || '';
+  const tail = (line) => {
+    if (components.length === 1) line += ' · ' + componentLine(components[0]);
+    if (rootShipped) line += ' · Build ' + buildId;
+    if (components.length > 1) line += components.map(c => '\n📦 ' + componentLine(c)).join('');
+    return line;
+  };
   if (state.mode === 'git-no-remote') {
     const localWord = lang === 'en' ? 'local only, no remote' : 'nur lokal, kein Remote';
     let local = state.merged
@@ -1095,8 +1106,8 @@ function renderPipelineLine(input, lang, buildId) {
       : (commitDone ? '✓' : '○') + ' commit · ' + localWord;
     if (state.branch) local += ' · ' + state.branch;
     // A local ship still bumps and commits the version.
-    if (version) local += ' · v' + String(version).replace(/^v/, '');
-    return local + ' · Build ' + buildId;
+    if (version) local += ' · ' + displayVersion(version);
+    return tail(local);
   }
   const pushDone = !!(state.pushed || state.merged);
   const prDone = !!state.pr;
@@ -1114,9 +1125,8 @@ function renderPipelineLine(input, lang, buildId) {
 
   // A ring project shows its versions on the channel ladder line below; the
   // pipeline line then names no version of its own.
-  if (version && !delivery.promote) line += ' · v' + String(version).replace(/^v/, '');
-  line += ' · Build ' + buildId;
-  return line;
+  if (version && !delivery.promote) line += ' · ' + displayVersion(version);
+  return tail(line);
 }
 
 /**
@@ -1142,6 +1152,48 @@ const LADDER_ORDER = ['alpha', 'beta', 'stable'];
 
 function stripV(v) {
   return v ? String(v).trim().replace(/^v/, '') : '';
+}
+
+/**
+ * A version as the card shows it (#695): a bare semver gets its "v"
+ * ("0.10.0" / "v0.10.0" → "v0.10.0"), anything else stays as given — a
+ * caller-composed "Desktop 0.10.0" must not read "vDesktop 0.10.0".
+ */
+function displayVersion(v) {
+  const s = v == null ? '' : String(v).trim();
+  if (!s) return '';
+  const bare = s.replace(/^v(?=\d)/, '');
+  return /^\d+\.\d+\.\d+/.test(bare) ? 'v' + bare : s;
+}
+
+/**
+ * The shipped components of a multi-app repo (`delivery.ship.components`,
+ * #695), normalized; [] when the caller passed none. An entry needs a name
+ * or a version to be shown.
+ */
+function shipComponents(delivery) {
+  const list = delivery && delivery.ship && Array.isArray(delivery.ship.components) ? delivery.ship.components : [];
+  return list
+    .filter(c => c && typeof c === 'object')
+    .map(c => ({
+      name: String(c.name || '').trim(),
+      version: String(c.version || '').trim(),
+      tag: String(c.tag || '').trim(),
+      channel: String(c.channel || '').trim(),
+      root: c.root === true,
+    }))
+    .filter(c => c.name || c.version);
+}
+
+/** "Desktop app 0.10.0" — a named component keeps its version as given; a bare one gets displayVersion. */
+function componentHead(c) {
+  if (!c.name) return displayVersion(c.version);
+  return c.version ? c.name + ' ' + c.version : c.name;
+}
+
+/** "Desktop app 0.10.0 · desktop-v0.10.0 · alpha" — head, then tag and channel when known. */
+function componentLine(c) {
+  return [componentHead(c), c.tag, c.channel].filter(Boolean).join(' · ');
 }
 
 function compareSemver(a, b) {
@@ -1237,14 +1289,14 @@ const HEADINGS = {
         : c.n + (c.n === 1 ? ' teilweise erfüllter Anforderung' : ' teilweise erfüllten Anforderungen')}?`,
     'ship-blocked': (c) => `⛔ ${c.reason} umgehen und trotzdem shippen?`,
     'ship-successful': (c) => c.ring
-      ? `🚀 Released v${c.version} alpha — nach beta promoten?`
-      : `🚀 Shipped v${c.version} → ${c.base}.`,
-    'ship-successful-kept': (c) => `🚀 Released v${c.version} alpha — weiter in \`${c.branch}\`?`,
+      ? `🚀 Released ${c.ver} alpha — nach beta promoten?`
+      : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}.`,
+    'ship-successful-kept': (c) => `🚀 Released ${c.ver} alpha — weiter in \`${c.branch}\`?`,
     // #693: the open concept only waits for its close-out — no branch to go on in.
-    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released v${c.version} alpha` : `🚀 Shipped v${c.version} → ${c.base}`} — Konzept abschließen – Abschlussbericht wartet.`,
+    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released ${c.ver} alpha` : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}`} — Konzept abschließen – Abschlussbericht wartet.`,
     'ship-successful-deploy': () => '🚨 Gemergt, aber nicht live — Migration jetzt deployen?',
-    'released-beta': (c) => `🎊 Promoted v${c.version} BETA — nach stable?`,
-    'released-stable': (c) => `🎊 Released v${c.version} LIVE — stable.`,
+    'released-beta': (c) => `🎊 Promoted ${c.ver} BETA — nach stable?`,
+    'released-stable': (c) => `🎊 Released ${c.ver} LIVE — stable.`,
     'ready-files': () => '📂 Fertig auf der Platte — noch etwas?',
     test: () => '🧪 Erst testen, dann shippen?',
     'test-minimal': () => '▶️ Läuft — viel Spaß',
@@ -1273,13 +1325,13 @@ const HEADINGS = {
         : c.n + (c.n === 1 ? ' partially met requirement' : ' partially met requirements')}?`,
     'ship-blocked': (c) => `⛔ Bypass ${c.reason} and ship anyway?`,
     'ship-successful': (c) => c.ring
-      ? `🚀 Released v${c.version} alpha — promote to beta?`
-      : `🚀 Shipped v${c.version} → ${c.base}.`,
-    'ship-successful-kept': (c) => `🚀 Released v${c.version} alpha — continue on \`${c.branch}\`?`,
-    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released v${c.version} alpha` : `🚀 Shipped v${c.version} → ${c.base}`} — Close out the concept – final report is waiting.`,
+      ? `🚀 Released ${c.ver} alpha — promote to beta?`
+      : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}.`,
+    'ship-successful-kept': (c) => `🚀 Released ${c.ver} alpha — continue on \`${c.branch}\`?`,
+    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released ${c.ver} alpha` : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}`} — Close out the concept – final report is waiting.`,
     'ship-successful-deploy': () => '🚨 Merged, but not live — deploy the migration now?',
-    'released-beta': (c) => `🎊 Promoted v${c.version} BETA — to stable?`,
-    'released-stable': (c) => `🎊 Released v${c.version} LIVE — stable.`,
+    'released-beta': (c) => `🎊 Promoted ${c.ver} BETA — to stable?`,
+    'released-stable': (c) => `🎊 Released ${c.ver} LIVE — stable.`,
     'ready-files': () => '📂 Done on disk — anything else?',
     test: () => '🧪 Test first, then ship?',
     'test-minimal': () => '▶️ Running — have fun',
@@ -1542,8 +1594,18 @@ function decisionContext(input, key, delivery, state, lang) {
   const validation = ownedValidation(input);
   const unmetCount = validation.filter(v => v.status && v.status !== 'met').length;
   const strictlyUnmet = validation.filter(v => v.status === 'unmet').length;
+  // #695: one named component replaces the version in the heading and adds
+  // its tag and channel after the base; several are counted here and listed
+  // one per line on the pipeline line.
+  const components = shipComponents(delivery);
+  const one = components.length === 1 ? components[0] : null;
+  const ver = one ? componentHead(one)
+    : components.length > 1 ? components.length + (lang === 'en' ? ' components' : ' Komponenten')
+      : displayVersion(version);
   return {
     version: String(version || '').replace(/^v/, ''),
+    ver,
+    shipTail: one ? [one.tag, one.channel].filter(Boolean).map(s => ' · ' + s).join('') : '',
     // AUD-C015: a ship without a remote has no channel tags to move —
     // promote.js needs origin — so no ring heading and no Promote buttons.
     ring: !!delivery.promote && state.mode !== 'git-no-remote',
@@ -2707,7 +2769,17 @@ server.registerTool(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
           pr: z.object({ number: z.number(), title: z.string() }).nullable().optional().describe("PR for this work, or null for a direct commit (PR node renders '⊘ no PR')."),
-          ship: z.object({ version: z.string(), base: z.string().optional() }).nullable().optional().describe("Ship stage: version merged to `base` (e.g. main). null = not shipped yet."),
+          ship: z.object({
+            version: z.string(),
+            base: z.string().optional(),
+            components: z.array(z.object({
+              name: z.string().describe("Display name, e.g. 'Desktop app'."),
+              version: z.string().describe("The component's own version, e.g. '0.10.0'."),
+              tag: z.string().optional().describe("The component's release tag, e.g. 'desktop-v0.10.0'."),
+              channel: z.string().optional().describe("Release channel, e.g. 'alpha'."),
+              root: z.boolean().optional().describe("true = this entry is the repo's root/web app. When no entry is root, the card omits the root version and Build-ID."),
+            })).optional().describe("Multi-app repos (#695): the components this ship released. One entry renders inline in the heading and pipeline line ('Desktop app 0.10.0 → main · desktop-v0.10.0 · alpha'); several render one line each. Omit for a single-app repo. ship_preflight's `components` hint lists sub-app manifests whose version the diff changed."),
+          }).nullable().optional().describe("Ship stage: version merged to `base` (e.g. main). null = not shipped yet. A bare semver renders with a 'v' prefix; any other string is shown as given."),
           promote: z.object({
             channels: z.object({ alpha: z.string().nullable().optional(), beta: z.string().nullable().optional(), stable: z.string().nullable().optional() }).describe("Version each channel serves right now — pass the latest beta and stable too, not only the reached ones; null = channel has no tag yet (renders as —). Channels on the same version merge on the ladder."),
             current: z.enum(["alpha", "beta", "stable"]).optional().describe("Channel this turn landed on — highlighted 🟢 in the ladder."),
