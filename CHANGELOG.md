@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.259.0] — 2026-10-12
+
+Ship cards in multi-app repos garbled a sub-app release ("vDesktop 0.10.0" with the web app's Build-ID) (#695), a `tag: "null"` pushed a literal `alpha/null` tag (#694), and the plugin's own temp markers piled up by the thousand per week (#699). Concept pages showed raw locale keys exactly when a submit failed, and the test suite went red only when run from inside a live Claude session.
+
+### Added
+- **Components on ship cards (#695).** `render_completion_card` accepts `delivery.ship.components: [{ name, version, tag?, channel?, root? }]`. One component shows in the heading ("🚀 Shipped Desktop app 0.10.0 → main · desktop-v0.10.0 · alpha"), several get one "📦 …" line each under the pipeline line. The "v" prefix is added only to a bare semver. With components, the root version is never shown separately and the root Build-ID only when one entry has `root: true`. `ship_preflight` returns a conservative `components` hint: a sub-folder `package.json` / `Cargo.toml` / `pyproject.toml` whose version this diff changed. The do-ship skill documents passing it through.
+- **`ss.tmp.sweep` (#699).** Once every 6 h at session start, `dotclaude-*` temp files untouched for 48 h are deleted, as are old cacherebuild scratch dirs. Durable state (team-changelog "last shown", locale) and live-process bookkeeping (MCP pid/heartbeat/status files, locks, in-use markers) are never touched.
+
+### Fixed
+- **`ship_release` tag opt-out (#694).** `"null"`, `"undefined"`, `""` and whitespace mean the same as `tag: null`: no tag, `tagSkipped` + `tagWarning`. A literal `alpha/null` is never pushed again.
+- **Concept engine locale keys.**
+  - `panel.submit_queued_offline`, `panel.submit_not_durable` and `panel.attachments_not_synced` now have de/en rows, so a failing submit shows text instead of the key.
+  - The German comment placeholder used ASCII quotes that cut its `placeholder="…"` attribute short; both locales now use typographic quotes.
+  - The concept gate rejects a raw locale key passed to `showSubmitWarning`.
+- **Test isolation.** A new vitest setup file points TEMP/TMP/TMPDIR at a fresh per-file directory (spawned hooks inherit it) and drops the session-id env vars. Card, agent-nudge and card-relay suites no longer read state from parallel files or from the live session running `npm test`. The dispatch test no longer leaves a `dotclaude-budget-tier-vitest-dispatch-*` file per run.
+
+### Docs
+- `docs/concepts/20261009-1654-governor-pc-traegheit.html`: the governor responsiveness analysis page.
+
+### Tests
+- Full suite inside a live session: 8729 passed, 3 skipped (299 files); before the isolation fix 19–22 failed there. Branch suites 235/235 at `ship_build`, eslint clean. Codex review found one issue (single-quoted TOML strings in the components hint), which is fixed.
+
 ## [0.258.3] — 2026-10-09
 
 After an /auto-concept implement ship that merged, the card still offered "weiter in <branch>" and the session title fell back to "🧭 Concept – ", although the only thing left was the concept page's close-out (#693). Root cause: the card key `ship-successful-kept` was picked from `state.kept` alone, and the title treated any live `concept-active.json` as "page waits".
