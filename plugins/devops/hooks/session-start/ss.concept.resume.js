@@ -476,7 +476,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
     lines.push(
       `IMMEDIATELY ALSO process the pending submission BEFORE waiting on any of the above: ` +
       `curl -s http://localhost:${state.port}/decisions, parse, then run auto-concept SKILL.md Step 5 ` +
-      `(rewrite HTML at ${state.html_path}, POST /reload, conditional /reset with the captured _version). ` +
+      `(bake the submitted round + write the next round fragment + concept-build.js build for ${state.html_path} — step2-build.md, never a hand edit of the page — then POST /reload, conditional /reset with the captured _version). ` +
       `The user already submitted and is waiting — do not delay this on a schedule.`
     );
     // A checkpoint means a PREVIOUS run already started processing this very
@@ -490,7 +490,7 @@ function buildResumeInstructions(state, pendingState, statePath = STATE_PATH, st
     lines.push(
       `The /pending probe was inconclusive (timeout, non-200, or malformed JSON). ` +
       `Do NOT assume idle. Fetch /decisions once now: curl -s http://localhost:${state.port}/decisions. ` +
-      `If submitted=true, run Step 5 immediately (rewrite ${state.html_path}, /reload, conditional /reset). ` +
+      `If submitted=true, run Step 5 immediately (bake + fragment + build for ${state.html_path}, /reload, conditional /reset). ` +
       `If submitted=false, the waker from (c) catches any later submission.`
     );
   } else {

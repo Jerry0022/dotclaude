@@ -163,8 +163,9 @@ What differs:
   than only in a checkpoint means a resumed session that never watched the check
   run can still advance correctly.
 - **Read the file back after writing it** and confirm both attributes are
-  present on the new section before posting `/reload`. The append is a
-  hand-written HTML rewrite; a marker that silently failed to land re-arms a
+  present on the new section before posting `/reload` — the round fragment
+  `rounds/NN.html`, never the built page (`step2-build.md`). The fragment is
+  hand-written; a marker that silently failed to land re-arms a
   check the user has already answered, and nothing else in the pipeline would
   notice.
 - The section opens with the `.reality-banner` explainer (`templates-rounds.md`
@@ -254,7 +255,7 @@ identical from the outside:
 | progress shows | What actually happened | Do this |
 |---|---|---|
 | nothing | the check never ran | run Step 0 normally |
-| `reality-check-forced` | the round was decided; the HTML write may or may not have landed | read the page — marker present ⇒ done, absent ⇒ re-append from the recorded verdict. **Never re-decide** |
+| `reality-check-forced` | the round was decided; the HTML write may or may not have landed | read the round fragment (`rounds/NN.html`, never the built page) — marker present ⇒ done, absent ⇒ re-append from the recorded verdict. **Never re-decide** |
 | `reality-check-clear` \| `-skipped` | the check passed; implement may be half-written | verify the artifacts (`git rev-parse`, `gh pr view`, read the files) and continue implementing from what you observe |
 
 This also amends the equal-`_version` rule in SKILL.md § 5d. "Equal version on a

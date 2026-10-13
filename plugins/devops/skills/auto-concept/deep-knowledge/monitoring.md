@@ -409,7 +409,8 @@ active old iteration, allowing duplicate submissions before the reload
 lands.
 
 1. **Rewrite the HTML file** with the new iteration appended (Step 5c
-   in `SKILL.md`).
+   in `SKILL.md`) — on a built page: the new round fragment plus
+   `concept-build.js build` (`step2-build.md`).
 
 2. **Trigger reload** — bump the reload counter:
    ```bash

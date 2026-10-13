@@ -61,6 +61,16 @@ worktrees, worktrees outside `.claude/worktrees/`, the current worktree, the
 default branch, remote branches. Those stay for the cleanup page ("branch
 cleanup" / "branches aufräumen" — the auto-cleanup skill).
 
+### `concept` — the auto-concept round loop
+
+| Key | Default | Meaning |
+|---|---|---|
+| `roundAgent` | `true` | From round 2 on, a sub-agent writes the round fragment (auto-concept SKILL.md § Round author). The session keeps only its short report, so its context does not grow with every round. `false` → every round is written in the session itself. |
+
+"Konzept-Runden ohne Sub-Agent" → `concept.roundAgent false`. The page's look
+(tokens, fonts, CSP) is no setting: it lives in a `head.html` (per concept, or
+per project at `.claude/skills/auto-concept/head.html`).
+
 ### `deployParity` — the deploy-parity build before a ship merges
 
 | Key | Default | Meaning |

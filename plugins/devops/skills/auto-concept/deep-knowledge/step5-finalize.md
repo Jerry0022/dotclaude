@@ -2,6 +2,13 @@
 
 Finalize parts A · Issues, B · Implement, C · Ship and D · Close out, legacy actions and the critical invariant — execution detail of `SKILL.md` Step 5b, moved here verbatim. Each `##` section below is named by exactly one mandatory pointer in `SKILL.md`, at the place the text used to stand; read it completely before executing that step — it is as binding as the step itself.
 
+**The report is a fragment.** The final report lives in its round fragment
+`docs/concepts/{name}/rounds/NN.html` (`step2-build.md`). Every "rewrite /
+update the final-report HTML" below edits that fragment with a targeted
+`Edit`, followed by `concept-build.js build` and then `POST /reload`. The built
+page is never read or edited. `{{…}}` tokens written into the fragment are
+substituted by the build, but writing the locale VALUE stays correct too.
+
 ## A · Issues
 
 1. Read the `items` array from `issues` — each entry carries
@@ -107,15 +114,16 @@ because the session feels like it is ending.
 
 ## C · Disposition staging per mode
 
-   - `keep`, no `moveTo` → nothing (plus the attachments copy + `git add`
-     from `step6-closeout.md` → Also dispose of the durable store).
-   - `keep` + `moveTo` → `cp` the HTML and the decisions JSON into
-     `<moveTo>/`, `git add` the copies, `git rm --cached` the originals
-     (if tracked).
+   - `keep`, no `moveTo` → `git add` the source folder `{date}-{slug}/`
+     (plus the attachments copy + `git add` from `step6-closeout.md` → Also
+     dispose of the durable store).
+   - `keep` + `moveTo` → `cp` the HTML and the decisions JSON (and
+     `cp -r` the source folder `{date}-{slug}/`) into `<moveTo>/`, `git add`
+     the copies, `git rm -r --cached` the originals (if tracked).
    - `gitignore` → the `.gitignore` line and the `git rm --cached` from the
      table in Step 6a (`step6-closeout.md` § Disposition, cleanup procedure and disposition tables).
-   - `discard` → `git rm --cached` the HTML and the decisions JSON if
-     tracked.
+   - `discard` → `git rm --cached` the HTML and the decisions JSON, and
+     `git rm -r --cached` the source folder `{date}-{slug}/`, if tracked.
    Nothing to commit → no commit. Step 6a then skips the git half of its
    table for this close-out and only moves or deletes the files on disk
    (for `keep` + `moveTo`: delete the originals, the copies are already in

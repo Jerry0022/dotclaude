@@ -16,7 +16,7 @@ the sections below.
    `docs/concepts/<date>-<slug>.html`, built from the engine, and the
    Post-Generation Validation gate passed (`post.concept.gate` runs on it as
    on every page). Never skip them because the live channel is missing.
-2. **Commit and push** the page on the working branch
+2. **Commit and push** the page and its source folder on the working branch
    (`docs(concept): <slug>`), so another session can open it.
 3. **Hand off in one line**, naming the reason, the file, the branch and the
    way back to the live loop:

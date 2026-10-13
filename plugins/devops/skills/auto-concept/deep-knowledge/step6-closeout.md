@@ -62,16 +62,22 @@ renders the card only after all of them are gone.
 **Apply disposition on the concept files.** Files are named
 `docs/concepts/{date}-{slug}.html` and `docs/concepts/{date}-{slug}-decisions.json`
 — always include the `{date}-` prefix in patterns; bare `{slug}` does
-NOT match. After a ship (part C step 0 already staged and committed the git
+NOT match. The **source folder** `docs/concepts/{date}-{slug}/` (round
+fragments, `page.json`, `head.html`, briefs — `step2-build.md`) shares the
+page's fate in every row below. `discard` → `rm -rf -- "docs/concepts/{date}-{slug}/"`.
+`keep` keeps it and stages it with the page (moved alongside it under `moveTo`).
+`gitignore` → also append `docs/concepts/{date}-{slug}/` (or `<moveTo>/{date}-{slug}/`)
+and `git rm -r --cached` it. Check the path before `rm -rf`: it must be
+exactly `docs/concepts/{date}-{slug}/` with both segments non-empty. After a ship (part C step 0 already staged and committed the git
 half), only the on-disk moves and deletes below remain.
 
 | `mode` | `moveTo` | Action |
 |---|---|---|
-| `discard` | (any) | `rm -f -- "<html>" "<decisions.json>"` — `moveTo` is ignored. |
-| `keep` | null | No file change. Files remain at their original git-tracked path. |
-| `keep` | set | `mkdir -p -- "<moveTo>"` then `git mv -- "<html>" "<moveTo>/"` (if tracked, else `mv -- "<html>" "<moveTo>/"`); same for the decisions JSON. Files remain git-tracked at the new path. |
-| `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` to untrack them if they were already added. |
-| `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON. Append `<moveTo>/{date}-{slug}.*` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` on the original tracked entries. |
+| `discard` | (any) | `rm -f -- "<html>" "<decisions.json>"` and `rm -rf -- "<source-folder>/"` — `moveTo` is ignored. |
+| `keep` | null | No file change; `git add -- "<source-folder>/"`. Files remain at their original git-tracked path. |
+| `keep` | set | `mkdir -p -- "<moveTo>"` then `git mv -- "<html>" "<moveTo>/"` (if tracked, else `mv -- "<html>" "<moveTo>/"`); same for the decisions JSON and the source folder. Files remain git-tracked at the new path. |
+| `gitignore` | null | Files stay at original path. Append `docs/concepts/{date}-{slug}.*` and `docs/concepts/{date}-{slug}/` to `.gitignore` if not already covered. Run `git rm --cached -- "<html>" "<decisions.json>"` and `git rm -r --cached -- "<source-folder>/"` to untrack them if they were already added. |
+| `gitignore` | set | `mkdir -p -- "<moveTo>"` then `mv -- "<html>" "<moveTo>/"`; same for the decisions JSON and the source folder. Append `<moveTo>/{date}-{slug}.*` and `<moveTo>/{date}-{slug}/` to `.gitignore` if not already covered. Run `git rm --cached -- "<original-html>" "<original-decisions.json>"` and `git rm -r --cached -- "<original-source-folder>/"` on the original tracked entries. |
 
 **Also dispose of the durable store.** The bridge keeps every submission,
 progress checkpoint and pasted image under
@@ -135,7 +141,8 @@ done
   shorter pattern silently fails to match the timestamp-prefixed
   files this skill produces.
 - Never delete a file that does NOT match the
-  `docs/concepts/{date}-{slug}.*` pattern for THIS session's slug.
+  `docs/concepts/{date}-{slug}.*` pattern or the `docs/concepts/{date}-{slug}/`
+  source folder for THIS session's slug.
   Other concept HTML files in `docs/concepts/` belong to other
   sessions and MUST be preserved.
 - The same applies to the store: `rm -rf` exactly

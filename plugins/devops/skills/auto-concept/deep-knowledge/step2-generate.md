@@ -11,7 +11,9 @@ CSS is namespaced; gate P32, #400).
 
 The page's **engine** — the Kompass panel skeleton, § Layout CSS, § Section
 Navigation JS, § Claude Connection Heartbeat, § Two-Button Submit, § State
-Persistence, § Attachments, the viewport switcher — is copied **verbatim from
+Persistence, § Attachments, the viewport switcher — is copied by
+`scripts/concept-build.js` on every build (`step2-build.md`), never by
+Claude. It is copied **verbatim from
 the template parts of the plugin running this session** (`deep-knowledge/templates.md`
 lists all `templates-*.md` parts in reading order; the engine spans all of
 them), every time a page is generated. Older concept pages in `docs/concepts/` (this

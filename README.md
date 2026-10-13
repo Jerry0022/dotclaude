@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.262.0**
+**Version: 0.263.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -298,7 +298,7 @@ from the restored marketplaces.
 
 - **<!--devops:count:hooks-->80<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
-- **<!--devops:count:agents-->11<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout
+- **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout, Concept-Author
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
 - **Ship Enforcement** — intent detection, PR command blocking, automatic /do-ship skill routing
 - **3-Layer Extension Model** — customize any skill or agent per-project without forking
@@ -619,6 +619,7 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 | **research** | Deep-dive investigations |
 | **scout** | Read-only locator (haiku · medium): "where/how is X?" sweeps, answer + `path:line` evidence |
 | **rethinker** | Code-blind fresh-approach ideation through one lens |
+| **concept-author** | Writes one follow-up concept round from a brief and builds the page (opus · high), so long concepts keep the session context small |
 
 ## Completion Cards
 
@@ -693,7 +694,7 @@ devops/
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
 ├── hooks/                         ← <!--devops:count:hooks-->80<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
-├── agents/                        ← <!--devops:count:agents-->11<!--/devops:count:agents--> agent definitions
+├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs
 ├── templates/                     ← Output format templates
 └── scripts/                       ← Utility scripts (build-id, usage)

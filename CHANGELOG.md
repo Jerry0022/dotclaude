@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.263.0] — 2026-10-14
+
+A long `/auto-concept` run got expensive per round: real pages are 600–690 KB, and every round the model copied or re-read the engine, grep-validated the whole page and carried all earlier rounds in context. A concept is now a source folder that a script assembles into the same page — the model writes only the new round, the engine never passes through its context, and nothing changes for the browser.
+
+### Added
+- **Concept build pipeline** (`scripts/concept-build.js`: `init` / `build` / `check` / `bake` / `import`). A concept lives in `docs/concepts/{name}/` (`page.json`, optional `head.html`, `rounds/NN.html` fragments, `briefs/`) and is assembled into the unchanged `docs/concepts/{name}.html` that the bridge, watchers and hooks already use. The engine is copied by the script on every build (no engine drift), frozen rounds are frozen mechanically, `bake` writes a submitted `/decisions` payload into the round fragment (`--unanswered` for rounds never submitted), a deterministic gate runs before an atomic write, a page hand-edited since its last build is refused (`--force` overrides), and `import` converts legacy single-file pages. Consumers customise through a `head.html` cascade: per concept, per project (`.claude/skills/auto-concept/head.html`) or global. Authoritative doc: `skills/auto-concept/deep-knowledge/step2-build.md`.
+- **`concept-author` agent** (opus · high) writes rounds 2+ from a round brief and builds the page until the gate passes, so the session context stays small over many rounds. Config key `concept.roundAgent` (default `true`); roster, agent card and README updated (12 agents).
+
+### Changed
+- auto-concept docs (SKILL.md Step 2 / 5c / 6a, step5-update-page, step5-finalize, step6-closeout, iteration-rules, reality-check, monitoring, templates, validation-gate, step2/step3) describe fragment edits + build instead of rewriting the page. The mandatory "Re-Read on every round" pointers stay — deliberately.
+- `post.concept.gate` skips round fragments and `head.html`, and blocks hand edits of a built page (one with `page.json` next to it); `ss.concept.resume` says bake + fragment + build instead of "rewrite HTML".
+
+### Rejected
+- Fetching round fragments at runtime in the browser: it would change the engine; the assembled page keeps engine behaviour identical. Dropping the re-read rule: the user confirmed it matters.
+
+### Tests
+- `concept-build.test.js` (new, 23). Full suite 8807 passed before the red-team fixes; targeted re-runs 1312 (auto-concept, skill-contracts, agent-definitions, gen-readme, gate hook) and 302 (concept-build, session-start, concept-gate) green; 388/388 at `ship_build`. Under machine load two unrelated tests timed out (`bridge-durability`, `scheduled-task-idle`) and passed in isolation (57/57). Browser checks via the real concept server: a mixed design + decision concept and an imported real 7-round page, no console errors; 8 of 9 real pages imported. Red team: two rounds, all 18 + 10 notes fixed. eslint clean. Codex review skipped (usage limit until 2026-11-11).
+
 ## [0.262.0] — 2026-10-13
 
 On Opus 5.5, Sonnet 5.5, Fable 5 and Mythos 5 the answer written before the completion card — and every "show the user … verbatim" relay — reached the user only as a rephrased progress summary. Claude Code has an opt-out for that display; the plugin now sets it.
