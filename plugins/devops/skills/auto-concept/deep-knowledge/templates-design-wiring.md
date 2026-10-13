@@ -53,6 +53,8 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     document.querySelectorAll('[data-anno-pin], [data-anno-summary]').forEach(el => {
       el.setAttribute('aria-expanded', 'false');
     });
+    // A collapsed bubble is narrower than the open one it was placed as.
+    layoutAnnos(annotationsInScreen(activeScreen()));
   }
 
   // Recomputed on every input, not just at generation time — an answer
@@ -93,43 +95,161 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     anno.style.setProperty('--anno-y', Math.max(0, Math.min(100, y)).toFixed(2) + '%');
   }
 
-  // Keep an open bubble inside the viewport: flip to the opposite side first
-  // (that is what the authored side is for), then shift by whatever is still
-  // sticking out. A bubble the user cannot read is worse than one that opens
-  // on the "wrong" side.
-  function placeBubble(anno) {
+  // Reported from a real page: pins sat half off the right edge, a collapsed
+  // bubble's summary ran out of the window, and an expanded bubble opened
+  // under the ☰ FAB with its question clipped by the scrolling canvas. The
+  // window alone is the wrong box — the canvas clips earlier, and the fixed
+  // chrome paints over the layer (z-index 40) — so every placement below
+  // measures against BOTH.
+  const ANNO_PAD = 8;
+  const ANNO_CHROME = [
+    '.panel-fab', '.feedback-fab', '.anno-toggle-fab', '.screen-indicator',
+    '.design-switcher', '.viewport-toggle', '.frozen-bar', '.feedback-dock',
+    '.concept-decision-panel', '[data-anno-avoid]'
+  ].join(', ');
+
+  // The viewport narrowed by every ancestor that clips its overflow.
+  function visibleBounds(el) {
+    let b = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (!/(auto|scroll|hidden|clip)/.test(cs.overflowX + ' ' + cs.overflowY)) continue;
+      const r = p.getBoundingClientRect();
+      b = {
+        left: Math.max(b.left, r.left), top: Math.max(b.top, r.top),
+        right: Math.min(b.right, r.right), bottom: Math.min(b.bottom, r.bottom)
+      };
+    }
+    return {
+      left: b.left + ANNO_PAD, top: b.top + ANNO_PAD,
+      right: b.right - ANNO_PAD, bottom: b.bottom - ANNO_PAD
+    };
+  }
+
+  // Fixed chrome that is actually painted right now. Hidden controls
+  // (display:none, faded-out FAB while the panel is open, the closed panel
+  // parked off-screen) yield no rect or an invisible one and are skipped.
+  function chromeRects() {
+    const out = [];
+    document.querySelectorAll(ANNO_CHROME).forEach(el => {
+      if (el.closest('[data-anno-layer]')) return;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity < 0.05) return;
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height) out.push(r);
+    });
+    return out;
+  }
+
+  function overlapArea(a, b) {
+    const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    return w > 0 && h > 0 ? w * h : 0;
+  }
+  // Hidden area of a rect: the part outside the visible box plus the part
+  // under chrome. 0 means fully readable.
+  function hiddenArea(r, bounds, chrome) {
+    const total = r.width * r.height;
+    let hidden = total - overlapArea(r, bounds);
+    chrome.forEach(c => { hidden += overlapArea(r, c); });
+    return hidden;
+  }
+  function shifted(r, dx, dy) {
+    return { left: r.left + dx, right: r.right + dx, top: r.top + dy, bottom: r.bottom + dy,
+             width: r.width, height: r.height };
+  }
+
+  // Smallest (dx, dy) that puts `r` inside `bounds` and clear of every chrome
+  // rect. First clamp into bounds; then, per chrome rect still covered, try
+  // stepping out on each of its four sides and keep the cheapest move that
+  // stays in bounds. Falls back to the clamp alone when nothing clears.
+  function nudge(r, bounds, chrome) {
+    let dx = 0, dy = 0;
+    if (r.right > bounds.right) dx = bounds.right - r.right;
+    if (r.left + dx < bounds.left) dx = bounds.left - r.left;
+    if (r.bottom > bounds.bottom) dy = bounds.bottom - r.bottom;
+    if (r.top + dy < bounds.top) dy = bounds.top - r.top;
+    for (let pass = 0; pass < 3; pass++) {
+      const cur = shifted(r, dx, dy);
+      const hit = chrome.find(c => overlapArea(cur, c) > 0);
+      if (!hit) break;
+      const moves = [
+        [hit.left - ANNO_PAD - cur.right, 0], [hit.right + ANNO_PAD - cur.left, 0],
+        [0, hit.top - ANNO_PAD - cur.bottom], [0, hit.bottom + ANNO_PAD - cur.top]
+      ].filter(([mx, my]) => {
+        const n = shifted(cur, mx, my);
+        return n.left >= bounds.left - 0.5 && n.right <= bounds.right + 0.5 &&
+               n.top >= bounds.top - 0.5 && n.bottom <= bounds.bottom + 0.5;
+      }).sort((a, b) => (Math.abs(a[0]) + Math.abs(a[1])) - (Math.abs(b[0]) + Math.abs(b[1])));
+      if (!moves.length) break;
+      dx += moves[0][0]; dy += moves[0][1];
+    }
+    return [Math.round(dx), Math.round(dy)];
+  }
+
+  // The pin moves the whole .anno (pin + leader + bubble) via margins — the
+  // authored/anchored --anno-x/--anno-y stay untouched, so the next pass
+  // starts again from the true spot instead of compounding nudges.
+  function placePin(anno, bounds, chrome) {
+    const pin = anno.querySelector('[data-anno-pin]');
+    anno.style.marginLeft = '';
+    anno.style.marginTop = '';
+    if (!pin) return;
+    const r = pin.getBoundingClientRect();
+    if (!r.width) return;
+    const [dx, dy] = nudge(r, bounds, chrome);
+    if (dx) anno.style.marginLeft = dx + 'px';
+    if (dy) anno.style.marginTop = dy + 'px';
+  }
+
+  // Collapsed AND open bubbles: try the authored side, its opposite, then
+  // bottom/top; keep the side with the least hidden area (ties keep the
+  // earlier, i.e. authored, side), then shift what still sticks out. A
+  // bubble the user cannot read is worse than one on the "wrong" side.
+  const OPPOSITE = { right: 'left', left: 'right', top: 'bottom', bottom: 'top' };
+  function placeBubble(anno, bounds, chrome) {
     if (!anno) return;
     const bubble = anno.querySelector('[data-anno-bubble]');
-    if (!bubble || bubble.dataset.open !== 'true') return;
+    if (!bubble) return;
     if (!anno.dataset.annoSideAuthored) {
       anno.dataset.annoSideAuthored = anno.dataset.annoSide || 'right';
     }
-    anno.dataset.annoSide = anno.dataset.annoSideAuthored;
+    bounds = bounds || visibleBounds(anno);
+    chrome = chrome || chromeRects();
     bubble.style.marginLeft = '';
     bubble.style.marginTop = '';
-    const pad = 12;
-    let r = bubble.getBoundingClientRect();
-    if (anno.dataset.annoSide === 'right' && r.right > window.innerWidth - pad) {
-      anno.dataset.annoSide = 'left';
-      r = bubble.getBoundingClientRect();
-    } else if (anno.dataset.annoSide === 'left' && r.left < pad) {
-      anno.dataset.annoSide = 'right';
-      r = bubble.getBoundingClientRect();
+    const authored = anno.dataset.annoSideAuthored;
+    const sides = [...new Set([authored, OPPOSITE[authored] || 'left', 'bottom', 'top', 'right', 'left'])];
+    let best = null;
+    for (const side of sides) {
+      anno.dataset.annoSide = side;
+      const score = hiddenArea(bubble.getBoundingClientRect(), bounds, chrome);
+      if (!best || score < best.score - 0.5) best = { side, score };
+      if (score === 0) break;
     }
-    let dx = 0;
-    if (r.right > window.innerWidth - pad) dx = (window.innerWidth - pad) - r.right;
-    if (r.left + dx < pad) dx = pad - r.left;
-    if (dx) bubble.style.marginLeft = Math.round(dx) + 'px';
-    r = bubble.getBoundingClientRect();
-    let dy = 0;
-    if (r.bottom > window.innerHeight - pad) dy = (window.innerHeight - pad) - r.bottom;
-    if (r.top + dy < pad) dy = pad - r.top;
-    if (dy) bubble.style.marginTop = Math.round(dy) + 'px';
+    anno.dataset.annoSide = best.side;
+    const [dx, dy] = nudge(bubble.getBoundingClientRect(), bounds, chrome);
+    if (dx) bubble.style.marginLeft = dx + 'px';
+    if (dy) bubble.style.marginTop = dy + 'px';
+  }
+
+  function layoutAnno(anno, bounds, chrome) {
+    anchorToTarget(anno);
+    bounds = bounds || visibleBounds(anno);
+    chrome = chrome || chromeRects();
+    placePin(anno, bounds, chrome);
+    placeBubble(anno, bounds, chrome);
+  }
+  function layoutAnnos(list) {
+    if (document.body.classList.contains('anno-hidden') || !list.length) return;
+    const chrome = chromeRects();
+    const bounds = visibleBounds(list[0]);
+    list.forEach(anno => layoutAnno(anno, bounds, chrome));
   }
 
   function openBubbleAt(id) {
     const anno = document.querySelector(`[data-anno="${CSS.escape(id)}"]`);
-    if (anno) { anchorToTarget(anno); placeBubble(anno); }
+    if (anno) layoutAnno(anno);
   }
 
   function updateAnnoUI() {
@@ -146,6 +266,7 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     // page would otherwise paint every already-answered pin as unanswered.
     all.forEach(anno => recomputeAnswered(anno));
     all.forEach(anchorToTarget);
+    layoutAnnos(all);
     toggle.hidden = all.length === 0;
     const hidden = document.body.classList.contains('anno-hidden');
     const label = (hidden ? toggle.dataset.labelShow : toggle.dataset.labelHide) || '';
@@ -219,11 +340,25 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
   // design -> view transition (the reverse works only by accident, because
   // showDesign() routes through showScreen()).
   document.addEventListener('view:changed', updateAnnoUI);
-  // A resize moves every anchored pin and can push an open bubble off-screen.
-  window.addEventListener('resize', () => {
-    updateAnnoUI();
-    const open = document.querySelector('[data-anno-bubble][data-open="true"]');
-    if (open) placeBubble(open.closest('[data-anno]'));
+  // A resize moves every anchored pin and can push a bubble off-screen;
+  // scrolling the canvas moves pins against its clip edge; opening the
+  // panel or dock (body class change) puts new chrome over the layer. All
+  // three re-run the placement, coalesced to one pass per frame.
+  let annoFrame = 0;
+  function scheduleAnnoLayout() {
+    if (annoFrame) return;
+    annoFrame = requestAnimationFrame(() => {
+      annoFrame = 0;
+      layoutAnnos(annotationsInScreen(activeScreen()));
+    });
+  }
+  window.addEventListener('resize', () => { updateAnnoUI(); scheduleAnnoLayout(); });
+  document.addEventListener('scroll', scheduleAnnoLayout, true);
+  new MutationObserver(scheduleAnnoLayout)
+    .observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // The panel and dock slide in with a transition — measure again once it ends.
+  document.addEventListener('transitionend', e => {
+    if (e.target.matches && e.target.matches(ANNO_CHROME)) scheduleAnnoLayout();
   });
   updateAnnoUI();
 })();

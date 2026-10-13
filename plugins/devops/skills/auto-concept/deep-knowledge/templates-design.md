@@ -235,9 +235,20 @@ exception.
   off the artefact. `anchorToTarget()` measures live rects and is unaffected;
   this only matters for coordinates authored by hand. They survive any
   viewport size either way. `data-anno-side="right|left|top|bottom"`
-  picks which side the bubble opens on — Claude chooses this at generation
-  time from the element's position in the mock; there is no runtime
-  collision math.
+  picks the PREFERRED side for the bubble — Claude chooses it at generation
+  time from the element's position in the mock.
+- **Always fully visible — pins and bubbles, collapsed and expanded.** At
+  runtime `layoutAnno()` (§ Annotation Layer JS) keeps every pin and every
+  bubble of the active screen inside the visible box — the viewport narrowed
+  by each ancestor that clips overflow (the scrolling canvas) — and off the
+  fixed chrome (☰ / 💬 FABs, eye pill, screen indicator, design switcher,
+  viewport toggle, frozen bar, open dock, open ☰ panel). A pin is nudged
+  inward (it never sits half off the edge); a bubble tries the authored side,
+  then the opposite one, then bottom/top, keeps the one with the least
+  hidden area, and is then shifted into view. This runs for COLLAPSED bubbles
+  too — a one-line summary cut off at the window edge is the same defect as
+  an expanded one — and again on resize, canvas scroll, and whenever the
+  panel or dock opens or closes.
 - **The eye pill (`#anno-toggle`) toggles the whole layer**, globally, for
   every screen — not per screen. It is shaped like a pin (same ring and
   accent) with an eye glyph instead of a number — no count — and swaps to a
