@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.261.0**
+**Version: 0.262.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 

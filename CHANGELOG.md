@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.262.0] — 2026-10-13
+
+On Opus 5.5, Sonnet 5.5, Fable 5 and Mythos 5 the answer written before the completion card — and every "show the user … verbatim" relay — reached the user only as a rephrased progress summary. Claude Code has an opt-out for that display; the plugin now sets it.
+
+### Fixed
+- **Chat text stays verbatim on progress-update models.** New SessionStart hook `ss.thinking.display` sets `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0` in the user's `~/.claude/settings.json` `env`, only when the key is absent (an explicit value such as `"1"` is kept; a missing or unparseable settings file is left alone). Claude Code 2.1.295 then stops requesting `thinking.display: "updates"`, and text followed by another tool call stays a text block. Verified on Desktop transcripts: before, the same text was a `narration` thinking block; after, a text block — Claude Code applies the settings `env` live, so it already holds in the session that set it.
+- **Agent-card relay is back on for opted-out sessions.** `pre.agent.relay` and `pre.agent.announce` treat a session with the opt-out like a plain-text session again (the card goes into the next text and the relay checks it); without the opt-out they keep the 0.261.0 behaviour. Quiet output style and `completion-card-design.md` § 5.7 note the dependency.
+
+### Tests
+- `ss.thinking.display` (new, 5), `agent-card-relay` (opt-out unit + spawn test; hook spawns no longer inherit the session's opt-out), `pre.agent.announce`, `output-style-sync` manifest — full suite 8776 passed / 3 skipped; 83/83 at `ship_build`. eslint clean. Codex review skipped (usage limit until 2026-11-11).
+
 ## [0.261.0] — 2026-10-13
 
 Haiku 5.5 came out; the plugin barred Haiku everywhere. Measured against the scout's job, Haiku matches Sonnet on recall, so the scout moves to it — and nowhere else. Separately, a shown agent card kept the next tool call blocked on Opus 5.5 and other models that turn mid-turn text into progress updates.
