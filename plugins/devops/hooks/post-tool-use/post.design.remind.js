@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.design.remind
- * @version 0.5.0
+ * @version 0.6.0
  * @event PostToolUse
  * @plugin devops
  * @matcher Edit|Write
@@ -43,6 +43,7 @@ const RULES = [
   { id: 'R5', text: 'scrollbars styled once, globally, from tokens (scrollbar-color/-width, ::-webkit-scrollbar fallback, color-scheme per theme); no local divergence' },
   { id: 'R6', text: 'platform matrix: design, UX and function checked on Windows + Linux desktop, Android + iOS tablet, Android + iOS phone; no hover/right-click/shortcut-only action without a touch path, no 100vh, safe-area insets, fonts with generic fallback' },
   { id: 'R7', text: 'wording: decide consciously whether a text names a thing the same or differently — fixed UI strings keep one term per concept, chat and prose may vary freely, a different concept gets a different term' },
+  { id: 'R8', text: 'nothing clipped unless explicitly wanted: at every viewport and width, with long text, and in every state (hover scale, shadow, focus ring, open popover, animation peak) - give growing elements room, no overflow:hidden/fixed height around them, popovers in a portal with edge flip, truncation only with full text on hover/focus' },
 ];
 
 // A bare family id (`R2`, `R4`) disables both of its halves (`R2a`/`R2b`, `R4a`/`R4b`).

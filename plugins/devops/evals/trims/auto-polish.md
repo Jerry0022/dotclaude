@@ -38,7 +38,7 @@ variant B = the trimmed text.
 |---|---|---|
 | 1 | Invocation Context / Execution / Step 1 wording incl. `/auto-agents` (layer 5) never calls it, `--mode=background` under `--autonomous`, **ignore `ship`**, Inline shortcut, `--strict` narrows, never widens | pinned by `skills/auto-harden/skill-text.test.js` (contract prose) |
 | 2 | Step 2 scope question (header `Scope`) | AskUserQuestion header/options |
-| 3 | Fix-phase table and score tiers; findings-scan.md R0–R7 spec | policy content, not hand-holding |
+| 3 | Fix-phase table and score tiers; findings-scan.md R0–R8 spec | policy content, not hand-holding |
 | 4 | Completion-card variant table + VERBATIM LAST | stop-hook card contract |
 | 5 | Never commit automatically | safety |
 

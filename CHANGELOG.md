@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.260.0] — 2026-10-13
+
+UI work kept shipping elements that were cut off: a card whose hover scale was clipped by its list, a focus ring or shadow eaten by `overflow: hidden`, a menu cut at the right edge, a label that only fit at the developer's window width.
+
+### Added
+- **UI rule R8 · Nothing clipped** (`deep-knowledge/ui-defaults.md`). No element, text, shadow, focus ring or popover is cut off unless the clip is explicitly wanted (a commented clip, or truncation with the full text on hover/focus). Holds at every R6 viewport and the widths between, with long and localised strings and 200 % zoom, and in every transient state — hover, focus, open, loading — through every animation's peak frame. Static half flags `overflow: hidden` / `clip-path` around elements that scale, cast a shadow, show a ring or open a popover, hover/keyframe transforms without room, `nowrap`/ellipsis without the full text, fixed heights on text boxes and popovers without a portal or edge flip. The `post.design.remind` hook (0.6.0) names R8, and `/auto-polish` checks it in the static scan, the ship rules path and the runtime retest.
+
+### Tests
+- `post.design.remind.test.js` asserts R8 in the reminder. Hook/polish/harden suites 55/55 at `ship_build` (full suite locked by a parallel run at build time), eslint clean. Codex review skipped (usage limit until 2026-11-11).
+
+## [0.259.1] — 2026-10-13
+
+Design concept pages let annotation pins and their bubbles land outside the visible area: pins half off the edge, collapsed bubble summaries cut off at the window edge, open bubbles under the ☰ FAB or clipped by the scrolling canvas.
+
+### Fixed
+- **Annotation layer placement.** Pins and bubbles, collapsed and expanded, are now kept inside the visible box: the viewport narrowed by every clipping ancestor, and clear of the fixed chrome (FABs, eye pill, screen indicator, design switcher, viewport toggle, frozen bar, open dock and panel). A bubble tries its authored side, the opposite side, then bottom/top, and keeps the one with the least hidden area. Placement re-runs on resize, canvas scroll and whenever the panel or dock opens or closes.
+
+### Tests
+- `anno-visibility.test.js` locks the placement contract; the geometry was measured in a real browser (pins at the right edge with a FAB, bubble collapsed, open and scrolled). auto-concept suites 690/690 at `ship_build`, full suite 8750 passed / 3 skipped (302 files), eslint clean. Codex review skipped (usage limit until 2026-11-11).
+
 ## [0.259.0] — 2026-10-12
 
 Ship cards in multi-app repos garbled a sub-app release ("vDesktop 0.10.0" with the web app's Build-ID) (#695), a `tag: "null"` pushed a literal `alpha/null` tag (#694), and the plugin's own temp markers piled up by the thousand per week (#699). Concept pages showed raw locale keys exactly when a submit failed, and the test suite went red only when run from inside a live Claude session.

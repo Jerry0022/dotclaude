@@ -122,14 +122,14 @@ describe("post.design.remind (hook)", () => {
     })).toBe("");
   });
 
-  test("UI file produces the reminder with R0..R7", () => {
+  test("UI file produces the reminder with R0..R8", () => {
     const dir = project();
     const context = runHook(dir, {
       filePath: path.join(dir, "src", "App.tsx"),
       sessionId: nextSid(),
     });
     expect(context).toContain("[ui-defaults]");
-    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4a", "R4b", "R5", "R6", "R7"]) {
+    for (const id of ["R0", "R1", "R2a", "R2b", "R3", "R4a", "R4b", "R5", "R6", "R7", "R8"]) {
       expect(context).toContain(`${id} `);
     }
     expect(context).toContain("part of every rule");
@@ -138,6 +138,7 @@ describe("post.design.remind (hook)", () => {
     expect(context).toContain("R5 scrollbars");
     expect(context).toContain("R6 platform matrix");
     expect(context).toContain("R7 wording: decide consciously");
+    expect(context).toContain("R8 nothing clipped unless explicitly wanted");
   });
 
   test("a UI file inside <repo>/.claude/worktrees/<name>/ gets the reminder (AUD-012)", () => {
