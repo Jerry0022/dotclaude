@@ -183,11 +183,22 @@ function unrelayedLaunches(transcriptText) {
 const PROGRESS_UPDATE_MODELS = /claude-(?:opus-5-5|sonnet-5-5|fable-5|mythos-5)/;
 
 /**
+ * Is Claude Code's progress-update display switched off? Hooks inherit the
+ * session's env, settings.json `env` included (ss.thinking.display sets it);
+ * the falsy spellings match Claude Code's own parser.
+ */
+function updatesOptedOut(env = process.env) {
+  const v = String(env.CLAUDE_CODE_THINKING_DISPLAY_UPDATES ?? '').toLowerCase().trim();
+  return ['0', 'false', 'no', 'off'].includes(v);
+}
+
+/**
  * Does the session's model turn mid-turn text into progress summaries? Read
  * from the newest assistant entry of the current turn. When it does, a card
  * the model writes before its next tool call never reaches the user verbatim.
  */
-function progressUpdates(transcriptText) {
+function progressUpdates(transcriptText, env = process.env) {
+  if (updatesOptedOut(env)) return false;
   const turn = currentTurn(transcriptText);
   for (let i = turn.length - 1; i >= 0; i--) {
     const e = turn[i];
@@ -275,6 +286,7 @@ module.exports = {
   cardRows,
   cardShownIn,
   progressUpdates,
+  updatesOptedOut,
   currentTurn,
   unrelayedLaunches,
   messageIdOf,

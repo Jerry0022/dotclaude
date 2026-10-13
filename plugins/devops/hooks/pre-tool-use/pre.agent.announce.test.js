@@ -312,9 +312,10 @@ describe("announce text on progress-update models", () => {
   const mod = createRequire(import.meta.url)("./pre.agent.announce.js");
 
   test("a progress-update model is told to relay the card in the turn's final text", () => {
-    expect(mod.progressUpdatesModel("claude-opus-5-5")).toBe(true);
-    expect(mod.progressUpdatesModel("claude-opus-5")).toBe(false);
-    expect(mod.progressUpdatesModel(null)).toBe(false);
+    expect(mod.progressUpdatesModel("claude-opus-5-5", {})).toBe(true);
+    expect(mod.progressUpdatesModel("claude-opus-5-5", { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" })).toBe(false);
+    expect(mod.progressUpdatesModel("claude-opus-5", {})).toBe(false);
+    expect(mod.progressUpdatesModel(null, {})).toBe(false);
     const on = mod.announceText("---\nCARD\n---", true);
     expect(on).toMatch(/show the user this card verbatim in the FINAL text of the turn/);
     expect(on).not.toMatch(/held back once/);

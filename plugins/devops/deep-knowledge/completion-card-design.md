@@ -516,6 +516,16 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
    payload and call again. The same findings a second time render anyway, and
    the Stop gate still checks every card after the turn — the pre-check only
    saves the second render, it never replaces the gate.
+7. **The answer above the card must stay text.** Claude Code asks Opus 5.5,
+   Sonnet 5.5, Fable 5 and Mythos 5 for `thinking.display: "updates"`: text
+   followed by another tool call (the answer before the card widget, a
+   "show the user … verbatim" relay) comes back as a rephrased progress
+   summary, not a text block. `ss.thinking.display` sets
+   `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0` in the user's settings `env`
+   (only when absent; effective from the next session), which keeps it a
+   text block — verified in a Desktop session transcript. While that is
+   missing, `pre.agent.relay` stands down and `pre.agent.announce` asks
+   for the agent card in the turn's final text instead.
 
 ## 6. Signs and colours
 
