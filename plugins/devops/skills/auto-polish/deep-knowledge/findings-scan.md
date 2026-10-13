@@ -49,7 +49,7 @@ Spawn parallel `devops:scout` agents (single message, multiple Agent calls):
    no internal seams, hook-reuse opportunities (same effect logic in
    3+ components).
 
-8. **Standing UI rules (`$UI_RULES`)** — R0–R7, each with a static and a
+8. **Standing UI rules (`$UI_RULES`)** — R0–R8, each with a static and a
    runtime half. `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` (loaded in Step 0) is the
    single source for what each half checks — work from it, not from memory:
    R0 app style · R1 tooltips (app-styled, Info/Label delay tiers) · R2a
@@ -57,7 +57,9 @@ Spawn parallel `devops:scout` agents (single message, multiple Agent calls):
    R5 scrollbars · R6 platform matrix (Windows / Linux desktop, Android /
    iOS tablet, Android / iOS phone — design, UX and function on each) ·
    R7 wording (same or different on purpose — fixed strings keep one term
-   per concept, chat and prose may vary).
+   per concept, chat and prose may vary) · R8 nothing clipped (every
+   viewport and width, long text, hover/focus/open states and animation
+   peaks — unless a clip is explicitly wanted).
    **R0 is part of every rule**, project rules included.
    Detection uses the allowlist from `ui-defaults.md` merged with the
    override. A rule whose mechanism class has zero matches in the whole
