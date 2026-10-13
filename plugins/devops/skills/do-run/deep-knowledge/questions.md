@@ -130,7 +130,7 @@ F5  header: "Desktop"       multiSelect: false   [only behind the desktop gate b
 F6  header: "PC danach"     multiSelect: false   [only behind the resume gate below]
     1. "🟢 PC anlassen · ➕ Resume (Recommended)" — PC bleibt an; nach dem 5h-Reset werden hängende Worktrees mit »weiter« angestoßen.
     2. "🟢 PC anlassen · ➖ Resume"          — PC bleibt an; kein automatischer Anstoß.
-    3. "🔴 PC ausmachen"                     — PC fährt nach Abschluss herunter (wartet auf andere Sessions).
+    3. "🔴 PC ausmachen"                     — PC fährt nach Abschluss herunter; wartet auf andere laufende Sessions und fährt auch dann herunter, wenn das Nutzungslimit den Run abbricht.
 
 F7  header: "Burn-Resume"   multiSelect: false   [only with Budget verbrennen]
     question: "Stoppt das Limit den Burn und der Auto-Resume stößt nach dem Reset an: weiterbrennen? (Gilt nur mit »🟢 PC anlassen · ➕ Resume«.)"
@@ -162,7 +162,25 @@ one line only when it matters ("Desktop bleibt frei · PC bleibt an").
   prüfen", parallel lanes — ≥ 50 %), add half of it again as buffer, and
   ask when that reaches the window's remaining headroom from the newest
   `[budget]` line (or parallel sessions draw on it). Budget verbrennen
-  always passes the gate. Gated out → `🟢 PC anlassen · ➖ Resume`.
+  and the `sleep` preset always pass the gate — a user away overnight
+  makes a limit stop foreseeable. Gated out → `🟢 PC anlassen · ➖ Resume`.
+- **Bedtime (`sleep` preset, `prompt.flow.sleep`).** "ich gehe ins Bett",
+  "geh schlafen", "gute Nacht", "going to bed" → the user answers once and
+  leaves: F6 (and F5 when its gate passes) move INTO the base call, Q3 is
+  dropped (Flexibel), Q2 shows only its `Autonom · …` options — at most
+  four questions, one `AskUserQuestion`. Nothing left to do ("Rest machen
+  wir morgen") → ask F6 alone: `🔴` → `modes/autonomous.md` Step 8a + 8b
+  (wait for other sessions, then shut down); `➕ Resume` → arm the
+  `autonomous-resume-schedule.js` cron (`modes/autonomous.md` Step 4);
+  `➖ Resume` → nothing.
+  **Mid-run comment.** Said as an aside while work already runs (agents
+  spawned, a run or background task open) → no restart, no base call:
+  every running agent and task keeps going; ask F6 alone (plus the Q2
+  `Autonom · Ship …` pair when the ship decision is still open) and fold
+  the answer into the running work — from then on no more questions,
+  `🔴` arms the fail-safe timer + watchdog (`modes/autonomous.md` Steps
+  4d/5.0) and shuts down after the work through Step 8; `➕ Resume` arms
+  the resume cron.
 - **Phrase presets (Step 1).** "PC danach aus", "fahr den PC runter",
   "shutdown" → F6 = `🔴 PC ausmachen`; "resume nach dem Limit",
   "weitermachen nach dem Reset" → F6 = `🟢 PC anlassen · ➕ Resume`;

@@ -87,6 +87,7 @@ It never reorders the options that remain.
 | `audit`, or an audit trigger phrase | Q1 dropped → Audit. |
 | `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Autonom · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
+| `sleep`, or a bedtime phrase ("ich gehe ins Bett", "geh schlafen", "going to bed" — `prompt.flow.sleep` passes `sleep`) | Q2 only `Autonom · …`, Q3 dropped (Flexibel), F6 always asked and moved into the base call; nothing left to do → F6 alone. Details: `deep-knowledge/questions.md` (Bedtime). |
 | a shutdown, resume or desktop-takeover wish | F6 / F5 dropped → the named option; phrases: `deep-knowledge/questions.md` § Follow-up questions. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
 | strict already armed for this branch (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
