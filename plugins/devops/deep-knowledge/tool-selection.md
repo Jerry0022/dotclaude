@@ -60,7 +60,7 @@ more precise results.
 `skills/devops-livebrief/` exists → `Grep(pattern: "livebrief", path: "plugins/devops/skills/devops-livebrief")`.
 
 **When to skip:** If the project has no `.claude/project-map.md`, fall back to
-scoped searches using your best guess, or use the `devops:scout` agent (sonnet · low) for broad searches.
+scoped searches using your best guess, or use the `devops:scout` agent (haiku · medium) for broad searches.
 
 ## Knowledge Graph for Exploration
 

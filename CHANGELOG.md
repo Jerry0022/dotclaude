@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.261.0] — 2026-10-13
+
+Haiku 5.5 came out; the plugin barred Haiku everywhere. Measured against the scout's job, Haiku matches Sonnet on recall, so the scout moves to it — and nowhere else. Separately, a shown agent card kept the next tool call blocked on Opus 5.5 and other models that turn mid-turn text into progress updates.
+
+### Changed
+- **Scout runs on Haiku 5.5 at medium effort** (`agents/scout.md`). Measured 2026-10-13: 6 grep-verified locate questions × 3 configs (18 runs) — haiku · low matched sonnet · low (6/6 vs 5/6 complete), all 12 cited `path:line` verified, no invented paths; only ~9 % faster. Effort stays medium (Anthropic's default; low skips searches under long system prompts; high ≈ 1.8× output tokens with no recall data). Every config miscounted a headline once, so the scout's output rule now says the count must match the list. Method and numbers: `docs/haiku-5-5-scout.md`.
+- **"No haiku" replaced by a reasoned rule** (`deep-knowledge/agent-orchestration.md`, `agent-proactivity.md`). Haiku only where an agent file sets it (scout), never for agents that edit, plan, review, research or decide, never below medium; budget downgrades never raise a scout to sonnet. `agent-definitions.test.js` enforces it (`HAIKU_AGENTS`/`HAIKU_EFFORTS`).
+- Stale Haiku references: the `usage.md` battery hint names Sonnet; the strict-e2e default model is `claude-haiku-5-5`.
+
+### Fixed
+- **Agent-card relay no longer blocks after a shown card.** Claude Code 2.1.295 requests `thinking.display: "updates"` for Opus 5.5, Sonnet 5.5, Fable 5.x and Mythos 5.x: text written between tool calls comes back as a rephrased progress-update block, so a relayed card never exists as a text block. `pre.agent.relay` now stands aside on those models, `pre.agent.announce` tells them to relay the card in the turn's final text, and `stop.agent.relay` keeps its one turn-end nudge. Spawns whose every result is an error (hook refusal, unknown agent type) no longer count as launches, and a card relayed in another language counts by its agent rows.
+- **Always-on delegation policy stays under its preload cap.** The haiku rule pushed `agent-proactivity.md` to 7517 bytes (cap 7168), which would have skipped it at SessionStart; trimmed to 7161 bytes, the full rule lives in `agent-orchestration.md`.
+
+### Tests
+- `agent-card-relay`, `pre.agent.announce`, `agent-definitions`, `agent-model-gate`, `ss.knowledge.index` — 158/158 at `ship_build` after the merge of main; full suite before it 8761 passed / 3 skipped, the 4 red tests (preload cap) fixed. eslint clean. Codex review skipped (usage limit until 2026-11-11). A scheduled task re-measures the scout once the shipped plugin carries it.
+
 ## [0.260.0] — 2026-10-13
 
 UI work kept shipping elements that were cut off: a card whose hover scale was clipped by its list, a focus ring or shadow eaten by `overflow: hidden`, a menu cut at the right edge, a label that only fit at the developer's window width.

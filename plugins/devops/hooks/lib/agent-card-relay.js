@@ -21,6 +21,21 @@
  *
  *   One nudge per launch: the ids already nudged sit in a session file, so a
  *   model that still does not relay is never refused twice (no loops).
+ *
+ *   Three blind spots, found 2026-10-13 on Opus 5.5:
+ *   - Progress updates. Claude Code asks the 5.x models that support it for
+ *     `thinking.display: "updates"`; text the model writes BETWEEN tool calls
+ *     then comes back as a short, rephrased `thinking` summary — the card
+ *     never exists as a text block, whatever the model does. Holding back
+ *     the next tool call cannot fix that, it only costs a call per launch
+ *     (`progressUpdates`). The final text of a turn is still verbatim, so the
+ *     turn-end check (stop.agent.relay) keeps its one nudge.
+ *   - A blocked or failed spawn (a PreToolUse refusal, an unknown agent type)
+ *     still got its card from pre.agent.announce, so every retry left a new
+ *     unshown "launch" behind and the next call was refused again. A launch
+ *     whose every tool_result is an error never ran and is skipped.
+ *   - A card relayed in the user's language ("1 Agent gestartet" for "1 agent
+ *     started") missed the header match; its agent rows count as well.
  */
 
 'use strict';
@@ -53,6 +68,27 @@ function cardFromContext(text) {
 function cardHeader(card) {
   const m = String(card || '').match(/^###[^\n]*?\*\*([^*\n]+)\*\*/m);
   return m ? m[1].trim() : null;
+}
+
+/**
+ * The locale-free part of each agent row: `**qa** | Run tests` for
+ * `| 🧪 | **qa** | Run tests | sonnet | ●● medium |`. Name and task come from
+ * the spawn itself, so a translated card still carries them.
+ */
+function cardRows(card) {
+  const rows = [];
+  for (const line of String(card || '').split('\n')) {
+    const m = line.match(/\|\s*(\*\*[^*|]+\*\*)\s*\|\s*([^|]*?)\s*\|/);
+    if (m && m[2]) rows.push(`${m[1]} | ${m[2]}`);
+  }
+  return rows;
+}
+
+/** Does `shown` carry the card — its header phrase, or every agent row? */
+function cardShownIn(shown, header, rows) {
+  if (!shown) return false;
+  if (header && shown.includes(header)) return true;
+  return rows.length > 0 && rows.every(r => shown.includes(r));
 }
 
 /** Text an assistant entry shows the user: text blocks and show_widget code. */
@@ -94,7 +130,13 @@ function unrelayedLaunches(transcriptText) {
 
   const launches = new Map(); // msgId → { msgId, ids, lastIdx, lastId }
   const cardFor = new Map();  // toolUseID → card
+  const failed = new Set();   // tool_use ids whose result is an error
   turn.forEach((e, i) => {
+    if (e.type === 'user' && Array.isArray(e.message && e.message.content)) {
+      for (const b of e.message.content) {
+        if (b && b.type === 'tool_result' && b.is_error === true && b.tool_use_id) failed.add(b.tool_use_id);
+      }
+    }
     if (e.type === 'assistant' && Array.isArray(e.message && e.message.content)) {
       for (const b of e.message.content) {
         if (!b || b.type !== 'tool_use' || b.name !== 'Agent') continue;
@@ -116,18 +158,44 @@ function unrelayedLaunches(transcriptText) {
 
   const out = [];
   for (const l of launches.values()) {
+    // A spawn that was refused or failed never ran: its card announces nothing.
+    if (l.ids.every(id => failed.has(id))) continue;
     // The last card of a launch lists every agent of it.
     let card = null;
     for (const id of l.ids) if (cardFor.has(id)) card = cardFor.get(id);
     const header = cardHeader(card);
     if (!card || !header) continue;
+    const rows = cardRows(card);
     let shown = false;
     for (let j = l.lastIdx + 1; j < turn.length && !shown; j++) {
-      if (turn[j].type === 'assistant' && shownText(turn[j]).includes(header)) shown = true;
+      if (turn[j].type === 'assistant' && cardShownIn(shownText(turn[j]), header, rows)) shown = true;
     }
     if (!shown) out.push({ msgId: l.msgId, ids: l.ids, lastId: l.lastId, card, header });
   }
   return out;
+}
+
+/**
+ * Models that return text between tool calls as progress-update `thinking`
+ * blocks when Claude Code asks for `display: "updates"` (Claude API docs:
+ * Opus 5.5, Sonnet 5.5, Fable 5 / 5.1, Mythos 5 / 5.1).
+ */
+const PROGRESS_UPDATE_MODELS = /claude-(?:opus-5-5|sonnet-5-5|fable-5|mythos-5)/;
+
+/**
+ * Does the session's model turn mid-turn text into progress summaries? Read
+ * from the newest assistant entry of the current turn. When it does, a card
+ * the model writes before its next tool call never reaches the user verbatim.
+ */
+function progressUpdates(transcriptText) {
+  const turn = currentTurn(transcriptText);
+  for (let i = turn.length - 1; i >= 0; i--) {
+    const e = turn[i];
+    if (e.type === 'assistant' && e.message && typeof e.message.model === 'string') {
+      return PROGRESS_UPDATE_MODELS.test(e.message.model);
+    }
+  }
+  return false;
 }
 
 /** The message id of a tool_use in the current turn, or null. */
@@ -201,8 +269,12 @@ function nudgeText(launch, { atStop = false } = {}) {
 
 module.exports = {
   CARD_PREFIX,
+  PROGRESS_UPDATE_MODELS,
   cardFromContext,
   cardHeader,
+  cardRows,
+  cardShownIn,
+  progressUpdates,
   currentTurn,
   unrelayedLaunches,
   messageIdOf,

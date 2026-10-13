@@ -38,6 +38,13 @@ const toolUse = (msgId, id, name = "Bash") => ({ type: "assistant", message: { i
 const text = (msgId, t) => ({ type: "assistant", message: { id: msgId, role: "assistant", content: [{ type: "text", text: t }] } });
 const hookCtx = (toolUseID, c) => ({ type: "attachment", attachment: { type: "hook_additional_context", hookName: "PreToolUse:Agent", toolUseID, content: [announce(c)] } });
 const result = (id) => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] } });
+const errResult = (id, msg = "PreToolUse:Agent hook error: [agent-card-relay] …") =>
+  ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, is_error: true, content: msg }] } });
+/** An assistant entry on `model` — a progress-update thinking block, the shape Opus 5.5 returns mid-turn text in. */
+const update = (msgId, model, t = "Ich habe einen Agenten gestartet.") =>
+  ({ type: "assistant", message: { id: msgId, role: "assistant", model, content: [{ type: "thinking", thinking: t, signature: "s" }] } });
+const modelUse = (msgId, id, model, name = "Bash") =>
+  ({ type: "assistant", message: { id: msgId, role: "assistant", model, content: [{ type: "tool_use", id, name, input: {} }] } });
 const jsonl = (...entries) => entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
 
 describe("agent-card-relay lib", () => {
@@ -102,6 +109,47 @@ describe("agent-card-relay lib", () => {
     expect(relay.launchToNudge(t, sid, { skipMsgId: "m4" })).toBe(null);
   });
 
+  test("a refused or failed spawn is no launch — its retry leaves no phantom card behind", () => {
+    // Three refused attempts of the same spawn, then a call: nothing to relay.
+    const t = jsonl(prompt(),
+      agentUse("m1", "a1"), hookCtx("a1", card(1, "en")), errResult("a1"),
+      agentUse("m2", "a2"), hookCtx("a2", card(1, "en")), errResult("a2", "Agent type 'x' not found."),
+      toolUse("m3", "b1"));
+    expect(relay.unrelayedLaunches(t)).toEqual([]);
+  });
+
+  test("a parallel launch with one failed sibling still needs its card", () => {
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1)), agentUse("m1", "a2"), hookCtx("a2", card(2)),
+      errResult("a1"), result("a2"), toolUse("m2", "b1"));
+    expect(relay.unrelayedLaunches(t)).toHaveLength(1);
+  });
+
+  test("a card relayed in another language counts through its agent rows", () => {
+    const en = card(1, "en");
+    const de = en.replace("1 agent started", "1 Agent gestartet");
+    expect(relay.cardRows(en)).toEqual(["**qa** | Run tests"]);
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", en), result("a1"), text("m2", de), toolUse("m2", "b1"));
+    expect(relay.unrelayedLaunches(t)).toEqual([]);
+  });
+
+  test("a prose summary that drops the rows still counts as unshown", () => {
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1, "en")), result("a1"),
+      text("m2", "Ein QA-Agent läuft im Hintergrund."), toolUse("m2", "b1"));
+    expect(relay.unrelayedLaunches(t)).toHaveLength(1);
+  });
+
+  test("progressUpdates reads the session model of the current turn", () => {
+    const on = jsonl(prompt(), modelUse("m1", "b1", "claude-opus-5-5"));
+    expect(relay.progressUpdates(on)).toBe(true);
+    for (const m of ["claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5", "claude-mythos-5-1"]) {
+      expect(relay.progressUpdates(jsonl(prompt(), modelUse("m1", "b1", m)))).toBe(true);
+    }
+    for (const m of ["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8", "claude-haiku-5-5"]) {
+      expect(relay.progressUpdates(jsonl(prompt(), modelUse("m1", "b1", m)))).toBe(false);
+    }
+    expect(relay.progressUpdates(jsonl(prompt(), toolUse("m1", "b1")))).toBe(false);
+  });
+
   test("messageIdOf finds a tool_use's message in the turn", () => {
     const t = jsonl(prompt(), agentUse("m1", "a1"), toolUse("m2", "b1"));
     expect(relay.messageIdOf(t, "b1")).toBe("m2");
@@ -161,6 +209,16 @@ describe("pre.agent.relay hook", () => {
     expect(s.code).toBe(0);
   }, 20000);
 
+  test("stands aside on a progress-update model: mid-turn text never arrives verbatim there", async () => {
+    // Opus 5.5 returned the relayed card as a rephrased thinking summary (2026-10-13 transcript).
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1, "en")), result("a1"),
+      update("m2", "claude-opus-5-5"), modelUse("m2", "b1", "claude-opus-5-5"));
+    const { dir, file } = project(t);
+    const r = await runHook(PRE_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, tool_name: "Bash", tool_use_id: "b1", tool_input: {} });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
+  }, 20000);
+
   test("passes once the card was shown", async () => {
     const { dir, file } = project(jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1)), result("a1"), text("m2", card(1)), toolUse("m2", "b1")));
     const r = await runHook(PRE_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, tool_name: "Bash", tool_use_id: "b1" });
@@ -177,6 +235,14 @@ describe("stop.agent.relay hook", () => {
     expect(first.stderr).toContain("2 agents started");
     const again = await runHook(STOP_HOOK, { session_id: sid, cwd: dir, transcript_path: file, stop_hook_active: false });
     expect(again.code).toBe(0);
+  }, 20000);
+
+  test("still asks once at the turn end on a progress-update model — the final text stays verbatim", async () => {
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1, "en")), result("a1"), update("m2", "claude-opus-5-5"));
+    const { dir, file } = project(t);
+    const r = await runHook(STOP_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, stop_hook_active: false });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("1 agent started");
   }, 20000);
 
   test("never blocks on stop_hook_active or after the completion card", async () => {

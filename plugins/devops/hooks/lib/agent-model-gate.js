@@ -88,7 +88,7 @@ function wouldRefuse(input, frontmatterModel, transcriptText, toolUseId) {
 function refusalText(input) {
   const type = input.subagent_type || 'general-purpose';
   const locate = /^(Explore|general-purpose)$/.test(type)
-    ? ' Locating or a sweep → `devops:scout` (sonnet · low) instead of Explore.'
+    ? ' Locating or a sweep → `devops:scout` (haiku · medium) instead of Explore.'
     : '';
   return (
     `${MARKER} \`${type}\` has no model of its own and would silently inherit the session model. ` +
@@ -100,12 +100,12 @@ function refusalText(input) {
 
 /**
  * Explore that names its model passes the gate, yet `devops:scout` is the
- * cheaper locator (sonnet · low, ~1 min median vs ~5 for Explore in the
+ * cheaper locator (haiku · medium since 2026-10; sonnet · low measured ~1 min median vs ~5 for Explore in the
  * 2026-09 transcripts). A hint, never a block — Explore stays legitimate.
  */
 function locateHint(input) {
   if ((input && input.subagent_type) !== 'Explore') return null;
-  return '[agent-model] Explore spawned — for locating and sweeps `devops:scout` (sonnet · low) is the cheaper ' +
+  return '[agent-model] Explore spawned — for locating and sweeps `devops:scout` (haiku · medium) is the cheaper ' +
     'default (delegation policy). Keep Explore when you need its thoroughness levels.';
 }
 

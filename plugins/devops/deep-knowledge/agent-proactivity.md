@@ -29,8 +29,8 @@ the next text, also under Quiet; spawns in one message → only the last card.
 Every spawn names its `model` (`opus`, `sonnet`, `fable` — family aliases,
 never a pinned version), even when it equals the session's: an inheriting
 spawn is refused once (`pre.agent.model`). Effort is not a spawn parameter —
-it comes from the agent file. Locating → `scout` (sonnet · low), not
-`Explore`; implementing → a domain agent. No `haiku`.
+it comes from the agent file. Locating → `scout` (haiku · medium), not
+`Explore`; implementing → a domain agent. `haiku` only for `scout`.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 

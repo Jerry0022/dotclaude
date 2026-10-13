@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.260.0**
+**Version: 0.261.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -616,7 +616,7 @@ a yes. Explicit `/run-*` skills and "with agents" in a prompt always still spawn
 | **qa** | Test, verify, screenshot |
 | **redteam** | Adversarial review: failure modes, blind spots, hidden risks |
 | **research** | Deep-dive investigations |
-| **scout** | Read-only locator (sonnet · low): "where/how is X?" sweeps, answer + `path:line` evidence |
+| **scout** | Read-only locator (haiku · medium): "where/how is X?" sweeps, answer + `path:line` evidence |
 | **rethinker** | Code-blind fresh-approach ideation through one lens |
 
 ## Completion Cards

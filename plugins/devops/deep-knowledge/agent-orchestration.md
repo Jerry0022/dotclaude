@@ -67,21 +67,28 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
 | **ai** | sonnet | medium | Standard code generation |
 | **designer** | sonnet | medium | Design specs |
 | **qa** | sonnet | medium | Test execution + evaluation |
-| **scout** | sonnet | low | Read-only locating and sweeps — replaces Explore (which inherits the session) |
+| **scout** | haiku | medium | Read-only locating and sweeps — replaces Explore (which inherits the session); measured against sonnet · low in `docs/haiku-5-5-scout.md` |
 | **feature** | opus | medium | Long autonomous run: elaborates, builds, delegates |
 | **rethinker** | opus | high | Code-blind ideation, one lens per agent (do-run rethink only) |
 
 **Model override rules:**
 - Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`.
   Pass `sonnet`, `opus` or `fable` — `fable` is an accepted value for upward
-  overrides, not only `opus`. `haiku` is not used: it is cheaper, not better
-  at research or locating, and `scout` (sonnet · low) covers the cheap tier.
+  overrides, not only `opus`. `haiku` belongs to `scout` alone (haiku ·
+  medium): Haiku 5.5 matched sonnet · low on locating at about 1/20 of the
+  token price, but trails Sonnet 5.5 far on agentic work (Terminal-Bench 4.0:
+  39 % vs. 71 %), so it never runs an agent that edits, plans, reviews,
+  researches or decides, and never below `medium` (at `low` Anthropic reports
+  skipped searches and early stops under long system prompts). Budget
+  downgrades never raise: "the 1-agent tier runs on `model: sonnet`"
+  (agent-proactivity.md § Budget) lowers an opus agent; a `scout` spawn keeps
+  `model: haiku` in every class.
 - **Always name the model**, also when it equals the session's — a spawn that
   would inherit it (Explore, general-purpose, `model: inherit`) is refused once
   by `pre.agent.model`; the identical retry is the deliberate exception.
-- **Effort is chosen by agent, not per spawn**: `low` belongs to mechanical,
-  read-only work (`scout`) — sonnet·low for locating beats
-  opus·anything; reasoning roles keep medium/high.
+- **Effort is chosen by agent, not per spawn**: the cheap tier is a small
+  model at `medium`, not a big one at `low` — haiku·medium for locating
+  beats opus·anything; reasoning roles keep medium/high.
 - **`/do-run burn` inverts this**: it overrides **upward only** (sonnet → opus)
   per its depth profile, and never downgrades for cost. The overrides come
   from `scripts/burn-plan.js gate` (`models`), applied by auto-agents' burn
