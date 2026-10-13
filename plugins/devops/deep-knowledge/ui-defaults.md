@@ -314,6 +314,46 @@ differ — never let it drift by accident.
   confirm → toast / error) — does every named thing keep its name?
 - **Fix policy:** report-only — wording is product language.
 
+### 8 · Nothing clipped — in every size and every state
+
+- **Outcome:** no element, text, icon, shadow, focus ring or badge is cut off
+  unless clipping was explicitly asked for (a deliberate truncation with
+  ellipsis plus the full text on hover/focus per R1 (b), a cropped image
+  frame, a masked carousel). This holds in **every** viewport of the R6
+  matrix, at every container width in between (not only at the presets), with
+  long and localised strings, larger font settings / 200 % zoom, and in every
+  transient state: hover, focus, active, open, expanded, loading, error — and
+  during and after every animation or transition. An element that grows
+  situationally (hover scale, lift with shadow, focus ring, expanding
+  card, badge counter, tooltip/popover near the edge) gets the room it grows
+  into, or overflows above its neighbours — never cut by an ancestor.
+- **Static:** a finding for new or changed code that clips without an
+  explicit reason: `overflow: hidden` / `clip` / `clip-path` / `contain:
+  paint` on a container whose children scale, translate, cast a shadow, show
+  a focus ring or open a popover/tooltip inside it; `transform: scale()` /
+  `translate` on `:hover` / `:focus` / `:active` or in a `@keyframes` without
+  room in the parent (padding/margin) or an overflow-visible ancestor;
+  `white-space: nowrap` / `text-overflow: ellipsis` / `line-clamp` without
+  the full text reachable (R1 Label tier); fixed `height` / `max-height` /
+  `width` on a box that holds text or dynamic content (use `min-*` or let it
+  grow); popovers, menus and tooltips rendered inside a clipping ancestor
+  instead of a portal/top layer, or without collision handling (flip /
+  shift at the viewport edge). A deliberate clip carries a short comment
+  saying so — that is the "explicitly asked for".
+- **Runtime:** each changed view at every R6 viewport plus one width between
+  two breakpoints, with the longest realistic string and the largest
+  supported locale; hover, focus and open every interactive element and let
+  every animation run to its end and its peak frame — the scaled card, the
+  shadow, the focus ring, the opened menu at the right and bottom edge are
+  fully visible. A check per element: its rendered box (incl. shadow and
+  outline) lies inside every clipping ancestor's box, or the ancestor is
+  meant to scroll (R5).
+- **Fix policy:** mechanical only for adding room for a hover/focus scale or
+  ring the parent visibly clips (padding/`overflow: visible` on a container
+  that does not need to clip) and for a missing `title`-free full-text
+  tooltip derived from the truncated text itself; everything else (a fixed
+  size, a portal for a popover) is report-only — it is layout.
+
 ## Common rules
 
 - **New or changed elements only** on the ship path. Existing elements are the
@@ -373,7 +413,7 @@ section:
 
 ```markdown
 ## UI rules
-- disable: R2b, R4b         # rule ids: R0, R1, R2a, R2b, R3, R4a, R4b, R5, R6, R7 (static halves); a bare R2 / R4 disables both halves — a disabled rule is named on the ship card
+- disable: R2b, R4b         # rule ids: R0, R1, R2a, R2b, R3, R4a, R4b, R5, R6, R7, R8 (static halves); a bare R2 / R4 disables both halves — a disabled rule is named on the ship card
 - tooltip.mechanisms: appTooltip, <HelpHint>
 - tooltip.delay: info 1200, label 400   # ms, the two R1 tier values; project beats user-global
 - hotkey.mechanisms: useShortcut(, data-hotkey

@@ -13,7 +13,10 @@ targets on the phone viewport, tab-walk every changed view (focus order,
 Escape/Enter/arrows, focus ring), and walk every changed view on each target
 of the R6 platform matrix (layout, touch vs. mouse/keyboard interactions,
 the flow completing), and read every changed flow once in order for R7
-(trigger, dialog, confirmation, toast, error keep one term per concept) — what emulation cannot show goes to `userFinalTest`
+(trigger, dialog, confirmation, toast, error keep one term per concept), and
+check R8 at every viewport plus one in-between width with the longest
+string: hover, focus and open each element and stop every animation at its
+peak frame — nothing (shadow, ring, scaled card, edge popover) clipped — what emulation cannot show goes to `userFinalTest`
 with the target named. Findings follow the same score/approval
 rules as every other polish item; R0/R1/R4a/R4b/R5/R7 stay report-only (R0 token
 swaps excepted). Without a browser tool: list them once as skipped in
