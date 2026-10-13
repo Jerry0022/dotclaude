@@ -7,6 +7,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.plugin.update.js", "timeout": 20 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.permissions.ensure.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.statusline.ensure.js", "timeout": 10 },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.thinking.display.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.knowledge.index.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.mcp.deps.js", "timeout": 20 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.mcp.envcheck.js", "timeout": 10 },

@@ -229,9 +229,13 @@ function shipDelegateWillRefuse(prompt, transcriptPath) {
   }
 }
 
-/** Does this model return mid-turn text as progress updates (lib/agent-card-relay.js)? */
-function progressUpdatesModel(model) {
-  return typeof model === 'string' && require('../lib/agent-card-relay').PROGRESS_UPDATE_MODELS.test(model);
+/**
+ * Does this model return mid-turn text as progress updates (lib/agent-card-relay.js)?
+ * Never when the session opted out (CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0).
+ */
+function progressUpdatesModel(model, env = process.env) {
+  const relay = require('../lib/agent-card-relay');
+  return typeof model === 'string' && !relay.updatesOptedOut(env) && relay.PROGRESS_UPDATE_MODELS.test(model);
 }
 
 /**

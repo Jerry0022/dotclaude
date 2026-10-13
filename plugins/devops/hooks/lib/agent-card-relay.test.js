@@ -140,14 +140,24 @@ describe("agent-card-relay lib", () => {
 
   test("progressUpdates reads the session model of the current turn", () => {
     const on = jsonl(prompt(), modelUse("m1", "b1", "claude-opus-5-5"));
-    expect(relay.progressUpdates(on)).toBe(true);
+    expect(relay.progressUpdates(on, {})).toBe(true);
     for (const m of ["claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5", "claude-mythos-5-1"]) {
-      expect(relay.progressUpdates(jsonl(prompt(), modelUse("m1", "b1", m)))).toBe(true);
+      expect(relay.progressUpdates(jsonl(prompt(), modelUse("m1", "b1", m)), {})).toBe(true);
     }
     for (const m of ["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8", "claude-haiku-5-5"]) {
-      expect(relay.progressUpdates(jsonl(prompt(), modelUse("m1", "b1", m)))).toBe(false);
+      expect(relay.progressUpdates(jsonl(prompt(), modelUse("m1", "b1", m)), {})).toBe(false);
     }
-    expect(relay.progressUpdates(jsonl(prompt(), toolUse("m1", "b1")))).toBe(false);
+    expect(relay.progressUpdates(jsonl(prompt(), toolUse("m1", "b1")), {})).toBe(false);
+  });
+
+  test("progressUpdates is off when the session opted out of progress updates", () => {
+    const on = jsonl(prompt(), modelUse("m1", "b1", "claude-opus-5-5"));
+    for (const v of ["0", "false", "No", " off "]) {
+      expect(relay.progressUpdates(on, { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: v })).toBe(false);
+    }
+    for (const v of ["1", "true", ""]) {
+      expect(relay.progressUpdates(on, { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: v })).toBe(true);
+    }
   });
 
   test("messageIdOf finds a tool_use's message in the turn", () => {
@@ -158,9 +168,12 @@ describe("agent-card-relay lib", () => {
 });
 
 // Async spawn, never spawnSync: a sync child blocks the vitest worker's event loop.
-function runHook(file, payload) {
+// The session's own progress-update opt-out never leaks into the hook under test.
+function runHook(file, payload, extraEnv = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [file], { env: { ...process.env, CLAUDE_PLUGIN_ROOT: path.join(__dirname, "..", "..") } });
+    const env = { ...process.env, CLAUDE_PLUGIN_ROOT: path.join(__dirname, "..", ".."), ...extraEnv };
+    if (!("CLAUDE_CODE_THINKING_DISPLAY_UPDATES" in extraEnv)) delete env.CLAUDE_CODE_THINKING_DISPLAY_UPDATES;
+    const child = spawn(process.execPath, [file], { env });
     let stdout = "", stderr = "";
     child.stdout.on("data", (d) => { stdout += d; });
     child.stderr.on("data", (d) => { stderr += d; });
@@ -217,6 +230,15 @@ describe("pre.agent.relay hook", () => {
     const r = await runHook(PRE_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, tool_name: "Bash", tool_use_id: "b1", tool_input: {} });
     expect(r.code).toBe(0);
     expect(r.stderr).toBe("");
+  }, 20000);
+
+  test("holds back again on that model once the session opted out of progress updates", async () => {
+    const t = jsonl(prompt(), agentUse("m1", "a1"), hookCtx("a1", card(1, "en")), result("a1"),
+      update("m2", "claude-opus-5-5"), modelUse("m2", "b1", "claude-opus-5-5"));
+    const { dir, file } = project(t);
+    const r = await runHook(PRE_HOOK, { session_id: sessionId(), cwd: dir, transcript_path: file, tool_name: "Bash", tool_use_id: "b1", tool_input: {} },
+      { CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0" });
+    expect(r.code).toBe(2);
   }, 20000);
 
   test("passes once the card was shown", async () => {

@@ -62,7 +62,10 @@ Desktop app the user does not see it. Write it to a script (self-elevating
 
 The answer to the user's question is written in full as text before the
 completion card — the card summarises the work, it never carries the answer,
-and "no recap" never means leaving the answer out.
+and "no recap" never means leaving the answer out. On Opus 5.5, Sonnet 5.5, Fable 5 and Mythos 5 that
+text stays verbatim only with `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0`
+(devops `ss.thinking.display` sets it); otherwise Claude Code returns text
+written before a further tool call as a rephrased progress summary.
 
 The completion card ends the turn — nothing after it: no summary, no "the
 card is above". On the Desktop app the card is a widget call, and the app
