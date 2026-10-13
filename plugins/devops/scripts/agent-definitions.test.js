@@ -24,7 +24,10 @@ const FIELDS = new Set([
   "skills", "memory", "background", "omitClaudeMd", "isolation", "color", "experimental",
 ]);
 const COLORS = new Set(["red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"]);
-const MODELS = new Set(["sonnet", "opus", "fable", "inherit"]); // no haiku: agent-orchestration.md
+const MODELS = new Set(["sonnet", "opus", "fable", "haiku", "inherit"]);
+// haiku runs read-only locating only, never below medium (agent-orchestration.md § Model override rules).
+const HAIKU_AGENTS = new Set(["scout"]);
+const HAIKU_EFFORTS = new Set(["medium", "high"]);
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const BUILTIN_TOOLS = new Set([
   "Read", "Write", "Edit", "Bash", "PowerShell", "Glob", "Grep", "WebSearch", "WebFetch",
@@ -70,6 +73,13 @@ describe.each(files)("agents/%s", (file) => {
     expect(MODELS).toContain(fm.model);
     if (fm.effort) expect(EFFORTS).toContain(fm.effort);
     expect(COLORS).toContain(fm.color);
+  });
+
+  test("haiku only on a read-only locator, at medium effort or above", () => {
+    if (fm.model !== "haiku") return;
+    expect(HAIKU_AGENTS, `${file}: haiku is reserved for ${[...HAIKU_AGENTS]}`).toContain(fm.name);
+    expect(HAIKU_EFFORTS, `${file}: haiku needs effort medium or high`).toContain(fm.effort);
+    for (const t of ["Write", "Edit", "NotebookEdit", "Agent"]) expect(fm.tools || []).not.toContain(t);
   });
 
   test("every tool entry resolves: a built-in or a full mcp__ name", () => {

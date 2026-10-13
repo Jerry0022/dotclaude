@@ -3,12 +3,12 @@ name: scout
 description: >-
   Scout agent — read-only locator for codebase sweeps: finds files, callers,
   config and patterns across many files and returns only the conclusion with
-  file:line references. Cheap by design (sonnet, low effort) — the devops
+  file:line references. Cheap by design (haiku, medium effort) — the devops
   replacement for Explore, whose model and effort follow the session.
   Use proactively, in the background, for a sweep over more than ~10 files or a "where/how is X wired?" question — no user request needed.
   <example>Find every caller of renderAgentCard and how its lang is chosen</example>
-model: sonnet
-effort: low
+model: haiku
+effort: medium
 color: cyan
 maxTurns: 30
 tools: ["Read", "Grep", "Glob", "Bash"]
@@ -34,6 +34,7 @@ settles it.
 
 ## Output
 
-- One-line answer first.
+- One-line answer first. When it names a count ("ten files"), count the
+  entries of your evidence list — the number must match it.
 - Then the evidence: `path:line` — what is there, one line each.
 - Anything you could not find or verify, said plainly.

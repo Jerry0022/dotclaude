@@ -37,7 +37,7 @@ checkout so the hooks under test are the ones in the working tree.
 
 ```bash
 PLUGIN="<path-to-dotclaude>/plugins/devops"
-run() { claude -p "$1" --model "${2:-claude-haiku-4-5-20251001}" --plugin-dir "$PLUGIN" --output-format json --permission-mode acceptEdits; }
+run() { claude -p "$1" --model "${2:-claude-haiku-5-5}" --plugin-dir "$PLUGIN" --output-format json --permission-mode acceptEdits; }
 ```
 
 ## S1 — Visual request touches only the named element

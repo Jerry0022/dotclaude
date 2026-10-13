@@ -132,7 +132,7 @@ Weekly:     elapsed_pct = (10080 - resetInMinutes) / 10080 * 100
 
 ratio < 0.5  → 🔋 + "Viel Spielraum"
 ratio 0.5-1.3 → 🔋 (no hint)
-ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Haiku empfohlen"
+ratio > 1.3  → 🪫 + "Hoher Verbrauch — neue Session oder Sonnet empfohlen"
 ```
 
 ## Rules
