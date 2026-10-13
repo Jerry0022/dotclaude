@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -304,5 +305,21 @@ describe("pre.agent.announce under strict mode", () => {
       input: { subagent_type: "devops:frontend", prompt: `${S.CONTRACT_BLOCK}\n\nMach den Rand dünner.` },
     });
     expect(line(res)).toBe("frontend · sonnet · medium · background");
+  });
+});
+
+describe("announce text on progress-update models", () => {
+  const mod = createRequire(import.meta.url)("./pre.agent.announce.js");
+
+  test("a progress-update model is told to relay the card in the turn's final text", () => {
+    expect(mod.progressUpdatesModel("claude-opus-5-5")).toBe(true);
+    expect(mod.progressUpdatesModel("claude-opus-5")).toBe(false);
+    expect(mod.progressUpdatesModel(null)).toBe(false);
+    const on = mod.announceText("---\nCARD\n---", true);
+    expect(on).toMatch(/show the user this card verbatim in the FINAL text of the turn/);
+    expect(on).not.toMatch(/held back once/);
+    const off = mod.announceText("---\nCARD\n---", false);
+    expect(off).toMatch(/your next tool call is held back once/);
+    expect(on.endsWith("---\nCARD\n---")).toBe(true);
   });
 });

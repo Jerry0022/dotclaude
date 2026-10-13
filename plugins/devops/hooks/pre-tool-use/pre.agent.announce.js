@@ -229,6 +229,39 @@ function shipDelegateWillRefuse(prompt, transcriptPath) {
   }
 }
 
+/** Does this model return mid-turn text as progress updates (lib/agent-card-relay.js)? */
+function progressUpdatesModel(model) {
+  return typeof model === 'string' && require('../lib/agent-card-relay').PROGRESS_UPDATE_MODELS.test(model);
+}
+
+/**
+ * The instruction around the card. On a progress-update model, text written
+ * between tool calls reaches the user only as a rephrased summary, so "the
+ * next text you write" cannot carry the card verbatim — it goes into the
+ * final text of the turn instead (stop.agent.relay checks that once).
+ */
+function announceText(card, progressUpdates) {
+  if (progressUpdates) {
+    return (
+      'Agent card — show the user this card verbatim in the FINAL text of the turn (after your last ' +
+      'tool call), also under the Quiet output style: on this model, text written between tool calls ' +
+      'reaches the user only as a rephrased progress summary, so a card written before your next tool ' +
+      'call does not arrive verbatim. When the turn ends with the completion card, its pending field ' +
+      'names the agents instead. Agents launched in one message each hand you a card that grows by one ' +
+      'row: show only the LAST card of the message:\n' +
+      card
+    );
+  }
+  return (
+    'Agent card — show the user this card verbatim in the next text you write (before your next ' +
+    'tool call if you would otherwise stay silent), also under the Quiet output style. Agents ' +
+    'launched in one message each hand you a card that grows by one row: show only the LAST ' +
+    'card of the message — it lists them all; never a prose summary in its place. Until it is shown, ' +
+    'your next tool call is held back once (pre.agent.relay):\n' +
+    card
+  );
+}
+
 function main() {
   let inputData = '';
   process.stdin.setEncoding('utf8');
@@ -251,13 +284,7 @@ function main() {
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          additionalContext:
-            'Agent card — show the user this card verbatim in the next text you write (before your next ' +
-            'tool call if you would otherwise stay silent), also under the Quiet output style. Agents ' +
-            'launched in one message each hand you a card that grows by one row: show only the LAST ' +
-            'card of the message — it lists them all; never a prose summary in its place. Until it is shown, ' +
-            'your next tool call is held back once (pre.agent.relay):\n' +
-            card,
+          additionalContext: announceText(card, progressUpdatesModel(sessionModel(hook.transcript_path))),
         },
       }));
       process.exit(0);
@@ -269,4 +296,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse };
+module.exports = { readFrontmatter, findAgentFile, friendlyModel, sessionModel, resolve, buildLine, batchInputs, buildCard, strictWillBlock, modelGateWillRefuse, shipDelegateWillRefuse, progressUpdatesModel, announceText };
