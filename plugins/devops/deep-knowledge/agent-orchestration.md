@@ -79,7 +79,10 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
   token price, but trails Sonnet 5.5 far on agentic work (Terminal-Bench 4.0:
   39 % vs. 71 %), so it never runs an agent that edits, plans, reviews,
   researches or decides, and never below `medium` (at `low` Anthropic reports
-  skipped searches and early stops under long system prompts).
+  skipped searches and early stops under long system prompts). Budget
+  downgrades never raise: "the 1-agent tier runs on `model: sonnet`"
+  (agent-proactivity.md § Budget) lowers an opus agent; a `scout` spawn keeps
+  `model: haiku` in every class.
 - **Always name the model**, also when it equals the session's — a spawn that
   would inherit it (Explore, general-purpose, `model: inherit`) is refused once
   by `pre.agent.model`; the identical retry is the deliberate exception.

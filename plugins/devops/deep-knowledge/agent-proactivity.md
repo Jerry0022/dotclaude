@@ -26,14 +26,11 @@ the suite run inline again and again (→ `qa`, background), 10+ files touched
 
 Every spawn gets an agent card (`pre.agent.announce`) — show it verbatim as
 the next text, also under Quiet; spawns in one message → only the last card.
-Every spawn names its `model` (`opus`, `sonnet`, `fable`, `haiku` — family aliases,
+Every spawn names its `model` (`opus`, `sonnet`, `fable` — family aliases,
 never a pinned version), even when it equals the session's: an inheriting
 spawn is refused once (`pre.agent.model`). Effort is not a spawn parameter —
 it comes from the agent file. Locating → `scout` (haiku · medium), not
-`Explore`; implementing → a domain agent. `haiku` only where the agent file
-sets it — today `scout`: read-only locating, never an agent that edits,
-plans, reviews, researches or decides (Terminal-Bench 4.0: 39 % vs.
-Sonnet 5.5's 71 %). Never pass `model: haiku` to another agent.
+`Explore`; implementing → a domain agent. `haiku` only for `scout`.
 
 ## Precedence: explicit run skill > hard stop > hard go > switch > escalation > tier table
 
@@ -78,8 +75,6 @@ tool-call ceiling in the agent prompt. Class names say what they do.
   → the 1-agent tier runs on `model: sonnet` with ≤ 5 tool calls;
   parallel/ceremony ask as above, naming the binding reset ("window
   resets in N min" / "week resets in N h").
-- **Downgrades never raise.** "Runs on `model: sonnet`" lowers an opus agent;
-  a `scout` spawn keeps `model: haiku` in every class.
 - **The answer holds for the whole session and every tier**: after "the right
   agents", also the 1-agent tier is back on its frontmatter model; after
   "spare", parallel stays collapsed. Re-ask only when you cannot tell whether
