@@ -10,7 +10,8 @@
  *   rephrased progress summary — the answer before a completion card and any
  *   "show the user … verbatim" relay reach the user only as a paraphrase.
  *   `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0` opts out; this hook sets it in the
- *   user's ~/.claude/settings.json `env` (effective from the next session).
+ *   user's ~/.claude/settings.json `env`; Claude Code applies a settings `env`
+ *   change live, so it already holds in the session that set it.
  *
  *   Idempotent: only adds the key when it is absent — an explicit user value
  *   (e.g. "1" to keep progress updates) is never overwritten.
@@ -44,7 +45,7 @@ function main(settingsPath = join(homedir(), ".claude", "settings.json")) {
   if (!next) return false;
   try {
     writeFileSync(settingsPath, JSON.stringify(next, null, 2) + "\n");
-    console.error(`[dotclaude] Set ${KEY}=0 — chat text stays verbatim from the next session on.`);
+    console.error(`[dotclaude] Set ${KEY}=0 — chat text stays verbatim.`);
     return true;
   } catch (err) {
     console.error(`[dotclaude] Could not update ${settingsPath}: ${err.message}`);

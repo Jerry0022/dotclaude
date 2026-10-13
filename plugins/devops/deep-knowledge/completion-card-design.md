@@ -522,8 +522,9 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
    "show the user … verbatim" relay) comes back as a rephrased progress
    summary, not a text block. `ss.thinking.display` sets
    `CLAUDE_CODE_THINKING_DISPLAY_UPDATES=0` in the user's settings `env`
-   (only when absent; effective from the next session), which keeps it a
-   text block — verified in a Desktop session transcript. While that is
+   (only when absent; Claude Code applies it live), which keeps it a text
+   block — verified in Desktop session transcripts (2026-10-13: narration
+   blocks before, text blocks after, same session). While that is
    missing, `pre.agent.relay` stands down and `pre.agent.announce` asks
    for the agent card in the turn's final text instead.
 
