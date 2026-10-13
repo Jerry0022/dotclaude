@@ -151,7 +151,11 @@ every section you append (regular round, reality-check round, final report).
 
 ## Step 2 — Generate HTML
 
-Build a single self-contained HTML file. Requirements:
+The page is **built** by `scripts/concept-build.js` (engine from the current templates, content from one fragment per round); Claude never copies, reads in full or edits the built page.
+
+**Before executing this step, Read `deep-knowledge/step2-build.md` § Layout completely** — the built page, the source folder, `page.json`, `head.html` and the round fragments.
+**Before executing this step, Read `deep-knowledge/step2-build.md` § The build — `scripts/concept-build.js` completely** — `init` / `build` / `bake` / `import` / `check`, and what every build does (engine, head, frozen rounds, tabs, gate).
+**Before executing this step, Read `deep-knowledge/step2-build.md` § What Claude writes completely** — a fragment holds exactly one round section; the built page is never written by hand.
 
 ### Engine source (mandatory — templates.md, never an older page)
 
@@ -163,13 +167,15 @@ Build a single self-contained HTML file. Requirements:
 
 ### File Location
 
-Write to: `docs/concepts/{timestamp}-{slug}.html`
+Built page `docs/concepts/{timestamp}-{slug}.html`, source folder `docs/concepts/{timestamp}-{slug}/` (`init` once, `rounds/01.html`, `build`).
 
 **Before executing this step, Read `deep-knowledge/step2-feedback.md` § File naming and iteration tabs completely** — the naming pattern, the discard default, one file per session and the iteration tab rules.
 
 ### Post-Generation Validation (mandatory gate)
 
-After writing the HTML file, grep it for every mandatory interactive
+`concept-build.js build` runs the deterministic gate and writes the page only
+when it passes; the Phase 1 engine patterns hold by construction. Before the
+build, check the round itself against Phase 0 and its template's Phase 2 for every mandatory interactive
 pattern listed in Phase 1 (heartbeat, all four panel states incl. the
 frozen one, iteration tabs, section TOC, reload polling, generic
 form-collection catch-all scoped to the active iteration, post-submit
@@ -330,7 +336,7 @@ re-shipping.
    retry from the sheet, and report the blocker verbatim. Never fall through
    to cleanup — a `discard` disposition would delete the concept the user
    still needs.
-3. On a successful release, rewrite the live final-report section in place:
+3. On a successful release, rewrite the final-report fragment in place (then `build`):
    add a one-line "Shipped" note (version + tag) to the Zusammenfassung.
 4. **The ship card comes last.** Once `ship_release` has merged (the ship can
    no longer block), run part D and Step 6a in full — bridge, pulser and
@@ -355,9 +361,13 @@ re-shipping.
 
 **Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § Legacy mapping, rationale and the critical invariant completely on every round — even if read earlier in this session** — `create-issues` → part A + Step 6, `ship` → part C + Step 6, `dispose-concept` → part D only (never the ship pipeline), part B never for a legacy page; `iterate` never changes anything outside the concept HTML, and within finalize only B writes code and only C reaches outside the repo.
 ### 5c. Update the Page
-After processing, **append a new tab** to the same HTML file and signal
-the browser to reload. This is the ONLY update path — there is no
-separate "in-place edit" vs. "new file" distinction anymore.
+After processing, **append a new round**: `bake` the submitted round, write `rounds/{N+1}.html`, `build`, signal
+the browser to reload. This is the ONLY update path — every "append a section to the HTML file" below means this.
+
+**Before executing this step, Re-Read `deep-knowledge/step2-build.md` § Freezing the submitted round — `bake` completely on every round — even if read earlier in this session** — the payload goes into the submitted round's fragment; the build freezes its attributes.
+**Before executing this step, Re-Read `deep-knowledge/step2-build.md` § Reading — only what the round needs completely on every round — even if read earlier in this session** — never the whole page; the previous fragment only when the round builds on it.
+**Before executing this step, Re-Read `deep-knowledge/step2-build.md` § Round author (Step 5c, rounds 2+) completely on every round — even if read earlier in this session** — the round brief, the `concept-author` agent (`concept.roundAgent`, default on) and what stays with the session.
+**Before executing this step, Re-Read `deep-knowledge/step2-build.md` § Legacy pages completely on every round — even if read earlier in this session** — a page without a source folder is imported once before its next round.
 
 For `action: "iterate"` → append a regular iteration section.
 For `action: "implement"` → append a **final-report section** (one-time,
@@ -370,7 +380,7 @@ explainer as its first child. Everything else about the append is identical to
 a normal iteration, including the append checklist and the `/reset` ordering.
 **Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § Reality-check round — template and markers completely on every round — even if read earlier in this session** — the forced round keeps the concept template, and both markers are read back before `/reload`.
 For `action: "finalize"` → no new section; rewrite the existing final-report
-HTML in place (linked `[Issue #NNN]` labels for routed items, a shipped note
+fragment in place and `build` (linked `[Issue #NNN]` labels for routed items, a shipped note
 when part B ran) and POST `/reload`.
 
 Procedure on every iteration (including the very first response to feedback).
@@ -424,6 +434,7 @@ on the user's disposition choice (see `deep-knowledge/templates-rounds.md`
 § Disposition Control for the UI + payload shape).
 
 **Before executing this step, Read `deep-knowledge/step6-closeout.md` § Disposition, cleanup procedure and disposition tables completely** — the disposition is the `finalize` payload's, else the last legacy payload's, else `discard`; the `/shutdown` + owner-checked state-file removal, stopping the watchers before any card, the title restore, the cron delete, and the per-mode file and durable-store tables.
+**Before executing this step, Read `deep-knowledge/step2-build.md` § Close-out completely** — the source folder shares the page's disposition.
 
 **UNPROCESSED guard — never discard unseen work.** Before any `rm -rf` of a
 store, check for `.claude/concepts/{date}-{slug}/UNPROCESSED`. Its presence

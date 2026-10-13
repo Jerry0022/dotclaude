@@ -236,10 +236,12 @@ Full example: `docs/concepts/2026-04-12-auth-middleware-redesign.html`
   final-report panel; the default cleanup deletes both HTML and decisions
   JSON. Power users may also opt for "Nur lokal / .gitignore" to keep
   files locally without polluting the repo
-- **One file per concept session** — all iterations live inside the same
-  HTML file as separate `<section data-iteration="N">` blocks, switched via
-  tabs in the decision panel (see "Iteration Tabs" below). There are no
-  `-v2`, `-v3` files.
+- **One page per concept session** — all iterations live inside the same
+  built HTML page as separate `<section data-iteration="N">` blocks, switched
+  via tabs in the decision panel (see "Iteration Tabs" below). There are no
+  `-v2`, `-v3` files. Each round's source is one fragment in the source folder
+  `docs/concepts/{timestamp}-{slug}/rounds/NN.html` next to the page
+  (`step2-build.md`).
 - If a file for the same slug already exists on the same day and the user
   starts a genuinely new topic, append a short disambiguator (e.g.
   `…-auth-middleware-redesign-2.html`) — do NOT treat this as a version bump.

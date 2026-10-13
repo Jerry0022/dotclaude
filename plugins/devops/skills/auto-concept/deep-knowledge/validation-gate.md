@@ -10,6 +10,16 @@ by the **active iteration's** template — `data-iteration-template` on
 template; validate every iteration's section against its own
 `data-iteration-template`, not just the one currently mirrored onto `<html>`.
 
+> **Built pages (`step2-build.md`):** `concept-build.js build` copies the
+> engine verbatim from the current templates and runs the deterministic gate
+> before it writes the page. Phase 1 and the engine entries of Phase 2 are
+> then satisfied by construction. Engine drift on iteration append cannot
+> occur, because every build re-syncs. What stays Claude's to check, on the
+> round fragment before building: Phase 0 (forbidden), Phase 2 for the round's
+> own template, § Frozen/Active Mismatch (the build derives `data-template`
+> from the live round) and § Mappings. Grep the built page only for an entry
+> the build output names.
+>
 > **Deterministic backstop:** the `post.concept.gate` PostToolUse hook
 > re-checks a critical subset of this gate (the live decision panel + bridge
 > submit markers + the forbidden clipboard list below) on every write to a

@@ -32,7 +32,8 @@
 require('../lib/plugin-guard');
 
 const fs = require('fs');
-const { evaluate, buildBlockReason, isConceptHtml } = require('../lib/concept-gate');
+const path = require('path');
+const { evaluate, buildBlockReason, isConceptHtml, isConceptSourceFile, builtPageSource } = require('../lib/concept-gate');
 
 function targetPath(toolName, input) {
   if (!input) return null;
@@ -61,7 +62,25 @@ process.stdin.on('end', () => {
   catch { html = (hook.tool_input && hook.tool_input.content) || null; }
   if (html == null) process.exit(0);
 
+  // A round fragment or head.html inside a concept source folder
+  // (docs/concepts/{name}/…) is no page: scripts/concept-build.js gates the
+  // assembled page when it builds it.
+  if (isConceptSourceFile(file)) process.exit(0);
+
   if (!isConceptHtml(file, html)) process.exit(0);
+
+  // A page assembled by concept-build.js is regenerated from its source folder
+  // on the next build — a hand edit here is lost, and Claude reading or
+  // patching the whole page is exactly the token cost the folder removes.
+  const source = builtPageSource(file);
+  if (source) {
+    process.stderr.write(
+      `[concept-gate] ${path.basename(file)} is built by concept-build.js from ${source}/ — ` +
+      'this edit is overwritten by the next build. Edit the round fragment ' +
+      `(${source}/rounds/NN.html) or head.html instead, then run ` +
+      `node "<plugin>/scripts/concept-build.js" build "${source}".\n`);
+    process.exit(2);
+  }
 
   const { ok, missing, forbidden, structural, mapping, overlap, stale, collisions } = evaluate(file, html);
   if (ok) process.exit(0);

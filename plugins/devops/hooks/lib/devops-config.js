@@ -77,6 +77,12 @@ const SCHEMA = Object.freeze({
       doc: 'Days of silence after a suggestion (0 = suggest after every ship above the threshold).',
     }),
   }),
+  concept: Object.freeze({
+    roundAgent: Object.freeze({
+      type: 'boolean', default: true,
+      doc: 'auto-concept: write each follow-up round (2+) in a sub-agent, so the session context stays small over many rounds.',
+    }),
+  }),
   deployParity: Object.freeze({
     enabled: Object.freeze({
       type: 'boolean', default: true,

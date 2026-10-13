@@ -9,64 +9,65 @@ a `design` concept the collision cards go into a
 `section[data-view] data-view-kind="decision"` alongside the design the round
 is about, NOT into a `decision` round — a gate that swaps the reviewer's
 feedback surface mid-session reads as the page breaking.
-**Read the file back and confirm both attributes landed before `/reload`** — a
-marker that silently failed to write re-arms a check the user already answered.
+**Read the file back and confirm both attributes landed before `/reload`** — the
+round FRAGMENT (`rounds/NN.html`), never the built page; the build keeps every
+`data-*` of the section. A marker that silently failed to write re-arms a
+check the user already answered.
 See `deep-knowledge/reality-check.md` § The forced round.
 
 ## 5c · Append procedure
 
-1. Read the existing HTML file (same path, always).
-2. Freeze the currently-active iteration section per the rules in
-   `deep-knowledge/templates-rounds.md` § Freezing Past Iterations (authoritative
-   source). In short: remove `data-active`, add `hidden`, disable every
-   `input`/`textarea`/`select`/`button` inside the section, set `readonly`
-   on text inputs and textareas, preserve the submitted values exactly
-   (read them from the just-processed decisions JSON).
-   **Mappings:** for every `[data-mapping]` in the frozen section write
-   `"submitted": {cells, order, adhoc, slotNotes}` into its JSON spec from
-   the payload's `mappings[]` entry — `cells` = `assigned` (keyed by matrix
-   key, verbatim), `order` = `order`, `adhoc` = `adhocItems`, `slotNotes` =
-   `slotNotes`. The renderer disables the cells itself from `submitted`; a
-   frozen mapping without a complete `submitted` (every matrix key present
-   under `cells`) renders the red `map.frozen_missing` banner over the
-   proposal and fails the deterministic gate (M9). See
-   `deep-knowledge/iteration-rules.md` § Freezing Design Iterations →
-   Mappings and `deep-knowledge/templates-mapping.md` § Information Mapping
-   (engine) → Freezing.
-2.5. **Verify form collection coverage.** Read the existing JS for
-   `collectDecisions()` (or its template-specific variant). Confirm it
-   uses a generic `querySelectorAll('input, select, textarea')` scoped
-   to `[data-active]`. If it uses hand-listed selectors instead, fix it
-   NOW before appending the new iteration — otherwise the new section's
-   fields will silently fail to upload at submit time. See
-   `deep-knowledge/iteration-rules.md` § Procedure on every iteration —
-   coverage gate and `deep-knowledge/validation-gate.md` § Generic Form
-   Collection for the required pattern.
-2.6. **Engine drift check.** Run `deep-knowledge/validation-gate.md` over
-   the EXISTING page — the gate applies to the whole file on every append,
-   not only at first generation. The page's shared engine (Attachments
-   JS/CSS, § Layout CSS chrome rules, tab-switch JS) is whatever
-   templates.md said on the day it was generated, and every later round
-   re-uses it. If any engine entry fails (30b, 44, 46, 47, 48, 49–53, 54,
-   56, 59–61, tab-switch), re-sync that whole block **verbatim from
-   templates.md NOW**, before appending — otherwise the new iteration
-   inherits the old defect and the user sees the same bug after updating
-   the plugin. A page from before the Kompass panel (fails 56 / 59–61) gets
-   the whole panel block — skeleton, § Layout, § Section Navigation,
-   § Two-Button Submit — on this append, no opt-out (#344). See
-   `deep-knowledge/validation-gate.md` § Engine drift on iteration append.
-3. Append a new
-   `<section data-iteration="{N+1}" data-iteration-template="…" data-active>`
-   with the updated / next-round content. The template attribute is
-   mandatory and carries the concept's template forward (§ Step 1a ·
-   Template continuity) — a round that silently switches it swaps the
-   reviewer's whole feedback surface (new variants, refined options, whatever
-   the feedback produced). Set `submitted: false` in `#concept-decisions`,
-   remove `concept-submitted` from `<body>`, re-enable the submit button.
-4. Append a new entry in the `.iteration-tabs` bar for iteration N+1 and
-   mark it active (set `aria-selected="true"`, remove that attribute from
-   the previous tab — but keep the previous tab clickable so the user can
-   re-read their frozen history).
+The page is built from its source folder (`step2-build.md`): every step
+below works on the round fragments and the build. **Never read or edit the
+built page.** A page without a source folder gets `concept-build.js import`
+first (`step2-build.md` § Legacy pages).
+
+1. Save the `/decisions` payload of the submitted round N to a temp file
+   (the scratchpad, never the repo).
+2. **Freeze round N — `bake`:**
+   `node "{PLUGIN_ROOT}/scripts/concept-build.js" bake "docs/concepts/{name}" --round N --payload <file>`.
+   It writes the submitted values into `rounds/NN.html`: radios, checkboxes,
+   textareas, inputs, selects, the mapping `submitted` and the dock's
+   `data-frozen-feedback`. The build then applies the freeze attributes
+   (`hidden`, `disabled`, `readonly`, design navigation exempt;
+   `templates-rounds.md` § Freezing Past Iterations). `data-active` is the
+   only attribute a freeze removes. The build guarantees that, so never strip
+   anything by hand. A field the payload carries in a shape bake cannot map
+   is a small `Edit` of `rounds/NN.html`.
+   **Mappings:** bake writes each `mappings[]` entry as
+   `"submitted": {cells, order, adhoc, slotNotes}` (`assigned`, `order`,
+   `adhocItems`, `slotNotes`). A frozen mapping without a complete
+   `submitted` renders the red `map.frozen_missing` banner and fails the
+   gate (M9). When the build reports M9, the payload had no entry for that
+   mapping. Fix the spec in the fragment.
+2.5. **Verify form collection coverage — holds by construction.** The build
+   copies the current engine verbatim on every build, including
+   `collectDecisions()` with its generic
+   `querySelectorAll('input, select, textarea')` catch-all scoped to
+   `[data-active]` (`validation-gate.md` § Generic Form Collection). A field
+   that must ship still needs a `name`, `id` or `data-*` key the catch-all
+   reads.
+2.6. **Engine drift check — holds by construction.** `validation-gate.md`
+   § Engine drift on iteration append no longer needs a manual re-sync: every
+   build re-copies the engine from the current templates, and an old page is
+   re-synced on its first build after `import`.
+3. Append a new round — **write `rounds/{N+1}.html`**, either yourself (round 1 logic,
+   reality-check round, final report) or through the round author
+   (`step2-build.md` § Round author). It holds
+   `<section data-iteration="{N+1}" data-iteration-template="…">` with the
+   updated / next-round content. The template attribute is mandatory and
+   carries the concept's template forward (§ Step 1a · Template continuity).
+   A round that silently switches it swaps the reviewer's whole feedback
+   surface: new variants, refined options, whatever the feedback produced.
+   `#concept-decisions` (`submitted: false`), the body class and the submit
+   buttons come fresh from the build.
+4. **`build`:** `node "{PLUGIN_ROOT}/scripts/concept-build.js" build "docs/concepts/{name}"`.
+   It generates the tab chip for N+1 (active, `aria-selected="true"`; the
+   previous chips stay clickable so the user can re-read their frozen
+   history). It runs the gate and writes the page only on `OK`. On
+   `BLOCKED`, fix the fragment it names and build again. Never POST
+   `/reload` over a blocked build: the old page would reload as if it were
+   the new round.
 5. POST to the bridge: `curl -s -X POST http://localhost:{port}/reload`.
    The browser's `pollReload` loop sees the counter bump and calls
    `location.reload()`. The reload lands on the new active iteration
@@ -91,14 +92,16 @@ the left-hand content area. Render as a compact vertical chip list.
 
 Do NOT write a redirect file. Do NOT create a new `-v{N}` file. The entire
 concept session — first render, every iteration, "nochmal neu" reworks —
-lives in the single `{date}-{slug}.html`.
+lives in the single built `{date}-{slug}.html` and its source folder
+`{date}-{slug}/`.
 
 ## Final-report append — steps and verbatim copy directive
 
-1. Freeze the previous iteration the same way (step 1–2 above).
-2. Append a
-   `<section data-iteration="{N+1}" data-iteration-template="free" data-final-report data-active>`
-   to the same file. The `data-final-report` flag switches the panel to
+1. Freeze the previous iteration the same way (`bake`, step 1–2 above).
+2. Write `rounds/{N+1}.html` holding
+   `<section data-iteration="{N+1}" data-iteration-template="free" data-final-report>`.
+   The session writes it itself, because the implementation is in its
+   context. The build makes it the live round. The `data-final-report` flag switches the panel to
    `panel-final-report` mode (no iterate/implement buttons — see
    `deep-knowledge/templates-rounds.md` § Final Report Panel). The template is
    **always `free`** and is never omitted: a report is a document with a TOC,
@@ -128,19 +131,22 @@ lives in the single `{date}-{slug}.html`.
      hand over. Never a place for recommendations: work that is worth doing
      and in scope was built; work that is out of scope goes through the gate
      below or nowhere
-4. Append a new entry in the `.iteration-tabs` bar for the final report.
-   **Tab label MUST be `iteration.final_tab`** (locale: "Abschlussbericht" /
-   "Final report"), NOT "Iteration N+1". Mark it `aria-selected="true"` and
-   carry `data-final-report` so the tab-bar JS can style it distinctly.
-5. Set `submitted: false` in `#concept-decisions`, remove `concept-submitted`
-   from `<body>`. The submit-button reset is irrelevant because the
+4. `build`. The build generates the final-report chip:
+   **tab label `iteration.final_tab`** (locale: "Abschlussbericht" /
+   "Final report"), never "Iteration N+1", with `aria-selected="true"` and
+   `data-final-report` so the tab-bar JS can style it distinctly. A second
+   final report, or one that is not the last round, blocks the build.
+5. `submitted: false` in `#concept-decisions` and the body class come fresh
+   from the build. The submit-button reset is irrelevant because the
    final-report panel doesn't surface iterate/implement at all.
 6. /reload → /reset → **re-launch the pickup waker**, as steps 5–7 above.
    Step 7 is not optional here: the final-report panel still accepts the
    `finalize` submission, and `implement` is the longest round there is —
    leaving it unwatched is the widest window in the whole flow.
 
-**Verbatim copy directive (mandatory):**
+**Verbatim copy directive (mandatory):** on a built page the build copies
+it (it is part of the engine) — this directive binds whatever assembles the
+page, and is why a fragment never carries its own close-out JS.
 The final-report JS block — `refreshCloseout`, `renderCloseout`,
 `renderHandoffs`, `openQuestionBoxes`, `followUpRoute`, `followUpItem`, `collectFollowUps`,
 `collectIssueItems`, `collectImplementItems`, `collectDisposition`,

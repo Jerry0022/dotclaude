@@ -219,6 +219,32 @@ function findChromeCollisions(html) {
 }
 
 /**
+ * A file inside a concept SOURCE folder — docs/concepts/{name}/rounds/NN.html
+ * or docs/concepts/{name}/head.html (scripts/concept-build.js). Those are
+ * fragments, not pages: the build gates the page it assembles from them.
+ */
+function isConceptSourceFile(filePath) {
+  if (!filePath) return false;
+  const norm = String(filePath).replace(/\\/g, '/').toLowerCase();
+  return /(^|\/)docs\/concepts\/[^/]+\/(rounds\/[^/]+|head)\.html?$/.test(norm);
+}
+
+/**
+ * The source folder of a page assembled by concept-build.js — a page.json in
+ * the folder of the same name next to it, with or without the generator meta
+ * (a full Write can drop the meta) — or null. Returned in filePath's form,
+ * without the trailing `.html`.
+ */
+function builtPageSource(filePath) {
+  if (!filePath) return null;
+  const dir = String(filePath).replace(/\.html?$/i, '');
+  try {
+    if (require('fs').existsSync(path.join(dir, 'page.json'))) return dir;
+  } catch { /* unreadable → treat as a plain page */ }
+  return null;
+}
+
+/**
  * Is this written file a concept page we should gate?
  * Triggers on the canonical output location (the `docs/concepts/*.html` path
  * where SKILL.md Step 2 writes every concept) OR on a concept content
@@ -865,6 +891,8 @@ module.exports = {
   ENGINE_DOCUMENT,
   FORBIDDEN,
   isConceptHtml,
+  isConceptSourceFile,
+  builtPageSource,
   findMissing,
   findStaleEngine,
   findForbidden,

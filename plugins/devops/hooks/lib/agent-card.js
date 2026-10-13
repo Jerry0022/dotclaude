@@ -49,7 +49,7 @@ const L = {
 
 const ICON = {
   core: '🔧', frontend: '🎨', designer: '🖌️', ai: '🧠', qa: '🧪', redteam: '🛡️',
-  research: '🔎', po: '🎯', feature: '🧩', rethinker: '💡',
+  research: '🔎', po: '🎯', feature: '🧩', rethinker: '💡', 'concept-author': '🧭',
   explore: '🔭', plan: '📐', 'general-purpose': '🤖',
 };
 

@@ -21,8 +21,12 @@ selections, read-only comments).
 | Close-out from final report (`action: "finalize"`) | Do NOT append a new section. Rewrite the existing final-report HTML in place: for routed issues add `disabled` to the `[data-open-questions]` checkboxes and append an `.oq-issue-link` `<a>` with the GitHub issue URL; for a successful ship add the version note to the Zusammenfassung. Keep `data-active` on the final-report section. | Same final-report tab stays active; routed items become read-only audit entries. `refreshCloseout()` drops the follow-up block from the close-out sheet once every checkbox in the section is disabled. |
 
 **Rules:**
-- **Never create a second file** for iterations of the same concept — always
-  append a section to the existing file and POST `/reload` (see Step 5c).
+- **Never create a second page** for iterations of the same concept — every
+  round is one fragment in the concept's source folder, built into the same
+  page, then POST `/reload` (see Step 5c and `step2-build.md`). "Append a
+  section" / "write the file" in this document and the table above means:
+  write `rounds/NN.html` and run `concept-build.js build`. The chip, the
+  freeze attributes and `data-active` come from the build.
 - The active iteration is the only one that accepts input. Submit sends
   decisions for the active iteration only.
 - **A freeze removes `data-active` from the section and nothing else.** Every
@@ -333,13 +337,14 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
       Every input/select/textarea in the active iteration MUST appear in
       the JSON. If any is missing → the catch-all is broken, fix BEFORE
       reload.
-5. ☐ The round being frozen carries the user's comments in its own HTML —
+5. ☐ The round being frozen carries the user's comments in its own fragment
+      (`concept-build.js bake` writes them) —
       textarea values plus the `data-frozen-feedback` blob for the dock
       (every template: at least `general`, § Freezing Design Iterations). Do
       not rely on `localStorage` to render a frozen round: the append bumps
       the live round, so its keys move to a new namespace and the frozen tab
       would come back blank.
-6. ☐ Before overwriting the file, confirm the bridge holds the round's
+6. ☐ Before rebuilding the page, confirm the bridge holds the round's
       comments: `GET /draft?slug={slug}` must list them under `recovered`.
       That is the copy that survives if the rewrite goes wrong.
 7. ☐ The new chip is ONE plain `<button class="iteration-tab" role="tab"
@@ -352,12 +357,18 @@ When appending a new iteration section (Step 5c of `SKILL.md`), verify
       begin with. Nothing else changes in the bar: no `.iteration-tab-summary`,
       no `.nav-group`, no hand-built rounds chip/list — the Kompass tree is
       rebuilt by `buildSectionNav()` on load (see § The panel tree below).
+      On a built page `concept-build.js build` generates exactly this chip —
+      verify only.
 
 ## Procedure on every iteration — coverage gate (Step 5c, Step 2.5)
 
 Before appending the new iteration section, insert this verification step
 between "freeze previous" (step 2 of the SKILL.md procedure) and "append
 new section" (step 3):
+
+On a built page (`step2-build.md`) 2.5 and 2.6 hold by construction —
+every build copies the current engine; what follows applies to a page
+assembled any other way.
 
 **2.5. Verify form collection coverage.** Read the existing JS for
 `collectDecisions()` (or its template-specific variant). Confirm it uses

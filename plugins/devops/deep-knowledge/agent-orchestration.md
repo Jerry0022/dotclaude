@@ -70,6 +70,7 @@ ceiling is its proxy. `/do-run burn` is exempt (explicit run skill).
 | **scout** | haiku | medium | Read-only locating and sweeps — replaces Explore (which inherits the session); measured against sonnet · low in `docs/haiku-5-5-scout.md` |
 | **feature** | opus | medium | Long autonomous run: elaborates, builds, delegates |
 | **rethinker** | opus | high | Code-blind ideation, one lens per agent (do-run rethink only) |
+| **concept-author** | opus | high | Writes one auto-concept round fragment from a brief (auto-concept Step 5c only) |
 
 **Model override rules:**
 - Override `model` at invocation for cost control: `Agent({ subagent_type: "research", model: "sonnet", ... })`.

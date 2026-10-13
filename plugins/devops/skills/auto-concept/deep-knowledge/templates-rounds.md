@@ -183,7 +183,9 @@ section[data-iteration]:not([data-active]) select {
 
 ### Freezing Past Iterations
 
-When appending iteration N+1, Claude must freeze the previous section:
+On a built page (`step2-build.md`) steps 1–3 are applied by `concept-build.js
+build` and the submitted values (step 4) by `bake`; the rules below are what
+both guarantee. When appending iteration N+1, the previous section is frozen:
 
 1. Remove `data-active`, add `hidden` to the previous `<section>`.
    **`data-active` is the ONLY attribute a freeze removes from the section
@@ -821,9 +823,9 @@ how the concept files should land on disk before closing the session.
 
 | `mode` | Step 6 cleanup behaviour |
 |---|---|
-| `discard` *(default)* | Delete the concept HTML AND the matching `-decisions.json` from `docs/concepts/`. |
+| `discard` *(default)* | Delete the concept HTML, the matching `-decisions.json` AND its source folder `{date}-{slug}/` from `docs/concepts/`. |
 | `keep` | Leave the files in place (or under `moveTo` if set). They remain git-tracked. |
-| `gitignore` | Leave the files in place (or under `moveTo` if set) AND append `docs/concepts/{slug}.*` (or the moved path glob) to the repo's `.gitignore` if not already covered. |
+| `gitignore` | Leave the files in place (or under `moveTo` if set) AND append `docs/concepts/{date}-{slug}.*` plus `docs/concepts/{date}-{slug}/` (or the moved paths) to the repo's `.gitignore` if not already covered. |
 
 **Optional `moveTo` (string):** the user may type a target directory
 (e.g. `docs/architecture/decisions/`). When set, Claude `mv`s both the
