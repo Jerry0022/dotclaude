@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.264.1] — 2026-10-14
+
+Two question pins anchored to the same control on a design concept page sat on one spot, and their bubbles stacked into one unreadable block.
+
+### Fixed
+- **Annotation layer**: pins and bubbles of one screen no longer overlap each other. Pins are placed first, each stepping around the pins before it (several questions on one point end up side by side); then the bubbles, the open one first, each avoiding every other pin and the bubbles already placed.
+
+### Tests
+- `anno-visibility.test.js` locks the two-phase placement; a browser check with three questions on one button measured 6 overlaps before and 0 after, also with a bubble open. Auto-concept suite (691) green. Codex review skipped (usage limit until 2026-11-11).
+
 ## [0.264.0] — 2026-10-14
 
 Saying "ich gehe jetzt ins Bett" before leaving matched no trigger: work either kept going interactively or became an improvised autonomous run that never asked whether the PC should shut down or auto-resume after the usage limit.
