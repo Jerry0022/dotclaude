@@ -69,3 +69,32 @@ questions with the shipped `scout` (haiku · medium) once the installed plugin
 carries it, adds the column here, and reverts the scout to `sonnet · low` in
 the same PR when it falls behind (fewer complete answers or any invented
 path).
+
+## Re-measurement 2026-10-14 (shipped scout, haiku · medium)
+
+Installed plugin 0.265.0, `scout` frontmatter `model: haiku`, `effort: medium`.
+Same six questions, ground truth re-grepped on `origin/main` (151efa7f) first.
+The Sonnet baseline is the same `scout` spawned with `model: "sonnet"`, so it
+ran at the frontmatter effort **medium**, not `low` as on 2026-10-13. Pairs
+were spawned in parallel; on Q2, Q3 and Q6 a hook hold (`pre.agent.relay`)
+pushed one of the two runs into a follow-up call, so those ran one after the
+other. Cells: completeness · duration · tool calls.
+
+| Question | haiku · medium (shipped scout) | sonnet · medium (baseline) |
+|---|---|---|
+| Q1 readers of `usage-live.json` (10 files) | 10/10 · 16.3 s · 1 | 10/10 · 16.5 s · 1 |
+| Q2 hooks naming `concept-active.json` (5) | 5/5 · 9.5 s · 1 | 5/5, headline "4" ✗ · 7.3 s · 1 |
+| Q3 concept-infra pattern of `stop.flow.guard` | complete · 29.8 s · 8 | complete · 22.8 s · 6 |
+| Q4 Max 20x budget thresholds | ✓ · 20.8 s · 7 | ✓ · 14.3 s · 3 |
+| Q5 `render_completion_card` registration | ✓ · 16.2 s · 3 | ✓ · 26.3 s · 3 |
+| Q6 model gate and its callers | ✓ · 25.7 s · 7 | ✓ · 19.3 s · 3 |
+| **Total** | 6/6 complete · 0 count errors · Ø 19.7 s | 6/6 complete · 1 count error · Ø 17.8 s |
+
+Every `path:line` claim in the Haiku answers (about 40) was checked against
+the code: each points at the cited symbol, no invented path or line.
+
+Reading: no regression — Haiku · medium is as complete as Sonnet · medium, got
+every headline count right and invented nothing. It keeps searching more
+(27 vs 17 tool calls), which costs ~2 s per answer on average; at a fraction
+of Sonnet's token price that trade stays in Haiku's favour. The scout stays on
+`haiku · medium`.
