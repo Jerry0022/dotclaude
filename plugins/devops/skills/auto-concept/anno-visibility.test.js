@@ -31,6 +31,18 @@ describe("annotation layer keeps pins and bubbles visible", () => {
     expect(wiring).toMatch(/placePin\(anno, bounds, chrome\)/);
   });
 
+  // Reported from a live page: two pins anchored to the same control sat on
+  // one spot and their bubbles stacked into one unreadable block. Clusters
+  // and side-by-side pins are fine; overlap is not.
+  test("pins and bubbles of one screen avoid each other, the open bubble first", () => {
+    const body = wiring.slice(wiring.indexOf("function layoutAnnos("), wiring.indexOf("function openBubbleAt("));
+    expect(body).toMatch(/placePin\(anno, bounds, chrome\.concat\(pins\.map/);
+    expect(body).toMatch(/placeBubble\(anno, bounds, chrome\.concat\(others, bubbles\)\)/);
+    expect(body).toMatch(/list\.filter\(isOpenAnno\)/);
+    const open = wiring.slice(wiring.indexOf("function openBubbleAt("), wiring.indexOf("function updateAnnoUI()"));
+    expect(open).toMatch(/layoutAnnos\(all\)/);
+  });
+
   test("every pin of the active screen is laid out on update, close, scroll and chrome changes", () => {
     const update = wiring.slice(wiring.indexOf("function updateAnnoUI()"));
     expect(update.slice(0, update.indexOf("window.updateAnnoUI"))).toMatch(/layoutAnnos\(all\)/);

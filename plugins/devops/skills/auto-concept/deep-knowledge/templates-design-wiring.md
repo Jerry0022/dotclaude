@@ -169,7 +169,9 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     if (r.left + dx < bounds.left) dx = bounds.left - r.left;
     if (r.bottom > bounds.bottom) dy = bounds.bottom - r.bottom;
     if (r.top + dy < bounds.top) dy = bounds.top - r.top;
-    for (let pass = 0; pass < 3; pass++) {
+    // Six passes, not three: besides the chrome, a pin in a cluster has to
+    // step around its neighbours (layoutAnnos()) — one hop per obstacle.
+    for (let pass = 0; pass < 6; pass++) {
       const cur = shifted(r, dx, dy);
       const hit = chrome.find(c => overlapArea(cur, c) > 0);
       if (!hit) break;
@@ -240,16 +242,43 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     placePin(anno, bounds, chrome);
     placeBubble(anno, bounds, chrome);
   }
+  // Reported from a real page: two pins anchored to the same control sat on
+  // the same spot and their collapsed bubbles stacked into one unreadable
+  // block. Several questions on one point are fine, side by side is fine —
+  // overlapping never is. So the screen is laid out in two phases: every
+  // pin placed counts as an obstacle for the next pin, then every pin and
+  // every bubble placed counts as one for the next bubble (the open bubble
+  // goes first, so it keeps its best side and the collapsed ones make room).
+  function isOpenAnno(anno) {
+    return !!anno.querySelector('[data-anno-bubble][data-open="true"]');
+  }
   function layoutAnnos(list) {
     if (document.body.classList.contains('anno-hidden') || !list.length) return;
     const chrome = chromeRects();
     const bounds = visibleBounds(list[0]);
-    list.forEach(anno => layoutAnno(anno, bounds, chrome));
+    const pins = [];
+    list.forEach(anno => {
+      anchorToTarget(anno);
+      placePin(anno, bounds, chrome.concat(pins.map(p => p.rect)));
+      const pin = anno.querySelector('[data-anno-pin]');
+      const r = pin && pin.getBoundingClientRect();
+      if (r && r.width) pins.push({ anno, rect: r });
+    });
+    const bubbles = [];
+    [...list.filter(isOpenAnno), ...list.filter(a => !isOpenAnno(a))].forEach(anno => {
+      const others = pins.filter(p => p.anno !== anno).map(p => p.rect);
+      placeBubble(anno, bounds, chrome.concat(others, bubbles));
+      const bubble = anno.querySelector('[data-anno-bubble]');
+      const r = bubble && bubble.getBoundingClientRect();
+      if (r && r.width) bubbles.push(r);
+    });
   }
 
   function openBubbleAt(id) {
     const anno = document.querySelector(`[data-anno="${CSS.escape(id)}"]`);
-    if (anno) layoutAnno(anno);
+    if (!anno) return;
+    const all = annotationsInScreen(activeScreen());
+    if (all.includes(anno)) layoutAnnos(all); else layoutAnno(anno);
   }
 
   function updateAnnoUI() {
