@@ -138,7 +138,10 @@ const HOOK_OWNED_MODES = new Set(['do-ship']);
  *  Compared lowercase. */
 const PHRASE_DENYLIST = Object.freeze({
   'do-ship': new Set(['release']),
-  'do-run': new Set(['prüf alles']),
+  // Bedtime phrases end ordinary chats too ("danke, gute Nacht") — the model
+  // decides from do-run's description whether a run is wanted.
+  'do-run': new Set(['prüf alles', 'gute nacht', 'ich gehe ins bett', 'ich geh schlafen',
+    'going to bed', 'good night', 'calling it a night']),
   'auto-update': new Set(['neue version', 'update plugin', 'plugin updaten', 'self update']),
   'auto-agents': new Set(['use agents', 'parallel agents']),
   'auto-issue': new Set(['new issue', 'neues issue']),

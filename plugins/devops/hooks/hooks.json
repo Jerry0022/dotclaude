@@ -23,6 +23,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.graphify.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.verify.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.resume.js", "timeout": 10 },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.run.task.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.concept.resume.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.team.changelog.js", "timeout": 20 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.governor.attach.js", "timeout": 5 }
@@ -266,7 +267,6 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.strict.enforce.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.ship.detect.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.flow.appstart.js" },
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.flow.sleep.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.burn.resume.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.worktree.branch-guard.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit/prompt.governor.resume.js", "timeout": 5 }

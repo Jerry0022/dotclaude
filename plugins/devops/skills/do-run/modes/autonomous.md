@@ -24,7 +24,8 @@ If the incoming user message starts with `AUTONOMOUS_AUTOSTART:`, this is the
    offene Frage aktiv", continue waiting.
 2. If no question is pending: parse `task`, `mode`, `desktop`, `shutdown`,
    `autoResume`, `branch` — and the do-run router answers `ship`, `passes`,
-   `strict` — from the prompt.
+   `strict` — from the prompt. With `taskFile=` the task is that file's
+   content, verbatim — `task=` is only its label.
 3. Output once: **"3-Minuten-Timeout — starte jetzt autonom."**
 4. Skip Steps 1-4 entirely. Permissions were already primed in the parent session.
 5. If `autoResume=yes`, arm the resume cron now (Step 4e) — Step 4c never ran on
@@ -66,7 +67,7 @@ Before Task Intake, check for `AUTONOMOUS-RESUME.json` in the project root.
 If not found → proceed to Step 1.
 
 If found:
-1. Read the resume file (contains: task, mode, progress, missing permission, shutdown pref, branch)
+1. Read the resume file (contains: task, mode, progress, missing permission, shutdown pref, branch) — and `.claude/run-task.md`, the task verbatim, when present
 2. The do-run router already asked "Run fortsetzen" / "Run neu starten" before
    its base call (`../SKILL.md` Step 2, naming the task and the missing
    permission). Take that answer — never ask again.
@@ -133,8 +134,12 @@ The do-run router passes the task (the prompt, a rethink briefing, an audit
 work unit or burn's composite prompt) as `$ARGUMENTS`. Only when it is
 empty, ask: **"Was soll ich autonom erledigen?"**
 
-Parse into: **Goal** (one sentence), **Scope** (files/systems), **Success criteria**.
-If ambiguous, ask ONE clarifying question — time is limited.
+Parse into: **Goal** (one-sentence label), **Scope** (files/systems),
+**Success criteria** — the label never replaces `.claude/run-task.md`
+(`../SKILL.md` Step 1): every constraint in it stays binding.
+If ambiguous, ask ONE clarifying question — time is limited. Never under
+`sleep` or once the user is away: decide, log the choice as an open point,
+move on.
 
 ## Step 2 — Mode & Preference Questions
 
@@ -332,7 +337,7 @@ execution context (the user will not be there to re-enter it):
 CronCreate({
   cron: "<M> <H> <D> <Mo> *",
   recurring: false,
-  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=harden,polish, strict=<on|off>, branch=<current-branch>."
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, taskFile=.claude/run-task.md, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=harden,polish, strict=<on|off>, branch=<current-branch>."
 })
 ```
 
@@ -720,3 +725,6 @@ ends the turn — so a leftover contract never gates the next unrelated session:
 ```bash
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" done
 ```
+
+Delete `.claude/run-task.md` with it (`../SKILL.md` Step 1) — unless the
+run ends INTERRUPTED (the resume path reads it again).

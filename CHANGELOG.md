@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.265.0] — 2026-10-14
+
+A bedtime announcement inside a longer prompt ("gute Nacht, fix noch X und ship es") could lose its actual instructions: the `prompt.flow.sleep` hook's topic filter suppressed some real requests, and on autostart, resume or compaction the task survived only as a one-sentence goal. A hook can only inject text, never carry out the work — so bedtime is now a plain do-run trigger and the task itself is persisted verbatim for the run.
+
+### Removed
+- **`prompt.flow.sleep`** (UserPromptSubmit) and its test. Bedtime detection no longer runs as a hook.
+
+### Added
+- **do-run bedtime triggers**: "gute Nacht", "ich gehe ins Bett", "going to bed" and the like are do-run triggers in its description, `when_to_use` and triggers. The skill-trigger router denylists them, so a plain sign-off ("danke, gute Nacht") never forces a load — the model decides.
+- **`.claude/run-task.md`**: do-run Step 1 writes the user's task VERBATIM there before the base call (overwritten per run; deleted when there is no task and at every run close except an INTERRUPTED autonomous run). Presets read only the user's own words; under sleep/away no clarifying question is asked.
+- **`ss.run.task`** (SessionStart): after a compaction or resume, re-injects `.claude/run-task.md` verbatim as the binding task while this session owns an active run contract and the file is newer than the previous run's close (`run-contract.prev.json`). Listed in `runtime-ignores.js`.
+- **do-run ship preset**: "inkl. ship" narrows Q2 to `… · Ship automatisch`.
+
+### Changed
+- **autonomous mode**: the `AUTONOMOUS_AUTOSTART` prompt carries `taskFile=.claude/run-task.md` (task = file content verbatim); resume reads the file; the Step 1 goal is only a label; the file is deleted with the contract close.
+- `questions.md` § Bedtime: no hook; new tasks said mid-run are appended to the task file.
+
+### Known limits
+- An unanswered bedtime base call waits — whether a cron fires during a pending question is unverified (needs a Desktop e2e check). No trigger-eval cases for the bedtime phrases yet.
+
+### Tests
+- `ss.run.task.test.js` (new, 10). Branch suites (session-start hook, trigger router, runtime-ignores, skill-graph, skills) 1544/1544 green; full suite 301/305 files green with the 4 load-flaky files (untouched areas) green on rerun. Codex review skipped (usage limit until 2026-11-11).
+
 ## [0.264.1] — 2026-10-14
 
 Two question pins anchored to the same control on a design concept page sat on one spot, and their bubbles stacked into one unreadable block.
