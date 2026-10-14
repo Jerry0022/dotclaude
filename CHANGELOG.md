@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.264.0] — 2026-10-14
+
+Saying "ich gehe jetzt ins Bett" before leaving matched no trigger: work either kept going interactively or became an improvised autonomous run that never asked whether the PC should shut down or auto-resume after the usage limit.
+
+### Added
+- **`prompt.flow.sleep`** (UserPromptSubmit) detects a first-person bedtime announcement — "ins Bett gehe", "geh(e) jetzt schlafen", "ich werde heute nacht schlafen", "gute Nacht", "going to bed", "calling it a night", typos included — and routes the turn into do-run with the new `sleep` preset. Conditional or descriptive mentions ("wenn ich ins Bett gehe …", "die Lobbys gehen schlafen") and quoted/code text stay silent.
+- **do-run `sleep` preset**: Q2 shows only its Autonom options, Q3 is dropped (Flexibel), and F6 "PC danach" is always asked — the resume gate is bypassed — in the same `AskUserQuestion` call, so the user answers once and goes. With nothing left to do, F6 alone. Said mid-run as an aside, nothing restarts: running agents and tasks keep going and only F6 is asked and folded into the running work.
+
+### Changed
+- F6 `🔴 PC ausmachen` now says it waits for other running sessions and still powers off when the usage limit stops the run (fail-safe timer).
+
+### Tests
+- `prompt.flow.sleep.test.js` (new, 20) with real phrasings from recent sessions plus false-positive cases; 600 tests in the hook and do-run suites and 470 in the hooks.json suites green. The full suite was not run (it was queued behind another session's run). Codex review skipped (usage limit until 2026-11-11).
+
 ## [0.263.0] — 2026-10-14
 
 A long `/auto-concept` run got expensive per round: real pages are 600–690 KB, and every round the model copied or re-read the engine, grep-validated the whole page and carried all earlier rounds in context. A concept is now a source folder that a script assembles into the same page — the model writes only the new round, the engine never passes through its context, and nothing changes for the browser.
