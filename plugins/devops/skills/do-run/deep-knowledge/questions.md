@@ -164,8 +164,9 @@ one line only when it matters ("Desktop bleibt frei · PC bleibt an").
   `[budget]` line (or parallel sessions draw on it). Budget verbrennen
   and the `sleep` preset always pass the gate — a user away overnight
   makes a limit stop foreseeable. Gated out → `🟢 PC anlassen · ➖ Resume`.
-- **Bedtime (`sleep` preset, `prompt.flow.sleep`).** "ich gehe ins Bett",
-  "geh schlafen", "gute Nacht", "going to bed" → the user answers once and
+- **Bedtime (`sleep` preset, a skill trigger — no hook).** A first-person
+  "ich gehe ins Bett", "geh schlafen", "gute Nacht", "going to bed" — not
+  a message ABOUT bedtime or this trigger — → the user answers once and
   leaves: F6 (and F5 when its gate passes) move INTO the base call, Q3 is
   dropped (Flexibel), Q2 shows only its `Autonom · …` options — at most
   four questions, one `AskUserQuestion`. Nothing left to do ("Rest machen
@@ -173,9 +174,17 @@ one line only when it matters ("Desktop bleibt frei · PC bleibt an").
   (wait for other sessions, then shut down); `➕ Resume` → arm the
   `autonomous-resume-schedule.js` cron (`modes/autonomous.md` Step 4);
   `➖ Resume` → nothing.
+  The rest of the bedtime prompt (tasks, constraints, content
+  instructions, a named skill such as /do-ship or /do-learn) is the task:
+  written verbatim to `.claude/run-task.md` before the base call (SKILL.md
+  Step 1) and binding for the whole run — the base call never re-asks or
+  shortens it. Known limit: an unanswered base call waits — the run
+  starts only once the user answered it.
   **Mid-run comment.** Said as an aside while work already runs (agents
   spawned, a run or background task open) → no restart, no base call:
-  every running agent and task keeps going; ask F6 alone (plus the Q2
+  every running agent and task keeps going; new tasks or constraints in
+  the message are appended to `.claude/run-task.md` and the running work's
+  task list, never dropped; ask F6 alone (plus the Q2
   `Autonom · Ship …` pair when the ship decision is still open) and fold
   the answer into the running work — from then on no more questions,
   `🔴` arms the fail-safe timer + watchdog (`modes/autonomous.md` Steps

@@ -338,6 +338,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `ss.graphify` — graphify enforcement — install-check + auto-build wiring for the graphify integration…
 - `ss.ship.verify` — Surface results from the post-merge watcher (post-ship CI + optional deploy verify).
 - `ss.ship.resume` — Keep a running /do-ship stable across a compaction or a resume.
+- `ss.run.task` — Keep a running do-run's task verbatim across a compaction or a resume.
 - `ss.concept.resume` — Recover an open concept session after a Claude restart.
 - `ss.team.changelog` — Show a summary of changes made by other contributors on remote main since the last ti…
 - `ss.governor.attach` — Registers the session with the Claude load governor and starts its watcher detached (…
@@ -357,7 +358,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.strict.enforce` — Arms and enforces strict mode — literal scope, discretionary parameters.
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
-- `prompt.flow.sleep` — Detect a bedtime announcement ("ich gehe jetzt ins Bett", "geh schlafen", "going to b…
 - `prompt.burn.resume` — After a usage limit stopped a burn: ask on a manual nudge, apply the chosen policy on…
 - `prompt.worktree.branch-guard` — Prevents working without a dedicated branch inside a linked worktree.
 - `prompt.governor.resume` — Tells the session when deferred heavy commands can run again.
@@ -441,6 +441,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `pre.ship.delegate` — The same threshold for a do-ship started through the Skill tool (concept finalize, do-run, autonomous); refuses a delegated spawn below it *(PreToolUse)*
 - `ss.ship.verify` — Surface post-merge watcher results *(SessionStart)*
 - `ss.ship.resume` — Re-enter a ship that was mid-pipeline when the context compacted or the session paused: verify git/gh state first, never a second PR or tag *(SessionStart)*
+- `ss.run.task` — After a compaction or resume, re-inject a running do-run's task verbatim from `.claude/run-task.md`, so constraints survive an overnight run *(SessionStart)*
 
 #### flow — track progress toward completion
 
@@ -448,7 +449,6 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.flow.debug` — Mandate /auto-fix after 2+ consecutive shell failures *(PostToolUse + PostToolUseFailure)*
 - `prompt.batch.collect` — Collect prompts instead of executing them, in `/do-batch` mode *(UserPromptSubmit)*
 - `prompt.flow.appstart` — Detect app start intent, enforce completion card *(UserPromptSubmit)*
-- `prompt.flow.sleep` — "ich gehe ins Bett" / "going to bed" routes into do-run's `sleep` preset: the PC-shutdown / auto-resume question is always asked; said mid-run it never restarts running work *(UserPromptSubmit)*
 - `prompt.flow.silent-turn` — Mark background/cron-injected turns *(UserPromptSubmit)*
 - `prompt.burn.resume` — After a usage limit stopped a burn: ask on a manual nudge, apply the chosen policy on an automatic resume *(UserPromptSubmit)*
 - `stop.flow.guard` — Enforce completion card before response ends *(Stop)*

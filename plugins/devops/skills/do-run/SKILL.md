@@ -6,7 +6,7 @@ description: >-
   set (what · how · scope · passes), then implements the prompt through the
   agent execution path, works off the planned GitHub backlog (milestones or
   loose issues — refine, implement, test, ship each item), runs fully
-  autonomous while the user is away (optional PC shutdown), burns the
+  autonomous while the user is away or goes to bed (optional PC shutdown), burns the
   remaining weekly budget as depth per task (ONLY on the literal /do-run
   burn or /run-burn or the "Budget verbrennen" answer, never from wording
   such as burn, budget, limit or token), rethinks a stuck area from scratch
@@ -19,6 +19,7 @@ when_to_use: >-
   "run the backlog", "milestones abarbeiten", "arbeite die milestones ab",
   "arbeite den milestone ab", "autonomous", "run autonomous",
   "run this while I'm away", "afk mode", "autopilot", "/run-burn",
+  "gute Nacht", "ich gehe ins Bett", "going to bed",
   "festgefahren", "stuck", "unstuck", "wir drehen uns im Kreis",
   "neu denken", "rethink", "frischer Ansatz", "fresh approach",
   "komplett neu denken", "das führt zu nichts", "audit", "full audit",
@@ -27,8 +28,8 @@ when_to_use: >-
 layer: 1
 invokes: [auto-concept, do-ship, auto-harden, auto-polish, auto-agents, auto-issue]
 triggers:
-  en: ["backlog runner", "run the backlog", "autonomous", "run autonomous", "run this while I'm away", "afk mode", "autopilot", "/run-burn", "stuck", "unstuck", "rethink", "fresh approach", "audit", "full audit"]
-  de: ["backlog abarbeiten", "arbeite den backlog ab", "milestones abarbeiten", "arbeite die milestones ab", "arbeite den milestone ab", "festgefahren", "wir drehen uns im Kreis", "neu denken", "frischer Ansatz", "komplett neu denken", "das führt zu nichts", "voller Audit", "auditiere", "auditieren", "prüf alles", "komplett durchchecken", "health check der App", "Qualitätsaudit"]
+  en: ["backlog runner", "run the backlog", "autonomous", "run autonomous", "run this while I'm away", "afk mode", "autopilot", "/run-burn", "going to bed", "good night", "calling it a night", "stuck", "unstuck", "rethink", "fresh approach", "audit", "full audit"]
+  de: ["gute Nacht", "ich gehe ins Bett", "ich geh schlafen", "backlog abarbeiten", "arbeite den backlog ab", "milestones abarbeiten", "arbeite die milestones ab", "arbeite den milestone ab", "festgefahren", "wir drehen uns im Kreis", "neu denken", "frischer Ansatz", "komplett neu denken", "das führt zu nichts", "voller Audit", "auditiere", "auditieren", "prüf alles", "komplett durchchecken", "health check der App", "Qualitätsaudit"]
 argument-hint: "[backlog | autonomous | burn | rethink | audit] [--from=do-batch] [task, filter or target]"
 allowed-tools: >-
   Bash(*), Read, Write, Edit, Glob, Grep, Agent, SendMessage, Skill,
@@ -87,13 +88,30 @@ It never reorders the options that remain.
 | `audit`, or an audit trigger phrase | Q1 dropped → Audit. |
 | `autonomous`, or an AFK phrase ("while I'm away", "afk", "autopilot") | Q2 shows only its two `Autonom · …` options, in table order. |
 | `rethink`, or a stuck phrase (the rethink triggers above) | Q4 marks "Rethink vorher" as recommended. |
-| `sleep`, or a bedtime phrase ("ich gehe ins Bett", "geh schlafen", "going to bed" — `prompt.flow.sleep` passes `sleep`) | Q2 only `Autonom · …`, Q3 dropped (Flexibel), F6 always asked and moved into the base call; nothing left to do → F6 alone. Details: `deep-knowledge/questions.md` (Bedtime). |
+| `sleep`, or a first-person bedtime phrase ("gute Nacht", "ich gehe ins Bett", "geh schlafen", "going to bed") | Q2 only `Autonom · …`, Q3 dropped (Flexibel), F6 always asked and moved into the base call, the base call gets the 3-minute autostart; nothing left to do → F6 alone. Details: `deep-knowledge/questions.md` (Bedtime). |
+| a ship wish in the task ("inkl. ship", "und shippen", "ship it when green", "ship when done") | Q2 shows only its `… · Ship automatisch` options. |
 | a shutdown, resume or desktop-takeover wish | F6 / F5 dropped → the named option; phrases: `deep-knowledge/questions.md` § Follow-up questions. |
 | literal `burn` (`/do-run burn`, `/run-burn`) | Budget verbrennen is on; the option leaves Q4 whatever the usage. |
 | strict already armed for this branch (`node "{PLUGIN_ROOT}/hooks/lib/strict-state.js" status` → `active: true, reason: "on"`) | Q3 dropped → Strikt (`strict off` lifts it, not this question). |
 
 The remaining tokens of `$ARGUMENTS` (or the prompt itself) are the task,
-the backlog filter or the audit target.
+the backlog filter or the audit target. A preset reads its signal from the
+user's own words, never from a constraint inside the task ("kein
+audit-Code anfassen" presets nothing).
+
+**The task stays verbatim.** Before the base call, ALWAYS write the
+user's task — the whole prompt minus a bedtime phrase, word for word, never
+a summary — to `.claude/run-task.md`, overwriting any earlier one; with no
+task (a backlog run, "Rest machen wir morgen") delete the file instead, so a
+leftover never becomes this run's task. Every mode reads its task from
+there, the autostart and resume prompts point at it, and `ss.run.task`
+re-injects it after a compaction. Constraints in it ("Y nicht anfassen",
+"inkl. ship") bind the whole run; no answer, no one-sentence goal label and
+no later summary overrides them. Under `sleep`, or once the user is away,
+no clarifying question about it: decide, log the choice as an open point,
+move on. Every mode deletes the file when the run closes (`run-contract.js
+done` / `abort`) — except an INTERRUPTED autonomous run, whose resume
+reads it again.
 
 ## Step 2 — Resume before anything else
 
