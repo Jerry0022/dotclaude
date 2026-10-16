@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
-  isRegenerable, isToolingState, hasLiveSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
+  isRegenerable, isToolingState, hasLiveSession, hasMovedSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
   reachableFromMerged, dirBytes,
 } from "./hygiene.js";
 
@@ -567,6 +567,56 @@ describe("auto-clean — what a worktree removal would destroy (AUD-C001/C009/C0
     expect(fs.existsSync(idle)).toBe(false);
     expect(res.autoClean.removed.map((r) => r.name || path.basename(r.path)).sort()).toEqual(["wt-idle", "wt-idle"]);
     expect(hasLiveSession(live, projects)).toBe(true);
+  });
+
+  test("a worktree a main-checkout session moved into (EnterWorktree) is live while that transcript names it", () => {
+    const { dir, c1 } = makeRepo();
+    const moved = sessionWorktree(dir, "wt-moved", c1, 40);
+    const other = sessionWorktree(dir, "wt-other", c1, 40);
+    const projects = mkTmp("hy-projects-");
+    // The moved session keeps writing under the MAIN checkout's folder.
+    const mainDir = path.join(projects, path.resolve(dir).replace(/[\\/:.]/g, "-"));
+    fs.mkdirSync(mainDir);
+    const line = JSON.stringify({ cwd: path.resolve(moved), type: "assistant" });
+    fs.writeFileSync(path.join(mainDir, "s.jsonl"), `${"{}\n".repeat(50)}${line}\n`);
+
+    expect(hasMovedSession(moved, dir, projects)).toBe(true);
+    expect(hasMovedSession(other, dir, projects)).toBe(false);
+    expect(hasMovedSession(moved, null, projects)).toBe(false);
+    // A prefix of the live worktree's path is not that worktree.
+    expect(hasMovedSession(path.join(dir, ".claude", "worktrees", "wt-mov"), dir, projects)).toBe(false);
+    if (process.platform === "win32") {
+      // git and the transcript may spell the path in different case.
+      expect(hasMovedSession(moved.toUpperCase(), dir, projects)).toBe(true);
+    }
+
+    run(dir, { projectsDir: projects });
+    expect(fs.existsSync(moved)).toBe(true);
+    expect(fs.existsSync(other)).toBe(false);
+  });
+
+  test("a mere mention of the worktree path in a fresh transcript keeps nothing", () => {
+    const { dir, c1 } = makeRepo();
+    const wt = sessionWorktree(dir, "wt-mentioned", c1, 40);
+    const projects = mkTmp("hy-projects-");
+    const mainDir = path.join(projects, path.resolve(dir).replace(/[\\/:.]/g, "-"));
+    fs.mkdirSync(mainDir);
+    const report = { cwd: path.resolve(dir), message: { content: `kept ${path.resolve(wt)} (live-session); ${path.resolve(wt).replace(/\\/g, "/")}` } };
+    fs.writeFileSync(path.join(mainDir, "s.jsonl"), `${JSON.stringify(report)}\n`);
+    expect(hasMovedSession(wt, dir, projects)).toBe(false);
+  });
+
+  test("a stale main-checkout transcript naming the worktree does not keep it", () => {
+    const { dir, c1 } = makeRepo();
+    const moved = sessionWorktree(dir, "wt-moved-old", c1, 40);
+    const projects = mkTmp("hy-projects-");
+    const mainDir = path.join(projects, path.resolve(dir).replace(/[\\/:.]/g, "-"));
+    fs.mkdirSync(mainDir);
+    const file = path.join(mainDir, "s.jsonl");
+    fs.writeFileSync(file, `${JSON.stringify({ cwd: path.resolve(moved) })}\n`);
+    const old = new Date(Date.now() - LIVE_SESSION_MS - 60_000);
+    fs.utimesSync(file, old, old);
+    expect(hasMovedSession(moved, dir, projects)).toBe(false);
   });
 
   test("a removal that fails is reported as damaged and the closing prune is skipped", () => {

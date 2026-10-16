@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.267.0] — 2026-10-16
+
+Claude Desktop creates a worktree and a `claude/<slug>` branch only when the worktree option is ticked; every other session sits in the shared main checkout. The main-branch guards then told the model to run `git switch -c <topic> origin/main`, which switches the branch under every other session in that checkout — exactly the collision parallel local and cloud sessions must avoid. Sessions in a shared main checkout now move into their own worktree instead. Repos that work on main on purpose (`DEVOPS_ALLOW_MAIN=1` in `.claude/settings.local.json`) are unchanged.
+
+### Added
+- **`post.worktree.enter`** (PostToolUse, matcher `EnterWorktree`): after a session moves into its own worktree, its live `/do-run` contract (strict session-id match, moved under the contract lock, pending arm marker included) follows it. Another session's contract stays in the shared checkout; an id-less contract is never taken, the session is told to re-arm instead.
+- **Eval `evals/git/shared-main-enter-worktree`**: a session in a shared main checkout asked for a fix must enter its own worktree, leave main untouched and never switch the checkout's branch (origin/main 0/2, this release 2/2).
+
+### Changed
+- **Main-branch guards (`pre.edit.branch` 0.2.0, `pre.main.guard` 0.2.0)**: in a main checkout the remedy is `EnterWorktree` (a name with a random suffix, a ToolSearch hint for the deferred tool, the standing plugin rule counts as the instruction to work in a worktree); in a linked worktree `git switch -c` stays. A moved session editing a main-checkout path is pointed at the same path in its own worktree; a path in another session's worktree is never treated as its own; subagents report to the parent instead of creating worktrees. `pre.edit.branch` judges the branch of the target file's work tree, not the session's. The bypass line says only the user enables `DEVOPS_ALLOW_MAIN` in settings — never inline, never by writing around the block.
+- **Session start (`ss.git.check` 0.8.0)**: a clean main checkout gets the standing rule (move into an own worktree before the first edit) without a question. Uncommitted or unpushed work in the checkout keeps the question, recommending an own worktree that leaves those changes untouched; the git-stash take-along is gone (the stash stack is shared by every worktree). A feature branch in the main checkout may be continued; new work moves. Findings are still always reported (#268).
+- **Ship hygiene**: a worktree whose session started in the main checkout is kept while a fresh main-checkout transcript carries it as its `cwd`.
+- **Docs**: `deep-knowledge/git-hygiene.md` describes the worktree-per-session rule; `/do-run` names it in one rule line.
+
+### Known gaps (unchanged by this release)
+- `pre.main.guard` only matches commands that start with `git` (`cd X && git commit`, `git -C X commit` pass), and file writes through Bash bypass `pre.edit.branch`.
+- The ship sentinel is per checkout, not per session.
+
 ## [0.266.3] — 2026-10-16
 
 A promote-only card without `delivery.promote.current` rendered "Promoted  BETA" — the version slot stayed empty and left a double space in the heading (#700).

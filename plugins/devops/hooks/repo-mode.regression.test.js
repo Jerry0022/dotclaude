@@ -194,8 +194,11 @@ describe("branch guards stay usable without an origin", () => {
     );
     // The block itself is correct — branch hygiene does not depend on a remote.
     expect(out.status).toBe(2);
-    // ...but the escape hatch must be one the user can actually run.
-    expect(out.stderr).toMatch(/git switch -c/);
+    // ...but the escape hatch must be one the user can actually run. The
+    // repo root is a MAIN checkout, so the remedy is the session's own
+    // worktree — branched from local main, never from a missing origin.
+    expect(out.stderr).toMatch(/EnterWorktree/);
+    expect(out.stderr).toMatch(/from local main/);
     expect(out.stderr).not.toMatch(/git fetch origin/);
     expect(out.stderr).not.toMatch(/origin\/main/);
   });
@@ -207,11 +210,11 @@ describe("branch guards stay usable without an origin", () => {
       noRemoteDir,
     );
     expect(out.status).toBe(2);
-    expect(out.stderr).toMatch(/git switch -c/);
+    expect(out.stderr).toMatch(/EnterWorktree/);
     expect(out.stderr).not.toMatch(/git fetch origin/);
   });
 
-  test("the suggested local fix actually works", () => {
+  test("the linked-worktree local fix (git switch -c) actually works", () => {
     const probe = mkdtempSync(join(tmpdir(), "repomode-fix-"));
     try {
       git(["init", "-q", "-b", "main", "."], probe);
@@ -231,7 +234,7 @@ describe("branch guards stay usable without an origin", () => {
     }
   });
 
-  test("with an origin, the remote-based fix is unchanged", () => {
+  test("with an origin, the worktree is branched from origin/main", () => {
     git(["remote", "add", "origin", "https://example.invalid/x.git"], noRemoteDir);
     try {
       const out = runHook(
@@ -240,7 +243,8 @@ describe("branch guards stay usable without an origin", () => {
         noRemoteDir,
       );
       expect(out.status).toBe(2);
-      expect(out.stderr).toMatch(/git fetch origin && git switch -c <feat\/topic> origin\/main/);
+      expect(out.stderr).toMatch(/new branch from origin\/main/);
+      expect(out.stderr).not.toMatch(/Fix: git (fetch origin && git )?switch -c/);
     } finally {
       git(["remote", "remove", "origin"], noRemoteDir);
     }

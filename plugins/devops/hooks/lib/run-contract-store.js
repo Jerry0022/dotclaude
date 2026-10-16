@@ -979,6 +979,58 @@ function close(cwd, reason, opts = {}) {
   }
 }
 
+// ── carry-over on EnterWorktree ────────────────────────────────────────────
+
+/**
+ * Move this session's live contract from `fromCwd`'s work tree into
+ * `toCwd`'s — the session just moved there with EnterWorktree, and every
+ * reader looks the contract up in the session's current root, so a contract
+ * left behind in the main checkout would leave the run ungated (fail open).
+ *
+ * Strict ownership: only a header (and arm marker) whose stored sessionId IS
+ * `sessionId` moves — never an id-less one, which in a shared main checkout
+ * may be another session's. A closed contract stays. A destination that
+ * already holds a live contract of its own is not overwritten.
+ *
+ * @returns {object|null} the moved header, or null (nothing moved)
+ */
+function carryOver(fromCwd, toCwd, sessionId) {
+  if (disabled() || !sessionId) return null;
+  if (projectRoot(fromCwd) === projectRoot(toCwd)) return null;
+  const pending = readJson(pendingPath(fromCwd));
+  const pendingOwned = pending && pending.sessionId === sessionId;
+  const raw = readRawContract(fromCwd);
+  const headerOwned = raw && raw.sessionId === sessionId && !raw.closedAt;
+  if (!headerOwned && !pendingOwned) return null;
+  try { fs.mkdirSync(projectClaudeDir(toCwd), { recursive: true }); } catch { /* the write below reports it */ }
+  // Like update() and compactEvents(): no lock, no move — a record() racing
+  // between the events copy and the unlink would otherwise be lost.
+  const token = acquireLock(fromCwd);
+  if (!token) return null;
+  try {
+    let moved = null;
+    if (headerOwned) {
+      const h = readRawContract(fromCwd);
+      if (!h || h.id !== raw.id) return null; // changed under us
+      const dest = readRawContract(toCwd);
+      if (dest && !dest.closedAt && dest.id !== h.id) return null;
+      const next = { ...h, root: projectRoot(toCwd) };
+      if (!writeJsonRetry(contractPath(toCwd), next)) return null;
+      const ev = eventsPath(fromCwd);
+      if (fileExists(ev)) {
+        try { fs.copyFileSync(ev, eventsPath(toCwd)); } catch { unlinkQuiet(contractPath(toCwd)); return null; }
+      }
+      unlinkQuiet(contractPath(fromCwd));
+      unlinkQuiet(ev);
+      moved = next;
+    }
+    if (pendingOwned && writeJsonRetry(pendingPath(toCwd), pending)) unlinkQuiet(pendingPath(fromCwd));
+    return moved;
+  } finally {
+    releaseLock(fromCwd, token);
+  }
+}
+
 // ── markers ────────────────────────────────────────────────────────────────
 
 function markPendingArm(cwd, opts = {}) {
@@ -1030,7 +1082,7 @@ module.exports = {
   LIB_PATH, rearmHint,
   disabled, contractPath, eventsPath, prevPath, pendingPath, batchHandoffPath, hasState,
   readContract, readContractForCard, readRawContract, expiryNotice, arm, update, claim, record, close, events,
-  markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff,
+  markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff, carryOver,
   // shared with the sibling modules (not part of the facade's public list)
   nowOf, eventsOf, readJson, strList, sanitize,
   // internal, exposed for this module's own tests only (AUD-017 / AUD-018 / RT1 / RT2)

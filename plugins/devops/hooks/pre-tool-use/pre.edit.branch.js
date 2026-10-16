@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.edit.branch
- * @version 0.1.3
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Edit|Write|NotebookEdit
@@ -15,7 +15,19 @@
  *     - HEAD is NOT main/master
  *     - Sentinel file .claude/.ship-in-progress exists (ship pipeline active)
  *     - DEVOPS_ALLOW_MAIN=1 in environment
- *     - Target path is outside the repo working tree (e.g. ~/.claude/**)
+ *     - Target path is outside this repository (e.g. ~/.claude/**, another repo)
+ *
+ *   The branch checked is the one of the work tree the TARGET lives in, not
+ *   the cwd's: a session that moved into its own worktree (EnterWorktree)
+ *   may still hold paths into the main checkout, and the cwd-based check let
+ *   exactly those edits land on the shared main. A target in another work
+ *   tree of the same repository is checked against that tree's branch; a
+ *   target in a different repository stays out of scope.
+ *
+ *   The remedy depends on where the block happens (lib/branch-fix.js): in
+ *   the repo's MAIN checkout — possibly shared by several sessions — the
+ *   session moves into its own worktree instead of switching the shared
+ *   checkout's branch; in a linked worktree `git switch -c` stays the fix.
  *
  *   Every git probe goes through lib/git-timeout.js's gitOut — GIT_TIMEOUT_MS
  *   per call; before, these calls had no timeout at all. A failed or hung
@@ -29,11 +41,13 @@ const path = require('path');
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every edit
 // (AUD-028).
-let gitOut, sentinelActive;
+let gitOut, sentinelActive, isLinkedWorktree, findRepoRoot, gitCommonDir, samePath, branchFix, BYPASS;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
+  ({ isLinkedWorktree, findRepoRoot, gitCommonDir, samePath } = require('../lib/project-root'));
+  ({ branchFix, BYPASS } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -71,28 +85,48 @@ function canonicalize(p) {
   try { return fs.realpathSync.native(p); } catch { return null; }
 }
 
-function isInside(repoRoot, target) {
-  if (!repoRoot || !target) return false;
+/** Absolute target with its closest existing ancestor canonicalized (Write may create the file). */
+function realTargetOf(target) {
+  const absTarget = path.resolve(target);
+  let probe = absTarget;
+  let real = canonicalize(probe);
+  while (!real && probe !== path.dirname(probe)) {
+    probe = path.dirname(probe);
+    real = canonicalize(probe);
+    if (real) return { real: path.join(real, path.relative(probe, absTarget)), dir: real };
+  }
+  return { real: real || absTarget, dir: real ? path.dirname(real) : null };
+}
+
+function isInside(root, realTarget) {
+  const realRoot = canonicalize(root) || root;
+  const rel = path.relative(realRoot, realTarget);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+const real = (p) => (p && (canonicalize(p) || path.resolve(p))) || null;
+
+/**
+ * The work-tree root whose branch decides about `target`, or null when the
+ * target is outside this repository: the target's own work tree (fs walk, no
+ * git spawn), provided it is the cwd's tree or another work tree of the same
+ * repository (same git common dir). A nested linked worktree under the main
+ * checkout is thereby judged by its own branch, a main-checkout path from a
+ * worktree session by main's.
+ */
+function targetRoot(cwdRoot, target) {
   try {
-    const realRoot = canonicalize(repoRoot) || repoRoot;
-    const absTarget = path.resolve(target);
-    // Target may not exist yet (Write creates new files) — canonicalize the
-    // closest existing ancestor instead, so a symlinked parent is resolved.
-    let probe = absTarget;
-    let realTarget = canonicalize(probe);
-    while (!realTarget && probe !== path.dirname(probe)) {
-      probe = path.dirname(probe);
-      realTarget = canonicalize(probe);
-      if (realTarget) {
-        realTarget = path.join(realTarget, path.relative(probe, absTarget));
-        break;
-      }
-    }
-    if (!realTarget) realTarget = absTarget;
-    const rel = path.relative(realRoot, realTarget);
-    return !rel.startsWith('..') && !path.isAbsolute(rel);
+    const { real: realTarget, dir } = realTargetOf(target);
+    const ownRoot = real(dir && findRepoRoot(dir));
+    if (!ownRoot) return null;
+    const cwdReal = real(cwdRoot);
+    if (samePath(ownRoot, cwdReal)) return isInside(cwdReal, realTarget) ? { root: cwdReal, cwdRoot: cwdReal, real: realTarget } : null;
+    const a = real(gitCommonDir(cwdReal));
+    const b = real(gitCommonDir(ownRoot));
+    if (!a || !b || !samePath(a, b)) return null;
+    return { root: ownRoot, cwdRoot: cwdReal, real: realTarget };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -113,10 +147,12 @@ process.stdin.on('end', () => {
 
   if (process.env.DEVOPS_ALLOW_MAIN === '1') process.exit(0);
 
-  const repoRoot = gitTopLevel(cwd);
-  if (!repoRoot) process.exit(0);
+  const cwdRoot = gitTopLevel(cwd);
+  if (!cwdRoot) process.exit(0);
 
-  if (!isInside(repoRoot, target)) process.exit(0);
+  const hit = targetRoot(cwdRoot, target);
+  if (!hit) process.exit(0);
+  const repoRoot = hit.root;
 
   if (sentinelActive(repoRoot)) process.exit(0);
 
@@ -125,18 +161,29 @@ process.stdin.on('end', () => {
   if (branch !== 'main' && branch !== 'master') process.exit(0);
 
   const remote = hasRemote(repoRoot);
+  const mainCheckout = !isLinkedWorktree(repoRoot);
   const rule = remote
     ? `New work always happens on a branch derived from origin/${branch}.`
     : `New work always happens on a feature branch.`;
-  const fix = remote
-    ? `git fetch origin && git switch -c <feat/topic> origin/${branch}  — then retry the edit.`
-    : `git switch -c <feat/topic>  — no origin remote, so this branches from local ${branch}. Then retry the edit.`;
+  const fix = branchFix({
+    branch,
+    remote,
+    mainCheckout,
+    relPath: path.relative(repoRoot, hit.real),
+    subagent: Boolean(hook.agent_id),
+    // The target lives in ANOTHER work tree of this repo than the session's
+    // own — a moved session holding a main-checkout path, or a path inside
+    // another session's worktree.
+    elsewhere: samePath(repoRoot, hit.cwdRoot)
+      ? null
+      : { targetRoot: repoRoot, ownRoot: hit.cwdRoot, ownIsWorktree: isLinkedWorktree(hit.cwdRoot) },
+  });
 
   process.stderr.write(
     `BLOCKED: Editing files on local '${branch}' is not allowed.\n` +
     `Rule: ${rule}\n` +
-    `Fix: ${fix}\n` +
-    `Bypass (only if the user explicitly asked to edit ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single action.\n`
+    fix.map(l => `${l}\n`).join('') +
+    `${BYPASS}\n`
   );
   process.exit(2);
 });

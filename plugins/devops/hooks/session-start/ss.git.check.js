@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.7.0
+ * @version 0.8.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
@@ -15,11 +15,16 @@
  *   Composition lives in ../lib/git-check-output.js.
  *
  *   Workspace check (current repo only):
- *     - On main/master without worktree → high-priority warning, suggests
- *       worktree + feature branch (or ship-first if uncommitted exist).
+ *     - On main/master without worktree → high-priority warning. The main
+ *       checkout may be shared by several sessions, so the remedy is the
+ *       session's own worktree (EnterWorktree), never switching the shared
+ *       checkout's branch. Clean checkout → a standing rule, no question;
+ *       uncommitted/unpushed work there → AskUserQuestion (it may be the
+ *       user's WIP or another session's). Text: lib/git-check-output.js.
  *     - Detached HEAD without worktree → high-priority warning (commits
- *       would not belong to any branch).
- *     - Not in worktree on feature branch → mild suggestion to isolate.
+ *       would not belong to any branch), same remedy.
+ *     - Not in worktree on feature branch → mild note: continuing that
+ *       branch is fine, new work moves into its own worktree.
  *     - In worktree on main → silent (prompt.worktree.branch-guard handles).
  *
  *   Bypass for workspace check (stale check still runs):

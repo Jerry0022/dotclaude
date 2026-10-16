@@ -29,7 +29,9 @@
  *          ignored files too and can follow a junction, so a `.env`, a patch,
  *          unsent batch notes, a concept store or an ignored link keeps it),
  *          no other checkout inside it, no Claude transcript for it
- *          written in the last `LIVE_SESSION_MS`, idle for the age above
+ *          written in the last `LIVE_SESSION_MS` (nor a main-checkout
+ *          transcript naming it — a session moved there by EnterWorktree),
+ *          idle for the age above
  *          (newest of HEAD commit and the worktree's index/HEAD/log mtimes),
  *          and its HEAD landed as above — its branch goes with it.
  *      Never touched: the default branch, main/master/HEAD/origin, the
@@ -512,6 +514,56 @@ export function hasLiveSession(wtPath, projectsDir, now = Date.now()) {
   return false;
 }
 
+/** How much of a transcript's tail is searched for a moved session's worktree path. */
+const MOVED_TAIL_BYTES = 512 * 1024;
+
+/**
+ * A session that STARTED in the main checkout and moved into `wtPath` with
+ * EnterWorktree keeps writing its transcript under the main checkout's
+ * projects folder, so hasLiveSession() on the worktree path finds nothing.
+ * Such a worktree is live when a transcript of the main checkout, written
+ * within LIVE_SESSION_MS, carries `wtPath` as a session `cwd` in its tail.
+ * Only the structured `"cwd":"<path>"` field counts, closed by its quote —
+ * a mere mention (a `git worktree list`, a hygiene report) keeps nothing,
+ * and `…/worktrees/fix` does not match a live `…/worktrees/fix-ab12`.
+ * Case-folded on win32, where git and the transcript may spell a drive or
+ * folder differently.
+ */
+export function hasMovedSession(wtPath, mainPath, projectsDir, now = Date.now()) {
+  if (!projectsDir || !mainPath || !wtPath) return false;
+  const fold = (t) => (process.platform === "win32" ? t.toLowerCase() : t);
+  const abs = path.resolve(String(wtPath));
+  const needles = [...new Set([abs, abs.replace(/\\/g, "/")])]
+    .flatMap((p) => [`"cwd":${JSON.stringify(p)}`, `"cwd": ${JSON.stringify(p)}`])
+    .map(fold);
+  for (const name of transcriptDirNames(mainPath)) {
+    let files;
+    try {
+      files = fs.readdirSync(path.join(projectsDir, name));
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      if (!f.endsWith(".jsonl")) continue;
+      const file = path.join(projectsDir, name, f);
+      let fd;
+      try {
+        const st = fs.statSync(file);
+        if (now - st.mtimeMs >= LIVE_SESSION_MS) continue;
+        const len = Math.min(st.size, MOVED_TAIL_BYTES);
+        const buf = Buffer.alloc(len);
+        fd = fs.openSync(file, "r");
+        fs.readSync(fd, buf, 0, len, st.size - len);
+        const tail = fold(buf.toString("utf8"));
+        if (needles.some((n) => tail.includes(n))) return true;
+      } catch { /* vanished or unreadable */ } finally {
+        if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already closed */ }
+      }
+    }
+  }
+  return false;
+}
+
 export function defaultProjectsDir() {
   return path.join(os.homedir(), ".claude", "projects");
 }
@@ -523,7 +575,7 @@ function keepReason(unit, ctx) {
     if (unit.locked) return "locked";
     const inner = nestedCheckout(unit.path, ctx.paths, ctx.current);
     if (inner) return `holds another checkout: ${inner}`;
-    if (hasLiveSession(unit.path, ctx.projectsDir)) return "live-session";
+    if (hasLiveSession(unit.path, ctx.projectsDir) || hasMovedSession(unit.path, ctx.mainPath, ctx.projectsDir)) return "live-session";
     const why = worktreeContentReason(unit.path, ctx.mainPath);
     if (why) return why;
   }
@@ -719,7 +771,7 @@ function removeWorktree(unit, cwd, current, timeout, projectsDir, mainPath) {
   if (entry.head !== unit.head || entry.branch !== unit.branch) return "moved";
   const inner = nestedCheckout(unit.path, live.map((w) => normPath(w.path)), current);
   if (inner) return `holds another checkout: ${inner}`;
-  if (hasLiveSession(unit.path, projectsDir)) return "live-session";
+  if (hasLiveSession(unit.path, projectsDir) || hasMovedSession(unit.path, mainPath, projectsDir)) return "live-session";
   const why = worktreeContentReason(unit.path, mainPath);
   if (why) return why;
   try {

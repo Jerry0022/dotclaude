@@ -148,8 +148,10 @@ describe("#268 — findings survive a session that never asks", () => {
 // ---------------------------------------------------------------------------
 
 describe("ask block", () => {
+  const pending = () => [currentRepo(issue("uncommitted", 2, "2 uncommitted file(s)"))];
+
   test("keeps the FIRST-action AskUserQuestion mandate verbatim", () => {
-    const out = text(compose({ dirty: [], workspace: onMain, cwd: CWD }));
+    const out = text(compose({ dirty: pending(), workspace: onMain, cwd: CWD }));
     expect(out).toContain("Call AskUserQuestion as the FIRST action of this turn.");
   });
 
@@ -167,51 +169,46 @@ describe("ask block", () => {
       .toBeLessThan(out[0].indexOf("final message"));
   });
 
-  test("every truthy workspace type gets an ask block", () => {
+  test("every workspace type asks when the checkout holds pending work", () => {
     for (const workspace of [onMain, detached, featureNoWorktree]) {
-      const out = text(compose({ dirty: [], workspace, cwd: CWD }));
+      const out = text(compose({ dirty: pending(), workspace, cwd: CWD }));
       expect(out, workspace.type).toContain("Call AskUserQuestion as the FIRST action of this turn.");
       expect(out, workspace.type).toContain("Resolution per option:");
     }
   });
 
-  test("offers all four resolutions when the repo has pending changes", () => {
-    const out = text(compose({
-      dirty: [currentRepo(issue("uncommitted", 2, "2 uncommitted file(s)"))],
-      workspace: onMain,
-      cwd: CWD,
-    }));
-    expect(out).toContain("Worktree + Feature-Branch anlegen");
-    expect(out).toContain("Erst aktuelle Changes shippen");
-    expect(out).toContain("Changes mitnehmen in neuen Worktree");
+  test("unpushed commits count as pending work too", () => {
+    const out = text(compose({ dirty: [currentRepo(issue("unpushed", 1, "1 unpushed commit(s)"))], workspace: onMain, cwd: CWD }));
+    expect(out).toContain("Call AskUserQuestion as the FIRST action of this turn.");
+  });
+
+  test("on main with pending changes: own worktree first, changes left alone, no stash take-along", () => {
+    const out = text(compose({ dirty: pending(), workspace: onMain, cwd: CWD }));
+    expect(out).toContain("Neue Arbeit im eigenen Worktree, Changes hier unangetastet lassen (recommended)");
+    expect(out).toContain("Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen");
     expect(out).toContain("Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1");
+    expect(out).toContain("Own worktree: Call the EnterWorktree tool");
+    expect(out).toContain("they may be another session's");
     expect(out).toContain("Ship-first: invoke /do-ship");
-    expect(out).toContain("Take-along: `git stash`");
-    expect(out).toContain("Stay: set env `DEVOPS_ALLOW_MAIN=1`");
+    expect(out).toContain("Stay: the user adds env `DEVOPS_ALLOW_MAIN=1` to the project's `.claude/settings.local.json`");
+    expect(out).toContain("never set it yourself");
+    expect(out).not.toContain("git stash");
+    expect(out).not.toContain("git worktree add ../");
+    expect(out).not.toContain("cd there");
   });
 
-  test("offers only the worktree option when there are no pending changes", () => {
-    const out = text(compose({ dirty: [], workspace: onMain, cwd: CWD }));
-    expect(out).toContain("Worktree + Feature-Branch anlegen (recommended)");
-    expect(out).not.toContain("Ship-first: invoke /do-ship");
-    expect(out).not.toContain("Take-along: `git stash`");
+  test("feature branch in the root with pending changes: continuing it is the default", () => {
+    const out = text(compose({ dirty: pending(), workspace: featureNoWorktree, cwd: CWD }));
+    expect(out).toContain("Am Branch `feat/x` hier weiterarbeiten (recommended)");
+    expect(out).toContain("Neue Arbeit im eigenen Worktree, Changes hier unangetastet lassen");
+    expect(out).toContain("Continue here:");
+    expect(out).not.toContain("DEVOPS_ALLOW_MAIN");
   });
 
-  test("a stash-only repo does not count as pending changes", () => {
-    const out = text(compose({
-      dirty: [currentRepo(issue("stash", 3, "3 stash entries"))],
-      workspace: onMain,
-      cwd: CWD,
-    }));
-    expect(out).toContain("- 3 stash entries → review with `git stash list`");
-    expect(out).toContain("Worktree + Feature-Branch anlegen (recommended)");
-    expect(out).not.toContain("Ship-first: invoke /do-ship");
-  });
-
-  test("non-main workspace types get the informative bypass wording and no DEVOPS_ALLOW_MAIN resolution", () => {
-    const out = text(compose({ dirty: [], workspace: featureNoWorktree, cwd: CWD }));
+  test("detached HEAD with pending changes keeps the informative stay option", () => {
+    const out = text(compose({ dirty: pending(), workspace: detached, cwd: CWD }));
     expect(out).toContain("Hier bleiben (Warning bleibt informativ");
-    expect(out).not.toContain("Stay: set env");
+    expect(out).not.toContain("Stay: the user adds env");
   });
 
   test("no ask block at all when there is no workspace issue", () => {
@@ -227,6 +224,48 @@ describe("ask block", () => {
 // ---------------------------------------------------------------------------
 // Workspace rendering
 // ---------------------------------------------------------------------------
+
+describe("clean checkout — the standing rule, no question", () => {
+  test("clean main checkout: EnterWorktree before the first edit, no AskUserQuestion", () => {
+    const out = compose({ dirty: [], workspace: onMain, cwd: CWD });
+    const t = text(out);
+    expect(t).not.toContain("AskUserQuestion");
+    expect(out[0]).toContain("The Rule block below is an instruction for you, not a message for the user");
+    expect(out[0]).toContain("Findings listed below, if any, are for the user: show them");
+    expect(t).toContain("Before the FIRST edit or commit of this session");
+    expect(t).toContain("Call the EnterWorktree tool");
+    expect(t).toContain("counts as the instruction to work in a worktree");
+    expect(t).toContain("Read-only work (questions, reviews, analysis) needs no worktree");
+    expect(t).toContain("Never switch this checkout's branch");
+  });
+
+  test("detached HEAD in the root gets the same rule", () => {
+    const t = text(compose({ dirty: [], workspace: detached, cwd: CWD }));
+    expect(t).not.toContain("AskUserQuestion");
+    expect(t).toContain("Before the FIRST edit or commit of this session");
+  });
+
+  test("feature branch in the root: continuing allowed, new work moves (R6)", () => {
+    const t = text(compose({ dirty: [], workspace: featureNoWorktree, cwd: CWD }));
+    expect(t).not.toContain("AskUserQuestion");
+    expect(t).toContain("Continuing that branch's work here is fine; NEW work moves into its own worktree first");
+    expect(t).not.toContain("Before the FIRST edit");
+  });
+
+  test("a stash-only repo does not count as pending changes, and its finding is still owed", () => {
+    const out = compose({
+      dirty: [currentRepo(issue("stash", 3, "3 stash entries"))],
+      workspace: onMain,
+      cwd: CWD,
+    });
+    const t = text(out);
+    expect(t).toContain("- 3 stash entries → review with `git stash list`");
+    expect(t).not.toContain("AskUserQuestion");
+    // #268: a finding next to the rule is still owed in the final message.
+    expect(out[0]).toContain("restate them verbatim in your final message, before any completion card");
+    expect(out[0]).toContain("scheduled, cron or headless run");
+  });
+});
 
 describe("workspace section", () => {
   test("on-main renders the guard warning", () => {
@@ -367,10 +406,13 @@ describe("robustness", () => {
     expect(out).toContain("- 1 stash entry → review with `git stash list`");
   });
 
-  test("an unknown workspace type still renders a branch line and an ask block", () => {
-    const out = text(compose({ dirty: [], workspace: { type: "brand-new", branch: "x" }, cwd: CWD }));
-    expect(out).toContain("- On `x` in repo root (not in a worktree)");
-    expect(out).toContain("Call AskUserQuestion as the FIRST action of this turn.");
+  test("an unknown workspace type still renders a branch line and the rule (an ask with pending work)", () => {
+    const ws = { type: "brand-new", branch: "x" };
+    const clean = text(compose({ dirty: [], workspace: ws, cwd: CWD }));
+    expect(clean).toContain("- On `x` in repo root (not in a worktree)");
+    expect(clean).toContain("Call the EnterWorktree tool");
+    const dirty = text(compose({ dirty: [currentRepo(issue("uncommitted", 1, "1 uncommitted file(s)"))], workspace: ws, cwd: CWD }));
+    expect(dirty).toContain("Call AskUserQuestion as the FIRST action of this turn.");
   });
 
   test("a workspace without a branch does not render `undefined`", () => {
@@ -395,7 +437,8 @@ describe("repo without a remote", () => {
 
   test("the ask recommends a local ship — never a push", () => {
     const out = text(compose({ dirty: [currentRepo(localOnly)], workspace: onMain, cwd: CWD }));
-    expect(out).toContain("Erst aktuelle Changes lokal shippen (commit + lokaler Merge), dann Worktree anlegen (recommended)");
+    expect(out).toContain("Erst aktuelle Changes lokal shippen (commit + lokaler Merge), dann Worktree anlegen");
+    expect(out).toContain("Neue Arbeit im eigenen Worktree, Changes hier unangetastet lassen (recommended)");
     expect(out).toContain("Ship-first: invoke /do-ship (no remote: commits and merges locally)");
     expect(out).not.toContain("shippen (commit + push)");
   });

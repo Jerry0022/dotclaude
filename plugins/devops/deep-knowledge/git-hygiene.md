@@ -6,8 +6,21 @@ Commit message format and granularity: [commit-conventions.md](commit-convention
 ## Main-branch protection (hard rule)
 
 - **HEAD must never be `main`/`master` while editing or committing.** New work always
-  starts from a branch derived from `origin/main`:
-  `git fetch origin && git switch -c <feat/topic> origin/main`.
+  starts from a branch derived from `origin/main` — how depends on the checkout:
+  - **Main checkout** (the repo root, not a linked worktree): several sessions —
+    Desktop local and cloud, scheduled tasks, a terminal — may share it, and
+    switching its branch moves all of them. The session moves into its own
+    worktree instead: `EnterWorktree {"name":"<topic>-<suffix>"}` (branch from
+    `origin/<default>`), then works with paths inside it. The shared checkout stays
+    on `main`. Changes found there are never moved, stashed or restored on
+    Claude's own — they may be another session's; the user decides. A subagent
+    blocked on main reports to its parent instead of creating a worktree.
+  - **Linked worktree** (the session's own): `git fetch origin && git switch -c <feat/topic> origin/main`.
+  - `pre.edit.branch` checks the branch of the work tree the edited file lives in,
+    so a moved session that still holds a main-checkout path is blocked too.
+  - The do-run contract follows the move (`post.worktree.enter`), and
+    `ship_hygiene` keeps a worktree whose session started in the main checkout
+    alive while that session's transcript names it.
 - **Never commit, merge, push, rebase, cherry-pick, reset --hard, revert, apply or
   am on main/master directly.** The only path back to `main` is `/do-ship`.
 - **Never create PRs manually** (`gh pr create` / `gh pr merge`). Always via
@@ -46,8 +59,9 @@ Commit message format and granularity: [commit-conventions.md](commit-convention
 - After merge: local branch is deleted, remote branch is deleted by `--delete-branch`.
 - Stale branches (upstream gone, no worktree) are cleaned up by the ship flow.
 - After ship, `main` is checked out locally as a side-effect of cleanup. The next
-  unit of work must start with a fresh branch (`git switch -c ... origin/main`)
-  before any edits — see "Main-branch protection" above.
+  unit of work must start with a fresh branch — in the main checkout via
+  `EnterWorktree`, in a linked worktree via `git switch -c ... origin/main` —
+  before any edits; see "Main-branch protection" above.
 
 ## Parallel development safety
 
