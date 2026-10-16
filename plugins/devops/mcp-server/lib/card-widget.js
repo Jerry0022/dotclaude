@@ -169,6 +169,12 @@ export const CONCLUDE = {
   en: { label: "Rework", icon: "bug", tooltip: "Puts the prepared answer to the open points into the input box — tackle all of them, Enter sends.", intro: "Please tackle all open points:" },
 };
 
+/** Label of the analysis card's primary button when the card names its recommended next step (`nextStep`). */
+export const NEXT_STEP = {
+  de: { label: "Empfehlung umsetzen" },
+  en: { label: "Do recommended step" },
+};
+
 /**
  * The guide-offer button (#506): index.js#buildDecisionBlock scans the
  * card's `userFinalTest`/`open` payload for a manual web hand-off
@@ -267,6 +273,13 @@ export function buttonsFor(buttonsKey, lang = "de", opts = {}) {
     if (conclusion && !list.some((a) => a.conclude)) buttons.push(concludeButton);
     // Dropping the Ship button must not leave a row without its accented verb.
     if (opts && opts.noShip && buttons.length && !buttons.some((a) => a.primary)) buttons[0] = { ...buttons[0], primary: true };
+  }
+  // An analysis names its one recommended step: "Umsetzen" alone left the user
+  // guessing what a click would start.
+  const step = String((opts && opts.nextStep) || "").trim().replace(/^\/+/, "");
+  if (buttonsKey === "analysis" && step && buttons.length) {
+    const n = NEXT_STEP[lang] || NEXT_STEP.de;
+    buttons[0] = { ...buttons[0], label: n.label, prompt: step, tooltip: step.length > 140 ? step.slice(0, 139) + "…" : step };
   }
   if (opts && opts.appStart) buttons.push(appStartButton(lang));
   const handoff = opts && opts.guideHandoff;
@@ -392,7 +405,7 @@ export function cardWidgetData(model, repoUrl = "") {
   const nz = (v) => (v ? v : undefined);
   const arr = (a) => (Array.isArray(a) ? a : []);
   const list = (a) => (arr(a).length ? a : undefined);
-  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff, appStart: model.appStart });
+  const buttons = buttonsFor(model.buttonsKey, lang, { version: model.promoteVersion, replies: model.replies, noShip: model.noShip, guideHandoff: model.guideHandoff, appStart: model.appStart, nextStep: model.nextStep });
   const prNum = model.pipelinePr && model.pipelinePr.number;
   const b = model.budget;
   let bu;

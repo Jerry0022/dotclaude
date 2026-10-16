@@ -1782,6 +1782,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
     heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
+    nextStep: key === 'analysis' ? String(input.nextStep || '').trim() : '',
   };
 }
 
@@ -1915,6 +1916,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     noShip: !!decision.noShip,
     guideHandoff: decision.guideHandoff || null,
     appStart: !!decision.appStart,
+    nextStep: decision.nextStep || '',
   };
 }
 
@@ -2686,6 +2688,7 @@ server.registerTool(
           description: z.string().optional(),
         }).optional(),
       ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
+      nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here."),
       userTest: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.string()).optional(),
