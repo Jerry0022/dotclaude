@@ -1,20 +1,12 @@
 # Router Questions — Rules, Conditions, Resume, Follow-up
 
-Question detail for `/do-run`: what Steps 2–4 of `SKILL.md` need to build
-their `AskUserQuestion` calls and to read the answers. The **decision** stays
-in the skill body — whether the resume question comes first (Step 2), the
-base call Q1–Q4 (Step 3) and which follow-up an answer opens (the Step 4
-table); this file only answers "I am asking it, now what exactly?". The
-rules apply to every question the router asks: the base call in `SKILL.md`
-as much as the resume and follow-up questions below. Step numbers and
+How `/do-run` Steps 2–4 build their `AskUserQuestion` calls and read the
+answers; which question is asked stays in `SKILL.md`. Step numbers and
 `modes/…` paths refer to `SKILL.md` and its directory.
-
-Spec: `docs/superpowers/specs/2026-09-24-skill-restructure-design.md`
-§ "do-run questions".
 
 ## Rules for every question
 
-Rules for every question this router asks (spec § "do-run questions"):
+Apply to the base call, the resume and the follow-up questions alike:
 
 - **Fixed option order.** The options below always appear in exactly this
   order. A condition may hide an option; nothing ever moves one.
@@ -39,10 +31,8 @@ Rules for every question this router asks (spec § "do-run questions"):
   once (it freshens `~/.claude/usage-live.json`), then
   `node "{PLUGIN_ROOT}/scripts/burn-plan.js" offer --no-refresh`.
   Show the option only when it prints `"offer": true`: at the user's own
-  pace this week, at least 10 % above the reserve would expire unused. (The
-  old rule, `weekly.pct > 80`, showed it exactly where little is left and a
-  normal run uses it anyway.) It is always the last option and never
-  carries `(Recommended)`.
+  pace this week, at least 10 % above the reserve would expire unused. It is
+  always the last option and never carries `(Recommended)`.
 - **Rethink marker** — "reads stuck" means a stuck phrase from Step 1 or an
   explicit `rethink` argument; nothing else.
 - **Last choice for Q3.** Scan this conversation for the most recent answer
@@ -61,13 +51,10 @@ number read and the rest dropped.
 **Reading Q4.** Q4 carries only what changes the run's shape: Rethink
 vorher (Prompt umsetzen only) and Budget verbrennen (only on a
 `burn-plan.js` offer). Harden and Polish are no option — Harden always
-runs after the implementation, Polish whenever the change touched UI files
-(the 48 h session scan of 2026-09-27: the passes were picked in 10 of 13
-runs, and Polish ran on UI-free backlog items for nothing). When neither
-option applies, Q4 is dropped. Whenever Q4 is asked, `"Nichts davon"` —
-Direkt umsetzen — is its last option, however many others apply (#635): the
-Desktop app cannot submit a multi-select with nothing ticked, and without it
-the only way to say "nothing" was an empty Other.
+runs after the implementation, Polish whenever the change touched UI files.
+When neither option applies, Q4 is dropped. Whenever Q4 is asked, `"Nichts
+davon"` — Direkt umsetzen — is its last option, however many others apply
+(#635: the Desktop app cannot submit a multi-select with nothing ticked).
 
 `AskUserQuestion` has no pre-selection: an option can be marked, never
 pre-ticked. The question text therefore names what an empty answer runs.
@@ -197,11 +184,8 @@ one line only when it matters ("Desktop bleibt frei · PC bleibt an").
   übernehmen`. A preset answers the question whether or not its gate
   passed — shutdown stays reachable without asking everyone.
 
-F6 is asked only when a resume is foreseeable, so its first option — the
-recommendation — is `➕ Resume`; the order never changes. The symbols carry
-the state at a glance: 🟢/🔴 the PC stays on or shuts down, ➕/➖
-auto-resume on or off; shutdown never resumes, so its label needs no resume
-symbol.
+F6's first option — the recommendation — is `➕ Resume`; the order never
+changes.
 
 F7 is the auto-resume answer for the burn: whatever the user types after a
 limit is asked again by `prompt.burn.resume` (manual nudge, "Burn
@@ -212,10 +196,8 @@ feeds `modes/burn.md` Step 5: issues assigned to the user are core work
 unassigned issues are filler (P3–P5). Mechanical and filler tasks always run
 at standard depth.
 
-F6 folds the autonomous shutdown and auto-resume questions into one: no
-option pairs shutdown with resume, so the HARD GATE of
-`modes/autonomous.md` Step 2 (`$SHUTDOWN=yes` ⇒ `$AUTO_RESUME=no`) holds by
-construction. F3/F4 labels are data, exempt from the label rules. When more
+No F6 option pairs shutdown with resume (`modes/autonomous.md` Step 2 HARD
+GATE: `$SHUTDOWN=yes` ⇒ `$AUTO_RESUME=no`). F3/F4 labels are data, exempt from the label rules. When more
 milestones and loose issues exist than the call has room for, the rest of
 the selection continues in `modes/backlog.md` Step 1.2 — the tool's
 four-question cap is the only reason for a second follow-up.
