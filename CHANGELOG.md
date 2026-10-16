@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.268.1] — 2026-10-16
+
+In the /auto-concept design template a mock root with `max-width: 1080px` whose only wide child was an absolute 640px popup shrank to its content (about 510px) inside the screen's flex centring, and the window's `overflow: hidden` clipped the popup (#708). Mock roots now take the screen's full width.
+
+### Fixed
+- **Concept design template**: `[data-template="design"] section[data-screen] > :not([data-anno-layer]) { width: 100%; }` — a mock root fills the screen and is sized with `max-width`; the annotation layer is excluded, `.device-stage` already stretched. Browser check at 1440px: 32px without the rule, 1080px with it; no horizontal overflow at phone width.
+- **Docs**: `templates-design-wiring.md` Mock CSS — a mock root takes the screen's full width, size it with `max-width`.
+- **auto-concept SKILL.md** back under the 500-line ceiling (498): #730 had pushed it to 500 and `skill-source.test.js` was red on main.
+
 ## [0.268.0] — 2026-10-16
 
 A high-severity npm-audit advisory was mentioned in one prose sentence while the card read "all harmless" and carried no open item, so the fix was only discoverable through the input-field suggestion (#709). A card that names a security finding now has to offer its fix.

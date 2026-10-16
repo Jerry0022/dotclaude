@@ -143,6 +143,12 @@ section[data-iteration][hidden] { display: none; }
   animation: screen-in 0.25s ease;
 }
 section[data-screen][hidden] { display: none; }
+/* The screen centers its mock with flexbox, and a flex item shrinks to its
+   content: a mock root with `max-width: 1080px` whose only wide child is an
+   absolute popup collapsed to ~510px and clipped that popup (#708). Full
+   width for every mock root lets its own max-width decide; the screen still
+   centers it. The annotation layer keeps its own sizing. */
+[data-template="design"] section[data-screen] > :not([data-anno-layer]) { width: 100%; }
 /* Structural backstop for the "exactly one of these is on screen" invariant.
    `hidden` is the switchers' mechanism, and the markup above asks for it on
    every inactive design and screen — but nothing enforces that, and these

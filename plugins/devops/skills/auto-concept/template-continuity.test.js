@@ -405,3 +405,13 @@ describe("the ☰ panel is page chrome", () => {
     expect(sharedLine).toBeLessThan(designLine);
   });
 });
+
+// #708: the screen centers its mock with flexbox, so a mock root with only a
+// max-width shrank to its in-flow content (~510px) and clipped its popup.
+describe("a mock root takes the screen's full width", () => {
+  test("the engine gives every non-annotation child of a screen width: 100%", () => {
+    expect(cssSource).toContain(
+      '[data-template="design"] section[data-screen] > :not([data-anno-layer]) { width: 100%; }'
+    );
+  });
+});

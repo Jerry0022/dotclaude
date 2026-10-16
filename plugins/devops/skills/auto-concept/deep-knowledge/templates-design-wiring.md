@@ -523,6 +523,11 @@ with `data-screen`:
   no `<script>`, `<canvas>`, `<style>` or `<iframe>`, no `vh`/`vw` units, no
   `position: fixed`, and no `#id` selectors in its CSS. § Responsive device
   views explains what each of those does when cloned.
+- **A mock root takes the screen's full width.** The engine gives every
+  direct child of `section[data-screen]` (except the annotation layer)
+  `width: 100%`; size the mock with `max-width` on its root, never by
+  leaving the width to its content — a flex-centered root without it
+  shrinks to its in-flow content and clips absolute popups (#708).
 - **Mock CSS is namespaced per design — never a bare generic name, never an
   engine chrome class.** A round's `<style>` (at the top of the iteration,
   outside every `section[data-screen]`) lives in the same document as the
