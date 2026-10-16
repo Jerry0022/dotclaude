@@ -959,6 +959,36 @@ describe("render_completion_card — ship + promote in one run (released)", () =
     expect(text).toContain("tags beta/v0.1.0");
     expect(text).not.toMatch(/Tests? (green|grün)/);
   });
+
+  // #700: a promote-only payload without promote.current printed
+  // "Promoted  BETA" — the version now comes from the ladder.
+  test("a promote-only card without promote.current still names the version", async () => {
+    for (const [lang, re] of [["de", /^## 🎊 Promoted v0\.51\.0 BETA — nach stable\?$/m], ["en", /^## 🎊 Promoted v0\.51\.0 BETA — to stable\?$/m]]) {
+      const text = await cardText({
+        variant: "released", summary: "x", lang, session_id: "test-700-" + lang,
+        delivery: { promote: { channels: { alpha: "0.51.0", beta: "0.51.0" } } },
+      });
+      expect(text, lang).toMatch(re);
+    }
+  });
+
+  test("promotion.to picks the target channel and its version", async () => {
+    const text = await cardText({
+      variant: "released", summary: "x", lang: "en", session_id: "test-700-to",
+      delivery: { promote: { channels: { alpha: "0.52.0", beta: "0.51.0", stable: "0.50.0" } } },
+      promotion: { from: "beta", to: "stable" },
+    });
+    expect(text).toMatch(/^## 🎊 Released v0\.50\.0 LIVE — stable\.$/m);
+  });
+
+  test("an unresolvable version drops the token instead of leaving a gap", async () => {
+    const text = await cardText({
+      variant: "released", summary: "x", lang: "de", session_id: "test-700-none",
+      delivery: { promote: { channels: {} } },
+    });
+    expect(text).toMatch(/^## 🎊 Promoted BETA — nach stable\?$/m);
+    expect(text).not.toMatch(/Promoted {2}|Promoted v /);
+  });
 });
 
 describe("render_completion_card — out-of-band deploy gate (#243)", () => {

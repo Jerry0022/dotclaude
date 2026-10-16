@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.266.3] — 2026-10-16
+
+A promote-only card without `delivery.promote.current` rendered "Promoted  BETA" — the version slot stayed empty and left a double space in the heading (#700).
+
+### Fixed
+- **Completion card (promote / released)**: the heading names the version from `promotion.to` (or the CTA channel), falling back to the highest version on the channel ladder. When no version can be resolved the token is dropped ("Promoted BETA") instead of leaving a gap.
+- **Completion card (released)**: the released key selection also reads `promotion.to`, matching the session-title prefix, so title and heading name the same channel.
+
 ## [0.266.2] — 2026-10-16
 
 A note field under a concept decision showed up as the browser's default box (monospace, 20 columns, two rows) whenever the page emitted it without its row wrapper, and the wrapped one was smaller than the 💬 dock's field.
