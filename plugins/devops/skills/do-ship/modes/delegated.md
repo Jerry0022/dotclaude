@@ -82,13 +82,16 @@ inline that way, the largest at 951 k.
         widget without that markup is not the card. In the terminal, output
         `markdown` verbatim. Add no text of your own.
    - `{ "status": "done", "cardData", "afterRender", "exitWorktree" }` (only
-     with `--card-data`, see below): the card is NOT rendered yet. Finish your
-     own close-out first (the /auto-concept finalize: part D and Step 6a, so
-     the bridge, pulser and waker are stopped and the state file is gone).
-     Then, if `exitWorktree` is true, call `ExitWorktree({ action: "remove" })`.
-     Only then call `render_completion_card` with `cardData` verbatim, carry
-     out its `[SESSION TITLE]` step and show the card as the last action, and
-     run the `afterRender` steps right after the render.
+     with `--card-data`, see below): the card is NOT rendered yet. On a
+     shipped variant finish your own close-out first (the /auto-concept
+     finalize: part D and Step 6a, so the bridge, pulser and waker are
+     stopped and the state file is gone); on `ship-blocked` skip it — the
+     concept stays open. A failed close-out still goes on. Then call
+     `render_completion_card` with `cardData` verbatim, carry out its
+     `[SESSION TITLE]` step and show the card as the last action, run the
+     `afterRender` steps, and only then, if `exitWorktree` is true, call
+     `ExitWorktree({ action: "remove" })` — the render reads the worktree
+     as its `cwd`.
    - **No JSON block**, or the agent failed: render a `ship-blocked` card that
      states the agent's last words as the reason. Never re-run the pipeline
      inline on your own; the user decides (`/do-ship --inline`).
@@ -106,9 +109,10 @@ blocks it.
 A ship inside an /auto-concept finalize (part C) runs before the caller's
 close-out. A card the subagent renders there is frozen with the concept still
 open: it links the localhost page and asks to close the concept out, and the
-bridge is gone a minute later. So `pre.ship.delegate` adds `--card-data` to
-the delegated args whenever the project holds a `.claude/concept-active.json`
-(or the args already carry the flag). The subagent then stops before the
+bridge is gone a minute later. So the finalize passes `--card-data` in its
+do-ship args and `pre.ship.delegate` keeps it in the delegated args. It is
+never inferred from `.claude/concept-active.json`: that file also exists for
+a paused, stale or close-out-only concept, whose ship must not close it out. The subagent then stops before the
 render and returns the card input; the caller renders after Step 6a, and the
 last card shows the closed concept. The finalize order A → B → C → D stays
 unchanged; only the render moves behind the close-out.
@@ -139,7 +143,7 @@ extension. Only these points differ:
 | Step 5b Substep 3 (re-open files) | Skip it. Those files were opened by the parent session. |
 | Step 5e (memory dream) | Skip it. The learnings live in the parent's conversation, not in the brief. |
 | Step 6 | Unchanged up to and including `render_completion_card` (with the `session_id` and `lang` from your prompt) and any project-extension step that runs after the render, such as a plugin self-sync. Take `changes`, `validation` and `userFinalTest` from the brief, plus what the ship itself found. **Never call `show_widget` or rename the session**: return the result in the `done` JSON. `titlePrefix` is the prefix the `[SESSION TITLE]` block names. On Desktop, `widgetFile` is the path the result names ("The same HTML is saved in …") and `widgetTitle` is always `"completion_card_body"`. In the terminal, `markdown` is the card markdown verbatim. |
-| Step 6 with `--card-data` | Do everything up to the render, but do **not** call `render_completion_card` and do not run the project-extension steps that follow the render. Return `{ "status": "done", "cardData": <the full render_completion_card input you would have passed, session_id and lang included>, "afterRender": [<each deferred extension step, as a command or one-line instruction>], "exitWorktree" }`. The parent renders after its close-out. |
+| Step 6 with `--card-data` | Do everything up to the render, but do **not** call `render_completion_card` and do not run the project-extension steps that follow the render. Return `{ "status": "done", "cardData": <the full render_completion_card input you would have passed, session_id and lang included>, "afterRender": [<each deferred extension step, as a command or one-line instruction>], "exitWorktree" }`. List an extension step in `afterRender` only when it would have run here: `ship_release` succeeded and its own conditions hold (e.g. no `.claude/.ship-queue` marker) — otherwise `[]`. The parent renders after its close-out. |
 | Sentinel hygiene | Unchanged. Before a `ship-blocked` card, call `ship_cleanup({ …, keep: true })`. |
 
 End **every** return (`decision` and `done` alike) with exactly one fenced `json`

@@ -37,6 +37,15 @@ describe("bridgeLive (#712)", () => {
     expect(bridgeLive(cwd, s, 8800, { isAlive: alive, readEntry: () => null, platform: "win32" })).toBe(true);
   });
 
+  // Redteam: ports collide across worktrees — a foreign session's live bridge
+  // must not vouch for ours.
+  test("a registry entry of another worktree is not ours", () => {
+    const foreign = () => ({ pid: 4242, worktree: join(cwd, "..", "other-worktree") });
+    const s = { ...state, server_pid: DEAD };
+    expect(bridgeLive(cwd, s, 8800, { isAlive: alive, readEntry: foreign, platform: "linux" })).toBe(false);
+    expect(bridgeLive(cwd, state, 8800, { isAlive: alive, readEntry: () => ({ pid: DEAD, worktree: cwd }) })).toBe(false);
+  });
+
   test("missing or zero pid is unknown: the page alone decides", () => {
     for (const server_pid of [undefined, 0, null, "x"]) {
       expect(bridgeLive(cwd, { ...state, server_pid }, 8800, { isAlive: () => false, readEntry: () => null, platform: "linux" })).toBe(true);

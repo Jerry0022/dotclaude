@@ -151,8 +151,10 @@ describe("ship-delegate — Skill-tool ships", () => {
 // before the caller's close-out, so the relayed widget still linked the
 // (then dead) localhost page and asked to close out a closed concept.
 describe("card data instead of a card for the concept finalize ship (#712)", () => {
-  test("wantsCardData: an open concept or an explicit --card-data", () => {
-    expect(wantsCardData({ args: "beta", conceptOpen: true })).toBe(true);
+  // Redteam: a state file also exists for a paused, stale or close-out-only
+  // concept (#693) — only the finalize's own flag counts.
+  test("wantsCardData: only an explicit --card-data", () => {
+    expect(wantsCardData({ args: "beta", conceptOpen: true })).toBe(false);
     expect(wantsCardData({ args: "--card-data beta" })).toBe(true);
     expect(wantsCardData({ args: "beta --keep" })).toBe(false);
     expect(wantsCardData()).toBe(false);
@@ -168,6 +170,11 @@ describe("card data instead of a card for the concept finalize ship (#712)", () 
     expect(render).toBeGreaterThan(closeout);
     expect(after).toBeGreaterThan(render);
     expect(out).toMatch(/"cardData", "afterRender", "exitWorktree"/);
+    // A blocked ship never closes the concept out (auto-concept C.2).
+    expect(out).toMatch(/ship-blocked: NO part D/);
+    // The card renders while its cwd (the worktree) still exists.
+    const exit = out.indexOf('ExitWorktree({ action: "remove" })', render);
+    expect(exit).toBeGreaterThan(after);
     // Never doubled when the args already carry the flag.
     const again = shipDelegateInstruction({ tokens: 434_000, skillArgs: "--card-data beta", pluginRoot: "/p", cardData: true, env: {} });
     expect(again).toContain('with args "--delegated --card-data beta"');

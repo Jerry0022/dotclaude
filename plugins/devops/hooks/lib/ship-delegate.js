@@ -102,14 +102,14 @@ const CARD_DATA = /(^|\s)--card-data\b/i;
 
 /**
  * Whether the delegated ship hands back card data instead of a rendered card
- * (#712): explicitly via `--card-data`, or because the project holds an
- * /auto-concept state file — a do-ship started while a concept is open is
- * that concept's finalize ship, and its close-out has not run yet.
- * @param {{ args?: string, conceptOpen?: boolean }} o
+ * (#712). Only the explicit `--card-data` the /auto-concept finalize passes
+ * counts: a state file alone also exists for a paused, stale or
+ * close-out-only concept (#693), whose ship must not trigger a close-out.
+ * @param {{ args?: string }} o
  * @returns {boolean}
  */
-function wantsCardData({ args = '', conceptOpen = false } = {}) {
-  return conceptOpen || CARD_DATA.test(String(args || ''));
+function wantsCardData({ args = '' } = {}) {
+  return CARD_DATA.test(String(args || ''));
 }
 
 /** `--delegated` (the subagent itself) and `--resume` (Pre-Step R, which
@@ -214,11 +214,12 @@ function spawnAndDeliver({ args, sessionId, description, brief, cardData = false
     '   { "status": "decision", "question", "options", "recommended" } → AskUserQuestion, then SendMessage the answer',
     '     to the same agent and wait for its next result.',
     ...(cardData ? [
-      '   { "status": "done", "cardData", "afterRender", "exitWorktree" } (--card-data, the concept finalize ship) → NOT rendered yet:',
-      '     first finish the /auto-concept close-out (part D and Step 6a: bridge, pulser and waker stopped, state file gone),',
-      '     then exitWorktree true: ExitWorktree({ action: "remove" }). Only then call render_completion_card with cardData',
-      '     verbatim, show it per the render result (title step included) as the LAST card, and run the afterRender steps',
-      '     right after the render.',
+      '   { "status": "done", "cardData", "afterRender", "exitWorktree" } (--card-data, the concept finalize ship) → NOT rendered yet.',
+      '     cardData.variant ship-successful (or another shipped variant): first finish the /auto-concept close-out',
+      '     (part D and Step 6a: bridge, pulser and waker stopped, state file gone). ship-blocked: NO part D, the concept',
+      '     stays open. Then call render_completion_card with cardData verbatim (before ExitWorktree, its cwd must exist),',
+      '     show it per the render result (title step included) as the LAST card, run the afterRender steps, and only',
+      '     then, if exitWorktree is true, ExitWorktree({ action: "remove" }). A failed close-out still renders.',
     ] : []),
     '   { "status": "done", "titlePrefix", "widgetFile" | "markdown", "widgetTitle", "exitWorktree" } → the card is already rendered.',
     '     exitWorktree true: ExitWorktree({ action: "remove" }) first. Set the session title to titlePrefix + the title',

@@ -472,11 +472,13 @@ export function bridgeLive(cwd, state, port, deps = {}) {
   }
   let isAlive = deps.isAlive;
   let readEntry = deps.readEntry;
-  if (!isAlive || !readEntry) {
+  let norm = deps.normWorktree;
+  if (!isAlive || !readEntry || !norm) {
     try {
       const reg = createRequire(import.meta.url)(join(here, "..", "..", "scripts", "concept-port-registry.js"));
       isAlive = isAlive || reg.isProcessAlive;
       readEntry = readEntry || reg.readEntry;
+      norm = norm || reg.normWorktree;
     } catch {
       return true; // registry module unreadable: the page check alone decides
     }
@@ -484,7 +486,10 @@ export function bridgeLive(cwd, state, port, deps = {}) {
   let pid = 0;
   try {
     const entry = readEntry(port);
-    pid = entry && Number(entry.pid);
+    // Ports collide across worktrees: another session's live bridge on the
+    // same port says nothing about ours — its pid counts as unknown.
+    const foreign = entry && entry.worktree && norm(entry.worktree) !== norm(cwd);
+    pid = entry && !foreign ? Number(entry.pid) : 0;
   } catch {
     pid = 0;
   }
