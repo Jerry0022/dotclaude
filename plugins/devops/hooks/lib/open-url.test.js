@@ -4,8 +4,10 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
-  OPEN_URL_PREFIX, isLoopbackHttpUrl, parseOpenUrlPrompt, openCommand, openInDefaultBrowser,
+  OPEN_URL_PREFIX, isLoopbackHttpUrl, parseOpenUrlPrompt, openCommand, openInDefaultBrowser, probeUrl,
 } = require("./open-url.js");
+const http = require("node:http");
+const net = require("node:net");
 
 describe("isLoopbackHttpUrl", () => {
   test.each([
@@ -138,5 +140,46 @@ describe("openInDefaultBrowser", () => {
     const { spawn, calls } = fakeSpawn("spawn");
     await expect(openInDefaultBrowser("https://example.com/", { spawn })).resolves.toBe(false);
     expect(calls).toHaveLength(0);
+  });
+});
+
+// #703: the hook probes before it opens.
+describe("probeUrl", () => {
+  function listen(handler) {
+    return new Promise((resolve) => {
+      const srv = http.createServer(handler);
+      srv.listen(0, "127.0.0.1", () => resolve(srv));
+    });
+  }
+
+  test("any HTTP answer counts as alive, a 404 too", async () => {
+    const srv = await listen((req, res) => { res.statusCode = 404; res.end(); });
+    try {
+      expect(await probeUrl(`http://127.0.0.1:${srv.address().port}/missing.html`)).toBe(true);
+    } finally { srv.close(); }
+  });
+
+  test("a closed port is dead", async () => {
+    const srv = await listen(() => {});
+    const port = srv.address().port;
+    await new Promise((r) => srv.close(r));
+    expect(await probeUrl(`http://127.0.0.1:${port}/`)).toBe(false);
+  });
+
+  test("a port that accepts but never answers is dead after the timeout", async () => {
+    const sockets = [];
+    const srv = net.createServer((s) => sockets.push(s));
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    try {
+      const t0 = Date.now();
+      expect(await probeUrl(`http://127.0.0.1:${srv.address().port}/`, { timeoutMs: 200 })).toBe(false);
+      expect(Date.now() - t0).toBeLessThan(2000);
+    } finally { sockets.forEach((s) => s.destroy()); srv.close(); }
+  });
+
+  test("never probes a non-loopback URL", async () => {
+    let called = false;
+    expect(await probeUrl("https://example.com/", { get: () => { called = true; } })).toBe(false);
+    expect(called).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 /**
  * @module open-url
- * @version 0.1.0
+ * @version 0.2.0
  * @description The "open this local page in the default browser" prompt the
  *   completion-card widget puts into the composer, and the opener
  *   prompt.flow.open-url runs for it.
@@ -120,9 +120,48 @@ function openInDefaultBrowser(url, deps = {}) {
   });
 }
 
+/** How long the reachability probe waits before calling a page dead. */
+const PROBE_TIMEOUT_MS = 1500;
+
+/**
+ * Whether a loopback page answers at all (#703). Any HTTP response counts —
+ * a 404 still proves a server is listening; a refused or silent port does
+ * not. The hook opens nothing on a dead port: the browser would show an
+ * error page and the prompt that should have woken Claude would be gone.
+ * @param {string} url
+ * @param {{ get?: Function, timeoutMs?: number }} [deps]
+ * @returns {Promise<boolean>}
+ */
+function probeUrl(url, deps = {}) {
+  const timeoutMs = deps.timeoutMs ?? PROBE_TIMEOUT_MS;
+  return new Promise((resolve) => {
+    if (!isLoopbackHttpUrl(url)) { resolve(false); return; }
+    const u = new URL(url);
+    const get = deps.get || require(u.protocol === 'https:' ? 'https' : 'http').get;
+    let settled = false;
+    const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+    let req;
+    try {
+      // Loopback only, so a self-signed dev certificate is no reason to call
+      // the server dead.
+      req = get(u.href, { timeout: timeoutMs, rejectUnauthorized: false }, (res) => {
+        res.resume();
+        finish(true);
+      });
+    } catch {
+      finish(false);
+      return;
+    }
+    req.on('timeout', () => { req.destroy(); finish(false); });
+    req.on('error', () => finish(false));
+  });
+}
+
 module.exports = {
   OPEN_URL_PREFIX,
   SPAWN_TIMEOUT_MS,
+  PROBE_TIMEOUT_MS,
+  probeUrl,
   isLoopbackHttpUrl,
   parseOpenUrlPrompt,
   openCommand,
