@@ -35,13 +35,13 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every Bash call
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, branchFix;
+let gitOut, sentinelActive, isLinkedWorktree, branchFix, BYPASS;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree } = require('../lib/project-root'));
-  ({ branchFix } = require('../lib/branch-fix'));
+  ({ branchFix, BYPASS } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -132,7 +132,7 @@ process.stdin.on('end', () => {
     `[pre.main.guard] BLOCKED: Write operation on local '${branch}' is not allowed.\n` +
     `[pre.main.guard] Rule: ${rule}\n` +
     fix.map(l => `[pre.main.guard] ${l}\n`).join('') +
-    `[pre.main.guard] Bypass (only if the user explicitly asked to work on ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single command.\n`
+    `[pre.main.guard] ${BYPASS}\n`
   );
   process.exit(2);
 });

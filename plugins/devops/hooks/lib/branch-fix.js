@@ -89,4 +89,14 @@ function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPat
   ];
 }
 
-module.exports = { branchFix, enterLine, RULE_CLAUSE };
+/**
+ * The bypass line. The hooks read DEVOPS_ALLOW_MAIN from THEIR OWN
+ * environment — the session's, set in settings — so an inline
+ * `DEVOPS_ALLOW_MAIN=1 <cmd>` never reaches them. The old "set env … for
+ * this single action" read as permission to do exactly that: a behavioural
+ * eval (evals/git/shared-main-enter-worktree) caught a session writing the
+ * blocked file through `DEVOPS_ALLOW_MAIN=1 node -e …` instead.
+ */
+const BYPASS = 'Bypass: only the user enables it, as env DEVOPS_ALLOW_MAIN=1 in the project\'s .claude/settings.local.json (e.g. a repo that is deliberately worked on main). Never set it yourself and never write the file another way (Bash, node, a script) to get around this block.';
+
+module.exports = { branchFix, enterLine, RULE_CLAUSE, BYPASS };

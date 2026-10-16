@@ -157,7 +157,7 @@ function askLines(workspace, noRemote = false) {
     out.push('  - Continue here: keep working on this branch in this checkout; new work later still moves into a worktree');
   }
   if (workspace.type === 'on-main-no-worktree') {
-    out.push('  - Stay: set env `DEVOPS_ALLOW_MAIN=1` for this session to silence main-branch checks');
+    out.push('  - Stay: the user adds env `DEVOPS_ALLOW_MAIN=1` to the project\'s `.claude/settings.local.json` to silence main-branch checks (an inline `DEVOPS_ALLOW_MAIN=1 <cmd>` never reaches the hooks — never set it yourself)');
   }
   out.push('');
   return out;

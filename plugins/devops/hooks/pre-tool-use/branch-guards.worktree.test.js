@@ -182,6 +182,15 @@ describe("pre.edit.branch", () => {
     expect(edit(featDir, join(root, "loose.txt")).status).toBe(0);
   }, TIMEOUT);
 
+  test("the bypass line never invites an inline env var or a write around the block", () => rootOnMain(() => {
+    for (const r of [edit(mainDir, join(mainDir, "a.txt")), commit(mainDir)]) {
+      expect(r.stderr).toContain("only the user enables it");
+      expect(r.stderr).toContain(".claude/settings.local.json");
+      expect(r.stderr).toContain("Never set it yourself and never write the file another way");
+      expect(r.stderr).not.toContain("for this single");
+    }
+  }), TIMEOUT);
+
   test("DEVOPS_ALLOW_MAIN=1 (the Home Assistant exception) still passes", () => rootOnMain(() => {
     expect(edit(mainDir, join(mainDir, "a.txt"), {}, { DEVOPS_ALLOW_MAIN: "1" }).status).toBe(0);
   }), TIMEOUT);

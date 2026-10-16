@@ -41,13 +41,13 @@ const path = require('path');
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every edit
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, findRepoRoot, gitCommonDir, samePath, branchFix;
+let gitOut, sentinelActive, isLinkedWorktree, findRepoRoot, gitCommonDir, samePath, branchFix, BYPASS;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree, findRepoRoot, gitCommonDir, samePath } = require('../lib/project-root'));
-  ({ branchFix } = require('../lib/branch-fix'));
+  ({ branchFix, BYPASS } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -183,7 +183,7 @@ process.stdin.on('end', () => {
     `BLOCKED: Editing files on local '${branch}' is not allowed.\n` +
     `Rule: ${rule}\n` +
     fix.map(l => `${l}\n`).join('') +
-    `Bypass (only if the user explicitly asked to edit ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single action.\n`
+    `${BYPASS}\n`
   );
   process.exit(2);
 });

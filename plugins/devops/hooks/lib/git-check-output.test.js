@@ -190,7 +190,8 @@ describe("ask block", () => {
     expect(out).toContain("Own worktree: Call the EnterWorktree tool");
     expect(out).toContain("they may be another session's");
     expect(out).toContain("Ship-first: invoke /do-ship");
-    expect(out).toContain("Stay: set env `DEVOPS_ALLOW_MAIN=1`");
+    expect(out).toContain("Stay: the user adds env `DEVOPS_ALLOW_MAIN=1` to the project's `.claude/settings.local.json`");
+    expect(out).toContain("never set it yourself");
     expect(out).not.toContain("git stash");
     expect(out).not.toContain("git worktree add ../");
     expect(out).not.toContain("cd there");
@@ -207,7 +208,7 @@ describe("ask block", () => {
   test("detached HEAD with pending changes keeps the informative stay option", () => {
     const out = text(compose({ dirty: pending(), workspace: detached, cwd: CWD }));
     expect(out).toContain("Hier bleiben (Warning bleibt informativ");
-    expect(out).not.toContain("Stay: set env");
+    expect(out).not.toContain("Stay: the user adds env");
   });
 
   test("no ask block at all when there is no workspace issue", () => {
