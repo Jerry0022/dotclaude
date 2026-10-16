@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.268.4] — 2026-10-17
+
+/auto-concept loads fewer tokens on every concept page (#722, pass 1). The 17 cuts kept are the ones that held every grader on the `decision-page` eval case against `origin/main`.
+
+### Changed
+- **auto-concept `SKILL.md`**: 498 → 430 lines (−13 % words). Rationale, duplicate rules and lists the build already enforces are removed. Every test-pinned guard sentence and every `Before executing this step` pointer is kept.
+- **auto-concept `deep-knowledge/step4-monitor.md`, `pause-resume.md`, `artifact-fallback.md`**: rationale paragraphs removed; the rules and contract facts are unchanged.
+
+### Added
+- **Trim record `evals/trims/auto-concept.md`**: each removed instruction with its A/B result (batch 1: 16/16 → 16/16 over 2 runs; batch 2: 8/8 → 8/8). `templates-*`, `validation-gate.md` and `bridge-server.md` follow in pass 2 (#723).
+
 ## [0.268.3] — 2026-10-16
 
 /do-run is trimmed against real `ab-run.js` evidence (#719). Only the cuts that held up ship: the SKILL.md cuts lost graders on the A/B run and were reverted.
