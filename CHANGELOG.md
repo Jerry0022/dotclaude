@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.268.0] — 2026-10-16
+
+A high-severity npm-audit advisory was mentioned in one prose sentence while the card read "all harmless" and carried no open item, so the fix was only discoverable through the input-field suggestion (#709). A card that names a security finding now has to offer its fix.
+
+### Added
+- **Card pregate, Gate S (`securityWithoutOpen`)**: a card whose summary, changes or tests name a CVE, GHSA, advisory, npm-audit or vulnerab* finding without an `open` item is refused once (same one-refusal-per-identical-finding rule as the other gates, so a false positive renders on the second call). A clean audit ("0 vulnerabilities", "found 0", "keine Schwachstellen", "npm audit clean/passed/ok") and "advisory lock/board/only" do not count.
+- **Docs**: `deep-knowledge/completion-card-design.md` § 2.6 — a security finding is never "harmless"; it goes into `open` with a fix reply.
+
 ## [0.267.3] — 2026-10-16
 
 After a concept close-out the card still linked the stopped localhost page and offered to close out a concept that was already closed (#712). The card now checks that the page and its bridge are alive, and a delegated concept-finalize ship hands its card back to be rendered after the close-out.
