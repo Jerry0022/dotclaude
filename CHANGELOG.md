@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.266.2] — 2026-10-16
+
+A note field under a concept decision showed up as the browser's default box (monospace, 20 columns, two rows) whenever the page emitted it without its row wrapper, and the wrapped one was smaller than the 💬 dock's field.
+
+### Fixed
+- **Concept templates (`templates-decision.md`)**: a zero-specificity safety-net rule styles every bare `textarea[data-comment]` like the dock's textarea (full width, 80 px ≈ three lines, 10 px radius, `--input-bg`, page font); the dock, mapping slot notes, comment fields and annotation answers keep their own look. `.decision-comment-row textarea` now matches the dock too, and both cap at `max-width: 100%` with vertical-only resize, so no drag widens the page into a horizontal scroll. The authoring rule now requires the wrapper with its label.
+
 ## [0.266.1] — 2026-10-16
 
 Clicking a card's open button for a local page whose server had stopped opened a dead browser tab, and nothing told Claude to bring the page back (#703).

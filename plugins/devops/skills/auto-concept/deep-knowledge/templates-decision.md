@@ -64,7 +64,9 @@ attach a free-form override (e.g. "only for X", "with variant Y") to the
 bi-state choice, and attach a file to it (§ Attachments). Place the textarea
 inside the same row container so the comment is visually anchored to the
 card. The catch-all `collectAllFormFields` picks it up via `data-comment`
-without any collector change.
+without any collector change. Always emit the full `.decision-comment-row`
+wrapper with its label, never a bare `<textarea>` after the group — the bare
+form only gets the CSS safety net below, not the label.
 
 ```html
 <div class="variant-evaluation" data-decision="variant-a" data-label="Variant A">
@@ -196,12 +198,15 @@ the override slot.
 
 /* Per-decision comment row — slotted directly under the bi-state group so
    the override is visually anchored to the variant card. Width tracks the
-   group width via the container; min-height keeps it usable on dense pages. */
+   group width via the container. The field matches the 💬 dock's textarea
+   (.feedback-section textarea: 80px ≈ three lines, 10px radius, --input-bg)
+   so every note field on the page looks the same; resize stays vertical and
+   max-width 100% so a drag never widens the page into a horizontal scroll. */
 .decision-comment-row {
-  margin-top: 0.6rem;
+  margin-top: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
 }
 .decision-comment-row label {
   font-size: 0.78rem;
@@ -212,24 +217,56 @@ the override slot.
 .decision-comment-row textarea {
   box-sizing: border-box;
   width: 100%;
-  min-height: 48px;
-  padding: 0.5rem 0.65rem;
-  border-radius: 8px;
+  max-width: 100%;
+  min-height: 80px;
+  padding: 0.65rem 0.7rem;
+  border-radius: 10px;
   border: 1px solid var(--border-color, #30363d);
-  background: color-mix(in srgb, var(--bg-color, #0d1117) 80%, transparent);
+  background: var(--input-bg, #0d1117);
   color: var(--text-color, #c9d1d9);
   font: inherit;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  font-size: 0.95rem;
+  line-height: 1.5;
   resize: vertical;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s;
 }
 .decision-comment-row textarea:focus {
   outline: none;
   border-color: var(--accent-color, #58a6ff);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #58a6ff) 30%, transparent);
 }
 .decision-comment-row textarea::placeholder {
+  color: var(--text-muted, #8b949e);
+  opacity: 0.6;
+}
+/* Safety net for a comment textarea emitted WITHOUT the row wrapper (a bare
+   `<textarea data-comment>` after the bi-state group). Without it the browser
+   default applies: monospace, ~20 columns, two rows, system-grey border.
+   The :not() list keeps it off every textarea that already has its own look
+   (feedback dock, the row above, comment field, mapping slot note, annotation
+   answer), and :where() keeps specificity at zero so a page rule still wins. */
+:where(textarea[data-comment]:not(#feedback-dock textarea, .decision-comment-row textarea, .comment-field textarea, .map-slot-note textarea, .anno-answer)) {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 80px;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #30363d);
+  background: var(--input-bg, #0d1117);
+  color: var(--text-color, #c9d1d9);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.15s;
+}
+:where(textarea[data-comment]:not(#feedback-dock textarea, .decision-comment-row textarea, .comment-field textarea, .map-slot-note textarea, .anno-answer)):focus {
+  outline: none;
+  border-color: var(--accent-color, #58a6ff);
+}
+:where(textarea[data-comment]:not(#feedback-dock textarea, .decision-comment-row textarea, .comment-field textarea, .map-slot-note textarea, .anno-answer))::placeholder {
   color: var(--text-muted, #8b949e);
   opacity: 0.6;
 }
