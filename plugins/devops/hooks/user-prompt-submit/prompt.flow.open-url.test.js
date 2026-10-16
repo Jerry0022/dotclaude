@@ -134,6 +134,21 @@ describe("prompt.flow.open-url", () => {
       expect(res.context).not.toContain("ss.concept.resume");
     });
 
+    // QA on the first cut: handle() returned the context but the process
+    // never printed it, so Claude was told nothing.
+    test("as a process: a dead loopback page prints the context as hook JSON", () => {
+      const cwd = mkdtempSync(join(tmpdir(), "open-url-"));
+      const dead = "http://127.0.0.1:1/x.html";
+      const res = spawnSync(process.execPath, [HOOK], {
+        input: JSON.stringify({ prompt: `Open in default browser: ${dead}`, cwd }),
+        encoding: "utf8",
+      });
+      expect(res.status).toBe(0);
+      const out = JSON.parse(res.stdout);
+      expect(out.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+      expect(out.hookSpecificOutput.additionalContext).toContain(dead);
+    });
+
     test("a probe that throws counts as dead", async () => {
       const { open, urls } = opener(true);
       const res = await handle({ prompt: `Open in default browser: ${URL_}` },

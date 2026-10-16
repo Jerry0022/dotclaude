@@ -108,7 +108,12 @@ if (require.main === module) {
     const hook = parseHookInput(inputData);
     if (!hook) process.exit(0);
     handle(hook)
-      .then(({ exitCode, stderr }) => {
+      .then(({ exitCode, stderr, context }) => {
+        if (context) {
+          process.stdout.write(JSON.stringify({
+            hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
+          }));
+        }
         if (stderr) process.stderr.write(`${stderr}\n`);
         process.exit(exitCode);
       })
