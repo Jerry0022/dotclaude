@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.268.3] — 2026-10-16
+
+/do-run is trimmed against real `ab-run.js` evidence (#719). Only the cuts that held up ship: the SKILL.md cuts lost graders on the A/B run and were reverted.
+
+### Changed
+- **do-run `deep-knowledge/questions.md`**: history and rationale prose removed (−185 words, −9.1 %). Every question header, label, gate and order rule is unchanged; the run-contract strings survive.
+
+### Added
+- **Eval case `evals/skills/do-run/router-defaults/`**: under `claude -p` the router never asks its question set, so the case grades the observable router path — task copied verbatim to `.claude/run-task.md`, `auto-agents --from=do-run` with the defaults, Harden with `--invoked-by=do-run`, the constraint held, no direct `ship_*` call.
+- **Trim record `evals/trims/do-run.md`**: A/B word counts and per-grader results (`--runs 4`). The SKILL.md cuts dropped `harden-pass` 3/3 → 2/3 and `task-verbatim` 1/3 → 0/3 and were reverted; SKILL.md is identical to the previous release. `modes/` and `execution.md` stay untrimmed (no `-p` run reaches them, #734).
+- **Docs**: `evals/README.md` — the do-run case.
+
 ## [0.268.2] — 2026-10-16
 
 The planned /auto-concept trims (#722/#723) had no behavioural baseline to be measured against (#721). A new `ab-run.js` eval case now checks, on real `claude -p` runs, that a decision-page request goes through the skill and its builder.
