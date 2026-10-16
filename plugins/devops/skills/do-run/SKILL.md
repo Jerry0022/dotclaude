@@ -47,9 +47,10 @@ allowed-tools: >-
 
 # Do Run
 
-One door for every multi-step run: one question call, at most one
-follow-up, then the matching mode file, which reads the router's answers
-instead of asking again.
+One door for every multi-step run. This file is the router: it asks one
+question call, at most one follow-up, then runs the matching mode file. Each
+mode file is the verbatim body of a former skill; where the router already
+answered one of its questions, the mode file says so and reads the answer.
 
 ## Step 0 — Load Extensions
 
@@ -230,7 +231,9 @@ step for item 3.
 refuses the final completion card, while a pass is still open for the
 segment being closed — the block names the exact `Skill(...)` call that
 satisfies it; Polish only when the diff holds UI files. Ship through
-`Skill("devops:do-ship")` only, never the `ship_*` MCP tools directly.
+`Skill("devops:do-ship")` only, never the
+`ship_*` MCP tools directly: `do-ship` is what runs the diff passes and the
+Codex review, and the gate cannot see a ship it never ran.
 
 1. **Harden, always** → `Skill("devops:auto-harden")`, args
    `--invoked-by=do-run` (Interaktiv) or `--invoked-by=autonomous` (Autonom), plus
@@ -251,8 +254,15 @@ before the ship: `deep-knowledge/execution.md` § auto-agents hand-off.
 
 ## Rules
 
-- A burn stopped by a limit is never burned on silently: a manual nudge is
-  asked (`prompt.burn.resume`), an automatic resume follows F7.
+- One base call, at most one follow-up — every other question a folded skill
+  used to ask is answered by them and skipped in its mode file.
+- Option order is fixed; the agnostic recommendation is first; click-through
+  is a valid run; labels are parallel and never "Ja" / "Nein".
+- Budget verbrennen is never recommended and only visible when
+  `burn-plan.js offer` says budget would expire unused, or on the literal
+  `burn` argument. A burn stopped by a limit is never burned on silently:
+  a manual nudge is asked (`prompt.burn.resume`), an automatic resume
+  follows F7.
 - Ship authority lives in this router (Q2) and in backlog mode's per-issue
   loop. The autonomous engine itself still never ships.
 - Harden always, Polish on every UI change — never asked, never silently

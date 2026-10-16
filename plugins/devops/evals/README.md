@@ -114,7 +114,11 @@ the plugin's MCP servers may not connect under `-p`); `auto-cleanup`
 "branches aufräumen" should build the page or the Apply-Manifest and attempt
 no delete without a confirm (measured 2026-10-08: it deleted before asking;
 since the deletion gate `pre.cleanup.gate` 3/3 runs attempt no delete — see
-`trims/auto-cleanup.md`). Ordering checks share
+`trims/auto-cleanup.md`). The #719 case `do-run/router-defaults` grades
+the router path under `-p`, where the base call is never asked (measured
+2026-10-16): task to `.claude/run-task.md`, `auto-agents --from=do-run`
+with the click-through defaults, Harden, the prompt's constraint held, no
+direct `ship_*` call. Ordering checks share
 `skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 
