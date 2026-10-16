@@ -1,6 +1,6 @@
 /**
  * @module ship-delegate
- * @version 1.1.0
+ * @version 1.2.0
  * @plugin devops
  * @description The "ship in a fresh-context subagent" instruction, shared by
  *   `prompt.ship.detect` (which emits it instead of the plain
@@ -35,6 +35,11 @@
  *     prompt, `pre.ship.delegate` for a do-ship the model starts through the
  *     Skill tool (concept finalize, `/do-run backlog`, an autonomous ship) —
  *     before that guard, half of the large-context ships ran inline that way.
+ *   - `--card-data` (#712): a ship inside an /auto-concept finalize. The
+ *     subagent hands back the card DATA instead of a rendered card, and the
+ *     caller renders it after its own close-out (Step 6a: bridge, pulser and
+ *     waker stopped), so the last card shows the closed concept, never a
+ *     frozen "concept open" widget with a dead localhost link.
  */
 
 const { formatTokens } = require('./context-size');
@@ -92,6 +97,21 @@ function shouldDelegate({ tokens, prompt, promotionOnly = false, env = process.e
   return !INLINE.test(prompt || '');
 }
 
+/** `--card-data`: the delegated ship returns card data, the caller renders. */
+const CARD_DATA = /(^|\s)--card-data\b/i;
+
+/**
+ * Whether the delegated ship hands back card data instead of a rendered card
+ * (#712). Only the explicit `--card-data` the /auto-concept finalize passes
+ * counts: a state file alone also exists for a paused, stale or
+ * close-out-only concept (#693), whose ship must not trigger a close-out.
+ * @param {{ args?: string }} o
+ * @returns {boolean}
+ */
+function wantsCardData({ args = '' } = {}) {
+  return CARD_DATA.test(String(args || ''));
+}
+
 /** `--delegated` (the subagent itself) and `--resume` (Pre-Step R, which
  *  ss.ship.resume also reloads mid-turn after a compaction) are never
  *  redirected by the Skill-call guard. */
@@ -145,8 +165,9 @@ function delegatedSpawnTooSmall({ prompt, tokens, env = process.env }) {
  *   ("stable", "promote 0.193.0", …); `--delegated` is prepended.
  * @returns {string}
  */
-function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, sessionId = '', env = process.env }) {
-  const args = ['--delegated', skillArgs].filter(Boolean).join(' ');
+function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, sessionId = '', cardData = false, env = process.env }) {
+  const rest = cardData && !CARD_DATA.test(skillArgs) ? ['--card-data', skillArgs] : [skillArgs];
+  const args = ['--delegated', ...rest].filter(Boolean).join(' ');
   const mode = `${String(pluginRoot).replace(/\\/g, '/')}/skills/do-ship/modes/delegated.md`;
   return [
     `[ship-delegate] Context is ${formatTokens(tokens)} tokens (threshold ${formatTokens(threshold(env))}). The ship runs in a`,
@@ -160,7 +181,7 @@ function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, sessionId
     '   tests that ran + results · validation (requirement → how met → how confirmed) · open points · issue refs ·',
     '   anything the ship must know (bump hint, risks, files not to commit). The subagent reads the diff itself —',
     '   the brief carries what the diff cannot: the why.',
-    ...spawnAndDeliver({ args, sessionId, description: 'Ship im Subagenten', brief: true }),
+    ...spawnAndDeliver({ args, sessionId, description: 'Ship im Subagenten', brief: true, cardData }),
     `Details (read only on trouble): ${mode}`,
   ].join('\n');
 }
@@ -172,10 +193,15 @@ function shipDelegateInstruction({ tokens, skillArgs = '', pluginRoot, sessionId
  * right after the render that marks the plugin's MCP servers stale (the
  * dotclaude plugin self-sync), so a render left to the parent would be
  * blocked. That is the same order the inline pipeline keeps.
- * @param {{ args: string, sessionId: string, description: string, brief: boolean }} o
+ *
+ * `cardData` (#712, an /auto-concept finalize): the subagent stops before
+ * the render and hands back the card input; the caller finishes its
+ * close-out first, then renders, then runs the post-render extension steps
+ * the subagent deferred (`afterRender`, e.g. the plugin self-sync).
+ * @param {{ args: string, sessionId: string, description: string, brief: boolean, cardData?: boolean }} o
  * @returns {string[]}
  */
-function spawnAndDeliver({ args, sessionId, description, brief }) {
+function spawnAndDeliver({ args, sessionId, description, brief, cardData = false }) {
   const sid = sessionId || '<this session_id>';
   const briefPart = brief ? '\\nBrief:\\n<brief>' : '';
   return [
@@ -187,6 +213,14 @@ function spawnAndDeliver({ args, sessionId, description, brief }) {
     '   The agent ends with ONE fenced json block:',
     '   { "status": "decision", "question", "options", "recommended" } → AskUserQuestion, then SendMessage the answer',
     '     to the same agent and wait for its next result.',
+    ...(cardData ? [
+      '   { "status": "done", "cardData", "afterRender", "exitWorktree" } (--card-data, the concept finalize ship) → NOT rendered yet.',
+      '     cardData.variant ship-successful (or another shipped variant): first finish the /auto-concept close-out',
+      '     (part D and Step 6a: bridge, pulser and waker stopped, state file gone). ship-blocked: NO part D, the concept',
+      '     stays open. Then call render_completion_card with cardData verbatim (before ExitWorktree, its cwd must exist),',
+      '     show it per the render result (title step included) as the LAST card, run the afterRender steps, and only',
+      '     then, if exitWorktree is true, ExitWorktree({ action: "remove" }). A failed close-out still renders.',
+    ] : []),
     '   { "status": "done", "titlePrefix", "widgetFile" | "markdown", "widgetTitle", "exitWorktree" } → the card is already rendered.',
     '     exitWorktree true: ExitWorktree({ action: "remove" }) first. Set the session title to titlePrefix + the title',
     '     without its old devops prefix. Desktop: Read widgetFile and call show_widget ONCE with title = widgetTitle',
@@ -231,5 +265,5 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
 module.exports = {
   DEFAULT_THRESHOLD, SUBAGENT_FLOOR, SHIP_CALLS, INLINE,
   threshold, shipSavingEstimate, shouldDelegate, shipDelegateInstruction, shipResumeInstruction,
-  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall,
+  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall, wantsCardData, CARD_DATA,
 };

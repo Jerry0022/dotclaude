@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   shouldDelegate, shipDelegateInstruction, threshold, shipSavingEstimate, DEFAULT_THRESHOLD, SUBAGENT_FLOOR,
-  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall,
+  promotionOfArgs, shouldDelegateSkillCall, delegatedSpawnTooSmall, wantsCardData,
 } from "./ship-delegate.js";
 
 // A /do-ship at session end re-reads a ~434 k context ~25 times (measured over
@@ -144,5 +144,45 @@ describe("ship-delegate — Skill-tool ships", () => {
     expect(delegatedSpawnTooSmall({ prompt: spawn.replace("--delegated", "--delegated --resume"), tokens: 115_000, env })).toBe(false);
     expect(delegatedSpawnTooSmall({ prompt: "Review the diff", tokens: 115_000, env })).toBe(false);
     expect(delegatedSpawnTooSmall({ prompt: spawn, tokens: 115_000, env: { DOTCLAUDE_SHIP_DELEGATE_THRESHOLD: "0" } })).toBe(false);
+  });
+});
+
+// #712: a delegated ship inside an /auto-concept finalize rendered its card
+// before the caller's close-out, so the relayed widget still linked the
+// (then dead) localhost page and asked to close out a closed concept.
+describe("card data instead of a card for the concept finalize ship (#712)", () => {
+  // Redteam: a state file also exists for a paused, stale or close-out-only
+  // concept (#693) — only the finalize's own flag counts.
+  test("wantsCardData: only an explicit --card-data", () => {
+    expect(wantsCardData({ args: "beta", conceptOpen: true })).toBe(false);
+    expect(wantsCardData({ args: "--card-data beta" })).toBe(true);
+    expect(wantsCardData({ args: "beta --keep" })).toBe(false);
+    expect(wantsCardData()).toBe(false);
+  });
+
+  test("the instruction passes --card-data and makes the caller render after Step 6a", () => {
+    const out = shipDelegateInstruction({ tokens: 434_000, skillArgs: "beta", pluginRoot: "/p", cardData: true, env: {} });
+    expect(out).toContain('with args "--delegated --card-data beta"');
+    const closeout = out.indexOf("Step 6a");
+    const render = out.indexOf("render_completion_card with cardData");
+    const after = out.indexOf("afterRender steps");
+    expect(closeout).toBeGreaterThan(-1);
+    expect(render).toBeGreaterThan(closeout);
+    expect(after).toBeGreaterThan(render);
+    expect(out).toMatch(/"cardData", "afterRender", "exitWorktree"/);
+    // A blocked ship never closes the concept out (auto-concept C.2).
+    expect(out).toMatch(/ship-blocked: NO part D/);
+    // The card renders while its cwd (the worktree) still exists.
+    const exit = out.indexOf('ExitWorktree({ action: "remove" })', render);
+    expect(exit).toBeGreaterThan(after);
+    // Never doubled when the args already carry the flag.
+    const again = shipDelegateInstruction({ tokens: 434_000, skillArgs: "--card-data beta", pluginRoot: "/p", cardData: true, env: {} });
+    expect(again).toContain('with args "--delegated --card-data beta"');
+  });
+
+  test("without a concept the instruction stays as before", () => {
+    const out = shipDelegateInstruction({ tokens: 434_000, skillArgs: "beta", pluginRoot: "/p", env: {} });
+    expect(out).toContain('with args "--delegated beta"');
+    expect(out).not.toContain("cardData");
   });
 });

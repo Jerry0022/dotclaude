@@ -324,7 +324,9 @@ re-shipping.
    serves it; Step 6a does the on-disk part after the stop:
 **Before executing this step, Re-Read `deep-knowledge/step5-finalize.md` § C · Disposition staging per mode completely on every round — even if read earlier in this session** — what the index-only staging does per `disposition` mode; the durable-store copy and the Step 6a table it cites are in `deep-knowledge/step6-closeout.md` § Disposition, cleanup procedure and disposition tables.
 1. Run the full ship pipeline via the `do-ship` skill (ship_preflight →
-   ship_build → ship_version_bump → ship_release → ship_cleanup). The execute
+   ship_build → ship_version_bump → ship_release → ship_cleanup), with
+   `--card-data` in its args — a delegated ship then hands the card back
+   for step 4 (`step5-finalize.md` § C). The execute
    click authorises the ship; it does NOT waive the gates `ship` already
    enforces. If a gate blocks, report the blocker to the user and STOP —
    never fake a completion or force past a failing gate. (A force-push to
@@ -342,7 +344,7 @@ re-shipping.
    no longer block), run part D and Step 6a in full — bridge, pulser and
    waker stopped — and only then let `do-ship` render its ship card. A card
    rendered before the stop is followed by the watchers' exit notifications,
-   and the chat no longer ends on the outcome.
+   and the chat no longer ends on the outcome. Delegated ship: `step5-finalize.md` § C.
 
 ### D · Close out
 

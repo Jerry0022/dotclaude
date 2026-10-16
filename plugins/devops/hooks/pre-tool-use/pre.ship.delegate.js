@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.ship.delegate
- * @version 0.1.0
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Skill|Agent
@@ -16,6 +16,10 @@
  *   - Agent spawn of a `--delegated` ship while the known main context is
  *     below the threshold → refused: there the subagent's fresh context and
  *     its cache write cost more than the inline ship (+28 % measured at 115 k).
+ *   - `--card-data` in the args (an /auto-concept finalize ship passes it
+ *     itself) → the instruction keeps it: the subagent returns card data and
+ *     the caller renders after its close-out (#712). Never inferred from a
+ *     state file: a paused, stale or close-out-only concept is no finalize.
  *   Silent inside a subagent, on an unknown context size and on any error.
  */
 
@@ -56,7 +60,10 @@ function main(hook) {
   return {
     block: [
       `[pre.ship.delegate] Refused: this do-ship would run inline in a ${formatTokens(tokens)}-token context.`,
-      D.shipDelegateInstruction({ tokens, skillArgs: args, pluginRoot: PLUGIN_ROOT, sessionId: hook.session_id || '' }),
+      D.shipDelegateInstruction({
+        tokens, skillArgs: args, pluginRoot: PLUGIN_ROOT, sessionId: hook.session_id || '',
+        cardData: D.wantsCardData({ args }),
+      }),
       `Only when the user explicitly asked for this ship to stay here: repeat the Skill call with "--inline" added to its args.`,
     ].join('\n'),
   };

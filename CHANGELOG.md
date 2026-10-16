@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.267.3] — 2026-10-16
+
+After a concept close-out the card still linked the stopped localhost page and offered to close out a concept that was already closed (#712). The card now checks that the page and its bridge are alive, and a delegated concept-finalize ship hands its card back to be rendered after the close-out.
+
+### Fixed
+- **Completion card / session title**: the concept link and the close-out CTA appear only when the page exists and the bridge process is alive (`mode-state.js` `bridgeLive`: registry pid first, a registry entry of another worktree does not count; off Windows the state file's `server_pid`). A dead bridge or a deleted page reads as no concept, whatever the card asserts.
+- **Delegated ship (`--card-data`)**: the /auto-concept finalize passes `--card-data`; the ship subagent returns the card data instead of a rendered card. The caller runs part D and Step 6a only on a shipped variant (a blocked ship keeps the concept open), renders before `ExitWorktree`, then runs the deferred post-render steps. A concept state file alone never sets the flag.
+- **Docs**: `do-ship/modes/delegated.md` § Card data instead of a card, `do-ship/SKILL.md`, `auto-concept/SKILL.md` part C, `step5-finalize.md`.
+
 ## [0.267.2] — 2026-10-16
 
 After a delegated ship the parent showed the card widget under a different title, the Stop guard did not recognise it and asked for the card again — up to four identical cards in a row (#713). A card widget is now recognised by its markup, whatever title it got.

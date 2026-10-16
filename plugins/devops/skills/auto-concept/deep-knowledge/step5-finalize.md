@@ -129,6 +129,28 @@ because the session feels like it is ending.
    (for `keep` + `moveTo`: delete the originals, the copies are already in
    place).
 
+### Delegated ship: card data, rendered after Step 6a (#712)
+
+Part C passes `--card-data` in the do-ship args itself; in a large context
+`pre.ship.delegate` keeps it when it moves the ship into a subagent (a state
+file alone never sets it — a paused or close-out-only concept is no
+finalize). An inline ship ignores the flag. The subagent runs the pipeline
+but returns the card DATA only
+(`{ "status": "done", "cardData", "afterRender", "exitWorktree" }`) instead of
+a rendered widget. Keep part C's order:
+
+- `cardData.variant` is `ship-blocked` → part C step 2 holds: NO part D, the
+  concept stays open; render the card right away.
+- Otherwise run part D and Step 6a first (bridge, pulser and waker stopped,
+  state file gone). A close-out that fails still goes on to the render.
+- Then call `render_completion_card` with `cardData` verbatim (before
+  `ExitWorktree` — the card reads its `cwd`), show that card last, run the
+  `afterRender` steps, and only then `ExitWorktree` when `exitWorktree` is
+  true. Never relay a widget a subagent
+rendered while the concept was still open: it links the localhost page and
+asks to close out a concept that is closed a minute later. Details:
+`do-ship/modes/delegated.md` § Card data instead of a card.
+
 ## D · Reload and reset per disposition
 
 1. **`keep` / `gitignore`:** add `data-closed` to the

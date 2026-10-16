@@ -192,6 +192,8 @@ describe("titlePrefixFor", () => {
     try {
       mkdirSync(join(cwd, ".claude"));
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true });
+      writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
       expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.ready });
       expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
       // Background work outranks the compass for the owner, and the variant for anyone else.
@@ -264,6 +266,7 @@ describe("titlePrefixFor", () => {
       try {
         mkdirSync(join(cwd, ".claude", "concepts", "x", "drafts"), { recursive: true });
         writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: old }));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true }); writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
         for (const [rel, body] of Object.entries(files)) writeFileSync(join(cwd, ".claude", "concepts", "x", rel), JSON.stringify(body));
         expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(files))
           .toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
@@ -280,6 +283,7 @@ describe("titlePrefixFor", () => {
     try {
       mkdirSync(join(cwd, ".claude"));
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date(Date.now() - 48 * 3600_000).toISOString() }));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true }); writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
       expect(conceptUrl(cwd, { phase: "waiting" })).toBe("http://localhost:4321/docs/concepts/x.html");
       expect(conceptUrl(cwd, undefined)).toBe("");
     } finally {
@@ -307,6 +311,7 @@ describe("titlePrefixFor", () => {
     try {
       mkdirSync(join(cwd, ".claude"));
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true }); writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
       expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps))
         .toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
     } finally {
