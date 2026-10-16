@@ -26,12 +26,9 @@ full payload from `/decisions` and process it (Step 5).
 **Polling schedule:**
 - **Primary mechanism**: the **pickup waker** from Step 3. It exits the moment
   a submission lands, which wakes Claude — no user chat message required.
-- **Backstop**: the cron from Step 3, every 15 minutes — and only a partial
-  one. It covers the window between the waker exiting and being re-launched
-  ONLY while the REPL is idle, which is exactly when that window is not open:
-  during a processing round the REPL is busy and the cron cannot fire. That is
-  why 5c step 7 re-launches the waker immediately rather than leaving the gap
-  to the cron.
+- **Backstop**: the cron from Step 3, every 15 minutes — partial only: it
+  cannot fire while a round is processing, so 5c step 7 re-launches the waker
+  immediately.
 - **Initial wait**: 10 seconds after opening, then one manual heartbeat +
   `/pending` check to close the gap before the first waker cycle lands.
 - **No timeout** — monitoring runs indefinitely until the user ends it
@@ -39,8 +36,6 @@ full payload from `/decisions` and process it (Step 5).
 - **On demand**: if the user asks "did my submission arrive?", poll
   `/pending` manually — do NOT wait for the next tick.
 
-**Important:** monitoring MUST NOT block the conversation, and it must not
-depend on one either. The waker runs detached, so an idle turn keeps watching
-on its own; a user who clicks submit and types nothing still gets picked up.
-If the user sends an unrelated message, respond normally — the waker keeps
-running and wakes you when the submission arrives.
+**Important:** monitoring MUST NOT block the conversation, nor depend on
+one: the detached waker picks up a submit with no chat message, and an
+unrelated message is answered normally while it keeps running.

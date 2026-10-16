@@ -5,10 +5,7 @@ Referenced from `SKILL.md` § 6c. A pause stops every process of an open concept
 ## Pause — stop everything, keep the concept
 
 The user pauses in chat ("pausieren", "machen wir später weiter", "ist
-pausiert") — the same way "fertig" starts the close-out. A pause is not a
-close-out: nothing is disposed, only the processes stop. Leaving them running
-keeps the bridge, the pulser, the waker and the backstop cron alive for
-nothing, and a later session start would relaunch them while the user is away.
+pausiert"). Nothing is disposed, only the processes stop.
 
 In this order — the waker treats an unexpected bridge exit as a signal, so it
 goes before the bridge:

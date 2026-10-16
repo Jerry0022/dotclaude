@@ -40,8 +40,7 @@ substitute (#568).
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before reading.
-Do NOT call Read on files that may not exist — skip missing files silently (no output).
+Optional overrides — Glob each path first; skip missing files silently.
 
 1. Global: `~/.claude/skills/auto-concept/SKILL.md` + `reference.md`
 2. Project: `{project}/.claude/skills/auto-concept/SKILL.md` + `reference.md`
@@ -67,20 +66,12 @@ concept the user wants. Three modes exist:
 
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § 1a · Per-iteration choice completely** — the template is picked anew for every iteration, never once per page.
 
-Pick via the **strict ordered check below** — first matching template wins,
-free is the explicit fallback when neither of the first two applies. Do NOT
-skip the order; `free` must never be chosen while `design` or `decision`
-would also fit.
-
-**Order of evaluation (mandatory, per iteration):**
+**Order of evaluation (mandatory, per iteration)** — first match wins;
+`free` never while `design` or `decision` would also fit.
 
 1. **Is this iteration primarily VISUAL?**
-   The options this iteration puts up for decision are primarily visual —
-   layouts, design directions, screen composition, visual arrangement, a
-   click-through flow, screen-by-screen UI design, any "design me / sketch /
-   lay out a UI" task. If the output needs maximum viewport real estate and
-   per-screen (and, with 2+ competing designs, per-design) feedback →
-   `design`. **Stop.**
+   Layouts, design directions, screen composition, a click-through flow,
+   any "design me / sketch / lay out a UI" task → `design`. **Stop.**
 
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § 1a · Design iteration authoring completely** — click-dummy wiring, screens as states, competing designs, single-screen, design system, annotation layer, optional views and the view-vs-decision-iteration rule of thumb.
 
@@ -96,19 +87,13 @@ would also fit.
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § 1a · Orthogonality test completely** — the pre-authoring test, the one-line "needed by" exception and gate P31.
 
 2. **Are there ≥2 substantive non-visual alternatives?**
-   Multi-option evaluation where the user must pick from 2+ mutually-exclusive
-   alternatives (architecture, tech, strategy, library, approach, …). If there
-   are explicit variants A/B/C with pros/cons to weigh → `decision`. **Stop.**
-   Count preference: 7 alternatives compared (Step 0.5). In **design** mode
-   (Step 0.5) this step is skipped — visual-only concepts do not get a
-   `decision` iteration.
+   2+ mutually-exclusive alternatives (architecture, tech, strategy, library,
+   approach, …) with pros/cons to weigh → `decision`. **Stop.** Skipped in
+   **design** mode (Step 0.5).
 
 3. **Otherwise → FREE.**
-   Only reach this step after 1 AND 2 have both been ruled out. Analysis,
-   walkthrough, brainstorm, explainer, timeline, status deep-dive, retro,
-   post-mortem — structured content that has no forced variant framing.
-   Tri-state is opt-in per section (Claude adds it only where a finding
-   genuinely needs user evaluation).
+   Analysis, walkthrough, brainstorm, explainer, timeline, retro — content
+   with no variant framing. Tri-state is opt-in per section.
    An iteration whose question is "which of these many items goes where" —
    an assignment, not a choice between alternatives — is a `free` round
    carrying ≥ 1 `section[data-mapping]`; inside a design concept it is a
@@ -117,18 +102,12 @@ would also fit.
 
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § 1a · Entangled questions and layout signatures completely** — entangled visual and non-visual questions are split into a `design` and a `decision` iteration, never mixed into one layout, and the decision round after a design round stays orthogonal to it; plus the per-template layout signatures, the shared ☰ / 💬 chrome and the `prototype` alias.
 
-**Template continuity — decide once, per concept.** The template belongs to
-the concept, not to the mood of a round. Once a concept has rendered a
-`design` round, every later round stays `design` unless the user asked for
-something else — a non-visual question that comes up later (a refinement, a
-reality-check collision) belongs in a `data-view-kind="decision"` view inside
-a design round, not in a `decision` round of its own. The deliberate
-exceptions are exactly two:
-- the **mixed mode** of Step 0.5 above, where entangled visual and non-visual
-  questions are split on purpose and the user knows why;
-- the **final report**, which is always `free` — it is a document with a TOC,
-  and the design layout (absolutely positioned sections, hidden
-  `.iteration-intro`) is built for a mockup.
+**Template continuity — decide once, per concept.** Once a concept has
+rendered a `design` round, every later round stays `design` unless the user
+asked otherwise — a later non-visual question goes into a
+`data-view-kind="decision"` view inside a design round. Exactly two
+exceptions: the **mixed mode** of Step 0.5, and the **final report**, which is
+always `free` (a document with a TOC).
 
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § 1a · Why continuity completely** — what a template swap does to the reviewer and why the section must carry its template.
 
@@ -175,16 +154,9 @@ Built page `docs/concepts/{timestamp}-{slug}.html`, source folder `docs/concepts
 
 `concept-build.js build` runs the deterministic gate and writes the page only
 when it passes; the Phase 1 engine patterns hold by construction. Before the
-build, check the round itself against Phase 0 and its template's Phase 2 for every mandatory interactive
-pattern listed in Phase 1 (heartbeat, all four panel states incl. the
-frozen one, iteration tabs, section TOC, reload polling, generic
-form-collection catch-all scoped to the active iteration, post-submit
-content dimmer, close-out sheet, etc.), plus
-the conditional M-set (`deep-knowledge/validation-gate.md` § Mappings) when
-the page has `[data-mapping]`.
-**If ANY pattern is missing → DO NOT open the page.** Fix the HTML first,
-then re-validate. See `deep-knowledge/validation-gate.md` for the full
-pattern list and common failure modes.
+build, check the round against Phase 0 and its template's Phase 2, plus the
+M-set when it has `[data-mapping]` (`deep-knowledge/validation-gate.md`).
+**If ANY pattern is missing → DO NOT open the page.** Fix it, re-validate.
 
 ## Step 3 — Open in Browser
 
@@ -205,24 +177,17 @@ The concept page MUST be opened in the user's **real Edge browser** via the
 OS shell. **Forbidden alternatives** that will produce a broken session:
 
 - ❌ **Never** use `preview_start` / `preview_*` (`mcp__Claude_Browser__*`, formerly `mcp__Claude_Preview__*`) to
-  display the page. The preview pane is a sandboxed in-IDE iframe — it
-  has no heartbeat connection, no cron polling, and the user cannot
-  interact with it the way the concept flow needs. `mcp__Claude_Preview__*`
-  is in `allowed-tools` ONLY for `preview_eval` during Step 5 page
-  updates, never for opening the page.
+  display the page — a sandboxed iframe with no heartbeat or polling.
+  `mcp__Claude_Preview__*` is allowed ONLY for `preview_eval` in Step 5.
 - ❌ **Never** use `mcp__plugin_playwright_playwright__browser_navigate`
-  to open the page. Playwright spawns its own browser instance — the user
-  will not see it.
+  — its own browser instance, invisible to the user.
 - ❌ **Never** print "Concept opened at file:///… open it in your browser"
-  and stop. The bridge server requires the page to be loaded via
-  `http://localhost:{port}/…`, not `file://`.
+  and stop — the bridge needs `http://localhost:{port}/…`, not `file://`.
 - ❌ **Never** bake a "copy the decisions JSON and paste it into the chat"
   block (clipboard button, `navigator.clipboard`, "In Zwischenablage
-  kopieren", "füg es mir in den Chat ein") into the page. That manual
-  handoff is the failure this whole flow exists to avoid — the live bridge
-  already delivers decisions. The decision panel's two submit buttons +
-  bridge are the **only** sanctioned mechanism, and the panel may never be
-  omitted. The `post.concept.gate` hook blocks any page that violates this.
+  kopieren", "füg es mir in den Chat ein") into the page. The decision
+  panel's two submit buttons + bridge are the **only** sanctioned mechanism,
+  and the panel may never be omitted; `post.concept.gate` blocks violations.
 
 **Before executing this step, Read `deep-knowledge/step3-open-browser.md` § Open command, 200 gate, token check completely** — the per-platform open command, the HTTP 200 gate, the `--accent-color` check in an isolated profile, and what to do when the open fails.
 
@@ -293,14 +258,10 @@ sheet. Branch on it:
 **Before executing this step, Re-Read `deep-knowledge/step5-process.md` § 5b · finalize payload and zero-prompt invariant completely on every round — even if read earlier in this session** — the one `finalize` payload, disjoint item buckets, and never a follow-up question.
 
 **Fixed execution order — A (issues) → B (implement) → C (ship) → D
-(cleanup).** Never reorder: issues are cheap and independent and must not
-depend on anything else succeeding, the follow-ups the user chose to build
-must land BEFORE a release rather than after it, ship is the one part that
-can hard-fail, and cleanup can DELETE the concept HTML — running it before
-the outward-facing parts would destroy the record while it is still needed.
-Skip any part whose flag is false; a payload may legitimately carry none of
-them (`ship.run: false`, `issues.create: false`, `implement.run: false`) and
-then finalize is just Step 6.
+(cleanup).** Never reorder: issues are independent, follow-ups land before
+the release, ship is the one part that can hard-fail, and cleanup can DELETE
+the concept HTML. Skip any part whose flag is false; with none set, finalize
+is just Step 6.
 
 **Checkpoint each part as it lands** (see Checkpoint duty above) — a finalize
 that dies mid-flight must be resumable without re-creating issues or
@@ -385,21 +346,17 @@ when part B ran) and POST `/reload`.
 
 Procedure on every iteration (including the very first response to feedback).
 
-**Order matters — `/reset` is the LAST step, NOT the first.** Posting `/reset`
-early stamps `_processed_at` on the server, which makes the browser's
-`pollProcessedState` flip the panel back to "ready" before the new iteration
-is on disk. The user then sees the still-active OLD iteration with
-re-enabled submit buttons and can fire a duplicate submission. The new
-iteration must be live in the browser BEFORE the server signals "processed".
+**Order matters — `/reset` is the LAST step, NOT the first.** An early
+`/reset` re-enables the OLD iteration's submit buttons before the new one is
+live, inviting a duplicate submission.
 
 **Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § 5c · Append procedure completely on every round — even if read earlier in this session** — the numbered append procedure: freeze, coverage, engine drift, append, tab, /reload, /reset, re-launch the waker.
 
 ### Final-report append (implement only)
 
-When `action: "implement"` is being processed, step 3 of the append procedure (`deep-knowledge/step5-update-page.md` § 5c · Append procedure)
-differs: instead of appending a regular iteration, append a **final-report
-section**. Everything else (freeze previous, /reload, /reset, version
-preservation) stays identical.
+For `action: "implement"`, step 3 of the append procedure appends a
+**final-report section** (`data-iteration-template="free"`) instead of a
+regular iteration; everything else stays identical.
 
 **Before executing this step, Re-Read `deep-knowledge/step5-update-page.md` § Final-report append — steps and verbatim copy directive completely on every round — even if read earlier in this session** — freeze, the `free` final-report section, report structure, tab label, the close-out JS copied verbatim.
 
@@ -420,29 +377,21 @@ previous rounds; each entry records its `iteration` number).
 
 ## Step 6 — Completion Card
 
-The feedback loop ends when the user is satisfied (user says "fertig"/"done",
-closes the page, or all items are processed). Then **clean up the
-bridge-server state** and render a completion card.
+The loop ends when the user says "fertig"/"done", closes the page, or all
+items are processed.
 
 ### 6a. Clean up the active-concept state — Cleanup-By-Disposition
 
-Before rendering the completion card, stop the bridge server, the pulser and
-the waker, remove the state file, AND dispose of the on-disk concept
-artefacts. The card is the last thing in the chat — nothing of the concept
-may still be running when it renders. The on-disk steps depend
-on the user's disposition choice (see `deep-knowledge/templates-rounds.md`
-§ Disposition Control for the UI + payload shape).
+Before the card: stop the bridge, the pulser and the waker, remove the state
+file, and dispose of the on-disk artefacts per the user's disposition. Nothing
+of the concept may still run when the card renders.
 
 **Before executing this step, Read `deep-knowledge/step6-closeout.md` § Disposition, cleanup procedure and disposition tables completely** — the disposition is the `finalize` payload's, else the last legacy payload's, else `discard`; the `/shutdown` + owner-checked state-file removal, stopping the watchers before any card, the title restore, the cron delete, and the per-mode file and durable-store tables.
 **Before executing this step, Read `deep-knowledge/step2-build.md` § Close-out completely** — the source folder shares the page's disposition.
 
 **UNPROCESSED guard — never discard unseen work.** Before any `rm -rf` of a
-store, check for `.claude/concepts/{date}-{slug}/UNPROCESSED`. Its presence
-means a submission was made that Claude never finished processing, so the user
-has not yet seen a result for it. Deleting that is the very loss this whole
-mechanism exists to prevent, and a default-`discard` disposition (§ above:
-`discard` is what an aborted session falls back to) would otherwise do it
-silently.
+store, check for `.claude/concepts/{date}-{slug}/UNPROCESSED` — a submission
+the user never saw a result for, which a default `discard` would silently lose.
 
 **Before executing this step, Read `deep-knowledge/step6-closeout.md` § UNPROCESSED guard command, orphan sweep, safety rules, reporting completely** — the guarded store deletion, what to do when the guard trips, the 7-day orphan sweep, the path safety rules and the disposition line on the card.
 
@@ -460,39 +409,22 @@ skill), skip the card and return control — the parent skill renders its own.
 
 ### 6c. Pause and resume (#555)
 
-The user pauses in chat ("pausieren", "machen wir später weiter") → **pause**,
-not close-out: stop the pulser, the waker, the backstop cron and the bridge,
-mark `concept-active.json` with `paused_at`, keep page, decisions and store,
-end with the `paused` card (no `concept` field). Resume only when a prompt
-continues this concept: relaunch on the same port, re-arm, drop `paused_at`.
-Order, commands and the state-file rewrite: `deep-knowledge/pause-resume.md`.
+"pausieren" / "machen wir später weiter" → **pause**, not close-out: stop
+every process, keep page, decisions and store, end with the `paused` card.
+Resume only when a prompt continues this concept. Procedure:
+`deep-knowledge/pause-resume.md`.
 
 ## Smart Trigger Rules
 
-The auto-concept skill should be **auto-suggested** (not auto-triggered) when:
-
-1. Claude completes a **multi-option analysis** (3+ options with trade-offs)
-2. Claude presents an **implementation plan** with 5+ steps
-3. Claude delivers a **comparison** of technologies/approaches
-4. Claude finishes **concept work** with multiple variants
-5. Claude produces any output where **user decisions** are needed to proceed
-
-**How to suggest:**
-Append to the response: "Soll ich das als Concept-Seite aufbereiten?"
-
-**When NOT to suggest:**
-- Simple yes/no questions — just ask directly
-- Single-option recommendations — no decision needed
-- Code-only outputs — not suitable for HTML visualization
-- User explicitly declined a concept page earlier in the session
+Auto-suggest (never auto-trigger) after a 3+-option analysis, a 5+-step plan,
+a comparison or variant work: append "Soll ich das als Concept-Seite
+aufbereiten?". Not for yes/no questions, single recommendations, code-only
+output, or after the user declined one this session.
 
 ## Rules
 
-- Always self-contained HTML — no CDN links, no external resources
+- Self-contained HTML (< 500KB) — no CDN, no external fetch except the bridge
 - Never include sensitive data (API keys, passwords) in the HTML
-- Comment fields are optional — include only where comments add value
+- Comment fields only where comments add value
 - Design quality matters — this is a deliverable, not a debug dump
-- German UI labels (buttons, headers) unless project language says otherwise
-- The HTML must be self-contained — no CDN or external fetch calls.
-  Bridge server fetch calls (`/heartbeat`, `/decisions`) are the only exception
-- Keep file size reasonable (< 500KB) — inline only what's needed
+- German UI labels unless the project language says otherwise
