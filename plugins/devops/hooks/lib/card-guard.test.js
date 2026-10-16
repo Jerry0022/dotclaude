@@ -1521,6 +1521,8 @@ describe("card widget recognized by its marker, not only its title (#713)", () =
     const html = '<div class="dc-card-like"><h3 class="card-title">Not a card</h3><p id="dc-cards">x</p></div>';
     expect(isCardWidgetCall("mcp__visualize__show_widget", { title: "my_chart", widget_code: html })).toBe(false);
     expect(isCardWidgetCall("mcp__visualize__show_widget", { title: "my_chart" })).toBe(false);
+    // QA: data-id is another attribute, not the card's id.
+    expect(isCardWidgetCall("mcp__visualize__show_widget", { title: "my_chart", widget_code: '<div data-id="dc-card"></div>' })).toBe(false);
     const tx = jsonl(userMsg("ship"), render, renderResult, widget("w1", "my_chart", html), ok("w1"));
     expect(cardDelivered(tx)).toBe(false);
     expect(deliveredCardText(tx)).toBe("");

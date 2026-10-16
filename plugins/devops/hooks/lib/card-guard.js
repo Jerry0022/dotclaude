@@ -126,8 +126,9 @@ function isShowWidgetTool(name) {
 const CARD_WIDGET_TITLE = 'completion_card_body';
 
 /** The card widget's own markers (card-widget.js): the `#dc-card` mount point
- *  and the `#dc-card-data` JSON block. */
-const CARD_WIDGET_MARKER_RE = /\bid\s*=\s*["']dc-card(?:-data)?["']/;
+ *  and the `#dc-card-data` JSON block. The attribute must be `id` itself —
+ *  `data-id="dc-card"` is not the card. */
+const CARD_WIDGET_MARKER_RE = /(?<![\w-])id\s*=\s*["']dc-card(?:-data)?["']/;
 
 /**
  * Is this show_widget call the completion card (#713)? The card-body title
