@@ -37,6 +37,10 @@
  *     Q  question without `open` — a requirement waits on the user
  *        (`waitsOn: "user"`) but the card carries no `open` item, so its
  *        decision heading could not ask the user anything
+ *   and (#709):
+ *     S  security finding without `open` — `summary`, `changes` or `tests`
+ *        name a CVE / GHSA / advisory / npm-audit finding (a clean audit
+ *        excepted) but the card offers no open point to fix it
  *
  *   One refusal per identical finding: the same findings on the next call
  *   render anyway, so a false positive can never lock the card out — the
@@ -152,6 +156,48 @@ function buildUserQuestionReason(requirements) {
   ].join('\n');
 }
 
+/** A security finding named in card text (#709). */
+const SECURITY_RE = /\b(?:CVE-\d{4}-\d+|CVE|GHSA(?:-[0-9a-z]{4}){0,3}|advisor(?:y|ies)(?![\s-]+(?:lock|board|only))|npm audit|vulnerab\w*|Sicherheitsl(?:ü|ue)cke\w*|Schwachstelle\w*)\b/i;
+/** A text that reports a clean audit names no finding. */
+const CLEAN_AUDIT_RE = /\b(?:0|no|zero|keine?)\s+(?:known\s+|bekannten?\s+)?(?:vulnerabilit\w*|advisor(?:y|ies)|Schwachstelle\w*|Sicherheitsl(?:ü|ue)cke\w*)|\bfound 0\b|\bnpm audit\W+(?:clean|passed|ok|sauber)\b/i;
+
+/**
+ * The card fields a finding can hide in — summary, then one text per
+ * `changes` / `tests` item (its strings joined, so "npm audit" + "found 0
+ * vulnerabilities" is read as one clean line).
+ */
+function cardTexts(input) {
+  const flat = (v) => (typeof v === 'string' ? [v]
+    : Array.isArray(v) ? v.flatMap(flat)
+      : v && typeof v === 'object' ? Object.values(v).flatMap(flat) : []);
+  const items = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(it => flat(it).join(' — '));
+  return [String(input.summary || ''), ...items(input.changes), ...items(input.tests)];
+}
+
+/**
+ * Gate S (#709): the card names a security finding but offers nothing to do
+ * about it — no `open` item. Returns the offending snippets, or [].
+ */
+function securityWithoutOpen(input) {
+  const open = Array.isArray(input.open)
+    ? input.open.filter(it => String(typeof it === 'string' ? it : (it && it.text) || '').trim())
+    : [];
+  if (open.length) return [];
+  return cardTexts(input)
+    .filter(t => SECURITY_RE.test(t) && !CLEAN_AUDIT_RE.test(t))
+    .map(t => t.trim().slice(0, 80));
+}
+
+function buildSecurityReason(snippets) {
+  return [
+    `[stop.flow.guard] Security finding without an open point: ${snippets.slice(0, 2).join('; ')}.`,
+    'A CVE, GHSA, advisory or npm-audit finding is never summarised as harmless (#709) — the user acts on the card,',
+    'not on prose above it. Put it into `open: [{ text: "<finding + risk>?", reply: "<the fix, as the user>" }]`',
+    'and drop any "harmless"/"harmlos" from the title. Then render again;',
+    'if the card really names no open finding, the same call renders on the next try.',
+  ].join('\n');
+}
+
 function buildAnalysisWriteReason(tools) {
   return [
     `[stop.flow.guard] Variant \`analysis\` but this turn changed something: ${tools.join(', ')}.`,
@@ -209,6 +255,9 @@ function findings(input, { validationPending = false, openTasks = null, verifica
 
   const waiting = userWaitWithoutOpen(input);
   if (waiting.length) out.push(buildUserQuestionReason(waiting));
+
+  const security = securityWithoutOpen(input);
+  if (security.length) out.push(buildSecurityReason(security));
   return out;
 }
 

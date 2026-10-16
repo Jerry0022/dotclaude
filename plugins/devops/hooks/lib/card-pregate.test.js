@@ -349,3 +349,44 @@ describe('card-pregate — waitsOn user without an open question (#714)', () => 
     expect(check(input, { home, tmp }).refuse).toBe(false);
   });
 });
+
+// #709: an undici advisory was waved through as "alle harmlos" with no open
+// point; the fix was only found through the input-field suggestion.
+describe('card-pregate — security finding without an open point (#709)', () => {
+  const advisory = { ...ok, summary: 'Dev-Start-Warnungen geprüft — alle harmlos',
+    tests: [{ method: 'npm audit', result: '1 high (undici GHSA-3wwx-pv8p-q78v)' }] };
+
+  test('a GHSA / CVE / audit finding without `open` is a finding', () => {
+    const r = findings(advisory, { openTasks: [] });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatch(/Security finding without an open point: .*GHSA-3wwx/);
+    expect(r[0]).toMatch(/open: \[\{ text/);
+    const cve = findings({ ...ok, changes: [{ area: 'deps', description: 'CVE-2026-1234 in lodash noted' }] }, { openTasks: [] });
+    expect(cve).toHaveLength(1);
+  });
+
+  test('the same card with an open fix offer renders', () => {
+    const fixed = { ...advisory, open: [{ text: 'undici hat eine High-Advisory — patchen?', reply: 'Ja, undici auf die gepatchte Version heben.' }] };
+    expect(findings(fixed, { openTasks: [] })).toEqual([]);
+  });
+
+  test('a clean audit and cards without security terms are unaffected', () => {
+    expect(findings({ ...ok, tests: [{ method: 'npm audit', result: 'found 0 vulnerabilities' }] }, { openTasks: [] })).toEqual([]);
+    expect(findings({ ...ok, tests: [{ method: 'npm audit', result: 'keine Schwachstellen' }] }, { openTasks: [] })).toEqual([]);
+    expect(findings(ok, { openTasks: [] })).toEqual([]);
+    // "advise" / "vulnerable-looking" words that are not findings stay quiet
+    expect(findings({ ...ok, summary: 'Advice on the review flow' }, { openTasks: [] })).toEqual([]);
+    // QA: a Postgres advisory lock and a clean audit in other words are no findings
+    expect(findings({ ...ok, changes: [{ area: 'db', description: 'Adds advisory lock to the DB migration' }] }, { openTasks: [] })).toEqual([]);
+    expect(findings({ ...ok, tests: [{ method: 'npm audit', result: 'clean' }] }, { openTasks: [] })).toEqual([]);
+  });
+
+  test('check refuses once, then renders the same call', () => {
+    setup({});
+    const input = { ...advisory, session_id: sid };
+    const first = check(input, { home, tmp });
+    expect(first.refuse).toBe(true);
+    expect(first.text).toMatch(/Security finding without an open point/);
+    expect(check(input, { home, tmp }).refuse).toBe(false);
+  });
+});

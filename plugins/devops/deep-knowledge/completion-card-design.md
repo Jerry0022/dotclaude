@@ -182,7 +182,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   it is a state ending in `.` and there are no buttons (`🎊 Released v0.179.0
   LIVE.`, `📂 Fertig auf der Platte — noch etwas?` keeps the question form
   because "noch etwas" is one).
-- **Ship only when nothing is open (#714)** — see the `❓` row in § 3. A user-wait without `open` is refused once by the card pregate (Gate Q): put the question into `open: [{ text, reply }]`. No `[LOCAL SHIP]` over it; only `waitsOn: "user"` triggers, no reply-text heuristic.
+- **Ship only when nothing is open (#714)** — see the `❓` row in § 3. A user-wait without `open` is refused once by the card pregate (Gate Q): put the question into `open: [{ text, reply }]`. No `[LOCAL SHIP]` over it; only `waitsOn: "user"` triggers, no reply-text heuristic. **A security finding is never "harmless" (#709)** — an npm audit result, a CVE, a GHSA or another advisory the turn found is never summarised away (`… — alle harmlos`) or left in prose above the card. It goes into `open: [{ text, reply }]` with the fix as the prepared answer ("Ja, `undici` auf die gepatchte Version heben."). The card pregate (Gate S) refuses once a card that names one in `summary`, `changes` or `tests` without an `open` item; a clean audit ("0 vulnerabilities", "keine Schwachstellen") does not trigger it.
 - Verb first after a ship/promotion: `🚀 Released v0.179.0 alpha — nach beta
   promoten?`, `🎊 Promoted v0.179.0 BETA — nach stable?`, `🎊 Released
   v0.179.0 LIVE — stable.` (channel word in CAPS for visibility; 🎊 for both
