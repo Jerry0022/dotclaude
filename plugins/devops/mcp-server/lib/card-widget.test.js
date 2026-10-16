@@ -233,6 +233,19 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(buttonsFor("vv-running", "en").map((a) => a.label)).toEqual(["Ship now"]);
   });
 
+  // A bare "Umsetzen" left the user unable to tell what a click starts: with
+  // nextStep the primary button names the recommendation and sends it as is.
+  test("analysis with nextStep: primary button sends the recommended step", () => {
+    const step = "Bau im Governor eine Summen-Drossel ein.";
+    const de = buttonsFor("analysis", "de", { nextStep: step });
+    expect(de[0]).toMatchObject({ label: "Empfehlung umsetzen", prompt: step, tooltip: step, primary: true });
+    expect(de[1].label).toBe("Frage");
+    expect(buttonsFor("analysis", "en", { nextStep: step })[0].label).toBe("Do recommended step");
+    expect(buttonsFor("analysis", "de", { nextStep: "/do-run x" })[0].prompt).toBe("do-run x");
+    expect(buttonsFor("analysis", "de")[0]).toMatchObject({ label: "Umsetzen", prompt: "Setz die Analyse jetzt um." });
+    expect(buttonsFor("ready", "de", { nextStep: step })[0].label).toBe("Ship");
+  });
+
   // Live 2026-09-23: the Desktop host refuses a prefill that starts with "/"
   // (leading space too); plain text lands. A slash prompt is a dead button.
   test("no button prompt starts with a slash — in any key, in any language", () => {

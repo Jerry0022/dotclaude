@@ -37,6 +37,12 @@ Speak only when:
    read-only report that leaves nothing to decide.
 4. **Something is blocked** — one line: cause + fix.
 
+An answer that ends in actions separates them: what the user must do
+themselves ("Du:") and what Claude would build ("Ich:"), then ONE
+recommendation — never a mixed list with a trailing "soll ich?" in prose.
+The analysis card then carries that recommendation as `nextStep`, so its
+button names the step instead of a bare "Umsetzen".
+
 Tool and hook output is addressed to you, not the user. Relay only the part
 a tool explicitly marks for the user — the completion-card markdown and any
 block introduced by "show the user … verbatim" — complete, never shortened
