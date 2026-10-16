@@ -1295,8 +1295,8 @@ const HEADINGS = {
     // #693: the open concept only waits for its close-out — no branch to go on in.
     'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released ${c.ver} alpha` : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}`} — Konzept abschließen – Abschlussbericht wartet.`,
     'ship-successful-deploy': () => '🚨 Gemergt, aber nicht live — Migration jetzt deployen?',
-    'released-beta': (c) => `🎊 Promoted ${c.ver} BETA — nach stable?`,
-    'released-stable': (c) => `🎊 Released ${c.ver} LIVE — stable.`,
+    'released-beta': (c) => `🎊 Promoted ${c.ver ? c.ver + ' ' : ''}BETA — nach stable?`,
+    'released-stable': (c) => `🎊 Released ${c.ver ? c.ver + ' ' : ''}LIVE — stable.`,
     'ready-files': () => '📂 Fertig auf der Platte — noch etwas?',
     test: () => '🧪 Erst testen, dann shippen?',
     'test-minimal': () => '▶️ Läuft — viel Spaß',
@@ -1330,8 +1330,8 @@ const HEADINGS = {
     'ship-successful-kept': (c) => `🚀 Released ${c.ver} alpha — continue on \`${c.branch}\`?`,
     'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released ${c.ver} alpha` : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}`} — Close out the concept – final report is waiting.`,
     'ship-successful-deploy': () => '🚨 Merged, but not live — deploy the migration now?',
-    'released-beta': (c) => `🎊 Promoted ${c.ver} BETA — to stable?`,
-    'released-stable': (c) => `🎊 Released ${c.ver} LIVE — stable.`,
+    'released-beta': (c) => `🎊 Promoted ${c.ver ? c.ver + ' ' : ''}BETA — to stable?`,
+    'released-stable': (c) => `🎊 Released ${c.ver ? c.ver + ' ' : ''}LIVE — stable.`,
     'ready-files': () => '📂 Done on disk — anything else?',
     test: () => '🧪 Test first, then ship?',
     'test-minimal': () => '▶️ Running — have fun',
@@ -1550,8 +1550,7 @@ function resolveCardKey(input) {
     return 'ship-successful';
   }
   if (variant === 'released') {
-    const to = (delivery.promote && delivery.promote.current) || (input.cta && input.cta.to);
-    return to === 'stable' ? 'released-stable' : 'released-beta';
+    return promoteTarget(input, delivery) === 'stable' ? 'released-stable' : 'released-beta';
   }
   if (variant === 'ready-files') return 'ready-files';
   if (variant === 'test') return 'test';
@@ -1579,10 +1578,42 @@ function headingReservation(open, lang) {
   return n + (n === 1 ? ' Vorbehalt' : ' Vorbehalten');
 }
 
+/**
+ * The channel a promotion landed on: the delivery ladder's `current`, else the
+ * promotion facts' `to`, else the CTA's — a promote-only payload often carries
+ * only one of them (#700).
+ */
+function promoteTarget(input, delivery) {
+  return (delivery.promote && delivery.promote.current)
+    || (input.promotion && input.promotion.to)
+    || (input.cta && input.cta.to) || '';
+}
+
+const semverParts = (v) => String(v).replace(/^v/, '').split(/[.-]/).slice(0, 3).map(n => parseInt(n, 10) || 0);
+
+/**
+ * The version a promote card names when neither the ship nor the CTA carries
+ * one (#700): the target channel's version, else the highest version on the
+ * ladder (a promotion re-tags the newest build). '' when the ladder is empty —
+ * the heading then drops the token instead of printing "Promoted  BETA".
+ */
+function promotedVersion(input, delivery, key) {
+  const channels = (delivery.promote && delivery.promote.channels) || {};
+  const target = promoteTarget(input, delivery)
+    || (key === 'released-stable' ? 'stable' : key === 'released-beta' ? 'beta' : '');
+  if (target && channels[target]) return channels[target];
+  const all = Object.values(channels).filter(Boolean);
+  if (!all.length) return '';
+  return all.reduce((best, v) => {
+    const a = semverParts(v), b = semverParts(best);
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i] ? v : best;
+    return best;
+  });
+}
+
 function decisionContext(input, key, delivery, state, lang) {
-  const promote = delivery.promote || {};
   const version = (delivery.ship && delivery.ship.version) || (input.cta && input.cta.version)
-    || (promote.current && promote.channels && promote.channels[promote.current]) || '';
+    || promotedVersion(input, delivery, key);
   // "N roten Tests" counts the red tests the results NAME ("3462 grün · 2 rot"
   // → 2), falling back to one per failing entry when no number is given.
   const redCount = (Array.isArray(input.tests) ? input.tests : [])
