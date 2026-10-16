@@ -169,3 +169,39 @@ describe("stop.flow.guard — a rendered card must also be relayed (#449)", () =
     } finally { cleanup(dir); }
   });
 });
+
+// #713 end-to-end: the delegated-ship relay under a made-up title.
+describe("stop.flow.guard — the card widget is recognized by its marker (#713)", () => {
+  function foreignTranscript(dir, widgetCode) {
+    const file = path.join(dir, "t.jsonl");
+    const lines = [
+      { type: "user", message: { role: "user", content: [{ type: "text", text: "ship it" }] } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "mcp__visualize__show_widget", input: { title: "ship_v090_lobby_harbour_card", widget_code: widgetCode } }] } },
+      { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } },
+    ];
+    fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+    return file;
+  }
+
+  test("card HTML under a foreign title → relayed, pass", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      setFlag(dir, "card-rendered");
+      const html = '<div id="dc-card"><h3 class="card-title">Card relay guarded</h3></div>\n<script type="application/json" id="dc-card-data">{}</script>';
+      expect((await stop(dir, foreignTranscript(dir, html))).trim()).toBe("");
+    } finally { cleanup(dir); }
+  });
+
+  test("foreign title without the marker → block naming both titles", async () => {
+    const dir = project();
+    try {
+      setFlag(dir, "work-happened");
+      setFlag(dir, "card-rendered");
+      const out = await stop(dir, foreignTranscript(dir, "<p>chart</p>"));
+      expect(out).toContain('"decision":"block"');
+      expect(out).toContain("ship_v090_lobby_harbour_card");
+      expect(out).toContain("completion_card_body");
+    } finally { cleanup(dir); }
+  });
+});

@@ -72,6 +72,7 @@ const {
   lastUserEntryIsNotification,
   safeReadTranscript,
   showWidgetCalledThisTurn,
+  foreignWidgetTitle,
   PENDING_TAIL_BYTES,
 } = require('../lib/card-guard');
 const { scanOpenTasks, openTaskNames } = require('../lib/pending-tasks');
@@ -168,6 +169,8 @@ process.stdin.on('end', () => {
   const cardText = (!silent && cardRendered) ? deliveredCardText(transcript) : '';
   const widgetFile = widgetResult ? String(widgetResult.filePath).replace(/\\/g, '/') : '';
   const widgetCalled = (widgetFile && transcript) ? showWidgetCalledThisTurn(transcript) : undefined;
+  // #713: a non-card widget shown after the render; the relay reason names its title.
+  const foreignTitle = cardRelayed === false ? foreignWidgetTitle(transcript) : null;
   // Both probes are only needed on the paths that read them: the tree check
   // shells out to git, the heartbeat stats a PID file — skip both on silent ticks.
   const treeClean = (!silent && (scheduledTask || notificationTurn)) ? isTreeClean(hook.cwd, sessionId) : null;
@@ -213,6 +216,7 @@ process.stdin.on('end', () => {
     cardRelayed,
     widgetFile,
     widgetCalled,
+    foreignWidgetTitle: foreignTitle,
     guideActive,
     guideLoopLive,
   });

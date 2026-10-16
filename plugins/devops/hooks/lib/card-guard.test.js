@@ -34,6 +34,7 @@ import {
   SUBSTANTIAL_CHARS,
   CARD_MARKER,
 } from "./card-guard.js";
+import { foreignWidgetTitle, isCardWidgetCall, CARD_WIDGET_TITLE } from "./card-guard.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — build JSONL transcript fragments
@@ -1450,5 +1451,78 @@ describe("buildBlockReason", () => {
     });
     expect(d.action).toBe("block");
     expect(d.reason).toContain('node "/opt/devops/mcp-server/index.js" --render-card');
+  });
+});
+
+// #713: a delegated ship hands back only the widget file; the main session
+// showed it under a title of its own, the guard never saw a card and every
+// re-show stacked another identical one (four cards in one turn).
+describe("card widget recognized by its marker, not only its title (#713)", () => {
+  const render = assistantMsg({ type: "tool_use", id: "r1", name: "mcp__plugin_devops_dotclaude-completion__render_completion_card", input: {} });
+  const renderResult = { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "r1", content: "card" }] } };
+  // The shape card-widget.js renders: #dc-card mount point + #dc-card-data JSON.
+  const cardHtml = '<details><summary>Lines</summary></details>\n<div id="dc-card"><h3 class="card-title" style="margin:0">🚀 v0.9.0 Lobby Harbour</h3></div>\n<script type="application/json" id="dc-card-data">{"ti":"x"}</script>';
+  const widget = (id, title, code) => assistantMsg({ type: "tool_use", id, name: "mcp__visualize__show_widget", input: { title, widget_code: code } });
+  const ok = (id) => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] } });
+  const gate = (tx) => decideAction({ workHappened: true, stopHookActive: false, substantial: false,
+    cardRendered: true, cardRelayed: cardDelivered(tx), cardText: deliveredCardText(tx),
+    widgetFile: "/tmp/w", widgetCalled: showWidgetCalledThisTurn(tx), foreignWidgetTitle: foreignWidgetTitle(tx) });
+
+  test("criterion 1: the card HTML under a foreign title counts as the relayed card", () => {
+    const tx = jsonl(userMsg("ship"), render, renderResult, widget("w1", "ship_v090_lobby_harbour_card", cardHtml), ok("w1"));
+    expect(cardDelivered(tx)).toBe(true);
+    expect(extractCardTitle(deliveredCardText(tx))).toBe("🚀 v0.9.0 Lobby Harbour");
+    expect(foreignWidgetTitle(tx)).toBeNull();
+    expect(gate(tx).action).toBe("pass");
+  });
+
+  test("criterion 1: either marker alone is enough, the required title alone still is too", () => {
+    expect(isCardWidgetCall("mcp__visualize__show_widget", { title: "x", widget_code: '<div id="dc-card"></div>' })).toBe(true);
+    expect(isCardWidgetCall("show_widget", { title: "x", widget_code: "<script type='application/json' id='dc-card-data'>{}</script>" })).toBe(true);
+    expect(isCardWidgetCall("mcp__6f61__show_widget", { title: CARD_WIDGET_TITLE, widget_code: "<p>x</p>" })).toBe(true);
+    expect(isCardWidgetCall("Bash", { title: CARD_WIDGET_TITLE, widget_code: cardHtml })).toBe(false);
+  });
+
+  test("criterion 3: a foreign-title widget without the marker → the block names the required title and the foreign one", () => {
+    const tx = jsonl(userMsg("ship"), render, renderResult, widget("w1", "my_chart", "<div><h3 class=\"card-title\">Chart</h3></div>"), ok("w1"));
+    expect(foreignWidgetTitle(tx)).toBe("my_chart");
+    const d = gate(tx);
+    expect(d.action).toBe("block");
+    expect(d.reason).toContain("never relayed");
+    expect(d.reason).toContain('under title "my_chart"');
+    expect(d.reason).toContain('title "completion_card_body"');
+  });
+
+  test("criterion 3: the plain not-relayed reason names the required title too", () => {
+    expect(buildNotRelayedReason()).toContain('title "completion_card_body"');
+    expect(buildNotRelayedReason()).not.toContain("DID run");
+  });
+
+  test("criterion 4: once the card was shown after the last render, re-shows and stray text never demand another", () => {
+    const tx = jsonl(userMsg("ship"), render, renderResult,
+      widget("w1", "ship_v090_lobby_harbour_card", cardHtml), ok("w1"),
+      assistantMsg({ type: "text", text: "Fertig." }),
+      widget("w2", "ship_v090_lobby_harbour_card", cardHtml), ok("w2"),
+      assistantMsg({ type: "text", text: "Die Card steht oben." }));
+    expect(gate(tx).action).toBe("pass");
+    // also when a non-card widget followed the shown card
+    const tx2 = jsonl(userMsg("ship"), render, renderResult,
+      widget("w1", CARD_WIDGET_TITLE, cardHtml), ok("w1"), widget("w2", "my_chart", "<p>chart</p>"), ok("w2"));
+    expect(gate(tx2).action).toBe("pass");
+  });
+
+  test("criterion 4: a card shown BEFORE a newer render does not count for that render", () => {
+    const tx = jsonl(userMsg("ship"), widget("w1", "x", cardHtml), ok("w1"), render, renderResult);
+    expect(cardDelivered(tx)).toBe(false);
+    expect(gate(tx).action).toBe("block");
+  });
+
+  test("criterion 5: a foreign title without the marker is never a card (false positive)", () => {
+    const html = '<div class="dc-card-like"><h3 class="card-title">Not a card</h3><p id="dc-cards">x</p></div>';
+    expect(isCardWidgetCall("mcp__visualize__show_widget", { title: "my_chart", widget_code: html })).toBe(false);
+    expect(isCardWidgetCall("mcp__visualize__show_widget", { title: "my_chart" })).toBe(false);
+    const tx = jsonl(userMsg("ship"), render, renderResult, widget("w1", "my_chart", html), ok("w1"));
+    expect(cardDelivered(tx)).toBe(false);
+    expect(deliveredCardText(tx)).toBe("");
   });
 });

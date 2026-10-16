@@ -68,15 +68,19 @@ inline that way, the largest at 951 k.
      then `SendMessage` the answer to the same agent and wait for its next
      result. Repeat until the status is `done`.
    - `{ "status": "done", "titlePrefix", "widgetFile" | "markdown",
-     "exitWorktree" }`: the card is already rendered. Do not call
+     "widgetTitle", "exitWorktree" }`: the card is already rendered. Do not call
      `render_completion_card` again.
      1. If `exitWorktree` is true, call `ExitWorktree({ action: "remove" })`.
      2. Set the session title to `titlePrefix` plus the current title with
         its old devops prefix removed. This is the render result's
         `[SESSION TITLE]` step, carried out here.
-     3. On Desktop, `Read` the `widgetFile` and pass its content verbatim to
-        `show_widget` (title `completion_card_body`) as the last action. In
-        the terminal, output `markdown` verbatim. Add no text of your own.
+     3. On Desktop, `Read` the `widgetFile` and call `show_widget` once, as
+        the last action, with `title` = `widgetTitle` verbatim
+        (`completion_card_body`; never a title of your own) and
+        `widget_code` = the file content verbatim. `stop.flow.guard` also
+        recognizes the card by its `dc-card` markup, but a foreign title on a
+        widget without that markup is not the card. In the terminal, output
+        `markdown` verbatim. Add no text of your own.
    - **No JSON block**, or the agent failed: render a `ship-blocked` card that
      states the agent's last words as the reason. Never re-run the pipeline
      inline on your own; the user decides (`/do-ship --inline`).
@@ -109,7 +113,7 @@ extension. Only these points differ:
 | Step 5b Substep 2 (`ExitWorktree`) | Never call it. For a worktree the parent entered through `EnterWorktree`, run `ship_cleanup({ …, keep: true })` and return `"exitWorktree": true`, and the parent removes the worktree. Leftover branches are `ship_hygiene`'s job. |
 | Step 5b Substep 3 (re-open files) | Skip it. Those files were opened by the parent session. |
 | Step 5e (memory dream) | Skip it. The learnings live in the parent's conversation, not in the brief. |
-| Step 6 | Unchanged up to and including `render_completion_card` (with the `session_id` and `lang` from your prompt) and any project-extension step that runs after the render, such as a plugin self-sync. Take `changes`, `validation` and `userFinalTest` from the brief, plus what the ship itself found. **Never call `show_widget` or rename the session**: return the result in the `done` JSON. `titlePrefix` is the prefix the `[SESSION TITLE]` block names. On Desktop, `widgetFile` is the path the result names ("The same HTML is saved in …"). In the terminal, `markdown` is the card markdown verbatim. |
+| Step 6 | Unchanged up to and including `render_completion_card` (with the `session_id` and `lang` from your prompt) and any project-extension step that runs after the render, such as a plugin self-sync. Take `changes`, `validation` and `userFinalTest` from the brief, plus what the ship itself found. **Never call `show_widget` or rename the session**: return the result in the `done` JSON. `titlePrefix` is the prefix the `[SESSION TITLE]` block names. On Desktop, `widgetFile` is the path the result names ("The same HTML is saved in …") and `widgetTitle` is always `"completion_card_body"`. In the terminal, `markdown` is the card markdown verbatim. |
 | Sentinel hygiene | Unchanged. Before a `ship-blocked` card, call `ship_cleanup({ …, keep: true })`. |
 
 End **every** return (`decision` and `done` alike) with exactly one fenced `json`

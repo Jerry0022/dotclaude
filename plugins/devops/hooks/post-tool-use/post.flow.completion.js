@@ -95,7 +95,7 @@ const path = require('path');
 // PostToolUse call error. Guarded the way post.agent.nudge.js does it: a load
 // error makes main() a silent no-op, same as every other failure path.
 let sessionFile, readSessionFile, writeSessionFile, projectRoot, inOwnWorkTree, gitRun,
-  isMcpServerAlive, NO_OUTPUT_NUDGE_REPLY, getLocale, t,
+  isMcpServerAlive, NO_OUTPUT_NUDGE_REPLY, isCardWidgetCall, getLocale, t,
   responseLaunch, responseTaskId, labelFor, isConceptInfra,
   BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns,
   SPAWN_TOOL_RE, DISMISS_TOOL_RE, recordSpawn, recordDismiss, chipReminder,
@@ -112,7 +112,7 @@ try {
   ({ projectRoot, inOwnWorkTree } = guardedRequire('../lib/project-root'));
   ({ gitRun } = guardedRequire('../lib/git-timeout'));
   ({ isMcpServerAlive } = guardedRequire('../lib/mcp-heartbeat'));
-  ({ NO_OUTPUT_NUDGE_REPLY } = guardedRequire('../lib/card-guard'));
+  ({ NO_OUTPUT_NUDGE_REPLY, isCardWidgetCall } = guardedRequire('../lib/card-guard'));
   ({ getLocale, t } = guardedRequire('../lib/locale'));
   ({ responseLaunch, responseTaskId, labelFor, isConceptInfra } = guardedRequire('../lib/pending-tasks'));
   ({ BGRUN_FLAG, recordBackgroundRun, settleRecordedRuns } = guardedRequire('../lib/light-bgrun'));
@@ -239,12 +239,6 @@ function contextOf(lines) {
 }
 
 const SHIP_RELEASE_TOOL = 'mcp__plugin_devops_dotclaude-ship__ship_release';
-
-/** The Desktop card itself: show_widget (any namespace) with the card-body title. */
-function isCardWidgetCall(toolName, toolInput) {
-  const widgetTool = toolName === 'show_widget' || toolName.endsWith('__show_widget');
-  return widgetTool && !!toolInput && toolInput.title === 'completion_card_body';
-}
 
 /**
  * Did a ship_release response report a merge? MCP results arrive as

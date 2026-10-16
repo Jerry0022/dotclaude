@@ -91,6 +91,10 @@ describe("ship-delegate — the instruction", () => {
     expect(withId).toContain("--keep when the user announced");
     expect(withId).toContain("--no-watch");
     expect(withId).toContain('"titlePrefix", "widgetFile" | "markdown"');
+    // #713: the hand-back names the show_widget title; the caller passes it verbatim.
+    expect(withId).toContain('"widgetTitle"');
+    expect(withId).toContain('title = widgetTitle');
+    expect(withId).toContain('verbatim ("completion_card_body", never a title of your own)');
     expect(withId).toContain("no second render_completion_card");
   });
 
