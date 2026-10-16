@@ -13,12 +13,19 @@ const { FORBIDDEN } = require("../../../../hooks/lib/concept-gate.js");
 const HANDOFF = FORBIDDEN.filter((f) => /clipboard|zwischenablage|chat/i.test(f.why)).map((f) => f.re);
 const BUILT_PAGE = /docs[\\/]+concepts[\\/]+[^\\/]+\.html$/i;
 
-// Built pages are docs/concepts/*.html; the source folder holds fragments.
-function builtPages(workdir) {
-  const dir = path.join(workdir, "docs", "concepts");
+// Built pages are docs/concepts/*.html (the source folder holds fragments) —
+// in the workspace or in a worktree the session entered under
+// .claude/worktrees/<name>/ (observed: the model calls EnterWorktree first).
+function htmlIn(dir) {
   try {
     return fs.readdirSync(dir).filter((f) => f.endsWith(".html")).map((f) => fs.readFileSync(path.join(dir, f), "utf8"));
   } catch { return []; }
+}
+function builtPages(workdir) {
+  const roots = [workdir];
+  const wt = path.join(workdir, ".claude", "worktrees");
+  try { for (const n of fs.readdirSync(wt)) roots.push(path.join(wt, n)); } catch { /* no worktrees */ }
+  return roots.flatMap((r) => htmlIn(path.join(r, "docs", "concepts")));
 }
 const mainCalls = (ctx, name) => ctx.parsed.toolCalls.filter((c) => !c.subagent && c.name === name);
 

@@ -186,6 +186,13 @@ describe("path_prepend (stub CLIs)", () => {
     expect(graders["no-clipboard-handoff"](built)).toBe(false);
     fs.writeFileSync(page, "<main>no panel</main>");
     expect(graders["decision-panel"](built)).toBe(false);
+    // A page built inside a worktree the session entered counts too.
+    fs.rmSync(path.join(dir, "docs"), { recursive: true, force: true });
+    const wtDir = path.join(dir, ".claude", "worktrees", "notes-k7", "docs", "concepts");
+    fs.mkdirSync(wtDir, { recursive: true });
+    fs.writeFileSync(path.join(wtDir, "2026-x-notes.html"), '<aside id="decision-panel" class="concept-decision-panel"></aside>');
+    expect(graders["page-built"](built)).toBe(true);
+    expect(graders["decision-panel"](built)).toBe(true);
 
     const bad = run(
       tool("AskUserQuestion", { questions: [{ header: "Mode" }] }),

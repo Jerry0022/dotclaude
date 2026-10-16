@@ -121,8 +121,9 @@ browser, crons and `kill` denied: the skill loads without the mode question,
 `concept-build.js build` writes `docs/concepts/*.html` (no hand-written
 page), the page has `#decision-panel` and none of the concept gate's
 clipboard / paste-into-chat patterns, and no preview / Playwright tool is
-used. A full build takes longer than the default 5 min — pass
-`--timeout-min 15`. Ordering checks share
+used. The page graders also look under `.claude/worktrees/*/` (the model
+may `EnterWorktree` before building). A run takes ~8 min, longer than the
+default 5 min timeout — pass `--timeout-min 15`. Ordering checks share
 `skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 
