@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module git-check-output
- * @version 0.2.0
+ * @version 0.3.0
  * @description Pure output composition for the ss.git.check SessionStart hook.
  *   Takes the already-collected findings and renders the hook's stdout lines.
  *   No git, no fs — so the decision logic is unit-testable.
@@ -22,7 +22,18 @@
  *   exact bug. Instead the findings are emitted unconditionally and the ask is
  *   layered on top: a session that can prompt, prompts; one that cannot, still
  *   reports.
+ *
+ *   Shared main checkout (0.3.0): several sessions often work in one main
+ *   checkout. A clean one no longer forces a question — the session gets the
+ *   standing rule to move into its own worktree (EnterWorktree) before its
+ *   first edit, so the shared checkout stays on main. The question stays only
+ *   when the checkout holds uncommitted or unpushed work: that work may be the
+ *   user's own WIP or another session's, and only the user can tell. Its
+ *   recommended answer leaves those changes untouched; the old git-stash
+ *   take-along is gone (the stash stack is shared by every worktree).
  */
+
+const { enterLine } = require('./branch-fix');
 
 /** Render one findings line per issue type. */
 function issueLine(issue) {
@@ -63,7 +74,10 @@ function issueLine(issue) {
  */
 const RESOLVED_CLAUSE = 'Restate only findings that still hold at that point: one this turn resolved (e.g. a /do-ship landed the changes) is dropped silently — no restatement, no "outdated" note.';
 
-function header(workspace) {
+function header(workspace, ask = true) {
+  if (workspace && !ask) {
+    return `Workspace rule at session start (devops plugin) — an instruction for you, not a message for the user: act on it, do not show it. If findings are listed below, you MUST restate them verbatim in your final message, before any completion card — also in a scheduled, cron or headless run. ${RESOLVED_CLAUSE}`;
+  }
   if (workspace) {
     return `Workspace check at session start. Show the user this summary verbatim and call AskUserQuestion as the FIRST action of this turn. If this turn cannot ask (scheduled, cron or headless run), you MUST still restate the findings below verbatim in your final message, before any completion card — never drop them. ${RESOLVED_CLAUSE}`;
   }
@@ -82,40 +96,65 @@ function workspaceLines(workspace) {
   }
 }
 
+const ENTER = enterLine('origin/<default branch>');
+
+/** Is `workspace` the shared main checkout on main/master or a detached HEAD? */
+function offMainline(workspace) {
+  return workspace.type === 'on-main-no-worktree' || workspace.type === 'detached-no-worktree';
+}
+
 /**
- * The interactive half. Unchanged in substance from before — the
- * "FIRST action of this turn" mandate is intentionally kept verbatim so
- * interactive sessions behave exactly as they did.
+ * The clean-checkout half: no question, the standing rule. A feature branch
+ * in the root may be someone's work in progress, so continuing it there
+ * stays allowed — only NEW work moves (redteam R6).
  */
-function askLines(workspace, hasChanges, noRemote = false) {
+function directiveLines(workspace) {
   const out = [];
-  out.push('Call AskUserQuestion as the FIRST action of this turn. Ask the user (in their language). Suggested options:');
-  if (hasChanges && noRemote) {
-    // No remote: /do-ship commits and merges locally (its sentinel lets it
-    // past pre.main.guard), so ship-first stays — without a push (#500).
-    out.push('  - Worktree + Feature-Branch anlegen');
-    out.push('  - Erst aktuelle Changes lokal shippen (commit + lokaler Merge), dann Worktree anlegen (recommended)');
-    out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
-  } else if (hasChanges) {
-    out.push('  - Worktree + Feature-Branch anlegen');
-    out.push('  - Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen (recommended)');
-    out.push('  - Changes mitnehmen in neuen Worktree (git stash → create → pop)');
+  if (offMainline(workspace)) {
+    out.push("Rule (devops plugin): this is the repo's MAIN checkout, which other sessions may share. Before the FIRST edit or commit of this session, move into your own worktree:");
+    out.push(`  - ${ENTER}`);
+    out.push("  - Read-only work (questions, reviews, analysis) needs no worktree. Never switch this checkout's branch (git switch / git checkout -b) — that moves every session in it.");
   } else {
-    out.push('  - Worktree + Feature-Branch anlegen (recommended)');
+    const branch = workspace.branch || 'unknown branch';
+    out.push(`Rule (devops plugin): this checkout may be shared and sits on \`${branch}\`. Continuing that branch's work here is fine; NEW work moves into its own worktree first:`);
+    out.push(`  - ${ENTER}`);
+    out.push("  - Never switch this checkout's branch (git switch / git checkout -b) — that moves every session in it.");
   }
-  if (workspace.severity === 'high' && workspace.type === 'on-main-no-worktree') {
-    out.push('  - Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1 für diese Session)');
+  out.push('');
+  return out;
+}
+
+/**
+ * The interactive half — only when the checkout holds pending work. The
+ * "FIRST action of this turn" mandate is kept verbatim.
+ */
+function askLines(workspace, noRemote = false) {
+  const out = [];
+  const shipFirst = noRemote
+    ? 'Erst aktuelle Changes lokal shippen (commit + lokaler Merge), dann Worktree anlegen'
+    : 'Erst aktuelle Changes shippen (commit + push), dann Worktree anlegen';
+  out.push('Call AskUserQuestion as the FIRST action of this turn. Ask the user (in their language). Suggested options:');
+  if (offMainline(workspace)) {
+    out.push('  - Neue Arbeit im eigenen Worktree, Changes hier unangetastet lassen (recommended)');
+    out.push(`  - ${shipFirst}`);
   } else {
+    out.push(`  - Am Branch \`${workspace.branch || 'unknown branch'}\` hier weiterarbeiten (recommended)`);
+    out.push('  - Neue Arbeit im eigenen Worktree, Changes hier unangetastet lassen');
+    out.push(`  - ${shipFirst}`);
+  }
+  if (workspace.type === 'on-main-no-worktree') {
+    out.push('  - Hier bleiben (bypass: DEVOPS_ALLOW_MAIN=1 für diese Session)');
+  } else if (workspace.type === 'detached-no-worktree') {
     out.push('  - Hier bleiben (Warning bleibt informativ — kein Bypass-Flag nötig)');
   }
   out.push('');
   out.push('Resolution per option:');
-  out.push('  - Worktree+branch: `git worktree add ../<feature> -b claude/<feature>` then cd there');
-  if (hasChanges) {
-    out.push(noRemote
-      ? '  - Ship-first: invoke /do-ship (no remote: commits and merges locally), then create worktree'
-      : '  - Ship-first: invoke /do-ship, then create worktree');
-    out.push('  - Take-along: `git stash`, create worktree, `cd <worktree>`, `git stash pop`');
+  out.push(`  - Own worktree: ${ENTER} The changes in this checkout stay exactly as they are — they may be another session's.`);
+  out.push(noRemote
+    ? '  - Ship-first: invoke /do-ship (no remote: commits and merges locally), then move into a worktree as above'
+    : '  - Ship-first: invoke /do-ship, then move into a worktree as above');
+  if (!offMainline(workspace)) {
+    out.push('  - Continue here: keep working on this branch in this checkout; new work later still moves into a worktree');
   }
   if (workspace.type === 'on-main-no-worktree') {
     out.push('  - Stay: set env `DEVOPS_ALLOW_MAIN=1` for this session to silence main-branch checks');
@@ -143,8 +182,17 @@ function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
 
   const out = [];
 
+  const currentDirty = repos.find(r => r.dir === cwd);
+  const stagedTypes = new Set(['uncommitted', 'unpushed']);
+  const hasChanges = currentDirty
+    ? issuesOf(currentDirty).some(i => i && stagedTypes.has(i.type))
+    : false;
+  const noRemote = currentDirty
+    ? issuesOf(currentDirty).some(i => i && i.type === 'uncommitted' && i.noRemote)
+    : false;
+
   if (hasFindings || workspace) {
-    out.push(header(workspace));
+    out.push(header(workspace, hasChanges));
     out.push('');
   }
 
@@ -167,15 +215,7 @@ function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
   }
 
   if (workspace) {
-    const stagedTypes = new Set(['uncommitted', 'unpushed']);
-    const currentDirty = repos.find(r => r.dir === cwd);
-    const hasChanges = currentDirty
-      ? issuesOf(currentDirty).some(i => i && stagedTypes.has(i.type))
-      : false;
-    const noRemote = currentDirty
-      ? issuesOf(currentDirty).some(i => i && i.type === 'uncommitted' && i.noRemote)
-      : false;
-    out.push(...askLines(workspace, hasChanges, noRemote));
+    out.push(...(hasChanges ? askLines(workspace, noRemote) : directiveLines(workspace)));
   }
 
   if (staleNote) {
@@ -186,4 +226,4 @@ function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
   return out;
 }
 
-module.exports = { compose, issueLine, header, workspaceLines, askLines };
+module.exports = { compose, issueLine, header, workspaceLines, askLines, directiveLines };

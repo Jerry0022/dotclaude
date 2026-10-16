@@ -270,3 +270,4 @@ before the ship: `deep-knowledge/execution.md` § auto-agents hand-off.
   and shows on the card (Step 5b, `{PLUGIN_ROOT}/deep-knowledge/run-contract.md`).
 - When the request fits no mode and is not an implementation task, say so
   and stop.
+- In the main checkout on `main`/`master`, `EnterWorktree` before the first edit and before spawning agents (`{PLUGIN_ROOT}/deep-knowledge/git-hygiene.md` § Main-branch protection).

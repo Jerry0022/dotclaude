@@ -216,6 +216,12 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.governor.clear.js", "timeout": 5 }
         ],
         "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/post.worktree.enter.js", "timeout": 10 }
+        ],
+        "matcher": "EnterWorktree"
       }
     ],
     "PostToolUseFailure": [

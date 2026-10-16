@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook pre.main.guard
- * @version 0.1.3
+ * @version 0.2.0
  * @event PreToolUse
  * @plugin devops
  * @matcher Bash
@@ -21,6 +21,11 @@
  *   Read-only git commands (status, log, diff, fetch, branch listing) pass
  *   through untouched.
  *
+ *   The remedy depends on where the block happens (lib/branch-fix.js): in
+ *   the repo's MAIN checkout — possibly shared by several sessions — the
+ *   session moves into its own worktree instead of switching the shared
+ *   checkout's branch; in a linked worktree `git switch -c` stays the fix.
+ *
  *   Every git probe goes through lib/git-timeout.js's gitOut — GIT_TIMEOUT_MS
  *   per call; before, these calls had no timeout at all. A failed or hung
  *   probe reads as "not a repo" / "no branch" / "no origin", as a failure
@@ -30,11 +35,13 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every Bash call
 // (AUD-028).
-let gitOut, sentinelActive;
+let gitOut, sentinelActive, isLinkedWorktree, branchFix;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
+  ({ isLinkedWorktree } = require('../lib/project-root'));
+  ({ branchFix } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -112,14 +119,19 @@ process.stdin.on('end', () => {
   const rule = remote
     ? `Never commit/merge/push directly on ${branch}. Work on a branch derived from origin/${branch} and land via /do-ship.`
     : `Never commit directly on ${branch}. Work on a feature branch and land it via /do-ship.`;
-  const fix = remote
-    ? `git fetch origin && git switch -c <feat/topic> origin/${branch}`
-    : `git switch -c <feat/topic>   (no origin remote — branches from local ${branch})`;
+  const top = gitOut(cwd, ['rev-parse', '--show-toplevel']);
+  const fix = branchFix({
+    branch,
+    remote,
+    // Unknown top level → treat as the shared main checkout: the safe remedy.
+    mainCheckout: !(top && isLinkedWorktree(top)),
+    subagent: Boolean(hook.agent_id),
+  });
 
   process.stderr.write(
     `[pre.main.guard] BLOCKED: Write operation on local '${branch}' is not allowed.\n` +
     `[pre.main.guard] Rule: ${rule}\n` +
-    `[pre.main.guard] Fix: ${fix}\n` +
+    fix.map(l => `[pre.main.guard] ${l}\n`).join('') +
     `[pre.main.guard] Bypass (only if the user explicitly asked to work on ${branch}): set env DEVOPS_ALLOW_MAIN=1 for this single command.\n`
   );
   process.exit(2);
