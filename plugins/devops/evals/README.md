@@ -118,7 +118,16 @@ since the deletion gate `pre.cleanup.gate` 3/3 runs attempt no delete — see
 the router path under `-p`, where the base call is never asked (measured
 2026-10-16): task to `.claude/run-task.md`, `auto-agents --from=do-run`
 with the click-through defaults, Harden, the prompt's constraint held, no
-direct `ship_*` call. Ordering checks share
+direct `ship_*` call. `auto-concept` (#721, for the #722/#723 trims)
+asks for a decision-mode page about notes-cli storage with the bridge
+(`python`, `concept-server` / `-port-registry` / `-watch` / `-tick`), the
+browser, crons and `kill` denied: the skill loads without the mode question,
+`concept-build.js build` writes `docs/concepts/*.html` (no hand-written
+page), the page has `#decision-panel` and none of the concept gate's
+clipboard / paste-into-chat patterns, and no preview / Playwright tool is
+used. The page graders also look under `.claude/worktrees/*/` (the model
+may `EnterWorktree` before building). A run takes ~8 min, longer than the
+default 5 min timeout — pass `--timeout-min 15`. Ordering checks share
 `skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 

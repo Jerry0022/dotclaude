@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.268.2] — 2026-10-16
+
+The planned /auto-concept trims (#722/#723) had no behavioural baseline to be measured against (#721). A new `ab-run.js` eval case now checks, on real `claude -p` runs, that a decision-page request goes through the skill and its builder.
+
+### Added
+- **Eval case `evals/skills/auto-concept/decision-page/`**: case, prompt with a deny list (no bridge, no browser, no clipboard hand-off), scaffold and 8 deterministic graders — skill invoked, no mode question, page built under `docs/concepts` (also inside an entered worktree), built by `concept-build.js`, no hand-written page, decision panel present, no clipboard hand-off, no browser tool. Real run (`--runs 2 --timeout-min 15`, origin/main vs. branch): 8/8 on both arms.
+- **Grader unit tests** in `evals/lib/ab.test.js` (hand-written page and skill-less runs fail).
+- **Docs**: `evals/README.md` — the case and its `--timeout-min 15` requirement.
+
 ## [0.268.1] — 2026-10-16
 
 In the /auto-concept design template a mock root with `max-width: 1080px` whose only wide child was an absolute 640px popup shrank to its content (about 510px) inside the screen's flex centring, and the window's `overflow: hidden` clipped the popup (#708). Mock roots now take the screen's full width.
