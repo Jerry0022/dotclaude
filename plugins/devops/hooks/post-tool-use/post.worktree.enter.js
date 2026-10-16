@@ -21,7 +21,6 @@
 
 require('../lib/plugin-guard');
 
-const fs = require('fs');
 const path = require('path');
 
 /** The main working tree a linked worktree belongs to (fs only, no git spawn); null for a main checkout or a bare repo. */
