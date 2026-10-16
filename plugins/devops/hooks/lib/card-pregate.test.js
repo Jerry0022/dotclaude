@@ -376,6 +376,9 @@ describe('card-pregate — security finding without an open point (#709)', () =>
     expect(findings(ok, { openTasks: [] })).toEqual([]);
     // "advise" / "vulnerable-looking" words that are not findings stay quiet
     expect(findings({ ...ok, summary: 'Advice on the review flow' }, { openTasks: [] })).toEqual([]);
+    // QA: a Postgres advisory lock and a clean audit in other words are no findings
+    expect(findings({ ...ok, changes: [{ area: 'db', description: 'Adds advisory lock to the DB migration' }] }, { openTasks: [] })).toEqual([]);
+    expect(findings({ ...ok, tests: [{ method: 'npm audit', result: 'clean' }] }, { openTasks: [] })).toEqual([]);
   });
 
   test('check refuses once, then renders the same call', () => {

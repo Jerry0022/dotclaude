@@ -157,9 +157,9 @@ function buildUserQuestionReason(requirements) {
 }
 
 /** A security finding named in card text (#709). */
-const SECURITY_RE = /\b(?:CVE-\d{4}-\d+|CVE|GHSA(?:-[0-9a-z]{4}){0,3}|advisor(?:y|ies)|npm audit|vulnerab\w*|Sicherheitsl(?:ü|ue)cke\w*|Schwachstelle\w*)\b/i;
+const SECURITY_RE = /\b(?:CVE-\d{4}-\d+|CVE|GHSA(?:-[0-9a-z]{4}){0,3}|advisor(?:y|ies)(?![\s-]+(?:lock|board|only))|npm audit|vulnerab\w*|Sicherheitsl(?:ü|ue)cke\w*|Schwachstelle\w*)\b/i;
 /** A text that reports a clean audit names no finding. */
-const CLEAN_AUDIT_RE = /\b(?:0|no|zero|keine?)\s+(?:known\s+|bekannten?\s+)?(?:vulnerabilit\w*|advisor(?:y|ies)|Schwachstelle\w*|Sicherheitsl(?:ü|ue)cke\w*)|\bfound 0\b/i;
+const CLEAN_AUDIT_RE = /\b(?:0|no|zero|keine?)\s+(?:known\s+|bekannten?\s+)?(?:vulnerabilit\w*|advisor(?:y|ies)|Schwachstelle\w*|Sicherheitsl(?:ü|ue)cke\w*)|\bfound 0\b|\bnpm audit\W+(?:clean|passed|ok|sauber)\b/i;
 
 /**
  * The card fields a finding can hide in — summary, then one text per
