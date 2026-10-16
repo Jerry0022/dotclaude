@@ -71,7 +71,8 @@ describe("points cap (§ 2.6) — ≤ 3 on the card, rest folded into the headin
   test("exactly 3 points render without a tail", async () => {
     const text = await cardText({
       variant: "ready", summary: "x", lang: "de", session_id: "test-compact-points-3",
-      open: ["A", "B", "C"],
+      // #714: the top point is the question heading, the rest are the points.
+      open: ["Q", "A", "B", "C"],
     });
     expect(text.split("\n").filter((l) => /^\d+\. /.test(l))).toHaveLength(3);
     expect(text).not.toContain("weitere");
@@ -80,7 +81,7 @@ describe("points cap (§ 2.6) — ≤ 3 on the card, rest folded into the headin
   test("5 points → 3 shown + '+2 weitere' in the heading", async () => {
     const text = await cardText({
       variant: "ready", summary: "x", lang: "de", session_id: "test-compact-points-5",
-      open: ["A", "B", "C", "D", "E"],
+      open: ["Q", "A", "B", "C", "D", "E"],
     });
     const shown = text.split("\n").filter((l) => /^\d+\. /.test(l));
     expect(shown).toHaveLength(3);

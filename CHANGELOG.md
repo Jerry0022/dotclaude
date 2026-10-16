@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.267.1] — 2026-10-16
+
+A card that still waited on the user offered Ship anyway: the open question sat in a block further down while the heading asked "SHIP or CHANGE?" (#714). Ship is now offered only when nothing is open.
+
+### Changed
+- **Completion card (ready / test)**: when a requirement waits on the user (`waitsOn: "user"`) or the card carries any open point, the decision heading asks that question (`❓ …`), the Ship button is gone and the conclude button carries the prepared answer. A remote-less ready card no longer auto-ships over an open point.
+- **Removed**: the `📦 Shippen trotz {reservation}?` heading. An open point no longer reads as a ship-with-reservation offer — it suppresses the ship offer entirely (owner rule: "ship only when everything is done, no questions open").
+- **Card pregate (Gate Q)**: refuses once when a requirement has `waitsOn: "user"` but the card has no open question, and asks for it in `open[{ text, reply }]`.
+- **Docs**: `deep-knowledge/completion-card-design.md` § 2.6 "Ship only when nothing is open".
+
 ## [0.267.0] — 2026-10-16
 
 Claude Desktop creates a worktree and a `claude/<slug>` branch only when the worktree option is ticked; every other session sits in the shared main checkout. The main-branch guards then told the model to run `git switch -c <topic> origin/main`, which switches the branch under every other session in that checkout — exactly the collision parallel local and cloud sessions must avoid. Sessions in a shared main checkout now move into their own worktree instead. Repos that work on main on purpose (`DEVOPS_ALLOW_MAIN=1` in `.claude/settings.local.json`) are unchanged.

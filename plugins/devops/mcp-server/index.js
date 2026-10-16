@@ -532,6 +532,9 @@ function withDetectedRepoMode(params) {
  */
 function localShipInstruction(params) {
   if (params.variant !== 'ready') return null;
+  // #714: an open question or a requirement waiting on the user is the next
+  // step — never ship behind it.
+  if (openQuestionOf(params)) return null;
   const state = params.state || {};
   if (state.mode !== 'git-no-remote' || state.delivered) return null;
   const cwd = params.cwd || process.cwd();
@@ -1276,9 +1279,14 @@ function renderChannelLadderMd(ladder, lang) {
 
 const HEADINGS = {
   de: {
-    ready: (c) => c.reservation ? `📦 Shippen trotz ${c.reservation}?` : '📦 Shippen?',
+    // #714: ship is offered only when nothing is open — an `open` point or a
+    // requirement waiting on the user turns the card into the `question` key.
+    ready: () => '📦 Shippen?',
     // No remote (#500): nothing to ship to — the work ends at the local commit.
-    'ready-local': (c) => c.reservation ? `📦 Lokal fertig trotz ${c.reservation} — noch etwas?` : '📦 Lokal fertig — noch etwas?',
+    'ready-local': () => '📦 Lokal fertig — noch etwas?',
+    question: (c) => c.question
+      ? `❓ ${c.question}`
+      : `❓ Wartet auf dich: ${c.waitsFor} — wie entscheidest du?`,
     'test-local': () => '🧪 Erst testen?',
     // Names what is actually red: failing tests, else unmet requirements,
     // else partially met ones — an unmet requirement is not a "red test".
@@ -1315,8 +1323,11 @@ const HEADINGS = {
     'vv-running': () => '⏳ Test läuft noch — Ergebnis abwarten?',
   },
   en: {
-    ready: (c) => c.reservation ? `📦 Ship anyway despite ${c.reservation}?` : '📦 Ship?',
-    'ready-local': (c) => c.reservation ? `📦 Done locally despite ${c.reservation} — anything else?` : '📦 Done locally — anything else?',
+    ready: () => '📦 Ship?',
+    'ready-local': () => '📦 Done locally — anything else?',
+    question: (c) => c.question
+      ? `❓ ${c.question}`
+      : `❓ Waiting on you: ${c.waitsFor} — what's your call?`,
     'test-local': () => '🧪 Test first?',
     'ready-red': (c) => `⚠ Ship anyway with ${c.redTests
       ? c.redTests + ' red tests'
@@ -1561,21 +1572,30 @@ function resolveCardKey(input) {
   return 'fallback';
 }
 
-const RESERVATION_MAX = 48;
+/**
+ * What still waits on the user (#714): the first `open` point and every
+ * not-met requirement with `waitsOn: "user"` — or null when nothing does.
+ * Ship is offered only when this is null.
+ */
+function openQuestionOf(input) {
+  const open = normalizeOpenItems(input.open);
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  const waits = validation.filter(v => v && typeof v === 'object' && v.waitsOn === 'user' && v.status !== 'met');
+  if (!open.length && !waits.length) return null;
+  return { first: open.length ? open[0].text : '', waits };
+}
+
+/** Ship-offering keys a pending question replaces (#714). */
+const QUESTION_KEYS = new Set(['ready', 'test']);
 
 /**
- * What the `ready` heading names after "trotz": the top reservation verbatim
- * when it is short enough to read as a clause, otherwise the count — a heading
- * that quotes a 120-character sentence is no question any more.
+ * The `question` heading's text: the top open point verbatim, phrased as a
+ * question when it is a statement ("Doku fehlt" → "Doku fehlt — angehen?").
  */
-function headingReservation(open, lang) {
-  const items = normalizeOpenItems(open).map(it => it.text);
-  if (!items.length) return '';
-  const first = items[0].replace(/[.!?]\s*$/, '');
-  if (items.length === 1 && first.length <= RESERVATION_MAX) return first;
-  const n = items.length;
-  if (lang === 'en') return n + (n === 1 ? ' reservation' : ' reservations');
-  return n + (n === 1 ? ' Vorbehalt' : ' Vorbehalten');
+function questionText(text, lang) {
+  const t = String(text || '').trim();
+  if (!t || /\?$/.test(t)) return t;
+  return t.replace(/[.!:]\s*$/, '') + (lang === 'en' ? ' — tackle it?' : ' — angehen?');
 }
 
 /**
@@ -1641,7 +1661,6 @@ function decisionContext(input, key, delivery, state, lang) {
     // promote.js needs origin — so no ring heading and no Promote buttons.
     ring: !!delivery.promote && state.mode !== 'git-no-remote',
     base: (delivery.ship && delivery.ship.base) || state.merged || 'main',
-    reservation: headingReservation(input.open, lang),
     n: redCount || unmetCount || 1,
     // What the ready-red heading names: red tests first, else unmet
     // requirements, else (n) partially met ones.
@@ -1773,6 +1792,26 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // Without any repo (file-only) there is nothing to ship either: the test
   // card asks only to test.
   const noShip = (state.mode === 'git-no-remote' || state.mode === 'file-only') && (key === 'ready' || key === 'test');
+
+  // #714: an open point or a requirement waiting on the user is the next
+  // step — the heading asks it and the Ship button goes; the conclude button
+  // (Ändern / Nachbessern) carries the prepared answer.
+  const question = QUESTION_KEYS.has(key) ? openQuestionOf(input) : null;
+  if (question) {
+    const waitsFor = question.waits.length ? String(question.waits[0].requirement || question.waits[0].evidence || '').trim() : '';
+    let qHeading = T.question({ question: questionText(question.first, lang), waitsFor });
+    const all = pointsForKey(input, key, lang);
+    const at = question.first ? all.indexOf(question.first) : -1;
+    const rest = at >= 0 ? [...all.slice(0, at), ...all.slice(at + 1)] : all;
+    const capped = capPoints(rest, lang);
+    if (capped.tail) qHeading = qHeading.replace(/([?.])$/, capped.tail + '$1');
+    return {
+      heading: qHeading, context: buildContextLine(input, key, delivery, lang), points: capped.shown,
+      buttonsKey: key, version: ctx.version || null, replies: openReplies(input, lang), noShip: true, guideHandoff,
+      appStart: APP_START_KEYS.has(key) && !!detectLaunchPath(input.cwd), nextStep: '',
+    };
+  }
+
   const fn = T[noShip ? key + '-local' : key] || T.fallback;
   let heading = fn(ctx);
 
@@ -2865,7 +2904,7 @@ export {
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   ctaInput, resolveCardKey, sessionArchiveNote, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
-  renderExpiredNote, formatLastReading,
+  openQuestionOf, localShipInstruction, renderExpiredNote, formatLastReading,
 };
 
 // ---------------------------------------------------------------------------

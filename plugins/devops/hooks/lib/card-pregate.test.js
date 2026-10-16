@@ -118,7 +118,8 @@ describe('card-pregate — parity with stop.flow.guard', () => {
     [{ ...ok, summary: 'Noch nicht fertig' }, {}],
     [{ variant: 'ready', summary: 'x' }, { validationPending: true }],
     [{ ...ok, validation: [{ requirement: 'r', status: 'unmet' }] }, {}],
-    [{ ...ok, validation: [{ requirement: 'r', status: 'partial', waitsOn: 'user', evidence: 'listen' }] }, {}],
+    // Gate Q (#714) is the pre-check's own — the parity case carries its question.
+    [{ ...ok, validation: [{ requirement: 'r', status: 'partial', waitsOn: 'user', evidence: 'listen' }], open: ['r?'] }, {}],
     [{ ...ok, validation: [{ requirement: 'r', status: 'partial', waitsOn: 'pending', evidence: 'qa' }] }, { openTasks: [] }],
     [ok, { openTasks: ['devops:qa'] }],
     [{ ...ok, pending: [{ name: 'devops:qa' }] }, { openTasks: ['devops:qa'] }],
@@ -290,6 +291,7 @@ describe('card-pregate — web hand-off without the guide (#617)', () => {
     ...ok,
     validation: [{ requirement: 'Cron läuft nachts', status: 'partial', waitsOn: 'user',
       evidence: 'Vercel-Dashboard → Settings → Environment Variables → CRON_SECRET kopieren' }],
+    open: ['CRON_SECRET im Vercel-Dashboard kopieren?'],
   };
 
   test('findings: hand-off + no guide → nudge; guide ran or no hand-off → none', () => {
@@ -314,5 +316,36 @@ describe('card-pregate — web hand-off without the guide (#617)', () => {
   test('check: no transcript → no nudge (unknown whether the guide ran)', () => {
     setup();
     expect(check({ ...webStep, session_id: sid }, { home, tmp }).refuse).toBe(false);
+  });
+});
+
+describe('card-pregate — waitsOn user without an open question (#714)', () => {
+  const waits = [{ requirement: 'failing quest named', status: 'partial', evidence: 'needs the tracker line', waitsOn: 'user' }];
+
+  test('a requirement waiting on the user without `open` is a finding naming it', () => {
+    const r = findings({ ...ok, validation: waits }, { openTasks: [] });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatch(/Waits on the user without a question: failing quest named/);
+    expect(r[0]).toMatch(/open: \[\{ text/);
+  });
+
+  test('an open question, a met requirement or another waitsOn pass', () => {
+    expect(findings({ ...ok, validation: waits, open: [{ text: 'Welche Quest?', reply: 'Quest X.' }] }, { openTasks: [] })).toEqual([]);
+    expect(findings({ ...ok, validation: waits, open: ['Welche Quest?'] }, { openTasks: [] })).toEqual([]);
+    expect(findings({ ...ok, validation: [{ ...waits[0], status: 'met' }] }, { openTasks: [] })).toEqual([]);
+    expect(findings({ ...ok, validation: [{ ...waits[0], waitsOn: 'deploy' }] }, { openTasks: [] })).toEqual([]);
+    // blank open entries are no question
+    expect(findings({ ...ok, validation: waits, open: ['  ', { text: '' }] }, { openTasks: [] })).toHaveLength(1);
+    // aborted / paused end work on purpose
+    expect(findings({ ...ok, variant: 'paused', validation: waits }, { openTasks: [] })).toEqual([]);
+  });
+
+  test('check refuses once, then renders the same call', () => {
+    setup({});
+    const input = { ...ok, session_id: sid, validation: waits };
+    const first = check(input, { home, tmp });
+    expect(first.refuse).toBe(true);
+    expect(first.text).toMatch(/Waits on the user without a question/);
+    expect(check(input, { home, tmp }).refuse).toBe(false);
   });
 });

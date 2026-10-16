@@ -267,7 +267,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     });
     expect(ready).toContain("✓ commit · nur lokal, kein Remote · main");
     expect(ready).not.toMatch(/push|PR|merge/);
-    expect(ready).toMatch(/^## 📦 Lokal fertig trotz 2 Vorbehalten — noch etwas\?$/m);
+    expect(ready).toMatch(/^## ❓ Doku fehlt — angehen\?$/m);
     expect(ready).not.toMatch(/^## .*[Ss]hippen\?/m);
 
     const test = await cardText({
@@ -711,7 +711,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
   test("points cap at 3, with a +N weitere tail appended to the heading", async () => {
     const text = await cardText({
       variant: "ready", summary: "Viele Punkte", lang: "de", session_id: "test-anatomy-11",
-      open: ["Punkt 1", "Punkt 2", "Punkt 3", "Punkt 4", "Punkt 5"],
+      open: ["Frage?", "Punkt 1", "Punkt 2", "Punkt 3", "Punkt 4", "Punkt 5"],
     });
     const numbered = text.split("\n").filter((l) => /^\d+\. /.test(l));
     expect(numbered.length).toBe(3);
@@ -733,9 +733,10 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
       de: /^## 📦 Shippen\?$/m, en: /^## 📦 Ship\?$/m,
     },
     {
-      name: "ready (top reservation)",
+      // #714: an open point is a question — no ship offer behind it.
+      name: "ready + open point (question)",
       params: { variant: "ready", open: ["fremder Testfehler"] },
-      de: /^## 📦 Shippen trotz fremder Testfehler\?$/m, en: /^## 📦 Ship anyway despite fremder Testfehler\?$/m,
+      de: /^## ❓ fremder Testfehler — angehen\?$/m, en: /^## ❓ fremder Testfehler — tackle it\?$/m,
     },
     {
       name: "ready + red tests",
@@ -1215,11 +1216,10 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
       variant: "ready", summary: "Heuristik", lang: "de", session_id: "test-ev-1",
       tests: [{ method: "npm test", result: "3464 grün · 3 skipped" }],
       validation: [{ requirement: "A", status: "met", evidence: "t" }],
-      open: ["agent-proactivity.md liegt 11 B unter dem Preload-Cap — kürzen oder Cap heben", "zweiter Punkt"],
     });
     expect(text).toContain("✓ 3464 Tests grün");
     expect(text).not.toMatch(/⏭/);
-    expect(text).toMatch(/^## 📦 Shippen trotz 2 Vorbehalten\?$/m);
+    expect(text).toMatch(/^## 📦 Shippen\?$/m);
   });
 
   test("'N/M (K skipped)' with N+K==M is green: '8680/8683 (3 skipped)' is ✓ 8680 Tests grün, no 'Nicht erreicht'", async () => {
@@ -1326,17 +1326,13 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     expect(partial).toMatch(/^## ⚠ Trotzdem shippen mit 1 teilweise erfüllter Anforderung\?$/m);
   });
 
-  test("a short single reservation is quoted in the heading, a long one becomes the count", async () => {
-    const short = await cardText({
-      variant: "ready", summary: "Kurz", lang: "de", session_id: "test-ev-3a",
-      open: ["fremdem Testfehler"],
-    });
-    expect(short).toMatch(/^## 📦 Shippen trotz fremdem Testfehler\?$/m);
+  test("a statement in `open` becomes the question heading verbatim (#714)", async () => {
     const long = await cardText({
       variant: "ready", summary: "Lang", lang: "en", session_id: "test-ev-3b",
-      open: ["agent-proactivity.md is 11 B under the preload cap — the next addition must trim or raise the cap"],
+      open: ["agent-proactivity.md is 11 B under the preload cap — the next addition must trim or raise the cap."],
     });
-    expect(long).toMatch(/^## 📦 Ship anyway despite 1 reservation\?$/m);
+    expect(long).toMatch(/^## ❓ agent-proactivity\.md is 11 B under the preload cap — the next addition must trim or raise the cap — tackle it\?$/m);
+    expect(long).not.toMatch(/Ship/);
   });
 
   test("gates without a lane (preflight) surface only with a finding, named after the gate", async () => {
@@ -1479,5 +1475,84 @@ describe("render_completion_card — the pre-check refuses before rendering", ()
     } finally {
       process.env.DEVOPS_CARD_PREGATE = "0";
     }
+  });
+});
+
+describe("render_completion_card — a pending question replaces the ship offer (#714)", () => {
+  const delivery = {};
+  const state = { mode: "git" };
+  const labels = async (d, lang = "de") => {
+    const { buttonsFor } = await import("./lib/card-widget.js");
+    return buttonsFor(d.buttonsKey, lang, { version: d.version, replies: d.replies, noShip: d.noShip }).map(b => b.label);
+  };
+  const waitsOnUser = [{ requirement: "Failing quest named", status: "partial", evidence: "needs the user's tracker line", waitsOn: "user" }];
+
+  test("waitsOn user + open question: the question is the heading, no Ship button", async () => {
+    const mod = await import("./index.js");
+    const input = {
+      variant: "ready", summary: "Analyse",
+      validation: waitsOnUser,
+      open: [{ text: "Welche Quest schlägt fehl?", reply: "Quest X, Tracker-Zeile Y." }, "Log anhängen"],
+    };
+    for (const key of ["ready", "test"]) {
+      const d = mod.buildDecisionBlock(input, "de", key, delivery, state);
+      expect(d.heading).toBe("❓ Welche Quest schlägt fehl?");
+      expect(d.points).toEqual(["Log anhängen"]);
+      expect(d.noShip).toBe(true);
+      const l = await labels(d);
+      expect(l).not.toContain("Ship");
+      expect(l).toContain("Nachbessern");
+      expect(d.replies[0]).toBe("Quest X, Tracker-Zeile Y.");
+    }
+    const en = mod.buildDecisionBlock(input, "en", "ready", delivery, state);
+    expect(en.heading).toBe("❓ Welche Quest schlägt fehl?");
+    expect(await labels(en, "en")).not.toContain("Ship");
+  });
+
+  test("waitsOn user without open still asks (heading names the requirement), no Ship", async () => {
+    const mod = await import("./index.js");
+    const de = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: waitsOnUser }, "de", "ready", delivery, state);
+    expect(de.heading).toBe("❓ Wartet auf dich: Failing quest named — wie entscheidest du?");
+    expect(await labels(de)).not.toContain("Ship");
+    const en = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: waitsOnUser }, "en", "ready", delivery, state);
+    expect(en.heading).toBe("❓ Waiting on you: Failing quest named — what's your call?");
+  });
+
+  test("the rendered card carries the question heading, not 📦 Shippen?", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Analyse", lang: "de", session_id: "test-714-render",
+      validation: waitsOnUser, open: [{ text: "Welche Quest schlägt fehl?", reply: "Quest X." }],
+    });
+    expect(text).toMatch(/^## ❓ Welche Quest schlägt fehl\?$/m);
+    expect(text).not.toMatch(/📦 Shippen/);
+  });
+
+  test("ship is offered only when nothing is open: no waitsOn user, no open, no pending", async () => {
+    const mod = await import("./index.js");
+    expect(mod.openQuestionOf({ variant: "ready" })).toBeNull();
+    // met / other waitsOn values are no question for the user
+    expect(mod.openQuestionOf({ validation: [{ requirement: "A", status: "met", waitsOn: "user" }, { requirement: "B", status: "partial", waitsOn: "deploy", evidence: "e" }] })).toBeNull();
+    expect(mod.openQuestionOf({ open: ["x"] })).not.toBeNull();
+    expect(mod.openQuestionOf({ validation: waitsOnUser })).not.toBeNull();
+    const open = mod.buildDecisionBlock({ variant: "ready", summary: "x", open: ["Doku nachziehen"] }, "de", "ready", delivery, state);
+    expect(open.heading).toBe("❓ Doku nachziehen — angehen?");
+    expect(await labels(open)).not.toContain("Ship");
+    const pending = mod.buildDecisionBlock({ variant: "ready", summary: "x", pending: [{ name: "qa", doing: "läuft" }] }, "de", "ready", delivery, state);
+    expect(pending.buttonsKey).toBeNull();
+    // A remote-less ready card never auto-ships over an open question.
+    expect(mod.localShipInstruction({ variant: "ready", state: { mode: "git-no-remote" }, validation: waitsOnUser })).toBeNull();
+    expect(mod.localShipInstruction({ variant: "ready", state: { mode: "git-no-remote" }, open: ["Frage?"] })).toBeNull();
+  });
+
+  test("a ready card with nothing open renders as before", async () => {
+    const mod = await import("./index.js");
+    const d = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: [{ requirement: "A", status: "met", evidence: "t" }] }, "de", "ready", delivery, state);
+    expect(d.heading).toBe("📦 Shippen?");
+    expect(d.noShip).toBe(false);
+    expect(await labels(d)).toEqual(["Ship", "Ändern"]);
+    const en = mod.buildDecisionBlock({ variant: "ready", summary: "x" }, "en", "ready", delivery, state);
+    expect(en.heading).toBe("📦 Ship?");
+    const text = await cardText({ variant: "ready", summary: "Fertig", lang: "de", session_id: "test-714-plain" });
+    expect(text).toMatch(/^## 📦 Shippen\?$/m);
   });
 });
