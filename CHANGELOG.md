@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.266.2] — 2026-10-16
+## [0.266.3] — 2026-10-16
 
 A promote-only card without `delivery.promote.current` rendered "Promoted  BETA" — the version slot stayed empty and left a double space in the heading (#700).
 
