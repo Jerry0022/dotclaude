@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.266.0] — 2026-10-16
+
+An analysis that ended with a mixed list of actions plus a card button that only said "Umsetzen" left the user unsure what to decide and what a click would start.
+
+### Added
+- **`nextStep`** on `render_completion_card` (analysis variant): the one step Claude recommends, written as the user's instruction. The Desktop primary button becomes "Empfehlung umsetzen" / "Do recommended step" and sends exactly that text; without it the button stays "Umsetzen".
+
+### Changed
+- **Quiet output style**: an answer that ends in actions separates what the user does ("Du:") from what Claude would build ("Ich:") and gives one recommendation, never a trailing "soll ich?" in prose.
+
 ## [0.265.0] — 2026-10-14
 
 A bedtime announcement inside a longer prompt ("gute Nacht, fix noch X und ship es") could lose its actual instructions: the `prompt.flow.sleep` hook's topic filter suppressed some real requests, and on autostart, resume or compaction the task survived only as a one-sentence goal. A hook can only inject text, never carry out the work — so bedtime is now a plain do-run trigger and the task itself is persisted verbatim for the run.
