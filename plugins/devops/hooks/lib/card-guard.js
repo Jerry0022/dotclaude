@@ -125,6 +125,25 @@ function isShowWidgetTool(name) {
 /** The title the card body widget is called with (card-widget.js). */
 const CARD_WIDGET_TITLE = 'completion_card_body';
 
+/** The card widget's own markers (card-widget.js): the `#dc-card` mount point
+ *  and the `#dc-card-data` JSON block. The attribute must be `id` itself —
+ *  `data-id="dc-card"` is not the card. */
+const CARD_WIDGET_MARKER_RE = /(?<![\w-])id\s*=\s*["']dc-card(?:-data)?["']/;
+
+/**
+ * Is this show_widget call the completion card (#713)? The card-body title
+ * OR the card's own markers in the widget HTML. A delegated ship hands back
+ * only the widget file; a caller that invented its own title still showed the
+ * card, and judging it by the title alone made every re-show count as "not
+ * relayed" (four identical cards in one turn). A foreign title without the
+ * markers is any other widget, never a card.
+ */
+function isCardWidgetCall(name, input) {
+  if (!isShowWidgetTool(name) || !input) return false;
+  if (input.title === CARD_WIDGET_TITLE) return true;
+  return typeof input.widget_code === 'string' && CARD_WIDGET_MARKER_RE.test(input.widget_code);
+}
+
 /**
  * What to do with the app's no-output nudge. Claude Code sends ONE meta
  * message — "[Your previous response had no visible output…]" — when the model
@@ -195,7 +214,7 @@ function deliveredCardText(transcriptContent) {
       if (block.type === 'text' && typeof block.text === 'string' && block.text.includes(CARD_MARKER)) return block.text;
       if (block.type !== 'tool_use') continue;
       if (isCardRenderCall(block)) return '';
-      if (isShowWidgetTool(block.name) && block.input && block.input.title === CARD_WIDGET_TITLE) {
+      if (isCardWidgetCall(block.name, block.input)) {
         const title = widgetCardTitle(block.input.widget_code);
         return title ? `${CARD_MARKER} ${title} ${CARD_MARKER}` : '';
       }
@@ -211,6 +230,38 @@ function deliveredCardText(transcriptContent) {
  */
 function cardDelivered(transcriptContent) {
   return deliveredCardText(transcriptContent).includes(CARD_MARKER);
+}
+
+/**
+ * The title of a show_widget call that ran after the last render but is NOT
+ * the card (#713): a foreign title without the card markers. null when there
+ * is none, or when a card was shown after it. The not-relayed reason names
+ * it, so the retry uses the required title instead of stacking the same
+ * foreign-titled widget again.
+ */
+function foreignWidgetTitle(transcriptContent) {
+  if (!transcriptContent) return null;
+  const lines = transcriptContent.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let entry;
+    try { entry = JSON.parse(raw); } catch { continue; }
+    if (entry.type === 'user' && isPromptEntry(entry)) return null;
+    if (entry.type !== 'assistant') continue;
+    const content = entry.message && entry.message.content;
+    if (!Array.isArray(content)) continue;
+    for (let b = content.length - 1; b >= 0; b--) {
+      const block = content[b];
+      if (!block || block.type !== 'tool_use') continue;
+      if (isCardRenderCall(block)) return null;
+      if (!isShowWidgetTool(block.name)) continue;
+      if (isCardWidgetCall(block.name, block.input)) return null;
+      const title = block.input && block.input.title;
+      return typeof title === 'string' ? title : '';
+    }
+  }
+  return null;
 }
 
 /**
@@ -445,7 +496,7 @@ function decideAction({
   validationPending, validationAttested, validationOpen, openTasksKnown, openTaskNames, pendingAttested, pluginRoot,
   scheduledTask, treeClean, shipped, completionMcpDown,
   notificationTurn, cardText, prevCardSignature, desktopClient, cardRelayed,
-  widgetFile, widgetCalled, guideActive, guideLoopLive,
+  widgetFile, widgetCalled, guideActive, guideLoopLive, foreignWidgetTitle: foreignTitle,
 }) {
   if (silent) {
     // Background tick (cron git-sync, concept bridge poll, autonomous loop).
@@ -517,7 +568,7 @@ function decideAction({
     return {
       action: 'block',
       resetFlags: false,
-      reason: buildNotRelayedReason(),
+      reason: buildNotRelayedReason(foreignTitle),
     };
   }
 
@@ -749,7 +800,20 @@ function buildBlockReason(pluginRoot, opts = {}) {
   ].join('\n');
 }
 
-function buildNotRelayedReason() {
+/**
+ * @param {string|null} [foreignTitle] title of a non-card show_widget that ran
+ *   after the render (foreignWidgetTitle). Named so the retry fixes the title
+ *   instead of showing the same widget again (#713).
+ */
+function buildNotRelayedReason(foreignTitle) {
+  const foreign = typeof foreignTitle === 'string'
+    ? [
+      `show_widget DID run after the render, but under title "${foreignTitle}" and without the`,
+      `card markup, so it is not the card. The card needs title "${CARD_WIDGET_TITLE}" and the`,
+      'widget HTML verbatim. Show it ONCE with that title; never re-show the foreign one.',
+      '',
+    ]
+    : [];
   return [
     '[stop.flow.guard] Card rendered but never relayed — the user sees no card this turn.',
     '',
@@ -757,9 +821,11 @@ function buildNotRelayedReason() {
     'result sits in a collapsed block the user does not read; only what you output',
     'yourself is visible.',
     '',
+    ...foreign,
     'Terminal: output the markdown of the LAST card you rendered VERBATIM now,',
     'character-for-character, as the LAST thing in the response. Desktop app: call',
-    'mcp__visualize__show_widget with that card\'s widget HTML as the LAST action —',
+    `mcp__visualize__show_widget with title "${CARD_WIDGET_TITLE}" and that card's widget HTML`,
+    'verbatim as the LAST action —',
     'no text before or after it. If circumstances changed since that render (a',
     'blocker cleared, a gate got fixed), re-render first and deliver the new card',
     'instead. Nothing after the card.',
@@ -1019,6 +1085,9 @@ module.exports = {
   buildNotRelayedReason,
   buildWidgetSkippedReason,
   showWidgetCalledThisTurn,
+  foreignWidgetTitle,
+  isCardWidgetCall,
+  CARD_WIDGET_TITLE,
   buildPendingReason,
   safeReadTranscript,
   TITLE_STATUS_WORD_RE,

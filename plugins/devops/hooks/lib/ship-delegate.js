@@ -187,11 +187,11 @@ function spawnAndDeliver({ args, sessionId, description, brief }) {
     '   The agent ends with ONE fenced json block:',
     '   { "status": "decision", "question", "options", "recommended" } → AskUserQuestion, then SendMessage the answer',
     '     to the same agent and wait for its next result.',
-    '   { "status": "done", "titlePrefix", "widgetFile" | "markdown", "exitWorktree" } → the card is already rendered.',
+    '   { "status": "done", "titlePrefix", "widgetFile" | "markdown", "widgetTitle", "exitWorktree" } → the card is already rendered.',
     '     exitWorktree true: ExitWorktree({ action: "remove" }) first. Set the session title to titlePrefix + the title',
-    '     without its old devops prefix. Desktop: Read widgetFile and pass its content verbatim to show_widget',
-    '     (title "completion_card_body") as the LAST action; terminal: output markdown verbatim. No text of your own,',
-    '     no second render_completion_card.',
+    '     without its old devops prefix. Desktop: Read widgetFile and call show_widget ONCE with title = widgetTitle',
+    '     verbatim ("completion_card_body", never a title of your own) and widget_code = the file content verbatim,',
+    '     as the LAST action; terminal: output markdown verbatim. No text of your own, no second render_completion_card.',
     "   No JSON block or a failed agent: render a ship-blocked card yourself that names the agent's last words.",
   ];
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.267.2] — 2026-10-16
+
+After a delegated ship the parent showed the card widget under a different title, the Stop guard did not recognise it and asked for the card again — up to four identical cards in a row (#713). A card widget is now recognised by its markup, whatever title it got.
+
+### Fixed
+- **Stop guard / card guard**: a `show_widget` call counts as the completion card when its HTML carries the card marker (`id="dc-card"` / `id="dc-card-data"` as the id attribute itself — `data-id="dc-card"` and other look-alikes do not count), regardless of its `title`. `post.flow.completion` uses the same shared check.
+- **Delegated ship hand-back**: the `done` JSON carries a new `widgetTitle` field (`completion_card_body`); the parent passes it verbatim to `show_widget`.
+- **Stop guard message**: when a widget ran under a foreign title without the card markup, the block names the required title.
+
 ## [0.267.1] — 2026-10-16
 
 A card that still waited on the user offered Ship anyway: the open question sat in a block further down while the heading asked "SHIP or CHANGE?" (#714). Ship is now offered only when nothing is open.
