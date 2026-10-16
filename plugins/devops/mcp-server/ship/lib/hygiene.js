@@ -522,12 +522,20 @@ const MOVED_TAIL_BYTES = 512 * 1024;
  * EnterWorktree keeps writing its transcript under the main checkout's
  * projects folder, so hasLiveSession() on the worktree path finds nothing.
  * Such a worktree is live when a transcript of the main checkout, written
- * within LIVE_SESSION_MS, names `wtPath` in its tail.
+ * within LIVE_SESSION_MS, carries `wtPath` as a session `cwd` in its tail.
+ * Only the structured `"cwd":"<path>"` field counts, closed by its quote —
+ * a mere mention (a `git worktree list`, a hygiene report) keeps nothing,
+ * and `…/worktrees/fix` does not match a live `…/worktrees/fix-ab12`.
+ * Case-folded on win32, where git and the transcript may spell a drive or
+ * folder differently.
  */
 export function hasMovedSession(wtPath, mainPath, projectsDir, now = Date.now()) {
   if (!projectsDir || !mainPath || !wtPath) return false;
+  const fold = (t) => (process.platform === "win32" ? t.toLowerCase() : t);
   const abs = path.resolve(String(wtPath));
-  const needles = [...new Set([abs, abs.replace(/\\/g, "/"), JSON.stringify(abs).slice(1, -1)])];
+  const needles = [...new Set([abs, abs.replace(/\\/g, "/")])]
+    .flatMap((p) => [`"cwd":${JSON.stringify(p)}`, `"cwd": ${JSON.stringify(p)}`])
+    .map(fold);
   for (const name of transcriptDirNames(mainPath)) {
     let files;
     try {
@@ -546,7 +554,7 @@ export function hasMovedSession(wtPath, mainPath, projectsDir, now = Date.now())
         const buf = Buffer.alloc(len);
         fd = fs.openSync(file, "r");
         fs.readSync(fd, buf, 0, len, st.size - len);
-        const tail = buf.toString("utf8");
+        const tail = fold(buf.toString("utf8"));
         if (needles.some((n) => tail.includes(n))) return true;
       } catch { /* vanished or unreadable */ } finally {
         if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already closed */ }

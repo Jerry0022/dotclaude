@@ -24,24 +24,12 @@ require('../lib/plugin-guard');
 const fs = require('fs');
 const path = require('path');
 
-/** The main working tree a linked worktree belongs to, from its `.git` file — no git spawn. */
+/** The main working tree a linked worktree belongs to (fs only, no git spawn); null for a main checkout or a bare repo. */
 function mainCheckoutOf(wtRoot) {
-  try {
-    const dotGit = path.join(wtRoot, '.git');
-    if (!fs.statSync(dotGit).isFile()) return null;
-    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
-    if (!m) return null;
-    const gitDir = path.resolve(wtRoot, m[1]);
-    let common;
-    try {
-      common = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim());
-    } catch {
-      common = path.resolve(gitDir, '..', '..'); // <common>/worktrees/<name>
-    }
-    return path.basename(common) === '.git' ? path.dirname(common) : null;
-  } catch {
-    return null;
-  }
+  const { isLinkedWorktree, gitCommonDir } = require('../lib/project-root');
+  if (!isLinkedWorktree(wtRoot)) return null;
+  const common = gitCommonDir(wtRoot);
+  return common && path.basename(common) === '.git' ? path.dirname(common) : null;
 }
 
 /** Paths the payload may name the new worktree by — the response shape is not pinned, so look broadly. */
@@ -70,10 +58,20 @@ function main(hook) {
     const wt = projectRoot(c);
     if (!isLinkedWorktree(wt)) continue;
     const main = mainCheckoutOf(wt);
-    if (!main) continue;
+    if (!main) {
+      // Separate git dir or a bare-repo layout: nothing to carry from.
+      process.stderr.write(`[post.worktree.enter] no main checkout found for ${wt} — run contract not carried\n`);
+      return null;
+    }
     const moved = store.carryOver(main, wt, sessionId);
-    if (!moved) return null;
-    return { context: `[run-contract] This session's do-run contract moved with it into ${wt} — its gates keep applying there.` };
+    if (moved) return { context: `[run-contract] This session's do-run contract moved with it into ${wt} — its gates keep applying there.` };
+    // An id-less live contract (armed through the CLI without --session) is
+    // never moved: in a shared checkout it may be another session's.
+    const left = store.readRawContract(main);
+    if (left && !left.closedAt && !left.sessionId && !store.readRawContract(wt)) {
+      return { context: `[run-contract] A do-run contract without a session id stayed in the main checkout (${main}). If it is THIS session's run, re-arm it here: ${store.rearmHint({ replace: false })}` };
+    }
+    return null;
   }
   return null;
 }

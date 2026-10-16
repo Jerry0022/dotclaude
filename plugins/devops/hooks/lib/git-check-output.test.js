@@ -229,7 +229,8 @@ describe("clean checkout — the standing rule, no question", () => {
     const out = compose({ dirty: [], workspace: onMain, cwd: CWD });
     const t = text(out);
     expect(t).not.toContain("AskUserQuestion");
-    expect(out[0]).toContain("an instruction for you, not a message for the user");
+    expect(out[0]).toContain("The Rule block below is an instruction for you, not a message for the user");
+    expect(out[0]).toContain("Findings listed below, if any, are for the user: show them");
     expect(t).toContain("Before the FIRST edit or commit of this session");
     expect(t).toContain("Call the EnterWorktree tool");
     expect(t).toContain("counts as the instruction to work in a worktree");

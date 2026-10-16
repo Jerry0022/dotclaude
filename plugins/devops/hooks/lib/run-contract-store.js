@@ -1002,15 +1002,18 @@ function carryOver(fromCwd, toCwd, sessionId) {
   const raw = readRawContract(fromCwd);
   const headerOwned = raw && raw.sessionId === sessionId && !raw.closedAt;
   if (!headerOwned && !pendingOwned) return null;
-  const dest = readRawContract(toCwd);
-  if (headerOwned && dest && !dest.closedAt && dest.id !== raw.id) return null;
   try { fs.mkdirSync(projectClaudeDir(toCwd), { recursive: true }); } catch { /* the write below reports it */ }
+  // Like update() and compactEvents(): no lock, no move — a record() racing
+  // between the events copy and the unlink would otherwise be lost.
   const token = acquireLock(fromCwd);
+  if (!token) return null;
   try {
     let moved = null;
     if (headerOwned) {
       const h = readRawContract(fromCwd);
       if (!h || h.id !== raw.id) return null; // changed under us
+      const dest = readRawContract(toCwd);
+      if (dest && !dest.closedAt && dest.id !== h.id) return null;
       const next = { ...h, root: projectRoot(toCwd) };
       if (!writeJsonRetry(contractPath(toCwd), next)) return null;
       const ev = eventsPath(fromCwd);
@@ -1024,7 +1027,7 @@ function carryOver(fromCwd, toCwd, sessionId) {
     if (pendingOwned && writeJsonRetry(pendingPath(toCwd), pending)) unlinkQuiet(pendingPath(fromCwd));
     return moved;
   } finally {
-    if (token) releaseLock(fromCwd, token);
+    releaseLock(fromCwd, token);
   }
 }
 

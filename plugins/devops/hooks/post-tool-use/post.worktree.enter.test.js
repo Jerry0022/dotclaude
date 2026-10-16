@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, realpathSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, realpathSync, existsSync, readFileSync, utimesSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -84,12 +84,32 @@ describe("post.worktree.enter carries the run contract", () => {
     expect(RC.readRawContract(wtDir)).toBeNull();
   });
 
-  test("an id-less contract is never taken (it may be another session's)", () => {
+  test("an id-less contract is never taken (it may be another session's), but the session is told to re-arm", () => {
     RC.arm(mainDir, { mode: "prompt" });
-    expect(main(hookFor())).toBeNull();
+    const reply = main(hookFor());
+    expect(reply && reply.context).toContain("without a session id stayed in the main checkout");
+    expect(reply.context).toContain(" arm --mode");
     expect(RC.readRawContract(mainDir)).toBeTruthy();
     expect(RC.readRawContract(wtDir)).toBeNull();
   });
+
+  test("a held contract lock means no move (no events lost to a racing record)", () => {
+    RC.arm(mainDir, { mode: "backlog", sessionId: SID });
+    const lock = `${RC.contractPath(mainDir)}.lock`;
+    writeFileSync(lock, "someone-else");
+    // Fresh for the whole wait, so the stale-lock takeover cannot kick in.
+    const future = new Date(Date.now() + 60_000);
+    utimesSync(lock, future, future);
+    try {
+      const t0 = Date.now();
+      expect(RC.carryOver(mainDir, wtDir, SID)).toBeNull();
+      expect(Date.now() - t0).toBeLessThan(15_000);
+      expect(RC.readRawContract(mainDir).sessionId).toBe(SID);
+      expect(RC.readRawContract(wtDir)).toBeNull();
+    } finally {
+      rmSync(lock, { force: true });
+    }
+  }, 30_000);
 
   test("a closed contract stays", () => {
     RC.arm(mainDir, { mode: "prompt", sessionId: SID });

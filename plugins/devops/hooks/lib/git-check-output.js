@@ -76,7 +76,7 @@ const RESOLVED_CLAUSE = 'Restate only findings that still hold at that point: on
 
 function header(workspace, ask = true) {
   if (workspace && !ask) {
-    return `Workspace rule at session start (devops plugin) — an instruction for you, not a message for the user: act on it, do not show it. If findings are listed below, you MUST restate them verbatim in your final message, before any completion card — also in a scheduled, cron or headless run. ${RESOLVED_CLAUSE}`;
+    return `Workspace rule at session start (devops plugin). The Rule block below is an instruction for you, not a message for the user: act on it, do not show it. Findings listed below, if any, are for the user: show them, and you MUST restate them verbatim in your final message, before any completion card — also in a scheduled, cron or headless run. ${RESOLVED_CLAUSE}`;
   }
   if (workspace) {
     return `Workspace check at session start. Show the user this summary verbatim and call AskUserQuestion as the FIRST action of this turn. If this turn cannot ask (scheduled, cron or headless run), you MUST still restate the findings below verbatim in your final message, before any completion card — never drop them. ${RESOLVED_CLAUSE}`;

@@ -137,10 +137,28 @@ describe("pre.edit.branch", () => {
     expect(r.stderr).toContain("new/deep/n.txt");
   }), TIMEOUT);
 
-  test("R1: a session in its worktree that edits a main-checkout path is still blocked", () => rootOnMain(() => {
+  test("R1: a moved session editing a main-checkout path is blocked and pointed at its own worktree path", () => rootOnMain(() => {
     const r = edit(featDir, join(mainDir, "a.txt"));
     expect(r.status).toBe(2);
-    expect(r.stderr).toContain("EnterWorktree");
+    const own = featDir.replace(/\\/g, "/");
+    expect(r.stderr).toContain(`you work in your own worktree ${own}`);
+    expect(r.stderr).toContain(`(${own}/a.txt)`);
+    // Already in a worktree: no second EnterWorktree, no branch switch.
+    expect(r.stderr).not.toContain("Call the EnterWorktree tool");
+    expect(r.stderr).not.toMatch(/git (fetch origin && git )?switch -c/);
+  }), TIMEOUT);
+
+  test("R7: from the main checkout, a path in another session's worktree on main is not 'your own'", () => {
+    const r = edit(mainDir, join(onMainDir, "a.txt"));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("another session's worktree");
+    expect(r.stderr).toContain("do not edit it or switch its branch");
+    expect(r.stderr).not.toContain("switching its branch is safe");
+    expect(r.stderr).toContain("Call the EnterWorktree tool");
+  }, TIMEOUT);
+
+  test("a moved session's own worktree path passes", () => rootOnMain(() => {
+    expect(edit(featDir, join(featDir, "src", "new.txt")).status).toBe(0);
   }), TIMEOUT);
 
   test("an edit inside a feature worktree passes — from the worktree and from the main checkout", () => rootOnMain(() => {

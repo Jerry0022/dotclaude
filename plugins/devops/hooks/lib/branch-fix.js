@@ -39,9 +39,30 @@ function enterLine(base) {
  * @param {boolean} [p.mainCheckout]  the repo root is the MAIN working tree (not a linked worktree)
  * @param {string}  [p.relPath]       the blocked file, relative to the repo root (Edit/Write only)
  * @param {boolean} [p.subagent]      the call came from a subagent (hook payload carries agent_id)
+ * @param {{targetRoot:string, ownRoot:string, ownIsWorktree:boolean}|null} [p.elsewhere]
+ *   the target is in another work tree of the repo than the session's own
  * @returns {string[]} remedy lines, without a prefix
  */
-function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPath = '', subagent = false } = {}) {
+function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPath = '', subagent = false, elsewhere = null } = {}) {
+  const slash = (p) => String(p || '').replace(/\\/g, '/');
+  const rel = slash(relPath);
+  if (elsewhere && elsewhere.ownIsWorktree) {
+    // Already in its own worktree (typically: moved there, then edited a path
+    // remembered from the main checkout). Another EnterWorktree would nest a
+    // second worktree; the fix is the path.
+    const own = slash(elsewhere.ownRoot);
+    return [
+      `Why: this path is in another work tree of this repo (${slash(elsewhere.targetRoot)}, on ${branch}) — you work in your own worktree ${own}.`,
+      `Fix: retry with the path inside your worktree${rel ? ` (${own}/${rel})` : ''}. Never edit another work tree's files, and hand subagents paths inside ${own} only.`,
+    ];
+  }
+  if (elsewhere) {
+    // The session sits in the main checkout and aimed at another session's
+    // linked worktree on main: neither is the place to work.
+    const lines = branchFix({ branch, remote, mainCheckout: true, subagent });
+    lines[0] = `Why: this path is in another session's worktree (${slash(elsewhere.targetRoot)}, on ${branch}) — not yours: do not edit it or switch its branch.${subagent ? '' : ' This session sits in the shared main checkout, so it needs a worktree of its own.'}`;
+    return lines;
+  }
   if (!mainCheckout) {
     return [remote
       ? `Fix: git fetch origin && git switch -c <feat/topic> origin/${branch}  — this worktree is the session's own, so switching its branch is safe.`
@@ -56,8 +77,8 @@ function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPat
     ];
   }
   const base = remote ? `origin/${branch}` : `local ${branch}`;
-  const retry = relPath
-    ? `Then retry with the path inside the new worktree (.claude/worktrees/<name>/${String(relPath).replace(/\\/g, '/')}) — never the main checkout's path, and hand subagents worktree paths only.`
+  const retry = rel
+    ? `Then retry with the path inside the new worktree (.claude/worktrees/<name>/${rel}) — never the main checkout's path, and hand subagents worktree paths only.`
     : 'Then run the command again inside the new worktree.';
   return [
     `Why a worktree: this is the repo's MAIN checkout, which other sessions may share — switching its branch (git switch / git checkout -b) would move them onto your branch. Leave this checkout on ${branch}.`,

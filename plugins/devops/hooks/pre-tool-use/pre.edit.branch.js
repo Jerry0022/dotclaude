@@ -41,12 +41,12 @@ const path = require('path');
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every edit
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, branchFix;
+let gitOut, sentinelActive, isLinkedWorktree, findRepoRoot, gitCommonDir, samePath, branchFix;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
-  ({ isLinkedWorktree } = require('../lib/project-root'));
+  ({ isLinkedWorktree, findRepoRoot, gitCommonDir, samePath } = require('../lib/project-root'));
   ({ branchFix } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
@@ -104,27 +104,27 @@ function isInside(root, realTarget) {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
-function commonDir(dir) {
-  const out = gitOut(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  return out ? (canonicalize(out) || path.resolve(out)) : null;
-}
+const real = (p) => (p && (canonicalize(p) || path.resolve(p))) || null;
 
 /**
  * The work-tree root whose branch decides about `target`, or null when the
- * target is outside this repository. The cwd's tree when the target is in it
- * (the common case: no extra git call); otherwise the target's own tree, if
- * that tree belongs to the same repository (same git common dir).
+ * target is outside this repository: the target's own work tree (fs walk, no
+ * git spawn), provided it is the cwd's tree or another work tree of the same
+ * repository (same git common dir). A nested linked worktree under the main
+ * checkout is thereby judged by its own branch, a main-checkout path from a
+ * worktree session by main's.
  */
 function targetRoot(cwdRoot, target) {
   try {
-    const { real, dir } = realTargetOf(target);
-    const ownRoot = dir ? gitTopLevel(dir) : null;
+    const { real: realTarget, dir } = realTargetOf(target);
+    const ownRoot = real(dir && findRepoRoot(dir));
     if (!ownRoot) return null;
-    const same = (canonicalize(ownRoot) || ownRoot) === (canonicalize(cwdRoot) || cwdRoot);
-    if (same) return isInside(cwdRoot, real) ? { root: cwdRoot, real } : null;
-    const a = commonDir(cwdRoot);
-    if (!a || a !== commonDir(ownRoot)) return null;
-    return { root: ownRoot, real };
+    const cwdReal = real(cwdRoot);
+    if (samePath(ownRoot, cwdReal)) return isInside(cwdReal, realTarget) ? { root: cwdReal, cwdRoot: cwdReal, real: realTarget } : null;
+    const a = real(gitCommonDir(cwdReal));
+    const b = real(gitCommonDir(ownRoot));
+    if (!a || !b || !samePath(a, b)) return null;
+    return { root: ownRoot, cwdRoot: cwdReal, real: realTarget };
   } catch {
     return null;
   }
@@ -169,8 +169,14 @@ process.stdin.on('end', () => {
     branch,
     remote,
     mainCheckout,
-    relPath: path.relative(canonicalize(repoRoot) || repoRoot, hit.real),
+    relPath: path.relative(repoRoot, hit.real),
     subagent: Boolean(hook.agent_id),
+    // The target lives in ANOTHER work tree of this repo than the session's
+    // own — a moved session holding a main-checkout path, or a path inside
+    // another session's worktree.
+    elsewhere: samePath(repoRoot, hit.cwdRoot)
+      ? null
+      : { targetRoot: repoRoot, ownRoot: hit.cwdRoot, ownIsWorktree: isLinkedWorktree(hit.cwdRoot) },
   });
 
   process.stderr.write(
