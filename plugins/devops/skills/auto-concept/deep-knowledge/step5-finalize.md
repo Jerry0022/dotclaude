@@ -129,6 +129,20 @@ because the session feels like it is ending.
    (for `keep` + `moveTo`: delete the originals, the copies are already in
    place).
 
+### Delegated ship: card data, rendered after Step 6a (#712)
+
+In a large context `pre.ship.delegate` moves the part C ship into a subagent
+and, because `.claude/concept-active.json` still exists, adds `--card-data`.
+The subagent runs the pipeline but returns the card DATA only
+(`{ "status": "done", "cardData", "afterRender", "exitWorktree" }`) instead of
+a rendered widget. Keep part C step 4's order: run part D and Step 6a first
+(bridge, pulser and waker stopped, state file gone), then call
+`render_completion_card` with `cardData` verbatim, show that card last, and
+run the `afterRender` steps right after it. Never relay a widget a subagent
+rendered while the concept was still open: it links the localhost page and
+asks to close out a concept that is closed a minute later. Details:
+`do-ship/modes/delegated.md` § Card data instead of a card.
+
 ## D · Reload and reset per disposition
 
 1. **`keep` / `gitignore`:** add `data-closed` to the

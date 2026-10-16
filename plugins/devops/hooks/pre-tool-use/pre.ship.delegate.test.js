@@ -96,3 +96,22 @@ describe("pre.ship.delegate — a delegated spawn below the threshold", () => {
     expect(run("Agent", { prompt: "Find every caller of x" }, 115_000).code).toBe(0);
   });
 });
+
+// #712: the finalize ship of an open /auto-concept is delegated with
+// --card-data, so the caller renders the card after its close-out.
+describe("pre.ship.delegate — concept finalize ship returns card data", () => {
+  test("an open concept state file adds --card-data to the delegated args", () => {
+    fs.writeFileSync(path.join(dir, ".claude", "concept-active.json"), JSON.stringify({ port: 8811, html_path: "docs/concepts/x.html" }));
+    const r = run("Skill", { skill: "devops:do-ship", args: "beta" }, 573_000);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('with args "--delegated --card-data beta"');
+    expect(r.stderr).toMatch(/Step 6a[\s\S]*render_completion_card with cardData/);
+  });
+
+  test("no concept: no --card-data", () => {
+    const r = run("Skill", { skill: "devops:do-ship", args: "beta" }, 573_000);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('with args "--delegated beta"');
+    expect(r.stderr).not.toContain("--card-data");
+  });
+});

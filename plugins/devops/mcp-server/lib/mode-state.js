@@ -1,6 +1,6 @@
 /**
  * @module mode-state
- * @version 1.3.0
+ * @version 1.4.0
  *
  * Mode state the card reads off the project — not off the caller.
  *
@@ -18,7 +18,7 @@
  * Pure reads, all failures swallowed: a card must never die on a missing or
  * half-written state file.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -419,6 +419,8 @@ export function conceptUrl(cwd, concept) {
  * recently stays live. `skipStale` drops the check for a card that carries a
  * `concept` field (#563). A paused concept (#555) reads as none: its bridge
  * is stopped on purpose, so there is no link to show and no page waiting.
+ * A missing page or a dead bridge (`bridgeLive`, #712) reads as none too —
+ * whatever the caller asserts, so a `concept` field cannot resurrect it.
  *
  * @param {string|undefined} cwd
  * @param {{ skipStale?: boolean }} [opts]
@@ -437,9 +439,63 @@ export function readConceptState(cwd, { skipStale = false } = {}) {
     // the pausing turn and every later card show the plain outcome instead.
     if (R.isPaused(state)) return null;
     if (!skipStale && R.isStale(state, R.readStore(R.storeDirFor(state.html_path, cwd)))) return null;
+    // A state file outlives its bridge when a close-out stops the server and
+    // deletes the page before the card renders (#712): no link to a dead page.
+    if (!bridgeLive(cwd, state, port)) return null;
     return { port, html_path: state.html_path };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Synchronous liveness of the concept the state file names (#712): the page
+ * (`html_path`) exists on disk AND the bridge process is alive. The pid comes
+ * from the bridge's own registry entry (`~/.claude/concept-bridges/<port>.json`,
+ * written by concept-server.py with its real `os.getpid()`) first; without an
+ * entry, the state file's `server_pid` — but only off Windows, where `$!` of
+ * a Git Bash launch is an MSYS pid, not a Windows one. A missing, zero or
+ * untrusted pid is "unknown" and the page check alone decides. No network
+ * probe: the card render stays synchronous.
+ *
+ * @param {string} cwd project root
+ * @param {{ html_path: string, server_pid?: unknown }} state parsed state file
+ * @param {number} port the state file's port
+ * @param {{ platform?: string, isAlive?: (pid: number) => boolean, readEntry?: (port: number) => object|null }} [deps]
+ * @returns {boolean}
+ */
+export function bridgeLive(cwd, state, port, deps = {}) {
+  try {
+    if (!existsSync(join(cwd, String(state.html_path)))) return false;
+  } catch {
+    return false;
+  }
+  let isAlive = deps.isAlive;
+  let readEntry = deps.readEntry;
+  if (!isAlive || !readEntry) {
+    try {
+      const reg = createRequire(import.meta.url)(join(here, "..", "..", "scripts", "concept-port-registry.js"));
+      isAlive = isAlive || reg.isProcessAlive;
+      readEntry = readEntry || reg.readEntry;
+    } catch {
+      return true; // registry module unreadable: the page check alone decides
+    }
+  }
+  let pid = 0;
+  try {
+    const entry = readEntry(port);
+    pid = entry && Number(entry.pid);
+  } catch {
+    pid = 0;
+  }
+  if (!(Number.isInteger(pid) && pid > 0) && (deps.platform || process.platform) !== "win32") {
+    pid = Number(state.server_pid);
+  }
+  if (!(Number.isInteger(pid) && pid > 0)) return true; // unknown pid
+  try {
+    return Boolean(isAlive(pid));
+  } catch {
+    return true;
   }
 }
 

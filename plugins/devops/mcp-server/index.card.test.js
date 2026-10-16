@@ -1131,6 +1131,8 @@ describe("render_completion_card — every input. field lands somewhere", () => 
     try {
       mkdirSync(join(cwd, ".claude"), { recursive: true });
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
+      mkdirSync(join(cwd, "docs", "concepts"), { recursive: true });
+      writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
       const link = "http://localhost:4321/docs/concepts/x.html";
       for (const [phase, shown] of [["waiting", true], ["iterating", false], ["implementing", false]]) {
         const viaFile = await cardText({ variant: "ready", summary: "x", lang: "de", session_id: "test-concept-link-file-" + phase, cwd, concept: { phase } });
@@ -1195,6 +1197,42 @@ describe("render_completion_card — concept close-out after the implement ship 
       expect(text).not.toMatch(/Abschlussbericht wartet/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  // #712: a close-out that stopped the bridge (and, on discard, deleted the
+  // page) before the card rendered left the state file behind — the card
+  // printed a dead localhost link and asked to close out a closed concept.
+  test("dead bridge or deleted page: no localhost link, no close-out CTA; a live bridge keeps both", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const reg = mkdtempSync(join(tmpdir(), "card-closeout-reg-"));
+    const prev = process.env.CONCEPT_BRIDGE_REGISTRY_DIR;
+    process.env.CONCEPT_BRIDGE_REGISTRY_DIR = reg;
+    const cwd = conceptRepo('<section data-iteration="2"></section>' + FINAL);
+    try {
+      const link = "http://localhost:4321/docs/concepts/x.html";
+      // Live: the registry names this (running) process as the bridge.
+      writeFileSync(join(reg, "4321.json"), JSON.stringify({ port: 4321, pid: process.pid }));
+      const live = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-live", cwd });
+      expect(live).toContain("› " + link);
+      expect(live).toMatch(/Abschlussbericht wartet/);
+      // Dead: the registry pid belongs to a process that already exited.
+      const deadPid = spawnSync(process.execPath, ["-e", "0"]).pid;
+      writeFileSync(join(reg, "4321.json"), JSON.stringify({ port: 4321, pid: deadPid }));
+      const dead = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-dead", cwd });
+      expect(dead).not.toContain("localhost");
+      expect(dead).not.toMatch(/Abschlussbericht wartet|Konzept abschließen/);
+      // Discard: the page is gone, the state file still sits on disk.
+      rmSync(join(reg, "4321.json"));
+      rmSync(join(cwd, "docs", "concepts", "x.html"));
+      const gone = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-gone", cwd });
+      expect(gone).not.toContain("localhost");
+      expect(gone).not.toMatch(/Abschlussbericht wartet|Konzept abschließen/);
+    } finally {
+      if (prev === undefined) delete process.env.CONCEPT_BRIDGE_REGISTRY_DIR;
+      else process.env.CONCEPT_BRIDGE_REGISTRY_DIR = prev;
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(reg, { recursive: true, force: true });
     }
   });
 

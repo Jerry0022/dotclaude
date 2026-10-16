@@ -342,7 +342,7 @@ re-shipping.
    no longer block), run part D and Step 6a in full — bridge, pulser and
    waker stopped — and only then let `do-ship` render its ship card. A card
    rendered before the stop is followed by the watchers' exit notifications,
-   and the chat no longer ends on the outcome.
+   and the chat no longer ends on the outcome. Delegated ship: `step5-finalize.md` § C.
 
 ### D · Close out
 
