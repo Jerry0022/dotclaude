@@ -152,6 +152,52 @@ describe("path_prepend (stub CLIs)", () => {
     expect(graders["write-succeeded"](run(blocked))).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it("auto-concept graders: built page, decision panel, no hand-off, no hand-written page", () => {
+    const c = loadCase(resolveCases("skills/auto-concept/decision-page")[0]);
+    const graders = Object.fromEntries(g.loadGraders(c).map((x) => [x.name, x.check]));
+    expect(c.denyTools).toEqual(expect.arrayContaining(["Bash(*concept-server*)", "Bash(python *)", "Bash(*msedge*)", "CronCreate"]));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-grade-"));
+    const tool = (name, input) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t" + name, name, input }] } });
+    const run = (...lines) => { const raw = lines.join("\n"); return { parsed: parseStream(raw), raw, workdir: dir }; };
+    const built = run(
+      tool("Skill", { skill: "devops:auto-concept" }),
+      tool("Write", { file_path: path.join(dir, "docs/concepts/2026-x-notes/rounds/01.html"), content: "<section>" }),
+      tool("Bash", { command: 'node "/p/scripts/concept-build.js" build docs/concepts/2026-x-notes' }),
+    );
+    // No page on disk yet: every page grader fails, trace graders pass.
+    expect(graders["page-built"](built)).toBe(false);
+    expect(graders["decision-panel"](built)).toBe(false);
+    expect(graders["no-clipboard-handoff"](built)).toBe(false);
+    expect(graders["concept-skill"](built)).toBe(true);
+    expect(graders["built-by-script"](built)).toBe(true);
+    expect(graders["no-hand-written-page"](built)).toBe(true);
+    expect(graders["no-mode-question"](built)).toBe(true);
+    expect(graders["no-browser-tool"](built)).toBe(true);
+
+    fs.mkdirSync(path.join(dir, "docs", "concepts"), { recursive: true });
+    const page = path.join(dir, "docs", "concepts", "2026-x-notes.html");
+    // The engine's paste handler reads ev.clipboardData — not a hand-off.
+    fs.writeFileSync(page, '<aside id="decision-panel" class="concept-decision-panel"></aside><script>ev.clipboardData</script>');
+    expect(graders["page-built"](built)).toBe(true);
+    expect(graders["decision-panel"](built)).toBe(true);
+    expect(graders["no-clipboard-handoff"](built)).toBe(true);
+    fs.writeFileSync(page, '<aside id="decision-panel" class="concept-decision-panel"></aside><button onclick="navigator.clipboard.writeText(j)">In Zwischenablage kopieren</button>');
+    expect(graders["no-clipboard-handoff"](built)).toBe(false);
+    fs.writeFileSync(page, "<main>no panel</main>");
+    expect(graders["decision-panel"](built)).toBe(false);
+
+    const bad = run(
+      tool("AskUserQuestion", { questions: [{ header: "Mode" }] }),
+      tool("Write", { file_path: page, content: "<html>" }),
+      tool("mcp__Claude_Preview__preview_start", {}),
+    );
+    expect(graders["no-mode-question"](bad)).toBe(false);
+    expect(graders["no-hand-written-page"](bad)).toBe(false);
+    expect(graders["no-browser-tool"](bad)).toBe(false);
+    expect(graders["built-by-script"](bad)).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe("failed runs", () => {

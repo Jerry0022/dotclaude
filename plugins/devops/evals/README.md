@@ -114,7 +114,15 @@ the plugin's MCP servers may not connect under `-p`); `auto-cleanup`
 "branches aufräumen" should build the page or the Apply-Manifest and attempt
 no delete without a confirm (measured 2026-10-08: it deleted before asking;
 since the deletion gate `pre.cleanup.gate` 3/3 runs attempt no delete — see
-`trims/auto-cleanup.md`). Ordering checks share
+`trims/auto-cleanup.md`). `auto-concept` (#721, for the #722/#723 trims)
+asks for a decision-mode page about notes-cli storage with the bridge
+(`python`, `concept-server` / `-port-registry` / `-watch` / `-tick`), the
+browser, crons and `kill` denied: the skill loads without the mode question,
+`concept-build.js build` writes `docs/concepts/*.html` (no hand-written
+page), the page has `#decision-panel` and none of the concept gate's
+clipboard / paste-into-chat patterns, and no preview / Playwright tool is
+used. A full build takes longer than the default 5 min — pass
+`--timeout-min 15`. Ordering checks share
 `skills/order.js`. Per-skill trim records with the A/B numbers
 live in `trims/<skill>.md`.
 
