@@ -39,8 +39,7 @@ Spawned agents follow the same rule: they report, they do not start skills.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before reading.
-Do NOT call Read on files that may not exist — skip missing files silently (no output).
+Check for optional overrides; skip missing files silently.
 
 1. Global: `~/.claude/skills/auto-agents/SKILL.md` + `reference.md`
 2. Project: `{project}/.claude/skills/auto-agents/SKILL.md` + `reference.md`
@@ -367,7 +366,6 @@ Per tier:
   opened here: stop before that wave and return it as `needs-decision`
   (Step 7). The caller opens the concept page and re-enters this skill with
   the answer.
-  Treat the user as a collaborator on the plan, not just a recipient of results.
 
 QA Wave testing protocol and single-agent shortcut: see `deep-knowledge/agent-orchestration.md`
 § QA Wave — Testing Protocol and § Single-Agent Shortcut.
