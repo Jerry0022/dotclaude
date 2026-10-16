@@ -41,8 +41,7 @@ now AND the Artifact tool is available); this file is the procedure.
 | `GET /decisions` | the stored document, `{}` before the first submit | rejects like an unreachable bridge → the engine reads its local queue | untouched |
 | anything else (`/heartbeat`, `/status`, `/draft`) | real fetch — no bridge on the artifact host, the heartbeat shows "not connected" | same | untouched |
 
-The wrapper never acks what is not stored — the same rule as
-`concept-server.py`. It installs only where `window.claude.use` exists, so the
-bridge-served page and a saved file behave exactly as before.
+The wrapper never acks what is not stored, and installs only where
+`window.claude.use` exists.
 
 Tests: `scripts/concept-artifact.test.js`.
