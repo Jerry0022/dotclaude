@@ -254,10 +254,12 @@ describe("--render-card CLI fallback", () => {
       '- Vierten Punkt bitte auch erledigen."',
     );
     expect(stderr).not.toMatch(/data-prompt="[^"]*Im Desktop klicken/);
-    // The terminal shows the object entries as plain points.
+    // #714: no Ship offer while points are open.
+    expect(stderr).not.toContain('data-prompt="ship"');
+    // The terminal asks the top point as the heading and lists the rest.
     const term = await renderCard(payload);
-    expect(term).toMatch(/^1\. Soll die Änderung auch im Terminal-Renderer rein\?$/m);
-    expect(term).toMatch(/^## 📦 Shippen trotz 4 Vorbehalten \+2 weitere\?$/m);
+    expect(term).toMatch(/^## ❓ Soll die Änderung auch im Terminal-Renderer rein \+1 weitere\?$/m);
+    expect(term).toMatch(/^1\. Doku zur Card nachziehen\?$/m);
   });
 
   test("test and ship-successful cards answer their open points too (Desktop)", async () => {
@@ -273,8 +275,9 @@ describe("--render-card CLI fallback", () => {
     expect(testWidget).not.toContain("frag mich, was");
     // the open points show on the test card, the steps tagged 🧪
     const testTerm = await renderCard(test);
-    expect(testTerm).toMatch(/^1\. Auch im Terminal\?$/m);
-    expect(testTerm).toMatch(/^3\. 🧪 Seite öffnen$/m);
+    expect(testTerm).toMatch(/^## ❓ Auch im Terminal\?$/m);
+    expect(testTerm).toMatch(/^1\. Doku nachziehen\?$/m);
+    expect(testTerm).toMatch(/^2\. 🧪 Seite öffnen$/m);
 
     const ring = (await renderCardFull({
       variant: "ship-successful", summary: "Ship", lang: "de", session_id: S("conclude-ring"), open,

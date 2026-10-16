@@ -177,12 +177,12 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 ### 2.6 Decision block
 
 - **Heading = the decision as a question**, H2, with the variant's emoji.
-  Derived from the most important reservation: `📦 Shippen trotz fremdem
-  Testfehler?`; without reservations `📦 Shippen?`. It ends with `?` (the
+  `📦 Shippen?` only when nothing is open. It ends with `?` (the
   stop-hook checks that) — **except when there is nothing to decide**: then
   it is a state ending in `.` and there are no buttons (`🎊 Released v0.179.0
   LIVE.`, `📂 Fertig auf der Platte — noch etwas?` keeps the question form
   because "noch etwas" is one).
+- **Ship only when nothing is open (#714)** — see the `❓` row in § 3. A user-wait without `open` is refused once by the card pregate (Gate Q): put the question into `open: [{ text, reply }]`. No `[LOCAL SHIP]` over it; only `waitsOn: "user"` triggers, no reply-text heuristic.
 - Verb first after a ship/promotion: `🚀 Released v0.179.0 alpha — nach beta
   promoten?`, `🎊 Promoted v0.179.0 BETA — nach stable?`, `🎊 Released
   v0.179.0 LIVE — stable.` (channel word in CAPS for visibility; 🎊 for both
@@ -252,8 +252,9 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
-| `ready` | `📦 Shippen trotz {top reservation}?` / `📦 Shippen?` | open + final tests | Ship · Ändern (open points → Nachbessern) | |
-| `ready` / `test`, no remote | `📦 Lokal fertig trotz {reservation} — noch etwas?` / `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
+| `ready` | `📦 Shippen?` | final tests | Ship · Ändern | nothing open |
+| `ready` / `test` + open point or `waitsOn: "user"` | `❓ {top open point}` / `❓ Wartet auf dich: {requirement} — wie entscheidest du?` | remaining open + final tests / userTest | Ship dropped; Ändern / Nachbessern with the prepared answer | #714 — ship only when nothing is open |
+| `ready` / `test`, no remote | `📦 Lokal fertig — noch etwas?` · `🧪 Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
 | `ready` + red tests / partial | `⚠ Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
 | `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points; + App starten with a launch path | context line = distance to beta |

@@ -1,6 +1,6 @@
 /**
  * @module card-pregate
- * @version 0.3.1
+ * @version 0.4.0
  * @plugin devops
  * @description stop.flow.guard's payload gates, checked by
  *   render_completion_card BEFORE it renders.
@@ -33,6 +33,10 @@
  *     G  web hand-off without the guide — the card leaves a manual website
  *        step for the user (guide-handoff.detectCardHandoff) and auto-guide
  *        did not run this turn; skipped when the transcript is unreadable
+ *   and (#714):
+ *     Q  question without `open` — a requirement waits on the user
+ *        (`waitsOn: "user"`) but the card carries no `open` item, so its
+ *        decision heading could not ask the user anything
  *
  *   One refusal per identical finding: the same findings on the next call
  *   render anyway, so a false positive can never lock the card out — the
@@ -122,6 +126,32 @@ function writeToolsThisTurn(transcript) {
   return [...seen];
 }
 
+/**
+ * Gate Q (#714): a requirement waits on the user but the card has no `open`
+ * question — the card would offer ship (or nothing) instead of asking.
+ */
+function userWaitWithoutOpen(input) {
+  if (validationGaps.GAP_EXEMPT_VARIANTS.has(input.variant)) return [];
+  const open = Array.isArray(input.open)
+    ? input.open.filter(it => (typeof it === 'string' ? it : it && it.text) && String(typeof it === 'string' ? it : it.text).trim())
+    : [];
+  if (open.length) return [];
+  const validation = Array.isArray(input.validation) ? input.validation : [];
+  return validation
+    .filter(v => v && typeof v === 'object' && v.waitsOn === 'user' && v.status !== 'met')
+    .map(v => String(v.requirement || v.evidence || '').trim() || '(unnamed requirement)');
+}
+
+function buildUserQuestionReason(requirements) {
+  return [
+    `[stop.flow.guard] Waits on the user without a question: ${requirements.slice(0, 3).join('; ')}.`,
+    'A requirement with `waitsOn: "user"` means the next step is the answer of the user — the card must ask it (#714).',
+    'Put the question into `open: [{ text: "<the question?>", reply: "<the answer as the user>" }]`:',
+    'it becomes the decision heading and the card offers no Ship. Then render again;',
+    'if the card really asks nothing, the same call renders on the next try.',
+  ].join('\n');
+}
+
 function buildAnalysisWriteReason(tools) {
   return [
     `[stop.flow.guard] Variant \`analysis\` but this turn changed something: ${tools.join(', ')}.`,
@@ -176,6 +206,9 @@ function findings(input, { validationPending = false, openTasks = null, verifica
   }
 
   if (guideHandoff && !guideInvoked) out.push(buildGuideHandoffReason(guideHandoff.service));
+
+  const waiting = userWaitWithoutOpen(input);
+  if (waiting.length) out.push(buildUserQuestionReason(waiting));
   return out;
 }
 
