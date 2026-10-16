@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: shared-main-enter-worktree
+context:
+  scaffold_script: scaffold.sh
