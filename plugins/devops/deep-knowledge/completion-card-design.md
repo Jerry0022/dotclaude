@@ -485,8 +485,13 @@ stable?`, `Released v0.179.0 LIVE — stable.`, `Not done yet — {what}` …).
   blocks the prompt, so reopening never reaches Claude and spends no tokens.
   The ack under the harness's red "blocked" panel says exactly that, so the
   block does not read as a failure. Only a prompt that is
-  exactly the prefix plus one loopback URL is handled. If the browser cannot
-  start, the prompt passes through and Claude opens the page itself. Any
+  exactly the prefix plus one loopback URL is handled. The hook probes the
+  URL first (1.5 s, any HTTP response counts as alive, self-signed loopback
+  certs accepted): a dead page is never opened — the prompt passes through
+  with context telling Claude to start the dev server, or, for the active
+  concept page, to relaunch its bridge on the same port (the hook never
+  relaunches it itself). If the browser cannot start, the prompt passes
+  through and Claude opens the page itself. Any
   other http URL stays an anchor: dead on the Desktop app, but still a
   visible address.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.266.1] — 2026-10-16
+
+Clicking a card's open button for a local page whose server had stopped opened a dead browser tab, and nothing told Claude to bring the page back (#703).
+
+### Fixed
+- **`prompt.flow.open-url`**: probes the loopback URL first (1.5 s timeout, any HTTP response — 404 too — counts as alive, self-signed loopback certs accepted). Only a reachable page is opened and the prompt blocked as before. A dead page lets the prompt through with hook context telling Claude to start the dev server — or, for the URL of the active concept page (`.claude/concept-active.json`), to relaunch its bridge on the same port as `ss.concept.resume` does. The hook never relaunches the bridge itself.
+- **Test suite**: the shipped Quiet output-style manifest lists the current template hash again; `output-style-sync.test.js` had been red on main since 0.266.0.
+
 ## [0.266.0] — 2026-10-16
 
 An analysis that ended with a mixed list of actions plus a card button that only said "Umsetzen" left the user unsure what to decide and what a click would start.
