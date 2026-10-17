@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.268.7] — 2026-10-17
+
+The /auto-concept trim pass 2 (#723) removes rationale and incident prose from the validation-gate and bridge-server references with no grader loss.
+
+### Changed
+- **auto-concept `deep-knowledge/validation-gate.md`**: 13980 → 12264 words (−12 %). Incident stories and "used to / measured / without it" clauses are cut, and 33 of 34 "Common failures" bullets that repeated their row's Purpose are removed. Every gate row, pattern, `§` heading and pointer is unchanged.
+- **auto-concept `deep-knowledge/bridge-server.md`**: 9108 → 7471 words (−18 %). History and rationale in steps 1–5, 4b and 4c are cut. Every endpoint, exit reason, error table, the CronCreate block, `sleep 20` and both cron-prompt phrasings are unchanged.
+
+### Added
+- **Trim record `evals/trims/auto-concept.md`, Pass 2**: A/B on `skills/auto-concept/decision-page` (`--runs 2`): 15/16 → 16/16 and 16/16 → 16/16, tokens −12 %. Two test-pinned cuts were reverted before the runs. The case denies the bridge and covers round 1 only, so the bridge cuts and later-round gate rows are marked as not exercised.
+
 ## [0.268.6] — 2026-10-17
 
 The /auto-agents trim retry (#687) keeps two prose cuts that held every grader on the `inline-one-file` eval case over 8 runs per variant.

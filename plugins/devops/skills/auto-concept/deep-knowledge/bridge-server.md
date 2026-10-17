@@ -14,27 +14,18 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 > `_lastServerTs` (cached from `server_ts`) is compared against `SERVER_STALE_MS`
 > to distinguish the bootstrap window from a dead bridge — same ms-since-epoch
 > unit, same staleness-comparison pattern as `_lastHeartbeatTs`.
-> **Never divide either side by 1000.** A snippet copied from elsewhere that
-> assumes seconds-since-epoch (`claude_ts / 1000`, `Date.now() / 1000`) flips
-> the staleness math negative and silently renders "Claude verbunden" forever
-> while submissions rot in the bridge. This is the single most expensive
-> silent-failure mode of the whole concept system, because neither the user
-> nor Claude notices anything is wrong until days later.
+> **Never divide either side by 1000.** A seconds-since-epoch mix-up
+> (`claude_ts / 1000`, `Date.now() / 1000`) flips the staleness math negative
+> and silently renders "Claude verbunden" forever.
 >
 > `_processed_at` and `_picked_up_at` are **ISO-8601 UTC strings** (parsed
-> client-side via `Date.parse`). The split is deliberate: heartbeat math
-> needs cheap numeric comparisons every 5 s, while the processed/pickup
-> markers are read once per cycle and benefit from human-readable
-> serialization in `/decisions` payloads.
+> client-side via `Date.parse`).
 
 1. Find the bridge server script — the **highest** cached version, never the
    first `ls` hit:
    ```bash
-   # Several version directories coexist in the cache after updates
-   # (0.145.1, 0.147.0, 0.148.0 …). `ls … | head -1` returned the LEXICALLY
-   # first one, i.e. the OLDEST server while the hooks already ran the newest.
-   # Prefer the root the hook runtime hands us; otherwise version-sort the
-   # glob (`sort -V` orders 0.9 < 0.10) and take the last entry.
+   # Prefer the hook runtime's root; otherwise version-sort the glob
+   # (`sort -V` orders 0.9 < 0.10) and take the last entry, never `head -1`.
    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/concept-server.py}"
    [ -f "$PLUGIN_ROOT" ] || PLUGIN_ROOT=$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-server.py 2>/dev/null | sort -V | tail -1)
    ```
@@ -49,10 +40,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    lives here too, #417):
    **Launch it via the Bash tool's `run_in_background: true`** — NOT
    `nohup … &` (or any `&`-backgrounded child) inside a single foreground
-   Bash call. A child backgrounded inside one tool call is reaped when that
-   call's shell is torn down, so the server dies a few calls later, mid-
-   session, with no error — the page then silently loses its bridge. Only a
-   detached background task survives across turns:
+   Bash call. A child backgrounded inside one tool call is reaped with that
+   call's shell; only a detached background task survives across turns:
    ```bash
    # Bash tool, run_in_background: true  (no trailing &, no nohup)
    python "$PLUGIN_ROOT" {port} "{session-cwd}" \
@@ -60,9 +49,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    ```
 
    **Pick the port via the cross-session registry — never a bare random number
-   (Defect B: cross-session collision).** Two concurrent concept sessions in
-   different worktrees that both picked the same random 8700-8999 port used to
-   sweep and kill each other's live bridge. Every live bridge now advertises
+   (Defect B: cross-session collision).** Every live bridge advertises
    `{port, pid, worktree, …}` at `~/.claude/concept-bridges/<port>.json`; the
    picker skips any port owned by a LIVE FOREIGN session (and any bound port):
    ```bash
@@ -84,26 +71,14 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    temp directory so hard-killed test servers cannot silt the real registry.
 
    **Sweep the port BEFORE launching — exactly one instance must own it.**
-   A prior instance that did not fully die (its listening socket lingers in
-   TIME_WAIT/CLOSE_WAIT) plus a fresh launch used to leave **two** servers
-   bound to the same port (Windows permitted this via `SO_REUSEADDR`). `curl`
-   then hit whichever accepted the connection — sometimes the healthy one
-   (200), sometimes the wedged one (HTTP 000 / timeout) — surfacing as a
-   connection indicator that flickers between connected and "Claude nicht
-   verbunden" for no apparent reason.
-
-   **The server now binds the port EXCLUSIVELY** (`SO_EXCLUSIVEADDRUSE` on
-   Windows, `allow_reuse_address=False`; see `concept-server.py` §
-   `ConceptBridgeServer`), so a silent double-bind can no longer happen — a
-   duplicate launch instead **fails loudly** (`cannot bind port … exit 1`).
-   That turns the old silent flicker into a clear error, but you still MUST
-   sweep a lingering prior instance of YOUR OWN before launching — a socket
-   stuck in TIME_WAIT would make the fresh bind fail.
+   The server binds the port EXCLUSIVELY (`SO_EXCLUSIVEADDRUSE` on Windows,
+   `allow_reuse_address=False`; see `concept-server.py` §
+   `ConceptBridgeServer`), so a duplicate launch **fails loudly** (`cannot
+   bind port … exit 1`) — you still MUST sweep a lingering prior instance of
+   YOUR OWN before launching, or a socket stuck in TIME_WAIT fails the bind.
 
    **Only ever sweep a port THIS session owns — NEVER a foreign one (Defect
-   B).** The old guidance blindly `Stop-Process`-ed every listener on the port,
-   which is exactly how one session killed another's live bridge. Gate the
-   sweep on the registry: `can-claim` exits 0 when the port is free, ours, or
+   B).** Gate the sweep on the registry: `can-claim` exits 0 when the port is free, ours, or
    held by a dead owner, and non-zero when a LIVE FOREIGN session owns it. The
    picker already avoids foreign ports, so this is a belt-and-braces check on
    the exact port you are about to bind:
@@ -127,15 +102,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 
    **The server must be threaded.** `concept-server.py` uses
    `http.server.ThreadingHTTPServer` (not the single-threaded `HTTPServer`).
-   A single-threaded server serves one request at a time, so the browser's
-   own poll loops (it hits `/heartbeat`, `/decisions`, `/reload` every few
-   seconds) plus the background watcher plus any manual `curl` collide: one
-   slow or held connection blocks the serve loop and **every** subsequent
-   request times out — the socket still accepts (LISTENING) but returns
-   nothing, so `curl` reports HTTP 000 for 15 s+ and the page reads
-   "Claude nicht verbunden" even though the process is alive. This is a
-   distinct cause of HTTP 000 from the duplicate-instance case above; both
-   present identically. If you ever fork the script, keep it threaded.
+   A single-threaded server lets one held connection block every poll
+   (HTTP 000 while LISTENING). If you ever fork the script, keep it threaded.
    `$PORT` is written to `.claude/concept-active.json` in step 6 so the
    SessionStart resume hook can find this server again after a Claude restart.
 
@@ -169,42 +137,26 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    case (session closed without /shutdown, cron prompt loop dropped). Both
    conditions independently guarantee the server cannot become a ghost.
 
-   The 30 min default is calibrated for concept-review flows where the user
-   may read, think, and annotate for an extended period before submitting —
-   short idle pauses are expected and should not kill the server. Active
-   coding sessions with a tighter watchdog requirement can pass a lower value
-   (e.g. `--heartbeat-timeout-ms 300000` for 5 min) explicitly.
+   A tighter watchdog can pass a lower value explicitly (e.g.
+   `--heartbeat-timeout-ms 300000` for 5 min).
 
-3. Set up the **sparse backstop cron** (every 15 minutes). It used to fire
-   every minute and was described as the pickup path; since #363 the two
+3. Set up the **sparse backstop cron** (every 15 minutes). Since #363 the two
    token-free watchers below own the whole monitoring duty — heartbeat,
    self-cleanup, page liveness, pickup — and the cron is a last-resort
-   backstop only. **Every cron fire is a model turn**: Claude must issue the
-   Bash call and read its (empty) result, two inferences over the full cached
-   context, counted against the 5-h/weekly limits. At once a minute that was
-   hundreds of near-empty turns per concept session competing with the user's
-   own work; at once per 15 min it is four an hour, and it only matters if
+   backstop only (**every cron fire is a model turn**). It only matters if
    BOTH watchers died without a session restart (a restart re-arms them via
    `ss.concept.resume`).
 
    **The prompt is two sentences — the procedure is a script.** Claude Code
-   renders a cron's *entire* prompt text as its card in the background tasks
-   panel, so the old inline body (gate + heartbeat + `curl | python -c` probe +
-   the whole pending-branch procedure, 1128 characters) made one card fill the
-   panel and hid every other background task from the user. Nothing was
-   dropped: `scripts/concept-tick.js` performs every one of those steps and
-   prints an instruction only on the ticks that need one, so an ordinary idle
-   tick now costs zero tokens instead of re-reading the procedure every minute.
+   renders a cron's entire prompt as its background-task card;
+   `scripts/concept-tick.js` performs every step and prints an instruction
+   only on the ticks that need one, so an idle tick costs zero tokens.
 
    **Resolve the script at run time, never bake in a versioned path.** A cron
-   outlives a plugin rebuild: an in-session `/do-ship` writes the new version under
-   a fresh `.../devops/<version>/` directory and deletes the old one, so an
-   absolute path baked into the prompt dangles from that moment and every tick
-   fails MODULE_NOT_FOUND — once a minute, silently, for the rest of the
-   session. In the versioned cache layout emit a version-sorted glob that
-   picks the HIGHEST version directory — several coexist in practice, and a
-   plain `head -1` on the lexical listing returned the oldest — with the
-   literal path as the fallback:
+   outlives a plugin rebuild, so a baked versioned path dangles and every tick
+   fails MODULE_NOT_FOUND. In the versioned cache layout emit a version-sorted
+   glob that picks the HIGHEST version directory, with the literal path as the
+   fallback:
    `f="$(ls -d "{cache-root}/devops"/*/scripts/concept-tick.js 2>/dev/null | sort -V | tail -1)"; node "${f:-{literal}}"`.
    A dev/marketplace checkout has no version directory and just uses the
    literal path, which is the form shown below.
@@ -218,10 +170,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    **Two phrasings in that prompt are load-bearing — do not tidy them up.**
    - It MUST **start** with `Silently run`. The `prompt.flow.silent-turn` hook
      marks a cron tick as a silent turn only when the prompt *opens* with a
-     silence marker. Put anything in front of it — a `Concept bridge, port N — `
-     lead-in reads nicely and is exactly the trap — and every tick is treated as
-     a real user turn: the completion-card reminder fires and the stop hook
-     blocks the turn to force a card, once a minute, for the whole session.
+     silence marker. Put anything in front of it and every tick is treated as a real
+     user turn: the stop hook blocks it to force a completion card.
    - It MUST contain the literal `port {port}`. Step (0)'s orphan sweep deletes
      "every cron whose prompt mentions `port {port}`" when the state file, and
      with it `cron_id`, is gone. `--port {port}` alone does not match that
@@ -336,21 +286,9 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
            reloads onto the new iteration with a fresh ready panel. The
            `_processed_at` poll is only a safety-net for stuck states.
 
-   **Why `/pending` and not a substring check on `/decisions`?** The
-   `/decisions` JSON response is formatted via Python's default `json.dumps`,
-   which emits `"submitted": true` **with** a space after the colon — a literal
-   `contains "submitted":true` test silently misses every submission.
-   `/pending` collapses the signal to a strict boolean, and `concept-tick.js`
-   parses it as JSON rather than string-matching it, so the check cannot drift
-   into false negatives between ticks.
-
-   **Why a script and not a Read per tick.** The other way to shorten the
-   prompt would be to have the cron read the procedure from a file. That costs
-   tokens on *every* tick, and the idle tick is the overwhelmingly common case
-   — a submission arrives once every few minutes at best. A Bash call that
-   prints nothing costs nothing, and it replaces the TWO curl calls the old
-   body already made per tick, so this is strictly cheaper than what it
-   replaced rather than a new per-tick cost.
+   **Why `/pending` and not a substring check on `/decisions`?** `json.dumps`
+   emits `"submitted": true` with a space, so a literal substring test misses
+   every submission; `/pending` is a strict boolean, parsed as JSON.
 
    **Side effect — submit-panel progress list.** The first `/pending=true`
    response also stamps `_picked_up_at` on the server. The browser reads
@@ -360,27 +298,18 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    (see SKILL.md Step 5b · implement, sub-step 3) so the third step
    ("Implementierung abgeschlossen") lights up before the page reloads.
 
-   **Why combined, not two crons?** One cron minimizes race conditions and makes
-   the contract explicit: every tick does both. The waker (below) is what makes
-   the submit-to-process lag ~20 s; the cron's 15-min cadence is the lag only
-   when both watchers are gone.
+   The waker (below) makes the submit-to-process lag ~20 s; the cron's
+   15-min cadence is the lag only when both watchers are gone.
 
    **The cron alone does NOT keep the indicator green — add TWO decoupled
    background tasks.** The page flips to "Claude nicht verbunden" as soon as
    Claude's last `/heartbeat` POST is older than `HEARTBEAT_STALE_MS` (90 s).
-   The once-a-minute cron is the documented keepalive, but session-only crons
-   fire ONLY while the REPL is idle and have multi-minute gaps in practice
-   (observed: a 638 s gap with the cron registered and the session idle) — so
-   during normal reading/thinking the indicator goes red.
+   Session-only crons fire ONLY while the REPL is idle and have multi-minute
+   gaps, so the cron cannot be the keepalive.
 
-   **Keepalive and pickup MUST be separate tasks.** The naive single watcher
-   (pulse + `exit 0` on pending) has a load-bearing flaw: `exit 0` is how it
-   wakes Claude, so the instant a submission lands the watcher is *gone* — and
-   for an `implement` submission Claude then processes for many minutes with
-   NOTHING pulsing `/heartbeat` (the idle-only cron can't fire during a busy
-   `implement` turn). The indicator goes red *precisely during implementation*
-   — exactly when the user is watching for progress. Splitting the two roles
-   removes that coupling.
+   **Keepalive and pickup MUST be separate tasks.** A single watcher exits on
+   pending to wake Claude, leaving nothing to pulse `/heartbeat` during a long
+   `implement` — the indicator would go red exactly then.
 
    Launch both as **detached background tasks** (Bash tool,
    `run_in_background: true`, no trailing `&`, no `nohup`). Both are the same
@@ -407,46 +336,24 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    node "$(ls -d ~/.claude/plugins/cache/dotclaude/devops/*/scripts/concept-watch.js 2>/dev/null | sort -V | tail -1)" --mode watch --port {port} --state "{session-cwd}/.claude/concept-active.json" --owner {owner}
    ```
 
-   **Verify both actually started.** They are the only launches in this document
-   whose failure would be silent — the server has a heartbeat round-trip, the
-   port has a single-listener assert, the page has a 200-gate, and these had
-   nothing. Read each task's output once after launching: a `*_EXIT reason=`
+   **Verify both actually started.** Their failure is otherwise silent. Read each task's output once after
+   launching: a `*_EXIT reason=`
    line within seconds means it never got going. `STATE_NEVER_APPEARED` in
    particular means the launch outran step 4 — write the state file, then
    re-launch.
 
-   **Why a script and not an inline `while true; do … sleep 20; done`.** The
-   loop shape is easy to write and was wrong in four independent ways, each of
-   which silently reproduced the bug the watchers exist to prevent:
-   - it tested a **relative** `.claude/concept-active.json`, but this document
-     mandates the state file at the session cwd, which is not always the
-     task's cwd — both watchers then exited `STATE_GONE` on iteration 1;
-   - it was launched here, in step 3, **before** step 4 writes that file, so a
-     literal reading killed both at t=0. `--state` is absolute and `--grace`
-     (60 s) waits for the file instead of treating its absence as terminal, so
-     the step 3 → step 4 order is safe as written;
-   - its port guard `grep -qE '"port"…\b'` depended on JSON spacing and on
-     `\b`, a GNU extension — on BSD/macOS grep it never matched, so both
-     watchers exited `PORT_CHANGED` immediately. The script compares the port
-     numerically;
-   - `allowed-tools` matches command *prefixes*, and a multi-line loop has no
-     usable prefix, so the only grant that covered it was a blanket one. A
-     `node …` invocation is already covered by `Bash(node *)`.
+   **A script, never an inline `while true; do … sleep 20; done`.** `--state`
+   is absolute, `--grace` (60 s) waits for the state file so the step 3 →
+   step 4 order is safe, the port is compared numerically, and `node …` is
+   covered by `Bash(node *)`.
 
    Behaviour is otherwise unchanged: both poll every ~20 s (well under the 90 s
-   threshold), and **tolerate a slow or absent bridge** — measured on
-   2026-09-20, a bridge on a machine running four agents and a build took
-   10–20 s per `/heartbeat`, and the old 8 s deadline × 4 turned every such
-   stretch into a `SERVER_DEAD`, a relaunch and a red indicator. Requests now
-   wait up to 30 s (`--timeout`), the **pulser never exits on request
+   threshold), and **tolerate a slow or absent bridge**: requests wait up to 30 s (`--timeout`), the **pulser never exits on request
    failures** while the state file is there (it reconnects when the bridge
    is back or relaunched on the same port), and the waker reports
    `SERVER_DEAD` only after `--dead-after` (300 s) of continuous failure.
-   **Cleanup verdicts are debounced** (`--confirm`, 3 polls): the state file
-   and the page are both rewritten mid-session, and on Windows a tmp+rename
-   or an `mv` leaves a window in which the file is not there — one such poll
-   used to make the waker POST `/shutdown` on a live bridge (the journal
-   shows the shutdown/restore pair). A real end still takes the server down
+   **Cleanup verdicts are debounced** (`--confirm`, 3 polls): a tmp+rename on Windows
+   briefly hides the file. A real end still takes the server down
    within ~1 min. **Two watchers of one kind on one port** find each other through the
    id echo (`POST /heartbeat?pulser=<id>` → `prev_pulser`,
    `GET /pending?waker=<id>` → `prev_waker`): the younger pulser exits
@@ -473,12 +380,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      re-opens `http://localhost:{port}/{html_path}` in the user's Edge only
      when the user **closed the last tab**: no tab registered and a `/bye`
      after the last poll, 60 s ago (grace for a reload). Silence never
-     reopens, however long: Edge throttles a hidden tab's timers to one
-     wake-up per minute after 5 min and a Sleeping Tab is suspended
-     entirely, Worker included — the server then drops it from the registry
-     after 15 min, and the old silence rule (180 s, later 900 s) read every
-     sleeping tab as closed and opened a duplicate (#397; later 4 and 6 tabs
-     for two concepts). A tab that dies without a beacon is not reopened —
+     reopens, however long — a throttled or Sleeping Tab is dropped from the
+     registry after 15 min without being closed (#397). A tab that dies without a beacon is not reopened —
      the completion card prints the URL. Once per close, re-armed only after
      a tab is seen again. `--liveness 0` switches it off.
    - **Structured exit.** A submission exits with
@@ -598,9 +501,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
 4b. **The durable store — nothing to launch, but know it exists (#284).**
    The server creates `.claude/concepts/<html-basename>/` on startup, derived
    from `--html`, and **refuses to start (exit 1) if it cannot write there**.
-   That is deliberate: a bridge without durability looks perfectly healthy
-   right up until it eats a submission, so the failure belongs at launch time
-   where the 200-gate and the single-listener assert already catch problems.
+
    Override the location with `--store <path>` only if you have a reason to.
 
    ```
@@ -620,37 +521,23 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
      UNPROCESSED      present iff a submission has not been processed yet
    ```
 
-   **`drafts/` is for the half that was never submitted.** `journal.jsonl`
-   only ever sees a payload the user pressed submit on; everything typed
-   before that lived exclusively in the browser's `localStorage`, which does
-   not survive a wiped profile, a private window, a quota error, a power cut,
-   or a bug in the page's own persistence — and which nothing else had a copy
-   of. The page now POSTs its whole state blob to `/draft` on every (debounced)
+   **`drafts/` is for the half that was never submitted.** The page POSTs its whole state blob to `/draft` on every (debounced)
    autosave and flushes it with `sendBeacon` on `pagehide`, and the server
    fsyncs it before acking, exactly like a submission.
 
    **POST answers carry `Cache-Control: no-cache`, never `no-store`.** GET
-   answers and the served HTML keep `no-store`. Chromium does not complete a
-   `no-store` response whose body the page never reads, and a `keepalive`
-   request's body stays booked against a 64 KiB per-page quota until its
-   response completes — so a page that fired `POST /draft` with keepalive and
-   ignored the answer went dark after ~27 autosaves, every later request
-   refused inside the browser while this server kept answering 200. The page
-   engine no longer does that (templates.md `_drainDraftResponse`, gate 65);
-   the header rule keeps pages built from an older engine working too.
+   answers and the served HTML keep `no-store`. An unread `no-store` keepalive response pins Chromium's 64 KiB keepalive
+   quota (gate 65); the header rule keeps pages on an older engine working.
 
    The log is **append-only on purpose**. `GET /draft?slug=<slug>` returns the
    latest revision *and* `recovered`: the per-key union of the last non-empty
-   value ever posted, minus keys the page reported as deliberately cleared. So
-   a client that posts a blank blob — the shape every past data-loss bug took —
-   cannot destroy anything, and the page merges `recovered` back on load into
-   any key it is missing or holds empty. Losing a comment now requires losing
-   the disk.
+   value ever posted, minus keys the page reported as deliberately cleared. A blank
+   blob cannot destroy anything; the page merges `recovered` back on load into
+   any key it is missing or holds empty.
 
    `GET /recovery` lists a one-line summary per draft (`slug`, `rev`,
    `saved_at`, `iteration`, `recoverable_keys`, `chars`). Read it on a resumed
-   session: without it, a bridge that came back after a crash looks identical
-   whether the user had typed nothing or had typed for an hour. Never overwrite
+   session. Never overwrite
    or regenerate a concept HTML file while a draft holds comments you have not
    accounted for.
 
@@ -659,8 +546,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    that dies for any reason — PC restart, crash, or the watchdog reaping it
    because Claude hit a usage limit and the session-scoped pulser stopped
    heartbeating — comes back serving the SAME `pending: true` and the same
-   `_version`. Before this, `GET /pending` answered `false` afterwards, which
-   is indistinguishable from "the user never submitted".
+   `_version`.
 
    **Restart on the same port, always.** The store is keyed to the concept,
    not the port, but the open tab and `concept-active.json` both point at the
@@ -703,9 +589,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    attachments — "basically any file type, size does not matter" — through
    two request shapes on the SAME endpoint, `POST /attachments`, dispatched
    on `Content-Type`. Both shapes return the identical response body on
-   success, so a client implementer only needs to pick a shape once, per
-   file size, and everything downstream (read-back URL, dedup handling) is
-   the same.
+   success.
 
    **Limits and how to change them.**
 
@@ -727,11 +611,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    pre-check (before decoding Shape A's base64, or before Shape B streams
    the body to a temp file at all — fails obviously-hopeless uploads fast),
    and once authoritatively inside `_attachment_quota_lock`, in the same
-   critical section as the quota check and the write/rename. Only the
-   second check is what actually prevents two concurrent uploads from both
-   observing free space, both passing the advisory check, and together
-   eating into the safety margin — a single un-locked check cannot do that
-   regardless of where it runs. Either check failing refuses with
+   critical section as the quota check and the write/rename. Either check failing refuses with
    `507 disk_full`.
 
    **Shape A — legacy base64-in-JSON** (existing pages; kept working
@@ -844,12 +724,8 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    | `.webp` | `image/webp` |
 
    Being one of those four extensions is necessary but not sufficient
-   (#312 red-team F3). The stored extension comes from the UPLOADER's
-   claimed filename, not from the bytes — an SVG or HTML file uploaded as
-   `payload.png` with `X-Attach-Mime: image/png` would otherwise be served
-   `Content-Type: image/png` + `Content-Disposition: inline`, with
-   `X-Content-Type-Options: nosniff` as the only thing stopping the browser
-   from executing it. Before choosing the inline branch the server checks
+   (#312 red-team F3). The stored extension comes from the uploader's
+   claimed filename, not from the bytes. Before choosing the inline branch the server checks
    the blob's own leading bytes against that extension's magic-byte
    signature (PNG's 8-byte header, JPEG's `FF D8 FF`, GIF's `GIF87a`/
    `GIF89a`, WebP's `RIFF….WEBP` container) — see `_sniff_matches_ext` in
@@ -870,15 +746,6 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    not, as defense in depth — but the signature check, not nosniff, is what
    actually decides whether a blob is ever offered inline.
 
-   This is what replaces the old outright SVG ban: an uploaded SVG (or HTML
-   or JS file) can only execute script against the bridge's own origin if
-   the browser renders it in place, and a forced download served as an inert
-   content-type can't do that — so accepting the type and controlling how
-   it's served (bytes-verified, not extension-trusted) is strictly safer
-   than a growing list of type-specific rejections, and it is what makes
-   "basically any file type" possible without reopening the XSS risk the
-   old allowlist existed to close.
-
    **Stored extension derivation.** Never trusts the client's filename
    extension blindly — only its *shape*. Given the client-supplied `name`
    and `mime`: (1) if `name` contains a `.`, take the substring after the
@@ -891,9 +758,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    path component, only as free text in `index.json` and the
    `Content-Disposition` header.
 
-   **`attachments/index.json`.** The blob store is purely content-addressed,
-   so the original filename would otherwise be unrecoverable outside the
-   journal. `index.json` is a flat `{ "<id>": {"name", "mime", "size",
+   **`attachments/index.json`.** `index.json` is a flat `{ "<id>": {"name", "mime", "size",
    "sha256", "added_at"} }` map, read-modify-write merged (never replaced
    wholesale) and atomically written (`_durable_write`: tmp + fsync +
    `os.replace`) under the SAME `_attachment_quota_lock` that already
@@ -905,16 +770,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    session can say "you attached spec.pdf" instead of a hash.
 
 5. **Verified heartbeat round-trip.** A naked `POST /heartbeat` with no
-   read-back is not enough — if the server failed to bind, never started,
-   or crashed on the first request, the POST exits 0 and the next step
-   opens a tab against a dead bridge with no error surfaced. The whole
-   concept session then sits behind a green "Claude verbunden" indicator
-   that never actually was true.
+   read-back is not enough — a dead bridge still lets the POST exit 0.
 
    Do a **pre/post compare**, not just `claude_ts > 0`. A bare check
-   passes on any process that has ever seen a heartbeat — including a
-   stale bridge left running on the same port from a prior session. We
-   need proof that *our* POST landed on the running handler.
+   passes on a stale bridge from a prior session.
 
    ```bash
    # (a) Read claude_ts BEFORE our POST.
@@ -948,8 +807,7 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
    fi
    ```
 
-   The 3-second timeout matters: a hung TCP connect is the failure mode
-   we are trying to catch, not a slow JSON response. If you cannot run
+   If you cannot run
    the `python -c` snippet for some reason (locked-down environment),
    substitute any tool that parses the JSON and compares `claude_ts`
    numerically — never accept HTTP 200 alone, because the daemon
