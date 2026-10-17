@@ -181,6 +181,21 @@ function widgetCardTitle(widgetCode) {
 }
 
 /**
+ * The card part of a text block that also carries the answer before it: from
+ * the `---` rule that opens the card (the last one above the ✨ title), else
+ * from the title's line. The answer's own `## ` headings and numbered lists
+ * are not the card's — reading them as decision points blocked a correct
+ * card and stacked a second one (observed 2026-10-17).
+ */
+function cardPortion(text) {
+  const marker = text.indexOf(CARD_MARKER);
+  if (marker < 0) return text;
+  const lineStart = text.lastIndexOf('\n', marker) + 1;
+  const rule = [...text.slice(0, lineStart).matchAll(/^---[ \t]*$/gm)].pop();
+  return text.slice(rule ? rule.index : lineStart);
+}
+
+/**
  * The card this turn put on screen after its LAST render, '' when there is
  * none. Terminal (and the Desktop fallback title line): an assistant text
  * carrying the ✨ marker. Desktop: the card-body show_widget call — the widget
@@ -211,7 +226,7 @@ function deliveredCardText(transcriptContent) {
     for (let b = content.length - 1; b >= 0; b--) {
       const block = content[b];
       if (!block) continue;
-      if (block.type === 'text' && typeof block.text === 'string' && block.text.includes(CARD_MARKER)) return block.text;
+      if (block.type === 'text' && typeof block.text === 'string' && block.text.includes(CARD_MARKER)) return cardPortion(block.text);
       if (block.type !== 'tool_use') continue;
       if (isCardRenderCall(block)) return '';
       if (isCardWidgetCall(block.name, block.input)) {
