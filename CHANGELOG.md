@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.268.6] — 2026-10-17
+
+The /auto-agents trim retry (#687) keeps two prose cuts that held every grader on the `inline-one-file` eval case over 8 runs per variant.
+
+### Changed
+- **auto-agents `SKILL.md`**: 4207 → 4170 words (−37). Step 0's Glob/Read override sentences are condensed to one line, and Step 6's "Treat the user as a collaborator" line is removed. The Step 5 card description and the Rules block are untouched.
+
+### Added
+- **Trim record `evals/trims/auto-agents.md`, Attempt 2**: four cuts, each A/B-tested alone against `origin/main` with per-grader numbers. Cuts 1 and 4 kept (B ≥ A on every grader); cuts 2 and 3 reverted (each lost one `agents-skill` point). The #652 attempt stays on record.
+
+## [0.268.5] — 2026-10-17
+
+The /auto-fix trim retry (#720) found no safe cut: all four low-risk cuts were A/B-tested against `origin/main` and reverted. auto-fix `SKILL.md` is unchanged.
+
+### Added
+- **Trim record `evals/trims/auto-fix.md`** (#720 retry): each cut with its A→B result. Cuts 1 (Step 0 preamble) and 4 (pre-mortem duplicate) lost `reports-file-line` points; cuts 2 (Codex exit-code list) and 3 (Verify list) passed alone, but together failed the confirmation run (`--runs 2`: A 15/16, B 15/16). The ~2.7 % saving is below the grader's resolution at 2–8 runs; a retry needs 8+ runs per variant.
+
 ## [0.268.4] — 2026-10-17
 
 /auto-concept loads fewer tokens on every concept page (#722, pass 1). The 17 cuts kept are the ones that held every grader on the `decision-page` eval case against `origin/main`.
