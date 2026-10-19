@@ -91,6 +91,16 @@ the committed ship extension (`deployParity:` block in the project's
 |---|---|---|
 | `archiveAfterShip` | `true` | Desktop app: right after the card of a successful ship (`ship-successful` / `released`, merged) the session archives itself. Never for any other card, with an explicit keep (`--keep`, follow-up signals), pending agents/tasks/workflows, open points or user tests on the card, a dirty work tree, or while an autonomous run or ship queue still works. `false` → the session stays in the sidebar. |
 
+### `apiCredit` — advisory side tasks on the plan's monthly API credit (opt-in)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | When Codex is skipped (limit, timeout, missing), its second-opinion review runs once through `scripts/claude-api-safe.js` on the Claude API credit of the linked Console org. Claude Code itself always stays on the plan. |
+| `webGuide` | `false` | With `enabled` on and no key stored, offer the one-time auto-guide through the Console (workspace, spend limit, key). |
+
+"Nutze mein API-Guthaben" → the two questions and the `--global` writes in
+`deep-knowledge/api-credits.md` § Activation — never set these silently.
+
 "Session nach dem Ship nicht archivieren" → `ship.archiveAfterShip false`.
 Background: `deep-knowledge/claude-desktop-app-setup.md` § Session archiving
 after ship.

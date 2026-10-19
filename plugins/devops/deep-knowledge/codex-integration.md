@@ -77,6 +77,17 @@ If codex-plugin-cc is installed → run the Codex step AUTOMATICALLY (no user pr
 If not installed → skip silently, proceed with normal workflow
 ```
 
+### Claude API fallback (opt-in)
+
+When the user turned on `apiCredit.enabled` (`api-credits.md`), a Codex call
+that ends in rc **75**, **124** or **127** (or Codex not installed) is
+followed by ONE call of the same prompt through
+`node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" -` (prompt on stdin). It
+runs on the plan's monthly API credit, not on the plan's usage limits.
+Same rc table, same rules: advisory only, never retried, never blocking;
+rc 126 (switch off) is silent. This applies to every integration point
+below.
+
 **Key principle:** When Codex is available, it is used **proactively and
 automatically** at defined integration points. Codex steps are not "offered" or
 "suggested" — they are executed as part of the normal workflow. The user does
