@@ -209,7 +209,7 @@ function scanRepo(repo, io, opts) {
   const result = { path: repo, defaultBranch: base ? base.name : null, findings: [] };
   const push = (f) => {
     const id = hash(repo, f.kind, f.branch || f.worktree || f.stash || '', f.tip || '');
-    const { tip, ...rest } = f;
+    const { tip: _tip, ...rest } = f;
     result.findings.push({ id, ...rest });
   };
   const counts = (ref) => {
