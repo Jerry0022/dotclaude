@@ -59,6 +59,15 @@ as file-only (that was the 2026-09-18 failure: a real repo got a skipped
 - Tune timeout per call: `checksTimeoutSec: <30..3600>`.
 - See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
 
+### CI quota exhausted (#752)
+
+When the Actions minutes / spending limit run out, jobs fail within seconds with zero steps and a "payments have failed / spending limit" annotation. `ship_release` detects exactly that signature (never a real red check), records it machine-wide in `~/.claude/devops-ci-quota.json` (key `owner/repo`; override path via env `DEVOPS_CI_QUOTA_FILE`) and every later ship in any session or worktree knows it up front: `ship_preflight` returns `ciQuota` plus a `ci-quota` check/warning, and `ship_release` probes for at most 60 s instead of waiting for CI.
+
+- Result without a stored decision: `success: false`, `quotaBlocked: true`, `checks.status: "quota-blocked"`. **Ask the user once** (skip checks / wait for the reset / raise the budget), then call `ship_release` again with `quotaDecision: "skip-checks"` or `"wait"`. Pass it ONLY after an explicit answer — never on your own judgement.
+- Stored `skip-checks`: the ship merges without CI, `checks.status: "skipped"`, `checks.storedDecisionApplied: true`, `checks.reason` names the quota block and its reset date. **The completion card must say that a stored CI-quota decision was applied** (use `checks.reason`) — the user did not re-confirm this ship.
+- Stored `wait`: blocked without re-asking until the reset; `quotaDecision: "revoke"` forgets the answer.
+- Expiry: the record ends at the reset date (unknown → 1st of next month 00:00 UTC) or as soon as a check on the repo runs with steps again (`checks.quotaCleared: true`). A real failing check is never skipped, stored decision or not.
+
 ## Post-merge tree verification
 
 **If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:

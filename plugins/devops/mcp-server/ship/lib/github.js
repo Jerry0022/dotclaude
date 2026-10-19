@@ -294,6 +294,7 @@ function hadRecentChecks(prNumber, opts) {
  *                                                                    before concluding it — never a silent verdict on a
  *                                                                    head that simply hasn't reported yet (#508)
  *   { status: "failed",      checks, failed, pending, error }      — at least one check failed
+ *                                (+ `billingBlock: true` when `billingProbe` confirms the CI-quota signature, #752)
  *   { status: "timeout",     checks, failed, pending, error }      — did not complete within timeoutSec, OR
  *                                                                    watch exited unexpectedly while checks were still pending
  *   { status: "probe-error", error }                                — initial probe failed (auth/network) and the
@@ -312,6 +313,10 @@ export function watchPRChecks(prNumber, opts, {
   noChecksGraceIntervalMs = envInt("DEVOPS_SHIP_NO_CHECKS_GRACE_INTERVAL_MS", DEFAULT_NO_CHECKS_GRACE_INTERVAL_MS),
   sleep = sleepSync,
   now = Date.now,
+  // #752: (failed, opts) => boolean — true when EVERY failed check shows the
+  // CI-quota billing signature. Sets `billingBlock` on a "failed" verdict; the
+  // caller decides what to do. Absent → never a billing verdict.
+  billingProbe = null,
 } = {}) {
   // One probe — distinguishes "no checks at all" from "checks present" (incl.
   // pending). gh exits non-zero with "no checks reported" when nothing is
@@ -433,12 +438,17 @@ export function watchPRChecks(prNumber, opts, {
     }
     // gh exits non-zero when at least one check failed
     if (failed.length > 0) {
+      let billingBlock = false;
+      if (billingProbe) {
+        try { billingBlock = billingProbe(failed, opts) === true; } catch { billingBlock = false; }
+      }
       return {
         status: "failed",
         checks: finalChecks,
         failed,
         pending,
         error: `${failed.length} check(s) failed: ${failed.map((c) => c.name || c.workflow).join(", ")}`,
+        ...(billingBlock ? { billingBlock: true } : {}),
       };
     }
     // No failures recorded — but if checks are still pending, watch died early.

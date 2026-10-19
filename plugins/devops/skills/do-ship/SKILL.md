@@ -645,6 +645,7 @@ an all-green card (#372). Background: `{PLUGIN_ROOT}/skills/do-ship/deep-knowled
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
 
+- **CI quota exhausted** (`quotaBlocked: true`, `checks.status: "quota-blocked"`): ask the user once, then re-call with `quotaDecision` (`skip-checks` | `wait` | `revoke`) — the answer is shared by every session on the repo until the monthly reset; a stored decision is applied silently and the card names it (`checks.reason`). Details: `release-results.md` § CI quota exhausted.
 - Hot-fix bypass (`skipChecks`), timeout tuning and the full state matrix:
   `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Pre-merge CI gate options.
 

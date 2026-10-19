@@ -110,3 +110,7 @@ If version on main doesn't match new version → something went wrong.
 Step 5 (Cleanup) MUST NOT execute unless Step 4 (PR merge) completed
 successfully AND Post-Ship Verification passed. If any step fails →
 no cleanup, preserve all branches/worktrees.
+
+## CI quota (#752)
+
+`ship_preflight` adds `ciQuota` (and a `ci-quota` check with a warning, never an error) when any session on this machine recorded an exhausted Actions quota for the repo. See `release-results.md` § CI quota exhausted.
