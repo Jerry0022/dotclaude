@@ -1,6 +1,6 @@
 /**
  * @module wip-commit
- * @version 0.2.0
+ * @version 0.3.0
  * @description Save uncommitted work of a worktree without touching the
  *   user's index or working tree: the snapshot is built in a TEMPORARY index
  *   (read-tree HEAD, add --pathspec-from-file, write-tree, commit-tree), so no
@@ -10,7 +10,9 @@
  *   Safety filters (savablePaths): in-progress git operations skip the whole
  *   save (merge/rebase/cherry-pick/revert/index.lock/unmerged paths); secrets
  *   (.env*, keys, credentials, dumps), build output, tooling state and files
- *   over 5 MB are left out and reported as `skipped`.
+ *   over 5 MB are left out and reported as `skipped`. A path that is, or lies
+ *   under, a symlink or Windows junction inside the worktree is skipped as
+ *   `link` — links are lstat'ed, never followed.
  *
  *   Used by substop.agent.wip (wipCommit: moves the agent's branch) and
  *   stop.session.autosave (snapshotCommit only: the session branch stays put).
@@ -70,6 +72,18 @@ function identityArgs(cwd) {
   return a;
 }
 
+/** `rel` is, or lies under, a symlink/junction within `wt` (lstat per component, never followed). */
+function throughLink(wt, rel) {
+  let cur = wt;
+  for (const seg of rel.split('/').filter(Boolean)) {
+    cur = path.join(cur, seg);
+    try {
+      if (fs.lstatSync(cur).isSymbolicLink()) return true;
+    } catch { return false; /* missing (deleted): nothing below can be a link */ }
+  }
+  return false;
+}
+
 /** First 4 KB of the file look like a credential. */
 function sniffSecret(file) {
   let fd = null;
@@ -94,7 +108,8 @@ async function savablePaths(wt, { timeout } = {}) {
   for (const p of dirtyPaths(wt, timeout)) {
     const rel = p.replace(/\\/g, '/');
     let why = null;
-    if (SECRET.test(rel)) why = 'secret';
+    if (throughLink(wt, rel)) why = 'link';
+    else if (SECRET.test(rel)) why = 'secret';
     else if (rel.split('/').slice(0, -1).some((s) => BUILD_DIRS.has(s)) || TOOLING_ROOT.test(rel)) why = 'build/tooling';
     else if (hyg && (hyg.isToolingState(rel) || hyg.isRegenerable(rel))) why = 'build/tooling';
     else {
