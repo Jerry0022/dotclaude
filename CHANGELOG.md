@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.273.0] — 2026-10-19
+## [0.274.0] — 2026-10-19
 
 Session titles now show two icons, status first and activity second, plus one English keyword: `👉 📦 Ready – X`, `⏳ 🚀 Shipping – X`, `🟩 🚀 Released Alpha – X`. The title and the card's CTA heading come from one table, so they can no longer drift apart. The workspace question ("Wo soll die Arbeit laufen?") is now asked only until a project's handling is decided.
 
