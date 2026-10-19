@@ -185,3 +185,23 @@ test("costOf prices tokens and web searches", () => {
   const c = agent.costOf("claude-sonnet-5-5", { input_tokens: 1e6, output_tokens: 1e6, server_tool_use: { web_search_requests: 10 } });
   expect(c).toBeCloseTo(2 + 10 + 0.1, 5);
 });
+
+describe("secret-file guard (audit 2026-10-20)", () => {
+  test.each([".env::$DATA", ".env ", ".env.", "id_rsa_work", ".pypirc", ".git-credentials", "prod.tfvars"])(
+    "read_file %s is refused",
+    (name) => {
+      expect(() => agent.runTool(proj, "read_file", { path: name })).toThrow(/off limits|unsupported path form/);
+    },
+  );
+
+  test("a symlink to a secret file is refused by its real name", () => {
+    fs.writeFileSync(path.join(proj, ".env"), "K=answer-secret\n");
+    try { fs.symlinkSync(path.join(proj, ".env"), path.join(proj, "innocent.txt")); } catch { return; /* no symlink right */ }
+    expect(() => agent.runTool(proj, "read_file", { path: "innocent.txt" })).toThrow(/off limits/);
+  });
+
+  test("ordinary paths and the root itself still work", () => {
+    expect(agent.runTool(proj, "list_files", { path: "." })).toContain("src/");
+    expect(agent.runTool(proj, "read_file", { path: "src/a.js" })).toContain("answer");
+  });
+});

@@ -439,3 +439,22 @@ describe("AUD-C051 — bounded git calls", () => {
     expect(src).toMatch(/timeout, maxBuffer: GIT_MAX_BUFFER/);
   });
 });
+
+describe("removeStaleLock identity check (audit 2026-10-20)", () => {
+  test("removes the stale file it inspected", () => {
+    const lock = path.join(tmp, "ID1.json.lock");
+    fs.writeFileSync(lock, "999999 old\n");
+    expect(bp.removeStaleLock(lock, fs.statSync(lock))).toBe(true);
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
+  test("a different (live) lock swapped in after the read is restored, not deleted", () => {
+    const lock = path.join(tmp, "ID2.json.lock");
+    fs.writeFileSync(lock, "999999 old\n");
+    const seen = fs.statSync(lock);
+    fs.rmSync(lock);
+    fs.writeFileSync(lock, `${process.pid} a-much-longer-live-holder-record\n`);
+    expect(bp.removeStaleLock(lock, seen)).toBe(false);
+    expect(fs.readFileSync(lock, "utf8")).toContain(String(process.pid));
+  });
+});

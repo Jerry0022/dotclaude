@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  quoteWinArg,
   buildRegisterPsCommand,
   buildRecoveryScript,
   buildReapQueryPs,
@@ -140,7 +141,7 @@ describe("buildRecoveryScript — mode-specific recovery", () => {
     // Relaunches claude with the resume prompt in the project working dir.
     expect(s).toContain("Get-Command claude");
     expect(s).toContain("Start-Process -FilePath $claude.Source");
-    expect(s).toContain("'-p','RUN_BACKLOG_AUTOSTART: resume'");
+    expect(s).toContain("-ArgumentList '-p \"RUN_BACKLOG_AUTOSTART: resume\"'");
     expect(s).toContain("-WorkingDirectory 'C:\\proj'");
   });
 
@@ -397,5 +398,24 @@ describe("reap — the sweep of expired watchdog tasks (#544)", () => {
     expect(reapDue({ at: "garbage" }, NOW, 24)).toBe(true);
     expect(reapDue({ at: "2026-09-26T02:00:00Z" }, NOW, 24)).toBe(false);
     expect(reapDue({ at: "2026-09-25T13:59:00Z" }, NOW, 24)).toBe(true);
+  });
+});
+
+describe("resume prompt reaches claude as ONE argv entry (audit 2026-10-20)", () => {
+  test("quoteWinArg follows CommandLineToArgvW rules", () => {
+    expect(quoteWinArg("RUN_BACKLOG_AUTOSTART: a b")).toBe('"RUN_BACKLOG_AUTOSTART: a b"');
+    expect(quoteWinArg('say "hi"')).toBe('"say \\"hi\\""');
+    expect(quoteWinArg("dir\\")).toBe('"dir\\\\"');
+    expect(quoteWinArg('a\\"b')).toBe('"a\\\\\\"b"');
+  });
+
+  test("the generated script passes a single pre-quoted -ArgumentList string", () => {
+    const s = buildRecoveryScript({
+      action: "resume", recoveryFlagPath: "C:\\proj\\R.flag", workingDir: "C:\\proj",
+      flagPath: "C:\\proj\\A.flag", logPath: "C:\\proj\\w.log", taskName: "t", scriptPath: "C:\\proj\\s.ps1",
+      resumePrompt: "RUN_BACKLOG_AUTOSTART: confirmation timeout. phase=gate",
+    });
+    expect(s).toContain(`-ArgumentList '-p "RUN_BACKLOG_AUTOSTART: confirmation timeout. phase=gate"'`);
+    expect(s).not.toContain("@('-p'");
   });
 });

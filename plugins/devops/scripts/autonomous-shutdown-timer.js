@@ -183,13 +183,13 @@ function runArm(argv) {
   const cwd = safeCwd();
 
   // Idempotent re-arm: clear any pre-existing scheduled shutdown first.
-  spawnSync(exe, ['/a'], { encoding: 'utf8', cwd });
+  spawnSync(exe, ['/a'], { encoding: 'utf8', cwd, timeout: 30_000 });
 
   const msg =
     `Claude autonomous fail-safe — PC shuts down in ${plan.minutes} min unless the ` +
     `task finishes first. Run 'shutdown /a' to abort.`;
   const res = spawnSync(exe, ['/s', '/t', String(plan.seconds), '/c', msg],
-    { encoding: 'utf8', cwd });
+    { encoding: 'utf8', cwd, timeout: 30_000 });
 
   if (res.status !== 0) {
     fail(`shutdown /s failed (status ${res.status}): ` +
@@ -199,7 +199,7 @@ function runArm(argv) {
 }
 
 function runCancel() {
-  const res = spawnSync(shutdownExe(), ['/a'], { encoding: 'utf8', cwd: safeCwd() });
+  const res = spawnSync(shutdownExe(), ['/a'], { encoding: 'utf8', cwd: safeCwd(), timeout: 30_000 });
   if (res.status === 0) ok({ cancelled: true, noPending: false });
   // /a returns non-zero (error 1116) when no shutdown was scheduled — that's the
   // benign "nothing to cancel" case, not a failure.
