@@ -70,11 +70,11 @@ describe("claude-ignore migrate / check", () => {
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "0"], { cwd: d });
     const m = migrateRepo(d);
     expect(m.tracked).toEqual([".claude/launch.json"]);
-    expect(m.untrack).toBe('git rm --cached -- ".claude/launch.json"');
+    expect(m.untrack).toBe("git rm --cached -- '.claude/launch.json'");
     const c = checkRepo(d);
     expect(c.ok).toBe(false);
     expect(c.issues.map((i) => i.code)).toEqual(["tracked-local"]);
-    expect(c.issues[0].detail).toContain('git rm --cached -- ".claude/launch.json"');
+    expect(c.issues[0].detail).toContain("git rm --cached -- '.claude/launch.json'");
     expect(execFileSync("git", ["ls-files"], { cwd: d, encoding: "utf8" })).toContain(".claude/launch.json");
   });
 });

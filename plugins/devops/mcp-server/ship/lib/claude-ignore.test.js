@@ -50,7 +50,7 @@ describe("ship_preflight claude-ignore check", () => {
     expect(res.ok).toBe(true);
     expect(res.issues).toEqual(["tracked-local"]);
     expect(res.fix).toBeUndefined();
-    expect(res.untrack).toBe('git rm --cached -- ".claude/launch.json"');
+    expect(res.untrack).toBe("git rm --cached -- '.claude/launch.json'");
     expect(res.warning).toContain(res.untrack);
   });
 

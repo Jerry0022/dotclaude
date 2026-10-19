@@ -261,6 +261,18 @@ describe("info/exclude fallback block", () => {
     expect(res.ok).toBe(false);
     expect(res.issues).toHaveLength(1);
     expect(res.issues[0].code).toBe("tracked-local");
-    expect(res.issues[0].detail).toContain('git rm --cached -- ".claude/launch.json"');
+    expect(res.issues[0].detail).toContain("git rm --cached -- '.claude/launch.json'");
+  });
+
+  test("untrackCommand single-quotes every path — no shell expansion from a hostile file name", () => {
+    const hostile = ".claude/a$(touch pwned)`id`\"it's\".json";
+    const cmd = ri.untrackCommand([hostile, ".claude/launch.json"]);
+    expect(cmd).toBe(`git rm --cached -- '.claude/a$(touch pwned)\`id\`"it'\\''s".json' '.claude/launch.json'`);
+    if (process.platform !== "win32") {
+      // the shell hands the name back byte for byte and runs nothing
+      const { execFileSync } = require("node:child_process");
+      const echoed = execFileSync("sh", ["-c", `printf '%s\\n' ${ri.shellQuote(hostile)}`], { encoding: "utf8" });
+      expect(echoed).toBe(`${hostile}\n`);
+    }
   });
 });

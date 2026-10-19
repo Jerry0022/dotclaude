@@ -375,9 +375,19 @@ function trackedUnderBlock(root, { timeout = 10_000 } = {}) {
   }
 }
 
-/** The command that stops tracking `files` (they stay on disk). */
+/** `s` as one POSIX shell word: single-quoted, `'` written as `'\''` — no `$`, backtick or `"` expansion. */
+function shellQuote(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The command the user runs to stop tracking `files` (they stay on disk).
+ * Display only — the plugin never runs it; code that untracks calls
+ * execFileSync('git', ['rm', '--cached', '--', ...files]) without a shell.
+ * File names come from the repo and are untrusted: each is single-quoted.
+ */
 function untrackCommand(files) {
-  return `git rm --cached -- ${files.map((f) => `"${f}"`).join(' ')}`;
+  return `git rm --cached -- ${files.map(shellQuote).join(' ')}`;
 }
 
 /**
@@ -499,5 +509,5 @@ module.exports = {
   BLOCK_START, BLOCK_END, LEGACY_START, LEGACY_END,
   allEntries, renderBlock, applyBlock, normalizePattern, isBlockEntry,
   migrateGitignore, stripExclude, check, policyDeviations, touchesIgnorePolicy,
-  applyExcludeFallback, trackedUnderBlock, untrackCommand,
+  applyExcludeFallback, trackedUnderBlock, untrackCommand, shellQuote,
 };
