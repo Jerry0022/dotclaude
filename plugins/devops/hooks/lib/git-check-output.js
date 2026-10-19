@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module git-check-output
- * @version 0.3.0
+ * @version 0.4.0
  * @description Pure output composition for the ss.git.check SessionStart hook.
  *   Takes the already-collected findings and renders the hook's stdout lines.
  *   No git, no fs — so the decision logic is unit-testable.
@@ -31,6 +31,12 @@
  *   user's own WIP or another session's, and only the user can tell. Its
  *   recommended answer leaves those changes untouched; the old git-stash
  *   take-along is gone (the stash stack is shared by every worktree).
+ *
+ *   Decided once per project (0.4.0): the question is asked only until the
+ *   project's handling is settled. `workspace.ownWorktree` (devops-config,
+ *   set by post.worktree.enter the first time a session of the project
+ *   enters a worktree) turns the question into the standing rule even with
+ *   pending changes — those changes are still reported and stay untouched.
  */
 
 const { enterLine } = require('./branch-fix');
@@ -108,7 +114,7 @@ function offMainline(workspace) {
  * in the root may be someone's work in progress, so continuing it there
  * stays allowed — only NEW work moves (redteam R6).
  */
-function directiveLines(workspace) {
+function directiveLines(workspace, pending = false) {
   const out = [];
   if (offMainline(workspace)) {
     out.push("Rule (devops plugin): this is the repo's MAIN checkout, which other sessions may share. Before the FIRST edit or commit of this session, move into your own worktree:");
@@ -119,6 +125,9 @@ function directiveLines(workspace) {
     out.push(`Rule (devops plugin): this checkout may be shared and sits on \`${branch}\`. Continuing that branch's work here is fine; NEW work moves into its own worktree first:`);
     out.push(`  - ${ENTER}`);
     out.push("  - Never switch this checkout's branch (git switch / git checkout -b) — that moves every session in it.");
+  }
+  if (pending) {
+    out.push("  - This project's handling is decided (devops-config workspace.ownWorktree): do NOT ask where the work runs. The pending changes listed above stay exactly as they are — they may be another session's; ship them only on the user's word.");
   }
   out.push('');
   return out;
@@ -171,9 +180,10 @@ function askLines(workspace, noRemote = false) {
  * @param {{type:string, branch:string, severity:string}|null} [input.workspace]
  * @param {string|null} [input.staleNote]
  * @param {string} [input.cwd] — used only to label the current repo's block
+ * @param {boolean} [input.ownWorktree] — the project's handling is decided: no question
  * @returns {string[]} lines; empty array means "stay silent"
  */
-function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
+function compose({ dirty = [], workspace = null, staleNote = null, cwd, ownWorktree = false } = {}) {
   const repos = (Array.isArray(dirty) ? dirty : []).filter(r => r && typeof r === 'object');
   const issuesOf = (r) => (Array.isArray(r.issues) ? r.issues : []);
   const hasFindings = repos.some(r => issuesOf(r).some(i => issueLine(i)));
@@ -191,8 +201,11 @@ function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
     ? issuesOf(currentDirty).some(i => i && i.type === 'uncommitted' && i.noRemote)
     : false;
 
+  // A project whose handling is decided never gets the question again.
+  const ask = hasChanges && !ownWorktree;
+
   if (hasFindings || workspace) {
-    out.push(header(workspace, hasChanges));
+    out.push(header(workspace, ask));
     out.push('');
   }
 
@@ -215,7 +228,7 @@ function compose({ dirty = [], workspace = null, staleNote = null, cwd } = {}) {
   }
 
   if (workspace) {
-    out.push(...(hasChanges ? askLines(workspace, noRemote) : directiveLines(workspace)));
+    out.push(...(ask ? askLines(workspace, noRemote) : directiveLines(workspace, hasChanges)));
   }
 
   if (staleNote) {

@@ -38,12 +38,12 @@ same Desktop-only / skip-silently semantics). `test-minimal` never calls the
 widget. The session-title hook (`prompt.flow.title-work`) sets the bare `⏳ `
 icon-only prefix on the first prompt of new work, in place of the former
 `🔧 `; the card's session-title note replaces it with the result prefix at
-turn end (§ 7 of the design doc). The hook reads the current title from the
+turn end (`session-title-scheme.md`). The hook reads the current title from the
 transcript (`hooks/lib/session-title.js`) and passes the exact new title, set
 in parallel with the turn's first tool call — or emits nothing when the title
 is already right; only an unknown title falls back to `get_session`.
 `post.flow.title-mode` does the same for the skills' mode prefixes
-(`🚀 Shipping – ` on a `do-ship` Skill load, `📥 Batch – ` on and off with the
+(`⏳ 🚀 Shipping – ` on a `do-ship` Skill load, `👉 📥 Batch – ` on and off with the
 do-batch `activate` / `deactivate` commands).
 
 **Hook architecture:**
@@ -150,7 +150,7 @@ Subagents inherit all output contracts:
   Never put an internal agentId in a card — use the agent type or task label.
 - **A turn that ends with a `/auto-concept` page open renders its card with
   `concept: { phase }`** (`waiting` · `iterating` · `implementing`) — the CTA
-  becomes "🧭 CONCEPT wartet auf deine Entscheidungen / in Iteration /
+  becomes "👉 🧭 CONCEPT wartet auf deine Entscheidungen / in Iteration /
   in Implementierung — ich MELDE mich" and
   outranks `pending`. The concept bridge's own tasks (server, keepalive pulser,
   pickup waker) are infrastructure, never `pending`; the guard ignores them.
@@ -159,17 +159,18 @@ Subagents inherit all output contracts:
   link above the CTA, read from `.claude/concept-active.json`.
 - **A card rendered while `/do-batch` is collecting says so by itself**:
   with `cwd` passed, the card reads `.claude/batch-mode.json` and swaps its CTA
-  for "📥 Batch sammelt — {n} Einträge", with the next prompt's fate as context
+  for "👉 📥 Batch sammelt — {n} Einträge", with the next prompt's fate as context
   line and three how-to points (collect · fire · stop). No card field — the
   state file is the truth.
 - **The session title names the state the last card left the session in.**
   `render_completion_card` returns a `[SESSION TITLE]` block beside the card
-  (stderr on the CLI path), one per variant with the CTA emoji: `🚀 Shipped – `
-  for `ship-successful`, `🎊 Released <Alpha|Beta|Stable> – ` for `released`,
-  `🧪 Test – ` for `test`, `▶️ Started – ` for `test-minimal`, `📦 Ready – ` for
-  `ready`, `⛔ Blocked – ` for `ship-blocked`, `🚫 Aborted – ` for `aborted`,
-  `📋 Analysis – ` for `analysis`, `🔧 Erledigt – ` for `fallback`,
-  the bare `⏳ ` while `pending` work runs. The server reads the current title
+  (stderr on the CLI path), one per variant, double-icon
+  (`<STATUS> <ACTIVITY> <Word> – `, e.g. `🟩 🚀 Released Alpha – ` for
+  `ship-successful`, `👉 📦 Ready – ` for `ready`, `🟩 🖥️ System – ` for
+  `fallback`), and the CTA heading starts with the same two icons and keyword
+  (title = CTA); the full status/activity tables and the 👉-vs-🟩 rule live in
+  `session-title-scheme.md`. A card-less turn that ends on a bare `⏳ `
+  becomes `👉 ⚡ Interrupted – `. The server reads the current title
   off the session transcript (`~/.claude/projects/<cwd slug>/<session_id>.jsonl`),
   so the block names the exact `set_session_title` value, to be called in the
   same message as the card's `show_widget` (no `get_session`, no extra round
@@ -181,18 +182,18 @@ Subagents inherit all output contracts:
   rendered), so an outcome prefix never outlives the turn it described: a
   new prompt means new work. The hourglass is one state — "Claude works, not
   your move" — never a worded `⏳ Working – ` (a legacy form, only stripped).
-  `/auto-concept` sets `🧭 Concept – ` only while the page waits for the user:
+  `/auto-concept` sets `👉 🧭 Concept – ` only while the page waits for the user:
   generating the page, processing a submission, iterating and implementing
-  are Claude's move and show `⏳ ` (a user prompt swaps the compass for it,
+  are Claude's move and show `⏳ ` (`⏳ 🧭 Concept – ` once the skill names it) (a user prompt swaps the compass for it,
   the auto-concept skill does so when it picks up a submission, and the card
   re-states the compass only for the `waiting` phase, #416).
-  `/do-batch` owns `📥 Batch – ` while collecting, `/do-ship` `🚀 Shipping – `
+  `/do-batch` owns `👉 📥 Batch – ` while collecting, `/do-ship` `⏳ 🚀 Shipping – `
   while the pipeline runs — the bare `⏳ ` never replaces a running 📥 /
-  `🚀 Shipping – ` (a ship prompt is marked `🚀 Shipping – ` by
+  `⏳ 🚀 Shipping – ` (a ship prompt is marked `⏳ 🚀 Shipping – ` by
   `prompt.flow.title-work` itself, via `hooks/lib/ship-intent.js`), nor a
   🧭 on a task-notification turn, and no card block while a batch is armed.
   A mode skill strips any earlier prefix before adding
-  its own (`🧭 Concept – ⏳ Foo` is the bug). Prefixes are pinned in
+  its own (`👉 🧭 Concept – ⏳ Foo` is the bug). Prefixes are pinned in
   `mcp-server/lib/mode-state.js` (`SESSION_PREFIX`). Desktop-app only
   (`mcp__ccd_session_mgmt__set_session_title` `self`; deferred is not
   unavailable — `mcp-deferred-tools.md` § Session title tools) — elsewhere skip silently.

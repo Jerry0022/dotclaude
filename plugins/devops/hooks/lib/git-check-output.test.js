@@ -449,3 +449,38 @@ describe("repo without a remote", () => {
     expect(out).toContain("Ship-first: invoke /do-ship");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Handling decided once per project — devops-config workspace.ownWorktree
+// ---------------------------------------------------------------------------
+
+describe("handling decided once per project (workspace.ownWorktree)", () => {
+  const pending = () => [currentRepo(issue("uncommitted", 1, "1 uncommitted file(s)"), issue("unpushed", 30, "30 unpushed commit(s)"))];
+
+  test("a decided project never gets the question, even with pending changes", () => {
+    for (const workspace of [onMain, detached, featureNoWorktree]) {
+      const out = text(compose({ dirty: pending(), workspace, cwd: CWD, ownWorktree: true }));
+      expect(out, workspace.type).not.toContain("AskUserQuestion");
+      expect(out, workspace.type).toContain("EnterWorktree");
+      expect(out, workspace.type).toContain("do NOT ask where the work runs");
+    }
+  });
+
+  test("the findings are still reported for the user", () => {
+    const out = text(compose({ dirty: pending(), workspace: onMain, cwd: CWD, ownWorktree: true }));
+    expect(out).toContain("- 1 uncommitted file(s)");
+    expect(out).toContain("- 30 unpushed commit(s)");
+    expect(out).toContain("restate them verbatim in your final message");
+  });
+
+  test("an undecided project still asks", () => {
+    const out = text(compose({ dirty: pending(), workspace: onMain, cwd: CWD }));
+    expect(out).toContain("Call AskUserQuestion as the FIRST action of this turn.");
+  });
+
+  test("a clean decided checkout gets the plain rule without the pending note", () => {
+    const out = text(compose({ dirty: [], workspace: onMain, cwd: CWD, ownWorktree: true }));
+    expect(out).toContain("EnterWorktree");
+    expect(out).not.toContain("do NOT ask where the work runs");
+  });
+});

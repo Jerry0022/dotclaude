@@ -99,6 +99,12 @@ const SCHEMA = Object.freeze({
       doc: 'Time budget in seconds for the deploy-parity install + build; running out reads as inconclusive, never as failed.',
     }),
   }),
+  workspace: Object.freeze({
+    ownWorktree: Object.freeze({
+      type: 'boolean', default: false,
+      doc: 'New work started in the main checkout goes straight into its own worktree, even when that checkout holds pending changes — no session-start question. Set automatically the first time a session of this project enters a worktree.',
+    }),
+  }),
   ship: Object.freeze({
     archiveAfterShip: Object.freeze({
       type: 'boolean', default: true,

@@ -30,7 +30,7 @@ describe("ship SKILL.md — session title prefix", () => {
   test("Pre-Step C sets the shipping prefix and strips every ship prefix first", () => {
     const mark = section("## Pre-Step C — Mark the session in the sidebar", "## Step 0 — Load Extensions");
     expect(mark).toContain("`" + SESSION_PREFIX.shipping + "`");
-    expect(mark).toContain("`" + SESSION_PREFIX.shipped + "`");
+    expect(mark).toContain("`" + SESSION_PREFIX["released-alpha"] + "`");
     expect(mark).toContain("`" + SESSION_PREFIX.test + "`");
     expect(mark).toContain("`" + SESSION_PREFIX.blocked + "`");
     expect(mark).toContain("`" + SESSION_PREFIX.work + "`");
@@ -39,7 +39,7 @@ describe("ship SKILL.md — session title prefix", () => {
     expect(mark).toMatch(/never stack/);
     // The title hook marks a ship prompt itself; the skill must not re-mark
     // (and must never downgrade to the hourglass).
-    expect(mark).toMatch(/already starts with `🚀 Shipping – `: done/);
+    expect(mark).toContain("already starts with `" + SESSION_PREFIX.shipping + "`: done");
     expect(mark).toMatch(/prompt\.flow\.title-work/);
     // A Skill-tool load gets the exact title from post.flow.title-mode; the
     // set call rides along with the next tool call, get_session is fallback only.
@@ -56,7 +56,7 @@ describe("ship SKILL.md — session title prefix", () => {
 
   test("Step 6 maps each outcome to its title before the card renders", () => {
     const exit = section("### Session title on exit", "### Promotion-gap nudge");
-    expect(exit).toContain("`" + SESSION_PREFIX.shipped + "{title}`");
+    expect(exit).toContain("`" + SESSION_PREFIX["released-alpha"] + "{title}`");
     expect(exit).toContain("`" + SESSION_PREFIX.blocked + "{title}`");
     expect(exit).not.toContain("`" + SESSION_PREFIX.test + "{title}`");
     expect(exit).toMatch(/intermediate ship/);
@@ -71,7 +71,7 @@ describe("ship SKILL.md — session title prefix", () => {
     expect(hygiene).toContain("`" + SESSION_PREFIX.blocked + "`");
   });
 
-  test("the blocked prefix carries the ship-blocked card emoji", () => {
-    expect(SESSION_PREFIX.blocked.startsWith("⛔")).toBe(true);
+  test("the blocked prefix carries the ship-blocked card icons (title = CTA)", () => {
+    expect(SESSION_PREFIX.blocked).toBe("👉 ⛔ Blocked – ");
   });
 });

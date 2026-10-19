@@ -1,6 +1,6 @@
 /**
  * @module ship-delegate
- * @version 1.2.0
+ * @version 1.2.1
  * @plugin devops
  * @description The "ship in a fresh-context subagent" instruction, shared by
  *   `prompt.ship.detect` (which emits it instead of the plain
@@ -258,7 +258,7 @@ function shipResumeInstruction({ resume, delegate, pluginRoot, sessionId = '', n
     'the checkpoint and git/gh are the truth. Steps marked ✓ are never repeated (no second bump, PR or tag).',
     ...how,
     decisions,
-    'The session title stays "🚀 Shipping – " and the turn ends with the ship\'s own card (Shipped / Blocked).',
+    'The session title stays "⏳ 🚀 Shipping – " and the turn ends with the ship\'s own card (Released / Blocked).',
   ].filter(Boolean).join('\n');
 }
 

@@ -85,6 +85,15 @@ the committed ship extension (`deployParity:` block in the project's
 `.claude/skills/do-ship/reference.md`), not here. Details:
 `deep-knowledge/deploy-parity.md`.
 
+### `workspace` — where new work runs
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ownWorktree` | `false` | `true` → new work started in the main checkout goes straight into its own worktree, also when that checkout holds uncommitted/unpushed changes: ss.git.check reports them but no longer asks "Wo soll die Arbeit laufen?". Set for the project automatically the first time one of its sessions enters a worktree (post.worktree.enter), so the question comes at most once per project. |
+
+"Nie mehr fragen, immer eigener Worktree — überall" → `workspace.ownWorktree true --global`.
+"Hier bleiben" stays the `DEVOPS_ALLOW_MAIN=1` bypass in `.claude/settings.local.json`.
+
 ### `ship` — what happens after a successful ship
 
 | Key | Default | Meaning |

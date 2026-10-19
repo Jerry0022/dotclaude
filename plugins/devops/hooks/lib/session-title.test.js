@@ -3,47 +3,123 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX,
-  KNOWN_PREFIX_EMOJI, stripPrefixes, nextTitle, readCurrentTitle,
+  WORK_PREFIX, LEGACY_PENDING_PREFIX, LEGACY_PREFIXES as HOOK_LEGACY, SHIPPING_PREFIX, CONCEPT_PREFIX,
+  CONCEPT_WORKING_PREFIX, INTERRUPTED_PREFIX, classify, stripPrefixes, nextTitle, interruptedTitle, readCurrentTitle,
 } from "./session-title.js";
+import S from "./title-scheme.js";
 import { SESSION_PREFIX, LEGACY_PREFIXES, releasedPrefix, pausedPrefix, stripTitlePrefix, hookRequire } from "../../mcp-server/lib/mode-state.js";
 
 // The hook reads the title itself and hands Claude the exact value, so the
 // set call rides along in the turn's first tool batch (no get_session round
-// trip). These tests pin the rules the old prose instruction spelled out.
+// trip). These tests pin the rules of the two-slot scheme (lib/title-scheme.js).
+
+const FE0F = "️";
+const noFE0F = (s) => s.split(FE0F).join("");
+/** Every prefix a state can leave, status raised included (👉 for a done state). */
+const ALL_NEW = S.allStatePrefixes();
 
 describe("session-title — prefixes mirror mode-state.js", () => {
   test("pinned strings equal SESSION_PREFIX / LEGACY_PREFIXES", () => {
     expect(WORK_PREFIX).toBe(SESSION_PREFIX.work);
     expect(SHIPPING_PREFIX).toBe(SESSION_PREFIX.shipping);
-    expect(CONCEPT_PREFIX).toBe(SESSION_PREFIX.concept);
+    expect(CONCEPT_PREFIX).toBe(SESSION_PREFIX["concept-waiting"]);
+    expect(CONCEPT_WORKING_PREFIX).toBe(SESSION_PREFIX["concept-working"]);
+    expect(INTERRUPTED_PREFIX).toBe("👉 ⚡ Interrupted – ");
+    expect(HOOK_LEGACY).toEqual(LEGACY_PREFIXES);
     expect(LEGACY_PREFIXES).toContain(LEGACY_PENDING_PREFIX);
   });
 
-  test("stripPrefixes strips every prefix mode-state knows, like stripTitlePrefix", () => {
+  test("LEGACY_PREFIXES holds every old single-icon prefix (R4)", () => {
+    for (const p of ["⏳ Working – ", "🧭 Concept – ", "📥 Batch – ", "🚀 Shipping – ", "🚀 Shipped – ",
+      "🎊 Released – ", "🎊 Released Alpha – ", "🎊 Released Beta – ", "🎊 Released Stable – ",
+      "🧪 Test – ", "▶️ Started – ", "📦 Ready – ", "⛔ Blocked – ", "🚫 Aborted – ", "📋 Analysis – ",
+      "🔧 Done – ", "⏸️ Paused – ", "⏸️ Paused until restart – ", "⏸️ Paused until reboot – ",
+      "⏸️ Paused until limit reset – "]) {
+      expect(LEGACY_PREFIXES, p).toContain(p);
+    }
+  });
+
+  test("stripPrefixes strips every new prefix (each status the state can take), like stripTitlePrefix", () => {
     const all = [
-      ...Object.values(SESSION_PREFIX), ...LEGACY_PREFIXES,
-      ...["alpha", "beta", "stable"].map(releasedPrefix),
+      ...Object.values(SESSION_PREFIX), ...ALL_NEW,
+      ...["alpha", "beta", "stable"].map((c) => releasedPrefix(c)),
+      ...["beta", "stable"].map((c) => releasedPrefix(c, { promoted: true })),
       ...["restart", "reboot", "usage-reset", "user"].map(pausedPrefix),
     ];
+    expect(ALL_NEW.length).toBeGreaterThan(Object.keys(S.STATES).length);
     for (const p of all) {
       expect(stripPrefixes(p + "My task"), p).toBe("My task");
-      expect(stripPrefixes(p + "My task")).toBe(stripTitlePrefix(p + "My task"));
+      expect(stripPrefixes(p + "My task"), p).toBe(stripTitlePrefix(p + "My task"));
     }
+  });
+
+  test("stripPrefixes strips every legacy prefix, alone and stacked under a new one", () => {
+    for (const p of LEGACY_PREFIXES) {
+      expect(stripPrefixes(p + "My task"), p).toBe("My task");
+      expect(stripPrefixes(SESSION_PREFIX.ready + p + "My task"), p).toBe("My task");
+      expect(stripPrefixes(WORK_PREFIX + p + "My task"), p).toBe("My task");
+    }
+  });
+
+  test("FE0F: every prefix strips with and without the variation selector", () => {
+    const withSel = [...ALL_NEW, ...LEGACY_PREFIXES].filter((p) => p.includes(FE0F));
+    expect(withSel.length).toBeGreaterThan(5); // ▶️ ⏸️ 🖥️ ⚠️ are covered
+    for (const p of withSel) {
+      expect(stripPrefixes(noFE0F(p) + "Job"), p).toBe("Job");
+      expect(stripPrefixes(p + "Job"), p).toBe("Job");
+    }
+    // A selector where the canonical form has none is tolerated too.
+    expect(stripPrefixes("👉 📦" + FE0F + " Ready – Job")).toBe("Job");
+    expect(classify("⏸ ✋ Paused – Job")).toBe("outcome");
+    expect(stripPrefixes("⏸ 🔋 Limit reset – Job")).toBe("Job");
+    expect(stripPrefixes("🟩 🖥 System – Job")).toBe("Job");
+    expect(stripPrefixes("👉 ⚠ Red tests – Job")).toBe("Job");
+    expect(stripPrefixes("🟩 ▶ Started – Job")).toBe("Job");
+  });
+
+  // F6: the old WORDED rule took any "Xxx – " after a bare ⏳ as a prefix.
+  test("F6: only known prefixes go — free text after a bare ⏳ stays", () => {
+    expect(stripPrefixes("⏳ Fix Login – Bug")).toBe("Fix Login – Bug");
+    expect(nextTitle("⏳ Fix Login – Bug")).toBeNull();
+    expect(nextTitle("👉 📦 Ready – Fix Login – Bug")).toBe("⏳ Fix Login – Bug");
+    expect(stripPrefixes("🟩 🚀 Released Alpha – Fix Login – Bug")).toBe("Fix Login – Bug");
+    expect(stripPrefixes("📦 Packaging – rework")).toBe("📦 Packaging – rework");
+    expect(stripPrefixes("👉 📦 Shipit – rework")).toBe("👉 📦 Shipit – rework");
+    expect(stripPrefixes("Release Notes – v2")).toBe("Release Notes – v2");
   });
 
   test("stacked prefixes go, a plain or foreign-emoji title stays", () => {
     expect(stripPrefixes("🧪 Test – ⏳ 🚀 Shipped – X")).toBe("X");
+    expect(stripPrefixes("👉 🧪 Test – ⏳ 🚀 Shipping – 🟩 🖥️ System – X")).toBe("X");
     expect(stripPrefixes("Plain title")).toBe("Plain title");
     expect(stripPrefixes("🐛 Bug hunt")).toBe("🐛 Bug hunt");
-    // An outcome emoji without a worded prefix is title text, not a prefix.
+    // An activity icon without a known prefix is title text, not a prefix.
     expect(stripPrefixes("📦 packaging rework")).toBe("📦 packaging rework");
+    expect(stripPrefixes("👉 look at this")).toBe("👉 look at this");
+  });
+
+  test("classify reads the two-slot grammar", () => {
+    expect(classify("Plain")).toBe("plain");
+    expect(classify("⏳ X")).toBe("work");
+    expect(classify("⏳ Working – X")).toBe("work");
+    expect(classify("⏳ 🚀 Shipping – X")).toBe("shipping");
+    expect(classify("🚀 Shipping – X")).toBe("shipping");
+    expect(classify("👉 📥 Batch – X")).toBe("batch");
+    expect(classify("📥 Batch – X")).toBe("batch");
+    expect(classify("🟥 📥 Batch – X")).toBe("batch");
+    expect(classify("👉 🧭 Concept – X")).toBe("concept-waiting");
+    expect(classify("🧭 Concept – X")).toBe("concept-waiting");
+    expect(classify("⏳ 🧭 Concept – X")).toBe("process");
+    expect(classify("⏳ 🤖 Agents – X")).toBe("process");
+    expect(classify("⏳ 🧪 Testing – X")).toBe("process");
+    expect(classify("🟩 🚀 Released Alpha – X")).toBe("outcome");
+    expect(classify("🚀 Shipped – X")).toBe("outcome");
   });
 
   test("mcp-server can load the lib through hookRequire", () => {
     const lib = hookRequire("lib", "session-title.js");
     expect(lib.nextTitle("X")).toBe("⏳ X");
-    expect(lib.KNOWN_PREFIX_EMOJI).toEqual(KNOWN_PREFIX_EMOJI);
+    expect(lib.stripPrefixes).toBe(stripPrefixes);
   });
 });
 
@@ -51,39 +127,51 @@ describe("session-title — nextTitle (user prompt)", () => {
   test("plain title gets the bare hourglass", () => {
     expect(nextTitle("Fix login")).toBe("⏳ Fix login");
   });
-  test("an outcome prefix is replaced", () => {
-    expect(nextTitle("🧪 Test – Fix login")).toBe("⏳ Fix login");
-    expect(nextTitle("🚀 Shipped – Fix login")).toBe("⏳ Fix login");
-    expect(nextTitle("🎊 Released Stable – Fix login")).toBe("⏳ Fix login");
-    expect(nextTitle("⏸️ Paused until limit reset – Fix login")).toBe("⏳ Fix login");
+  test("every outcome prefix — new, raised and legacy — is replaced by the bare hourglass", () => {
+    const outcomes = ALL_NEW.filter((p) => ["outcome", "concept-waiting"].includes(classify(p + "X")));
+    expect(outcomes.length).toBeGreaterThan(20);
+    for (const p of [...outcomes, ...LEGACY_PREFIXES.filter((p) => !["🚀 Shipping – ", "📥 Batch – "].includes(p))]) {
+      expect(nextTitle(p + "Fix login"), p).toBe("⏳ Fix login");
+    }
   });
   test("an already bare-marked title needs nothing; the legacy worded form is rewritten", () => {
     expect(nextTitle("⏳ Fix login")).toBeNull();
     expect(nextTitle(LEGACY_PENDING_PREFIX + "Fix login")).toBe("⏳ Fix login");
   });
-  test("batch is owned by its skill, a running ship is never replaced", () => {
-    expect(nextTitle("📥 Batch – Queue")).toBeNull();
-    expect(nextTitle("🚀 Shipping – Fix login")).toBeNull();
-    expect(nextTitle("🚀 Shipping – Fix login", { prefix: SHIPPING_PREFIX })).toBeNull();
+  // R1: the guards read the two-slot grammar, the running ship first.
+  test("batch is owned by its skill, a running ship and any ⏳ process are never replaced", () => {
+    for (const t of ["👉 📥 Batch – Queue", "📥 Batch – Queue", "⏳ 🚀 Shipping – Fix login", "🚀 Shipping – Fix login",
+      "⏳ 🧭 Concept – D", "⏳ 🤖 Agents – D", "⏳ 🧪 Testing – D"]) {
+      expect(nextTitle(t), t).toBeNull();
+    }
+    expect(nextTitle("⏳ 🚀 Shipping – Fix login", { prefix: SHIPPING_PREFIX })).toBeNull();
+    expect(nextTitle("👉 📥 Batch – Queue", { prefix: SHIPPING_PREFIX })).toBeNull();
   });
-  test("the concept compass yields to a user prompt", () => {
+  test("a waiting concept yields to a user prompt", () => {
+    expect(nextTitle("👉 🧭 Concept – Dashboard")).toBe("⏳ Dashboard");
     expect(nextTitle("🧭 Concept – Dashboard")).toBe("⏳ Dashboard");
   });
-  test("a ship prompt sets Shipping, also over the hourglass", () => {
-    expect(nextTitle("⏳ Fix login", { prefix: SHIPPING_PREFIX })).toBe("🚀 Shipping – Fix login");
-    expect(nextTitle("🚀 Shipped – Fix login", { prefix: SHIPPING_PREFIX })).toBe("🚀 Shipping – Fix login");
+  test("a ship prompt sets Shipping — over the hourglass, an outcome, a process; a legacy Shipping is upgraded", () => {
+    expect(nextTitle("⏳ Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ 🚀 Shipping – Fix login");
+    expect(nextTitle("🟩 🚀 Released Alpha – Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ 🚀 Shipping – Fix login");
+    expect(nextTitle("🚀 Shipped – Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ 🚀 Shipping – Fix login");
+    expect(nextTitle("⏳ 🤖 Agents – Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ 🚀 Shipping – Fix login");
+    expect(nextTitle("🚀 Shipping – Fix login", { prefix: SHIPPING_PREFIX })).toBe("⏳ 🚀 Shipping – Fix login");
+    expect(nextTitle("⏳ Fix Login – Bug", { prefix: SHIPPING_PREFIX })).toBe("⏳ 🚀 Shipping – Fix Login – Bug");
   });
   test("empty / unknown / prefix-only titles do nothing", () => {
     expect(nextTitle("")).toBeNull();
     expect(nextTitle(null)).toBeNull();
     expect(nextTitle("🧪 Test – ")).toBeNull();
+    expect(nextTitle("👉 🧪 Test – ")).toBeNull();
   });
 });
 
 describe("session-title — nextTitle (machine turn)", () => {
   const m = { machine: true };
-  test("modes and outcomes stay (#618)", () => {
-    for (const t of ["🧭 Concept – D", "📥 Batch – Q", "🚀 Shipped – X", "📦 Ready – X", "⏸️ Paused – X"]) {
+  test("modes, processes and outcomes stay (#618)", () => {
+    for (const t of ["👉 🧭 Concept – D", "⏳ 🧭 Concept – D", "👉 📥 Batch – Q", "🟩 🚀 Released Alpha – X",
+      "👉 📦 Ready – X", "⏸️ ✋ Paused – X", "🧭 Concept – D", "📥 Batch – Q", "🚀 Shipped – X", "📦 Ready – X", "⏸️ Paused – X"]) {
       expect(nextTitle(t, m), t).toBeNull();
     }
   });
@@ -94,6 +182,22 @@ describe("session-title — nextTitle (machine turn)", () => {
   });
 });
 
+// F5: a turn that ends without a card must not leave "⏳" claiming work.
+describe("session-title — interruptedTitle (F5)", () => {
+  test("a bare ⏳ (or the legacy worded one) becomes 👉 ⚡ Interrupted", () => {
+    expect(interruptedTitle("⏳ Refactor")).toBe("👉 ⚡ Interrupted – Refactor");
+    expect(interruptedTitle("⏳ Working – Refactor")).toBe("👉 ⚡ Interrupted – Refactor");
+    expect(interruptedTitle("⏳ Fix Login – Bug")).toBe("👉 ⚡ Interrupted – Fix Login – Bug");
+  });
+  test("batch, a waiting concept, a running ship and every named state stay", () => {
+    for (const t of ["👉 📥 Batch – Q", "📥 Batch – Q", "👉 🧭 Concept – D", "🧭 Concept – D", "⏳ 🧭 Concept – D",
+      "⏳ 🚀 Shipping – X", "🚀 Shipping – X", "⏳ 🤖 Agents – X", "⏳ 🧪 Testing – X", "👉 ⚡ Interrupted – X",
+      "🟩 🚀 Released Alpha – X", "Plain", "", null]) {
+      expect(interruptedTitle(t), String(t)).toBeNull();
+    }
+    expect(interruptedTitle("⏳ ")).toBeNull();
+  });
+});
 describe("session-title — readCurrentTitle", () => {
   let dir;
   beforeAll(() => { dir = mkdtempSync(join(tmpdir(), "session-title-")); });
@@ -108,8 +212,8 @@ describe("session-title — readCurrentTitle", () => {
   const msg = (n) => ({ type: "user", message: { content: "x".repeat(n) } });
 
   test("the last custom-title wins", () => {
-    const p = write("a.jsonl", [ct("Old"), msg(10), ct("🧪 Test – New"), an("🧪 Test – New"), msg(10)]);
-    expect(readCurrentTitle(p)).toBe("🧪 Test – New");
+    const p = write("a.jsonl", [ct("Old"), msg(10), ct("👉 🧪 Test – New"), an("👉 🧪 Test – New"), msg(10)]);
+    expect(readCurrentTitle(p)).toBe("👉 🧪 Test – New");
   });
   test("agent-name is the fallback when no custom-title is in reach", () => {
     expect(readCurrentTitle(write("b.jsonl", [msg(5), an("Named"), msg(5)]))).toBe("Named");
@@ -134,8 +238,8 @@ describe("session-title — readCurrentTitle", () => {
     expect(readCurrentTitle(p, { chunk: 4096, maxBytes: 64 * 1024 })).toBeNull();
   });
   test("multi-byte titles survive a chunk boundary", () => {
-    const p = write("g.jsonl", [msg(3000), ct("🧭 Concept – Übersicht ä"), msg(100)]);
-    expect(readCurrentTitle(p, { chunk: 200 })).toBe("🧭 Concept – Übersicht ä");
+    const p = write("g.jsonl", [msg(3000), ct("👉 🧭 Concept – Übersicht ä"), msg(100)]);
+    expect(readCurrentTitle(p, { chunk: 200 })).toBe("👉 🧭 Concept – Übersicht ä");
   });
 });
 
@@ -181,7 +285,10 @@ describe("session-title — do-batch titles", () => {
     expect(batchTitle("Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
     expect(batchTitle("⏳ Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
     expect(batchTitle("🧪 Test – 🔧 Done – Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
-    expect(batchTitle(SESSION_PREFIX.concept + "Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+    expect(batchTitle(SESSION_PREFIX["concept-waiting"] + "Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+    // A legacy batch title is upgraded to the two-slot form.
+    expect(batchTitle("📥 Batch – Fix login")).toBe(SESSION_PREFIX.batch + "Fix login");
+    expect(batchTitle("⏳ Fix Login – Bug")).toBe(SESSION_PREFIX.batch + "Fix Login – Bug");
   });
 
   test("batchTitle leaves an armed, empty or unknown title alone", () => {
@@ -197,6 +304,8 @@ describe("session-title — do-batch titles", () => {
     expect(unbatchTitle("Renamed by user")).toBeNull();
     expect(unbatchTitle("🧪 Test – Fix login")).toBeNull();
     expect(unbatchTitle(SESSION_PREFIX.batch)).toBeNull();
+    // The legacy batch prefix of an older session is retired too.
+    expect(unbatchTitle("📥 Batch – Fix login")).toBe("Fix login");
     expect(unbatchTitle(null)).toBeNull();
   });
 });

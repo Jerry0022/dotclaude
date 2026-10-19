@@ -1,6 +1,6 @@
 /**
  * @module card-guard
- * @version 0.9.0
+ * @version 0.9.1
  * @description Pure decision logic for the completion-card enforcement flow,
  *   plus the validation half of the V&V gate. Split out of stop.flow.guard.js so
  *   the rules can be unit-tested without mocking stdin or temp files.
@@ -793,12 +793,12 @@ function buildBlockReason(pluginRoot, opts = {}) {
     'PENDING (orthogonal to the variant): if background subagents, workflows or',
     'tasks you started are STILL running, also pass `pending` — [{ name, kind,',
     'doing }] with kind "agent" | "task" | "workflow" — naming each. It replaces',
-    'the CTA with "⏳ NOCH NICHT FERTIG … ich MELDE mich", so the card never asks',
+    'the CTA with "⏳ 🤖 Agents — noch nicht fertig … ich melde mich", so the card never asks',
     'the user to act on a result that does not exist yet. Never put an internal',
     'agentId in the card; use the agent type / workflow name / task label.',
     'CONCEPT (outranks pending): if a /auto-concept page is OPEN, pass `concept` —',
     '{ phase: "waiting" | "iterating" | "implementing" } — and the CTA becomes',
-    '"🧭 CONCEPT wartet auf deine Entscheidungen / in Iteration /',
+    '"👉 🧭 Concept — wartet auf deine Entscheidungen" / "⏳ 🧭 Concept — in Iteration /',
     'in Implementierung — ich MELDE mich". The bridge',
     'server, keepalive pulser and pickup waker are infrastructure, NOT pending —',
     'never list them; this gate ignores them.',
@@ -949,7 +949,7 @@ function buildPendingReason(names) {
     '',
     'Keep the variant and every other field as they were — the body still reports',
     'what IS true. `pending` only corrects the last line, to',
-    '"⏳ NOCH NICHT FERTIG. … — ich MELDE mich".',
+    '"⏳ 🤖 Agents — noch nicht fertig … — ich melde mich".',
     '',
     'Use the names listed above. NEVER put an internal agentId in the card.',
     'If a /auto-concept page is open, ALSO pass `concept: { phase }` — the concept CTA',
