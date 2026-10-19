@@ -28,7 +28,7 @@ node "{PLUGIN_ROOT}/scripts/home-backup.js" setup --repo <owner>/claude-home
 
 It verifies `gh auth status`, creates the private repo if missing (refuses an existing public one), runs `git init` in `~/.claude` (refuses a repo with a different origin), writes the `.gitignore`, registers the daily job, switches the backup on, and does the first run. Safe to re-run: it fixes, never duplicates. Report the result in one or two lines: repo, job time, first-run outcome (`pushed`, `unchanged` or `blocked`).
 
-If the first run is `blocked`, handle it as below. If `gh` is not logged in, tell the user to run `gh auth login` (interactive; do not attempt it).
+If the first run is `blocked` (common: project memory or `CLAUDE.md` often name an e-mail address), handle it as below — the user can preview everything with `scan` first. The notification repeats only when the set of findings changes, not every day. If `gh` is not logged in, tell the user to run `gh auth login` (interactive; do not attempt it).
 
 The job runs the launcher `~/.claude/devops-jobs/home-backup.js` (not in the backup), which finds the newest installed devops plugin in `~/.claude/plugins/installed_plugins.json` at run time — plugin updates need no re-run. Only a moved node binary does (the job stores `process.execPath` of the setup).
 
@@ -51,7 +51,7 @@ Read `~/.claude/home-backup-report.txt`. Show the user each hit as file, line, r
   - `path-glob:rule-id` — skip one rule in that file (e.g. `agents/contacts.md:email`)
   - `value-sha256:<hex>` — allow one exact value by its SHA-256, so the file never contains the value
 
-Never add an allow entry on your own and never to "get the backup through". Binary files and files over 2 MB show up as rule `unscannable` and block until allowlisted. Rule ids: `private-key`, `api-key-sk`, `github-token`, `slack-token`, `aws-access-key`, `jwt`, `credential-assignment`, `email`, `phone`, `iban`, `credit-card`, `unscannable`.
+The scans are pattern rules: they catch keys, tokens and structured personal data, not free-text private details (names, addresses in prose) — say so when the user relies on them. Never add an allow entry on your own and never to "get the backup through". Binary files and files over 2 MB show up as rule `unscannable` and block until allowlisted. Rule ids: `private-key`, `api-key-sk`, `github-token`, `slack-token`, `aws-access-key`, `google-api-key`, `jwt`, `credential-assignment`, `email`, `phone`, `iban`, `credit-card`, `unscannable`.
 
 A failed push or commit also writes the report (kind `error`) and notifies; the commit stays local and the next run pushes it. A successful run deletes a stale report.
 

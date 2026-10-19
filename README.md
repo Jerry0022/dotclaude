@@ -183,7 +183,9 @@ addresses, phone numbers, IBANs, Luhn-valid card numbers). On any hit nothing is
 committed or pushed: you get a desktop notification and
 `~/.claude/home-backup-report.txt` with file, line and rule — never the value.
 Remove the data, or allow that one finding on purpose in `~/.claude/.backupallow`.
-Commits use a fixed local identity, not your e-mail address.
+Commits use a fixed local identity, not your e-mail address. The scans are
+pattern rules: they catch keys, tokens and structured personal data, not
+free-text private details — what you write into memory files stays your call.
 
 **Token cost: 0.** The daily run is a plain node script — no `claude` call, no
 Claude Code cron, no cloud routine. Only the one-time setup conversation costs

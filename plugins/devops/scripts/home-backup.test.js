@@ -157,6 +157,14 @@ describe('run', () => {
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify.mock.calls[0][0].body).toBe('Home-Backup blockiert: 1 Funde — siehe ~/.claude/home-backup-report.txt');
 
+    // the same finding the next day: still blocked, no second toast; a new finding notifies again
+    expect(hb.runBackup(opts()).status).toBe('blocked');
+    expect(notify).toHaveBeenCalledTimes(1);
+    write('agents/leak2.md', `token ${FAKE_TOKEN}\n`);
+    expect(hb.runBackup(opts()).status).toBe('blocked');
+    expect(notify).toHaveBeenCalledTimes(2);
+    fs.rmSync(path.join(claude, 'agents/leak2.md'));
+
     fs.rmSync(path.join(claude, 'agents/leak.md'));
     expect(hb.runBackup(opts()).status).toBe('pushed');
     expect(fs.existsSync(path.join(claude, hb.REPORT_JSON))).toBe(false);

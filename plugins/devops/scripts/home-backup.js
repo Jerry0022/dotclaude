@@ -32,6 +32,7 @@
  *   2  usage error
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -178,8 +179,18 @@ function clearReport(ctx) {
   for (const f of [REPORT_JSON, REPORT_TXT]) fs.rmSync(inClaude(ctx, f), { force: true });
 }
 
-function writeReport(ctx, kind, message, hits = []) {
-  const report = { generatedAt: ctx.now().toISOString(), kind, message, hits };
+function readJsonSafe(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+/** Identity of a hit set — file, line, rule only (never a value). */
+function hitsFingerprint(hits) {
+  const keys = hits.map((h) => `${h.file}:${h.line}:${h.rule}`).sort();
+  return crypto.createHash('sha256').update(keys.join('\n')).digest('hex');
+}
+
+function writeReport(ctx, kind, message, hits = [], fingerprint = null) {
+  const report = { generatedAt: ctx.now().toISOString(), kind, message, hits, ...(fingerprint && { fingerprint }) };
   const txt = [
     `Home-Backup ${kind === 'blocked' ? 'blockiert' : 'fehlgeschlagen'}: ${message}`,
     '',
@@ -352,9 +363,14 @@ function runBackup(opts = {}) {
   }
   if (hits.length) {
     git(ctx, ['reset', '-q']);
-    writeReport(ctx, 'blocked', `${hits.length} Funde`, hits);
+    // the same findings as last time were already notified — the report stays, the toast does not repeat daily
+    const seen = readJsonSafe(inClaude(ctx, REPORT_JSON));
+    const fingerprint = hitsFingerprint(hits);
+    writeReport(ctx, 'blocked', `${hits.length} Funde`, hits, fingerprint);
     appendLog(ctx, 'blocked', `${hits.length} hits`);
-    ctx.notify({ title: 'Home-Backup', body: `Home-Backup blockiert: ${hits.length} Funde — siehe ~/.claude/${REPORT_TXT}` });
+    if (!(seen && seen.kind === 'blocked' && seen.fingerprint === fingerprint)) {
+      ctx.notify({ title: 'Home-Backup', body: `Home-Backup blockiert: ${hits.length} Funde — siehe ~/.claude/${REPORT_TXT}` });
+    }
     return { code: 1, status: 'blocked', hits, lines: [`home-backup: blocked, ${hits.length} hits — see ~/.claude/${REPORT_TXT}`] };
   }
 
