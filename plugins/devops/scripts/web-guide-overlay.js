@@ -98,7 +98,7 @@
   // expand, edge-tab toggle, Escape) — render() always rebuilds the DOM, so
   // typed/ticked values live here instead of in the (destroyed) elements.
   var savedValues = {}, savedChecklist = [], savedHelpText = "", savedCommentText = "";
-  var commentSubmit = null;
+  var commentSubmit = null, confirmBtns = [], headCloseBtn = null;
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
@@ -130,7 +130,7 @@
     if (typeof step.title !== "string" || typeof step.text !== "string") return null;
     if (step.done !== undefined && typeof step.done !== "boolean") return null;
     if (step.location !== undefined && typeof step.location !== "string") return null;
-    if (step.note !== undefined && typeof step.note !== "string") return null;
+    if (step.note !== undefined && (typeof step.note !== "string" || step.note.length > 400)) return null;
     if (step.copy !== undefined && !isValidCopy(step.copy)) return null;
     if (step.checklist !== undefined && !isValidChecklist(step.checklist)) return null;
     var out = { id: step.id, index: step.index, total: step.total, title: step.title, text: step.text };
@@ -288,6 +288,7 @@
     "  border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.4);display:flex;flex-direction:column}",
     ".head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#6d28d9;color:#fff;border-radius:12px 12px 0 0;cursor:grab}",
     ".collapse{background:transparent;border:1px solid rgba(255,255,255,.6);color:#fff;border-radius:6px;width:22px;height:22px;cursor:pointer;line-height:1}",
+    ".collapse:disabled{opacity:.5;cursor:not-allowed}",
     ".body{padding:12px}",
     ".t{font-weight:700;margin:0 0 6px}",
     ".x{line-height:1.4;margin:0 0 10px}",
@@ -730,6 +731,7 @@
     activeBtns.forEach(function (btn) {
       btn.disabled = true;
     });
+    if (headCloseBtn && currentStep && (currentStep.done || lastSentType === "abort")) headCloseBtn.disabled = true;
   }
 
   function mk(tag, cls, text) {
@@ -796,6 +798,7 @@
       if (!text || sendBtn.disabled) return;
       sendBtn.disabled = true; // AUD-C008: one event per click
       savedCommentText = "";
+      field.value = "";
       emit("comment", undefined, text);
     });
     var sync = function () {
@@ -836,6 +839,7 @@
     });
     row.appendChild(stayBtn);
     row.appendChild(abortBtn);
+    confirmBtns = [stayBtn, abortBtn];
     card.appendChild(row);
     layer.appendChild(card);
     panel.scrollTop = 0;
@@ -844,7 +848,7 @@
     if (focus !== false) {
       try {
         stayBtn.focus();
-      } catch {}
+      } catch { /* focus is a courtesy — a page that blocks it changes nothing */ }
     }
   }
 
@@ -858,6 +862,7 @@
   }
 
   function render(focus) {
+    var hadFocus = !!shadow.activeElement; // a rebuild must not drop focus to the page
     clearEl(panel);
     panel.style.overflow = "";
     activeBtns = [];
@@ -866,6 +871,7 @@
     waitLabelEl = null;
     enterSubmit = null;
     commentSubmit = null;
+    confirmBtns = [];
     if (collapsed || edgeTab) abortConfirm = false;
     clearHeartbeat();
 
@@ -936,7 +942,12 @@
     var closeBtn = mk("button", "collapse", "×");
     closeBtn.type = "button";
     closeBtn.setAttribute("aria-label", currentStep.done ? "Guide schließen" : "Guide abbrechen");
+    // AUD-C008: once the finishing click or the abort went out, × has nothing
+    // left to send. While another click waits, aborting stays possible.
+    closeBtn.disabled = sentFlag && (!!currentStep.done || lastSentType === "abort");
+    headCloseBtn = closeBtn;
     closeBtn.addEventListener("click", function () {
+      if (closeBtn.disabled) return;
       if (currentStep.done) {
         emit("next");
         return;
@@ -1214,7 +1225,7 @@
     }
 
     if (abortConfirm && !collapsed && !currentStep.done) {
-      buildAbortConfirm(emit, focus);
+      buildAbortConfirm(emit, focus || hadFocus);
       return;
     }
 
@@ -1276,6 +1287,13 @@
         saveState();
         focusHandle();
       }
+    } else if (e.key === "Tab" && abortConfirm && confirmBtns.length) {
+      // aria-modal: Tab stays inside the confirm instead of reaching the step behind it.
+      if (typeof e.preventDefault === "function") e.preventDefault();
+      var next = confirmBtns[0] === shadow.activeElement ? confirmBtns[1] : confirmBtns[0];
+      try {
+        next.focus();
+      } catch { /* focus is a courtesy */ }
     } else if (e.key === "Enter" && commentSubmit && shadow.activeElement === commentSubmit.input) {
       if (typeof e.preventDefault === "function") e.preventDefault();
       if (!commentSubmit.btn.disabled) commentSubmit.btn.click();

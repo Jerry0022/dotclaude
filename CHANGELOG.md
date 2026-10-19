@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.275.0] — 2026-10-19
+
+The web guide panel (`/auto-guide`) gets a free question/comment field and a clear exit. Overlay version 1.14.0.
+
+### Added
+- **Question/comment field**: below the step buttons there is always a "Frage oder Kommentar an Claude …" row (Enter or Senden). It sends a new `comment` event, separate from Weiter and "Ich komme nicht weiter".
+- **Step field `note`** (1-400 chars, no HTML): Claude answers a comment or help question by re-sending the same step with `note`. The answer shows as a 💬 block above the step text. `web-guide.js` validates it.
+
+### Changed
+- **The header × replaces the minimise button.** It opens a "Guide wirklich abbrechen?" dialog (Weitermachen / Ja, abbrechen). Escape closes the dialog and Tab stays inside it. The Abbrechen button in the panel foot is gone. To minimise, click the FAB or press Escape. On the final step, × finishes the guide the same way Fertig does.
+- `protocol.md`, `recovery.md`, `authoring.md` (new § Handling `comment`) and `SKILL.md` cover the new event and field.
+
 ## [0.274.1] — 2026-10-19
 
 ### Fixed

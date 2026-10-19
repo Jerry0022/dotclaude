@@ -438,12 +438,44 @@ describe("header × asks before aborting", () => {
     expect((await a.api().wait(0, TOKEN)).type).toBe("timeout");
   });
 
-  test("on the final step × finishes like Fertig, without a confirm", async () => {
+  test("on the final step × finishes like Fertig, without a confirm — once", async () => {
     const a = page();
     a.api().setStep({ ...STEP, done: true }, TOKEN);
-    a.shadow().querySelector('button.collapse[aria-label="Guide schließen"]').click();
+    const close = a.shadow().querySelector('button.collapse[aria-label="Guide schließen"]');
+    close.click();
+    close.click(); // AUD-C008: a second click sends nothing
+    expect(close.disabled).toBe(true);
     expect(a.shadow().querySelector(".confirm")).toBeNull();
     expect((await a.api().wait(0, TOKEN)).type).toBe("next");
+    expect((await a.api().wait(0, TOKEN)).type).toBe("timeout");
+  });
+
+  test("after an abort went out, × is disabled", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').click();
+    btn(a, "Ja, abbrechen").click();
+    expect(a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').disabled).toBe(true);
+  });
+
+  test("Tab stays inside the open confirm; the comment field clears after sending", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').click();
+    const tab = () => a.shadow().activeElement.dispatchEvent(
+      new a.w.KeyboardEvent("keydown", { key: "Tab", bubbles: true, composed: true }));
+    tab();
+    expect(a.shadow().activeElement).toBe(btn(a, "Ja, abbrechen"));
+    tab();
+    expect(a.shadow().activeElement).toBe(btn(a, "Weitermachen"));
+
+    const b = page();
+    b.api().setStep(STEP, TOKEN);
+    const field = b.shadow().querySelector(".comment input");
+    field.value = "Frage";
+    field.dispatchEvent(new b.w.Event("input", { bubbles: true, composed: true }));
+    b.shadow().querySelector(".comment button").click();
+    expect(field.value).toBe("");
   });
 
   test("a plain Weiter says it was sent", () => {
