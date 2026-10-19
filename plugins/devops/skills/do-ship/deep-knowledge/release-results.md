@@ -59,6 +59,27 @@ as file-only (that was the 2026-09-18 failure: a real repo got a skipped
 - Tune timeout per call: `checksTimeoutSec: <30..3600>`.
 - See `deep-knowledge/quality-gates.md → Pre-Merge CI Checks Gate` for the full state matrix.
 
+## Account-limited CI
+
+GitHub's Actions minutes, spending limit and artifact storage quota are shared
+by every repo of the account. When one is used up, checks go red without a
+defect in the code: a job that was never started ("The job was not started
+because … spending limit …"), or a green test job whose `upload-artifact` step
+failed ("Artifact storage quota has been hit"). `ship_release` reads the
+failure annotations of every red Actions check
+(`lib/ci-account-limits.js`) and, when ALL of them match a limit, returns
+`checks.status: "account-limited"` + `ciAccountLimited: { kinds, checks }`
+instead of a plain failure. One real failure annotation ("Process completed
+with exit code 1"), an unreadable annotation or a non-Actions check (Vercel)
+keeps it a normal `failed` — the gate stays fail-closed.
+
+What the skill does with it (SKILL.md Step 4): local gate with tests, then
+`skipChecks: true`, then a card line plus an `open` item to re-run CI after
+the reset. The quota resets on its own (artifact usage is recalculated every
+6–12 h; minutes at the billing cycle), so waiting is never the answer inside
+a ship. Prevention runs on every ship: `ship_preflight.workflowHygiene`
+(Step 1e) makes uploads non-fatal and short-lived in each repo it touches.
+
 ## Post-merge tree verification
 
 **If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:

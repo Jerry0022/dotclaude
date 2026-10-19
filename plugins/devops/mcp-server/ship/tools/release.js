@@ -7,6 +7,7 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { gitArgs, gitTry, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
+import { classifyFailedChecks } from "../lib/ci-account-limits.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
@@ -426,6 +427,22 @@ export async function handler(params) {
           name: c.name || c.workflow,
           link: c.link,
         }));
+        // A red check caused by a GitHub account limit (Actions minutes,
+        // artifact storage quota) says nothing about the code — the skill
+        // falls back to the local quality gate instead of retrying into the
+        // same limit.
+        const limits = checkResult.status === "failed"
+          ? classifyFailedChecks(checkResult.failed, opts)
+          : { limited: false };
+        if (limits.limited) {
+          result.checks.status = "account-limited";
+          result.ciAccountLimited = { kinds: limits.kinds, checks: limits.checks };
+          result.error =
+            `CI could not give a verdict — GitHub account limit (${limits.kinds.join(", ")}) on ` +
+            `${limits.checks.map((c) => c.name).join(", ")}. PR #${pr.number} not merged. ` +
+            `Run the full local gate (ship_build with tests), then retry with skipChecks:true.`;
+          return result;
+        }
         result.error =
           `${checkResult.error}. PR #${pr.number} not merged. ` +
           `Fix the failing checks and retry, or pass skipChecks:true for hot-fix override.`;

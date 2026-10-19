@@ -468,6 +468,17 @@ passes, and compute the diff with `git -C <path>`. Both skills scope the diff
 AND their fixes to that checkout; a mechanical polish fix you apply yourself
 edits the file under `<path>` too.
 
+3. **Workflow hygiene** — `ship_preflight` returns `workflowHygiene.findings`
+   (`file`, `line`, `rule`, `fix`) for every `.github/workflows/*.yml`, not
+   only the diff: `upload-artifact-fatal`, `upload-artifact-retention`,
+   `pr-concurrency`. Apply each `fix` in this ship (mechanical: add
+   `continue-on-error: true`, `retention-days:` — 7, or 1 for a job hand-off —
+   and a `concurrency` group with `cancel-in-progress: true`), commit it with
+   the ship and list it under `changes`. A shared GitHub account limit
+   (artifact quota, Actions minutes) then can no longer turn a green job red
+   in any repo. A fix the workflow's own comments argue against → a
+   `userFinalTest` item instead.
+
 Treat what they return like the other 1d findings:
 - `applicable: false` → nothing; no card entry.
 - harden `fixed` items (it applied them) and polish findings with
@@ -644,6 +655,8 @@ An explicit `tag: null` returns `tagSkipped` + `tagWarning` → a `userFinalTest
 an all-green card (#372). Background: `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Ring tag.
 
 **Pre-merge CI gate** (default ON): after PR create, `ship_release` runs `gh pr checks --watch` (default 600s timeout). If checks fail or timeout → `success: false`, `checksBlocked: true`, PR stays open, branch not deleted. Render `ship-blocked` card with the failing check names + run URLs.
+
+- **`checks.status: "account-limited"`** (`ciAccountLimited.kinds`: `actions-minutes`, `artifact-quota`): every red check failed only on a GitHub account limit, not on the code. Do not retry into the limit and do not render `ship-blocked` for it: run the full local gate (`ship_build` WITH tests — never `buildIdOnly`), and only when it is green call `ship_release` again with `skipChecks: true`. The card then gets a `tests` line `{ method: "CI", result: "nicht gelaufen — GitHub-Limit (<kind>), lokaler Gate grün" }` and an `open` item to re-run CI after the reset (`gh run rerun <id> --failed`). A red local gate → `ship-blocked` as usual. Also under `$SHIP_LOCKOUT`: the fallback needs no judgment. Details: `deep-knowledge/release-results.md` § Account-limited CI.
 
 - Hot-fix bypass (`skipChecks`), timeout tuning and the full state matrix:
   `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/release-results.md` § Pre-merge CI gate options.

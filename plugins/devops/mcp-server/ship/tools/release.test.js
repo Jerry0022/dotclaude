@@ -55,6 +55,10 @@ vi.mock("../lib/github.js", () => ({
   deleteRemoteBranch: vi.fn(() => ({ ok: true, method: "gh-api" })),
 }));
 
+vi.mock("../lib/ci-account-limits.js", () => ({
+  classifyFailedChecks: vi.fn(() => ({ limited: false, kinds: [], checks: [] })),
+}));
+
 // The marker scan reads real files off disk. Stub the scan (the lib has its own
 // suite) and keep the real formatter, so these tests drive the gate itself.
 vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
@@ -88,6 +92,7 @@ import { execFileSync } from "node:child_process";
 import { detectRepoMode } from "../lib/repo-mode.js";
 import * as gitLib from "../lib/git.js";
 import * as ghLib from "../lib/github.js";
+import * as limitsLib from "../lib/ci-account-limits.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
 
 function params(overrides = {}) {
@@ -361,6 +366,30 @@ describe("ship_release — #207 parallel-change data-loss guards", () => {
     expect(ghLib.mergePR).not.toHaveBeenCalled();
     // Blocked before the re-check — only the entry-gate fetch ran.
     expect(fetchBaseCalls().length).toBe(1);
+  });
+
+  test("account-limited checks block with ciAccountLimited instead of a plain failure", async () => {
+    ghLib.watchPRChecks.mockReturnValue({
+      status: "failed",
+      checks: [],
+      failed: [{ name: "e2e", link: "https://github.com/o/r/actions/runs/1/job/2" }],
+      pending: [],
+      error: "1 check(s) failed: e2e",
+    });
+    limitsLib.classifyFailedChecks.mockReturnValueOnce({
+      limited: true,
+      kinds: ["artifact-quota"],
+      checks: [{ name: "e2e", kind: "artifact-quota" }],
+    });
+
+    const res = await handler(params());
+
+    expect(res.success).toBe(false);
+    expect(res.checksBlocked).toBe(true);
+    expect(res.checks.status).toBe("account-limited");
+    expect(res.ciAccountLimited.kinds).toEqual(["artifact-quota"]);
+    expect(res.error).toMatch(/skipChecks:true/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
   });
 
   // #508 — watchPRChecks only reaches "no-checks" after riding out its grace
