@@ -369,11 +369,16 @@ function extractPoints(cardText) {
 }
 
 /** Reason string if the points violate § 5.3 (more than 3 without the
- *  heading carrying "+N weitere"), else null. */
+ *  heading carrying "+N weitere"), else null. Under a test heading only the
+ *  open points (❓ / 👉) count: the steps to test are never folded (#750). */
 function pointsViolation(points, heading) {
-  if (!Array.isArray(points) || points.length <= 3) return null;
+  if (!Array.isArray(points)) return null;
+  const counted = /🧪 Test\b/.test(heading || '')
+    ? points.filter(p => /^\d+\.\s+(❓|👉)\s/.test(p))
+    : points;
+  if (counted.length <= 3) return null;
   if (/\+\d+\s+weitere/.test(heading || '')) return null;
-  return `${points.length} points — max 3 on the card (design § 5.3); more only as "+N weitere" in the heading.`;
+  return `${counted.length} points — max 3 on the card (design § 5.3); more only as "+N weitere" in the heading.`;
 }
 
 /** Rendered-line budget: 14 rows on Desktop, 24 in the terminal (design
