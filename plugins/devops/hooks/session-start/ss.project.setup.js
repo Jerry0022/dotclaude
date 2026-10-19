@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.project.setup
- * @version 0.2.0
+ * @version 0.3.0
  * @event SessionStart
  * @plugin devops
  * @description The automatic part of project setup (the former /setup-project
@@ -12,12 +12,13 @@
  *      `.gitignore` already carries the block gets it rewritten in place when
  *      a plugin release changed it; a repo without a commit yet gets it
  *      written (that is its project setup). An established repo without the
- *      block is left alone — its `.gitignore` is reviewed content, so the
+ *      block keeps its `.gitignore` untouched — reviewed content, so the
  *      move is `scripts/claude-ignore.js migrate`, offered by ship_preflight
- *      when a ship touches `.gitignore` or `.claude/`. Nothing is written
- *      while a rebase or merge is in progress. `.git/info/exclude` is no
- *      longer written (a block an earlier version left there keeps working
- *      until `migrate` removes it).
+ *      when a ship touches `.gitignore` or `.claude/`. Until then the block
+ *      goes into `.git/info/exclude` as a fallback, so a fresh clone or a new
+ *      worktree is covered from its first session; `migrate` removes that
+ *      copy. Nothing is written into `.gitignore` while a rebase or merge is
+ *      in progress.
  *   2. A new repository (no commit yet, or no root `.gitignore`) gets a
  *      one-time offer of the project setup — once per clone, recorded in
  *      ~/.claude/devops-project-setup.json; the setup itself only runs when
@@ -36,7 +37,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { findRepoRoot, gitCommonDir, samePath } = require('../lib/project-root');
-const { applyBlock, migrateGitignore, BLOCK_START } = require('../lib/runtime-ignores');
+const { applyBlock, migrateGitignore, applyExcludeFallback, BLOCK_START } = require('../lib/runtime-ignores');
 
 const STATE_FILE = 'devops-project-setup.json';
 
@@ -59,24 +60,52 @@ function operationInProgress(root) {
     .some((f) => fs.existsSync(path.join(dir, f)));
 }
 
+/** Rewrite `file` with `next` (LF text), keeping its CRLF endings. */
+function writeKeepingEol(file, old, next) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, old.includes('\r\n') ? next.replace(/\n/g, '\r\n') : next);
+}
+
 /**
- * Keep the managed block of `<root>/.gitignore` current.
+ * The fallback: the current block in `<commonDir>/info/exclude` (shared by
+ * every worktree of the clone). Local to the clone, never committed.
+ * @returns {'fallback'|'current'|'error'}
+ */
+function syncExcludeFallback(commonDir) {
+  const file = path.join(commonDir, 'info', 'exclude');
+  let old = '';
+  try { old = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }
+  const text = old.replace(/\r\n/g, '\n');
+  const next = applyExcludeFallback(text);
+  if (next === text) return 'current';
+  try {
+    writeKeepingEol(file, old, next);
+    return 'fallback';
+  } catch {
+    return 'error';
+  }
+}
+
+/**
+ * Keep the managed block of `<root>/.gitignore` current — or, for an
+ * established repo without it, the fallback copy in `info/exclude`.
  * @param {string} root work-tree root
  * @param {boolean} isNew no commit yet
- * @returns {'written'|'current'|'skipped'|'error'}
+ * @param {string|null} [commonDir] the clone's git common dir (for the fallback)
+ * @returns {'written'|'current'|'fallback'|'skipped'|'error'}
  */
-function syncGitignore(root, isNew) {
+function syncGitignore(root, isNew, commonDir = null) {
   const file = path.join(root, '.gitignore');
   let old = '';
   try { old = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }
   const text = old.replace(/\r\n/g, '\n');
   const hasBlock = text.split('\n').some((l) => l.startsWith(BLOCK_START));
-  if (!hasBlock && !isNew) return 'skipped';
+  if (!hasBlock && !isNew) return commonDir ? syncExcludeFallback(commonDir) : 'skipped';
   if (operationInProgress(root)) return 'skipped';
   const next = hasBlock ? applyBlock(text) : migrateGitignore(text).text;
   if (next === text) return 'current';
   try {
-    fs.writeFileSync(file, old.includes('\r\n') ? next.replace(/\n/g, '\r\n') : next);
+    writeKeepingEol(file, old, next);
     return 'written';
   } catch {
     return 'error';
@@ -124,7 +153,7 @@ function setupProject({ cwd, home = os.homedir(), pluginRoot = path.resolve(__di
   if (!common) return { gitignore: null, offer: null };
 
   const reason = newRepoReason(root);
-  const gitignore = syncGitignore(root, reason === 'no commit yet');
+  const gitignore = syncGitignore(root, reason === 'no commit yet', common);
   if (!reason) return { gitignore, offer: null };
   const stateFile = path.join(home, '.claude', STATE_FILE);
   const state = readState(stateFile);

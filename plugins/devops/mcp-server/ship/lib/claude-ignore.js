@@ -38,16 +38,20 @@ export function migrateCommand(cwd, pluginRoot = PLUGIN_ROOT) {
  *   files: repo-relative paths the ship changes (branch diff + working tree)
  * @returns {object|null} a preflight check, or null when the ship does not touch the policy
  */
-export function claudeIgnoreCheck({ cwd, files, commonDir = null, read = readOrNull, pluginRoot = PLUGIN_ROOT }) {
+export function claudeIgnoreCheck({ cwd, files, commonDir = null, read = readOrNull, pluginRoot = PLUGIN_ROOT, tracked = null }) {
   if (!ri.touchesIgnorePolicy(files)) return null;
   const gitignore = read(path.join(cwd, ".gitignore"));
   const exclude = read(path.join(commonDir || path.join(cwd, ".git"), "info", "exclude"));
-  const res = ri.check({ gitignore, exclude });
+  const committed = tracked || ri.trackedUnderBlock(cwd);
+  const res = ri.check({ gitignore, exclude, tracked: committed });
   const check = { name: "claude-ignore", ok: true, issues: res.issues.map((i) => i.code) };
   if (res.policy.length) check.policy = res.policy.map((d) => `${d.line} ignores ${d.path} (versioned by policy)`);
+  if (committed.length) check.untrack = ri.untrackCommand(committed);
   if (!res.ok) {
-    check.fix = migrateCommand(cwd, pluginRoot);
-    check.warning = `.claude ignore block deviates (${res.issues.map((i) => i.detail).join("; ")}) — fix: ${check.fix}`;
+    const fixes = [];
+    if (res.issues.some((i) => i.code !== "tracked-local")) fixes.push(check.fix = migrateCommand(cwd, pluginRoot));
+    if (check.untrack) fixes.push(check.untrack);
+    check.warning = `.claude ignore block deviates (${res.issues.map((i) => i.detail).join("; ")}) — fix: ${fixes.join(" && ")}`;
   }
   return check;
 }

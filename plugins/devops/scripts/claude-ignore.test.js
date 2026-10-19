@@ -49,6 +49,34 @@ describe("claude-ignore migrate / check", () => {
     expect(fs.readFileSync(path.join(d, ".git", "info", "exclude"), "utf8")).not.toContain(".claude/");
     expect(fs.existsSync(path.join(wt, ".gitignore"))).toBe(true);
   });
+
+  test("migrate removes the session-start fallback block from info/exclude", () => {
+    const d = repo();
+    const exclude = path.join(d, ".git", "info", "exclude");
+    fs.writeFileSync(exclude, ri.applyExcludeFallback("# keep me\n"));
+    fs.writeFileSync(path.join(d, ".gitignore"), "node_modules/\n");
+    expect(checkRepo(d).issues.map((i) => i.code)).toEqual(["missing-block"]);
+    expect(migrateRepo(d).exclude.changed).toBe(true);
+    expect(fs.readFileSync(exclude, "utf8")).toBe("# keep me\n");
+    expect(checkRepo(d)).toMatchObject({ ok: true, issues: [] });
+  });
+
+  test("committed files the block ignores are reported with the git rm --cached fix, never untracked", () => {
+    const d = repo();
+    fs.mkdirSync(path.join(d, ".claude"));
+    fs.writeFileSync(path.join(d, ".claude", "launch.json"), "{}");
+    fs.writeFileSync(path.join(d, ".claude", "settings.json"), "{}");
+    execFileSync("git", ["add", "-A"], { cwd: d });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "0"], { cwd: d });
+    const m = migrateRepo(d);
+    expect(m.tracked).toEqual([".claude/launch.json"]);
+    expect(m.untrack).toBe('git rm --cached -- ".claude/launch.json"');
+    const c = checkRepo(d);
+    expect(c.ok).toBe(false);
+    expect(c.issues.map((i) => i.code)).toEqual(["tracked-local"]);
+    expect(c.issues[0].detail).toContain('git rm --cached -- ".claude/launch.json"');
+    expect(execFileSync("git", ["ls-files"], { cwd: d, encoding: "utf8" })).toContain(".claude/launch.json");
+  });
 });
 
 describe("claude-ignore env-example — key names only, never values", () => {

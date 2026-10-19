@@ -6,9 +6,11 @@
  * @description The canonical `.claude` ignore block of a repo
  *   (hooks/lib/runtime-ignores.js) from the command line.
  *
- *     check   [repo] [--json]  deviations of .gitignore / .git/info/exclude; exit 1 on an issue
+ *     check   [repo] [--json]  deviations of .gitignore / .git/info/exclude, and committed files
+ *                              the block ignores (with the `git rm --cached` fix); exit 1 on an issue
  *     migrate [repo]           one current block in .gitignore, duplicates and the old block gone,
- *                              the Claude lines removed from .git/info/exclude — idempotent
+ *                              the Claude lines (and the fallback block) removed from
+ *                              .git/info/exclude — idempotent; reports tracked files, never untracks
  *     env-example [repo]       .env.example (key NAMES only) next to every .env / .env.* file,
  *                              <name>.example.json (values blanked) next to every *.local.json
  *
@@ -48,11 +50,15 @@ function writeLike(file, oldText, next) {
  */
 function checkRepo(repo) {
   const p = gitPaths(repo);
-  return { root: p.root, ...ri.check({ gitignore: read(p.gitignore), exclude: read(p.exclude) }) };
+  const tracked = ri.trackedUnderBlock(p.root);
+  return { root: p.root, tracked, ...ri.check({ gitignore: read(p.gitignore), exclude: read(p.exclude), tracked }) };
 }
 
 /**
- * @returns {{root:string, gitignore:{changed:boolean, removed:string[]}, exclude:{changed:boolean, removed:string[]}}}
+ * Committed files the block ignores are reported, never untracked here —
+ * removing them from the index is a change the user commits on purpose
+ * (`untrack` carries the command).
+ * @returns {{root:string, gitignore:{changed:boolean, removed:string[]}, exclude:{changed:boolean, removed:string[]}, tracked:string[], untrack:string|null}}
  */
 function migrateRepo(repo) {
   const p = gitPaths(repo);
@@ -69,7 +75,11 @@ function migrateRepo(repo) {
       exOut = { changed: true, removed: s.removed };
     }
   }
-  return { root: p.root, gitignore: { changed: giChanged, removed: m.removed }, exclude: exOut };
+  const tracked = ri.trackedUnderBlock(p.root);
+  return {
+    root: p.root, gitignore: { changed: giChanged, removed: m.removed }, exclude: exOut,
+    tracked, untrack: tracked.length ? ri.untrackCommand(tracked) : null,
+  };
 }
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'coverage', 'vendor', '.venv']);
@@ -175,6 +185,7 @@ function main(argv) {
       else {
         process.stdout.write(`[claude-ignore] .gitignore ${r.gitignore.changed ? `updated (${r.gitignore.removed.length} old line(s) folded into the block)` : 'already current'}\n`);
         process.stdout.write(`[claude-ignore] .git/info/exclude ${r.exclude.changed ? `cleaned (${r.exclude.removed.length} Claude line(s) removed)` : 'has no Claude lines'}\n`);
+        if (r.untrack) process.stdout.write(`[claude-ignore] ${r.tracked.length} committed file(s) are ignored by the block but still tracked — untrack them (files stay on disk), then commit: ${r.untrack}\n`);
       }
       return 0;
     }

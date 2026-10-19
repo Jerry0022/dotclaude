@@ -42,6 +42,18 @@ describe("ship_preflight claude-ignore check", () => {
     expect(res.warning).toContain(res.fix);
   });
 
+  test("committed files under the block: a warning with the git rm --cached fix, no migrate when nothing else deviates", () => {
+    const res = claudeIgnoreCheck({
+      cwd: CWD, files: [".claude/launch.json"], tracked: [".claude/launch.json"],
+      read: reader({ "/repo/.gitignore": ri.applyBlock("") }), pluginRoot: "/plugin",
+    });
+    expect(res.ok).toBe(true);
+    expect(res.issues).toEqual(["tracked-local"]);
+    expect(res.fix).toBeUndefined();
+    expect(res.untrack).toBe('git rm --cached -- ".claude/launch.json"');
+    expect(res.warning).toContain(res.untrack);
+  });
+
   test("policy deviations are listed but are not issues", () => {
     const res = claudeIgnoreCheck({ cwd: CWD, files: [".gitignore"], read: reader({ "/repo/.gitignore": ri.applyBlock(".claude/settings.json\n") }) });
     expect(res.issues).toEqual([]);

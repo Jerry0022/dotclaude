@@ -294,12 +294,16 @@ Versioned: `CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`, `commands/`,
 `hooks/`, `agents/`, `deep-knowledge/`, `.claude/project-map.md`,
 `.claude/launch.example.json`, `docs/concepts/`. Local: `settings.local.json`,
 `launch.json`, `worktrees/` and all plugin runtime state. A new repository gets
-the block on its own; an existing one moves over with
+the block on its own. An existing one keeps its `.gitignore` untouched until you
+move it over; until then each clone gets the block in `.git/info/exclude` at
+session start, so a fresh clone is covered from the first session. Move it with
 `node plugins/devops/scripts/claude-ignore.js migrate` — idempotent, it folds
-hand-grown Claude lines into the block and removes the plugin's old lines from
-`.git/info/exclude` (earlier versions kept them there). `/do-ship` checks the
+hand-grown Claude lines into the block and removes the plugin's lines (and the
+fallback copy) from `.git/info/exclude`. Files the block ignores that are
+already committed (e.g. an old `.claude/launch.json`) are reported with the
+`git rm --cached` command; nothing is untracked for you. `/do-ship` checks the
 block only when a ship touches `.gitignore` or `.claude/`, and then hands you
-the `migrate` command instead of blocking. `claude-ignore.js env-example` writes
+the fix instead of blocking. `claude-ignore.js env-example` writes
 a `.env.example` with key names only (never values) for your secrets files.
 
 ### Quiet output style (recommended)

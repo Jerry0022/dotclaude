@@ -130,7 +130,7 @@ const SCHEMA = Object.freeze({
       doc: 'Opt-in: a daily pure-node job commits the allowlisted part of ~/.claude to a private GitHub repo — only after a secret and private-data scan finds nothing (scripts/home-backup.js).',
     }),
     repo: Object.freeze({
-      type: 'string', default: '', globalOnly: true, pattern: /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/,
+      type: 'string', default: '', globalOnly: true, pattern: /^[A-Za-z0-9-]+\/(?!\.+$)[A-Za-z0-9._-]+$/,
       doc: 'The private backup repo as <owner>/<name>, e.g. Jerry0022/claude-home.',
     }),
   }),

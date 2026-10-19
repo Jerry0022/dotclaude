@@ -18,7 +18,7 @@ How to audit or initialize a project's repository structure: .gitignore, LICENSE
 
 | Former step | Now |
 |---|---|
-| Claude/plugin ignore entries | One managed block in `.gitignore` — `# >>> claude (managed) >>>` … `# <<< claude (managed) <<<`, rendered from `hooks/lib/runtime-ignores.js`. `ss.project.setup` writes it into a repo without a commit and keeps an existing block current; an established repo moves over with `migrate` (Step 2). `.git/info/exclude` is no longer written. |
+| Claude/plugin ignore entries | One managed block in `.gitignore` — `# >>> claude (managed) >>>` … `# <<< claude (managed) <<<`, rendered from `hooks/lib/runtime-ignores.js`. `ss.project.setup` writes it into a repo without a commit and keeps an existing block current; an established repo moves over with `migrate` (Step 2). Until then its clones get the block in `.git/info/exclude` as a fallback (fresh clones and new worktrees are covered); `migrate` removes it and reports committed files the block ignores with the `git rm --cached` fix. |
 | Project map | `ship_build` regenerates `.claude/project-map.md` on every ship; `pre.tokens.guard` regenerates it again right before injecting it into a session. |
 | CLAUDE.md budget | `post.claude.budget` measures every Claude context file at write time. |
 | README | `pre.readme.standards` + `readme-standards.md`. |

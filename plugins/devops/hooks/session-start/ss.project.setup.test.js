@@ -39,7 +39,7 @@ function initRepo({ commit = true, gitignore = true } = {}) {
 const gitignoreOf = (repo) => fs.readFileSync(path.join(repo, ".gitignore"), "utf8");
 const blocks = (text) => text.split("\n").filter((l) => l.startsWith(BLOCK_START)).length;
 
-describe("ss.project.setup — the managed block lives in .gitignore, never in .git/info/exclude", () => {
+describe("ss.project.setup — the managed block lives in .gitignore; info/exclude only as the pre-migrate fallback", () => {
   test("a repo without a commit gets the block once; runtime files vanish from status, config does not", () => {
     const repo = initRepo({ commit: false });
     const home = mkTmp("ps-home-");
@@ -62,11 +62,33 @@ describe("ss.project.setup — the managed block lives in .gitignore, never in .
     expect(status).toContain(".claude/settings.json");
   });
 
-  test("an established repo without the block is left alone — migrate is the user's move", () => {
+  test("an established repo without the block keeps its .gitignore — the block goes into info/exclude as a fallback", () => {
     const repo = initRepo();
+    const home = mkTmp("ps-home-");
     const before = gitignoreOf(repo);
-    expect(setupProject({ cwd: repo, home: mkTmp("ps-home-") }).gitignore).toBe("skipped");
+    expect(setupProject({ cwd: repo, home }).gitignore).toBe("fallback");
+    expect(setupProject({ cwd: repo, home }).gitignore).toBe("current");
     expect(gitignoreOf(repo)).toBe(before);
+    const exclude = fs.readFileSync(path.join(repo, ".git", "info", "exclude"), "utf8");
+    expect(blocks(exclude)).toBe(1);
+    // a fresh clone is covered from its first session: runtime files stay out of status
+    fs.mkdirSync(path.join(repo, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(repo, ".claude", "devops-config.json"), "{}");
+    fs.writeFileSync(path.join(repo, ".claude", "settings.json"), "{}");
+    const status = git(repo, "status", "--porcelain", "--untracked-files=all");
+    expect(status).not.toContain("devops-config.json");
+    expect(status).toContain(".claude/settings.json");
+  });
+
+  test("the fallback replaces the old plugin block in info/exclude and keeps the user's lines", () => {
+    const repo = initRepo();
+    const file = path.join(repo, ".git", "info", "exclude");
+    fs.writeFileSync(file, "mine.txt\n# >>> devops-plugin runtime state >>>\n.claude/batch.md\n# <<< devops-plugin runtime state <<<\n");
+    expect(setupProject({ cwd: repo, home: mkTmp("ps-home-") }).gitignore).toBe("fallback");
+    const text = fs.readFileSync(file, "utf8");
+    expect(text).toContain("mine.txt");
+    expect(text).not.toContain("devops-plugin runtime state");
+    expect(blocks(text)).toBe(1);
   });
 
   test("a stale block is rewritten in place, user lines around it survive", () => {

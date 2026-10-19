@@ -283,7 +283,34 @@ function applyBlock(text) {
   return join([...kept.slice(0, a), ...renderBlock().split('\n'), ...kept.slice(b + 1)]);
 }
 
-/** Lines that ignore a VERSIONED path (outside the block): policy deviations to report, never auto-fixed. */
+/**
+ * How the normalized pattern `n` ignores the normalized VERSIONED path `v`:
+ * "dir" (n is a parent folder of `v` — git cannot re-include anything below
+ * an excluded folder), "glob" (`v` itself, `<dir>/*`, `<dir>/**` or a long
+ * `prefix*` — a later `!` line can re-include) or null.
+ */
+function ignoresVersioned(n, v) {
+  if (v.startsWith(`${n}/`)) return 'dir';
+  if (n === v) return 'glob';
+  const base = n.replace(/\/\*\*?$/, '');
+  if (base !== n && (v === base || v.startsWith(`${base}/`))) return 'glob';
+  if (n.endsWith('*') && n.length > 8 && v.startsWith(n.slice(0, -1))) return 'glob';
+  return null;
+}
+
+/** A `!pattern` line, normalized like normalizePattern, or null. */
+function normalizeNegation(line) {
+  const t = String(line).trim();
+  return t.startsWith('!') ? normalizePattern(t.slice(1)) : null;
+}
+
+/**
+ * Lines that ignore a VERSIONED path (outside the block): policy deviations to
+ * report, never auto-fixed. Parent folders (`.claude/`, `**\/.claude/`) and
+ * globs (`.claude/*`, `.claude/**`) count; a later `!` line that re-includes
+ * the path clears a glob, never a parent folder (git cannot re-include below
+ * an excluded folder).
+ */
 function policyDeviations(text) {
   const lines = lf(text).split('\n');
   const inBlock = new Set();
@@ -294,10 +321,63 @@ function policyDeviations(text) {
     if (inBlock.has(i)) return;
     const n = normalizePattern(line);
     if (n === null) return;
-    const hit = versioned.find((v) => n === v || n === `${v}/*` || n === `${v}/**` || (n.endsWith('*') && v.startsWith(n.slice(0, -1)) && n.length > 8));
-    if (hit) out.push({ line: line.trim(), path: VERSIONED[versioned.indexOf(hit)] });
+    const hit = versioned.findIndex((v) => {
+      const how = ignoresVersioned(n, v);
+      if (!how) return false;
+      if (how === 'dir') return true;
+      // re-included by a later negation?
+      return !lines.slice(i + 1).some((l, k) => {
+        if (inBlock.has(i + 1 + k)) return false;
+        const m = normalizeNegation(l);
+        return m !== null && (m === v || v.startsWith(`${m}/`));
+      });
+    });
+    if (hit !== -1) out.push({ line: line.trim(), path: VERSIONED[hit] });
   });
   return out;
+}
+
+/**
+ * `text` (a `.git/info/exclude`) carrying the current managed block — the
+ * fallback for a repo whose `.gitignore` has no block yet, so a fresh clone or
+ * a new worktree of it is covered until `migrate` moves the block into
+ * `.gitignore` (and `stripExclude` removes this copy). The old plugin block is
+ * replaced; everything else stays. Idempotent.
+ */
+function applyExcludeFallback(text) {
+  const lines = lf(text).split('\n');
+  const legacy = blockRanges(lines, LEGACY_START, LEGACY_END);
+  return applyBlock(join(cut(lines, legacy).kept));
+}
+
+/**
+ * Tracked files of the repo at `root` that the block ignores — already
+ * committed, so the block alone does not stop them from being committed
+ * again. `git ls-files -c -i -X <block>`; [] on any failure.
+ * @returns {string[]} repo-relative paths
+ */
+function trackedUnderBlock(root, { timeout = 10_000 } = {}) {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { execFileSync } = require('child_process');
+  const tmp = path.join(os.tmpdir(), `claude-block-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  try {
+    fs.writeFileSync(tmp, renderBlock() + '\n');
+    const out = execFileSync('git', ['ls-files', '-z', '-c', '-i', '-X', tmp], {
+      cwd: root, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return out.split('\0').filter(Boolean);
+  } catch {
+    return [];
+  } finally {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* temp file */ }
+  }
+}
+
+/** The command that stops tracking `files` (they stay on disk). */
+function untrackCommand(files) {
+  return `git rm --cached -- ${files.map((f) => `"${f}"`).join(' ')}`;
 }
 
 /**
@@ -365,10 +445,14 @@ function stripExclude(text) {
 /**
  * Deviations from the canonical layout. Only structure counts as an issue
  * (fixable by `migrate`); policy deviations are reported apart.
- * @param {{gitignore:string|null, exclude:string|null}} files current contents ('' / null when absent)
+ * A managed block in `info/exclude` is the expected fallback while
+ * `.gitignore` has none; once `.gitignore` carries the block it is a leftover.
+ * `tracked` (from trackedUnderBlock) lists committed files the block ignores —
+ * an issue migrate cannot fix; its detail carries the `git rm --cached` fix.
+ * @param {{gitignore:string|null, exclude:string|null, tracked?:string[]}} files current contents ('' / null when absent)
  * @returns {{ok:boolean, issues:{code:string, detail:string}[], policy:{line:string, path:string}[]}}
  */
-function check({ gitignore, exclude }) {
+function check({ gitignore, exclude, tracked = [] }) {
   const gi = lf(gitignore || '');
   const lines = gi.split('\n');
   const issues = [];
@@ -387,9 +471,17 @@ function check({ gitignore, exclude }) {
   for (const [a, b] of [...ranges, ...legacy]) for (let i = a; i <= b; i++) inAnyBlock.add(i);
   const outside = lines.filter((l, i) => !inAnyBlock.has(i) && isBlockEntry(l)).map((l) => l.trim());
   if (outside.length) issues.push({ code: 'duplicate-lines', detail: `${outside.length} hand-written Claude line(s) the block already covers: ${outside.slice(0, 5).join(', ')}` });
-  const ex = lf(exclude || '');
-  if (blockRanges(ex.split('\n'), LEGACY_START, LEGACY_END).length) {
+  const ex = lf(exclude || '').split('\n');
+  if (blockRanges(ex, LEGACY_START, LEGACY_END).length) {
     issues.push({ code: 'exclude-block', detail: '.git/info/exclude still has the plugin block from an earlier version' });
+  } else if (ranges.length && blockRanges(ex, BLOCK_START, BLOCK_END).length) {
+    issues.push({ code: 'exclude-block', detail: '.git/info/exclude still has the fallback block although .gitignore carries it now' });
+  }
+  if (tracked && tracked.length) {
+    issues.push({
+      code: 'tracked-local',
+      detail: `${tracked.length} committed file(s) the block ignores (${tracked.slice(0, 5).join(', ')}) — untrack them: ${untrackCommand(tracked)}`,
+    });
   }
   return { ok: issues.length === 0, issues, policy: policyDeviations(gi) };
 }
@@ -407,4 +499,5 @@ module.exports = {
   BLOCK_START, BLOCK_END, LEGACY_START, LEGACY_END,
   allEntries, renderBlock, applyBlock, normalizePattern, isBlockEntry,
   migrateGitignore, stripExclude, check, policyDeviations, touchesIgnorePolicy,
+  applyExcludeFallback, trackedUnderBlock, untrackCommand,
 };

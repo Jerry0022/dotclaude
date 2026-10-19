@@ -214,3 +214,53 @@ describe("canonical .gitignore block — migrate, check, exclude cleanup", () =>
     expect(ri.touchesIgnorePolicy(["src/.gitignore.bak"])).toBe(false);
   });
 });
+
+describe("policy deviations — parent folders, globs and negations", () => {
+  const ri = require("./runtime-ignores.js");
+  const paths = (text) => ri.policyDeviations(text).map((d) => d.line);
+
+  test("a parent folder or a glob over .claude/ ignores versioned paths and is reported", () => {
+    for (const line of [".claude/", "/.claude", "**/.claude/", ".claude/**", ".claude/*", "docs/"]) {
+      expect(paths(`${line}\n`), line).toEqual([line]);
+    }
+  });
+
+  test("a glob re-included by a later negation is no deviation; a parent folder cannot be re-included", () => {
+    const allBack = [".claude/*", ...ri.VERSIONED.filter((v) => v.startsWith(".claude/")).map((v) => `!${v}`)].join("\n");
+    expect(paths(allBack)).toEqual([]);
+    expect(paths(".claude/*\n!.claude/skills/\n")).toEqual([".claude/*"]);
+    expect(paths(".claude/\n!.claude/skills/\n")).toEqual([".claude/"]);
+    expect(paths(".claude/settings.json\n!.claude/settings.json\n")).toEqual([]);
+  });
+
+  test("block entries and unrelated lines are no deviation", () => {
+    expect(paths(ri.applyBlock("node_modules/\n.claude-tmp/\n"))).toEqual([]);
+  });
+});
+
+describe("info/exclude fallback block", () => {
+  const ri = require("./runtime-ignores.js");
+
+  test("applyExcludeFallback is idempotent, replaces the old plugin block and keeps other lines", () => {
+    const once = ri.applyExcludeFallback(`/AUTONOMOUS-*\n${ri.LEGACY_START} >>>\n.claude/batch.md\n${ri.LEGACY_END} <<<\n`);
+    expect(once).toContain("/AUTONOMOUS-*");
+    expect(once).not.toContain(ri.LEGACY_START);
+    expect(once.split("\n").filter((l) => l === ri.BLOCK_START)).toHaveLength(1);
+    expect(ri.applyExcludeFallback(once)).toBe(once);
+    expect(ri.stripExclude(once).text).toBe("/AUTONOMOUS-*\n");
+  });
+
+  test("check: the fallback is expected while .gitignore has no block, a leftover once it has", () => {
+    const exclude = ri.applyExcludeFallback("");
+    expect(ri.check({ gitignore: "node_modules/\n", exclude }).issues.map((i) => i.code)).toEqual(["missing-block"]);
+    expect(ri.check({ gitignore: ri.applyBlock(""), exclude }).issues.map((i) => i.code)).toEqual(["exclude-block"]);
+  });
+
+  test("check: tracked files under the block are an issue carrying the git rm --cached fix", () => {
+    const res = ri.check({ gitignore: ri.applyBlock(""), exclude: "", tracked: [".claude/launch.json"] });
+    expect(res.ok).toBe(false);
+    expect(res.issues).toHaveLength(1);
+    expect(res.issues[0].code).toBe("tracked-local");
+    expect(res.issues[0].detail).toContain('git rm --cached -- ".claude/launch.json"');
+  });
+});
