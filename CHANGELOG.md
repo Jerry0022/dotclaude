@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.277.0] — 2026-10-20
+
+A ship no longer gets stuck on a GitHub account limit, and every ship spreads CI defaults that keep a shared limit from turning green jobs red.
+
+### Added
+- **Account-limited CI is told apart from a real failure.** When every red check failed only because of a GitHub account limit, `ship_release` returns `checks.status: "account-limited"` and `ciAccountLimited` instead of a plain failure. The limits are Actions minutes or spending limit (job never started) and the artifact storage quota (green tests, failed `upload-artifact`). `lib/ci-account-limits.js` reads the check-run annotations to decide. Any other failure annotation, an unreadable annotation or a non-Actions check keeps the gate closed. The skill then runs the full local gate and merges with `skipChecks`. The card shows that CI did not run and gives an open point to re-run it after the reset.
+- **Workflow hygiene in every preflight.** `ship_preflight` returns `workflowHygiene.findings` for all `.github/workflows/*.yml` (`lib/workflow-hygiene.js`). It flags report uploads (`if: failure()/always()/!cancelled()`) without `continue-on-error`, uploads without `retention-days` (the 90-day default holds the shared quota) and `pull_request` workflows without a `concurrency` group. do-ship Step 1e applies the fixes inside the ship, so each consumer repo picks the defaults up on its next ship. Hand-off uploads between jobs stay fatal.
+
 ## [0.276.2] — 2026-10-20
 
 ### Fixed
