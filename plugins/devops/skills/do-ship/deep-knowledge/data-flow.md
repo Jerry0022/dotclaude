@@ -22,9 +22,9 @@ ship_release → { commit, pushed, pr, merged, tag, remoteBranchDeleted? }  ← 
       ↓
 ship_cleanup → { cleaned }  |  ship_cleanup({ keep: true }) → { cleaned: ["sentinel"] }
       ↓
-render_completion_card → card markdown (VERBATIM)
-      ↓
 [memory dream — silent, only if memories touched]
+      ↓
+render_completion_card → card markdown (VERBATIM) — the LAST action
 ```
 
 ## Intermediate ship (sub-branch → feature branch)
@@ -44,7 +44,7 @@ ship_release → { commit, pushed, pr, merged: "feat/42", tag: null, remoteBranc
       ↓
 ship_cleanup → { cleaned, intermediate: true }  ← feature branch preserved
       ↓
-render_completion_card → card markdown (VERBATIM)
-      ↓
 [memory dream — silent, only if memories touched]
+      ↓
+render_completion_card → card markdown (VERBATIM) — the LAST action
 ```

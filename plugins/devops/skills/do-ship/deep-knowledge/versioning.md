@@ -44,7 +44,7 @@ Update ALL applicable files in a **single commit**. Missing any is a ship-blocki
 | `CHANGELOG.md` | New `## [X.Y.Z] — YYYY-MM-DD` section at top | Always |
 | Project-specific files | From extension `reference.md` | If defined |
 
-Note: `marketplace.json` has no version field — do not update it.
+Note: `marketplace.json` carries versions too (`metadata.version` and every `plugins[].version`) — update and verify them with the other version files.
 
 **npm project** (`package.json` exists, no `plugin.json`):
 

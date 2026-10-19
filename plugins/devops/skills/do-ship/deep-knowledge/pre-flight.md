@@ -84,9 +84,10 @@ After Step 4 (Commit/Push/PR/Merge), before Step 5 (Cleanup), verify:
 
 ```bash
 # 6a. Alpha channel tag exists on remote (ring model — ship publishes to alpha)
-git ls-remote --tags origin | grep "alpha/v$NEW_VERSION"
+git ls-remote --tags origin "alpha/v$NEW_VERSION"
 ```
-If no tag → CREATE it now (annotated: `git tag -a alpha/v$NEW_VERSION origin/main -m '{"channel":"alpha"}'`).
+(exact ref, not a substring grep — `alpha/v1.2.3` would also match `alpha/v1.2.30`.)
+If no tag → do NOT tag `origin/main` by hand (it may have moved since the merge, and tags are immutable). Use the `tagHandoff` from the `ship_release` result, or follow `release-flow.md` § owner hand-off: tag the MERGE commit with `{"channel":"alpha","version":"<x.y.z>"}` and push it.
 This is the most commonly missed step.
 
 ```
