@@ -37,3 +37,10 @@ test("childEnv sets the key only in the child and still strips the parent's Clau
   expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();
   expect(env.DEVOPS_ANTHROPIC_API_KEY).toBeUndefined(); // the plugin under test must not spend the credit
 });
+
+test("--timeout-min must be a positive number", () => {
+  const { parseArgs } = require("./ab-run.js");
+  expect(() => parseArgs(["--case", "x", "--timeout-min", "abc"])).toThrow(/timeout-min/);
+  expect(() => parseArgs(["--case", "x", "--timeout-min", "0"])).toThrow(/timeout-min/);
+  expect(parseArgs(["--case", "x", "--timeout-min", "2.5"]).timeoutMin).toBe(2.5);
+});
