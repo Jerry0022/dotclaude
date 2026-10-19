@@ -119,6 +119,16 @@ describe("post.flow.completion — completion-card instruction completeness", ()
     cleanup(dir);
   });
 
+  // auto-fix evals: runs fixed the bug and rendered the card without the Step 8
+  // report — "never restate what the card shows (changes …)" read as covering it.
+  test("keeps a skill-required report (auto-fix root cause file:line) out of the no-recap rule", () => {
+    const dir = project();
+    const out = runHook(dir, "s-report");
+    expect(out).toContain("A report the");
+    expect(out).toContain("running skill requires (e.g. auto-fix: root cause with file:line) is part of that answer");
+    cleanup(dir);
+  });
+
   test("scopes `delivery` to turns that reached a pipeline stage, not every card", () => {
     const dir = project();
     const out = runHook(dir, "s-track-scope");

@@ -117,9 +117,11 @@ Then verify:
 2. Related functionality still works
 3. Run tests if available
 
-## Step 8 — Report
+## Step 8 — Report (text, before the card)
 
-Always report:
+Write the report as text in your reply, before the Step 9 card call. It is
+the answer to the user's request (#642), not a recap of the card: never drop
+it because the card's `changes` names the same fix.
 - **Root cause**: the exact file:line where the failure originates
 - **What was wrong**: the broken assumption or logic error
 - **What was fixed**: the change made (or proposed)
@@ -127,7 +129,7 @@ Always report:
 
 ## Step 9 — Completion Card
 
-Call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with the
+Only once the Step 8 report is written, call `mcp__plugin_devops_dotclaude-completion__render_completion_card` with the
 variant that matches the outcome — variant is NOT fixed for this skill:
 
 | Outcome | Variant |

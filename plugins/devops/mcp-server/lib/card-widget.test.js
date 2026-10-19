@@ -888,6 +888,7 @@ describe("cardWidgetInstruction", () => {
     expect(text).toMatch(/no prose that restates the card/);
     expect(text).toMatch(/Text before the widget: the full answer to the user's question/);
     expect(text).toMatch(/the card never carries it/);
+    expect(text).toMatch(/a report the running skill requires \(e\.g\. auto-fix: root cause with file:line\) included/);
   });
 
   test("names the saved widget file when one was written, and only then", () => {
