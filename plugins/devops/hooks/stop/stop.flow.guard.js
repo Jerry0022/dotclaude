@@ -298,12 +298,12 @@ process.stdin.on('end', () => {
   if (decision.action !== 'block' && !silent && !scheduledTask && !guideActive) {
     const asked = readSessionFile(INTERRUPT_FLAG, sessionId, EXACT);
     if (asked) {
-      try { fs.unlinkSync(asked.filePath); } catch {}
+      try { fs.unlinkSync(asked.filePath); } catch { /* marker already gone — nothing to clear */ }
     } else if (!cardRendered) {
       const next = interruptedTitle(readCurrentTitle(hook.transcript_path));
       let marked = false;
       if (next) {
-        try { writeSessionFile(sessionFile(INTERRUPT_FLAG, sessionId), next); marked = true; } catch {}
+        try { writeSessionFile(sessionFile(INTERRUPT_FLAG, sessionId), next); marked = true; } catch { /* unwritable marker → no block (see below) */ }
       }
       // No marker, no block: without it the follow-up stop could block again.
       if (marked) {

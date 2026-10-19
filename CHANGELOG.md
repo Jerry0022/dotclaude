@@ -2,6 +2,23 @@
 
 ## [0.273.0] — 2026-10-19
 
+Session titles now show two icons, status first and activity second, plus one English keyword: `👉 📦 Ready – X`, `⏳ 🚀 Shipping – X`, `🟩 🚀 Released Alpha – X`. The title and the card's CTA heading come from one table, so they can no longer drift apart. The workspace question ("Wo soll die Arbeit laufen?") is now asked only until a project's handling is decided.
+
+### Added
+- **`hooks/lib/title-scheme.js`**: one table of STATUS icons (⏳ working, 👉 your move, 🟩 done, 🟥 aborted, ⏸️ paused) and ACTIVITY icons. It feeds both the session title and the CTA heading (`cardHead`). 👉 vs 🟩 is decided by mandatory user steps, not by variant: an alpha release with only an optional promote offer is 🟩.
+- **Interrupted turns**: a turn that ends without a card turns a bare `⏳` title into `👉 ⚡ Interrupted – …` (`stop.flow.guard`).
+- **devops-config `workspace.ownWorktree`**: the first `EnterWorktree` of a project stores it (`post.worktree.enter`). After that, `ss.git.check` still reports uncommitted or unpushed work but sends new work into its own worktree without asking.
+- Optional card field **`cta.activity`** for named aborts.
+
+### Changed
+- Wording is consistent: Released Alpha/Beta/Stable, Promoted Beta/Stable, Started — never LIVE. The card's component line uses 🧩.
+- The scheme moved into its own doc, `deep-knowledge/session-title-scheme.md` (`completion-card-design.md` was over its line budget).
+
+### Fixed
+- Title stripping removes only known prefixes. Before, a title such as `⏳ Fix Login – Bug` lost words. Legacy single-icon prefixes are still stripped.
+
+## [0.273.0] — 2026-10-19
+
 Every call that runs on the API credit is now logged, so you can see what it was spent on.
 
 ### Added

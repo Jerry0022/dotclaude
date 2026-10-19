@@ -22,7 +22,7 @@ function project() {
 }
 
 function cleanup(dir) {
-  for (const d of [dir, dir + "-tmp"]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
+  for (const d of [dir, dir + "-tmp"]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best-effort temp cleanup */ } }
 }
 
 /** A short chat turn (no tools, no substantial prose) with `title` as the sidebar title. */
