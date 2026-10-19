@@ -367,6 +367,15 @@ describe("concept-build — round-2 review fixes", () => {
     expect(doc(r.html).querySelector('textarea[data-comment="n"]').textContent).toBe("{{keep.this}}");
   });
 
+  test("a <textarea> named in a style/script comment does not open a skip span (#725)", () => {
+    const locale = new Map([["variant.include", "Include"], ["panel.x", "X"]]);
+    const html = '<style>/* a bare `<textarea data-comment>` */</style><script>// `<pre>` here</script>'
+      + '<span>{{variant.include}}</span><textarea>{{variant.include}}</textarea><script>"{{panel.x}}"</script>';
+    expect(cb.substitute(html, locale, "s")).toBe(
+      '<style>/* a bare `<textarea data-comment>` */</style><script>// `<pre>` here</script>'
+      + '<span>Include</span><textarea>{{variant.include}}</textarea><script>"X"</script>');
+  });
+
   test("a CRLF-only change of the page is not a hand edit", () => {
     const { dir, home } = project();
     cb.init(dir, { title: "T" });
