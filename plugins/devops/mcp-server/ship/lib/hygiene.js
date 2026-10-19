@@ -21,10 +21,10 @@
  *          of a merged PR (squash merges), or its CONTENT is: every file it
  *          touched is identical in the default branch, or re-applying its
  *          changes onto the default branch is a no-op
- *          (scripts/lib/content-landed.js). Being reachable from a merged PR
- *          head (a sub-agent branch merged into the PR's branch, #572) is not
- *          enough on its own — the PR may have dropped those changes before
- *          the squash;
+ *          (scripts/lib/content-landed.js). Being reachable from the merged
+ *          head of ANOTHER branch (a sub-agent branch merged into the PR's
+ *          branch, #572) is not enough on its own — that PR may have dropped
+ *          those changes before the squash;
  *        - worktree: a session worktree (under `.claude/worktrees/`), not
  *          locked, clean (`status --porcelain --untracked-files=all
  *          --ignored=matching` lists nothing but regenerable build output,
@@ -351,40 +351,28 @@ export function reachableFromMerged(cwd, merged, baseRef) {
 }
 
 /**
- * The content `sha` changed since its fork from `baseRef` is in `target`
- * (default: `baseRef`) — scripts/lib/content-landed.js, shared with the WIP
- * watch.
- */
-function contentLanded(sha, ctx, target = ctx.baseRef) {
-  const opts = { maxFiles: TREE_CHECK_MAX_FILES };
-  if (target !== ctx.baseRef) opts.forkRef = ctx.baseRef;
-  return contentInBase(ctx.cwd, sha, target, opts).landed;
-}
-
-/**
  * How `sha` reached the default branch: "ancestor" | "pr" | "tree", or null.
  *
- * Reachability is history, not content: a commit reachable from a merged PR
- * head (a sub-agent branch merged into the PR branch, #572), or an ancestor
- * of a same-name merged head, can still have had its changes reverted or
- * dropped in a conflict resolution before the squash. Those paths therefore
- * count only when the content check proves the branch's own changes are in
- * main (or in that head). A tip that IS a merged PR head, or an ancestor of
- * the default branch, needs no content check.
+ * "pr" is the branch's OWN history: its tip is a merged PR head, or an
+ * ancestor of a merged head of the same branch name. Being reachable from a
+ * merged head of ANOTHER branch (a sub-agent branch merged into the PR
+ * branch, #572) proves nothing about content — that PR may have reverted the
+ * changes, or dropped them in a conflict resolution, before the squash — so
+ * such a branch counts only when its content is in the default branch
+ * ("tree", scripts/lib/content-landed.js, the rule the WIP watch shares).
  * @param {{cwd:string, baseRef:string, merged:{bySha:Set<string>, byName:Map<string,string[]>}|null}} ctx
  */
 export function landedVia(sha, branch, ctx) {
   if (!sha) return null;
   if (gitOk(["merge-base", "--is-ancestor", sha, ctx.baseRef], ctx.cwd)) return "ancestor";
-  if (ctx.merged && ctx.merged.bySha.has(sha)) return "pr";
-  if (contentLanded(sha, ctx)) return "tree";
   if (ctx.merged) {
+    if (ctx.merged.bySha.has(sha)) return "pr";
     // local tip behind the merged PR head (pushed from elsewhere, then merged)
     for (const head of (branch && ctx.merged.byName.get(branch)) || []) {
-      if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd) && contentLanded(sha, ctx, head)) return "pr";
+      if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
     }
   }
-  return null;
+  return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
 }
 
 /** An ignored porcelain path that is regenerable build output. */
