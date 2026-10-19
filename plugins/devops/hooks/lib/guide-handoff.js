@@ -73,6 +73,7 @@ const SERVICE_PATTERNS = [
   { name: 'AWS Console', re: /\baws\s+console\b/i },
   { name: 'OpenAI Console', re: /\bopenai\s+console\b/i },
   { name: 'Anthropic Console', re: /\banthropic\s+console\b/i },
+  { name: 'Twitch Developer Console', re: /\btwitch\b/i },
   { name: 'cron-job.org', re: /\bcron-job\.org\b/i },
   // "Neon" alone is too common a word (colour, sign) — only counts near its
   // Postgres/database context (#519, StretchTimer: Vercel Marketplace → Neon).
@@ -101,6 +102,8 @@ const CREDENTIAL_NOUN_RE_SRC = [
   String.raw`webhooks?`, String.raw`cron[-\s]?jobs?`,
   // AUD-C042: a bot token ("paste its token") is a credential, too.
   String.raw`tokens?`,
+  // #742: client IDs/secrets and registered apps ("Twitch-App registrieren").
+  String.raw`client[-\s]?(?:id|secret)s?`, String.raw`apps?`,
 ];
 
 /** User-directed creation verbs (de+en, incl. zu-infinitives) — signal (c). */
@@ -123,6 +126,11 @@ const CREATION_VERB_RE_SRC = [
   // service and credential-noun conditions keep plain file copies out.
   String.raw`kopieren`, String.raw`kopiere`, String.raw`kopier`,
   String.raw`copy`, String.raw`copying`,
+  // #742: hand-off verbs for dashboard registrations and secrets.
+  String.raw`registrieren`, String.raw`registriere`, String.raw`register`, String.raw`registering`,
+  String.raw`setzen`, String.raw`setze`, String.raw`set`,
+  String.raw`hinterlegen`, String.raw`hinterlege`,
+  String.raw`liefern`, String.raw`liefere`, String.raw`provide`, String.raw`providing`,
 ];
 
 /** Unicode-aware whole-word alternative (JS `\b` is ASCII-only, so
@@ -344,6 +352,27 @@ function userWaitingValidation(validation) {
     .filter(Boolean);
 }
 
+/** Auto-guide trigger phrase at the start of a prepared reply (de+en). */
+const REPLY_TRIGGER_RE = new RegExp(
+  String.raw`^\s*(?:f(?:ü|ue|u)hr(?:e)?\s+mich\s+(?:per|mit|via)\s+(?:web|auto)[-\s]?guide\s+durch|guide\s+me\s+through)\s+(.+?)\s*[.!]?\s*$`,
+  'isu'
+);
+
+/**
+ * #742: `{ service }` when an item's `reply` starts with the guide trigger
+ * phrase; the service is the reply's object (a known service name wins).
+ * @param {unknown} item
+ * @returns {{service:string}|null}
+ */
+function replyHandoff(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.reply !== 'string') return null;
+  const m = item.reply.match(REPLY_TRIGGER_RE);
+  if (!m) return null;
+  const object = m[1].replace(/^(?:die|den|das|der|dem|the|a|an)\s+/i, '').trim();
+  const known = matchService(object);
+  return { service: known && known.named ? known.name : object };
+}
+
 /**
  * Scan the completion card's PAYLOAD (`userFinalTest`, `open`, `userTest`
  * and the requirement + evidence of `validation` items with
@@ -357,6 +386,12 @@ function userWaitingValidation(validation) {
  * @returns {{service:string}|null}
  */
 function detectCardHandoff(card) {
+  // #742: an open item whose own reply asks for the guide is an explicit
+  // author-declared hand-off, independent of the text heuristics.
+  for (const item of asList(card && card.open)) {
+    const hit = replyHandoff(item);
+    if (hit) return hit;
+  }
   // AUD-C042: each list is read as one block, so a numbered list split over
   // items or a `→` chain in one item hits the same shapes as in chat.
   const lists = [
@@ -408,6 +443,7 @@ module.exports = {
   hasHandoffSentence,
   detectWebHandoff,
   detectCardHandoff,
+  replyHandoff,
   webGuideInvokedThisTurn,
   writePendingHandoff,
   consumePendingHandoff,

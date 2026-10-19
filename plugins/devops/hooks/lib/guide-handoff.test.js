@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   detectWebHandoff,
   detectCardHandoff,
+  replyHandoff,
   hasHandoffSentence,
   matchService,
   hasNumberedUiSteps,
@@ -461,5 +462,36 @@ describe("AUD-C060: the guide-button prompt routes to auto-guide", () => {
     const { loadAllSkills } = await import("./skill-meta.js");
     const skills = loadAllSkills(path.join(__dirname, "..", "..", "skills"));
     expect(routeMessage(prompt, skills).map((e) => e.skill)).toContain("auto-guide");
+  });
+});
+
+describe("detectCardHandoff — open-item replies and hand-off verbs (#742)", () => {
+  const twitch = { text: "Twitch-App registrieren (public, Redirect http://localhost) und Client-ID als SCC_TWITCH_CLIENT_ID liefern", reply: "Führ mich per Web-Guide durch die Twitch-App-Registrierung." };
+  const secret = { text: "ANTHROPIC_API_KEY als Secret in Supabase sc-companion setzen (KI-Fallback des Event-Scrapers)", reply: "Führ mich per Web-Guide durch das Supabase-Secret." };
+
+  test("the issue items each yield a hand-off", () => {
+    expect(detectCardHandoff({ open: [twitch] })).not.toBeNull();
+    expect(detectCardHandoff({ open: [secret] })).not.toBeNull();
+    expect(detectCardHandoff({ open: [twitch, secret] })).not.toBeNull();
+  });
+
+  test("reply trigger phrase alone is enough (de + en)", () => {
+    expect(detectCardHandoff({ open: [{ text: "Irgendwas", reply: "Führ mich per Web-Guide durch die Twitch-App-Registrierung." }] }))
+      .toEqual({ service: "Twitch Developer Console" });
+    expect(detectCardHandoff({ open: [{ text: "Do the thing", reply: "Guide me through the Acme dashboard setup." }] }))
+      .toEqual({ service: "Acme dashboard setup" });
+  });
+
+  test("unrelated replies and non-open lists do not trigger", () => {
+    expect(detectCardHandoff({ open: [{ text: "Nachbessern", reply: "Bitte die Tests anpassen." }] })).toBeNull();
+    expect(replyHandoff({ reply: "Führ mich per Web-Guide durch X" })).toEqual({ service: "X" });
+    expect(replyHandoff("Guide me through X")).toBeNull();
+  });
+
+  test("prose with the new verbs is detected", () => {
+    expect(detectWebHandoff("Secret in Supabase setzen")).not.toBeNull();
+    expect(detectWebHandoff("Please register the app at Twitch.")).not.toBeNull();
+    expect(detectWebHandoff("Ich habe die Twitch-App registriert und das Secret in Supabase gesetzt.")).toBeNull();
+    expect(detectWebHandoff("Soll ich das Secret in Supabase setzen?")).toBeNull();
   });
 });
