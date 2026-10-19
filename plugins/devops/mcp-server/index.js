@@ -1514,6 +1514,23 @@ function pointsForKey(input, key, lang) {
   return skip && key !== 'vv-running' ? [skip, ...points] : points;
 }
 
+// Every point line carries its kind as a leading icon, so a question or a
+// manual step stands out in the box: ❓ a question to answer, 👉 a step the
+// user does by hand, 🧪 a check to run. A line that already opens with one of
+// them keeps it.
+const POINT_ICONS = ['❓', '👉', '🧪'];
+function pointIcon(icon, s) {
+  return POINT_ICONS.some(i => s.startsWith(i + ' ')) ? s : icon + ' ' + s;
+}
+function openPointIcon(s) {
+  return pointIcon(/\?\s*$/.test(s) ? '❓' : '👉', s);
+}
+/** Display only: icon the open points among the shown lines (heading and cap count stay plain). */
+function iconizePoints(points, input) {
+  const open = new Set(normalizeOpenItems(input.open).map(it => it.text));
+  return points.map(p => (open.has(p) ? openPointIcon(p) : p));
+}
+
 function basePointsForKey(input, key, lang) {
   const open = normalizeOpenItems(input.open).map(it => it.text);
   const userTest = (Array.isArray(input.userTest) ? input.userTest : []).map(String).filter(Boolean);
@@ -1847,7 +1864,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const capped = capPoints(rest, lang);
     if (capped.tail) qHeading = qHeading.replace(/([?.])$/, capped.tail + '$1');
     return {
-      heading: qHeading, context: buildContextLine(input, key, delivery, lang), points: capped.shown,
+      heading: qHeading, context: buildContextLine(input, key, delivery, lang), points: iconizePoints(capped.shown, input),
       buttonsKey: key, version: ctx.version || null, replies: openReplies(input, lang), noShip: true, guideHandoff,
       appStart: APP_START_KEYS.has(key) && !!detectLaunchPath(input.cwd), nextStep: '',
     };
@@ -1893,7 +1910,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
-    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
+    heading, context, points: iconizePoints(shown, input), buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
     nextStep: key === 'analysis' ? String(input.nextStep || '').trim() : '',
   };
 }

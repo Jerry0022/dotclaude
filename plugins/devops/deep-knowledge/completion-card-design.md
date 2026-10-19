@@ -192,7 +192,8 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   points (promote distance, alternatives after an abort, guard notes).
 - **Points list**: max 3 — numbered in the markdown, `›` lines in the Desktop
   widget (same glyph as the result lines, see § 4). Contents in
-  order: open reservations (`open`), then manual test steps (`userTest`,
+  order: open reservations (`open`, prefixed `❓` when the line ends in `?`,
+  else `👉` — a step the user does by hand), then manual test steps (`userTest`,
   `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
   artifacts on a deploy card. More than three → `+N weitere` appended to the
   heading and the rest written in the answer text above the card.
