@@ -259,19 +259,64 @@ describe("auto-clean — the disk trigger", () => {
 });
 
 describe("auto-clean — sub-agent branches of a squash-merged PR (#572)", () => {
-  test("a branch merged into the PR's branch before the squash counts as landed", () => {
-    const { dir, c1 } = makeRepo();
+  test("a branch merged into the PR's branch before the squash counts as landed once its content is in main", () => {
+    const { dir, c1, c3 } = makeRepo();
     const child = branchWithCommit(dir, "worktree-agent-a1", c1, "k.txt", "child\n", daysAgo(2));
     git(dir, "checkout", "-q", "-b", "parent", c1);
     execFileSync("git", ["merge", "-q", "--no-ff", "-m", "merge child", "worktree-agent-a1"], { cwd: dir, stdio: "ignore" });
     const prHead = commitAt(dir, "p.txt", "parent\n", daysAgo(1));
+    // the PR's squash on main
+    git(dir, "checkout", "-q", "-b", "squash", c3);
+    fs.writeFileSync(path.join(dir, "k.txt"), "child\n");
+    const squash = commitAt(dir, "p.txt", "parent\n", daysAgo(1));
+    git(dir, "update-ref", "refs/remotes/origin/main", squash);
     git(dir, "checkout", "-q", "main");
     const merged = { bySha: new Set([prHead]), byName: new Map([["parent", [prHead]]]) };
     const baseRef = "refs/remotes/origin/main";
     const viaMerged = reachableFromMerged(dir, merged, baseRef);
     expect(viaMerged.has(child)).toBe(true);
-    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged, viaMerged })).toBe("pr");
-    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged: null })).toBeNull();
+    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged, viaMerged })).toBe("tree");
+    expect(landedVia(child, "worktree-agent-a1", { cwd: dir, baseRef, merged: null })).toBe("tree");
+  });
+
+  test("regression: reachable from a merged PR head is not landed when the PR dropped the branch's changes", () => {
+    // 2026-10-19 (rescue of un-landed branches): reachability from a merged
+    // head of another branch counted as landed. Here a sub-agent branch is
+    // merged into its PR branch, the PR then reverts those changes and is
+    // squash-merged — the branch's commits are reachable from the merged
+    // head, its content is nowhere in main.
+    const { dir, c1, c3 } = makeRepo();
+    const child = branchWithCommit(dir, "worktree-agent-lost", c1, "k.txt", "child work\n", daysAgo(40));
+    git(dir, "checkout", "-q", "-b", "parent", c1);
+    execFileSync("git", ["merge", "-q", "--no-ff", "-m", "merge child", "worktree-agent-lost"], { cwd: dir, stdio: "ignore" });
+    git(dir, "rm", "-q", "k.txt");
+    const prHead = commitAt(dir, "p.txt", "parent\n", daysAgo(39));
+    git(dir, "checkout", "-q", "-b", "squash", c3);
+    const squash = commitAt(dir, "p.txt", "parent\n", daysAgo(39));
+    git(dir, "update-ref", "refs/remotes/origin/main", squash);
+    git(dir, "checkout", "-q", "main");
+    git(dir, "branch", "-q", "-D", "parent", "squash");
+    const merged = { bySha: new Set([prHead]), byName: new Map([["parent", [prHead]]]) };
+    const baseRef = "refs/remotes/origin/main";
+    const viaMerged = reachableFromMerged(dir, merged, baseRef);
+    expect(viaMerged.has(child)).toBe(true);
+    expect(landedVia(child, "worktree-agent-lost", { cwd: dir, baseRef, merged, viaMerged })).toBeNull();
+    const res = runHygiene({ cwd: dir, trigger: "ship", settings: { ...SETTINGS, autoCleanKeepNewest: 0 }, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: () => merged });
+    expect(branches(dir)).toContain("worktree-agent-lost");
+    expect(((res.autoClean && res.autoClean.removed) || []).map((r) => r.name)).not.toContain("worktree-agent-lost");
+  });
+
+  test("squash-merged content counts even after main changed the same file elsewhere", () => {
+    const { dir } = makeRepo();
+    const body = (first, last) => [first, "2", "3", "4", "5", "6", "7", last].join("\n") + "\n";
+    const fork = commitAt(dir, "m.txt", body("1", "8"), daysAgo(2));
+    const tip = branchWithCommit(dir, "squashed-then-edited", fork, "m.txt", body("1 branch", "8"), daysAgo(2));
+    git(dir, "checkout", "-q", "-b", "later", fork);
+    commitAt(dir, "m.txt", body("1 branch", "8"), daysAgo(1));
+    const later = commitAt(dir, "m.txt", body("1 branch", "8 main later"), daysAgo(1));
+    git(dir, "update-ref", "refs/remotes/origin/main", later);
+    git(dir, "checkout", "-q", "main");
+    expect(landedVia(tip, "squashed-then-edited", { cwd: dir, baseRef: "refs/remotes/origin/main", merged: null })).toBe("tree");
   });
 
   test("a PR head missing locally is skipped, not fatal", () => {

@@ -19,12 +19,18 @@ should live at root level (except `CLAUDE.md` and `.claudeignore`).
     ├── agents.json              ← Orchestrator config (tracked)
     ├── settings.json            ← Project-level settings (tracked)
     ├── settings.local.json      ← Local overrides (ignored)
-    ├── launch.json              ← Dev server configs (tracked)
+    ├── launch.json              ← Dev server configs, per machine (ignored)
+    ├── launch.example.json      ← Shared template for launch.json (tracked)
+    ├── project-map.md           ← Directory map, regenerated on ship (tracked)
     ├── worktrees/               ← Session worktrees (ignored)
     ├── todos/                   ← Session todos (ignored)
     ├── plans/                   ← Session plans (ignored)
     └── ...session state         ← All other artifacts (ignored)
 ```
+
+"Ignored" means: listed in the one managed `# >>> claude (managed) >>>` block of
+the repo's `.gitignore` (`hooks/lib/runtime-ignores.js`, written/migrated by
+`scripts/claude-ignore.js` — see `project-setup.md` Step 2).
 
 ## Root-level rules
 

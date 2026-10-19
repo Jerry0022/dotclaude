@@ -148,9 +148,9 @@ retry, no note, no fallback. The rename is a courtesy, never a gate.
 existing note count in the confirmation instead of pretending it starts empty.
 The notes end only with the merge (Step 4.7, archived).
 
-**2.3 Register the notes file in the git exclude** (machine state, not a project
-decision — never `.gitignore`): run the guarded snippet in
-`deep-knowledge/activation.md` § Git exclude — the guard is mandatory.
+**2.3 Make sure the managed ignore block covers the notes** — the one-liner in
+`deep-knowledge/activation.md` § Ignore block (writes only when the block is
+missing or stale).
 
 **2.4 Seed the invocation's own content.** If the activating prompt carried
 anything beyond the route word (Step 1), file it now — after `activate`, before

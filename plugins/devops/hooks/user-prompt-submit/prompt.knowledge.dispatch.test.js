@@ -244,6 +244,12 @@ describe("prompt.knowledge.dispatch — pointers for the retired skills (PR 3)",
     for (const doc of ["usage.md", "strict.md", "graphify.md"]) expect(ctx).toContain(`deep-knowledge/${doc}`);
     expect(ctx).not.toMatch(/Skill\(/);
   });
+
+  test("home backup and WIP watch phrases point at their runbooks", () => {
+    const h = proHome();
+    expect(runSession("richte Home-Backup ein für meine Claude Einstellungen", `vitest-pointer-c-${process.pid}-${Date.now()}`, h)).toContain("deep-knowledge/home-backup.md");
+    expect(runSession("bitte den WIP-Wächter an für alle Projekte", `vitest-pointer-d-${process.pid}-${Date.now()}`, h)).toContain("deep-knowledge/wip-watch.md");
+  });
 });
 
 describe("prompt.knowledge.dispatch — the payload stays under the harness limit (context-cap)", () => {

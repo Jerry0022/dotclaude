@@ -33,6 +33,7 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [git-hygiene.md](git-hygiene.md) | Git Hygiene | Cross-cutting git rules referenced by `/do-ship`, the role agents, and hooks. |
 | [graphify.md](graphify.md) | graphify — Codebase Knowledge Graph (default-on, opt-out) | Codebase knowledge graph via the external graphify CLI: default-on, opt-out v... |
 | [harden-polish-shared.md](harden-polish-shared.md) | Harden/Polish — Shared Reference | Cross-cutting reference for `/auto-harden` and `/auto-polish`. Covers |
+| [home-backup.md](home-backup.md) | Home Backup (opt-in) | Back up the allowlisted part of `~/.claude` (settings, agents, own skills/com... |
 | [injection-hardening.md](injection-hardening.md) | Prompt-Injection Hardening — Untrusted Content & Egress Control | Cross-cutting defense for any skill or agent that reads untrusted content (fi... |
 | [issue-trust.md](issue-trust.md) | Issue Trust — Who May Fill an Autonomous Queue | Cross-cutting rule for every skill that turns GitHub issues into **autonomously |
 | [load-governor.md](load-governor.md) | Claude load governor | Only heavy load that Claude caused yields: to any foreign, non-OS app with |
@@ -58,3 +59,4 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [usage.md](usage.md) | Usage Data — Live Token Usage | Live token usage (5h + weekly windows, burn rate) for the completion card's b... |
 | [visual-verification.md](visual-verification.md) | Visual Verification Methods | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [windows-platform.md](windows-platform.md) | Windows Platform Work | Reference for Windows-specific implementation — system tray, native |
+| [wip-watch.md](wip-watch.md) | WIP Watch (opt-in) | A weekly pure-node job that finds work existing nowhere else — unlanded |

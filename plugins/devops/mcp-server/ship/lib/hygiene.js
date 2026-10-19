@@ -18,9 +18,13 @@
  *      The rest is left to the page. "Removable" means nothing can be
  *      lost:
  *        - branch: its tip is in the default branch — git ancestor, the head
- *          of a merged PR (squash merges), reachable from a merged PR head
- *          (a sub-agent branch merged into the PR's branch, #572), or every
- *          file it touched is identical in the default branch;
+ *          of a merged PR (squash merges), or its CONTENT is: every file it
+ *          touched is identical in the default branch, or re-applying its
+ *          changes onto the default branch is a no-op
+ *          (scripts/lib/content-landed.js). Being reachable from the merged
+ *          head of ANOTHER branch (a sub-agent branch merged into the PR's
+ *          branch, #572) is not enough on its own — that PR may have dropped
+ *          those changes before the squash;
  *        - worktree: a session worktree (under `.claude/worktrees/`), not
  *          locked, clean (`status --porcelain --untracked-files=all
  *          --ignored=matching` lists nothing but regenerable build output,
@@ -74,7 +78,9 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-const { isParked, coveringRef } = createRequire(import.meta.url)("../../../hooks/lib/park-register.js");
+const require = createRequire(import.meta.url);
+const { contentInBase } = require("../../../scripts/lib/content-landed.js");
+const { isParked, coveringRef } = require("../../../hooks/lib/park-register.js");
 
 const DAY_MS = 86_400_000;
 const GB = 1024 ** 3;
@@ -350,20 +356,16 @@ export function reachableFromMerged(cwd, merged, baseRef) {
   return new Set((out || "").split("\n").map((s) => s.trim()).filter(Boolean));
 }
 
-/** Every file `sha` changed since its merge base is identical in `baseRef`. */
-function treeLanded(sha, ctx) {
-  const base = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
-  if (!base) return false;
-  const out = gitOut(["diff", "--name-only", "-z", base, sha], ctx.cwd);
-  if (out === null) return false;
-  const files = out.split("\0").filter(Boolean);
-  if (files.length === 0) return true;
-  if (files.length > TREE_CHECK_MAX_FILES) return false;
-  return gitOk(["diff", "--quiet", sha, ctx.baseRef, "--", ...files], ctx.cwd);
-}
-
 /**
  * How `sha` reached the default branch: "ancestor" | "pr" | "tree", or null.
+ *
+ * "pr" is the branch's OWN history: its tip is a merged PR head, or an
+ * ancestor of a merged head of the same branch name. Being reachable from a
+ * merged head of ANOTHER branch (a sub-agent branch merged into the PR
+ * branch, #572) proves nothing about content — that PR may have reverted the
+ * changes, or dropped them in a conflict resolution, before the squash — so
+ * such a branch counts only when its content is in the default branch
+ * ("tree", scripts/lib/content-landed.js, the rule the WIP watch shares).
  * @param {{cwd:string, baseRef:string, merged:{bySha:Set<string>, byName:Map<string,string[]>}|null}} ctx
  */
 export function landedVia(sha, branch, ctx) {
@@ -371,13 +373,12 @@ export function landedVia(sha, branch, ctx) {
   if (gitOk(["merge-base", "--is-ancestor", sha, ctx.baseRef], ctx.cwd)) return "ancestor";
   if (ctx.merged) {
     if (ctx.merged.bySha.has(sha)) return "pr";
-    if (ctx.viaMerged && ctx.viaMerged.has(sha)) return "pr";
     // local tip behind the merged PR head (pushed from elsewhere, then merged)
     for (const head of (branch && ctx.merged.byName.get(branch)) || []) {
       if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
     }
   }
-  return treeLanded(sha, ctx) ? "tree" : null;
+  return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
 }
 
 /** A throw-away index holding `baseRef`'s tree, for `git apply --cached` dry runs. */

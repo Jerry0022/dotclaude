@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.276.0] — 2026-10-19
+
+Backup safety: if the disk dies, your Claude setup and unfinished work are not gone. Two opt-in jobs (both off by default, zero model tokens) and one managed ignore block.
+
+### Added
+- **Home backup (opt-in, `homeBackup.*`)**: `scripts/home-backup.js setup|run|disable|status|scan` backs up `~/.claude` daily to a private GitHub repo (a public one is refused). A deny-by-default allowlist keeps credentials, transcripts, caches and plugin state out. `scripts/lib/backup-scan.js` scans every staged blob for secrets (private keys, API tokens, JWTs) and private data (e-mail, phone, IBAN, credit cards); a hit means no commit and no push, a report with file, line and rule (never the value), and one notification. `.backupallow` allows a finding on purpose.
+- **WIP watch (opt-in, `wipWatch.*`)**: `scripts/wip-watch.js` scans your repos weekly for orphaned work (unlanded branches, dirty or broken worktrees, old stashes), gives each finding a suggestion and notifies only on a new finding. `/auto-cleanup` reads its report as an input mode.
+- **Managed `.claude` ignore block**: one marked block in `.gitignore` instead of entries in `.git/info/exclude`. `scripts/claude-ignore.js check|migrate|env-example`. `ship_preflight` checks it only when the ship touches `.gitignore`, `info/exclude` or `.claude/`, and never blocks.
+- Shared helpers: `scripts/lib/content-landed.js` (content-based landed check), `scripts/lib/scheduler.js` (Task Scheduler / cron via a launcher that finds the newest plugin), `scripts/lib/desktop-notify.js`. devops-config gains global-only `string`, `enum` and `list` setting types.
+
+### Changed
+- `ss.project.setup` writes the managed block into a repo without commits and keeps an existing block current. An established repo keeps its `.gitignore` untouched; until you run `claude-ignore.js migrate`, its clones get the block in `.git/info/exclude` as a fallback, so fresh clones and new worktrees are covered from the first session. `migrate` removes the fallback.
+- `claude-ignore.js check|migrate` and the ship check report committed files the block ignores (e.g. an old `.claude/launch.json`) with the `git rm --cached` fix, and the policy check now catches `.claude/`, `.claude/*`, `.claude/**` and honours `!` re-includes.
+
+### Fixed
+- **`ship_hygiene` landed check**: a branch merely reachable from another branch's merged PR head no longer counts as landed. That PR may have reverted the changes before the squash, so the branch now needs content proof. Regression test added.
+- Enum config values match the whole word before the 3-letter form, so `sessionEnd.autosave local` and weekday values both parse.
+
 ## [0.275.2] — 2026-10-20
 
 ### Fixed
