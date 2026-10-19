@@ -77,7 +77,7 @@ const SERVICE_PATTERNS = [
   // only its developer surface counts: the app/client/console or the dev host.
   {
     name: 'Twitch Developer Console',
-    re: /\bdev\.twitch\.tv\b|\btwitch[-\s]?(?:apps?|client|developer|dev\s+console|console)\b|\b(?:apps?|client)\s+(?:at|bei|auf|on)\s+twitch\b/i,
+    re: /\bdev\.twitch\.tv\b|\btwitch[-\s]?(?:apps?|client[-\s]?(?:id|secret)s?|developer|dev\s+console|console)\b|\b(?:apps?|client)\s+(?:at|bei|auf|on)\s+twitch\b/i,
   },
   { name: 'cron-job.org', re: /\bcron-job\.org\b/i },
   // "Neon" alone is too common a word (colour, sign) — only counts near its
@@ -112,7 +112,7 @@ const CREDENTIAL_NOUN_RE_SRC = [
   // only counts as a compound ("Twitch-App") or registered at a host
   // ("the app at Twitch").
   String.raw`client[-\s]?(?:id|secret)s?`,
-  String.raw`[\p{L}\p{N}]+-apps?`, String.raw`apps?(?=\s+(?:at|bei|auf|on)\s)`,
+  String.raw`[\p{L}\p{N}]+-apps?`, String.raw`apps?(?=\s+(?:at|bei)\s)`,
 ];
 
 /** User-directed creation verbs (de+en, incl. zu-infinitives) — signal (c). */
@@ -202,7 +202,14 @@ const SELF_PERFORMED_RE = new RegExp(
       'erstelle', 'erzeuge', 'generiere'].join('|')) + ')' +
   '|(?:' + wordAlt('i') + String.raw`[^.!?\n]{0,60}?` +
     wordAlt(['created', 'generated', String.raw`set\s+up`, 'configured', 'copied',
-      'registered', 'provided'].join('|')) + ')',
+      'registered', 'provided'].join('|')) + ')' +
+  // "I need to set …", "I'll provide …", "let me register …" — announcing
+  // its own next step; "I need YOU to set …" stays a hand-off.
+  '|(?:' + wordAlt(String.raw`(?:i(?:'ll|'m\s+going\s+to|\s+(?:will|need\s+to|have\s+to|am\s+going\s+to|now))|let\s+me)`) +
+    String.raw`\s+` + wordAlt(['set', 'provide', 'register'].join('|')) + ')' +
+  // #742: "Supabase wird dir einen Token liefern" describes, it does not direct.
+  '|(?:' + wordAlt(['wird', 'werden', 'würde', 'würden'].join('|')) + String.raw`[^.!?\n]{0,60}?` +
+    wordAlt(['liefern', 'setzen', 'hinterlegen', 'registrieren'].join('|')) + ')',
   'iu'
 );
 

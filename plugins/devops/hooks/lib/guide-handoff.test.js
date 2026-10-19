@@ -510,6 +510,15 @@ describe("detectCardHandoff — open-item replies and hand-off verbs (#742)", ()
     expect(hasHandoffSentence("Supabase will provide a token after sign-up.")).toBeNull();
     expect(hasHandoffSentence("Ich setze das Secret in Supabase.")).toBeNull();
     expect(hasHandoffSentence("Ich registriere jetzt die Twitch-App.")).toBeNull();
+    expect(hasHandoffSentence("I need to set the secret in Supabase.")).toBeNull();
+    expect(hasHandoffSentence("Let me register the app at Twitch.")).toBeNull();
+    expect(hasHandoffSentence("Supabase wird dir einen Token liefern.")).toBeNull();
+    expect(hasHandoffSentence("I need you to set the secret in Supabase.")).toEqual({ service: "Supabase" });
+  });
+
+  test("an imperative after a list number or an earlier sentence still hits", () => {
+    expect(detectWebHandoff("1. Set the token in Vercel.")).not.toBeNull();
+    expect(detectWebHandoff("Done. Set the secret in Supabase.")).not.toBeNull();
   });
 
   test("a bare 'app' and the plain word 'twitch' are no credential or service", () => {
@@ -517,6 +526,9 @@ describe("detectCardHandoff — open-item replies and hand-off verbs (#742)", ()
     expect(hasHandoffSentence("Die App soll die Daten aus Supabase liefern.")).toBeNull();
     expect(hasHandoffSentence("Fix the twitch in the scroll animation; set the app flag.")).toBeNull();
     expect(hasHandoffSentence("Twitch embed: set the app id in the player.")).toBeNull();
+    expect(hasHandoffSentence("Set the token for the app on Vercel.")).toEqual({ service: "Vercel" });
+    expect(hasHandoffSentence("Please set the app on Vercel to Node 20.")).toBeNull();
+    expect(matchService("Use the Twitch client library.")).toBeNull();
   });
 
   test("the reply's service is its first line, trimmed and never empty", () => {
