@@ -356,7 +356,7 @@ function applyExcludeFallback(text) {
  * again. `git ls-files -c -i -X <block>`; [] on any failure.
  * @returns {string[]} repo-relative paths
  */
-function trackedUnderBlock(root, { timeout = 10_000 } = {}) {
+function trackedUnderBlock(root, { timeoutMs = 10_000 } = {}) {
   const fs = require('fs');
   const os = require('os');
   const path = require('path');
@@ -365,7 +365,7 @@ function trackedUnderBlock(root, { timeout = 10_000 } = {}) {
   try {
     fs.writeFileSync(tmp, renderBlock() + '\n');
     const out = execFileSync('git', ['ls-files', '-z', '-c', '-i', '-X', tmp], {
-      cwd: root, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'],
+      cwd: root, encoding: 'utf8', timeout: timeoutMs, stdio: ['ignore', 'pipe', 'ignore'],
     });
     return out.split('\0').filter(Boolean);
   } catch {
@@ -382,8 +382,8 @@ function shellQuote(s) {
 
 /**
  * The command the user runs to stop tracking `files` (they stay on disk).
- * Display only — the plugin never runs it; code that untracks calls
- * execFileSync('git', ['rm', '--cached', '--', ...files]) without a shell.
+ * Display only — the plugin never runs it; code that untracks must pass the
+ * paths as an argv array (`git rm --cached -- <files>`, no shell, a timeout).
  * File names come from the repo and are untrusted: each is single-quoted.
  */
 function untrackCommand(files) {
