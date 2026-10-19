@@ -94,7 +94,7 @@ function notifyToast(title, message) {
     '$n.Dispose()';
   try {
     spawnSync('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps], {
-      timeout: 15_000, stdio: 'ignore', detached: true,
+      timeout: 15_000, stdio: 'ignore', detached: true, windowsHide: true,
     });
     return true;
   } catch {

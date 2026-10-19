@@ -401,7 +401,7 @@ function runReap(args) {
   }
   const res = spawnSync('powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', buildReapQueryPs()],
-    { encoding: 'utf8', timeout: 30_000 });
+    { encoding: 'utf8', timeout: 30_000, windowsHide: true });
   if (res.status !== 0) fail(`task query failed: ${(res.stderr || res.stdout || '').trim()}`);
   let tasks = [];
   try { tasks = JSON.parse((res.stdout || '').trim() || '[]'); } catch { fail('task query returned no JSON'); }
@@ -409,7 +409,7 @@ function runReap(args) {
   const removed = [];
   if (apply) {
     for (const r of remove) {
-      const del = spawnSync('schtasks.exe', ['/Delete', '/TN', r.name, '/F'], { encoding: 'utf8' });
+      const del = spawnSync('schtasks.exe', ['/Delete', '/TN', r.name, '/F'], { encoding: 'utf8', windowsHide: true });
       if (del.status !== 0) continue;
       if (r.script && isValidWatchdogScriptPath(r.script)) {
         try { fs.unlinkSync(r.script); } catch { /* already gone */ }
