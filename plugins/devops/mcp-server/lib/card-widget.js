@@ -614,7 +614,8 @@ export function cardWidgetInstruction(model, repoUrl, env = process.env, { widge
     "the block below (verbatim, no read_me). Output NO text after the call. " +
     NO_OUTPUT_NUDGE_REPLY + " Never show this card a second time.\n" +
     "Text before the widget: the full answer to the user's question (the card never carries it, " +
-    "#642), but no prose that restates the card.\n" +
+    "#642), a report the running skill requires (e.g. auto-fix: root cause with file:line) " +
+    "included, but no prose that restates the card.\n" +
     "The call is mandatory, never optional. ONLY when the call itself fails, or the tool does not " +
     `exist: no retry, no note — output the visible title line \`### **✨✨✨ ${model.title || ""} ✨✨✨**\` ` +
     "(error path, never a shortcut).\n" +
