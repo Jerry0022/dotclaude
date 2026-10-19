@@ -121,7 +121,7 @@ Then verify:
 
 Write the report as text in your reply, before the Step 9 card call. It is
 the answer to the user's request (#642), not a recap of the card: never drop
-it because the card's `changes` names the same fix.
+it because the card's `changes` names the same fix. Always report:
 - **Root cause**: the exact file:line where the failure originates
 - **What was wrong**: the broken assumption or logic error
 - **What was fixed**: the change made (or proposed)

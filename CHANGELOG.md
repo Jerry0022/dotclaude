@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.276.1] — 2026-10-20
+
+### Fixed
+- **auto-fix writes its Step 8 report before the completion card.** Some runs fixed the bug and then showed only the card, with no root cause and no file:line. The card contract says "never restate in prose what the card shows (changes …)", and Step 9 puts the same root cause → fix into `changes`, so the model took the report for a recap. Step 8 now says the report is text written before the card call. It is the answer (#642), not a recap. The card contract (`post.flow.completion`, the `render_completion_card` description, the widget instruction) now counts a report the running skill requires as part of the answer. A/B over `skills/auto-fix/*`, 4 runs per variant: `reports-file-line` went from 5/8 to 8/8, and no grader regressed (`evals/trims/auto-fix.md`).
+
 ## [0.276.0] — 2026-10-19
 
 Backup safety: if the disk dies, your Claude setup and unfinished work are not gone. Two opt-in jobs (both off by default, zero model tokens) and one managed ignore block.
