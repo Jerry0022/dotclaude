@@ -92,6 +92,34 @@ describe("recording", () => {
     expect(evs[5].name).toBe("feat/x");
   });
 
+  describe("offline ship CLI release", () => {
+    const CLI = 'node "/p/mcp-server/ship/cli.js" ship_release params.json';
+    const out = (o) => ({ stdout: JSON.stringify(o, null, 2), stderr: "" });
+
+    test("a successful CLI ship_release records a release with ok/merged/closes", () => {
+      fs.writeFileSync(path.join(dir, "params.json"), JSON.stringify({ body: "Closes #5" }));
+      run("Bash", { command: CLI }, out({ success: true, merged: true }));
+      expect(RC.events(dir)).toEqual([expect.objectContaining({ k: "release", ok: true, merged: true, closes: ["5"] })]);
+    });
+
+    test("a blocked CLI result never records ok", () => {
+      run("Bash", { command: CLI }, out({ success: false, merged: false }));
+      expect(RC.events(dir).every(e => e.ok !== true)).toBe(true);
+    });
+
+    test("an error / unreadable / interrupted CLI call records no release", () => {
+      run("Bash", { command: CLI }, { stdout: JSON.stringify({ error: true, message: "x" }), stderr: "" });
+      run("Bash", { command: CLI }, { stdout: "boom", stderr: "" });
+      run("Bash", { command: CLI }, { ...out({ success: true, merged: true }), interrupted: true });
+      expect(RC.events(dir).filter(e => e.k === "release" && e.ok === true)).toEqual([]);
+    });
+
+    test("a mention of the CLI in a quoted string records nothing", () => {
+      run("Bash", { command: 'echo "node ship/cli.js ship_release p.json"' }, out({ success: true, merged: true }));
+      expect(kinds()).toEqual([]);
+    });
+  });
+
   test("ship_release result and closes are recorded", () => {
     run(SHIP, { body: "Closes #7\nfixes #8" }, [{ type: "text", text: JSON.stringify({ success: true, merged: false }) }]);
     run(SHIP, { body: "" }, { content: [{ type: "text", text: "boom" }] });
