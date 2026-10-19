@@ -36,6 +36,7 @@ Prefixes:
   prompt.  = UserPromptSubmit
   sub.     = SubagentStart (additionalContext reaches the subagent; SessionStart context does not)
   stop.    = Stop
+  substop. = SubagentStop
 
 Examples:
   ss.git.sync.js

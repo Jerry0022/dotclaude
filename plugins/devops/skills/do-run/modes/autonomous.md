@@ -619,6 +619,11 @@ that nobody reads.
 
 ### 7a — Gather Completion Data
 
+If the run used sub-agents or worktrees, first run the integration proof
+(`node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <branch> --slug <run-slug> --remove`).
+Its `open` line ("ungelandet: N Teile") goes onto the card and into the report
+as an open point; those parts are never counted as done.
+
 **INTERRUPTED or BLOCKED status → close the run contract as aborted BEFORE
 the card**, so the card gate does not park on a run that is not coming back
 this session:
