@@ -24,8 +24,10 @@ Call `ExitWorktree` with `action: "remove"` to:
 - Return the session to the main repo directory
 - Clean up the worktree directory and branch
 
-If `ExitWorktree` reports uncommitted changes and refuses to remove, use
-`discard_changes: true` — the work is already merged at this point.
+If `ExitWorktree` reports uncommitted changes and refuses to remove, STOP
+(SKILL.md Step 5b): uncommitted changes are by definition NOT part of the
+merge, so `discard_changes: true` would destroy them for good. Settle the
+tree first (commit and ship it, or have the owner decide), then retry.
 
 If `ExitWorktree` is not applicable (no worktree session active), skip to step 2.
 
