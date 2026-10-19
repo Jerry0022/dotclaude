@@ -1,4 +1,4 @@
-# Concept templates, part 02 of 16: Panel chrome, per-iteration templates
+# Concept templates, part 02 of 17: Panel chrome, per-iteration templates
 
 ## Panel Chrome (all templates)
 

@@ -1,4 +1,4 @@
-# Concept templates, part 04 of 16: Template: design — rules, devices, views, layout
+# Concept templates, part 04 of 17: Template: design — rules, devices, views, layout
 
 # Template: design
 
@@ -714,7 +714,7 @@ A design round with **two or more** `section[data-design]` gets engine chrome
 that a single-design round never shows (`body[data-overview="true"]`, set by
 `buildDesignUI()`). A single-design round, a document round and every legacy
 page render exactly as before. Nothing below is authored by hand except the
-four attributes; the engine (§ Variant overview JS) builds the rest.
+four attributes; the engine (templates-design-overview.md § Variant overview JS) builds the rest.
 
 **Authoring attributes on every `section[data-design]` of a ≥2-design round:**
 

@@ -94,7 +94,7 @@ const ENGINE_DESIGN = [
   { token: 'function navRowLabel', why: 'nav labels built as text, never as markup — § Layout JS (design engine predates the AUD-018 fix)' },
   // Variant overview (≥2 designs): without these a multi-design round has no
   // overview, no favourite and no user pins — and its payload silently lacks
-  // `favorite` / `userPins` (templates-design-js.md § Variant overview JS).
+  // `favorite` / `userPins` (templates-design-overview.md § Variant overview JS).
   { token: 'id="design-header"', why: 'variant-overview header mount — § Layout — Fullscreen single-screen (design engine predates the variant overview)' },
   { token: 'function wireDesignOverview', why: 'variant overview engine — § Variant overview JS (design engine predates the variant overview)' },
   { token: 'window.showOverview', re: /window\.showOverview\s*=/, why: 'overview switcher — § Layout JS (design engine predates the variant overview)' },

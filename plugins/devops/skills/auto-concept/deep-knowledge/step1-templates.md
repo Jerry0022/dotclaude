@@ -93,6 +93,18 @@ stay on one template throughout.
    (`docs/superpowers/specs/2026-08-03-concept-per-iteration-design-mode-design.md`)
    for the markup shape.
 
+   **Two or more designs → overview attributes.** Every
+   `section[data-design]` of a round with ≥2 designs carries
+   `data-design-motto` (a 2–5 word slogan), `data-design-traits` (exactly
+   three `|`-separated traits that are genuine differences to the OTHER
+   designs — never something they all share), `data-design-icon` (a built-in
+   icon name or an entity-escaped inline SVG — pick it thematically per
+   concept, it is how the user tells the designs apart) and optionally
+   `data-design-color` (never the accent blue). The engine builds the
+   variant overview, the header and the quick nav from them; the gate warns
+   when one is missing. See `deep-knowledge/templates-design.md` § Variant
+   overview (≥2 designs).
+
    **Single-screen, single-design (exactly one `data-screen`):** no
    screen-nav, no per-screen feedback textarea — the dock shows ONLY the
    general-notes textarea. A static single-screen design needs no

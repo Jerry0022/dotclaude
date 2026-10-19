@@ -1,4 +1,4 @@
-# Concept templates, part 01 of 16: Overview, UI locale, common structure
+# Concept templates, part 01 of 17: Overview, UI locale, common structure
 
 # Concept HTML Templates
 

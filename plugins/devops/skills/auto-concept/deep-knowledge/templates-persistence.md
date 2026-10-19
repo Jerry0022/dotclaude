@@ -1,4 +1,4 @@
-# Concept templates, part 11 of 16: Shared systems — state persistence, comment slots
+# Concept templates, part 12 of 17: Shared systems — state persistence, comment slots
 
 ## State Persistence (localStorage + TTL)
 
