@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.275.2] — 2026-10-20
+
+### Fixed
+- **A test card with steps to test keeps its Test heading (#750).** Open points no longer turn it into a `❓ Question` card. All `userTest` steps come first and are never folded into `+N weitere`; the open points follow, and only they fold after three. The session title stays `👉 🧪 Test`. A test card with open points and no steps still gets the Question heading, and `ready` cards are unchanged. The Ship button stays on the test card.
+- **The stop guard's 3-point rule follows suit.** Under a `🧪 Test` heading it counts only the open points (`❓` / `👉`), so a card that shows four or more steps is not blocked. `completion-card-design.md` § 2, § 3 and § 5.3 describe the new rule.
+
 ## [0.275.1] — 2026-10-19
 
 Two follow-ups from the #712 redteam.

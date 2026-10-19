@@ -197,6 +197,9 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
   `userFinalTest`) prefixed `🧪` when the list mixes both, then deploy-gate
   artifacts on a deploy card. More than three → `+N weitere` appended to the
   heading and the rest written in the answer text above the card.
+  **Exception — the `test` card's steps (#750):** its `userTest` steps come
+  first and are always shown, never folded and not counted against the three;
+  the open points follow and only they fold into `+N weitere`.
 - **A task chip is no point.** On the Desktop app a finding outside the work
   is flagged with `spawn_task`: the chip is the offer, one click starts the fix
   in its own session. The card server drops every point that says a chip or
@@ -255,7 +258,8 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | Variant / state | Heading (de) | Points | Buttons | Notes |
 |---|---|---|---|---|
 | `ready` | `👉 📦 Ready — Shippen?` | final tests | Ship · Ändern | nothing open |
-| `ready` / `test` + open point or `waitsOn: "user"` | `👉 ❓ Question — {top open point}` / `👉 ❓ Question — Wartet auf dich: {requirement} — wie entscheidest du?` | remaining open + final tests / userTest | Ship dropped; Ändern / Nachbessern with the prepared answer | #714 — ship only when nothing is open |
+| `ready` / `test` (no `userTest` steps) + open point or `waitsOn: "user"` | `👉 ❓ Question — {top open point}` / `👉 ❓ Question — Wartet auf dich: {requirement} — wie entscheidest du?` | remaining open + final tests | Ship dropped; Ändern / Nachbessern with the prepared answer | #714 — ship only when nothing is open |
+| `test` with `userTest` steps + open point | `👉 🧪 Test — …` (the Test heading stays; session title too) | every `userTest` step first (never folded), then the open points (≤ 3, rest `+N weitere`) | as plain `test`; Nachbessern carries the prepared answer | #750 — the steps to test are the next move, the open points ride along |
 | `ready` / `test`, no remote | `🟩 📦 Committed — Lokal committet — noch etwas?` · `👉 🧪 Test — Erst testen?` | as `ready` / `test` | Ship dropped; Ändern / Nachbessern stays and turns primary | `state.mode: "git-no-remote"`, or detected from `cwd` when the caller passes no mode (no `origin`) — nothing to push, PR or merge (#500). Keys after a ship attempt (ready-red, ship-blocked, vv-unverified) keep their buttons: a local ship still commits. `ship-successful` without `state.merged` downgrades to this row with its own note; with it (a local merge) it stays. **A `ready` card with unshipped work is not drawn at all:** the tool returns a `[LOCAL SHIP]` instruction instead, Claude runs `/do-ship` (commit, local merge, local tag), and that ship's card ends the turn. |
 | `ready` + red tests / partial | `👉 ⚠️ Red tests — Trotzdem shippen mit 2 roten Tests?` | open (fix first) | Fix · Trotzdem shippen | ⚠ red; line 1 = Nicht erreicht |
 | `ship-blocked` | `👉 ⛔ Blocked — {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
@@ -506,7 +510,9 @@ stable?`, `🟩 🎊 Promoted Stable — v0.179.0 — done.`, `⏳ 🤖 Agents �
    nicht`, `running`, `waiting`, agent counts) → block once with the reason.
 2. Result lines: ≤ 3; a line whose first token is a path / hook name
    (`\w+\.(js|md|ts|json)`, `ss\.|post\.|prompt\.|stop\.`) → block once.
-3. Points: ≤ 3 on the card; more only as `+N weitere` in the heading.
+3. Points: ≤ 3 on the card; more only as `+N weitere` in the heading. Under
+   a `🧪 Test` heading only the open points (`❓` / `👉`) count — the steps to
+   test are never folded (#750).
 4. Line budget: 14 rendered lines on Desktop (title 2, result ≤ 3, evidence
    1, budget 1, pipeline 1, heading 2, context ≤ 1, points ≤ 3) / 24 rows in
    the terminal. Overflow is cut in this order: evidence details → context

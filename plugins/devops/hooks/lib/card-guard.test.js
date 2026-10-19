@@ -837,6 +837,18 @@ describe("extractPoints / pointsViolation", () => {
       pointsViolation(["1. a", "2. b", "3. c", "4. d"], "## 📦 Shippen? +1 weitere"),
     ).toBeNull();
   });
+
+  test("#750: a test card's steps never count — only its open points do", () => {
+    const heading = "## 👉 🧪 Test — Erst testen?";
+    expect(pointsViolation(["1. A", "2. B", "3. C", "4. D"], heading)).toBeNull();
+    expect(
+      pointsViolation(["1. 🧪 A", "2. 🧪 B", "3. 🧪 C", "4. 🧪 D", "5. ❓ X?", "6. 👉 Y"], heading),
+    ).toBeNull();
+    const v = pointsViolation(["1. 🧪 A", "2. ❓ W?", "3. ❓ X?", "4. 👉 Y", "5. 👉 Z"], heading);
+    expect(v).toMatch(/4 points/);
+    // outside a test heading every point still counts
+    expect(pointsViolation(["1. 🧪 A", "2. 🧪 B", "3. 🧪 C", "4. 🧪 D"], "## 👉 📦 Ready — Shippen?")).toMatch(/4 points/);
+  });
 });
 
 describe("cardLineCount / lineBudgetReport", () => {
