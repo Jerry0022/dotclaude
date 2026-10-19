@@ -51,6 +51,9 @@ describe('checkIntegration', () => {
     // sub-4: copied into the integration branch as a different commit (cherry-pick)
     const w4 = agentWt('agent-ddd', 'sub-4');
     commit(w4, 'four.txt', '4');
+    // Move the integration branch first: a cherry-pick onto the same parent in the
+    // same second reproduces the identical commit SHA and would land as 'ancestor'.
+    commit(main, 'other.txt', 'o');
     g(main, '-c', 'user.name=t', '-c', 'user.email=t@t', 'cherry-pick', 'sub-4');
 
     const res = await checkIntegration({
