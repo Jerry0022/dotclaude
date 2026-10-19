@@ -1,4 +1,4 @@
-# Concept templates, part 04 of 16: Template: design — rules, devices, views, layout
+# Concept templates, part 04 of 17: Template: design — rules, devices, views, layout
 
 # Template: design
 
@@ -708,6 +708,67 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
   Mapping (engine) → Freezing) — the frozen view then shows the user's
   submission read-only, never the proposal.
 
+## Variant overview (≥2 designs)
+
+A design round with **two or more** `section[data-design]` gets engine chrome
+that a single-design round never shows (`body[data-overview="true"]`, set by
+`buildDesignUI()`). A single-design round, a document round and every legacy
+page render exactly as before. Nothing below is authored by hand except the
+four attributes; the engine (templates-design-overview.md § Variant overview JS) builds the rest.
+
+**Authoring attributes on every `section[data-design]` of a ≥2-design round:**
+
+| Attribute | Content |
+|---|---|
+| `data-design-motto` | The design's slogan, 2–5 words ("Less is calm."). It heads the card and the expanded header. |
+| `data-design-traits` | Exactly **three** traits, separated by `\|`. Only genuine differences to the OTHER designs of the round — never something every design has ("responsive", "dark mode"). |
+| `data-design-icon` | A built-in icon name (`leaf`, `rocket`, `gauge`, `grid`, `map`, `cube`, `chart`, `bolt`, `heart`, `compass`, `layers`, `sparkles`, `shield`, `book`, `user`, `home`, `sun`, `moon`, `flame`, `palette`, `game`, `list`) or one inline SVG, entity-escaped inside the attribute (`data-design-icon="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;path d=&quot;…&quot;/&gt;&lt;/svg&gt;"` — a raw `<`/`>` in an attribute breaks the build's and the gate's tag scanners); stroke paths in `currentColor`, everything outside svg/g/path/circle/ellipse/line/polyline/polygon/rect and their geometry/stroke attributes is dropped. A short emoji works too. Claude picks it thematically per concept — the icon is how the user tells the designs apart in the quick nav. |
+| `data-design-color` | Optional. A hex colour for the design's card, header line and icon background. Never the accent blue: the icons themselves are drawn in one uniform accent tint, and the background must stay distinguishable. Without it the engine assigns a palette colour by position. |
+
+The gate warns (never fails) when a ≥2-design round lacks motto, traits or
+icon, or when the traits are not exactly three (`concept-gate.js`
+`findDesignAuthoringWarnings`; validation-gate.md § Variant overview).
+
+**What the engine builds:**
+
+- **Overview** — the round's first top-level item ("Übersicht", `Esc`). One
+  card per design: number + icon + name, motto, a live mini preview of the
+  design's first screen (a scaled, inert clone; click = open the design),
+  page chips (jump to a screen), the three traits, a notes count (💬 N =
+  every note on the design: its dock row, its pages, its annotation answers,
+  its user pins) and **☆ Favourite**. A fresh page lands on the overview; a
+  reload returns to where the user was (`_overview` / `_overviewDesign` /
+  `_overviewScreen`, § State Persistence).
+- **Favourite** — optional, at most one, toggled until submit (button on the
+  card, in the expanded header, or `F`). The favoured card is raised with a
+  gold border and a `★ FAVOURITE` badge, the others dim. Payload:
+  `favorite: <designId>|null` (§ Decision schema). Meaning for the next
+  round: step5-process.md § 5a.
+- **Header** (top left, replaces `#screen-indicator`) — compact: back item
+  "▦ Übersicht" (on a design or view page; overview icon + word, no arrow),
+  icon + name, `★` only when this design IS the favourite (on the overview:
+  `★ <name>` only when one is set), and the annotation eye. Semi-transparent
+  at rest, opaque on hover; hover, keyboard focus or a tap grows it as ONE
+  card over the content (fixed, so nothing below moves) with the motto, the
+  page tabs, ☆ Favourite and the pin button (touch path for user pins).
+- **Quick nav** (top centre, replaces `#design-switcher`) — one segment per
+  design with its icon (uniform accent tint on the design colour), `★` on the
+  favourite; a second, smaller row of `?` segments only when the round has
+  `section[data-view]`s. Semi-transparent until hovered.
+- **Hotkeys** — `Esc` overview · `1`–`9` design N · `Shift`+`1`–`9` view N ·
+  `Tab` next page of the current design (only while nothing is focused) ·
+  `F` favourite · `Alt`+`1`–`9` iteration tab · `?` shortcut sheet ·
+  `Ctrl`+`Enter` submit · `N` notes dock. None fires while focus is in a text
+  field, the dock, a bubble or a user-pin editor. The hint is ONE app tooltip
+  per element carrying label + keycap ("Cockpit [1]", `data-tip-key`,
+  § App Tooltips), Info tier.
+- **User pins** — hold `Ctrl` (hint bar bottom centre, crosshair) and click
+  the current screen: a pin with a comment field only, `Enter` saves, `Esc`
+  discards. Persisted like annotation answers (localStorage + bridge draft),
+  shown read-only on a frozen round, payload `userPins[]`.
+- **☰ panel** — each design row gets a small icon prefix; its pages stay
+  indented below; a row's hotkey keycap appears on row hover.
+
 ## Layout — Fullscreen single-screen + Overlay Panel + Feedback Dock
 
 ```html
@@ -733,7 +794,13 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
                design still needs this wrapper for markup uniformity — it
                just degenerates to today's behaviour (see body[data-single-design]
                below). -->
-          <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true">
+          <!-- ≥2 designs: every design also carries the overview authoring
+               attributes (§ Variant overview (≥2 designs)) — motto, exactly
+               three traits, an icon, optionally a colour. -->
+          <section data-design="dispatch" data-nav-label="Dispatch and Apparatus" data-design-active="true"
+                   data-design-motto="Every unit at a glance."
+                   data-design-traits="Map-first layout | Apparatus as cards | One-click dispatch"
+                   data-design-icon="map" data-design-color="#e8622c">
             <!-- All pages of THIS design live here. Exactly one carries
                  data-screen-active="true" (others get `hidden`). Every screen
                  is position: absolute; inset: 0 so it fills the viewport. A
@@ -748,7 +815,10 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
               <div class="device-frame">…mock…</div>
             </section>
           </section>
-          <section data-design="holotable" data-nav-label="Holotable" hidden>
+          <section data-design="holotable" data-nav-label="Holotable" hidden
+                   data-design-motto="The incident in 3D."
+                   data-design-traits="Spatial incident model | Gesture control | No sidebars"
+                   data-design-icon="cube" data-design-color="#8250df">
             <section id="d2-s1" data-screen data-nav-label="Welcome" data-screen-active="true">
               <div class="device-frame">…mock…</div>
             </section>
@@ -834,6 +904,26 @@ design spec `docs/superpowers/specs/2026-09-13-concept-information-mapping-desig
            design, then (if any) a <span class="switcher-divider"> and one
            <button class="view-switch-item"> per view -->
     </nav>
+
+    <!-- Variant overview chrome (§ Variant overview (≥2 designs)) — mount
+         points only, filled by wireDesignOverview() (§ Variant overview JS).
+         Rendered ONLY while the visible iteration has ≥2 designs
+         (body[data-overview="true"]); in that mode they replace
+         #screen-indicator (top left) and #design-switcher (top centre), and
+         #anno-toggle moves into the header's first row. A single-design round
+         never shows any of them and renders exactly as before.
+         #design-header — the one card top left: back item · icon · name ·
+           ★ · eye; hover / focus / tap grows it over the content (fixed, so
+           nothing below shifts) with motto, page tabs, ☆ favourite, pin.
+         #design-quick — top-centre quick nav: one icon segment per design,
+           a second row of `?` segments only when the round has views.
+         #upin-hint — bottom-centre hint while Ctrl is held (user pins).
+         #design-keys — the `?` shortcut sheet. -->
+    <div class="design-header" id="design-header" data-open="false"></div>
+    <nav class="design-quick" id="design-quick" aria-label="{{design.switch_label}}"></nav>
+    <div class="upin-hint" id="upin-hint" role="status" hidden></div>
+    <div class="design-keys" id="design-keys" role="dialog" aria-modal="false"
+         aria-label="{{design.keys_title}}" hidden></div>
 
     <!-- Two FABs — the only floating UI besides the screen itself.
          BOTH carry two labels: the toggle swaps `data-tip` AND `aria-label`

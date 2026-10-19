@@ -37,8 +37,9 @@ const ENGINE_CSS_STUB = `<style>.concept-decision-panel { position: fixed }</sty
 // in <body>, like the real engine.
 const DOCUMENT_ENGINE_CSS_STUB = `<style>.concept-layout { display: grid } .concept-content { min-width: 0 }</style>`;
 const DESIGN_ENGINE_CSS_STUB = `<style>.screen-nav { display: flex }</style>`;
-const DESIGN_ENGINE_STUB = `<nav id="screen-nav"></nav>
-<script>function activeDesign(){} window.showScreen = function(){}; function navRowLabel(){}</script>`;
+const DESIGN_ENGINE_STUB = `<nav id="screen-nav"></nav><div id="design-header"></div>
+<script>function activeDesign(){} window.showScreen = function(){}; function navRowLabel(){}
+window.showOverview = function(){}; (function wireDesignOverview(){ window.designOverviewState = function(){}; })();</script>`;
 
 // A minimal but valid live-bridge concept page: contains every required
 // marker, no clipboard fallback. Real pages are far larger; the gate only

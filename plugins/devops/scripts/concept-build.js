@@ -348,6 +348,10 @@ function bakeFrozenFeedback(fragment, payload) {
     const v = (c[k] && typeof c[k] === 'object') ? c[k] : (payload && payload[k] && typeof payload[k] === 'object' ? payload[k] : null);
     if (v) blob[k] = v;
   }
+  // Variant overview (templates-design.md § Variant overview): the frozen tab
+  // shows the favourite and the user's own pins read-only.
+  if (payload && typeof payload.favorite === 'string' && payload.favorite) blob.favorite = payload.favorite;
+  if (payload && Array.isArray(payload.userPins) && payload.userPins.length) blob.userPins = payload.userPins;
   const tag = `<script type="application/json" data-frozen-feedback>${JSON.stringify(blob).replace(/<\/script/gi, '<\\/script')}</script>`;
   const cleaned = fragment.replace(/\s*<script\b[^>]*data-frozen-feedback[^>]*>[\s\S]*?<\/script>/gi, '');
   const root = rootSection(cleaned);
@@ -592,6 +596,7 @@ function runGate(outPath, html) {
   return {
     ok: r.ok,
     reason: r.ok ? '' : gate.buildBlockReason(outPath, r.missing, r.forbidden, r.structural, r.mapping, r.overlap, r.stale, r.collisions),
+    warnings: (r.warnings || []).map(w => w.why),
   };
 }
 
@@ -617,7 +622,7 @@ function build(dir, opts = {}) {
     page.lastBuild = sha(res.html);
     writePage(dir, page);
   }
-  return { ok, out, head: head.source, bytes: res.html.length, rounds: res.rounds, live: res.liveN, template: res.liveTemplate, problems, gate: g.reason, html: res.html };
+  return { ok, out, head: head.source, bytes: res.html.length, rounds: res.rounds, live: res.liveN, template: res.liveTemplate, problems, gate: g.reason, warnings: g.warnings || [], html: res.html };
 }
 
 function init(dir, opts) {
@@ -756,6 +761,7 @@ function report(r, dry) {
   lines.push(`${r.ok ? 'OK' : 'BLOCKED'} ${r.out}${dry && r.ok ? ' (check only, nothing written)' : ''}`);
   lines.push(`  rounds ${r.rounds.join(',') || '-'} · live ${r.live} (${r.template}) · ${r.bytes} bytes · head ${r.head}`);
   r.problems.forEach(p => lines.push(`  ✗ ${p}`));
+  (r.warnings || []).forEach(w => lines.push(`  ⚠ ${w}`));
   if (r.gate) lines.push(r.gate.split('\n').map(l => '  ' + l).join('\n'));
   if (!r.ok) lines.push('  The page was NOT written — the last good build stays live. Fix the round fragment, then build again.');
   return lines.join('\n') + '\n';

@@ -1,4 +1,4 @@
-# Concept templates, part 07 of 16: Template: design — annotation JS, click-through, screen patterns, decisions
+# Concept templates, part 07 of 17: Template: design — annotation JS, click-through, screen patterns, decisions
 
 ## Annotation Layer JS — `wireAnnotationLayer()`
 
@@ -288,7 +288,10 @@ like every other cross-cutting concern on this page (`viewing-frozen`,
     // above can still resolve to a (now hidden) screen while a view is on
     // screen. The eye pill must not render over a view's own content. body[data-view-active] is undefined on
     // pages that never use views, so this is a pure no-op there.
-    const viewActive = document.body.dataset.viewActive === 'true';
+    // The variant overview (§ Variant overview (≥2 designs)) hides every
+    // design the same way a view does — no pin belongs on it.
+    const viewActive = document.body.dataset.viewActive === 'true'
+      || document.body.dataset.overviewActive === 'true';
     const all = viewActive ? [] : annotationsInScreen(screen);
     // Recompute here, not only on `input`: restoreState() writes persisted
     // answers back programmatically and fires no input event, so a reloaded
@@ -426,12 +429,15 @@ document.addEventListener('click', e => {
   // [data-screen] too and have their own click handling — they must never
   // fall through to click-dummy navigation, even if a future pin design
   // nests a [data-screen-link] ancestor by accident.
-  if (e.target.closest('[data-anno-pin], [data-anno-summary], .anno-bubble')) return;
+  // User pins (§ Variant overview JS) sit inside the screen as well.
+  if (e.target.closest('[data-anno-pin], [data-anno-summary], .anno-bubble, .upin')) return;
   // A view (§ Views (optional)) is the active top-level item — no design is
   // on screen to navigate within, even though a hidden design still carries
   // data-design-active="true" as its own "last shown page" memory. Bail
   // before the lookup below would otherwise resolve to that hidden design.
   if (document.body.dataset.viewActive === 'true') return;
+  // Same for the variant overview: its previews are inert clones.
+  if (document.body.dataset.overviewActive === 'true') return;
   const link = e.target.closest('[data-screen-link]');
   if (!link) return;
   const activeDesignEl = document.querySelector(
@@ -671,6 +677,11 @@ contributes no `decisions[]` entry; its result is one `mappings[]` entry:
     "screens": { "d1-s1": "...", "d1-s2": "..." },
     "views": { "nav-model": "...", "card-density": "..." }
   },
+  "favorite": "holotable",
+  "userPins": [
+    { "id": "up-lz3k9a", "design": "dispatch", "screen": "d1-s2", "x": 62.5, "y": 18.2,
+      "target": "button.mock-dispatch \"Dispatch\"", "text": "This button needs a confirm step." }
+  ],
   "annotations": [
     {
       "id": "a1",
@@ -752,6 +763,17 @@ design iteration emits `"views": {}`, matching how `comments.designs`
 already degenerates to `{}` for a single-design iteration. Only views with
 non-empty, trimmed dock text are included, same trimming rule as every
 other `comments.*` level.
+
+`favorite` and `userPins` come from the variant overview (§ Variant overview
+(≥2 designs)) and are **always present**: `favorite` is the id of the design
+the user starred (☆ Favourite, at most one) or `null` — always `null` on a
+single-design round; `userPins` holds every Ctrl + click comment pin with a
+non-empty text, `[]` otherwise. A pin's `x` / `y` are percent of the screen's
+content box (the `.device-frame`, else the screen's first element), measured
+from its top-left corner; `target` names the element under the click — `#id`
+when it has one, else `tag.class` plus its first ~40 characters of text — so
+Claude can find the spot without the coordinates. How Claude applies both:
+step5-process.md § 5a → Favourite and user pins.
 
 `annotations` is **optional** and only present when the page uses the
 annotation layer (§ Annotation Layer (optional)) — a page with none emits
@@ -900,6 +922,16 @@ function collectDesignDecisions() {
   // engine block is absent, so the key is always present (§ 9 uniform shape).
   // `window.` on purpose: a bare `typeof collectMappings` here hits the TDZ of this very const.
   const collectMappings = (typeof window.collectMappings === 'function') ? window.collectMappings : () => [];
+  // Variant overview (§ Variant overview (≥2 designs)): the favourite and
+  // the user's own Ctrl + click pins, read from the engine store of the live
+  // round (§ Variant overview JS, designOverviewState). Always present —
+  // `null` / `[]` on a single-design round or a page without the overview
+  // engine, same empty-but-present convention as `annotations`.
+  const ovState = (typeof window.designOverviewState === 'function')
+    ? window.designOverviewState(active) : { favorite: null, pins: [] };
+  const userPins = (ovState.pins || [])
+    .filter(p => p && typeof p.text === 'string' && p.text.trim())
+    .map(p => ({ id: p.id, design: p.design, screen: p.screen, x: p.x, y: p.y, target: p.target || '', text: p.text.trim() }));
   return {
     submitted: true,
     template: 'design',
@@ -908,7 +940,9 @@ function collectDesignDecisions() {
     comments,
     annotations,
     attachments,
-    mappings: collectMappings(active || document)
+    mappings: collectMappings(active || document),
+    favorite: ovState.favorite || null,
+    userPins
   };
 }
 ```

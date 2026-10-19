@@ -1,4 +1,4 @@
-# Concept templates, part 14 of 16: Shared systems — collectDecisions, two-button submit, reset, progress
+# Concept templates, part 15 of 17: Shared systems — collectDecisions, two-button submit, reset, progress
 
 ## collectDecisions (dispatcher)
 
@@ -41,6 +41,10 @@ function collectAllFormFields(scope) {
     // Additive on purpose: the selector string above is pinned by
     // validation-gate.md pattern 21 and must stay literal.
     if (el.closest('[data-device-clone]')) return;
+    // Engine stores (the variant overview's favourite + user pins,
+    // § Variant overview JS) are typed into the payload by their own
+    // collector; their raw JSON is not a field the user filled in.
+    if (el.dataset.engineStore !== undefined) return;
     const key = el.dataset.field
              || el.dataset.v4
              || el.dataset.confirm

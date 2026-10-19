@@ -515,6 +515,19 @@ run this subset:
 | P32 | **no selector inside a `<style>` of any `section[data-iteration]` names an engine chrome class (`concept-decision-panel`, `panel-fab`, `panel-backdrop`, `feedback-fab`, `feedback-dock`, `iteration-tabs`, `iteration-tab`, `screen-indicator`, `design-switcher`, `frozen-bar`, `closeout-sheet`, `device-frame`, `panel-here`, `panel-status`, `concept-layout`, `concept-content`, …), and no rule there is a bare single-class selector without a per-design prefix (`.d1-…`, `.mock-…`)** | **Structural assertion, not a grep:** a mock's `<style>` shares the document with the engine, so `.overlay { position: absolute; left: 0; pointer-events: none }` for a fog SVG restyled the decision panel — docked left, ☰ FAB dead (#400). Enforced by `hooks/lib/concept-gate.js` (`findChromeCollisions`): every rule of every `<style>` inside an iteration, `@media` recursed, comments stripped. Fix: prefix or scope the mock class; never touch an engine class. templates-design-wiring.md § Design layout rules. |
 | P33 | `id="screen-nav"` (the element) AND `.screen-nav {` (its CSS rule) AND `function activeDesign` AND `showScreen` (as `window.showScreen =` or `function showScreen`) | **Design engine integrity (#430)** — the design-scoped half of entry 64, asserted only when `<html data-template="design"`. A design page whose screen nav markup, its stylesheet rule or the screen-switch JS went missing after generation renders the nav items bleeding through the mocks and no screen switching at all. Enforced by `hooks/lib/concept-gate.js` (`ENGINE_DESIGN`) under the STALE ENGINE block. |
 
+**Variant overview (conditional — a design round with ≥2
+`section[data-design]`):** templates-design.md § Variant overview (≥2
+designs). The engine half is asserted on every design page; the authoring
+half only warns, so a page written before the overview still builds.
+
+| # | Pattern | Purpose |
+|---|---------|---------|
+| V1 | `id="design-header"` (the mount) AND `function wireDesignOverview` AND `window.showOverview =` AND `window.designOverviewState =` | **Engine currency** — enforced by `hooks/lib/concept-gate.js` (`ENGINE_DESIGN`) under STALE ENGINE. Without them a ≥2-design round has no overview, and its payload silently lacks `favorite` / `userPins`. |
+| V2 | every `section[data-design]` of a ≥2-design round carries `data-design-motto`, `data-design-traits` (exactly three, `\|`-separated) and `data-design-icon` (**warning**) | The card renders without the missing part (no motto, no traits, a generic icon). Enforced as a warning by `concept-gate.js` `findDesignAuthoringWarnings`; `concept-build.js` prints it with `⚠`. |
+| V3 | `collectDesignDecisions` returns `favorite` and `userPins`; `collectAllFormFields` skips `[data-engine-store]` | The typed payload carries the favourite and the pins; the raw store JSON never lands in `allFields`. |
+| V4 | `bakeFrozenFeedback` (concept-build.js) writes `favorite` / `userPins` into `data-frozen-feedback` | A frozen round shows its favourite and pins read-only. |
+| V5 | no hotkey of `wireDesignOverview()` fires while focus is in `textarea`, `input`, `select`, `[contenteditable]`, `#feedback-dock`, `.anno-bubble` or `.upin-editor` | ui-defaults R4b — never a bare key firing in a text field. Pinned by `design-overview.test.js`. |
+
 **Failure for P22–P31:** if `data-view` is present anywhere on the page but
 any of these is missing (scoped to the view kind that requires it — P27 only
 applies to `decision`-kind views, P28/P29 only to `comparison`-kind views),

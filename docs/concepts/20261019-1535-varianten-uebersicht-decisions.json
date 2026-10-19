@@ -1,0 +1,78 @@
+[
+ {
+  "iteration": 1,
+  "action": "iterate",
+  "base": "plakatwand",
+  "decisions": [
+   "Plakatwand ist die Base",
+   "Motto passt; Hauptteil der Karte = Mini-Vorschau der Variante bzw. Zoom-in",
+   "Top-3 nur echte Unterschiede",
+   "Krönen-Idee gut, Wording Krone zu altmodisch",
+   "Hotkeys ja; Varianten-Leiste aufteilen: Header oben links (vergrößern) + Schnellauswahl oben Mitte"
+  ]
+ },
+ {
+  "iteration": 2,
+  "action": "iterate",
+  "decisions": [
+   "Erste Unterseite als Mini-Vorschau reicht",
+   "Wording: Sternchen-Favorit statt Base",
+   "Favorit optional; mit Favorit = Startpunkt, Kommentare zu anderen Varianten fliessen trotzdem ein; ohne Favorit entscheidet Claude aus den Kommentaren",
+   "Header links: 'Noch keine Base' viel kuerzer, eingeklappt + halbtransparent, Hover klappt aus; Auge-Icon dort; Kbd-Labels direkt an Aktionen statt Hotkeys-Knopf",
+   "Schnellauswahl: thematische Icons statt nur Farben, Hotkey bei Hover, variantenunabhaengiges in zweite Zeile; Chrome unauffaellig bis Hover",
+   "Hotkey-Menge gut; einige im Concept-Menue per Hover"
+  ]
+ },
+ {
+  "iteration": 3,
+  "action": "iterate",
+  "decisions": [
+   "Eingeklappter Header: Favorit nur anzeigen, wenn gesetzt",
+   "Icons thematisch ok, aber einheitlicher Farbstil (z. B. halbtransparent blau); Hintergruende variieren, nie blau",
+   "Hotkey-Hinweise nur beim Hover, visuell verfeinern",
+   "Favorit + Taste F passt; Kuerzel im Concept-Menue passt"
+  ]
+ },
+ {
+  "iteration": 4,
+  "action": "iterate",
+  "decisions": [
+   "Tooltips nur nach Hover-Regel (ui-defaults)",
+   "Neu: Strg + Klick setzt eigenen Kommentar-Punkt (nur Kommentarfeld) an beliebiger Stelle, Claude verarbeitet Screen + Position",
+   "Icons passen",
+   "Header-Hover darf Inhalt nicht verschieben - Overlay wie FABs",
+   "Tastenkappen-Screen passt",
+   "Menue: Icons viel zu gross, nur Praefix vor Variantenname, eine Zeile je Variante + Unterseiten-Zeilen, sonst wenig aendern"
+  ]
+ },
+ {
+  "iteration": 5,
+  "action": "iterate",
+  "decisions": [
+   "Hotkey-Hinweise erst bei langem Hover (Info-Stufe 1,5 s)",
+   "Zeile Uebersicht + Pfeile unter Varianten entfernen; zurueck dezent im Header (Pfeil + Uebersicht-Icon + Wort)",
+   "Schnellauswahl zeigen, wenn es 3 variantenunabhaengige Fragen-Seiten gibt",
+   "Ausgeklappter Header sah kaputt aus - pruefen",
+   "Strg-Hinweis unten Mitte ueber dem Inhalt wie FABs, nur solange Strg gedrueckt"
+  ]
+ },
+ {
+  "iteration": 6,
+  "action": "implement",
+  "decisions": [
+   "Ein Tooltip pro Element mit Label + Tastenkappe, nie zwei",
+   "Uebersicht-Header nur so breit wie noetig, horizontal erst beim Hover",
+   "Pfeil vor Uebersicht-Icon entfernen",
+   "Menue perfekt"
+  ],
+  "implemented": {
+   "branch": "feat/concept-variant-overview",
+   "commits": [
+    "c5db35f3",
+    "065b04f4",
+    "48413c0d"
+   ],
+   "tests": "8956 passed, 0 failed"
+  }
+ }
+]

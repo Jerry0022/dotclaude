@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.270.0] — 2026-10-19
+
+Concept design rounds with two or more designs now open on a variant overview, so each design can be judged at a glance before clicking through its screens.
+
+### Added
+- **Variant overview (auto-concept engine, new part `templates-design-overview.md`, part 08 of 17)**: a design round with ≥2 designs gets an engine-generated overview. Each card shows icon, name, motto, a live mini preview of the first screen, screen chips, the top-3 traits, the notes count and a "☆ Favorit" toggle. The submit payload carries `favorite`. Single-design rounds are unchanged.
+- **Favourite instead of a base checkbox**: optional. With a favourite it is the starting point, and comments on other designs still apply; without one Claude decides from the comments.
+- **Design chrome**: a compact semi-transparent header (top-left) that expands as one card over the content, with no layout shift. A top-centre quick nav with icon segments; its second row appears only for variant-independent data-view question pages. ☰ panel rows get an icon prefix and indented screens.
+- **Hotkeys**: Esc, 1–9, Shift+1–9 (views), Tab (only when nothing is focused), F, Alt+1–9 (iterations), ?, Ctrl+Enter, N. They never fire inside text fields. Each element has ONE app tooltip carrying label and keycap (`data-tip-key`, Info tier 1500 ms).
+- **Ctrl+click user pins**: comment pins on a design screen, stored in the payload as `userPins` (design, screen, x/y, target, text), persisted like annotation answers and frozen by the bake. Desktop view only — device-frame clones have no stable anchor.
+- **Authoring attributes**: `data-design-motto`, `-traits`, `-icon`, `-color`. The gate warns when one is missing (`concept-gate.js` `findDesignAuthoringWarnings`), never fails. `concept-build.js` bakes `favorite` / `userPins`. Docs: SKILL.md, step1-templates, step5-process §5a, validation-gate V1–V5; 29 locale keys de/en.
+
+### Fixed
+- **Overview authoring warnings**: a `>` inside a quoted attribute value (a motto like "Fast -> simple") no longer drops the design or reports its attributes as missing.
+
+### Known gaps
+- At phone width (375 px) the expanded header overlaps the quick nav, the collapsed header inside a design shows only "Übersicht", and N opens the dock without focusing the textarea.
+- The authoring warnings also fire for multi-design rounds frozen before the overview existed.
+
 ## [0.269.0] — 2026-10-19
 
 Opt-in: the monthly Claude API credit of a Max/Team plan can now carry devops' second-opinion review whenever Codex is skipped. Claude Code itself stays on the plan.

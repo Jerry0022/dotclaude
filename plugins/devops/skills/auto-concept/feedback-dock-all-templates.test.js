@@ -239,6 +239,9 @@ describe("design page — no regression, and the dock survives a document round 
     // harmless only while the dock was hidden on document rounds.
     const p = await boot(DESIGN, (html) => html
       .replace(/(<section[^>]*data-iteration="1"[^>]*>)/, '$1<script type="application/json" data-frozen-feedback>{"general":{"text":"round one note","attachments":[]}}</script>'));
+    // A round with two designs boots on its variant overview, where no
+    // screen row is shown — open the first design to get one.
+    p.window.showDesign(p.document.querySelector("section[data-iteration][data-active] > section[data-design]").dataset.design);
     const screenTa = [...p.document.querySelectorAll("#screen-textareas textarea")].find((t) => !t.hidden);
     p.type(screenTa, "screen note");
     p.type(p.general, "live general");
