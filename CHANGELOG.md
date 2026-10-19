@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.276.3] — 2026-10-20
+## [0.277.1] — 2026-10-20
 
 ### Fixed
 - **Web guide: a click nobody hears says so at once (#748).** A panel click with no live `wait()` and no poll that ended within the last 30 s now shows „Claude hört gerade nicht zu — schreib im Chat „weiter"" at the next heartbeat tick (~2 s, was 45 s). The event stays queued and the next turn drains it as before. A click in the normal gap between two polls (model working, hidden mode's 25 s pause) is picked up by the next `wait()` and gets no false warning. With a live waiter the panel still says „Gesendet – Claude prüft den Schritt …".
