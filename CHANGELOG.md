@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.268.9] — 2026-10-19
+
+No more cmd/PowerShell windows popping up after a PC start: the plugin's background console programs now always start hidden.
+
+### Fixed
+- **Session-start watchdog reap (`scripts/autonomous-watchdog.js`)**: the daily sweep runs as a detached, console-less Node process, and its `powershell.exe` task query and `schtasks.exe /Delete` calls had no `windowsHide` — each one opened a new visible console window, staggered, on the first Claude start after boot. Both now pass `windowsHide: true`.
+- **Toasts and file opener**: the balloon toasts of `batch-watchdog.js` and `post-merge-watcher.js` and the `cmd /c start` of `session-open-tracker.js` pass `windowsHide: true` too.
+
+### Added
+- **Regression test `scripts/console-spawn-hidden.test.js`**: fails on any `powershell`/`pwsh`/`cmd`/`schtasks` spawn in the plugins without `windowsHide`.
+
 ## [0.268.8] — 2026-10-19
 
 The completion-card check no longer reads the answer above the card as part of it, so a long answer with its own headings or numbered list no longer forces a second, identical card.

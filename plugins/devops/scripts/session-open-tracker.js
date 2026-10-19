@@ -341,7 +341,8 @@ function openInBrowser(absPath) {
       // Resolve any worktree-mountpoint quirks via a plain Windows path.
       child_process.spawn("cmd.exe", ["/c", "start", "", "msedge", fileUrl], {
         detached: true,
-        stdio: "ignore"
+        stdio: "ignore",
+        windowsHide: true
       }).unref();
     } else if (process.platform === "darwin") {
       child_process.spawn("open", ["-a", "Microsoft Edge", fileUrl], {
