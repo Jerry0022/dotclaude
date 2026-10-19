@@ -110,8 +110,8 @@ describe("devops-config — parse, set, unset", () => {
     expect(() => cfg.parseValue(key, raw)).toThrow(/expected/);
   });
 
-  test("sessionEnd.autosave is an enum: default push, valid words parse, others throw", () => {
-    expect(cfg.load(os.tmpdir(), { home: os.tmpdir() }).values.sessionEnd.autosave).toBe("push");
+  test("sessionEnd.autosave is an enum: default local, valid words parse, others throw", () => {
+    expect(cfg.load(os.tmpdir(), { home: os.tmpdir() }).values.sessionEnd.autosave).toBe("local");
     expect(cfg.parseValue("sessionEnd.autosave", " Local ")).toBe("local");
     expect(() => cfg.parseValue("sessionEnd.autosave", "force")).toThrow(/one of push, local, off/);
   });

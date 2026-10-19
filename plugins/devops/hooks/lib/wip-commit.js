@@ -1,89 +1,153 @@
 /**
  * @module wip-commit
- * @version 0.1.0
- * @description Save uncommitted work of a worktree as a WIP commit — never on
- *   main/master/the default branch, never forced, bounded git timeouts, never
- *   throws. Shared by sub.agent.wip (SubagentStop) and stop.session.autosave.
+ * @version 0.2.0
+ * @description Save uncommitted work of a worktree without touching the
+ *   user's index or working tree: the snapshot is built in a TEMPORARY index
+ *   (read-tree HEAD, add --pathspec-from-file, write-tree, commit-tree), so no
+ *   `git add -p` selection is lost and no hook runs. Never throws, bounded git
+ *   timeouts, never commits on a protected branch.
  *
- *   wipCommit(wt, message, {detached}) -> {committed, branch?, sha?, ref?, reason?}
- *   detached: 'branch:<name>' checks that branch out first; 'ref:<refname>'
- *   writes the snapshot to a backup ref and leaves HEAD and the tree alone.
+ *   Safety filters (savablePaths): in-progress git operations skip the whole
+ *   save (merge/rebase/cherry-pick/revert/index.lock/unmerged paths); secrets
+ *   (.env*, keys, credentials, dumps), build output, tooling state and files
+ *   over 5 MB are left out and reported as `skipped`.
+ *
+ *   Used by substop.agent.wip (wipCommit: moves the agent's branch) and
+ *   stop.session.autosave (snapshotCommit only: the session branch stays put).
  */
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { dirtyPaths } = require('./integration-check');
+const { dirtyPaths, loadHygiene } = require('./integration-check');
 
 const T = 20000;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const PROTECTED = /^(main|master|develop|trunk|release\/.+)$/;
+const SECRET = /(^|\/)(\.env(\..*)?|\.npmrc|\.netrc|id_(rsa|dsa|ecdsa|ed25519).*|[^/]*\.(pem|key|p12|pfx|keystore|jks|sql|dump|bak)|[^/]*credentials[^/]*|[^/]*secret[^/]*)$/i;
+const BUILD_DIRS = new Set(['dist', 'build', 'out', 'coverage', 'node_modules', 'graphify-out', '.next', '.nuxt',
+  'target', '.cache', '.venv', '__pycache__', '.gradle', '.turbo']);
+const TOOLING_ROOT = /^(AUTONOMOUS|BACKLOG|BURN)[-_]/;
 
-function git(args, cwd, env) {
+function git(args, cwd, { env, input, timeout } = {}) {
   try {
     return execFileSync('git', args, {
-      cwd, encoding: 'utf8', timeout: T, stdio: ['ignore', 'pipe', 'pipe'],
-      env: env ? { ...process.env, ...env } : process.env,
+      cwd, encoding: 'utf8', timeout: timeout || T, input, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      env: env ? { ...process.env, ...env } : process.env, maxBuffer: 32 * 1024 * 1024,
     }).trim();
   } catch { return null; }
 }
 
+/** origin's default branch when origin/HEAD is known, else null (unknown). */
 function defaultBranch(cwd) {
   const sym = git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], cwd);
   return sym ? sym.replace(/^origin\//, '') : null;
 }
 
 function isProtected(branch, cwd) {
-  return /^(main|master)$/.test(branch) || branch === defaultBranch(cwd);
+  if (PROTECTED.test(branch)) return true;
+  const def = defaultBranch(cwd);
+  return Boolean(def) && branch === def;
+}
+
+/** Why a save must not run now (an operation is mid-flight), or null. */
+function inProgress(wt) {
+  for (const name of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'index.lock', 'BISECT_LOG']) {
+    const p = git(['rev-parse', '--git-path', name], wt);
+    if (p && fs.existsSync(path.resolve(wt, p))) return name;
+  }
+  const st = git(['status', '--porcelain=v1'], wt);
+  if (st && /^(UU|AA|DD|AU|UA|DU|UD) /m.test(st)) return 'unmerged-paths';
+  return null;
 }
 
 function identityArgs(cwd) {
-  const has = (k) => Boolean(git(['config', k], cwd));
   const a = [];
-  if (!has('user.name')) a.push('-c', 'user.name=devops-autosave');
-  if (!has('user.email')) a.push('-c', 'user.email=devops-autosave@localhost');
+  if (!git(['config', 'user.name'], cwd)) a.push('-c', 'user.name=devops-autosave');
+  if (!git(['config', 'user.email'], cwd)) a.push('-c', 'user.email=devops-autosave@localhost');
   return a;
 }
 
-function snapshotToRef(wt, paths, message, ref) {
+/**
+ * The uncommitted paths that are safe to save, plus what was left out.
+ * @returns {Promise<{paths:string[], skipped:{path:string, why:string}[]}>}
+ */
+async function savablePaths(wt) {
+  const hyg = await loadHygiene();
+  const paths = [];
+  const skipped = [];
+  for (const p of dirtyPaths(wt)) {
+    const rel = p.replace(/\\/g, '/');
+    let why = null;
+    if (SECRET.test(rel)) why = 'secret';
+    else if (rel.split('/').slice(0, -1).some((s) => BUILD_DIRS.has(s)) || TOOLING_ROOT.test(rel)) why = 'build/tooling';
+    else if (hyg && (hyg.isToolingState(rel) || hyg.isRegenerable(rel))) why = 'build/tooling';
+    else {
+      try {
+        const st = fs.lstatSync(path.join(wt, rel));
+        if (st.isFile() && st.size > MAX_FILE_BYTES) why = 'large';
+      } catch { /* deleted file: keep */ }
+    }
+    if (why) skipped.push({ path: rel, why });
+    else paths.push(p);
+  }
+  return { paths, skipped };
+}
+
+/**
+ * Commit `paths` (working-tree state) on top of `parents` in a temporary
+ * index. Returns the new commit sha or null. HEAD, index, tree untouched.
+ */
+function snapshotCommit(wt, paths, message, parents = ['HEAD'], timeout) {
   const idx = path.join(os.tmpdir(), `dotclaude-wip-index-${process.pid}-${Date.now()}`);
-  const env = { GIT_INDEX_FILE: idx };
+  const env = { GIT_INDEX_FILE: idx, GIT_LITERAL_PATHSPECS: '1' };
   try {
-    if (git(['read-tree', 'HEAD'], wt, env) === null) return null;
-    if (git(['add', '-A', '--', ...paths], wt, env) === null) return null;
-    const tree = git(['write-tree'], wt, env);
+    if (git(['read-tree', 'HEAD'], wt, { env, timeout }) === null) return null;
+    if (paths.length && git(['add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], wt,
+      { env, input: `${paths.join('\0')}\0`, timeout }) === null) return null;
+    const tree = git(['write-tree'], wt, { env, timeout });
     if (!tree) return null;
-    const sha = git([...identityArgs(wt), 'commit-tree', tree, '-p', 'HEAD', '-m', message], wt);
-    if (!sha || git(['update-ref', ref, sha], wt) === null) return null;
-    return sha;
+    const pArgs = parents.flatMap((p) => ['-p', p]);
+    return git([...identityArgs(wt), 'commit-tree', tree, ...pArgs, '-m', message], wt, { timeout });
   } finally {
     try { fs.unlinkSync(idx); } catch { /* none */ }
   }
 }
 
-function wipCommit(wt, message, { detached } = {}) {
+/**
+ * WIP-commit the savable changes of `wt` onto its checked-out branch: the
+ * commit is built in a temporary index, the branch moved with update-ref, and
+ * only then the real index realigned to the new HEAD (working tree untouched).
+ * For a finished agent's worktree — nobody is mid-`git add -p` there.
+ * detached: 'branch:<name>' creates that branch at HEAD first.
+ * @returns {Promise<{committed:boolean, branch?:string, sha?:string, reason?:string, skipped?:object[]}>}
+ */
+async function wipCommit(wt, message, { detached } = {}) {
   try {
-    const paths = dirtyPaths(wt);
-    if (!paths.length) return { committed: false, reason: 'clean' };
+    const busy = inProgress(wt);
+    if (busy) return { committed: false, reason: `in-progress:${busy}` };
+    const { paths, skipped } = await savablePaths(wt);
+    if (!paths.length) return { committed: false, reason: 'clean', skipped };
     let branch = git(['symbolic-ref', '--short', '-q', 'HEAD'], wt);
     if (!branch) {
-      const m = /^(branch|ref):(.+)$/.exec(detached || '');
+      const m = /^branch:(.+)$/.exec(detached || '');
       if (!m) return { committed: false, reason: 'detached' };
-      if (m[1] === 'ref') {
-        const sha = snapshotToRef(wt, paths, message, m[2]);
-        return sha ? { committed: true, ref: m[2], sha } : { committed: false, reason: 'snapshot-failed' };
-      }
-      if (git(['checkout', '-b', m[2]], wt) === null) return { committed: false, reason: 'checkout-failed' };
-      branch = m[2];
+      if (git(['checkout', '-b', m[1]], wt) === null) return { committed: false, reason: 'checkout-failed' };
+      branch = m[1];
     }
     if (isProtected(branch, wt)) return { committed: false, reason: 'protected', branch };
-    if (git(['add', '-A', '--', ...paths], wt) === null) return { committed: false, reason: 'add-failed' };
-    if (git([...identityArgs(wt), 'commit', '--no-verify', '-m', message], wt) === null) {
-      return { committed: false, reason: 'commit-failed', branch };
+    const old = git(['rev-parse', 'HEAD'], wt);
+    const sha = snapshotCommit(wt, paths, message);
+    if (!sha) return { committed: false, reason: 'commit-failed', branch };
+    if (git(['update-ref', '-m', 'wip', `refs/heads/${branch}`, sha, old], wt) === null) {
+      return { committed: false, reason: 'update-ref-failed', branch };
     }
-    return { committed: true, branch, sha: git(['rev-parse', 'HEAD'], wt) };
+    git(['read-tree', 'HEAD'], wt);
+    return { committed: true, branch, sha, skipped };
   } catch {
     return { committed: false, reason: 'error' };
   }
 }
 
-module.exports = { wipCommit, isProtected, defaultBranch, git };
+module.exports = { wipCommit, snapshotCommit, savablePaths, inProgress, isProtected, defaultBranch, git, MAX_FILE_BYTES };

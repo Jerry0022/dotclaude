@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook substop.agent.wip
- * @version 0.1.0
+ * @version 0.2.0
  * @event SubagentStop
  * @plugin devops
  * @description A finished agent that ran in an isolated worktree
@@ -17,7 +17,7 @@ require('../lib/plugin-guard');
 
 const fs = require('fs');
 const path = require('path');
-const { runHook } = require('../lib/hook-input');
+const { parseHookInput, contextOutput } = require('../lib/hook-input');
 const { wipCommit } = require('../lib/wip-commit');
 const { listWorktrees } = require('../lib/integration-check');
 
@@ -53,27 +53,36 @@ function findAgentWorktree(hook) {
   return null;
 }
 
-function main(hook) {
+async function main(hook) {
   const wt = findAgentWorktree(hook);
   if (!wt) return null;
   const agent = String(hook.agent_type || hook.agent_id || 'agent').replace(/[\r\n]+/g, ' ').slice(0, 60);
   const id = String(hook.agent_id || path.basename(wt).replace(/^agent-/, '')).replace(/[^\w-]/g, '');
-  const res = wipCommit(wt, `wip(agent): uncommitted result of ${agent}`, { detached: `branch:wip/agent-${id}` });
+  const res = await wipCommit(wt, `wip(agent): uncommitted result of ${agent}`, { detached: `branch:wip/agent-${id}` });
   if (!res.committed) return null;
   const short = (res.sha || '').slice(0, 8);
+  const left = res.skipped && res.skipped.length ? ` ${res.skipped.length} file(s) left out (secrets/build output/large) — still in the worktree.` : '';
   return {
     context: `[devops] Agent ${agent} left uncommitted work; saved as WIP commit ${short} on branch ${res.branch} in worktree ${wt}. `
-      + 'Integrate that branch (merge/cherry-pick) before reporting done — it is not in your branch yet.',
+      + `Integrate that branch (merge/cherry-pick) before reporting done — it is not in your branch yet.${left}`,
   };
 }
 
 module.exports = { main, findAgentWorktree };
 
 if (require.main === module) {
-  try {
-    runHook(main, { event: 'SubagentStop' });
-  } catch {
-    // fail open
-  }
+  let raw = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (d) => { raw += d; });
+  process.stdin.on('end', async () => {
+    try {
+      const hook = parseHookInput(raw);
+      const reply = hook ? await main(hook) : null;
+      if (reply && reply.context) process.stdout.write(`${contextOutput('SubagentStop', reply.context)}
+`);
+    } catch {
+      // fail open
+    }
+    process.exitCode = 0;
+  });
 }
-
