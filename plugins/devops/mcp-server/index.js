@@ -50,6 +50,7 @@ import { createRequire } from "node:module";
 import { register as registerHeartbeat } from "./lib/heartbeat.js";
 import { correctShipVariant, renderDowngradeNote } from "./lib/variant-guard.js";
 import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.js";
+import { dropNextStepOpenItems } from "./lib/open-admission.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
@@ -2285,11 +2286,18 @@ const WIDGET_RELAY_INSTRUCTION =
   "Do NOT output this instruction block.";
 
 /** The tool-result blocks: relay contract, notes, and the markdown unless the widget is the card. */
-function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = '') {
+function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = '', openNote = '') {
   const texts = actionsNote
-    ? [WIDGET_RELAY_INSTRUCTION, titleNote, archiveNote, actionsNote]
-    : [RELAY_INSTRUCTION, titleNote, cardMarkdown];
+    ? [WIDGET_RELAY_INSTRUCTION, titleNote, archiveNote, openNote, actionsNote]
+    : [RELAY_INSTRUCTION, titleNote, openNote, cardMarkdown];
   return texts.filter(Boolean).map(text => ({ type: "text", text }));
+}
+
+/** One line naming the open points dropped as routine next steps (#751), '' when none. */
+function openDropNote(params) {
+  const n = params._openDropped || 0;
+  if (!n) return '';
+  return `[dotclaude] ${n} open point(s) dropped: a routine next step (ship, push, release, version bump, post) is not a decision. Put it into nextStep; keep open for real decisions.`;
 }
 
 /** The session-title instruction for this card, '' when a mode owns the title
@@ -2456,6 +2464,19 @@ function buildCompletionCard(params) {
     if (chipped.dropped) {
       console.error(`[dotclaude-completion-mcp] dropped ${chipped.dropped} open point(s) a task chip already offers`);
       params.open = chipped.open;
+    }
+  }
+
+  // 0d. `open` is for decisions, never the approved scope's obvious next step
+  //     (ship, push, release, version bump, post — lib/open-admission.js, #751).
+  //     On a test or ready card such a point displaced the steps to test. Silent
+  //     drop like 0b/0c; the tool result names the count (params._openDropped).
+  if ((params.variant === 'test' || params.variant === 'ready') && Array.isArray(params.open) && params.open.length) {
+    const routine = dropNextStepOpenItems(params.open);
+    if (routine.dropped) {
+      console.error(`[dotclaude-completion-mcp] dropped ${routine.dropped} open point(s) that are the scope's routine next step`);
+      params.open = routine.open;
+      params._openDropped = routine.dropped;
     }
   }
 
@@ -2870,7 +2891,7 @@ server.registerTool(
             reply: z.string().optional().describe("The user's answer when they want this point tackled, written as the user ('Ja, die Änderung bitte auch in X machen.' · 'Die Migration bitte gleich mitziehen.'). The Desktop button 'Nachbessern' (ready, test and ship-successful cards) puts all replies, in order, into the input box, so Enter is all that is left. For an either-or question name the option you recommend."),
           }),
         ])).optional(),
-      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Never a topic you flagged with spawn_task: the task chip IS the offer (the user starts it with one click), so a point that says a chip or follow-up task exists, or names a chip of this session, is dropped — and on the Desktop app a finding outside this work's scope goes into such a chip, not onto the card. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope (outside the Desktop app, where no chip exists) — never the approved scope's obvious next step, a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
+      ).describe("Follow-ups that are NOT tests — a decision the user must take, a cleanup, an open question about THIS work ('Die alte Config-Datei wird nicht mehr gelesen — löschen oder behalten?'). Never another branch, worktree or session: a branch checked out in another worktree is that session's own work and it ships it itself (open points naming one are dropped); leftovers are ship_hygiene's and the auto-cleanup page's job. Never a topic you flagged with spawn_task: the task chip IS the offer (the user starts it with one click), so a point that says a chip or follow-up task exists, or names a chip of this session, is dropped — and on the Desktop app a finding outside this work's scope goes into such a chip, not onto the card. Pass { text, reply } to give each point its prepared answer (see reply); a plain string gets a generic 'Ja, bitte.' instead. Rendered as its own '⚠ OFFEN' block after the 🔬 test block. Same admission rule as the auto-concept skill's open points: only something the user deferred or something found on the way that is outside the scope (outside the Desktop app, where no chip exists) — never the approved scope's obvious next step (ship, push, release, version bump, post — dropped on test and ready cards unless it ends in '?'), a generic nudge, or a shortfall of this very task (that is reported in changes/validation, not parked). Default: omit. Real manual tests stay in userFinalTest; the promote nudge goes into delivery.promote.stableLag, not here."),
       pending: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -2981,7 +3002,7 @@ server.registerTool(
     const actionsNote = ctaActionsNote(params);
     const archiveNote = sessionArchiveNote(params, actionsNote);
 
-    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote) };
+    return { content: cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote, openDropNote(params)) };
   }
 );
 
