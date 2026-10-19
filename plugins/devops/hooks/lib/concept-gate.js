@@ -92,6 +92,13 @@ const ENGINE_DESIGN = [
   // Currency, not integrity: a design page from before AUD-018 builds its nav
   // labels with innerHTML from the entity-decoded dataset — a markup sink.
   { token: 'function navRowLabel', why: 'nav labels built as text, never as markup — § Layout JS (design engine predates the AUD-018 fix)' },
+  // Variant overview (≥2 designs): without these a multi-design round has no
+  // overview, no favourite and no user pins — and its payload silently lacks
+  // `favorite` / `userPins` (templates-design-overview.md § Variant overview JS).
+  { token: 'id="design-header"', why: 'variant-overview header mount — § Layout — Fullscreen single-screen (design engine predates the variant overview)' },
+  { token: 'function wireDesignOverview', why: 'variant overview engine — § Variant overview JS (design engine predates the variant overview)' },
+  { token: 'window.showOverview', re: /window\.showOverview\s*=/, why: 'overview switcher — § Layout JS (design engine predates the variant overview)' },
+  { token: 'window.designOverviewState', re: /window\.designOverviewState\s*=/, why: 'favourite + user-pin store reader for the payload — § Variant overview JS' },
 ];
 const ENGINE_DOCUMENT = [
   { token: '.concept-layout {', why: 'document-round layout rule — § Layout — Document rounds (engine CSS gutted?)' },
@@ -128,6 +135,8 @@ const ENGINE_CLASSES = [
   'iteration-tab', 'screen-indicator', 'design-switcher', 'frozen-bar',
   'frozen-bar-text', 'closeout-sheet', 'device-frame', 'panel-here',
   'concept-layout', 'concept-content', 'iteration-intro',
+  'design-header', 'design-quick', 'design-ov', 'design-ov-card', 'design-fav-btn',
+  'upin', 'upin-layer', 'upin-hint', 'design-keys', 'app-kbd',
 ];
 // A mock class is namespaced when it carries a per-design prefix.
 const MOCK_PREFIX_RE = /^(d\d+-|s\d+-|mock-|mk-)/;
@@ -740,13 +749,66 @@ function findViewOverlap(html) {
   return issues;
 }
 
+// --- Variant overview authoring (validation-gate.md § Variant overview) -----
+
+/**
+ * Advisory only — never blocks. A design round with ≥2 `section[data-design]`
+ * renders an overview card per design from `data-design-motto`,
+ * `data-design-traits` (exactly three, `|`-separated) and `data-design-icon`
+ * (templates-design.md § Variant overview (≥2 designs)). A missing one still
+ * renders (no motto line, no traits, a generic icon), so a page written
+ * before the overview existed must keep building; the warning names what the
+ * card is missing.
+ *
+ * @returns {Array<{kind:string, why:string, at:number}>}
+ */
+function findDesignAuthoringWarnings(html) {
+  const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
+  const warnings = [];
+  // Quoted values are matched whole, so a `>` inside a motto ("Fast -> simple")
+  // neither drops the section nor cuts its tag short.
+  const topRe = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*?\s(data-iteration|data-design)=("|')([^"']*)\2(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  const groups = [];
+  let cur = null, m;
+  while ((m = topRe.exec(body)) !== null) {
+    if (m[1].toLowerCase() === 'data-iteration') {
+      cur = { n: m[3], designs: [] };
+      groups.push(cur);
+    } else if (cur) {
+      cur.designs.push({ id: m[3], tag: m[0], at: m.index });
+    }
+  }
+  for (const g of groups) {
+    if (g.designs.length < 2) continue;
+    for (const d of g.designs) {
+      const missing = [];
+      const motto = attrOf(d.tag, 'data-design-motto');
+      const traits = attrOf(d.tag, 'data-design-traits');
+      const icon = attrOf(d.tag, 'data-design-icon') || (/\sdata-design-icon=/i.test(d.tag) ? 'set' : null);
+      if (!motto || !motto.trim()) missing.push('data-design-motto');
+      if (!traits || !traits.trim()) missing.push('data-design-traits');
+      if (!icon) missing.push('data-design-icon');
+      if (missing.length) {
+        warnings.push({ kind: 'overview-authoring', at: d.at,
+          why: `iteration ${g.n}, design "${d.id}": ${missing.join(', ')} missing — the variant overview card renders without it (templates-design.md § Variant overview)` });
+      }
+      if (traits && traits.trim()) {
+        const count = traits.split('|').map(t => t.trim()).filter(Boolean).length;
+        if (count !== 3) warnings.push({ kind: 'overview-traits', at: d.at,
+          why: `iteration ${g.n}, design "${d.id}": data-design-traits has ${count} trait(s), the card shows exactly three genuine differences ("A | B | C")` });
+      }
+    }
+  }
+  return warnings;
+}
+
 /**
  * Full evaluation for a written file.
  * @returns {{applicable:boolean, ok:boolean, missing:Array, forbidden:Array, structural:Array, mapping:Array, overlap:Array}}
  */
 function evaluate(filePath, html) {
   if (!isConceptHtml(filePath, html)) {
-    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [] };
+    return { applicable: false, ok: true, missing: [], forbidden: [], structural: [], mapping: [], overlap: [], stale: [], warnings: [] };
   }
   const missing = findMissing(html);
   const forbidden = findForbidden(html);
@@ -765,6 +827,8 @@ function evaluate(filePath, html) {
     overlap,
     stale,
     collisions,
+    // Advisory, never part of `ok`.
+    warnings: findDesignAuthoringWarnings(html),
   };
 }
 
@@ -900,6 +964,7 @@ module.exports = {
   findMappingIssues,
   findViewOverlap,
   findChromeCollisions,
+  findDesignAuthoringWarnings,
   ENGINE_CLASSES,
   evaluate,
   buildBlockReason,

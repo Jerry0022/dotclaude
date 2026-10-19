@@ -161,7 +161,9 @@ Step 5c's freeze has two halves:
      (`{cells, order, adhoc, slotNotes}`), which satisfies M9, wherever the
      spec sits inside its mapping section.
    - the dock notes as `<script type="application/json" data-frozen-feedback>`:
-     `comments.general` plus `comments.designs` / `screens` / `views`.
+     `comments.general` plus `comments.designs` / `screens` / `views`, and —
+     for a round with the variant overview — `favorite` and `userPins`, so the
+     frozen tab shows the favourite and the user's pins read-only.
    - `data-baked` on the section, which the build requires on every frozen
      round.
 

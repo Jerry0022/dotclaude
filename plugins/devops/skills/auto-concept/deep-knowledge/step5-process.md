@@ -51,6 +51,26 @@ the sidebar on the hourglass while the page waits for the user.
    `text`; that is a complete remark, not an empty one, and skipping it
    because the text is blank silently discards the user's point.
 
+**Favourite and user pins (design rounds with ≥2 designs):** the payload
+always carries `favorite` (a design id or `null`) and `userPins[]`
+(`templates-design-wiring.md` § Decision schema).
+
+- **`favorite` set** → that design is the **starting point** of the next
+  round: build on it, keep its structure. Comments on the OTHER designs are
+  still applied — a liked detail of a non-favourite moves into the
+  favourite; a criticism of it is a thing to avoid. Never drop a remark
+  because it was written on a design that lost.
+- **`favorite` null** → no starting point was chosen. Decide from the
+  comments: keep every design on (refined per its notes) when the remarks do
+  not prefer one, or consolidate into one design when they point that way —
+  and say which and why in the round's intro.
+- **`userPins[]`** are the user's own Ctrl + click comments, each tied to a
+  spot: read them **per screen**, `design` + `screen` name the page, `x` / `y`
+  (percent of the screen's content box, from the top-left) and `target`
+  (`#id` or `tag.class "text…"` of the element hit) name the place. Treat a
+  pin exactly like a screen note about that element; when the next round
+  changes the element, the pin is answered.
+
 **Coverage check:** before processing decisions, verify every named form
 field that exists in the just-frozen iteration HTML appears in the
 `decisions` payload (specifically the `allFields` catch-all). If a field

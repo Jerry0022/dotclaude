@@ -75,6 +75,16 @@ concept the user wants. Three modes exist:
 
 **Before executing this step, Read `deep-knowledge/step1-templates.md` § 1a · Design iteration authoring completely** — click-dummy wiring, screens as states, competing designs, single-screen, design system, annotation layer, optional views and the view-vs-decision-iteration rule of thumb.
 
+   **≥2 designs → the variant overview.** Each design carries
+   `data-design-motto`, `data-design-traits` (exactly three genuine
+   differences), `data-design-icon` and optionally `data-design-color`; the
+   engine turns them into the overview, the header and the quick nav. The
+   user may star one design as **Favourite** (`favorite` in the payload,
+   optional, at most one): it is the starting point of the next round, and
+   comments on the other designs are still applied; without one Claude
+   decides from the comments (step5-process.md § 5a → Favourite and user
+   pins).
+
    **Orthogonality — a view never re-asks the design choice.** The call
    *between* the designs is made in the 💬 dock (per-design and per-screen
    textareas); that is the whole point of showing them side by side. A

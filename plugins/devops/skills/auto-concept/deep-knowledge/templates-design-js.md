@@ -1,4 +1,4 @@
-# Concept templates, part 06 of 16: Template: design — layout JS
+# Concept templates, part 06 of 17: Template: design — layout JS
 
 ## Layout JS — single-screen navigation + context-sensitive feedback
 
@@ -154,6 +154,11 @@ design round has: the three row builders and the ordering of stash → rebuild
     // to hide the switcher + design-level feedback row, mirroring
     // body[data-single-screen] below.
     document.body.dataset.singleDesign = allDesigns.length <= 1 ? 'true' : 'false';
+    // Variant overview mode (§ Variant overview (≥2 designs)): the CSS gate
+    // for the header, the quick nav and the overview itself. A single-design
+    // round never sets it, so its chrome stays what it was.
+    document.body.dataset.overview = allDesigns.length >= 2 ? 'true' : 'false';
+    if (allDesigns.length < 2) document.body.dataset.overviewActive = 'false';
 
     // Design switcher (ghost bar) — one segment per design.
     const switcher = document.getElementById('design-switcher');
@@ -288,6 +293,9 @@ design round has: the three row builders and the ordering of stash → rebuild
     buildScreenTextareas(allDesigns);
     buildViewTextareas(allViews);
     updateScreenScope(active);
+    // Overview, header, quick nav and the ☰ icon prefixes (§ Variant overview
+    // JS) — rebuilt with the rest of the round's chrome, never per switch.
+    if (typeof window.buildDesignOverview === 'function') window.buildDesignOverview();
     // § Attachments — rebuild bars for the freshly (re)created textareas
     // and re-render any attachments already tracked for their slot keys.
     if (typeof initCommentAttachments === 'function') initCommentAttachments();
@@ -578,6 +586,8 @@ design round has: the three row builders and the ordering of stash → rebuild
     // above has already run, which is the whole point of returning here
     // rather than earlier.
     if (document.body.dataset.viewActive === 'true') return;
+    // Same for the variant overview: no design is on screen.
+    if (document.body.dataset.overviewActive === 'true') return;
     const size = spec.sizes[viewportMode];
     const design = activeDesign();
     const screen = design && design.querySelector('section[data-screen][data-screen-active="true"]');
@@ -793,6 +803,7 @@ design round has: the three row builders and the ordering of stash → rebuild
       item.dataset.active = 'false';
     });
     document.body.dataset.viewActive = 'false';
+    hideOverview(it);
     const targets = [...it.querySelectorAll('section[data-design]')];
     targets.forEach(d => {
       const match = d.dataset.design === designId;
@@ -847,6 +858,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     // that attribute is design-vs-design memory, orthogonal to whether
     // design mode itself is what's on screen right now.
     it.querySelectorAll('section[data-design]').forEach(d => { d.hidden = true; });
+    hideOverview(it);
     const allViews = views();
     let target = null;
     allViews.forEach(v => {
@@ -875,11 +887,49 @@ design round has: the three row builders and the ordering of stash → rebuild
     document.body.dataset.viewActive = 'true';
     updateIndicator();
     updateViewNoteMarkers();
+    if (typeof window.updateDesignChrome === 'function') window.updateDesignChrome();
     if (typeof saveState === 'function') saveState();
     // Consistent with showScreen()'s screen:changed below — lets
     // wireAnnotationLayer() and any other cross-cutting listener react
     // without knowing views exist.
     document.dispatchEvent(new CustomEvent('view:changed', { detail: { id: viewId } }));
+  };
+
+  // The variant overview (§ Variant overview (≥2 designs)) — the third kind
+  // of top-level item, next to designs and views. buildDesignOverview()
+  // creates `[data-design-overview]` inside the visible iteration when it has
+  // ≥2 designs. Showing it hides every design (data-design-active stays: it
+  // is the design-vs-design memory showDesign() returns to) and every view;
+  // showDesign()/showView() call hideOverview() on the way in.
+  function overviewOf(it) {
+    return it ? it.querySelector(':scope > [data-design-overview]') : null;
+  }
+  function hideOverview(it) {
+    const ov = overviewOf(it);
+    if (ov) ov.hidden = true;
+    document.body.dataset.overviewActive = 'false';
+  }
+  window.showOverview = function() {
+    const it = visibleIteration();
+    const ov = overviewOf(it);
+    if (!ov) return;
+    it.querySelectorAll('section[data-design]').forEach(d => { d.hidden = true; });
+    it.querySelectorAll('section[data-view]').forEach(v => {
+      v.hidden = true;
+      v.dataset.viewActive = 'false';
+    });
+    document.querySelectorAll('.design-switch-item, .view-switch-item, .screen-nav-design-heading, .screen-nav-item, .screen-nav-view-item')
+      .forEach(item => { item.dataset.active = 'false'; });
+    document.body.dataset.viewActive = 'false';
+    ov.hidden = false;
+    document.body.dataset.overviewActive = 'true';
+    // Tears the device stage down (renderDeviceStage() returns early in
+    // overview mode) — a framed clone of the last screen must not linger.
+    applyViewport();
+    updateIndicator();
+    if (typeof window.updateDesignChrome === 'function') window.updateDesignChrome();
+    if (typeof saveState === 'function') saveState();
+    document.dispatchEvent(new CustomEvent('overview:changed'));
   };
 
   function updateViewNoteMarkers() {
@@ -893,6 +943,9 @@ design round has: the three row builders and the ordering of stash → rebuild
   window.showScreen = function(id) {
     const design = activeDesign();
     if (!design) return;
+    // On the variant overview a page switch is a design switch (only
+    // showDesign() un-hides the design; it calls back in here).
+    if (document.body.dataset.overviewActive === 'true') { showDesign(design.dataset.design, id); return; }
     const screens = design.querySelectorAll('section[data-screen][id]');
     // Membership guard. `hidden = s.id !== id` is a blanket hide when NO
     // screen carries `id` — one foreign id (a nav entry of another design, a
@@ -940,6 +993,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     applyViewport();
     updateIndicator();
     updateNoteMarkers();
+    if (typeof window.updateDesignChrome === 'function') window.updateDesignChrome();
     if (typeof saveState === 'function') saveState();
     // Lets the (optional) annotation layer refresh its per-screen counter
     // without this function knowing that layer exists — see
@@ -1082,8 +1136,25 @@ design round has: the three row builders and the ordering of stash → rebuild
         if (raw) restoredView = JSON.parse(raw)._activeView;
       } catch (e) {}
       const viewTarget = restoredView && active.querySelector(`section[data-view="${CSS.escape(restoredView)}"]`);
+      // Variant overview (≥2 designs): a fresh page lands on the overview; a
+      // reload returns to where the user was (`_overview` 'on' | 'off' plus
+      // the design and page, § State Persistence). An unknown design id
+      // falls back to the overview rather than to a blank canvas.
+      let ovState = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const st = JSON.parse(raw);
+          ovState = { mode: st._overview, design: st._overviewDesign, screen: st._overviewScreen };
+        }
+      } catch (e) {}
+      const ovDesign = ovState && ovState.design
+        && active.querySelector(`:scope > section[data-design="${CSS.escape(ovState.design)}"]`);
       if (viewTarget) {
         showView(restoredView);
+      } else if (overviewOf(active)) {
+        if (ovState && ovState.mode === 'off' && ovDesign) showDesign(ovState.design, ovState.screen || undefined);
+        else showOverview();
       } else {
         const design = active.querySelector('section[data-design][data-design-active="true"]');
         if (design) {
@@ -1139,7 +1210,12 @@ design round has: the three row builders and the ordering of stash → rebuild
     // (activeViewVisible()); a stale data-view-active behind a design is not.
     const incoming = visibleIteration();
     const incomingId = incoming ? String(incoming.dataset.iteration) : null;
-    const keptView = (incomingId !== null && incomingId === shownIterationId) ? activeViewVisible() : null;
+    const sameRound = incomingId !== null && incomingId === shownIterationId;
+    const keptView = sameRound ? activeViewVisible() : null;
+    // The overview survives a same-round re-entry (the boot event) like a
+    // view does, and a real tab switch into a ≥2-design round lands on that
+    // round's overview when the user was on one before.
+    const wasOverview = document.body.dataset.overviewActive === 'true';
     shownIterationId = incomingId;
     if (!keptView) {
       // A question view never survives a tab switch. buildDesignUI() requires
@@ -1196,6 +1272,13 @@ design round has: the three row builders and the ordering of stash → rebuild
       updateNoteMarkers();
       return;
     }
+    if (wasOverview && overviewOf(incoming)) {
+      showOverview();
+      primeDock();
+      updateNoteMarkers();
+      return;
+    }
+    if (incoming) hideOverview(incoming);
     const design = activeDesign();
     // A document round of this page (a decision reality-check, the free
     // final report) has no design to show — but it HAS the dock (#399: page
@@ -1241,6 +1324,7 @@ design round has: the three row builders and the ordering of stash → rebuild
     // Left/Right must not hijack it into switching designs (§ Views (optional)).
     // It has no device frames either, so `v` below is equally out of scope.
     if (document.body.dataset.viewActive === 'true') return;
+    if (document.body.dataset.overviewActive === 'true') return;
     // `v` cycles the device view — the keyboard equivalent of the bottom-left
     // toggle, and a no-op on concepts that declare a single viewport.
     if (e.key === 'v' || e.key === 'V') { e.preventDefault(); cycleViewport(); return; }
@@ -1258,4 +1342,3 @@ design round has: the three row builders and the ordering of stash → rebuild
   });
 })();
 ```
-

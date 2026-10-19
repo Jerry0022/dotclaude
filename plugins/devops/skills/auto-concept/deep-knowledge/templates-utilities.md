@@ -1,4 +1,4 @@
-# Concept templates, part 15 of 16: Shared systems — tooltips, theme toggle, connection heartbeat
+# Concept templates, part 16 of 17: Shared systems — tooltips, theme toggle, connection heartbeat
 
 ## App Tooltips
 
@@ -16,6 +16,12 @@ universal ✕). Once a tip has closed, the next one opens instantly within
 Escape, a click or a scroll closes it; touch opens it on long-press. A stray
 `title` — page content Claude writes, an older script — is moved to
 `data-tip` on sight, so the OS tooltip can never appear.
+
+**Hotkey hints ride in the same tooltip** (ui-defaults R4b): an element with
+`data-tip-key="1"` (parts joined by `+`, e.g. `⇧+1`, `Strg+Enter`) gets the
+key as app-styled `<kbd class="app-kbd">` caps after its label — "Cockpit
+[1]" — in ONE tooltip. There is never a second floating keycap badge next to
+the element. Pair it with `aria-keyshortcuts` on the element.
 
 ```css
 .app-tip {
@@ -95,13 +101,28 @@ Escape, a click or a scroll closes it; touch opens it on long-press. A stray
     tip.style.top = Math.round(top) + 'px';
   }
 
+  // Label text plus, for `data-tip-key`, one keycap per key part.
+  function fill(el) {
+    tip.textContent = el.dataset.tip;
+    const key = el.dataset.tipKey;
+    if (!key) return;
+    tip.appendChild(document.createTextNode(' '));
+    key.split('+').forEach((part, i) => {
+      if (i) tip.appendChild(document.createTextNode('+'));
+      const cap = document.createElement('kbd');
+      cap.className = 'app-kbd';
+      cap.textContent = part;
+      tip.appendChild(cap);
+    });
+  }
+
   function show(el) {
     const text = el.dataset.tip;
     if (!text || !el.isConnected) return;
     if (!tip.isConnected) document.body.appendChild(tip);
     if (owner && owner !== el) describe(owner, false);
     owner = el;
-    tip.textContent = text;
+    fill(el);
     tip.hidden = false;
     place(el);
     tip.setAttribute('data-open', '');
@@ -137,7 +158,7 @@ Escape, a click or a scroll closes it; touch opens it on long-press. A stray
         if (rec.type === 'attributes') {
           if (rec.attributeName === 'title') adopt(rec.target);
           else if (rec.target === owner) {
-            if (owner.dataset.tip) { tip.textContent = owner.dataset.tip; place(owner); } else hide();
+            if (owner.dataset.tip) { fill(owner); place(owner); } else hide();
           }
           continue;
         }
@@ -148,7 +169,7 @@ Escape, a click or a scroll closes it; touch opens it on long-press. A stray
         });
       }
     }).observe(document.documentElement,
-      { subtree: true, childList: true, attributes: true, attributeFilter: ['title', 'data-tip'] });
+      { subtree: true, childList: true, attributes: true, attributeFilter: ['title', 'data-tip', 'data-tip-key'] });
   }
 
   document.addEventListener('pointerover', (e) => {
