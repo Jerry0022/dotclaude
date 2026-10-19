@@ -1537,7 +1537,7 @@ describe("render_completion_card — a pending question replaces the ship offer 
     for (const key of ["ready", "test"]) {
       const d = mod.buildDecisionBlock(input, "de", key, delivery, state);
       expect(d.heading).toBe("👉 ❓ Question — Welche Quest schlägt fehl?");
-      expect(d.points).toEqual(["Log anhängen"]);
+      expect(d.points).toEqual(["👉 Log anhängen"]);
       expect(d.noShip).toBe(true);
       const l = await labels(d);
       expect(l).not.toContain("Ship");
@@ -1547,6 +1547,16 @@ describe("render_completion_card — a pending question replaces the ship offer 
     const en = mod.buildDecisionBlock(input, "en", "ready", delivery, state);
     expect(en.heading).toBe("👉 ❓ Question — Welche Quest schlägt fehl?");
     expect(await labels(en, "en")).not.toContain("Ship");
+  });
+
+  test("point lines carry their kind: ❓ a question, 👉 a manual step (display only)", async () => {
+    const mod = await import("./index.js");
+    const d = mod.buildDecisionBlock({
+      variant: "ready", summary: "x",
+      open: ["Welche Variante?", "API-Key im Dashboard eintragen", "Doku nachziehen?", "👉 Schon markiert"],
+    }, "de", "ready", delivery, state);
+    expect(d.heading).toBe("👉 ❓ Question — Welche Variante?");
+    expect(d.points).toEqual(["👉 API-Key im Dashboard eintragen", "❓ Doku nachziehen?", "👉 Schon markiert"]);
   });
 
   test("waitsOn user without open still asks (heading names the requirement), no Ship", async () => {

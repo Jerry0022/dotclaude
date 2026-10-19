@@ -259,7 +259,7 @@ describe("--render-card CLI fallback", () => {
     // The terminal asks the top point as the heading and lists the rest.
     const term = await renderCard(payload);
     expect(term).toMatch(/^## 👉 ❓ Question — Soll die Änderung auch im Terminal-Renderer rein \+1 weitere\?$/m);
-    expect(term).toMatch(/^1\. Doku zur Card nachziehen\?$/m);
+    expect(term).toMatch(/^1\. ❓ Doku zur Card nachziehen\?$/m);
   });
 
   test("test and ship-successful cards answer their open points too (Desktop)", async () => {
@@ -276,7 +276,7 @@ describe("--render-card CLI fallback", () => {
     // the open points show on the test card, the steps tagged 🧪
     const testTerm = await renderCard(test);
     expect(testTerm).toMatch(/^## 👉 ❓ Question — Auch im Terminal\?$/m);
-    expect(testTerm).toMatch(/^1\. Doku nachziehen\?$/m);
+    expect(testTerm).toMatch(/^1\. ❓ Doku nachziehen\?$/m);
     expect(testTerm).toMatch(/^2\. 🧪 Seite öffnen$/m);
 
     const ring = (await renderCardFull({

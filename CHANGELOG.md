@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.274.1] — 2026-10-19
+
+### Fixed
+- **Completion card points show their kind.** An open point ending in `?` now starts with ❓, any other open point (a step the user does by hand) with 👉. Test steps keep 🧪. The icons are added only when the points are shown, so the heading, the 3-point cap and the question heading still work on the plain text.
+
 ## [0.274.0] — 2026-10-19
 
 Session titles now show two icons, status first and activity second, plus one English keyword: `👉 📦 Ready – X`, `⏳ 🚀 Shipping – X`, `🟩 🚀 Released Alpha – X`. The title and the card's CTA heading come from one table, so they can no longer drift apart. The workspace question ("Wo soll die Arbeit laufen?") is now asked only until a project's handling is decided.
