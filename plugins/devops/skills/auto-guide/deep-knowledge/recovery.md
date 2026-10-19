@@ -115,8 +115,18 @@ in the chat leaves them staring at a spinner.
   text „Ich habe dir im Chat eine Frage gestellt – bitte beantworte sie dort.
   Danach geht es hier weiter." Then ask. After the answer, re-send the step
   the question was about.
-- A chat message from the user **during** the loop: answer it briefly, then
-  continue with § Resuming in a new turn — the panel kept its state.
+- A chat message from the user **during** the loop: answer it **in the
+  panel** in the same turn — re-issue the current step with the same `id` and
+  the answer in its text (the panel shows „Hinweis aktualisiert") — and keep
+  polling (5c). The user can reply in the panel; Claude continues without a
+  chat message. Queue the answer and post it as the **last chat text** when
+  the guide ends (§ Ends: done, aborted, paused). Never end a turn only to
+  make a chat answer visible while the guide waits on the panel.
+- **Any chat message that ends a turn during a guide** (pause, a question
+  answer, a card) names the next action: do the panel step, then write
+  „weiter" in the chat. A panel click with no live `wait()` stays queued and
+  the panel says „Claude hört gerade nicht zu" at once (#748); the next turn
+  drains it (§ Resuming in a new turn).
 
 ## Storing a secret (5d)
 
@@ -130,6 +140,9 @@ in the chat leaves them staring at a spinner.
   written anywhere else.
 
 ## Ends
+
+Any chat answer queued during the guide (§ Questions in the chat) is posted
+as the last chat text of the end report.
 
 | End | What to do |
 |-----|-----------|

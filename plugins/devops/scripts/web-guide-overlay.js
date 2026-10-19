@@ -643,6 +643,16 @@
     abort: "Abbruch gesendet – Claude beendet den Guide …",
   };
   var lastSentType = "next";
+  // #748: a click that finds no live wait() says "nicht zu" at once, not after
+  // 45 s — unless a poll ended within NO_LISTENER_GAP_MS: between two wait()
+  // calls (model working, hidden mode's 25 s pause) the next poll picks it up.
+  var NO_LISTENER_GAP_MS = 30000;
+  var noListenerAtClick = false;
+  function noListenerNow() {
+    if (listenerLive()) return false;
+    var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
+    return Date.now() - Math.max(lastPoll, deadAt) > NO_LISTENER_GAP_MS;
+  }
   function tickHeartbeat() {
     if (waitLabelEl) {
       var mine = currentStep ? eventQueue.filter((e) => e.stepId === currentStep.id) : [];
@@ -651,7 +661,7 @@
       var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
       var lastLive = listenerLive() ? Date.now() : Math.max(lastPoll, deadAt);
       var text;
-      if (undelivered && Date.now() - lastLive > HEARTBEAT_STALE_MS) {
+      if (undelivered && (noListenerAtClick || Date.now() - lastLive > HEARTBEAT_STALE_MS)) {
         text = sent === "abort"
           ? "Claude hört gerade nicht zu — schreib im Chat „Guide beenden“."
           : "Claude hört gerade nicht zu — schreib im Chat „weiter“.";
@@ -676,6 +686,7 @@
 
   function deliverEvent(event) {
     event.id = ++lastEventId;
+    noListenerAtClick = noListenerNow();
     eventQueue.push(event);
     saveQueue();
     // Hand off to the current pendingWaiter only while it is young enough to
@@ -1364,6 +1375,7 @@
       awaitingResponse = false; // Claude just sent us something — it isn't waiting any more
       currentStep = step;
       if (isNewStep) {
+        noListenerAtClick = false;
         collapsed = false;
         secretLost = false;
         sentFlag = false;
@@ -1390,6 +1402,7 @@
       // AUD-C007: a caller without the token neither supersedes Claude's
       // wait() nor receives an event.
       if (!authorized(token)) return Promise.resolve({ type: "bad-token" });
+      noListenerAtClick = false;
       lastPoll = Date.now(); // #513: heartbeat — every wait() records a poll.
       awaitingResponse = false; // #530: a new poll means Claude is listening again
       // #529: a new wait() call proves the previous call's caller has moved
