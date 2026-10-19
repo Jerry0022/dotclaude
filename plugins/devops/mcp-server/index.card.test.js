@@ -1606,3 +1606,27 @@ describe("render_completion_card — a pending question replaces the ship offer 
     expect(text).toMatch(/^## 👉 📦 Ready — Shippen\?$/m);
   });
 });
+
+describe("render_completion_card — routine next step is no open point (#751)", () => {
+  test("test card: the next-step point is dropped, the tool result names it, userTest stays", async () => {
+    const res = await render({
+      variant: "test", summary: "x", lang: "de", session_id: "test-751-test",
+      userTest: ["Login testen"],
+      open: ["Version ausgeben, nach main pushen und Discord-Post senden", "Alte Config löschen oder behalten?"],
+    });
+    const text = res.content[res.content.length - 1].text;
+    expect(text).toContain("Login testen");
+    expect(text).toContain("Alte Config löschen oder behalten?");
+    expect(text).not.toContain("Discord-Post");
+    expect(res.content.some(b => /1 open point\(s\) dropped/.test(b.text))).toBe(true);
+  });
+
+  test("ready card: next-step point dropped, so nothing is open and Ship stays", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "x", lang: "de", session_id: "test-751-ready",
+      open: [{ text: "Nach main pushen und Release ausgeben", reply: "Ja." }],
+    });
+    expect(text).not.toContain("nach main pushen");
+    expect(text).toMatch(/^## 👉 📦 Ready — Shippen\?$/m);
+  });
+});
