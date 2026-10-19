@@ -1,16 +1,9 @@
-<!-- do-run mode `audit` — the body of the former `tune-audit` skill (v0.1.0), moved verbatim in PR 2 of the skill restructure (docs/superpowers/specs/2026-09-24-skill-restructure-design.md). Its triggers, allowed tools and argument hint now live in ../SKILL.md. -->
-
 # Tune Audit — Full-Spectrum Audit
 
 Audit `$ARGUMENTS` (or the whole app) across every quality dimension, prove
 each finding with evidence, then either fix what is safe to fix or hand the
-result over as a DevOps concept page.
-
-**Why this skill exists:** `/auto-harden` and `/auto-polish` improve code
-they already assume is the right code; neither asks *"does the app do what was
-asked, does it sound, move, log and perform right?"*. An audit answers that
-first — across all dimensions, against stated requirements, with evidence —
-and only then decides what to change.
+result over as a DevOps concept page. Triggers, allowed tools and argument
+hint live in `../SKILL.md`.
 
 ## Step 0 — Load Extensions
 
@@ -22,9 +15,8 @@ reading. Skip missing files silently.
    Pre-PR-2 fallback: also read `~/.claude/skills/tune-audit/` and `{project}/.claude/skills/tune-audit/` (`SKILL.md` + `reference.md`) when present — an extension written for the old `tune-audit` skill applies to this mode unchanged.
 3. Merge order: project > global > plugin defaults
 
-Project extensions typically add: extra dimensions (e.g. "game-feel",
-"GDPR"), performance budgets (`LCP ≤ 2.0 s`, `bundle ≤ 300 kB`), the log
-schema, audio asset rules, or a requirements source (spec folder, Jira export).
+Extensions typically add dimensions, performance budgets, the log schema,
+audio asset rules or a requirements source.
 
 ## Step 1 — Parse Arguments
 
@@ -45,8 +37,7 @@ Scan `$ARGUMENTS` for:
 F2 "Audit-Umfang" in `{PLUGIN_ROOT}/skills/do-run/deep-knowledge/questions.md`)
 and passes `--scope=` and `--mode=`, so Step 1 presets them and this step asks
 nothing. It runs only when a preset is missing — and then asks exactly those
-two questions: same headers, labels, order and recommended marker, so the run
-contract reads a standalone answer the same way as the router's.
+two questions with the same headers, labels, order and recommended marker.
 
 First detect whether **this conversation already developed something**:
 files written/edited by this session, or commits made in it. Hold as
@@ -75,8 +66,7 @@ F2  header: "Audit-Umfang"  multiSelect: false
          last 48 h, traced to evidence. Functional dimension only (plus tests).
 ```
 
-The labels stay German whatever the chat language — they are the contract
-strings `questions.md` defines, not prose to translate.
+The labels stay German whatever the chat language.
 
 Autonomous defaults: `$SCOPE = chat` when `$CHAT_HAS_WORK`, else `all`.
 
@@ -116,6 +106,9 @@ Persist to `.claude/audit/<YYYY-MM-DD>-<slug>/requirements.md`.
 
 For `$SCOPE=all` the catalog covers the 48 h window; the rest of the app is
 audited against implicit requirements (README, docs, visible UI promises).
+
+Honest coverage: Step 4 states `n/a` / `blocked` with a reason, Step 6 requires
+evidence for every finding and every pass.
 
 ## Step 4 — Surface Detection & Dimension Plan
 
@@ -277,10 +270,6 @@ owns the card once its page is open.
 
 ## Rules
 
-- **Evidence or it didn't happen** — every finding and every "pass" names
-  its proof. Unproven claims are open questions.
-- **Honest coverage** — `n/a` and `blocked` dimensions are shown with their
-  reason; the scorecard never implies a check that did not run.
 - **Requirements come from the user's words**, not from Claude's taste. Taste
   findings (visual, audio, motion) are `low` unless they break a rule in
   `dimensions.md` or `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`.
