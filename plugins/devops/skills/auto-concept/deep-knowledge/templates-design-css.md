@@ -939,3 +939,316 @@ body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
 }
 ```
 
+
+### Variant overview CSS (≥2 designs)
+
+Chrome of § Variant overview (≥2 designs). Every rule is gated on
+`body[data-overview="true"]` (set by `buildDesignUI()` for a round with ≥2
+designs) or lives on an element that only exists in that mode, so a
+single-design round paints exactly as before. Geometry follows the top-edge
+partition above: the header owns the left band the screen indicator owned
+(collapsed ≤ 280px), the quick nav the centre band the design switcher
+owned; both expand only as overlays (fixed, higher z-index), never by
+pushing anything — the content box never moves.
+
+```css
+#design-header, #design-quick { display: none; }
+.design-header [hidden], .design-quick [hidden], .design-ov [hidden] { display: none !important; }
+/* On the overview no screen and no design is "current": the dock keeps its
+   general row only (the per-design notes live on the design pages). */
+body[data-overview-active="true"] .feedback-section:has(#screen-textareas),
+body[data-overview-active="true"] .feedback-divider:has(+ .feedback-section #screen-textareas),
+body[data-overview-active="true"] .feedback-section:has(#design-textareas),
+body[data-overview-active="true"] .feedback-divider:has(+ .feedback-section #design-textareas) { display: none; }
+body[data-overview-active="true"] .feedback-divider:has(+ .feedback-section #design-general-feedback) { display: none; }
+html[data-template="design"] body[data-overview="true"] #design-header,
+html[data-template="design"] body[data-overview="true"] #design-quick { display: flex; }
+html[data-template="design"] body[data-overview="true"] .screen-indicator,
+html[data-template="design"] body[data-overview="true"] .design-switcher { display: none; }
+html:not([data-template="design"]) .design-ov,
+html:not([data-template="design"]) .upin-layer,
+html:not([data-template="design"]) .upin-hint { display: none !important; }
+
+/* ── Overview (first top-level item) ── */
+[data-template="design"] .design-ov {
+  position: absolute; inset: 0;
+  padding: var(--chrome-safe-top, 5.75rem) 2rem var(--chrome-safe-bottom, 2rem);
+  overflow-y: auto;
+  animation: screen-in 0.25s ease;
+}
+.design-ov[hidden] { display: none; }
+body:not([data-overview-active="true"]) .design-ov { display: none; }
+.design-ov-grid {
+  display: grid; gap: 1.25rem; align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  max-width: 1320px; margin: 0 auto;
+  /* Room for the favourite's lift + badge so neither is clipped (R8). */
+  padding-top: 0.75rem;
+}
+.design-ov-card {
+  --dz-color: var(--accent-color);
+  position: relative; display: flex; flex-direction: column; gap: 0.75rem;
+  padding: 1.1rem 1.1rem 1rem; border-radius: 16px;
+  background: color-mix(in srgb, var(--dz-color) 9%, var(--panel-bg, #161b22));
+  border: 2px solid color-mix(in srgb, var(--dz-color) 35%, var(--border-color, #30363d));
+  color: var(--text-color, #e6edf3);
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.design-ov-card::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 6px;
+  border-radius: 14px 14px 0 0; background: var(--dz-color);
+}
+.design-ov-card[data-favorite="true"] {
+  border-color: var(--warning-color, #d29922);
+  transform: translateY(-6px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-color, #d29922) 35%, transparent),
+              0 16px 40px color-mix(in srgb, var(--warning-color, #d29922) 28%, transparent);
+}
+.design-ov-grid[data-has-favorite="true"] .design-ov-card:not([data-favorite="true"]) { opacity: 0.62; }
+.design-ov-grid[data-has-favorite="true"] .design-ov-card:not([data-favorite="true"]):hover,
+.design-ov-grid[data-has-favorite="true"] .design-ov-card:not([data-favorite="true"]):focus-within { opacity: 1; }
+.design-ov-badge {
+  position: absolute; top: -0.8rem; right: 1rem;
+  padding: 0.2rem 0.7rem; border-radius: 8px;
+  background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117);
+  font-weight: 800; font-size: 0.75rem; letter-spacing: 0.1em;
+}
+.design-ov-head {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0; border: 0;
+  background: none; cursor: pointer; text-align: left; font: inherit;
+  color: var(--dz-color); font-size: 0.8rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.design-ov-head:hover .design-ov-name { text-decoration: underline; }
+.design-ov-motto { margin: 0; font-size: 1.45rem; line-height: 1.15; font-weight: 700; color: var(--text, #e6edf3); }
+.design-ov-preview {
+  position: relative; display: block; width: 100%; height: 220px;
+  border-radius: 12px; overflow: hidden; cursor: zoom-in;
+  border: 1px solid var(--border-color, #30363d);
+  background: var(--bg-secondary, var(--panel-bg, #0d1117));
+}
+.design-ov-preview:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+/* The scaled clone: laid out at a fixed virtual width, scaled to the box by
+   fitOverviewPreviews() (--dz-ov-scale). pointer-events none + inert keep
+   the mock's own controls out of reach — the preview is one button. */
+.design-ov-scale {
+  position: absolute; top: 0; left: 0; width: 1200px;
+  transform: scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
+  pointer-events: none; padding: 1.5rem; box-sizing: border-box;
+}
+.design-ov-scale > * { width: 100%; }
+.design-ov-zoom {
+  position: absolute; right: 0.5rem; bottom: 0.5rem; padding: 0.15rem 0.5rem;
+  border-radius: 999px; font-size: 0.8rem;
+  background: color-mix(in srgb, var(--panel-bg, #0d1117) 85%, transparent);
+  color: var(--text, #e6edf3);
+}
+.design-ov-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.design-ov-chip {
+  border: 1px solid var(--border-color, #30363d); background: transparent;
+  color: var(--text-secondary, #8b949e); border-radius: 999px;
+  padding: 0.15rem 0.6rem; font: inherit; font-size: 0.78rem; cursor: pointer;
+}
+.design-ov-chip:hover { color: var(--text, #e6edf3); border-color: var(--dz-color); }
+.design-ov-traits { margin: 0; padding: 0 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.92rem; font-weight: 600; }
+.design-ov-traits li::marker { color: var(--dz-color); }
+.design-ov-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.design-ov-notes { font-size: 0.85rem; color: var(--text-secondary, #8b949e); }
+
+/* ── Design icon — one uniform accent tint, the design colour behind it ── */
+.dz-icon {
+  display: inline-grid; place-items: center; flex: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: color-mix(in srgb, var(--dz-color, var(--border-color)) 45%, var(--panel-bg, #161b22));
+  color: color-mix(in srgb, var(--accent-color, #58a6ff) 85%, transparent);
+  font-size: 13px; line-height: 1;
+}
+.dz-icon svg { width: 62%; height: 62%; display: block; }
+.dz-icon[data-size="s"] { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
+.dz-icon[data-kind="plain"] { background: transparent; color: var(--text-secondary, #8b949e); }
+
+/* ── Favourite button (card, header) ── */
+.design-fav-btn {
+  display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;
+  border: 1px solid var(--warning-color, #d29922); background: transparent;
+  color: var(--warning-color, #d29922); border-radius: 8px;
+  padding: 0.3rem 0.7rem; font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.design-fav-btn:hover { background: color-mix(in srgb, var(--warning-color, #d29922) 15%, transparent); }
+.design-fav-btn[aria-pressed="true"] { background: var(--warning-color, #d29922); color: var(--panel-bg, #0d1117); }
+.design-fav-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* ── Header — one card, grows over the content ── */
+.design-header {
+  position: fixed; top: 1rem; left: 1rem; z-index: 99;
+  flex-direction: column; box-sizing: border-box;
+  width: max-content; max-width: min(calc(33vw - 1.5rem), 280px);
+  padding: 0.35rem 0.7rem; border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  border: 1px solid var(--border-color, #30363d);
+  border-left: 4px solid var(--dz-color, var(--accent-color));
+  color: var(--text-secondary, #8b949e); font-size: 0.85rem;
+  backdrop-filter: blur(6px);
+  opacity: 0.6;
+  transition: opacity 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.design-header:hover, .design-header:focus-within, .design-header[data-open="true"] {
+  opacity: 1; background: var(--panel-bg, #161b22);
+  max-width: calc(100vw - 8rem);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.design-header-main { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; min-width: 0; min-height: 28px; }
+.design-header-name { color: var(--text, #e6edf3); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.design-header-star { color: var(--warning-color, #d29922); white-space: nowrap; }
+.design-header-back {
+  display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
+  border: 0; background: transparent; color: var(--text-secondary, #8b949e);
+  padding: 0.15rem 0.35rem; border-radius: 6px; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+.design-header-back:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 12%, transparent); }
+.design-header-back svg { width: 14px; height: 14px; display: block; flex: none; }
+.design-header-sep { width: 1px; height: 18px; background: var(--border-color, #30363d); flex: none; }
+/* The eye moves in here (wireDesignOverview) — same control, inline size. */
+.design-header .anno-toggle-fab { position: static; flex: none; width: 24px; height: 24px; border-width: 1px; box-shadow: none; }
+.design-header .anno-toggle-fab svg { width: 13px; height: 13px; }
+.design-header-more { display: none; flex-direction: column; gap: 0.5rem; margin-top: 0.45rem; padding: 0.45rem 0 0.15rem; border-top: 1px solid var(--border-color, #30363d); }
+.design-header:hover .design-header-more,
+.design-header:focus-within .design-header-more,
+.design-header[data-open="true"] .design-header-more { display: flex; }
+.design-header-more:empty { display: none !important; }
+.design-header-motto { font-style: italic; color: var(--text-secondary, #8b949e); white-space: normal; }
+.design-header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.design-header-note { max-width: 320px; white-space: normal; color: var(--text-color, #c9d1d9); }
+.design-header-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 8px; background: color-mix(in srgb, var(--panel-bg, #0d1117) 60%, var(--border-color, #30363d)); }
+.design-header-tab {
+  border: 0; background: transparent; color: var(--text-secondary, #8b949e);
+  padding: 0.2rem 0.6rem; border-radius: 6px; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+.design-header-tab:hover { color: var(--text, #e6edf3); }
+.design-header-tab[data-active="true"] { background: var(--border-color, #30363d); color: var(--text, #e6edf3); font-weight: 700; }
+.design-header-pin {
+  border: 1px dashed var(--border-color, #30363d); background: transparent;
+  color: var(--text-secondary, #8b949e); border-radius: 8px;
+  padding: 0.3rem 0.6rem; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+.design-header-pin[aria-pressed="true"] { border-color: #f78166; color: var(--text, #e6edf3); }
+
+/* ── Quick nav — top centre ── */
+.design-quick {
+  position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 95;
+  flex-direction: column; align-items: center; gap: 4px;
+  max-width: 34vw; opacity: 0.6; transition: opacity 0.16s ease;
+}
+.design-quick:hover, .design-quick:focus-within { opacity: 1; z-index: 98; max-width: calc(100vw - 2 * (1rem + min(33vw - 1.5rem, 280px) + 0.75rem)); }
+.design-quick-row { display: flex; gap: 3px; max-width: 100%; }
+.design-quick-designs {
+  padding: 3px; border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, transparent);
+  border: 1px solid var(--border-color, #30363d); backdrop-filter: blur(6px);
+}
+.design-quick-seg, .design-quick-view {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0;
+  border: 0; background: transparent; cursor: pointer; white-space: nowrap;
+  border-radius: 999px; font: inherit; color: var(--text-secondary, #8b949e);
+}
+.design-quick-seg { padding: 0.2rem 0.65rem 0.2rem 0.25rem; font-size: 0.8rem; }
+.design-quick-seg .design-quick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.design-quick-seg:hover, .design-quick-view:hover { color: var(--text, #e6edf3); background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.design-quick-seg[data-active="true"] {
+  color: var(--text, #e6edf3); font-weight: 700;
+  background: color-mix(in srgb, var(--border-color, #30363d) 80%, transparent);
+  box-shadow: inset 0 -2px 0 var(--dz-color, var(--accent-color));
+}
+.design-quick-star { color: var(--warning-color, #d29922); }
+.design-quick-view { padding: 0.1rem 0.55rem; font-size: 0.75rem; }
+.design-quick-view[data-active="true"] { color: var(--text, #e6edf3); background: var(--border-color, #30363d); }
+.design-quick-views:empty { display: none; }
+body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; pointer-events: none; }
+@media (max-width: 900px) {
+  /* Icons only — the tooltip still names each design. */
+  .design-quick-seg .design-quick-name { display: none; }
+  .design-quick-seg { padding: 0.2rem; }
+}
+
+/* ── ☰ panel: icon prefix + hover keycap on design rows ── */
+.screen-nav-design-heading > span:first-child { display: inline-flex; align-items: center; min-width: 0; }
+.screen-nav-design-heading .dz-icon { margin-right: 0.5rem; }
+.screen-nav-kbd { opacity: 0; transition: opacity 0.14s ease 0s; margin-left: auto; }
+.screen-nav-design-heading:hover .screen-nav-kbd { opacity: 1; transition-delay: 1.5s; }
+.screen-nav-design-heading:focus-visible .screen-nav-kbd { opacity: 1; transition-delay: 0s; }
+
+/* ── Keycap — one look for the tooltip, the sheet, the hint bar, the panel ── */
+.app-kbd {
+  display: inline-block; min-width: 1.1em; padding: 0 0.35em; margin: 0 0.1em;
+  border: 1px solid var(--border-color, #30363d); border-bottom-width: 2px; border-radius: 5px;
+  background: color-mix(in srgb, var(--panel-bg, #161b22) 70%, var(--border-color, #30363d));
+  color: var(--text, #e6edf3);
+  font: 600 0.72rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: center; vertical-align: baseline;
+}
+
+/* ── Shortcut sheet (`?`) ── */
+.design-keys {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 240;
+  width: min(420px, calc(100vw - 2rem)); max-height: calc(100dvh - 4rem); overflow-y: auto;
+  padding: 1rem 1.25rem; border-radius: 14px; box-sizing: border-box;
+  background: var(--panel-bg, #161b22); color: var(--text-color, #e6edf3);
+  border: 1px solid var(--border-color, #30363d); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.design-keys[hidden] { display: none; }
+.design-keys h2 { margin: 0 0 0.6rem; font-size: 1rem; }
+.design-keys dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; font-size: 0.88rem; }
+.design-keys dt { white-space: nowrap; text-align: right; }
+.design-keys dd { margin: 0; color: var(--text-secondary, #8b949e); }
+.design-keys-close { margin-top: 0.8rem; float: right; border: 1px solid var(--border-color, #30363d); background: transparent; color: var(--text, #e6edf3); border-radius: 8px; padding: 0.25rem 0.7rem; font: inherit; cursor: pointer; }
+
+/* ── User pins (Ctrl + click) ── */
+.upin-hint {
+  position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 99;
+  padding: 0.4rem 0.9rem; border-radius: 999px; white-space: nowrap; max-width: calc(100vw - 12rem);
+  overflow: hidden; text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--panel-bg, #0d1117) 92%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--accent-color) 60%, transparent);
+  color: var(--text-color, #c9d1d9); font-size: 0.82rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.upin-hint[hidden] { display: none; }
+body.upin-armed section[data-screen][data-screen-active="true"],
+body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: crosshair !important; }
+.upin-host { position: relative; }
+.upin-layer { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
+.upin {
+  --upin-color: #f78166;
+  position: absolute; left: var(--upin-x); top: var(--upin-y);
+  transform: translate(-4px, -100%); pointer-events: auto;
+}
+.upin-pin {
+  width: 26px; height: 26px; padding: 0; border-radius: 50% 50% 50% 4px;
+  border: 0; background: var(--upin-color); color: #0d1117;
+  font: 800 0.78rem/1 system-ui, sans-serif; cursor: pointer;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--upin-color) 30%, transparent), 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+.upin-pin:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.upin-editor {
+  position: absolute; left: 32px; top: 0; width: min(280px, 70vw);
+  padding: 0.6rem 0.7rem; border-radius: 12px; box-sizing: border-box;
+  background: var(--panel-bg, #161b22); color: var(--text-color, #e6edf3);
+  border: 1px solid var(--upin-color); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+  cursor: auto;
+}
+.upin[data-flip-x="true"] .upin-editor { left: auto; right: 4px; }
+.upin[data-flip-y="true"] .upin-editor { top: auto; bottom: 30px; }
+.upin-editor[hidden] { display: none; }
+.upin-editor-head { font-size: 0.72rem; color: var(--text-secondary, #8b949e); margin-bottom: 0.35rem; }
+.upin-editor textarea {
+  width: 100%; min-height: 56px; box-sizing: border-box; resize: vertical;
+  padding: 0.45rem; border-radius: 8px; font: inherit; font-size: 0.85rem;
+  background: var(--input-bg, #0d1117); color: var(--text-color, #e6edf3);
+  border: 1px solid var(--border-color, #30363d);
+}
+.upin-editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.35rem; font-size: 0.72rem; color: var(--text-secondary, #8b949e); }
+.upin-delete { border: 0; background: transparent; color: var(--danger-color, #f85149); font: inherit; font-size: 0.75rem; cursor: pointer; padding: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .design-ov-card, .design-header, .design-quick { transition: none; }
+}
+```
