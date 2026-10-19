@@ -726,7 +726,7 @@ function isSelfSessionMarker(id) {
  * @param {string|undefined} cwd the card's own cwd
  * @returns {boolean}
  */
-function sameProjectRoot(storedRoot, cwd) {
+export function sameProjectRoot(storedRoot, cwd) {
   try {
     const PR = hookRequire("lib", "project-root.js");
     return PR.samePath(storedRoot, PR.projectRoot(cwd));

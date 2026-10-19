@@ -52,7 +52,7 @@ export const CARD_VARIANTS = [
  * vanish without a trace (#406).
  */
 export const CARD_KNOWN_KEYS = [
-  "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests",
+  "variant", "summary", "lang", "cwd", "buildId", "session_id", "changes", "tests", "nextStep",
   "state", "cta", "userTest", "userFinalTest", "open", "pending", "concept",
   "deployGate", "validation", "verification", "delivery", "promotion", "pause",
 ];

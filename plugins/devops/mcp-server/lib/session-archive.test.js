@@ -81,6 +81,12 @@ describe("session-archive — which cards archive the session", () => {
     expect(archiveDecision(shipped({ open: [], userTest: [] }), deps()).archive).toBe(true);
   });
 
+  test("a deploy the user still owes keeps the session (audit)", () => {
+    expect(archiveDecision(shipped({ state: { deployPending: true } }), deps()).reason).toBe("deploy");
+    expect(archiveDecision(shipped({ deployGate: [{ action: "Run the migration" }] }), deps()).reason).toBe("deploy");
+    expect(archiveDecision(shipped({ deployGate: [] }), deps()).archive).toBe(true);
+  });
+
   test("a missing cwd fails closed (R6)", () => {
     expect(archiveDecision(shipped({ cwd: "" }), deps()).reason).toBe("no-cwd");
     expect(archiveDecision({ ...shipped(), cwd: undefined }, deps()).reason).toBe("no-cwd");
