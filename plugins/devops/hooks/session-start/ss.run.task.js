@@ -39,7 +39,7 @@ function taskPath(cwd) {
 function prevClosedAt(cwd) {
   try {
     const prev = JSON.parse(fs.readFileSync(path.join(projectClaudeDir(cwd), 'run-contract.prev.json'), 'utf8'));
-    const t = Date.parse(prev.closedAt || prev.archivedAt || '');
+    const t = Date.parse(prev.closedAt || prev.armedAt || '');
     return Number.isFinite(t) ? t : null;
   } catch {
     return null;
