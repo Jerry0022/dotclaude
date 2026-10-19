@@ -25,6 +25,9 @@ const MATCH_ASK_MIN = 0.6;
 /** A cache older than this no longer speaks for the open issues. */
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/** Shortest query word allowed to match as a substring of an issue word. */
+const PARTIAL_MIN_LEN = 4;
+
 /** Lowercase words of 3+ characters, punctuation stripped. */
 function tokenize(text) {
   return String(text)
@@ -36,13 +39,19 @@ function tokenize(text) {
 
 /** 0–1: the share of query tokens found in the issue's title and labels. */
 function scoreIssue(issue, queryTokens) {
-  const issueText = [issue.title, ...(issue.labels || [])].join(' ');
+  // `type:bug` -> `bug`: the namespace prefix (type/role/module) is not content
+  // and would substring-match ordinary words like "typescript".
+  const labels = (issue.labels || []).map((l) => String(l).replace(/^[a-z]+:/i, ''));
+  const issueText = [issue.title, ...labels].join(' ');
   const issueTokens = new Set(tokenize(issueText));
   if (issueTokens.size === 0 || queryTokens.length === 0) return 0;
   let hits = 0;
   for (const qt of queryTokens) {
     for (const it of issueTokens) {
-      if (it === qt || it.includes(qt) || qt.includes(it)) { hits++; break; }
+      // Partial match only one way (query word inside a longer issue word) and
+      // only for words long enough to mean something: "debug" must not hit the
+      // label "bug", "bug" must not hit "debugging".
+      if (it === qt || (qt.length >= PARTIAL_MIN_LEN && it.includes(qt))) { hits++; break; }
     }
   }
   return hits / queryTokens.length;
@@ -69,7 +78,26 @@ function normalizeRemote(url) {
     .toLowerCase();
 }
 
-function cacheFile(remoteUrl, dir = os.tmpdir()) {
+/** Per-user cache folder — a shared /tmp lets another user pre-plant files. */
+function defaultCacheDir(base = os.tmpdir()) {
+  let who = 'user';
+  try { who = String(process.getuid ? process.getuid() : os.userInfo().username); } catch { /* keep default */ }
+  return path.join(base, `dotclaude-${who.replace(/[^a-z0-9._-]/gi, '_')}`);
+}
+
+/** One line, no quotes/control characters, capped — issue titles reach Claude's context. */
+function sanitizeTitle(title) {
+  return String(title == null ? '' : title)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f"'`]/g, ' ')
+    .replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
+function sanitizeIssues(issues) {
+  return issues.map((i) => ({ ...i, title: sanitizeTitle(i && i.title) }));
+}
+
+function cacheFile(remoteUrl, dir = defaultCacheDir()) {
   const key = crypto.createHash('sha1').update(normalizeRemote(remoteUrl)).digest('hex').slice(0, 16);
   return path.join(dir, `dotclaude-issues-cache-${key}.json`);
 }
@@ -77,8 +105,9 @@ function cacheFile(remoteUrl, dir = os.tmpdir()) {
 function writeCache(remoteUrl, issues, { dir, now = Date.now() } = {}) {
   if (!normalizeRemote(remoteUrl)) return;
   const file = cacheFile(remoteUrl, dir);
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify({ ts: now, remote: normalizeRemote(remoteUrl), issues }));
+  fs.writeFileSync(tmp, JSON.stringify({ ts: now, remote: normalizeRemote(remoteUrl), issues: sanitizeIssues(issues) }));
   fs.renameSync(tmp, file);
 }
 
@@ -87,12 +116,12 @@ function readCache(remoteUrl, { dir, now = Date.now(), maxAgeMs = CACHE_MAX_AGE_
   if (!normalizeRemote(remoteUrl)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(cacheFile(remoteUrl, dir), 'utf8'));
-    if (!Array.isArray(data.issues) || !(now - data.ts <= maxAgeMs)) return null;
-    return data.issues;
+    if (!Array.isArray(data.issues) || !(data.ts <= now && now - data.ts <= maxAgeMs)) return null;
+    return sanitizeIssues(data.issues);
   } catch { return null; }
 }
 
 module.exports = {
   MATCH_ASK_MIN, CACHE_MAX_AGE_MS,
-  tokenize, scoreIssue, matchIssues, normalizeRemote, cacheFile, writeCache, readCache,
+  tokenize, scoreIssue, matchIssues, sanitizeTitle, defaultCacheDir, normalizeRemote, cacheFile, writeCache, readCache,
 };

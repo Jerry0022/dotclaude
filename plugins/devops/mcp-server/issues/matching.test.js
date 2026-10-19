@@ -69,7 +69,7 @@ describe("scoreIssue", () => {
     expect(scoreIssue(issue, tokens)).toBe(1);
   });
 
-  test("substring matching works both directions", () => {
+  test("query word matches as substring of a longer issue word", () => {
     const issue = { title: "authentication middleware", labels: [] };
     const tokens = tokenize("auth");
     // "auth" is a substring of "authentication"
