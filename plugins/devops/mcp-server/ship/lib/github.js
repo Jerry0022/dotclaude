@@ -53,7 +53,7 @@ function gh(args, opts = {}) {
 export function deleteRemoteBranch(branch, opts = {}) {
   const errors = [];
   try {
-    gh(["api", "-X", "DELETE", `repos/{owner}/{repo}/git/refs/heads/${branch}`], opts);
+    gh(["api", "-X", "DELETE", `repos/{owner}/{repo}/git/refs/heads/${branch.split("/").map(encodeURIComponent).join("/")}`], opts);
     return { ok: true, method: "gh-api" };
   } catch (e) {
     errors.push(`gh api: ${sanitizeError(e) || "failed"}`);
@@ -226,7 +226,21 @@ export function mergePR(prNumber, base = "main", opts, flags = {}) {
     warnings.push(`merged, but origin/${base} could not be fetched/resolved after 3 attempts (${readError}) — mergeSha unknown`);
   }
 
+  // The exact commit GitHub created for THIS merge. `origin/<base>` is only
+  // "the tip right after the merge" — a parallel ship landing in the seconds
+  // before the tag step moves it. Callers that tag must tag this SHA.
+  let fullSha = null;
+  if (verified) {
+    try {
+      const oid = gh(["pr", "view", String(prNumber), "--json", "mergeCommit", "-q", ".mergeCommit.oid"], opts);
+      if (/^[0-9a-f]{40}$/.test(oid)) fullSha = oid;
+    } catch {
+      /* best effort — callers fall back to origin/<base> */
+    }
+  }
+
   const result = { sha, verified };
+  if (fullSha) result.fullSha = fullSha;
   if (warnings.length > 0) result.warning = warnings.join("; ");
   return result;
 }

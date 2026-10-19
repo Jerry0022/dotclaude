@@ -47,6 +47,26 @@ export function bumpKind(from, to) {
 }
 
 const normVersions = (s) => s.replace(SEMVER_RE, "X");
+
+/**
+ * A line that carries the PROJECT's own version (manifest `"version":`, README
+ * `**Version:**` badge / shields badge, `## [x.y.z]` changelog heading, or a
+ * `[x.y.z]: url` link reference). A conflict that differs only in x.y.z
+ * numbers on any OTHER line (a dependency range, an engines pin) is a real
+ * edit of this branch and must not be resolved to the base's side.
+ */
+const isProjectVersionLine = (l) =>
+  /^\s*"version"\s*:/.test(l) ||
+  /\*\*Version:/i.test(l) ||
+  /^\s*## \[/.test(l) ||
+  /^\s*\[[^\]]+\]:\s*\S/.test(l) ||
+  /badge\/version-|img\.shields\.io\/[^\s)]*version/i.test(l);
+
+/** Every line pair that differs between the two sides is a project-version line. */
+function onlyProjectVersionLinesDiffer(up, ours) {
+  if (up.length !== ours.length) return false;
+  return up.every((l, k) => l === ours[k] || (isProjectVersionLine(l) && isProjectVersionLine(ours[k])));
+}
 const isEntryBlock = (s) => /^\s*## \[/.test(s);
 
 /**
@@ -76,7 +96,7 @@ export function resolveVersionConflicts(content, file) {
     i++; // skip >>>>>>>
     const upText = up.join(eol);
     const oursText = ours.join(eol);
-    if (normVersions(upText) === normVersions(oursText)) {
+    if (normVersions(upText) === normVersions(oursText) && onlyProjectVersionLinesDiffer(up, ours)) {
       out.push(...up);
     } else if (isChangelog && base.join("").trim() === "" && isEntryBlock(upText) && isEntryBlock(oursText)) {
       const trimmed = [...ours];

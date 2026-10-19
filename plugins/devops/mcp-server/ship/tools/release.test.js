@@ -165,7 +165,7 @@ beforeEach(() => {
   gitLib.treeOf.mockImplementation((ref) => (ref === "HEAD" ? "T1" : "T1"));
   // ls-remote --tags returns the alpha channel tag → tag already exists, skip creation path.
   gitLib.git.mockImplementation((cmd) =>
-    cmd.includes("ls-remote --tags") ? "abc\trefs/tags/alpha/v1.0.0" : "remoteSha",
+    cmd.includes("ls-remote --tags") ? "merge12ab\trefs/tags/alpha/v1.0.0" : "remoteSha",
   );
   gitLib.gitStrict.mockReturnValue("");
   // gitArgs handles staging adds, the remote-ref rev-parse, and the push (F1/F2).
@@ -510,6 +510,34 @@ describe("ship_release — alpha channel tagging (ring model)", () => {
     expect(res.releaseDeferred).toBe(true);
   });
 
+  test("tags the merge commit GitHub reported, not the moving origin/base tip", async () => {
+    const full = "a".repeat(40);
+    ghLib.mergePR.mockReturnValue({ sha: "merge12", fullSha: full, verified: true });
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1 ? "" : "t\trefs/tags/alpha/v1.0.0";
+      }
+      return "remoteSha";
+    });
+    const res = await handler(params());
+    expect(res.mergeSha).toBe("aaaaaaaa");
+    const tagCall = execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag");
+    expect(tagCall[1].slice(0, 4)).toEqual(["tag", "-a", "alpha/v1.0.0", full]);
+  });
+
+  test("existing alpha tag on a DIFFERENT commit (bump none) → not verified, no false success", async () => {
+    gitLib.git.mockImplementation((cmd) =>
+      cmd.includes("ls-remote --tags")
+        ? "t1\trefs/tags/alpha/v1.0.0\n" + "f".repeat(40) + "\trefs/tags/alpha/v1.0.0^{}"
+        : "remoteSha");
+    const res = await handler(params());
+    expect(res.tagVerified).toBe(false);
+    expect(res.tagWarning).toMatch(/points at ffffffff, not this merge/);
+    expect(execFileSync.mock.calls.find((c) => c[0] === "git" && c[1]?.[0] === "tag")).toBeUndefined();
+  });
+
   test("existing alpha tag on remote → skip creation, still verified", async () => {
     const res = await handler(params());
     expect(res.tagVerified).toBe(true);
@@ -847,7 +875,7 @@ describe("ship_release — #398 post-merge truth contract", () => {
     ghLib.mergePR.mockReturnValue({ sha: null, verified: true, warning: "merged, but origin/main could not be fetched/resolved after 3 attempts (ETIMEDOUT) — mergeSha unknown" });
     createPathLsRemote();
     gitLib.git.mockImplementation((cmd) => {
-      if (cmd.includes("ls-remote --tags")) return "abc\trefs/tags/alpha/v1.0.0";
+      if (cmd.includes("ls-remote --tags")) return "rec0ver1\trefs/tags/alpha/v1.0.0";
       if (cmd.startsWith("rev-parse --short origin/main")) return "rec0ver\n";
       return "remoteSha";
     });
@@ -1371,5 +1399,15 @@ describe("ship_release — #752 shared CI-quota block", () => {
     expect(res.quotaDecisionRevoked).toBe(true);
     expect(res.quotaBlocked).toBe(true);
     expect(quotaLib.readRecord("o/r").decision).toBeUndefined();
+  });
+});
+
+describe("ship_release — tag format gate", () => {
+  test.each(["0.18.0", "v1.0.0-beta.1", "alpha/v1.0.0"])("tag %s is refused before any side effect", async (tag) => {
+    const res = await handler(params({ tag }));
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not of the form vX\.Y\.Z/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(ghLib.createPR).not.toHaveBeenCalled();
   });
 });

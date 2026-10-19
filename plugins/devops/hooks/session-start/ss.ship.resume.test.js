@@ -33,7 +33,7 @@ describe("ss.ship.resume", () => {
     expect(out).toContain("gh pr list");
     expect(out).toContain('Skill("devops:do-ship")');
     expect(out).toContain("Never create a second PR");
-    expect(out).toContain("ship_cleanup({ keep: true");
+    expect(out).toContain("ship_cleanup({ branch, cwd, keep: true })");
   });
 
   test("resume and startup name their own trigger", () => {

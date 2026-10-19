@@ -95,7 +95,7 @@ function buildResumeInstruction({ cwd, source }) {
     'Then re-enter Skill("devops:do-ship"): preflight → build → bump → release → cleanup, each step is idempotent —',
     'an existing open PR is reused, a merged PR ends the release, a bump that already landed is not repeated.',
     'Never create a second PR or a second tag for the same branch. If the ship had already finished',
-    '(PR merged, branch gone), call ship_cleanup({ keep: true, cwd }) to clear the sentinel and render the card.',
+    '(PR merged, branch gone), call ship_cleanup({ branch, cwd, keep: true }) to clear the sentinel and render the card.',
     'If the user asks for something else first, do that — but mention in one line that a ship is pending here.',
   ].join('\n');
 }
