@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.268.10] — 2026-10-19
+
+Concept pages translate every label again, and the test suite runs green on a machine that does not enable the plugin in its settings (cloud sessions, CI).
+
+### Fixed
+- **Concept pages (`scripts/concept-build.js`)**: `substitute()` took a `<textarea data-comment>` named inside a CSS comment of the engine stylesheet for a real textarea, so every locale key after the engine CSS up to the next real `</textarea>` stayed literal — built pages showed `{{variant.include}}` / `{{variant.discard}}` (regression from #725). `<style>` and engine `<script>` blocks are now matched first and skipped whole. Covered by `concept-build.test.js` "no known locale key survives".
+- **Task chips (`hooks/lib/task-chips.js`)**: drive-letter paths (`C:/…`) are compared case-insensitively on any host, not only on win32.
+- **Evals (`evals/lib/command.js`)**: the `.cmd` shim's `.exe` target is joined segment-wise, so the resolved path is right on every platform.
+
+### Changed
+- **Test isolation (`vitest.isolation-setup.mjs`)**: sets `CLAUDE_PLUGIN_ROOT` to this checkout's `plugins/devops`, as Claude Code does for every hook. Before, `plugin-guard` let a spawned hook through only when `~/.claude/settings.json` enabled `devops@dotclaude`; without that entry every hook test exited 0 before its first line (97 failures in a cloud session). The production guard is unchanged — suites that test the disabled path still delete the variable per spawn.
+- **Windows-only tests**: the `mcp-reaper` tests pass `platform: "win32"`, the `concept-watch` `C:/` case runs only on win32, and the `git-sync` missing-signer test pins `gpg.format=openpgp` — they test Windows / openpgp behaviour explicitly instead of depending on the host.
+
 ## [0.268.9] — 2026-10-19
 
 No more cmd/PowerShell windows popping up after a PC start: the plugin's background console programs now always start hidden.
