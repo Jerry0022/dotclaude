@@ -52,18 +52,19 @@ function listWorktrees(cwd) {
 }
 
 /** Uncommitted paths worth keeping: porcelain entries minus untracked tooling state. */
-function dirtyPaths(wtPath) {
+function dirtyPaths(wtPath, timeout = GIT_TIMEOUT) {
   let out;
   try {
     out = execFileSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-      { cwd: wtPath, encoding: 'utf8', timeout: GIT_TIMEOUT, stdio: ['ignore', 'pipe', 'pipe'] });
+      { cwd: wtPath, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch { return []; }
   const parts = out.split('\0').filter(Boolean);
   const paths = [];
   for (let i = 0; i < parts.length; i++) {
     const code = parts[i].slice(0, 2);
     const p = parts[i].slice(3);
-    if (code[0] === 'R' || code[0] === 'C') i++; // rename source follows
+    // a rename/copy source follows: it is part of the change set too (else a staged `git mv` resurrects the old path)
+    if (code[0] === 'R' || code[0] === 'C') { i++; if (code[0] === 'R' && parts[i]) paths.push(parts[i]); }
     if (code === '??' && (/^\.claude\//.test(p) || /(^|\/)node_modules\//.test(p))) continue;
     paths.push(p);
   }
@@ -215,6 +216,7 @@ async function keepReason(part, { cwd, explicit, idleMs = IDLE_MIN_MS }) {
   if (!part.landed) return 'unlanded';
   if (part.dirty) return 'uncommitted';
   if (!explicit && !part.removable) return 'not-owned-by-run';
+  if (!part.branch) return 'detached-head'; // no branch -> own commits cannot be proven
   if (part.branch) {
     const own = ownCommitCount(part.branch, cwd);
     if (own === 0) return 'no-own-commits';

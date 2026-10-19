@@ -205,4 +205,37 @@ describe('wipCommit', () => {
     fs.rmSync(path.join(main, '.git', 'MERGE_HEAD'), { force: true });
     expect(await wipCommit(main, 'wip: x')).toMatchObject({ committed: false, reason: 'in-progress:unmerged-paths' });
   });
+
+  test('N1: a staged rename does not resurrect the old path', async () => {
+    g(main, 'checkout', '-b', 'topic');
+    g(main, 'mv', 'a.txt', 'b.txt');
+    const r = await wipCommit(main, 'wip: x');
+    expect(r.committed).toBe(true);
+    expect(g(main, 'ls-tree', '--name-only', 'HEAD').split('\n')).toEqual(['b.txt']);
+    expect(g(main, 'status', '--porcelain')).toBe('');
+  });
+
+  test('N8: extended secret names and content sniffing', async () => {
+    g(main, 'checkout', '-b', 'topic');
+    const names = ['x.tfvars', 'terraform.tfstate.backup', '.pypirc', 'my-token.txt', 'kubeconfig', 'service-account-prod.json', '.htpasswd', 'a.jks'];
+    for (const f of names) fs.writeFileSync(path.join(main, f), 'v');
+    fs.writeFileSync(path.join(main, 'notes.txt'), 'x\n-----BEGIN RSA PRIVATE KEY-----\nabc');
+    fs.writeFileSync(path.join(main, 'cfg.txt'), 'aws_secret_access_key = abc');
+    fs.writeFileSync(path.join(main, 'gh.txt'), `t=ghp_${'a'.repeat(30)}`);
+    fs.writeFileSync(path.join(main, 'ok.txt'), 'fine');
+    const r = await wipCommit(main, 'wip: x');
+    expect(g(main, 'show', '--name-only', '--format=', 'HEAD')).toBe('ok.txt');
+    expect(r.skipped.length).toBe(names.length + 3);
+  });
+
+  test('N10: a detached explicit part is kept (own commits cannot be proven)', async () => {
+    const w = path.join(main, '.claude', 'worktrees', 'agent-det');
+    g(main, 'worktree', 'add', '--detach', w);
+    commit(w, 'd.txt', 'd');
+    g(main, 'merge', '--no-ff', '-m', 'merge', g(w, 'rev-parse', 'HEAD'));
+    const res = await checkIntegration({ cwd: main, integrationRef: 'feature', subRefs: [{ path: w }] });
+    expect(res.parts[0].landed).toBe(true);
+    expect(await removeIntegrated({ cwd: main, integrationRef: 'feature', result: res, explicit: true, idleMs: 0 })).toEqual([]);
+    expect(fs.existsSync(w)).toBe(true);
+  });
 });

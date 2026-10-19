@@ -25,7 +25,8 @@ const { dirtyPaths, loadHygiene } = require('./integration-check');
 const T = 20000;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const PROTECTED = /^(main|master|develop|trunk|release\/.+)$/;
-const SECRET = /(^|\/)(\.env(\..*)?|\.npmrc|\.netrc|id_(rsa|dsa|ecdsa|ed25519).*|[^/]*\.(pem|key|p12|pfx|keystore|jks|sql|dump|bak)|[^/]*credentials[^/]*|[^/]*secret[^/]*)$/i;
+const SECRET = /(^|\/)(\.env(\..*)?|\.npmrc|\.netrc|\.pypirc|\.htpasswd|id_(rsa|dsa|ecdsa|ed25519).*|kubeconfig.*|service-account[^/]*\.json|[^/]*\.(pem|key|p12|pfx|keystore|jks|sql|dump|bak|tfvars)|[^/]*\.tfstate[^/]*|[^/]*credentials[^/]*|[^/]*secret[^/]*|[^/]*token[^/]*)$/i;
+const SECRET_CONTENT = /BEGIN [A-Z ]*PRIVATE KEY|aws_secret_access_key\s*[=:]|ghp_[A-Za-z0-9]{20,}|xox[bp]-[0-9A-Za-z-]{10,}/;
 const BUILD_DIRS = new Set(['dist', 'build', 'out', 'coverage', 'node_modules', 'graphify-out', '.next', '.nuxt',
   'target', '.cache', '.venv', '__pycache__', '.gradle', '.turbo']);
 const TOOLING_ROOT = /^(AUTONOMOUS|BACKLOG|BURN)[-_]/;
@@ -69,15 +70,28 @@ function identityArgs(cwd) {
   return a;
 }
 
+/** First 4 KB of the file look like a credential. */
+function sniffSecret(file) {
+  let fd = null;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(4096);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    return SECRET_CONTENT.test(buf.toString('latin1', 0, n));
+  } catch { return false; } finally {
+    if (fd !== null) { try { fs.closeSync(fd); } catch { /* none */ } }
+  }
+}
+
 /**
  * The uncommitted paths that are safe to save, plus what was left out.
  * @returns {Promise<{paths:string[], skipped:{path:string, why:string}[]}>}
  */
-async function savablePaths(wt) {
+async function savablePaths(wt, { timeout } = {}) {
   const hyg = await loadHygiene();
   const paths = [];
   const skipped = [];
-  for (const p of dirtyPaths(wt)) {
+  for (const p of dirtyPaths(wt, timeout)) {
     const rel = p.replace(/\\/g, '/');
     let why = null;
     if (SECRET.test(rel)) why = 'secret';
@@ -87,6 +101,7 @@ async function savablePaths(wt) {
       try {
         const st = fs.lstatSync(path.join(wt, rel));
         if (st.isFile() && st.size > MAX_FILE_BYTES) why = 'large';
+        else if (st.isFile() && st.size > 0 && sniffSecret(path.join(wt, rel))) why = 'secret';
       } catch { /* deleted file: keep */ }
     }
     if (why) skipped.push({ path: rel, why });
@@ -143,8 +158,9 @@ async function wipCommit(wt, message, { detached } = {}) {
     if (git(['update-ref', '-m', 'wip', `refs/heads/${branch}`, sha, old], wt) === null) {
       return { committed: false, reason: 'update-ref-failed', branch };
     }
-    git(['read-tree', 'HEAD'], wt);
-    return { committed: true, branch, sha, skipped };
+    // realign the index with the new HEAD; one retry, and say so when it fails
+    const synced = git(['read-tree', 'HEAD'], wt) !== null || git(['read-tree', 'HEAD'], wt) !== null;
+    return { committed: true, branch, sha, skipped, indexSynced: synced };
   } catch {
     return { committed: false, reason: 'error' };
   }

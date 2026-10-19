@@ -191,4 +191,36 @@ describe('autosave', () => {
     expect(g(wt, 'rev-parse', 'HEAD')).toBe(head);
     expect(fs.existsSync(path.join(wt, 'work.txt'))).toBe(true);
   });
+
+  test('N2: an unchanged tree makes no new snapshot, no message, no push', async () => {
+    write('work.txt');
+    expect(await autosave(opts({ mode: 'local' }))).not.toBeNull();
+    const first = g(wt, 'rev-parse', 'parked/autosave/sess1');
+    expect(await autosave(opts({ mode: 'local', now: T0 + 11 * 60_000 }))).toBeNull();
+    expect(g(wt, 'rev-parse', 'parked/autosave/sess1')).toBe(first);
+    // push mode: pushed once, then identical tree stays quiet; a never-pushed snapshot is still pushed
+    expect((await autosave(opts({ now: T0 + 22 * 60_000 }))).message).toMatch(/pushed to origin/);
+    const pushed = g(remote, 'rev-parse', 'parked/autosave/sess1');
+    expect(await autosave(opts({ now: T0 + 40 * 60_000 }))).toBeNull();
+    expect(g(remote, 'rev-parse', 'parked/autosave/sess1')).toBe(pushed);
+  });
+
+  test('N3: the open-PR exit stamps the throttle (gh is not asked again within the window)', async () => {
+    write('work.txt');
+    let calls = 0;
+    const hasOpenPr = () => { calls += 1; return true; };
+    expect(await autosave(opts({ hasOpenPr }))).toBeNull();
+    expect(await autosave(opts({ hasOpenPr, now: T0 + 60_000 }))).toBeNull();
+    expect(calls).toBe(1);
+  });
+
+  test('N7: a stale remote-tracking ref does not re-create a deleted remote branch', async () => {
+    commitIn('c1.txt', 'feat: c1');
+    g(wt, 'push', '-u', 'origin', 'claude/sess1');
+    commitIn('c2.txt', 'feat: c2');
+    g(remote, 'branch', '-D', 'claude/sess1'); // deleted behind our back: the tracking ref stays
+    const r = await autosave(opts());
+    expect(r.message).toMatch(/parked\/autosave\/sess1/);
+    expect(remoteHas('claude/sess1')).toBe(false);
+  });
 });

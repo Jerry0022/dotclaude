@@ -80,15 +80,15 @@ function ghJson(args, cwd, timeout) {
 
 const hasRemote = (cwd) => Boolean(git(['config', '--get', 'remote.origin.url'], cwd));
 /** Open PR for the branch? Unknown (no gh / offline) counts as no. */
-function defaultHasOpenPr(branch, cwd) {
+function defaultHasOpenPr(branch, cwd, budget = 15000) {
   if (!hasRemote(cwd)) return false;
-  const l = ghJson(['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number'], cwd, 15000);
+  const l = ghJson(['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number'], cwd, Math.min(15000, budget));
   return Array.isArray(l) && l.length > 0;
 }
 /** Head shas of merged PRs from this branch name. */
-function defaultMergedHeads(branch, cwd) {
+function defaultMergedHeads(branch, cwd, budget = 15000) {
   if (!hasRemote(cwd)) return [];
-  const l = ghJson(['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'headRefOid'], cwd, 15000);
+  const l = ghJson(['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'headRefOid'], cwd, Math.min(15000, budget));
   return Array.isArray(l) ? l.map((x) => x.headRefOid).filter(Boolean) : [];
 }
 
@@ -126,7 +126,7 @@ async function autosave(o) {
     for (const k of Object.keys(st)) if (now - st[k] > 24 * 3600 * 1000) delete st[k];
   });
 
-  const { paths, skipped } = await savablePaths(top);
+  const { paths, skipped } = await savablePaths(top, { timeout: left() });
   const def = defaultBranch(top);
   let unpushed = 0;
   let remoteExists = false;
@@ -139,7 +139,7 @@ async function autosave(o) {
   }
   if (!paths.length && !unpushed) return null;
 
-  if (branch && (o.hasOpenPr || defaultHasOpenPr)(branch, top)) return null;
+  if (branch && (o.hasOpenPr || defaultHasOpenPr)(branch, top, left())) { stamp(true); return null; }
 
   if (unpushed) {
     const head = git(['rev-parse', 'HEAD'], top);
@@ -149,7 +149,7 @@ async function autosave(o) {
       landed = Boolean(hyg && hyg.landingState(head, branch, { cwd: top, baseRef: `origin/${def}`, merged: null }).state === 'landed');
     } catch { /* unknown */ }
     if (!landed) {
-      for (const oid of (o.mergedHeads || defaultMergedHeads)(branch, top)) {
+      for (const oid of (o.mergedHeads || defaultMergedHeads)(branch, top, left())) {
         if (oid === head || git(['merge-base', '--is-ancestor', head, oid], top) !== null) { landed = true; break; }
       }
     }
@@ -165,7 +165,8 @@ async function autosave(o) {
 
   // 1. fast-forward the session branch — only where it already exists on origin
   let branchPushed = false;
-  if (mode === 'push' && unpushed && remoteExists && Date.now() < deadline) {
+  if (mode === 'push' && unpushed && remoteExists && Date.now() < deadline
+    && git(['ls-remote', '--exit-code', 'origin', `refs/heads/${branch}`], top, { timeout: left() }) !== null) {
     if (git(['push', 'origin', `HEAD:refs/heads/${branch}`], top, { timeout: left() }) !== null) {
       branchPushed = true;
       target = branch;
@@ -176,12 +177,19 @@ async function autosave(o) {
   // 2. snapshot on the stable parked ref (dirty work, or commits with no remote branch)
   if (paths.length || (unpushed && !branchPushed)) {
     const prev = git(['rev-parse', '--verify', '-q', ref], top);
-    const sha = snapshotCommit(top, paths, 'wip(session): autosave', prev ? ['HEAD', prev] : ['HEAD'], left());
-    if (!sha || git(['update-ref', ref, sha], top) === null) { stamp(false); return null; }
+    const marker = `refs/autosave-pushed/${m[1]}`;
+    let sha = snapshotCommit(top, paths, 'wip(session): autosave', prev ? ['HEAD', prev] : ['HEAD'], left());
+    if (!sha) { stamp(false); return null; }
+    if (prev && git(['rev-parse', `${sha}^{tree}`], top) === git(['rev-parse', `${prev}^{tree}`], top)) {
+      // nothing new since the last snapshot: no message, and no push unless that one never made it out
+      if (mode !== 'push' || git(['rev-parse', '--verify', '-q', marker], top) === prev) { stamp(true); return null; }
+      sha = prev;
+    } else if (git(['update-ref', ref, sha], top) === null) { stamp(false); return null; }
     what.push(paths.length ? `${paths.length} changed file(s)` : `${unpushed} unpushed commit(s)`);
     if (mode === 'push') {
       if (Date.now() < deadline && git(['push', 'origin', `${sha}:refs/heads/${short}`], top, { timeout: left() }) !== null) {
         target = target ? `${target} + ${short}` : short;
+        git(['update-ref', marker, sha], top);
       } else failed = true;
     }
   }

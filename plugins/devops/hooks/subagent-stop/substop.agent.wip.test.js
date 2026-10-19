@@ -4,9 +4,10 @@ import os from 'os';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
+import { pathToFileURL } from 'url';
 
 const require = createRequire(import.meta.url);
-const { main: hookMain, findAgentWorktree } = require('./substop.agent.wip.js');
+const { main: hookMain, findAgentWorktree, touchedByOtherSession } = require('./substop.agent.wip.js');
 
 let root;
 let repo;
@@ -78,5 +79,32 @@ describe('substop.agent.wip', () => {
     expect(out.context).toMatch(/1 file\(s\) left out/);
     expect(g(wt, 'show', '--name-only', '--format=', 'HEAD')).toBe('r.txt');
     expect(fs.readFileSync(path.join(wt, '.env'), 'utf8')).toBe('SECRET=1');
+  });
+
+  test('N4: only the agent_id-derived worktree counts; a mismatching cwd is ignored', async () => {
+    const wt = path.join(repo, '.claude', 'worktrees', 'agent-aaa');
+    g(repo, 'worktree', 'add', '-b', 'worktree-agent-aaa', wt);
+    fs.writeFileSync(path.join(wt, 'r.txt'), 'r');
+    expect(findAgentWorktree({ cwd: wt, agent_id: 'bbb' })).toBeNull();
+    expect(await hookMain({ cwd: wt, agent_id: 'bbb' })).toBeNull();
+    expect(g(wt, 'status', '--porcelain')).toContain('r.txt');
+    const norm = (p) => p.split(String.fromCharCode(92)).join('/');
+    expect(norm(findAgentWorktree({ cwd: repo, agent_id: 'aaa' }))).toBe(norm(wt));
+  });
+
+  test('N4: a fresh transcript of another session for the worktree blocks the save', async () => {
+    const wt = path.join(repo, '.claude', 'worktrees', 'agent-live');
+    g(repo, 'worktree', 'add', '-b', 'worktree-agent-live', wt);
+    const hyg = await import(pathToFileURL(path.resolve(import.meta.dirname, '..', '..', 'mcp-server', 'ship', 'lib', 'hygiene.js')).href);
+    const projects = path.join(root, 'projects');
+    const dir = path.join(projects, hyg.transcriptDirNames(wt)[0]);
+    fs.mkdirSync(dir, { recursive: true });
+    const other = path.join(dir, 'other.jsonl');
+    fs.writeFileSync(other, '{}');
+    const own = path.join(root, 'own.jsonl');
+    fs.writeFileSync(own, '{}');
+    expect(await touchedByOtherSession(wt, { agent_transcript_path: own }, 60000, Date.now(), projects)).toBe(true);
+    expect(await touchedByOtherSession(wt, { agent_transcript_path: other }, 60000, Date.now(), projects)).toBe(false);
+    expect(await touchedByOtherSession(wt, { agent_transcript_path: own }, 60000, Date.now() + 120000, projects)).toBe(false);
   });
 });
