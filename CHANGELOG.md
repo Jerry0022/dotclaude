@@ -2,6 +2,29 @@
 
 ## [0.270.0] — 2026-10-19
 
+With `apiCredit.enabled` on, devops' read-only side work runs on the plan's monthly API credit first and falls back to the plan. Before this, only the second-opinion review used the credit. The routing is based on a live billing test, not on assumptions.
+
+### Added
+- **`scripts/claude-api-agent.js`**: a lean, read-only agent loop on the Messages API.
+  - Tools: `list_files`, `read_file` and `grep`, confined to `--root`. `--web` adds web search and web fetch.
+  - Defaults: budget $2, 30 turns, 900 s per run.
+  - It follows the same exit-code contract as `claude-api-safe.js`. Any rc ≠ 0 means the caller runs the in-session Agent instead.
+  - It never touches secret-shaped files (`.env*`, `devops-api.env`, key files).
+- **SessionStart `[api-credit]` line**: shown only when the switch is on. It tells the session to send scout, research and review work to the API agent first, while code-writing and test-running agents stay in-session.
+- **`scripts/api-credit-audit.js`**: a month-end "use it or lose it" audit. It spends part of the expiring credit on a read-only audit of one repo (at most 15 findings with `file:line`) and writes the report to `~/.claude/devops-audits/<repo>-<date>.md`.
+- **Evals (`evals/ab-run.js`)**: new flags `--api-credit` and `--no-api-credit`. By default the key is used only when the run starts from your own terminal. Inside a Claude Code session the child would count as Claude Code and be billed to purchased credit (measured).
+
+### Changed
+- **`deep-knowledge/api-credits.md`** is rewritten. It now covers:
+  - which billing path was measured to draw which balance on 2026-10-19
+  - the token economics: same price per token, about 2k instead of 30k+ tokens of setup per agent, no plan quota used
+  - the routing rule, flags and exit codes
+
+  The README section *Claude API credits*, `devops-config.md` and `codex-integration.md` are updated to match.
+- **SessionStart index pointer** names the plugin root once instead of twice. This leaves room for the new line within the payload limit.
+
+## [0.270.0] — 2026-10-19
+
 Concept design rounds with two or more designs now open on a variant overview, so each design can be judged at a glance before clicking through its screens.
 
 ### Added
