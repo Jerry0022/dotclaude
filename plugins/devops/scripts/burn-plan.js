@@ -1364,6 +1364,29 @@ function isPidAlive(pid) {
 }
 
 /**
+ * Move a stale lock aside and delete it — but only if what we moved is the
+ * file we inspected (`seen`, a statSync result). A waiter that stalled between
+ * its read and its rename may otherwise rename away a LIVE lock a faster
+ * waiter created in between; that file is put back (best-effort, never
+ * overwriting a newer lock). Returns true when the stale lock was removed.
+ */
+function removeStaleLock(lock, seen) {
+  const graveyard = `${lock}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    fs.renameSync(lock, graveyard);
+  } catch { return false; /* taken over by another waiter, released, or rename failed */ }
+  let moved = null;
+  try { moved = fs.statSync(graveyard); } catch { return false; }
+  const same = moved.mtimeMs === seen.mtimeMs && moved.size === seen.size &&
+    (!seen.ino || !moved.ino || moved.ino === seen.ino);
+  if (!same) {
+    try { fs.linkSync(graveyard, lock); } catch { /* a newer lock already exists */ }
+  }
+  try { fs.unlinkSync(graveyard); } catch { /* best-effort cleanup */ }
+  return same;
+}
+
+/**
  * Run `fn` under an exclusive lock on the state file: read → decide/claim →
  * write is one step. Two parallel `gate` calls (two free lanes, batched tool
  * calls) otherwise read the same queue and claim the same task. The lock is
@@ -1408,11 +1431,7 @@ function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS
         // that keeps failing (e.g. antivirus/indexer holding the file on
         // Windows) must still respect the deadline and back off between
         // attempts instead of spinning at full CPU.
-        const graveyard = `${lock}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        try {
-          fs.renameSync(lock, graveyard);
-          try { fs.unlinkSync(graveyard); } catch { /* best-effort cleanup */ }
-        } catch { /* another waiter already took it over, the holder released it, or the rename itself failed */ }
+        removeStaleLock(lock, stat);
         giveUpOrRetry();
         continue;
       }
@@ -1757,6 +1776,7 @@ function stateOp(op, id, file, opts, now, finishUsage) {
 
 
 module.exports = {
+  removeStaleLock,
   STATE_VERSION, RESERVE_PCT, LANE_CAP, SESSION_RESERVE_PCT, MIN_SPENDABLE_PCT, MIN_OFFER_PCT,
   UPLIFT_FLOOR, USAGE_FRESH_MIN, HOLD_LIMIT, SESSION_PER_WEEKLY_DEFAULT, BLIND_FRACTION, BLIND_SAFETY, PROFILES, PROFILE_ORDER, SIZE_WEIGHT, PLAN_CAPACITY,
   DEFAULTS_AT_MAX20, RESUME_BUFFER_MIN,
