@@ -38,7 +38,7 @@ same Desktop-only / skip-silently semantics). `test-minimal` never calls the
 widget. The session-title hook (`prompt.flow.title-work`) sets the bare `⏳ `
 icon-only prefix on the first prompt of new work, in place of the former
 `🔧 `; the card's session-title note replaces it with the result prefix at
-turn end (§ 7 of the design doc). The hook reads the current title from the
+turn end (`session-title-scheme.md`). The hook reads the current title from the
 transcript (`hooks/lib/session-title.js`) and passes the exact new title, set
 in parallel with the turn's first tool call — or emits nothing when the title
 is already right; only an unknown title falls back to `get_session`.
@@ -169,7 +169,7 @@ Subagents inherit all output contracts:
   `ship-successful`, `👉 📦 Ready – ` for `ready`, `🟩 🖥️ System – ` for
   `fallback`), and the CTA heading starts with the same two icons and keyword
   (title = CTA); the full status/activity tables and the 👉-vs-🟩 rule live in
-  `completion-card-design.md` § 7. A card-less turn that ends on a bare `⏳ `
+  `session-title-scheme.md`. A card-less turn that ends on a bare `⏳ `
   becomes `👉 ⚡ Interrupted – `. The server reads the current title
   off the session transcript (`~/.claude/projects/<cwd slug>/<session_id>.jsonl`),
   so the block names the exact `set_session_title` value, to be called in the

@@ -216,7 +216,7 @@ right after the page is open, prefix the session title:
 
 The prefix is exactly `👉 🧭 Concept – ` (pointing hand, compass, space, word, space, en dash,
 space) — the same two icons the completion card carries in its CTA, so sidebar
-and card read as one state (scheme: `{PLUGIN_ROOT}/deep-knowledge/completion-card-design.md` § 7). From here on the completion card keeps the title
+and card read as one state (scheme: `{PLUGIN_ROOT}/deep-knowledge/session-title-scheme.md`). From here on the completion card keeps the title
 in step with the phase (table below); Step 6a strips the prefix again.
 
 **`👉 🧭` means "your move — look at the page", nothing else.** Never set

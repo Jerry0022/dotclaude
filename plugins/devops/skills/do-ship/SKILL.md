@@ -245,7 +245,7 @@ this step normally costs no API call of its own — no `get_session`:
      `title: "⏳ 🚀 Shipping – {stripped title}"`.
 
 The bare `⏳ ` is the fallback for "being worked on", never the override: no
-hook or skill replaces a running `⏳ 🚀 Shipping – ` with it (design § 7).
+hook or skill replaces a running `⏳ 🚀 Shipping – ` with it (`{PLUGIN_ROOT}/deep-knowledge/session-title-scheme.md`).
 
 **Both tools exist only in the Desktop app.** Deferred is not unavailable: when they sit in the deferred-tools list, load
 the set tool (fallback: both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`), then call them
@@ -253,7 +253,7 @@ the set tool (fallback: both once with `ToolSearch` `select:mcp__ccd_session_mgm
 unattended run, or when the call fails for any reason: skip silently — no
 retry, no note to the user, no fallback. The rename is a courtesy, never a
 gate. The completion card's `[SESSION TITLE]` block replaces the prefix with
-the outcome (`🟩 🚀 Released Alpha – ` / `👉 ⛔ Blocked – `, see Step 6; scheme: `completion-card-design.md` § 7); never restore a
+the outcome (`🟩 🚀 Released Alpha – ` / `👉 ⛔ Blocked – `, see Step 6; scheme: `{PLUGIN_ROOT}/deep-knowledge/session-title-scheme.md`); never restore a
 remembered title by re-typing it.
 
 > **Sentinel hygiene (every exit path).** `ship_preflight` writes a

@@ -177,7 +177,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 ### 2.6 Decision block
 
 - **Heading = the decision as a question**, H2, led by the same two-icon
-  head as the session title (§ 7): `👉 📦 Ready — Shippen?` only when nothing
+  head as the session title (`session-title-scheme.md`): `👉 📦 Ready — Shippen?` only when nothing
   is open. It ends with `?` (the stop-hook checks that) — **except when there
   is nothing to decide**: then it is a state ending in `.` and there are no
   buttons (`🟩 🎊 Released Stable — v0.179.0 — fertig.`; `👉 📦 Files — Fertig
@@ -277,7 +277,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | V&V unverified | `👉 ⚠️ Unverified — Ungeprüft shippen?` | "npm test lief nicht — …" | Tests laufen lassen · Trotzdem shippen | `⚠ ungeprüft` first evidence post |
 | V&V running | `⏳ 🧪 Testing — Test läuft noch — Ergebnis abwarten?` | "Ein Testlauf läuft noch im Hintergrund — …" | Jetzt shippen | `◐ Test läuft noch im Hintergrund` first evidence post; waiting needs no button — the run's notification brings the result; the pending override still wins when `pending` names the run |
 
-Every heading starts with the same status icon, activity icon and English keyword as the session title the card leaves (§ 7, "Title = CTA"), then ` — ` and the localized sentence; both come from one table (`hooks/lib/title-scheme.js`, `cardHead` in `mcp-server/index.js`).
+Every heading starts with the same status icon, activity icon and English keyword as the session title the card leaves (`session-title-scheme.md`, "Title = CTA"), then ` — ` and the localized sentence; both come from one table (`hooks/lib/title-scheme.js`, `cardHead` in `mcp-server/index.js`).
 
 English strings mirror these one to one (`👉 ⚠️ Red tests — Ship anyway with 2 red tests?`,
 `🟩 🚀 Released Alpha — v0.179.0 — promote to beta?`, `🟩 🎊 Promoted Beta — v0.179.0 — to
@@ -554,89 +554,9 @@ Yellow/red on the budget marker follow § 2.4, independent of the above.
 
 ## 7. Session title prefixes
 
-### The double-icon scheme
-
-A title reads `<STATUS> <ACTIVITY> <Word> – <title>`. The only single-icon
-form is the bare `⏳ <title>` that `prompt.flow.title-work` sets on every
-prompt that starts generic, unnamed work; the card's session-title note
-replaces it with the result prefix at turn end. Nothing else strips or sets
-titles.
-
-| STATUS | Meaning |
-|---|---|
-| `⏳` | Claude works on a named process (shipping, V&V running, background agents pending, concept iterating/implementing) |
-| `👉` | Your move: the card carries a MANDATORY user step |
-| `🟩` | Done, nothing mandatory left (not ✅) |
-| `🟥` | Aborted |
-| `⏸️` | Paused |
-
-| ACTIVITY | Keywords (STATUS in front) |
-|---|---|
-| 🚀 ship | `⏳ Shipping`, `🟩 Released Alpha` |
-| 🎊 promote | `🟩 Released Beta/Stable` (ship and promote in one run), `🟩 Promoted Beta/Stable` (promote only); never "LIVE" |
-| 🧪 test | `⏳ Testing` (V&V running), `👉 Test` |
-| ▶️ | `🟩 Started` (test-minimal) |
-| 🧭 concept | `👉 Concept` (page waits), `⏳ Concept` (iterating/implementing) |
-| 📥 batch | `👉 Batch` |
-| 📋 | `🟩 Analysis` |
-| 🖥️ | `🟩 System` (fallback: work outside the repo, no repo diff) |
-| 📦 code done | `👉 Ready`, `🟩 Committed` (ready-local), `👉 Files` (ready-files), `🟥 Aborted` (generic abort) |
-| ❓ / ⚠️ / ⛔ | `👉 Question`, `👉 Red tests` / `Unverified` / `Not deployed`, `👉 Blocked` |
-| 🤖 | `⏳ Agents` (pending background work) |
-| ⚡ | `👉 Interrupted` (see F5 below) |
-| pause | `⏸️ 🔋 Limit reset`, `🔄 Restart`, `💻 Reboot`, `✋ Paused` |
-
-A named abort keeps its activity (`🟥 🚀 Ship – X`).
-
-**The 👉-vs-🟩 rule** is decided by content, not by variant name: a
-mandatory user step (an open point or question, a required userTest, a
-requirement with `waitsOn: "user"`, red tests, unverified, blocked, ready
-"Ship?", files, a concept waiting, a batch collecting, not deployed) gives
-👉. Optional follow-ups (a promote offer after an alpha release, "noch
-etwas?") stay 🟩.
-
-**Title = CTA.** The card's CTA heading starts with the same two icons and
-the same English keyword as the title (`👉 📦 Ready – X` →
-`👉 📦 Ready — Shippen?`); both come from one table so they cannot drift.
-The card's component line uses 🧩.
-
-**F5 Interrupted.** A turn that ends WITHOUT a card while the title is a bare
-`⏳ …` is rewritten to `👉 ⚡ Interrupted – <title>`. A batch turn without a
-card, a concept waiting and `⏳ 🚀 Shipping` stay untouched.
-
-**Legacy prefixes.** Every old single-icon prefix (`🚀 Shipped – `,
-`📦 Ready – `, `🧭 Concept – `, `📥 Batch – `, `⏳ Working – `, …) is still
-stripped, so titles from older sessions come out clean. Only known
-status × activity × keyword prefixes are stripped; `⏳ Fix Login – Bug` keeps
-its text.
-
-**Process prefixes outrank the hourglass.** Two prefixes name a running
-process rather than an outcome: `⏳ 🚀 Shipping – ` (the ship pipeline) and
-`👉 📥 Batch – ` (an armed collection). The bare `⏳ ` is the *fallback* for
-"being worked on" — it is set only when no process prefix applies and it
-never replaces one. `👉 🧭 Concept – ` is no process but a wait: it says "your
-move — look at the page", so whenever Claude works in a concept session
-(generating the page, a user prompt, a picked-up submission, iterating,
-implementing) the title is the bare `⏳ ` (or `⏳ 🧭 Concept – ` while
-iterating), and the card brings 👉 back only for the `waiting` phase. Only a task-notification turn leaves the compass
-alone (it may end without a card). Concretely:
-`prompt.flow.title-work` leaves `⏳ 🚀 Shipping – ` / `👉 📥 Batch – ` titles
-untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same
-classifier `prompt.ship.detect` uses) is marked `⏳ 🚀 Shipping – ` by the hook
-itself, so `/do-ship` after a change never sits on `⏳` for the length of the
-pipeline. Outcome prefixes (`🟩 🚀 Released Alpha – `, `👉 📦 Ready – `, …) are what a new
-prompt outdates — those the hook strips. Observed 2026-09-21.
-
-**An outcome prefix lives exactly one turn.** `stop.flow.guard` hands the
-title-work token back at every non-silent turn end — card or no card — so the
-next prompt always marks `⏳ ` and the card that ends that turn sets its own
-outcome (`👉 📦 Ready – `, `👉 🧪 Test – `, …). `🟩 🚀 Released Alpha – ` therefore stays on
-the sidebar only while the LAST thing the session did was a ship; work after
-a ship reads ⏳ → Ready/Test, never Released. (Until 0.183.9 the token was
-released only after a card, and one card-less answer after a ship pinned
-Shipped for the rest of the session.) A ship keyword is an order only in a
-short prompt (`KEYWORD_MAX_CHARS` in `ship-intent.js`): long prose that
-mentions a ship in passing is work, not a ship, and gets the hourglass.
+The title scheme — status and activity icons, keywords, the 👉/🟩 rule,
+title = CTA, Interrupted, legacy prefixes and the process-prefix rules —
+lives in [`session-title-scheme.md`](session-title-scheme.md).
 
 ## 8. Text rules (both languages)
 
