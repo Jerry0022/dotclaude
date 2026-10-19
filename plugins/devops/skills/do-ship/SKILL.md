@@ -529,6 +529,7 @@ On success, **start Step 2.5 in the background now**, before the Codex gate — 
    - **rc=126** (`DEVOPS_DISABLE_CODEX=1`) or **rc=127** (codex CLI missing) → skip silently
    - **other non-zero** → surface first line of stderr, continue to Step 3
 3. If codex-plugin-cc not installed → skip silently
+4. **Claude API fallback (opt-in):** when Codex gave rc 75 / 124 / 127 (or is not installed), run the same review prompt once through `node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" -` (stdin) and evaluate rc 0 exactly like a Codex rc 0 (same lockout rule). rc 126 (switch off) → silent; any other rc → card line `Claude-API-Review → übersprungen — <reason>`, continue. Never retry. Details: `{PLUGIN_ROOT}/deep-knowledge/api-credits.md`.
 
 ## Step 2.5 — Deploy-Parity Build
 

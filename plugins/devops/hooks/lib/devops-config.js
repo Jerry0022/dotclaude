@@ -99,6 +99,16 @@ const SCHEMA = Object.freeze({
       doc: 'Desktop app: archive the session right after the card of a successful, merged ship (never with keep or pending work).',
     }),
   }),
+  apiCredit: Object.freeze({
+    enabled: Object.freeze({
+      type: 'boolean', default: false,
+      doc: 'Opt-in: advisory side tasks (second-opinion review when Codex is skipped) run on the Claude API credit of the linked Console org via scripts/claude-api-safe.js. Claude Code itself always stays on the plan.',
+    }),
+    webGuide: Object.freeze({
+      type: 'boolean', default: false,
+      doc: 'Opt-in: when apiCredit.enabled is on and no API key is stored, offer the one-time auto-guide through the Claude Console (workspace, spend limit, key).',
+    }),
+  }),
 });
 
 /** `section.key` for every setting, in SCHEMA order. */

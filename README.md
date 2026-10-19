@@ -131,6 +131,36 @@ for research tasks, and QA-integrated review for complex changes.
 
 See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 
+### Claude API credits (optional, opt-in)
+
+Claude Max and Team plans include monthly Claude API credits ($100 on Max 5x,
+$200 on Max 20x, up to $500 pooled on Team) that expire every billing cycle.
+They do **not** cover Claude Code itself, so your session, its subagents and
+the plugin's hooks always stay on the plan. What the plugin *can* move onto the
+credit is its out-of-process side task: the second-opinion code review that
+Codex gives, whenever Codex is skipped (usage limit, timeout, not installed).
+
+Two switches, both off by default:
+
+| Setting | Effect |
+|---|---|
+| `apiCredit.enabled` | The second-opinion review falls back to the Claude API (`scripts/claude-api-safe.js`, Messages API, timeout, never blocks a ship). |
+| `apiCredit.webGuide` | If no API key is stored yet, Claude offers once to walk you through the Claude Console in your browser: create a `devops` workspace, set a spend limit, create a key. The key goes to `~/.claude/devops-api.env`. |
+
+Turn them on by saying **"nutze mein API-Guthaben"** (or "API credits for
+devops"). Claude asks both questions once, then stores the answers globally.
+Check them with `node plugins/devops/scripts/claude-api-safe.js --status`, and
+turn them off with "API-Guthaben nicht mehr nutzen".
+
+Notes:
+- The key is read only as `DEVOPS_ANTHROPIC_API_KEY`. Never set `ANTHROPIC_API_KEY`
+  for this: doing so would switch Claude Code itself to API billing, which the
+  credit rejects.
+- Purchased credits can't be excluded. Anthropic spends the included credit
+  first. The workspace spend limit is the guardrail.
+
+Runbook: [`plugins/devops/deep-knowledge/api-credits.md`](plugins/devops/deep-knowledge/api-credits.md).
+
 ## Customization
 
 Every skill and agent supports **three-layer extensions**:
