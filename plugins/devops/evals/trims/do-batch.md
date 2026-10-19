@@ -45,7 +45,7 @@ variant B = the trimmed text.
 
 | Case | Graders | Why this case |
 |---|---|---|
-| `skills/do-batch/activate-and-seed` | `batch-skill`, `mode-file`, `note-verbatim`, `git-exclude`, `card-with-cwd` (graders.js) | activation with seed content: the mode file, the verbatim note, the exclude entry and the card with `cwd` are all observable (watchdog and session-title tools denied) |
+| `skills/do-batch/activate-and-seed` | `batch-skill`, `mode-file`, `note-verbatim`, `ignore-block`, `card-with-cwd` (graders.js) | activation with seed content: the mode file, the verbatim note, the managed .gitignore block and the card with `cwd` are all observable (watchdog and session-title tools denied) |
 
 ## Per-grader results
 

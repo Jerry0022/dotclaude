@@ -292,6 +292,10 @@ function scanRepo(repo, io, opts) {
       if (!landed && !uninspectable) {
         const m = getMerged();
         if (m && m.bySha && m.bySha.has(sha)) landed = true;
+        // local tip behind its own merged PR head — the same rule ship_hygiene uses
+        for (const head of (!landed && m && m.byName && m.byName.get(branch)) || []) {
+          if (git(repo, ['merge-base', '--is-ancestor', sha, head]).ok) { landed = true; break; }
+        }
       }
       if (!landed && !uninspectable) {
         const cl = contentInBase(repo, sha, base.ref, { git: gitForLanded });

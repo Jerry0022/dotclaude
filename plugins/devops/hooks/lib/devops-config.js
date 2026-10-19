@@ -17,8 +17,8 @@
  *              MAIN checkout of the clone, so every worktree reads the same
  *              file (the copy the Desktop app seeds into a new worktree is
  *              never consulted). Per clone, never committed: it is listed in
- *              runtime-ignores.js, which ss.project.setup writes into
- *              .git/info/exclude.
+ *              runtime-ignores.js, the managed block of the repo's
+ *              .gitignore.
  *     global   ~/.claude/devops-config.json — every project on this machine.
  *
  *   Both files hold the same shape: { "<section>": { "<key>": value } }.

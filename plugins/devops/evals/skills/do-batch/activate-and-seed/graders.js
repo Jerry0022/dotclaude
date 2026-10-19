@@ -1,12 +1,12 @@
 // do-batch activation with seed content (watchdog and session title denied).
 // Expected: the mode file is written, the prompt's content is parked as one
-// verbatim note, the notes file lands in .git/info/exclude, and the
+// verbatim note, the notes file is covered by the managed .gitignore block, and the
 // activation is confirmed with a completion card that carries `cwd`.
 module.exports = (g) => ({
   "batch-skill": g.skillInvoked("do-batch"),
   "mode-file": g.fileExists(".claude/batch-mode.json"),
   "note-verbatim": g.fileMatches(".claude/batch.md", /dark mode toggle to the settings page, and remember the user's choice/),
-  "git-exclude": g.fileMatches(".git/info/exclude", /batch\.md|\.claude/),
+  "ignore-block": g.fileMatches(".gitignore", /# >>> claude \(managed\) >>>/),
   // MCP card, or the offline renderer's payload when the server is not up.
   "card-with-cwd": (ctx) =>
     g.toolUsed("mcp__plugin_devops_dotclaude-completion__render_completion_card", { inputMatch: /"cwd"/ })(ctx) ||

@@ -80,6 +80,16 @@ const TOPIC_MAP = [
     patterns: [/\bapi.?(?:guthaben|credits?)\b/i, /\baktionsguthaben/i, /\bpromo(?:tional)?.?credits?/i],
   },
   {
+    file: 'home-backup.md',
+    specificity: 3,
+    patterns: [/\bhome.?backup/i, /\bclaude.?home\b/i, /\b(?:~\/)?\.claude\b.{0,30}\b(?:sichern|backup|back up)/i],
+  },
+  {
+    file: 'wip-watch.md',
+    specificity: 3,
+    patterns: [/\bwip.?(?:w(?:ä|ae)chter|watch)/i],
+  },
+  {
     file: 'codex-integration.md',
     specificity: 1,
     patterns: [/\bcodex/i, /\bgpt.?5/i],

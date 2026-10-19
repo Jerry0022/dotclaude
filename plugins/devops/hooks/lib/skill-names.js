@@ -125,7 +125,7 @@ const RETIRED = Object.freeze({
   // 2026-09-24 (skill-restructure spec § Addendum)
   'setup-project': Object.freeze({
     doc: 'project-setup.md',
-    home: 'ss.project.setup (runtime ignores → .git/info/exclude, one-time offer in a new repo) + prompt.knowledge.dispatch pointer',
+    home: 'ss.project.setup (managed claude block in .gitignore, one-time offer in a new repo) + prompt.knowledge.dispatch pointer',
   }),
 });
 

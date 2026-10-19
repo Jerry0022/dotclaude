@@ -44,7 +44,7 @@ your-project/.claude/skills/{skill-name}/
 └── reference.md    ← project-specific context
 ```
 
-Say "extend skill" (or "customize skill") to interactively scaffold an extension for a specific skill. The plugin keeps its own runtime files out of git by itself (`.git/info/exclude`); for a one-time repo setup (.gitignore for your stack, LICENSE) say "set up this project".
+Say "extend skill" (or "customize skill") to interactively scaffold an extension for a specific skill. The plugin keeps Claude and plugin runtime files out of git with one managed block in `.gitignore` (`# >>> claude (managed) >>>`); for a one-time repo setup (.gitignore for your stack, LICENSE) say "set up this project".
 
 ## Optional: Codex Integration
 

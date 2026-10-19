@@ -18,7 +18,7 @@ How to audit or initialize a project's repository structure: .gitignore, LICENSE
 
 | Former step | Now |
 |---|---|
-| Plugin runtime files in `.gitignore` (the marked block) | `ss.project.setup` writes `hooks/lib/runtime-ignores.js` into the clone's `.git/info/exclude` at every session start — no repo diff, every worktree covered. A marked `# >>> devops-plugin runtime state` block left in `.gitignore` by an earlier setup is harmless; remove it only when the user asks. |
+| Claude/plugin ignore entries | One managed block in `.gitignore` — `# >>> claude (managed) >>>` … `# <<< claude (managed) <<<`, rendered from `hooks/lib/runtime-ignores.js`. `ss.project.setup` writes it into a repo without a commit and keeps an existing block current; an established repo moves over with `migrate` (Step 2). `.git/info/exclude` is no longer written. |
 | Project map | `ship_build` regenerates `.claude/project-map.md` on every ship; `pre.tokens.guard` regenerates it again right before injecting it into a session. |
 | CLAUDE.md budget | `post.claude.budget` measures every Claude context file at write time. |
 | README | `pre.readme.standards` + `readme-standards.md`. |
@@ -64,26 +64,40 @@ See `claude-directory-structure.md` for the canonical `.claude/` layout. The
 line to hold: **plugin _configuration_ is tracked, plugin _runtime state_ is
 ignored.**
 
-**MUST be tracked (never ignore):** `CLAUDE.md`, `.claudeignore`,
-`.claude/commands/`, `.claude/skills/`, `.claude/hooks/`,
-`.claude/settings.json`, `.claude/agents/`, `.claude/agents.json`,
-`.claude/launch.json`, `.claude/graphify.json` (the graph opt-out record — a
-project decision; ignoring it silently re-enables the graph for everyone who
-clones the repo), `.claude/deep-knowledge/`, `.claude/project-map.md`.
+**VERSIONED (never ignore):** `CLAUDE.md`, `.claudeignore`,
+`.claude/settings.json`, `.claude/skills/`, `.claude/commands/`,
+`.claude/hooks/`, `.claude/agents/`, `.claude/agents.json`,
+`.claude/deep-knowledge/`, `.claude/project-map.md`,
+`.claude/launch.example.json`, `.claude/graphify.json` (the graph opt-out
+record — a project decision; ignoring it silently re-enables the graph for
+everyone who clones the repo), `docs/concepts/`.
 
-**Runtime state** needs no `.gitignore` entry for the plugin's own files — they
-are excluded per clone (table above). For collaborators who use Claude Code
-without the plugin, a shared `.gitignore` may still list Claude Code's own
-session state:
+**LOCAL (the managed block):** `.claude/settings.local.json`,
+`.claude/launch.json` (per machine — share a `.claude/launch.example.json`),
+`.claude/worktrees/`, Claude Code's session state and every runtime file the
+plugin writes (`token-config.json`, `concept-active.json`, `concepts/`,
+`batch*`, `.ship-*`, `session-*`, `scheduled_tasks*`, `run-contract*`,
+`runs/`, `cache/`, …). Never hand-write these lines — the block carries them:
 
-```gitignore
-# AI tooling — session state (never track)
-.claude/worktrees/
-.claude/todos/
-.claude/plans/
-.claude/settings.local.json
-.claude/*.log
+```bash
+node "{PLUGIN_ROOT}/scripts/claude-ignore.js" check   [repo]   # deviations, exit 1 on an issue
+node "{PLUGIN_ROOT}/scripts/claude-ignore.js" migrate [repo]   # one current block; old Claude lines folded in,
+                                                              # the plugin's lines removed from .git/info/exclude
 ```
+
+`migrate` is idempotent and keeps project-specific lines, including deliberate
+deviations (e.g. a repo that keeps `.claude/settings.json` local) — `check`
+lists those as info. `ship_preflight` runs the same check when a ship touches
+`.gitignore` or `.claude/` and puts the `migrate` command into its warnings;
+it never blocks a ship.
+
+**Secrets files → `.env.example`.** When the repo holds `.env` / `.env.*`,
+`*.local.json` or `environment.local.ts`, offer the example files:
+`node "{PLUGIN_ROOT}/scripts/claude-ignore.js" env-example [repo]` writes
+`.env.example` with the key NAMES only (`KEY=`, never a value; an existing
+example only gains missing keys) and `<name>.example.json` with every value
+blanked; `environment.local.ts` is reported for a hand-made
+`environment.example.ts`. The secrets files themselves stay ignored (below).
 
 ### Secrets (always)
 

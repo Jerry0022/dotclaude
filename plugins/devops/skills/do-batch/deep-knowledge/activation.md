@@ -57,19 +57,20 @@ first with one `ToolSearch`
 
 Removing it again (4.8, Step 5, expiry): `deep-knowledge/merge.md` § Retire.
 
-## Git exclude (Step 2.3)
+## Ignore block (Step 2.3)
+
+The notes, the mode file and every other `.claude/batch*` file are covered by
+the managed `# >>> claude (managed) >>>` block in the repo's `.gitignore`
+(`hooks/lib/runtime-ignores.js`). Make sure it is there — nothing is written
+when it already is:
 
 ```bash
-# The guard is mandatory: outside a git repo the command substitution is
-# EMPTY, so `x` becomes "/info/exclude" and `mkdir -p "${x%/*}"` creates
-# /info at the FILESYSTEM ROOT and appends there — outside the project.
-gcd="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
-if [ -n "$gcd" ]; then
-  x="$gcd/info/exclude"
-  mkdir -p "${x%/*}"
-  grep -qxF '/.claude/batch*' "$x" 2>/dev/null || echo '/.claude/batch*' >> "$x"
-fi
+node "{PLUGIN_ROOT}/scripts/claude-ignore.js" check >/dev/null 2>&1 || node "{PLUGIN_ROOT}/scripts/claude-ignore.js" migrate
 ```
+
+Outside a git repo both exit non-zero without writing anything — skip silently.
+Never append Claude entries to `.git/info/exclude` (earlier versions did; `migrate`
+removes them).
 
 ## Activation card (Step 2.5)
 

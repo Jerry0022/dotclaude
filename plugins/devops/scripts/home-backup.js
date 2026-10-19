@@ -55,8 +55,9 @@ const REPO_RE = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
 
 const ALLOWLIST = [
   '.gitignore', '.backupallow', 'CLAUDE.md', 'settings.json', 'settings.local.json', 'keybindings.json',
-  'output-styles/', 'agents/', 'skills/', 'commands/', 'scripts/', 'projects/',
-  'statusline*.js', 'statusline*.sh', 'statusline*.ps1', 'delegation.json', 'devops-*.json',
+  'output-styles/', 'agents/', 'skills/', 'commands/', 'scripts/', 'scheduled-tasks/', 'projects/',
+  // configuration only — devops-hygiene.json & co. are machine state that changes every day
+  'statusline*.js', 'statusline*.sh', 'statusline*.ps1', 'delegation.json', 'devops-config.json',
 ];
 const PLUGIN_SYNCED = ['skills/synced/'];
 const NEVER_DIRS = [

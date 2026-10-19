@@ -14,7 +14,7 @@ instead of inventing a key.
 
 | Scope | File | Applies to |
 |---|---|---|
-| `--project` | `<main checkout>/.claude/devops-config.json` | this clone and all its worktrees; never committed (excluded via `.git/info/exclude`) |
+| `--project` | `<main checkout>/.claude/devops-config.json` | this clone and all its worktrees; never committed (listed in the managed `.gitignore` block) |
 | `--global` | `~/.claude/devops-config.json` | every project on this machine without its own value |
 
 Resolution per key: project > global > default. "Hier", "in diesem Projekt" →
@@ -100,6 +100,33 @@ the committed ship extension (`deployParity:` block in the project's
 
 "Nutze mein API-Guthaben" → the two questions and the `--global` writes in
 `deep-knowledge/api-credits.md` § Activation — never set these silently.
+
+### `homeBackup` — daily backup of `~/.claude` to a private repo (opt-in, global only)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | A daily OS job (Task Scheduler / crontab) runs `scripts/home-backup.js run`: stage the allowlist, scan for secrets and private data, commit + push only when something changed and nothing was found. Pure node — zero model tokens. |
+| `repo` | `''` | The private backup repo, `<owner>/<name>`. |
+
+Never set these with `set`: "richte Home-Backup ein" → `scripts/home-backup.js
+setup --repo <owner>/claude-home` (creates the repo, registers the job, writes
+both keys); "Home-Backup aus" → `home-backup.js disable` (removes the job, sets
+`enabled false`). Runbook: `deep-knowledge/home-backup.md`.
+
+### `wipWatch` — weekly WIP watch over your repos (opt-in, global only)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | A weekly OS job runs `scripts/wip-watch.js run`: un-landed local branches, dirty or broken worktrees, old stashes under the roots → `~/.claude/wip-watch/report.json`, one notification only when something new turned up. Pure node — zero model tokens. |
+| `roots` | `~/IdeaProjects` | Comma-separated folders; each folder and its direct child repos are scanned. |
+| `day` | `sun` | Weekday of the run (`mon` … `sun`). |
+| `discardAfterWeeks` | `8` | Dirty worktrees and stashes untouched longer than this get "discard" instead of "secure" as suggestion. |
+
+"WIP-Wächter an" → `scripts/wip-watch.js enable [--roots …] [--day …]`
+(registers the job and sets `enabled`); "WIP-Wächter aus" → `wip-watch.js
+disable`. `roots`, `day` and `discardAfterWeeks` may be changed with `set …
+--global`; after a `day` change run `enable` again so the job moves. Runbook:
+`deep-knowledge/wip-watch.md`.
 
 "Session nach dem Ship nicht archivieren" → `ship.archiveAfterShip false`.
 Background: `deep-knowledge/claude-desktop-app-setup.md` § Session archiving

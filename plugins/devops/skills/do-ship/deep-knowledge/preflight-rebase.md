@@ -15,8 +15,9 @@ each file where it belongs, inside this ship:
   § .gitignore) → commit it. Include it in the ship when it matches the main
   checkout's copy.
 - **Plugin runtime state** → it belongs in `hooks/lib/runtime-ignores.js`, which
-  `ss.project.setup` writes into `.git/info/exclude` at every session start (a
-  file missing there is a plugin bug — add it to that list), or delete it when
+  renders into the managed `# >>> claude (managed) >>>` block of `.gitignore`
+  (`scripts/claude-ignore.js migrate`; a file missing there is a plugin bug —
+  add it to that list), or delete it when
   it is a stray hook artifact (e.g. a `.claude/` created in a subdirectory).
 
 ## Rebase conflict resolution

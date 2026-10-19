@@ -161,6 +161,69 @@ Notes:
 
 Runbook: [`plugins/devops/deep-knowledge/api-credits.md`](plugins/devops/deep-knowledge/api-credits.md).
 
+### Claude home backup (optional, opt-in)
+
+Your settings, `CLAUDE.md`, agents, your own skills and commands, project
+memory and helper scripts live only in `~/.claude` on one disk. The home backup
+pushes that part to a **private** GitHub repo once a day, so a new machine is one
+`git clone` away. It is off by default.
+
+Say **"richte Home-Backup ein"** (or "set up home backup"). Claude runs one
+setup command: it creates the private repo (default `<you>/claude-home`),
+initialises git in `~/.claude` with a deny-by-default `.gitignore` (`/*`, then
+an allowlist), and registers a daily job (Windows Task Scheduler, crontab on
+Linux/macOS). Never included: `.credentials.json`, any `*token*` / `*secret*` /
+`*credential*` / `.env` file, transcripts (`*.jsonl`), caches, `plugins/`,
+`file-history/`, browser profiles, logs and backups.
+
+Before every commit each staged file is scanned for **secrets** (private keys,
+`sk-` / `ghp_` / `github_pat_` / `xox*` / `AKIA` tokens, JWTs, long
+`password=` / `token=` / `api_key=` values) and **private data** (e-mail
+addresses, phone numbers, IBANs, Luhn-valid card numbers). On any hit nothing is
+committed or pushed: you get a desktop notification and
+`~/.claude/home-backup-report.txt` with file, line and rule — never the value.
+Remove the data, or allow that one finding on purpose in `~/.claude/.backupallow`.
+Commits use a fixed local identity, not your e-mail address.
+
+**Token cost: 0.** The daily run is a plain node script — no `claude` call, no
+Claude Code cron, no cloud routine. Only the one-time setup conversation costs
+tokens, well under 0.1 % of a Pro plan's weekly usage.
+
+Turn it off with "Home-Backup aus" (removes the job; the repo and `~/.claude/.git`
+stay). **Restore** on a new machine: install Claude Code, move the fresh
+`~/.claude` aside, `git clone https://github.com/<you>/claude-home ~/.claude`,
+let `claude plugin update` reinstall the plugins from the restored marketplaces,
+then `/login` — credentials are never part of the backup.
+Runbook: [`plugins/devops/deep-knowledge/home-backup.md`](plugins/devops/deep-knowledge/home-backup.md).
+
+### WIP watch (optional, opt-in)
+
+Un-landed branches, forgotten stashes and dirty or broken worktrees pile up
+across projects, and the work in them exists nowhere else. The WIP watch looks
+for them once a week and tells you only when something needs a decision. It is
+off by default.
+
+Say **"WIP-Wächter an"**. Claude registers a weekly job (default Sunday) that
+scans every git repo under your roots (default `~/IdeaProjects`) against the
+existing `origin/<default>` ref — no fetch. A branch counts as landed when its
+content is in main: ancestor, the head of a merged PR, or every changed file
+identical / re-applying it is a no-op — so squash merges are recognised. Each
+finding gets a rule-based suggestion: delete (already in main), push + PR (ahead,
+rebases cleanly), reimplement on current main (far behind or conflicts), commit
+or discard (dirty worktree, by age), secure or drop (stash older than 30 days),
+`git worktree prune` (worktree folder gone). The result is
+`~/.claude/wip-watch/report.json`.
+
+You get one desktop notification, only when a NEW finding appears — never an
+"all ok". It carries the prompt to paste into Claude: **`WIP-Report aufräumen`**.
+That opens the cleanup page with all repos grouped, each suggestion
+pre-selected, and nothing executed before the dry-run confirmation.
+
+**Token cost: 0.** The weekly job is a plain node script, never starts Claude
+and never deletes anything; only opening the cleanup page costs tokens. Turn it
+off with "WIP-Wächter aus". Runbook:
+[`plugins/devops/deep-knowledge/wip-watch.md`](plugins/devops/deep-knowledge/wip-watch.md).
+
 ## Customization
 
 Every skill and agent supports **three-layer extensions**:
@@ -195,6 +258,32 @@ Say "extend skill" (the hidden `auto-extend` skill) to interactively scaffold an
 It detects existing extensions and lets you adapt them.
 
 For the full extension guide with examples per skill, see `deep-knowledge/skill-extension-guide.md`.
+
+### `.claude` in git — one managed ignore block
+
+What of `.claude/` is shared and what stays on your machine is one policy, kept
+in ONE marked block of the project's `.gitignore`:
+
+```gitignore
+# >>> claude (managed) >>>
+**/.claude/settings.local.json
+**/.claude/launch.json
+**/.claude/worktrees/
+…every runtime file Claude Code and the plugin write…
+# <<< claude (managed) <<<
+```
+
+Versioned: `CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`, `commands/`,
+`hooks/`, `agents/`, `deep-knowledge/`, `.claude/project-map.md`,
+`.claude/launch.example.json`, `docs/concepts/`. Local: `settings.local.json`,
+`launch.json`, `worktrees/` and all plugin runtime state. A new repository gets
+the block on its own; an existing one moves over with
+`node plugins/devops/scripts/claude-ignore.js migrate` — idempotent, it folds
+hand-grown Claude lines into the block and removes the plugin's old lines from
+`.git/info/exclude` (earlier versions kept them there). `/do-ship` checks the
+block only when a ship touches `.gitignore` or `.claude/`, and then hands you
+the `migrate` command instead of blocking. `claude-ignore.js env-example` writes
+a `.env.example` with key names only (never values) for your secrets files.
 
 ### Quiet output style (recommended)
 
@@ -320,7 +409,9 @@ lists what only exists locally.
 
 **Make it a habit, not an emergency.** Keep the "Yes" rows in a private git
 repo (dotfiles) and restore them with a copy after reinstalling Claude Code —
-exclude `.credentials.json`, transcripts and caches. After restoring:
+exclude `.credentials.json`, transcripts and caches. The opt-in
+[Claude home backup](#claude-home-backup-optional-opt-in) does exactly this
+for `~/.claude` every day, with a secret and private-data scan. After restoring:
 install Claude Code, `/login`, then `claude plugin update` pulls every plugin
 from the restored marketplaces.
 

@@ -4,8 +4,8 @@
  * @version 0.2.0
  * @description Fail when the plugin writes a PROJECT-rooted `.claude/` file that
  *   the runtime ignore list does not cover (issue #292). The list is
- *   hooks/lib/runtime-ignores.js; ss.project.setup writes it into every
- *   clone's `.git/info/exclude`.
+ *   hooks/lib/runtime-ignores.js — the managed `# >>> claude (managed) >>>`
+ *   block of every repo's `.gitignore`.
  *
  *   Without this, every plugin release that starts writing a new artifact
  *   silently dirties every repo that installs it — the user finds out at their
