@@ -121,6 +121,13 @@
         "matcher": "Bash|PowerShell"
       }
     ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop/substop.agent.wip.js", "timeout": 30 }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
@@ -254,7 +261,8 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.guard.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.guide.handoff.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.strict.release.js" },
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.mcp.reap.js" }
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.mcp.reap.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.session.autosave.js", "timeout": 45 }
         ]
       }
     ],
