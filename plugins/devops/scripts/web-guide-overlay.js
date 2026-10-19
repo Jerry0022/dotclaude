@@ -1,11 +1,11 @@
 /**
  * @script web-guide-overlay
- * @version 1.13.0
+ * @version 1.14.0
  * @plugin devops
  * @description In-page overlay for /auto-guide. Injected verbatim via the
  *   Claude-in-Chrome javascript_tool into a third-party page. Renders a
  *   draggable FAB + panel in a closed Shadow DOM host, collects one event
- *   per step (next/help/abort/timeout), exposes window.claudeGuide per
+ *   per step (next/help/comment/abort/timeout), exposes window.claudeGuide per
  *   plugins/devops/skills/auto-guide/deep-knowledge/protocol.md. Idempotent
  *   (same version -> "already-injected"; frozen global, see protocol.md). No
  *   imports/eval/network — last expression is the IIFE call, so
@@ -27,7 +27,7 @@
   var nativeObjectCreate = Object.create;
   var nativeDefineProperty = Object.defineProperty;
 
-  var VERSION = "1.13.0";
+  var VERSION = "1.14.0";
   // AUD-C007: per-guide channel token, substituted by `web-guide.js payload
   // inject` (32 hex chars). setStep()/wait() must pass it and every event
   // echoes it, so a page script can neither push steps nor steal events.
@@ -77,7 +77,7 @@
 
   var currentStep = null, collapsed = true, edgeTab = false, pos = { right: 24, bottom: 24 };
   var eventQueue = [], pendingWaiter = null, helpOpen = false, abortConfirm = false;
-  var abortResetTimer = null, heartbeatTimer = null, activeBtns = [];
+  var heartbeatTimer = null, activeBtns = [];
   var statusEl = null, spinnerEl = null, waitLabelEl = null, lastPoll = Date.now();
   // #529: a pendingWaiter belongs to a `javascript_tool`/CDP eval that has its
   // own ~45s hard limit (protocol.md § spike). The page has no signal when
@@ -97,7 +97,8 @@
   // Field state preserved across a re-render of the SAME step id (collapse,
   // expand, edge-tab toggle, Escape) — render() always rebuilds the DOM, so
   // typed/ticked values live here instead of in the (destroyed) elements.
-  var savedValues = {}, savedChecklist = [], savedHelpText = "";
+  var savedValues = {}, savedChecklist = [], savedHelpText = "", savedCommentText = "";
+  var commentSubmit = null;
 
   function isNum(n) {
     return typeof n === "number" && isFinite(n);
@@ -129,11 +130,13 @@
     if (typeof step.title !== "string" || typeof step.text !== "string") return null;
     if (step.done !== undefined && typeof step.done !== "boolean") return null;
     if (step.location !== undefined && typeof step.location !== "string") return null;
+    if (step.note !== undefined && typeof step.note !== "string") return null;
     if (step.copy !== undefined && !isValidCopy(step.copy)) return null;
     if (step.checklist !== undefined && !isValidChecklist(step.checklist)) return null;
     var out = { id: step.id, index: step.index, total: step.total, title: step.title, text: step.text };
     if (step.done !== undefined) out.done = step.done;
     if (step.location !== undefined) out.location = step.location;
+    if (step.note !== undefined) out.note = step.note;
     if (step.copy !== undefined) out.copy = step.copy.map((c) => ({ label: c.label, value: c.value }));
     if (step.checklist !== undefined) out.checklist = step.checklist.slice();
     var input = step.input;
@@ -309,8 +312,16 @@
     ":focus-visible{outline:2px solid #6d28d9;outline-offset:2px}",
     ".head :focus-visible{outline-color:#fff}",
     ".secondary{background:#eee;color:#333}",
-    ".tertiary{background:transparent;color:#a33}",
     ".lbl{display:block;font-size:12px;font-weight:700;margin:0 0 4px}",
+    // Free question/comment row below the step buttons, and Claude's answer note.
+    ".comment{display:flex;gap:6px;padding:0 12px 10px;align-items:center}",
+    ".comment input.f{margin:0;flex:1;min-width:0;padding:6px 8px;font-size:13px}",
+    ".note{background:#eef2ff;color:#1e1b4b;border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.4;margin:0 0 10px}",
+    // Abort confirmation: a modal layer over the panel, opened by the header ×.
+    ".confirm{position:absolute;inset:0;background:rgba(17,17,17,.45);display:flex;align-items:center;justify-content:center;padding:16px;border-radius:12px;z-index:1}",
+    ".confirm .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.35);width:100%}",
+    ".confirm .row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}",
+    ".danger{background:#b91c1c;color:#fff}",
     "input.f,textarea.f{width:100%;font:inherit;padding:8px;border:1px solid #ccc;border-radius:8px;margin-bottom:8px}",
     ".status{font-size:12px;color:#666;display:flex;align-items:center;gap:6px;padding:0 12px 10px}",
     ".spin{width:12px;height:12px;border-radius:50%;border:2px solid #ccc;border-top-color:#6d28d9;animation:wgs .8s linear infinite}",
@@ -339,10 +350,11 @@
     // #514 blocks: their light backgrounds would carry the panel's light
     // dark-mode text, which left a copy chip's value near-invisible.
     "  .loc{background:#2e1065;color:#e9d5ff}",
+    "  .note{background:#1e1b4b;color:#e0e7ff}",
+    "  .confirm .card{background:#26262d}",
     "  .chip{background:#2a2a31}",
     "  .chipbtn{background:#3a3a44;color:#eee}",
     "  .status{color:#aaa}",
-    "  .tertiary{color:#f87171}",
     "  :focus-visible{outline-color:#e9d5ff}",
     "  .head :focus-visible{outline-color:#fff}",
     "}",
@@ -626,6 +638,7 @@
   var SENT_TEXT = {
     next: "Gesendet – Claude prüft den Schritt …",
     help: "Frage gesendet – Claude antwortet gleich hier im Panel …",
+    comment: "Kommentar gesendet – Claude antwortet gleich hier im Panel …",
     abort: "Abbruch gesendet – Claude beendet den Guide …",
   };
   var lastSentType = "next";
@@ -770,6 +783,71 @@
     buildHelpBox(container, emit, { focus: true });
   }
 
+  function buildCommentRow(emit) {
+    var row = mk("div", "comment");
+    var field = mk("input", "f");
+    field.type = "text";
+    field.placeholder = "Frage oder Kommentar an Claude …";
+    field.setAttribute("aria-label", "Frage oder Kommentar an Claude");
+    field.value = savedCommentText;
+    row.appendChild(field);
+    var sendBtn = makeButton("Senden", "secondary", function () {
+      var text = field.value.trim();
+      if (!text || sendBtn.disabled) return;
+      sendBtn.disabled = true; // AUD-C008: one event per click
+      savedCommentText = "";
+      emit("comment", undefined, text);
+    });
+    var sync = function () {
+      savedCommentText = field.value;
+      sendBtn.disabled = sentFlag || field.value.trim() === "";
+    };
+    field.addEventListener("input", sync);
+    row.appendChild(sendBtn);
+    panel.appendChild(row);
+    activeBtns.push(sendBtn);
+    sync();
+    commentSubmit = { input: field, btn: sendBtn };
+  }
+
+  // The header × opens this layer over the panel; only "Ja, abbrechen"
+  // sends the abort. Escape or "Weitermachen" closes it again.
+  function buildAbortConfirm(emit, focus) {
+    var layer = mk("div", "confirm");
+    layer.setAttribute("role", "alertdialog");
+    layer.setAttribute("aria-modal", "true");
+    layer.setAttribute("aria-labelledby", "wg-confirm-title");
+    var card = mk("div", "card");
+    var title = mk("p", "t", "Guide wirklich abbrechen?");
+    title.id = "wg-confirm-title";
+    card.appendChild(title);
+    card.appendChild(mk("p", "x", "Claude beendet die Anleitung. Was du auf der Seite schon gemacht hast, bleibt erhalten."));
+    var row = mk("div", "row");
+    var stayBtn = makeButton("Weitermachen", "secondary", function () {
+      abortConfirm = false;
+      render(true);
+    });
+    var abortBtn = makeButton("Ja, abbrechen", "danger", function () {
+      if (abortBtn.disabled) return;
+      abortBtn.disabled = true;
+      abortConfirm = false;
+      emit("abort");
+      render();
+    });
+    row.appendChild(stayBtn);
+    row.appendChild(abortBtn);
+    card.appendChild(row);
+    layer.appendChild(card);
+    panel.scrollTop = 0;
+    panel.style.overflow = "hidden"; // the layer covers the visible panel, not a scrolled-away part
+    panel.appendChild(layer);
+    if (focus !== false) {
+      try {
+        stayBtn.focus();
+      } catch {}
+    }
+  }
+
   // Collapsing destroys the focused control: hand keyboard focus to what
   // replaced it (the FAB or the edge tab), never back to the page body.
   function focusHandle() {
@@ -781,14 +859,14 @@
 
   function render(focus) {
     clearEl(panel);
+    panel.style.overflow = "";
     activeBtns = [];
     statusEl = null;
     spinnerEl = null;
     waitLabelEl = null;
     enterSubmit = null;
-    abortConfirm = false;
-    clearTimeout(abortResetTimer);
-    abortResetTimer = null;
+    commentSubmit = null;
+    if (collapsed || edgeTab) abortConfirm = false;
     clearHeartbeat();
 
     // #608: no step yet — a fresh inject, above all on a new origin where the
@@ -852,16 +930,21 @@
       focusHandle();
     });
     head.appendChild(edgeBtn);
-    var collapseBtn = mk("button", "collapse", "–");
-    collapseBtn.type = "button";
-    collapseBtn.setAttribute("aria-label", "Einklappen");
-    collapseBtn.addEventListener("click", function () {
-      collapsed = true;
-      render();
-      saveState();
-      focusHandle();
+    // Minimising is a FAB click (or Escape) — the header's last slot is the
+    // guide's exit instead: × asks once in a modal layer, then aborts. On the
+    // final step there is nothing left to lose, so × just finishes it.
+    var closeBtn = mk("button", "collapse", "×");
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", currentStep.done ? "Guide schließen" : "Guide abbrechen");
+    closeBtn.addEventListener("click", function () {
+      if (currentStep.done) {
+        emit("next");
+        return;
+      }
+      abortConfirm = true;
+      buildAbortConfirm(emit, true);
     });
-    head.appendChild(collapseBtn);
+    head.appendChild(closeBtn);
     makeDraggable(head);
     panel.appendChild(head);
 
@@ -873,6 +956,14 @@
     if (currentStep.location) {
       var locEl = mk("div", "loc", "📍 " + currentStep.location);
       body.appendChild(locEl);
+    }
+
+    // Claude's answer to a question/comment (or a help request), sent as
+    // `note` on a same-id re-send — shown above the step, never replacing it.
+    if (currentStep.note) {
+      var noteEl = mk("div", "note");
+      appendFormatted(noteEl, "💬 " + currentStep.note);
+      body.appendChild(noteEl);
     }
 
     var focusTarget = null;
@@ -1075,23 +1166,6 @@
       foot.appendChild(helpBtn);
       activeBtns.push(helpBtn);
 
-      var abortBtn = makeButton("Abbrechen", "tertiary", function () {
-        if (abortConfirm) {
-          clearTimeout(abortResetTimer);
-          abortConfirm = false;
-          emit("abort");
-        } else {
-          abortConfirm = true;
-          abortBtn.textContent = "Wirklich abbrechen?";
-          abortResetTimer = setTimeout(function () {
-            abortConfirm = false;
-            abortBtn.textContent = "Abbrechen";
-          }, 4000);
-        }
-      });
-      foot.appendChild(abortBtn);
-      activeBtns.push(abortBtn);
-
       // Fix 2: the help box survives a re-render — same open/closed state,
       // same typed text — instead of helpOpen staying true with no box left
       // in the (rebuilt) DOM, which made the button a silent no-op.
@@ -1099,6 +1173,10 @@
     }
 
     panel.appendChild(foot);
+
+    // A question or remark that is neither "done" nor "stuck" — always
+    // visible on a working step, sent as its own `comment` event.
+    if (!currentStep.done) buildCommentRow(emit);
 
     statusEl = mk("div", "status");
     statusEl.setAttribute("role", "status");
@@ -1135,6 +1213,11 @@
       waitLabelEl.textContent = "Hinweis aktualisiert – lies den Schritt noch einmal.";
     }
 
+    if (abortConfirm && !collapsed && !currentStep.done) {
+      buildAbortConfirm(emit, focus);
+      return;
+    }
+
     if (focus && focusTarget && focusTarget.focus) {
       try {
         focusTarget.focus();
@@ -1145,8 +1228,10 @@
   function toggleFab() {
     if (!currentStep) return; // #608: loading FAB — nothing to expand yet
     collapsed = !collapsed;
-    render(true);
+    abortConfirm = false;
+    render(!collapsed);
     saveState();
+    if (collapsed) focusHandle(); // the FAB is now the only way back in
   }
   makeDraggable(fabButton, toggleFab);
   // AUD-C036: Enter/Space on the focused FAB fire a click with detail 0 — a
@@ -1177,7 +1262,10 @@
       var tipOpen = !fabTip.hidden;
       hideFabTip();
       if (tipOpen) return;
-      if (edgeTab) {
+      if (abortConfirm) {
+        abortConfirm = false; // Escape = "Weitermachen" while the confirm is open
+        render(true);
+      } else if (edgeTab) {
         edgeTab = false; // #516: Escape restores from the edge tab, too
         render(true);
         saveState();
@@ -1188,6 +1276,9 @@
         saveState();
         focusHandle();
       }
+    } else if (e.key === "Enter" && commentSubmit && shadow.activeElement === commentSubmit.input) {
+      if (typeof e.preventDefault === "function") e.preventDefault();
+      if (!commentSubmit.btn.disabled) commentSubmit.btn.click();
     } else if (e.key === "Enter" && enterSubmit && shadow.activeElement === enterSubmit.input) {
       if (typeof e.preventDefault === "function") e.preventDefault();
       if (!enterSubmit.btn.disabled) enterSubmit.btn.click();
@@ -1392,7 +1483,6 @@
         window.removeEventListener(type, onWinKeyCap, true);
       });
       clearHeartbeat();
-      clearTimeout(abortResetTimer);
       currentStep = null;
       eventQueue = [];
       destroyed = true;
