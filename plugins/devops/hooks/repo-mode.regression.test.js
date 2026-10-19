@@ -257,8 +257,13 @@ describe("the git-exclude idiom is guarded in every skill that uses it", () => {
   const users = [
     ["do-run/modes/autonomous.md"],
     ["do-run/modes/backlog.md"],
-    ["do-batch/deep-knowledge/activation.md"],
   ];
+
+  test("do-batch no longer writes .git/info/exclude — the managed .gitignore block covers its files", () => {
+    const body = readFileSync(join(HOOKS_DIR, "..", "skills", "do-batch", "deep-knowledge", "activation.md"), "utf8");
+    expect(body).not.toMatch(/info\/exclude"/);
+    expect(body).toMatch(/claude-ignore\.js" check/);
+  });
 
   test.each(users)("%s guards git-common-dir before using it", (rel) => {
     const file = join(HOOKS_DIR, "..", "skills", ...rel.split("/"));
