@@ -13,7 +13,7 @@ description: >-
   provably landed are removed by ship_hygiene without this page.
   Triggers on: "repo health", "branch cleanup", "branch hygiene", "branches
   aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen",
-  or a yes to the card's cleanup hint. Do NOT trigger for: code cleanup or
+  "WIP-Report aufräumen", or a yes to the card's cleanup hint. Do NOT trigger for: code cleanup or
   refactoring, project setup (.gitignore, LICENSE), or the branch the current
   ship removes anyway.
 layer: 0
@@ -21,7 +21,7 @@ invokes: [auto-concept, do-ship]
 user-invocable: false
 triggers:
   en: ["repo health", "branch cleanup", "branch hygiene"]
-  de: ["branches aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen"]
+  de: ["branches aufräumen", "worktrees aufräumen", "offene PRs landen", "open PRs shippen", "WIP-Report aufräumen"]
 argument-hint: "[optional: focus area — branches, sessions, PRs]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(node *), Bash(start *), Bash(cmd *), Read, Write, Glob, Grep, AskUserQuestion, Skill, mcp__Claude_Browser__*, mcp__claude-in-chrome__*, mcp__Claude_Preview__*, mcp__plugin_playwright_playwright__*, mcp__Claude_in_Chrome__*, mcp__plugin_devops_dotclaude-completion__render_completion_card, mcp__plugin_devops_dotclaude-ship__*, mcp__ccd_session_mgmt__list_sessions, mcp__ccd_session_mgmt__get_session
 ---
@@ -43,15 +43,29 @@ The cleanup has an automatic half and this interactive half:
 | **this skill** | on a yes to that item, or a trigger phrase | whatever the user ticks on the page, recent items included |
 
 The numbers are user settings (`{PLUGIN_ROOT}/deep-knowledge/devops-config.md`,
-section `cleanup`). Scope is always the current project — there is no
-cross-repo mode.
+section `cleanup`). Scope is the current project — except in the one input
+mode below.
+
+**Input mode: WIP report.** On `WIP-Report aufräumen` / "wip report
+aufräumen" (the prompt the opt-in WIP watch notification carries), or when
+invoked for the report, do NOT investigate the current repo: read
+`deep-knowledge/wip-report.md` and work `~/.claude/wip-watch/report.json`
+(multi-repo) instead. Steps 0–7 are replaced by loading that file; the page
+(Step 8) groups the findings per repo, pre-selects each item's suggested
+action and the user picks per item; Step 10 runs per repo with that repo as
+cwd, re-verifies every item (tip unchanged) and keeps the Apply-Manifest +
+Dry-Run-Confirm, the Deletion gate and the SAFETY rules unchanged. Opening the
+page is the only token-costing step — the report itself came from a zero-token
+job (`{PLUGIN_ROOT}/deep-knowledge/wip-watch.md`).
 
 On this page a session worktree only goes when the user ticks it (HARD RULE
 below).
 
 ## Step 0 — Repo-mode check
 
-Before any git command, verify this directory is a git repository:
+Before any git command, verify this directory is a git repository (not in the
+WIP-report mode above, which names its repos itself and runs this check per
+repo before acting):
 
 ```bash
 git rev-parse --is-inside-work-tree

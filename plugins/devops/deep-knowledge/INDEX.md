@@ -57,3 +57,4 @@ Quick-reference for all deep-knowledge topics. Read this FIRST to find the right
 | [usage.md](usage.md) | Usage Data — Live Token Usage | Live token usage (5h + weekly windows, burn rate) for the completion card's b... |
 | [visual-verification.md](visual-verification.md) | Visual Verification Methods | > **Single-Source-of-Truth for test autonomy decisions:** see [test-autonomy.... |
 | [windows-platform.md](windows-platform.md) | Windows Platform Work | Reference for Windows-specific implementation — system tray, native |
+| [wip-watch.md](wip-watch.md) | WIP Watch (opt-in) | A weekly pure-node job that finds work existing nowhere else — unlanded |
