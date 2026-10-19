@@ -105,6 +105,19 @@ describe("passes without a Q4 answer (Harden always, Polish on UI changes)", () 
     expect(r).toMatchObject({ passes: ["harden", "polish"], rethink: true });
   });
 
+  test("audit fixes: Ablauf? alone is a partial router call; 'keine' on the new Q4 keeps passes; Q4 answer decides rethink", () => {
+    const pc = { header: "PC danach", question: "PC danach?", options: [{ label: "An lassen" }] };
+    expect(R.isRouterCall([Q.ablauf, pc])).toBe(true);
+    expect(R.isPartialRouterCall([Q.ablauf, pc])).toBe(true);
+    expect(R.isPartialRouterCall([Q.ablauf])).toBe(true);
+    const qs = [Q.was, Q.ablauf, Q.umfang, Q4NEW];
+    const base = ans("Prompt umsetzen", "Interaktiv · Ship manuell", "Flexibel");
+    expect(R.parseRouterAnswers(qs, { ...base, [Q4NEW.question]: ["keine"] }))
+      .toMatchObject({ passes: ["harden", "polish"], rethink: false });
+    const q4n = { ...Q4NEW, options: [{ label: "Rethink vorher" }, { label: "Nichts davon" }] };
+    expect(R.parseRouterAnswers([Q.was, Q.ablauf, Q.umfang, q4n], { ...base, [q4n.question]: ["Nichts davon"] }, { doRunArgs: "rethink" }).rethink).toBe(false);
+  });
+
   // #635: "Nichts davon" is always Q4's last option; an empty Other on the
   // "Leer lassen = …" question is the empty answer.
   test("#635: 'Nichts davon' → no extras, passes stay; empty Other on a 'Leer lassen' Q4 → the empty answer", () => {

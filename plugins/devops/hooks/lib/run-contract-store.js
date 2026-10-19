@@ -775,11 +775,18 @@ function expiryNotice(cwd, opts = {}) {
 /** Archive an expired header sitting on disk (the "next write" of spec A). */
 function archiveIfExpired(cwd, now) {
   const h = readRawContract(cwd);
-  if (h && !h.closedAt && isExpired(h, eventsOf(cwd, h), now)) {
-    archive(cwd, h, now);
+  if (!h || h.closedAt || !isExpired(h, eventsOf(cwd, h), now)) return false;
+  // Re-check under the header lock: an arm() landing since the read above
+  // must not have its fresh header archived (same as expiryNotice, AUD-021).
+  const token = acquireLock(cwd, { lockWaitMs: 200 });
+  try {
+    const cur = readRawContract(cwd);
+    if (!cur || cur.id !== h.id || cur.closedAt) return false;
+    archive(cwd, cur, now);
     return true;
+  } finally {
+    if (token) releaseLock(cwd, token);
   }
-  return false;
 }
 
 function newId(now) {
