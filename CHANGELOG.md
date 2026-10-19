@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.276.2] — 2026-10-20
+
+### Fixed
+- **Cards get the `Web-Guide starten` button for dashboard hand-offs again (#742).** An `open` item whose `reply` starts with "Führ mich per Web-Guide durch …" / "Guide me through …" now counts as a declared hand-off. The service is a known service name, else the reply's object (first line only, max. 80 characters). Items like "Twitch-App registrieren … Client-ID liefern" and "Secret in Supabase setzen" are also caught by the text heuristics. New hand-off verbs: registrieren/register, setzen/set, hinterlegen, liefern/provide. New credential nouns: client ID/secret, plus compound apps ("Twitch-App") and "the app at <host>". Twitch counts as a service only through its developer surface.
+- **No false hand-offs from the new words.** English "set"/"provide" count only as an imperative or a to-/please-infinitive. So "I set the token in Vercel" and "Supabase will provide a token" are not hand-offs. Neither are German first-person narration ("Ich setze das Secret …"), German descriptive future ("Supabase wird … liefern"), the agent announcing its own next step ("I need to set …", "let me register …"), a bare "app" or the plain word "twitch". `completion-card-design.md` names the reply trigger.
+
 ## [0.276.1] — 2026-10-20
 
 ### Fixed
