@@ -51,7 +51,7 @@ The map of one run; each step's full rules are further down.
 | 5d | promote (beta/stable named by the user) | `ship_promote` | never (guard error → `open` item) |
 | 5e, 6 | memory dream, promotion gap, hygiene, card — the last action | `ship_hygiene`, `render_completion_card` | — |
 
-Every `ship-blocked` exit calls `ship_cleanup({ keep: true })` first (Pre-Step C → *Sentinel hygiene*).
+Every `ship-blocked` exit calls `ship_cleanup({ branch, cwd, keep: true })` first (Pre-Step C → *Sentinel hygiene*).
 
 **After a context compaction mid-ship** Claude Code keeps only the first 5,000
 tokens of this skill — roughly everything from Step 0 on is gone from context. Before
@@ -108,7 +108,7 @@ Orchestrators that land several PRs from one session (auto-cleanup Step 10b,
 | Signal | Effect on this run |
 |---|---|
 | `--cwd=<path>` | **Target directory override.** Every `ship_*` MCP call passes this path as `cwd`, every git/gh command runs with `git -C <path>` / inside it, and both Step 1e passes get `--cwd=<path>`. The branch that ships is the one checked out THERE, not this session's own. Pre-Step B (session activity) and Pre-Step C (sidebar title) still refer to this session; `ExitWorktree` is **never** called (it would act on this session's worktree, not the target) — the orchestrator owns the target's teardown, so `--cwd` implies `--keep`. |
-| `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ keep: true })` only clears the sentinel and the lockout marker. |
+| `--keep` | Keep-mode (Step 5a signal 4): no branch or worktree teardown, `ship_cleanup({ branch, cwd, keep: true })` only clears the sentinel and the lockout marker. |
 | `--queued` | This ship is one of several in a queue. The card `summary` gets a `(Queue n/N)` suffix when the orchestrator passes `--queued=n/N`, a `ship-blocked` outcome is expected to be *parked* by the caller, not retried here, and Step 6 skips `ship_hygiene` — the orchestrator decided what stays. |
 | `.claude/.ship-queue` marker in the target repo root (`{ owner, since }`) | Written by the orchestrator before its first ship, deleted after its own finalizer. Project ship extensions MUST skip any post-ship step that mutates this install (plugin self-sync, cache rebuild, MCP restart) while it exists — the orchestrator runs that step exactly once at the end. Not a lockout: `AskUserQuestion` gates stay interactive unless Pre-Step A says otherwise. **Stale rule:** a marker whose `since` is older than 6 h belongs to a queue that died; a plain `/do-ship` (no `--queued`) deletes it and proceeds as if absent, so one crashed cleanup run never defers finalizers forever. |
 | `--delegated` | This run is the fresh-context subagent of a delegated ship (Pre-Step 0). Follow `modes/delegated.md` → *Subagent*: gates return a decision instead of asking, the card comes back as JSON. |
@@ -591,8 +591,8 @@ ship_version_bump({ bump: "minor", cwd: "<cwd>" })
 
 Returns: `{ success, vOld, vNew, filesUpdated, verified, mismatches }`.
 
-If `success: false` → no version file found. Report error and render completion card with variant `ship-blocked`. Do not continue.
-If `verified: false` → fix mismatches manually, then retry.
+If `skipped: true` (`success: true`) → no version manifest in this project; nothing was bumped. Continue.
+If `success: false` / `verified: false` → the version WAS raised (`vNew`) but the files in `mismatches` do not all carry it (e.g. a README without a `**Version:**` badge, a CHANGELOG without the new heading). Bring those files to `vNew` by hand and continue — **never call `ship_version_bump` again**: it re-reads the already-raised version and would raise it a second time. If a mismatch cannot be fixed, render `ship-blocked`.
 
 ## Step 4 — Release
 
@@ -681,7 +681,7 @@ and follow it. Default (`git+gh` or field absent): PR + merge already done in St
 - The repo has no `.github/workflows/` directory (check with `Glob`)
 - User passed `--no-watch` to the ship trigger (interpret intent from the user's message)
 
-Otherwise, after `ship_release` returns `success: true` **and** `merged: "main"`, spawn the
+Otherwise, after `ship_release` returns `success: true` **and** `merged` is the repo's default branch, spawn the
 post-merge watcher in the background (fire and forget): read
 `{PLUGIN_ROOT}/skills/do-ship/deep-knowledge/post-merge-steps.md` § Step 4b — Watcher spawn and run its
 command exactly (bash `nohup` / PowerShell `Start-Process`).
@@ -876,9 +876,12 @@ question is already answered by the channel the user named:
 - **cwd** = this session's cwd; after Step 5b removed the worktree, the
   captured `$MAIN_REPO_ROOT`.
 - **beta** → `ship_promote({ version, from: "alpha", to: "beta", cwd })`.
-- **stable** → fast-track, two sequential calls (alpha→beta, then
-  beta→stable with `releaseNotes` = this version's CHANGELOG entry), unless
-  the version is already on beta — then only beta→stable.
+- **stable** → fast-track, ONE call:
+  `ship_promote({ version, from: "alpha", to: "stable", releaseNotes, cwd })`
+  with `releaseNotes` = this version's CHANGELOG entry (the tool skips beta
+  itself; a two-call alpha→beta→stable run fails the monotonicity guard when
+  beta already holds a newer version). Version already on beta — use
+  `from: "beta"`.
 - **Beta soak skipped** — whenever the version goes to stable without having
   sat on beta before this run (every ship + "stable" run, every fast-track),
   the card MUST say so: an `open` item "Beta übersprungen — v<version> ging

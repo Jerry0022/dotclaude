@@ -14,8 +14,8 @@ pre-PR-2 `ship/` dir, Step 0) for a
 - **`ha-rest`:** POST to Home Assistant REST API at `base_url`. (Future work — currently falls through to `none`.)
 - **`none`:** skip delivery entirely.
 
-When `deliver` is set, the MCP `ship_release` tool dispatches to the corresponding
-handler. Handlers `ssh-rsync` and `ha-rest` are extension points documented for
+When `deliver` is set, the skill (not the `ship_release` tool, which has no `deliver` input) reads it from
+`reference.md` and runs the corresponding handler. Handlers `ssh-rsync` and `ha-rest` are extension points documented for
 consumer configuration — not yet implemented in this release (they fall through to
 `none` intentionally).
 
@@ -23,7 +23,7 @@ See `{PLUGIN_ROOT}/deep-knowledge/skill-extension-guide.md -> Delivery targets` 
 
 ## Step 4b — Watcher spawn
 
-After `ship_release` returns `success: true` **and** `merged: "main"`, spawn the post-merge
+After `ship_release` returns `success: true` **and** `merged` is the default branch (`main` / `master`), spawn the post-merge
 watcher in the background. It waits for the GitHub Actions run triggered by the merge
 and (if configured) probes the production URL — all without blocking the ship flow.
 
@@ -35,7 +35,7 @@ and (if configured) probes the production URL — all without blocking the ship 
 # still read it. No --state-dir flag is needed — the default handles this.
 nohup node "{PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
   --cwd "<cwd>" \
-  --base "main" \
+  --base "<base>" \
   --merge-sha "<ship_release.mergeSha>" \
   --pr "<ship_release.pr.number>" \
   --max-wait 1800 \
@@ -46,7 +46,7 @@ nohup node "{PLUGIN_ROOT}/scripts/post-merge-watcher.js" \
 
 On Windows (PowerShell), use `Start-Process` with `-WindowStyle Hidden` instead of `nohup`:
 ```powershell
-Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("{PLUGIN_ROOT}/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "main", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/do-ship/reference.md", "--version", "<vNew>")
+Start-Process -WindowStyle Hidden -FilePath "node" -ArgumentList @("{PLUGIN_ROOT}/scripts/post-merge-watcher.js", "--cwd", "<cwd>", "--base", "<base>", "--merge-sha", "<sha>", "--pr", "<n>", "--max-wait", "1800", "--verify-config", "<cwd>/.claude/skills/do-ship/reference.md", "--version", "<vNew>")
 ```
 
 Always pass the `do-ship/` path: when it does not exist, the watcher falls back
