@@ -69,6 +69,11 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
     budget.refreshing = maybeRefreshUsage(budget, { pluginRoot });
     head.push(budgetLine(budget));
   } catch { /* never let the budget probe break the index injection */ }
+  try {
+    // Opt-in API-credit route (deep-knowledge/api-credits.md): one line, only when switched on.
+    const apiLine = require('../../scripts/claude-api-safe').sessionLine({ cwd });
+    if (apiLine) head.push(apiLine);
+  } catch { /* never let the API-credit probe break the index injection */ }
 
   const blocks = [...head];
   let bytes = 0;
@@ -94,7 +99,8 @@ function buildContext(pluginRoot, sessionId = null, cwd = process.cwd()) {
   // INDEX.md — prompt.knowledge.dispatch injects the matching doc per prompt.
   const rows = indexRows(fs.readFileSync(indexPath, 'utf8'));
   const root = String(pluginRoot).replace(/\\/g, '/');
-  const pointer = `[deep-knowledge] Reference docs in ${root}/deep-knowledge/ — read one when its topic comes up; ${root}/deep-knowledge/INDEX.md has a one-line summary of each.`;
+  // The root once, not twice: every char here is one the index list below cannot use.
+  const pointer = `[deep-knowledge] Reference docs: ${root}/deep-knowledge/INDEX.md has a one-line summary of each — read one when its topic comes up.`;
   const variants = [
     rows.map(r => `${r.file} (${r.topic})`).join(' · '),
     rows.map(r => r.file).join(' · '),

@@ -1,4 +1,4 @@
-# Concept templates, part 11 of 16: Shared systems — state persistence, comment slots
+# Concept templates, part 12 of 17: Shared systems — state persistence, comment slots
 
 ## State Persistence (localStorage + TTL)
 
@@ -402,6 +402,18 @@ function saveState() {
   const _activeViewEl = document.querySelector('section[data-view][data-view-active="true"]:not([hidden])');
   if (_activeViewEl) state['_activeView'] = _activeViewEl.dataset.view;
   else delete state['_activeView'];
+  // Variant overview (§ Variant overview (≥2 designs)) — where the user is in
+  // a ≥2-design round: 'on' while the overview is on screen, 'off' plus the
+  // design and page otherwise. Same DOM read as `_activeView`; written only
+  // in overview mode and never from a frozen tab (that is not the live
+  // round's position).
+  if (document.body.dataset.overview === 'true' && !document.body.classList.contains('viewing-frozen')) {
+    state['_overview'] = document.body.dataset.overviewActive === 'true' ? 'on' : 'off';
+    const _ovDesign = document.querySelector('section[data-iteration][data-active] > section[data-design][data-design-active="true"]');
+    const _ovScreen = _ovDesign && _ovDesign.querySelector('section[data-screen][data-screen-active="true"]');
+    if (_ovDesign) state['_overviewDesign'] = _ovDesign.dataset.design;
+    if (_ovScreen) state['_overviewScreen'] = _ovScreen.id;
+  }
   // Persist the user-interacted flag so a reload while the user has unsaved
   // edits does not re-arm the empty-submit confirm dialog. Restored values
   // would otherwise look like "untouched defaults" because change/input
@@ -557,6 +569,9 @@ function restoreState() {
   // The text branch above sets mapping state inputs by value, without events
   // (§ Information Mapping (engine)) — re-project the boxes, chips and counts
   // from them, same precedent as updateNoteMarkers() after a dock restore.
+  // Same for the variant overview's engine store (favourite + user pins,
+  // § Variant overview JS): its textarea was just set by value.
+  if (typeof window.refreshDesignOverview === 'function') window.refreshDesignOverview();
   if (typeof refreshMappings === 'function') refreshMappings();
 }
 

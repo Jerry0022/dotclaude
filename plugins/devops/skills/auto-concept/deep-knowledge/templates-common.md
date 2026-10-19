@@ -1,4 +1,4 @@
-# Concept templates, part 01 of 16: Overview, UI locale, common structure
+# Concept templates, part 01 of 17: Overview, UI locale, common structure
 
 # Concept HTML Templates
 
@@ -193,6 +193,35 @@ must see their own language. The locale hint is authoritative.
 | `design.nav_views_heading`     | Questions                       | Fragen |
 | `design.feedback_view`         | Notes on this view               | Anmerkungen zu dieser Ansicht |
 | `design.feedback_view_placeholder` | Write a note on this view…  | Notiz zu dieser Ansicht… |
+| `design.overview`              | Overview                        | Übersicht |
+| `design.overview_back`         | Back to the overview            | Zurück zur Übersicht |
+| `design.overview_count`        | {n} designs · pick a favourite or just comment | {n} Designs · Favorit wählen oder einfach kommentieren |
+| `design.overview_open`         | Open this design                | Design öffnen |
+| `design.overview_notes`        | Notes on this design            | Notizen zu diesem Design |
+| `design.favorite`              | Favourite                       | Favorit |
+| `design.favorite_badge`        | FAVOURITE                       | FAVORIT |
+| `design.favorite_set`          | Mark as favourite               | Als Favorit markieren |
+| `design.favorite_unset`        | Remove the favourite            | Favorit entfernen |
+| `design.favorite_hint_none`    | No favourite needed — Claude then decides from your comments. | Kein Favorit nötig — dann entscheidet Claude aus deinen Kommentaren. |
+| `design.favorite_hint_set`     | The favourite is the starting point; comments on every design still count. | Der Favorit ist der Startpunkt; Kommentare zu allen Designs fließen ein. |
+| `design.next_screen`           | Next page                       | Nächste Seite |
+| `design.keys_title`            | Keyboard shortcuts              | Tastenkürzel |
+| `design.keys_design`           | Design 1–9                      | Design 1–9 |
+| `design.keys_view`             | Question 1–9                    | Frage 1–9 |
+| `design.keys_next`             | Next page of this design        | Nächste Seite dieses Designs |
+| `design.keys_round`            | Iteration tab 1–9               | Iterations-Tab 1–9 |
+| `design.keys_notes`            | Open or close the notes         | Notizen öffnen oder schließen |
+| `design.keys_pin`              | Your own comment on a spot      | Eigener Kommentar an einer Stelle |
+| `design.keys_click`            | click                           | Klick |
+| `design.keys_close`            | Close                           | Schließen |
+| `design.key_ctrl`              | Ctrl                            | Strg |
+| `design.upin_hint`             | + click places your own comment here | + Klick setzt hier einen eigenen Kommentar |
+| `design.upin_arm`              | Place a comment pin             | Kommentar-Pin setzen |
+| `design.upin_tap_hint`         | Tap the spot for your comment · Esc cancels | Tippe auf die Stelle für deinen Kommentar · Esc bricht ab |
+| `design.upin_placeholder`      | Your comment on this spot…      | Dein Kommentar zu dieser Stelle… |
+| `design.upin_keys`             | Enter saves · Esc discards      | Enter speichert · Esc verwirft |
+| `design.upin_delete`           | Delete comment                  | Kommentar löschen |
+| `design.upin_label`            | Your comment {n}                | Dein Kommentar {n} |
 | `view.compare_favourite`       | Favourite                       | Favorit |
 | `view.compare_no_preference`   | No preference                   | Keine Präferenz |
 | `view.compare_criteria`        | Criteria                        | Kriterien |

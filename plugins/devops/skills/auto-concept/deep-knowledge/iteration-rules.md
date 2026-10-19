@@ -229,9 +229,14 @@ section. A `decision` / `free` round carries just the general note; a
 
 <!-- design round -->
 <script type="application/json" data-frozen-feedback>
-  {"general": {"text": "…", "attachments": []}, "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}, "views": {"nav-model": "…"}}
+  {"general": {"text": "…", "attachments": []}, "designs": {"dispatch": "…"}, "screens": {"d1-s1": "…"}, "views": {"nav-model": "…"},
+   "favorite": "dispatch", "userPins": [{"id": "up-1", "design": "dispatch", "screen": "d1-s1", "x": 40, "y": 20, "target": "h1", "text": "…"}]}
 </script>
 ```
+
+`favorite` / `userPins` (rounds with ≥2 designs, § Variant overview) are
+optional keys: `wireDesignOverview()` reads them on a frozen tab to mark the
+favourite card and render the pins read-only.
 
 Write `general` exactly as the payload delivered it (`comments.general`, the
 `{ text, attachments }` object); a bare string is still accepted for pages

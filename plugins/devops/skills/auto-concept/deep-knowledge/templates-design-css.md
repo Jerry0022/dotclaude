@@ -1,4 +1,4 @@
-# Concept templates, part 05 of 16: Template: design — layout CSS
+# Concept templates, part 05 of 17: Template: design — layout CSS
 
 ## Layout CSS
 
@@ -938,4 +938,3 @@ body.panel-open .viewport-toggle { opacity: 0; pointer-events: none; }
      to change instantly with it. */
 }
 ```
-
