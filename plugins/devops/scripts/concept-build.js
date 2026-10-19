@@ -476,13 +476,15 @@ function tabsHtml(rounds, liveN) {
  * `{{key}}` → locale value. Only KNOWN keys are replaced (plus `{{slug}}`),
  * an unknown `{{…}}` stays as written, and nothing inside pre / code /
  * textarea bodies or JSON script blocks is touched — user content keeps its
- * braces.
+ * braces. Style and script bodies are consumed whole first, so a `<textarea>`
+ * named in a CSS/JS comment never opens a span that swallows the page (#725).
  */
 function substitute(html, locale, slug) {
   const spans = [];
-  const re = /(<(pre|code|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>)[\s\S]*?<\/\2\s*>|(<script\b[^>]*type=["']application\/json["'][^>]*>)[\s\S]*?<\/script\s*>/gi;
+  const re = /(<(pre|code|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>)[\s\S]*?<\/\2\s*>|(<script\b[^>]*type=["']application\/json["'][^>]*>)[\s\S]*?<\/script\s*>|<(style|script)\b[^>]*>[\s\S]*?<\/\4\s*>/gi;
   let m;
   while ((m = re.exec(html))) {
+    if (m[4]) continue;
     const open = (m[1] || m[3]).length;
     spans.push([m.index + open - 1, m.index + m[0].length]);
   }
