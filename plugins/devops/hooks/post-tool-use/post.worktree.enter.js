@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.worktree.enter
- * @version 0.1.0
+ * @version 0.2.0
  * @event PostToolUse
  * @plugin devops
  * @matcher EnterWorktree
@@ -17,6 +17,11 @@
  *   contract and arm marker stored with THIS session's id, never one of
  *   another session sharing the checkout. Silent unless something moved;
  *   fail open.
+ *
+ *   It also settles the project's workspace handling: the first time a
+ *   session of the project enters a worktree, devops-config
+ *   `workspace.ownWorktree` is set for the project, so ss.git.check stops
+ *   asking where new work runs (rememberWorktreeHandling).
  */
 
 require('../lib/plugin-guard');
@@ -47,6 +52,20 @@ function candidates(hook) {
   return out;
 }
 
+/**
+ * Store `workspace.ownWorktree true` for the project of `wt` unless it is
+ * already in effect (project or global). Never throws.
+ * @returns {boolean} written
+ */
+function rememberWorktreeHandling(wt, opts = {}) {
+  try {
+    const cfg = require('../lib/devops-config');
+    if (cfg.load(wt, opts).values.workspace.ownWorktree === true) return false;
+    cfg.setValue('workspace.ownWorktree', true, 'project', wt, opts);
+    return true;
+  } catch { return false; }
+}
+
 function main(hook) {
   if ((hook.tool_name || '') !== 'EnterWorktree') return null;
   const sessionId = hook.session_id;
@@ -56,6 +75,7 @@ function main(hook) {
   for (const c of candidates(hook)) {
     const wt = projectRoot(c);
     if (!isLinkedWorktree(wt)) continue;
+    rememberWorktreeHandling(wt);
     const main = mainCheckoutOf(wt);
     if (!main) {
       // Separate git dir or a bare-repo layout: nothing to carry from.
@@ -79,4 +99,4 @@ if (require.main === module) {
   try { require('../lib/hook-input').runHook(main, { event: 'PostToolUse' }); } catch { /* fail open */ }
 }
 
-module.exports = { main, mainCheckoutOf, candidates };
+module.exports = { main, mainCheckoutOf, candidates, rememberWorktreeHandling };
