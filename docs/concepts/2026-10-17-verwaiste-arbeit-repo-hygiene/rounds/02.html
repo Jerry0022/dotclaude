@@ -1,0 +1,106 @@
+<section data-iteration="2" data-iteration-template="free" data-final-report>
+  <style>
+    .d2-hy-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.6rem 0 1rem; }
+    .d2-hy-table th, .d2-hy-table td { text-align: left; padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    .d2-hy-table th { font-weight: 600; opacity: 0.85; }
+    .d2-hy-table code { font-size: 0.82rem; }
+    .d2-hy-ok { color: var(--success-color); }
+    .d2-hy-warn { color: var(--warning-color); }
+  </style>
+
+  <div class="iteration-intro">
+    <h2>{{iteration.final_tab}}</h2>
+    <p>Alle acht Vorschläge (V1–V8) sind umgesetzt. Die Plugin-Änderungen liegen auf dem Branch <code>claude/repo-hygiene-orphaned-worktrees-c50cfd</code> und gehen per Ship nach <code>main</code>. Die geretteten Arbeiten in den anderen Projekten liegen jeweils als eigener Branch <code>salvage-land/*</code> auf dem Remote.</p>
+  </div>
+
+  <section id="summary" data-nav-label="Zusammenfassung">
+    <h3>Zusammenfassung</h3>
+    <p><strong>Sicherung zuerst:</strong> Alle 45 gefährdeten Stände wurden auf <code>salvage/*</code>-Refs im jeweiligen Remote gesichert, ohne einen fremden Worktree anzufassen (Manifest: <code>~/.claude/salvage-manifest-2026-10-19.json</code>). Danach wurde jeder Stand gegen das aktuelle <code>main</code> geprüft (V1, so wie du es kommentiert hast). War er aktuell, wurde er als <code>salvage-land/*</code>-Branch neu aufgebaut und getestet. War er veraltet, wurde geprüft, ob die Absicht noch gilt. War der Inhalt schon in <code>main</code>, gilt er als obsolet.</p>
+    <p><strong>Plugin:</strong> Gefährdete Arbeit wird jetzt breit erkannt (V2): alles, was nicht gelandet ist, keinen offenen PR und keine laufende Session hat und nicht geparkt ist, dazu jeder Worktree mit ungespeicherten Änderungen. Ob etwas gelandet ist, prüft das Plugin jetzt pro Datei (gelandet / teilweise / nicht gelandet). Ein täglicher Scan über alle Projekte (V3) schreibt <code>~/.claude/orphan-report.json</code>, und beim Session-Start erscheint ein Hinweis. Neu sind außerdem:</p>
+    <ul>
+      <li>ein Integrationsnachweis, bevor Agent-Teil-Branches gelöscht werden (V4);</li>
+      <li>ein automatischer WIP-Commit, wenn ein Agent endet (V5);</li>
+      <li>ein lokaler Autosave beim Session-Ende auf genau einen Ref <code>parked/autosave/&lt;name&gt;</code> (V6, Standard <code>local</code>, nie remote);</li>
+      <li>das Entfernen gelandeter Reste über alle Projekte mit <code>orphan-scan.js --clean-landed</code> (V7, Trockenlauf als Standard, 24-h-Leerlauf-Sperre);</li>
+      <li>ein einheitliches Park-Register (V8).</li>
+    </ul>
+    <p><strong>Zu V8, „geparkt“ vereinheitlicht:</strong> Es gibt nur noch ein Präfix, <code>parked/&lt;thema&gt;</code>. Die alten Namen <code>wip/</code>, <code>backup/</code>, <code>salvage/</code> und <code>ARCHIVED</code> werden als Alias erkannt, aber nicht mehr neu angelegt. Geshippte oder gelandete Branches gelten nie als geparkt, weil die Hygiene sie automatisch entfernt.</p>
+  </section>
+
+  <section id="triage" data-nav-label="Gerettete Arbeit">
+    <h3>Gerettete Arbeit je Projekt (V1)</h3>
+    <table class="d2-hy-table">
+      <thead><tr><th>Projekt</th><th>Ergebnis</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>SCC-App</td><td><code>salvage-land/dev-config</code>. Die 12 <code>night/*</code>-Branches sind über #1426–#1443 gelandet; die übrigen Stashes und geparkten Stände sind obsolet.</td><td class="d2-hy-warn">Branch gepusht, Ship offen</td></tr>
+        <tr><td>SCC-Web</td><td><code>salvage-land/sc-events</code> (zuerst landen, denn SCC-App-main nutzt <code>rpc/sc_events_feed</code> schon), dazu <code>salvage-land/mobile-polish</code> und <code>salvage-land/terms-docs</code>.</td><td class="d2-hy-warn">Branches gepusht, Ship offen</td></tr>
+        <tr><td>StretchTimer</td><td><code>salvage-land/mascot-gesture</code> (vitest 166/166)</td><td class="d2-hy-warn">Branch gepusht, Ship offen</td></tr>
+        <tr><td>Anno</td><td><code>salvage-land/aufgaben-anzeiger-test-log</code></td><td class="d2-hy-warn">Branch gepusht, Ship offen</td></tr>
+        <tr><td>Hatchit</td><td><code>salvage-land/decompose-oversized</code> (1331 Tests grün), <code>salvage-land/adventure-dashboard</code> (1322 Tests grün). Alle 5 Stashes sind obsolet.</td><td class="d2-hy-warn">Branches gepusht, Ship offen</td></tr>
+        <tr><td>madmaze, deep-contact, septem, b2infinity, hll</td><td>Alles obsolet, der Inhalt ist schon in <code>main</code>.</td><td class="d2-hy-ok">nichts zu tun</td></tr>
+        <tr><td>homeassistant-finance</td><td><code>nostalgic-spence</code>: Fehlerschema, Status-Banner und Diagnose aus v0.12.3. Der Stand ist v0.15.2 weit voraus, ein Merge geht nicht. Ob die Absicht noch gilt, kann nur ein Neubau auf v0.15.2 zeigen.</td><td class="d2-hy-warn">gesichert, Entscheidung offen</td></tr>
+      </tbody>
+    </table>
+    <p>Die PRs hat das Plugin selbst blockiert: <code>pre.ship.guard</code> lässt PRs nur über <code>/do-ship</code> zu. Gelandet werden die Branches deshalb pro Projekt in einer eigenen Ship-Session.</p>
+  </section>
+
+  <section id="changed-files" data-nav-label="Geänderte Dateien">
+    <h3>Geänderte Dateien (Plugin)</h3>
+    <ul>
+      <li><code>mcp-server/ship/lib/hygiene.js</code>: <code>landingState</code> (Ancestor → Merge-Tree → PR-Head → Reverse-Apply pro Datei), breitere Gefährdet-Definition, geparkte Stände inklusive Remote-Refs</li>
+      <li><code>scripts/orphan-scan.js</code>: Scan über alle Projekte und <code>--clean-landed</code> mit Schutzregeln für langlebige Branches, Upstream, Leerlauf und geparkte Stände</li>
+      <li><code>hooks/lib/park-register.js</code>: geparkte Refs (auch nur remote), Stashes, Abdeckungsprüfung</li>
+      <li><code>hooks/session-start/ss.orphan.nudge.js</code> und <code>scheduled-tasks/orphan-scan/</code>: Hinweis beim Session-Start und täglicher Scan</li>
+      <li><code>hooks/lib/integration-check.js</code> und <code>scripts/integration-check.js</code>: Nachweis, dass Teil-Branches integriert sind, bevor sie entfernt werden</li>
+      <li><code>hooks/lib/wip-commit.js</code> und <code>hooks/subagent-stop/substop.agent.wip.js</code>: Snapshot über einen temporären Index, Schutz bei laufendem Merge, Filter für Secrets, Build-Artefakte und Größe</li>
+      <li><code>hooks/lib/session-autosave.js</code> und <code>hooks/stop/stop.session.autosave.js</code>: Autosave beim Session-Ende, gedrosselt, mit 35-s-Deadline</li>
+      <li><code>hooks/lib/devops-config.js</code>: neuer Schlüssel <code>sessionEnd.autosave</code> (off / local / remote)</li>
+      <li>Doku: <code>git-hygiene.md</code>, <code>agent-orchestration.md</code>, <code>devops-config.md</code>, <code>CONVENTIONS.md</code> (Präfix <code>substop.</code>), Skills auto-agents, auto-cleanup und do-run</li>
+    </ul>
+  </section>
+
+  <section id="tests" data-nav-label="Tests &amp; Verifikation">
+    <h3>Tests &amp; Verifikation</h3>
+    <ul>
+      <li>Neue und berührte Suites (hygiene, landing, orphan-scan, park-register, integration-check, wip-commit, autosave, substop, devops-config): <span class="d2-hy-ok">110 Tests grün</span>, eslint sauber</li>
+      <li>Redteam-Runde 1 (Urteil „rework“, R1–R10) ist komplett behoben. In Runde 2 („ship-with-notes“) sind N1–N5, N7, N8 und N10 behoben.</li>
+      <li>Die QA hat einen Fehlalarm gefunden: Remote-<code>salvage/*</code>-Refs zählten nicht als geparkt. Das ist behoben, der Scan ging von ~60 auf 32 Einträge zurück.</li>
+      <li>V7-Trockenlauf über alle Projekte: <span data-v7-result>siehe unten</span></li>
+      <li>Rot, aber vermutlich schon vorher: <code>concept-build.test.js</code> und <code>burn-plan.robustness.git.test.js</code>. Ob sie auf <code>main</code> genauso rot sind, wurde nicht geprüft.</li>
+    </ul>
+  </section>
+
+  <section id="open-questions" data-nav-label="{{final.open_questions}}" data-open-questions>
+    <h3>{{final.open_questions}}</h3>
+    <ul class="open-questions-list">
+      <li><label><input type="checkbox" name="oq-n6-junction"
+        data-issue-title="[BUG] wip-commit / autosave: nested junctions under node_modules can be followed"
+        data-issue-type="bug"
+        data-issue-body="Redteam round 2 leftover N6 from the orphaned-work concept (2026-10-17). The secret/build filter in plugins/devops/hooks/lib/wip-commit.js excludes node_modules by path, but a junction nested deeper (e.g. packages/x/node_modules -> elsewhere) is not detected before staging via the temp index. Add a junction/symlink check (fs.lstatSync) for every candidate path and skip reparse points; add a test with a nested junction on Windows."
+        data-issue-module="hooks" data-oq-origin="found" checked>
+        <span class="oq-label">N6: verschachtelte Junctions unter node_modules werden beim WIP-Snapshot nicht erkannt (Rest aus Redteam-Runde 2)</span></label></li>
+      <li><label><input type="checkbox" name="oq-n9-age-gate"
+        data-issue-title="[BUG] orphan-scan --clean-landed: idle gate only looks at branch age, not worktree mtime"
+        data-issue-type="bug"
+        data-issue-body="Redteam round 2 leftover N9 from the orphaned-work concept. plugins/devops/scripts/orphan-scan.js gates --clean-landed on 24h idle using the branch tip commit date only. A worktree whose branch is old but whose files were touched minutes ago (fresh uncommitted edits are excluded by the dirty check, but e.g. a running dev server) could be removed. Extend the gate with the newest mtime of the worktree's .git/HEAD/index and the session-liveness check used by integration-check.js."
+        data-issue-module="scripts" data-oq-origin="found" checked>
+        <span class="oq-label">N9: Die Leerlauf-Sperre von --clean-landed schaut nur auf das Alter des Branches, nicht auf die Worktree-Aktivität (Rest aus Redteam-Runde 2)</span></label></li>
+      <li><label><input type="checkbox" name="oq-preexisting-tests"
+        data-issue-title="[BUG] concept-build.test.js and burn-plan.robustness.git.test.js fail"
+        data-issue-type="bug"
+        data-issue-body="Found during QA of the orphaned-work branch: concept-build.test.js fails on unresolved {{variant.*}} keys and burn-plan.robustness.git.test.js fails. Neither file was touched by that branch, so they are likely red on main too — verify on main, then fix the missing locale keys / the git robustness fixture."
+        data-issue-module="tests" data-oq-origin="found" checked>
+        <span class="oq-label">Zwei Test-Dateien rot, die dieser Branch nicht berührt (vermutlich auch auf main)</span></label></li>
+    </ul>
+  </section>
+
+  <section id="handoffs" data-nav-label="{{final.handoffs}}" data-handoffs>
+    <h3>{{final.handoffs}}</h3>
+    <ol>
+      <li>Die <code>salvage-land/*</code>-Branches pro Projekt landen, je Projekt eine Ship-Session (Reihenfolge in SCC-Web: zuerst <code>sc-events</code>). Ich biete dir die Sessions auf der Abschluss-Karte an.</li>
+      <li>SCC-Web nach dem Merge von <code>sc-events</code>: <code>supabase db push --include-all</code> und Functions deployen.</li>
+      <li>homeassistant-finance <code>nostalgic-spence</code>: Fehlerschema, Banner und Diagnose auf v0.15.2 neu bauen oder verwerfen. Gesichert ist der Stand auf <code>salvage/nostalgic-spence</code>.</li>
+      <li>Neu seit dem Befund: deep-contact <code>burn/night-2026-10-17-*</code>, der Lobby-Branch mit 1 nicht gelandeten Commit und SCC-App <code>claude/ship-fitting-overview-76195a</code> mit ungespeicherten Änderungen. Der tägliche Scan meldet sie, bis sie gelandet oder geparkt sind.</li>
+    </ol>
+  </section>
+</section>

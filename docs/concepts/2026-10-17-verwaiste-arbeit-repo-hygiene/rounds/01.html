@@ -1,0 +1,216 @@
+<section data-iteration="1" data-iteration-template="free" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]}}</script>
+  <style>
+    .d1-hy-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.6rem 0 1rem; }
+    .d1-hy-table th, .d1-hy-table td { text-align: left; padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    .d1-hy-table th { font-weight: 600; opacity: 0.85; }
+    .d1-hy-table code { font-size: 0.82rem; }
+    .d1-hy-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .d1-hy-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.7rem; margin: 0.8rem 0 1.2rem; }
+    .d1-hy-kpi { border: 1px solid var(--border-color); border-radius: 10px; padding: 0.7rem 0.85rem; }
+    .d1-hy-kpi strong { display: block; font-size: 1.5rem; line-height: 1.2; }
+    .d1-hy-kpi span { font-size: 0.82rem; color: var(--text-muted); }
+    .d1-hy-tag { display: inline-block; font-size: 0.75rem; padding: 0.05rem 0.45rem; border-radius: 999px; border: 1px solid currentColor; opacity: 0.85; white-space: nowrap; }
+    .d1-hy-risk { color: var(--danger-color); }
+    .d1-hy-warn { color: var(--warning-color); }
+    .d1-hy-ok { color: var(--success-color); }
+    .d1-hy-meta { font-size: 0.85rem; color: var(--text-muted); }
+  </style>
+
+  <header class="iteration-intro">
+    <h2>Iteration 1 · Befund und Lösungsvorschläge</h2>
+    <p>Alle 29 Git-Projekte unter <code>IdeaProjects</code> geprüft: jeder lokale und Remote-Branch, jeder Worktree, jeder Stash.
+      „Gelandet" heißt: Inhalt nachweislich in <code>main</code> (Git-Vorfahre, Merge-Tree identisch, im Head eines gemergten PRs enthalten oder per Reverse-Apply bereits drin).
+      Unten wählst du, welche Vorschläge ich umsetze.</p>
+  </header>
+
+  <section id="kurzantwort" data-nav-label="Kurzantwort">
+    <h3>Kurzantwort</h3>
+    <div class="d1-hy-kpis">
+      <div class="d1-hy-kpi"><strong class="d1-hy-ok">0</strong><span>Verluste durch das automatische Aufräumen</span></div>
+      <div class="d1-hy-kpi"><strong>~190</strong><span>Branches + 13 Worktrees nachweislich gelandet, liegen aber noch rum</span></div>
+      <div class="d1-hy-kpi"><strong class="d1-hy-risk">7</strong><span>Worktrees mit uncommitteter Arbeit, die nirgends sonst existiert</span></div>
+      <div class="d1-hy-kpi"><strong class="d1-hy-risk">23</strong><span>Branches mit Commits, die nie gelandet sind (ohne PR, keine live Session)</span></div>
+      <div class="d1-hy-kpi"><strong class="d1-hy-warn">5 + 11</strong><span>bewusst geparkte Branches + alte Stashes ohne Verfallsdatum</span></div>
+    </div>
+    <p><strong>Das Aufräumen ist sicher, aber kurzsichtig.</strong> <code>ship_hygiene</code> hat noch nie ungelandete Arbeit gelöscht. Es läuft aber nur nach einem Ship, nur im Repo, das gerade geshippt wird, und meldet als „gefährdet" nur zwei Spezialfälle.
+      Die verwaiste Arbeit entsteht woanders: Multi-Agent-Läufe integrieren ihre Teil-Branches nicht vollständig, und Sessions enden ohne Commit oder Push.
+      Bisher ist nichts verloren, aber nichts würde es merken, wenn ein Worktree-Ordner verschwindet.</p>
+  </section>
+
+  <section id="hygiene" data-nav-label="Funktioniert das Aufräumen?">
+    <h3>Funktioniert das Aufräumen?</h3>
+    <table class="d1-hy-table">
+      <thead><tr><th>Aspekt</th><th>Stand</th><th>Beleg</th></tr></thead>
+      <tbody>
+        <tr><td>Löscht nur Gelandetes</td><td><span class="d1-hy-tag d1-hy-ok">funktioniert</span></td><td>Jede Entfernung im Log (<code>~/.claude/devops-hygiene.json</code>) war gelandet; Tip-SHA wird geloggt, Re-Check direkt vor dem Löschen.</td></tr>
+        <tr><td>Squash-Merges erkennen</td><td><span class="d1-hy-tag d1-hy-ok">funktioniert</span></td><td>PR-Head-Abgleich, inklusive Sub-Agent-Branches (#572).</td></tr>
+        <tr><td>Abdeckung über Projekte</td><td><span class="d1-hy-tag d1-hy-risk">Lücke</span></td><td>Nur 5 von 29 Repos haben überhaupt einen Hygiene-Stand (dotclaude, SCC-Web, SCC-App, madmaze, Anno). In Jerry, Hatchit, deep-contact, StretchTimer usw. läuft nie etwas, weil dort nie <code>/do-ship</code> lief oder nicht nach einer Hygiene-Version.</td></tr>
+        <tr><td>Zeitpunkt</td><td><span class="d1-hy-tag d1-hy-warn">schwach</span></td><td>Nur als Nachlauf eines Ships. Keine Session, kein Ship, also auch keine Prüfung.</td></tr>
+        <tr><td>„Gefährdet"-Erkennung</td><td><span class="d1-hy-tag d1-hy-risk">Lücke</span></td><td>Nur <code>[gone]</code>-Branches und detached Session-Worktrees (#573). Nie gepushte Branches ohne PR, Sub-Agent-Branches und uncommittete Änderungen in Agent-Worktrees werden still „behalten", aber nie gemeldet. Gemeldet wird nur auf der Ship-Karte genau dieses Repos.</td></tr>
+        <tr><td>Gelandete Reste abbauen</td><td><span class="d1-hy-tag d1-hy-warn">gewollt träge</span></td><td>Altersschranke 30 Tage, die neuesten 20 bleiben. Fast alle Reste stammen aus Sep/Okt, deshalb liegen ~190 gelandete Branches noch da. Gefahrlos, aber Rauschen: Echte Waisen gehen darin unter.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="uncommitted" data-nav-label="Gefährdet: uncommittet">
+    <h3>Gefährdet ① — uncommittete Arbeit in verlassenen Worktrees</h3>
+    <p class="d1-hy-meta">Existiert nur als Dateien auf der Platte. Löscht jemand den Ordner (Desktop „Worktree verwerfen", <code>git worktree remove --force</code>), ist sie weg. Gegen <code>origin/main</code> geprüft: nichts davon ist dort.</p>
+    <table class="d1-hy-table">
+      <thead><tr><th>Projekt · Worktree</th><th>Inhalt</th><th class="d1-hy-num">Stand</th></tr></thead>
+      <tbody>
+        <tr><td>Hatchit · <code>agent-a6d63e9c…</code><br><span class="d1-hy-meta">Branch decompose-oversized-components</span></td><td>Zerlegung Activity-Detail / Polls: 4 Dateien geändert (−1042 / +72), neue <code>sections/</code>, <code>question-view.utils</code>, <code>poll-evaluation.utils</code> + Specs</td><td class="d1-hy-num">26.09.</td></tr>
+        <tr><td>Hatchit · <code>agent-a55f897d…</code><br><span class="d1-hy-meta">Branch refactor/adventure-dashboard-decomposition</span></td><td>Zerlegung Adventure-Dashboard: −2488 / +158, 7 neue Dateien (Services, Model, Utils, Sections)</td><td class="d1-hy-num">26.09.</td></tr>
+        <tr><td>SCC-App · <code>overlay-funktionen-testen-2f2051</code></td><td><code>scripts/dev-config.js</code> + Test, <code>docs/project/dev-start.md</code>, Änderungen an <code>dev-start.ps1</code> und READMEs</td><td class="d1-hy-num">06.09.</td></tr>
+        <tr><td>StretchTimer · <code>reminder-settings-button-smoothing-558c6d</code><br><span class="d1-hy-meta">ausgecheckt: claude/android-voice-hopsi-ui</span></td><td>Maskottchen-Gesten: neue <code>lib/mascotGesture.ts</code> + Test, 8 Komponenten/Lib-Dateien geändert</td><td class="d1-hy-num">04.10.</td></tr>
+        <tr><td>SCC-App · <code>devops-audit-ki-funktionen-84b3e6</code></td><td>2 Konzeptdateien „Nachtlauf-Plan Issue-Triage" (HTML + Entscheidungen)</td><td class="d1-hy-num">07.10.</td></tr>
+        <tr><td>SCC-Web · <code>fix/terms-texts-and-docs</code></td><td>2 uncommittete Dateien zusätzlich zu den Commits unten</td><td class="d1-hy-num">29.09.</td></tr>
+        <tr><td>Anno · <code>stoic-sutherland-dc144a</code></td><td><code>docs/test-log.md</code> +20 Zeilen</td><td class="d1-hy-num">13.10.</td></tr>
+      </tbody>
+    </table>
+    <p class="d1-hy-meta">Harmlos, nicht mitgezählt: zwei kaputte madmaze-Agent-Worktrees (~2800 gestagte Löschungen, keine Arbeit), generierter graphify-Output in hll-overlay/main, ein loses <code>mcp-server/</code> (nur node_modules) im dotclaude-Hauptcheckout.</p>
+  </section>
+
+  <section id="unlanded" data-nav-label="Gefährdet: nie gelandet">
+    <h3>Gefährdet ② — Commits, die nie in main gelandet sind</h3>
+    <p class="d1-hy-meta">Kein PR, kein Eltern-PR, der sie enthält, keine laufende Session. „x/y" = so viele der geänderten Dateien sind per Reverse-Apply schon in main (teilweise gelandet; der Rest kann auch spätere Änderungen in main sein).</p>
+    <table class="d1-hy-table">
+      <thead><tr><th>Projekt</th><th>Branch(es)</th><th>Was</th><th class="d1-hy-num">gepusht?</th></tr></thead>
+      <tbody>
+        <tr><td>SCC-App</td><td><code>night/*</code>: blueprint-frontend (9/25), blueprint-2-frontend (18/23), codex-locations (7/8), devices-overlays (8/12), i18n-ext-a/b/c (7/13, 1/8, 9/15), i18n-kb-ts (31/61), mfd-2-pwa (38/46), mfd-2-studio (22/32), verse-nav-frontend (1/12), views-real-data-frontend (14/25)</td><td>Nachtlauf 08.10.: 7 PRs (#1435–#1441) gemergt, diese 12 Frontend-/i18n-Teil-Branches nie integriert, viele mit <code>wip(…)</code>-Commits</td><td class="d1-hy-num">ja</td></tr>
+        <tr><td>SCC-Web</td><td><code>fix/mobile-layout-polish</code> (0/39)</td><td>8 Commits, scScrollHint-Directive u. a.</td><td class="d1-hy-num d1-hy-risk">7 von 8 nie</td></tr>
+        <tr><td>SCC-Web</td><td><code>fix/terms-texts-and-docs</code> (0/8)</td><td>3 Commits, i18n-Keys aufgeräumt</td><td class="d1-hy-num d1-hy-risk">2 von 3 nie</td></tr>
+        <tr><td>SCC-Web</td><td><code>worktree-agent-a3f9ea91…</code> (4/47)</td><td>Codex-Suche + Set-Flow-Testsuite</td><td class="d1-hy-num d1-hy-risk">nein</td></tr>
+        <tr><td>SCC-Web</td><td><code>feat/sc-events-sync</code> (0/5)</td><td>SCC-Web übernimmt Star-Citizen-Events (16.10.)</td><td class="d1-hy-num">ja</td></tr>
+        <tr><td>madmaze</td><td><code>communication-phase-2-3-0ed648-qa-e2e</code> (58/145), <code>eve-pickup-voice-batch-b3</code>, 2× <code>worktree-agent-*</code></td><td>Crew-Kommunikation-E2E-Tests (22 Commits), Fund-Ansage-Voice, Restaurations-Score, Bar-Icons</td><td class="d1-hy-num">teils</td></tr>
+        <tr><td>deep-contact</td><td><code>claude/v0.2-server-logs</code> (2/4)</td><td>Serverseitiger Match-Event-Observer (wip)</td><td class="d1-hy-num d1-hy-risk">nein</td></tr>
+        <tr><td>StretchTimer</td><td><code>fix/reminder-cron-on-demand</code> (0/2)</td><td>Reminder-Workflow nur noch on demand</td><td class="d1-hy-num">ja</td></tr>
+      </tbody>
+    </table>
+    <p class="d1-hy-meta">Gehören zu laufenden oder offenen Sessions, daher nicht gefährdet: Anno „Dritte Ebene", SCC-App „Verse News Top 7" (inkl. 3 Agent-Branches vom 16.10.), SCC-App „App-Fenster fokussieren", SCC-App „Node version mismatch", deep-contact „Lobby DevOps-Konzepte". Offene PRs (14) sind ebenfalls nicht gefährdet.</p>
+  </section>
+
+  <section id="parked" data-nav-label="Bewusst geparkt">
+    <h3>Bewusst geparkt — ohne Besitzer und ohne Verfallsdatum</h3>
+    <table class="d1-hy-table">
+      <thead><tr><th>Projekt</th><th>Was</th></tr></thead>
+      <tbody>
+        <tr><td>SCC-App</td><td><code>backup/i18n-pre-squash</code> (17 Commits, lokal), <code>feat/input-actions-molly-view</code> („ARCHIVED — salvage source only")</td></tr>
+        <tr><td>septem-ascent</td><td><code>wip/parked-refactor-2026-09-06</code></td></tr>
+        <tr><td>b2infinity-product_generator</td><td><code>claude/topic14-panels</code> („park uncommitted worktree state", lokal)</td></tr>
+        <tr><td>homeassistant-finance</td><td><code>claude/nostalgic-spence-59653c</code> („preserve the abandoned v0.12.3 merge")</td></tr>
+        <tr><td>Stashes</td><td>11 Stück aus Apr–Sep: Hatchit 5, SCC-App 5 (u. a. „auto-save before archive", „concept artefacts — disposition pending"), hll-overlay 1. Stashes sind repo-global und tauchen in keiner Branch-Ansicht auf.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="ursachen" data-nav-label="Warum passiert das?">
+    <h3>Warum passiert das? — fünf Ursachen</h3>
+    <table class="d1-hy-table">
+      <thead><tr><th>#</th><th>Ursache</th><th>Belegt durch</th></tr></thead>
+      <tbody>
+        <tr><td>U1</td><td><strong>Multi-Agent-Läufe integrieren ihre Teile nicht nachweislich.</strong> do-run (Nacht/Batch), auto-agents-Wellen und Agent-Worktrees legen Teil-Branches an. Integriert wird per Squash, Cherry-Pick oder Kopieren. Am Ende prüft niemand, ob jeder Teil-Branch wirklich drin ist; ein abgebrochener Teil bleibt als <code>wip(…)</code> liegen.</td><td>SCC-App <code>night/*</code> (12), madmaze qa-e2e, alle <code>worktree-agent-*</code></td></tr>
+        <tr><td>U2</td><td><strong>Agent-Worktrees enden ohne Commit.</strong> Ein Sub-Agent in <code>isolation: worktree</code> darf zurückkehren, während sein Ergebnis nur als Arbeitskopie existiert. Der Elternlauf übernimmt es oder auch nicht.</td><td>Hatchit 2× Zerlegung (26.09.)</td></tr>
+        <tr><td>U3</td><td><strong>Sessions enden ohne Sicherungscommit.</strong> Archivieren oder Liegenlassen einer Session hinterlässt Dirty-State und ungepushte Commits. Nichts committet, pusht oder erinnert. Dazu wechseln Sessions Branches innerhalb eines Worktrees, sodass Ordnername und Inhalt auseinanderlaufen.</td><td>overlay-funktionen, StretchTimer-Gesten, mobile-layout-polish</td></tr>
+        <tr><td>U4</td><td><strong>Hygiene sieht nur ein Repo, nur nach dem Ship, nur zwei Risikoarten.</strong> 24 von 29 Repos werden nie geprüft. Was nicht <code>[gone]</code> oder detached ist, gilt als „behalten" statt „gefährdet".</td><td><code>hygiene.js</code> <code>planAutoClean</code> → <code>abandoned = gone || detached</code></td></tr>
+        <tr><td>U5</td><td><strong>Parken ohne Register.</strong> wip/backup/ARCHIVED-Branches und Stashes haben weder Besitzer noch Datum noch Erinnerung. Ältere repo-health-Logik hat außerdem per Stash „gesichert".</td><td>5 Park-Branches, 11 Stashes</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="p-rettung" data-nav-label="V1 · Sofort-Rettung">
+    <h3>V1 · Sofort-Rettung (einmalig, nicht-destruktiv)</h3>
+    <p>Alles aus ① und ② sichern: Uncommittetes als WIP-Commit auf dem eigenen Branch, dann jeden gefährdeten Branch als <code>salvage/&lt;branch&gt;</code> zu origin pushen. Die 11 Stashes werden zu <code>salvage/stash-&lt;datum&gt;</code>-Branches. Nichts wird gelöscht. Danach eine Triage-Liste pro Eintrag: shippen, nachintegrieren oder verwerfen.</p>
+    <p class="d1-hy-meta">Aufwand: klein · Risiko: keins (nur Commits und Pushes auf neue Branches) · Fremd-Repos SCC-App/SCC-Web/StarUI liegen unter StarOrga, dort landen die salvage-Branches sichtbar.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-rettung" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-rettung" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-rettung-note" placeholder="Anmerkung, z. B. Ausnahmen, nur lokal sichern …">check ob sie aktuell sind, dann merge sie, ansonsten gern die intention prüfen udn falls immer noch valide dies neuimplementieren. </textarea>
+  </section>
+
+  <section id="p-atrisk" data-nav-label="V2 · Gefährdet-Erkennung erweitern">
+    <h3>V2 · „Gefährdet" richtig definieren (behebt U4, Teil 1)</h3>
+    <p>In <code>hygiene.js</code> gilt künftig <em>jede</em> nicht gelandete Einheit ohne offenen PR und ohne live Session als gefährdet: nie gepushte Branches, Sub-Agent-Branches, Worktrees mit uncommitteten Änderungen (auch Agent-Worktrees). Dazu kommt die Reverse-Apply-Prüfung aus dieser Analyse, damit teilweise gelandete Branches als „teilweise" statt „nicht gelandet" erscheinen.</p>
+    <p class="d1-hy-meta">Aufwand: mittel · Risiko: gering (nur Meldung, keine neue Löschregel) · Tests in <code>hygiene.test.js</code> erweitern.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-atrisk" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-atrisk" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-atrisk-note" placeholder="Anmerkung …"></textarea>
+  </section>
+
+  <section id="p-scan" data-nav-label="V3 · Projektübergreifender Waisen-Scan">
+    <h3>V3 · Projektübergreifender Waisen-Scan (behebt U4, Teil 2)</h3>
+    <p>Ein Scheduled Task (täglich) läuft die Logik aus V2 über alle Repos unter <code>IdeaProjects</code> und schreibt <code>~/.claude/orphan-report.json</code>. Beim SessionStart eines Repos mit gefährdeter Arbeit kommt eine Zeile wie „⚠ 3 ungelandete Branches, 1 Worktree mit uncommitteter Arbeit → /auto-cleanup". Die Ship-Karte ist dann nicht mehr der einzige Ort, an dem das sichtbar wird.</p>
+    <p class="d1-hy-meta">Aufwand: mittel · Risiko: gering (nur lesend + <code>git fetch</code>) · nutzt die bestehende auto-cleanup-Seite als Aktionsort.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-scan" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-scan" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-scan-note" placeholder="Anmerkung, z. B. Intervall, welche Ordner …"></textarea>
+  </section>
+
+  <section id="p-integration" data-nav-label="V4 · Integrationsnachweis Multi-Agent">
+    <h3>V4 · Integrationsnachweis am Ende jedes Multi-Agent-Laufs (behebt U1)</h3>
+    <p>auto-agents und do-run prüfen vor ihrer Abschlusskarte jeden Teil-Branch und Agent-Worktree des Laufs: per Vorfahre, Merge-Tree oder Reverse-Apply im Integrations-Branch enthalten? Nicht enthalten heißt: die Karte zeigt „ungelandet: N Teile" statt Erfolg, und der Run-Report listet sie mit Pfad. Integrierte Teil-Branches werden sofort entfernt, damit sie nicht als Rauschen liegen bleiben.</p>
+    <p class="d1-hy-meta">Aufwand: mittel · Risiko: gering · hätte den Nachtlauf vom 08.10. als unvollständig markiert.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-integration" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-integration" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-integration-note" placeholder="Anmerkung …"></textarea>
+  </section>
+
+  <section id="p-agentcommit" data-nav-label="V5 · Agent muss committen">
+    <h3>V5 · Agent-Worktree kehrt nie mit Dirty-State zurück (behebt U2)</h3>
+    <p>Ein SubagentStop-Hook prüft den Worktree eines Agents mit <code>isolation: worktree</code>. Uncommittete Änderungen werden automatisch als <code>wip(agent): …</code> committet, und der Elternlauf bekommt die Branch-Info zurück. So bleibt nichts nur als Arbeitskopie liegen.</p>
+    <p class="d1-hy-meta">Aufwand: klein · Risiko: gering (Commit nur im Agent-Branch, nie auf main).</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-agentcommit" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-agentcommit" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-agentcommit-note" placeholder="Anmerkung …"></textarea>
+  </section>
+
+  <section id="p-sessionend" data-nav-label="V6 · Sicherung am Session-Ende">
+    <h3>V6 · Sicherung am Session-Ende (behebt U3)</h3>
+    <p>Beim Stop einer Session in einem Worktree mit Dirty-State oder ungepushten Commits ohne PR: WIP-Commit auf dem Session-Branch und Push nach <code>origin</code> (Backup-Ref, kein PR). Dazu ein Hinweis auf der Karte. Nie per Stash. Liegt die Arbeit auf origin, überlebt sie auch ein „Worktree verwerfen" in der Desktop-App.</p>
+    <p class="d1-hy-meta">Aufwand: mittel · Risiko: mittel (automatische Pushes, auch in StarOrga-Repos; der Push lässt sich per Projekt abschalten) · Alternative ohne Push: nur lokaler WIP-Commit.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-sessionend" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-sessionend" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-sessionend-note" placeholder="Anmerkung, z. B. nur lokal, nicht pushen …"></textarea>
+  </section>
+
+  <section id="p-cleanup" data-nav-label="V7 · Gelandetes abbauen">
+    <h3>V7 · Die ~190 gelandeten Reste jetzt abbauen</h3>
+    <p>Einmalig <code>ship_hygiene</code> mit den bestehenden Sicherheitsregeln über alle Repos laufen lassen, ohne Altersschranke für nachweislich gelandete Branches. Laufende Sessions und ihre Worktrees bleiben unberührt. Danach steht in jedem Repo nur noch, was wirklich offen ist, und echte Waisen fallen sofort auf.</p>
+    <p class="d1-hy-meta">Aufwand: klein · Risiko: gering (jede Löschung re-checkt, Tip-SHA geloggt) · sinnvoll erst nach V1.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-cleanup" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-cleanup" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-cleanup-note" placeholder="Anmerkung …"></textarea>
+  </section>
+
+  <section id="p-parking" data-nav-label="V8 · Park-Register">
+    <h3>V8 · Park-Register für wip/backup-Branches (behebt U5)</h3>
+    <p>Geparkte Branches (<code>wip/</code>, <code>backup/</code>, <code>salvage/</code>, „ARCHIVED") stehen in einem Register mit Datum und Grund. Nach 30 Tagen kommt ein Hinweis im Waisen-Scan: behalten, integrieren oder verwerfen. Stashes werden dort ebenfalls aufgeführt.</p>
+    <p class="d1-hy-meta">Aufwand: klein (baut auf V3 auf) · Risiko: keins.</p>
+    <div class="tri-state-group">
+      <label class="tri-state-option"><input type="radio" name="eval-p-parking" value="discard"><span class="tri-state-label">Verwerfen</span></label>
+      <label class="tri-state-option"><input type="radio" name="eval-p-parking" value="include" checked><span class="tri-state-label">Miteinbeziehen</span></label>
+    </div>
+    <textarea data-comment="p-parking-note" placeholder="Anmerkung …">ok, konsolidere aber nochmal was geparkt heißt, das ist ja doof, das das untersxyc hieldlich heißt oder ist das inhnärent? 
+Zudem heißt das shipped branches fallen nicht darunter, korrekt? Weil die werden ja uatomatisch aufgeräprumt, oder?</textarea>
+  </section>
+
+  <section id="empfehlung" data-nav-label="Empfehlung">
+    <h3>Empfehlung</h3>
+    <p><strong>V1 sofort, dann V2 + V4 + V5 als ein Ship, V3 direkt danach.</strong> V1 sichert alles Bestehende ohne Risiko. V4 und V5 stoppen die größte Quelle neuer Waisen (Multi-Agent-Läufe), V2 und V3 machen den Rest sichtbar, bevor er alt wird.
+      V7 räumt das Rauschen weg, sobald V1 durch ist. V6 ist wirksam, pusht aber automatisch, deshalb steht es zur Wahl. V8 ist optional.</p>
+    <p class="d1-hy-meta">„Zur nächsten Iteration" schärft die Auswahl nach. „Mit Feedback implementieren" startet V1 und die gewählten Plugin-Fixes; geshippt wird erst nach deinem OK.</p>
+  </section>
+</section>
