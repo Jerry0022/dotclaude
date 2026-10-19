@@ -30,7 +30,7 @@ describe("concept SKILL.md — session title prefix", () => {
 
   test("Step 3 sets exactly the prefix the card layer defines", () => {
     const mark = section("### Mark the session in the sidebar", "### After opening, inform the user:");
-    expect(mark).toContain("`" + SESSION_PREFIX.concept + "`");
+    expect(mark).toContain("`" + SESSION_PREFIX["concept-waiting"] + "`");
     expect(mark).toMatch(/session_id: "self"/);
     expect(mark).toMatch(/Desktop app/);
     expect(mark).toMatch(/skip silently/);
@@ -48,9 +48,9 @@ describe("concept SKILL.md — session title prefix", () => {
   test("the phase table shows the compass only while waiting", () => {
     const cards = section("### Completion cards while the concept is open", "## Step 4 — Monitor via HTTP Bridge");
     const row = (phase) => cards.split("\n").find((l) => l.startsWith("| `" + phase + "`"));
-    expect(row("waiting")).toContain("`" + SESSION_PREFIX.concept + "` |");
-    expect(row("iterating")).toMatch(/\| `⏳ ` \|$/);
-    expect(row("implementing")).toMatch(/\| `⏳ ` \|$/);
+    expect(row("waiting")).toContain("`" + SESSION_PREFIX["concept-waiting"] + "` |");
+    expect(row("iterating")).toContain("`" + SESSION_PREFIX["concept-working"] + "` |");
+    expect(row("implementing")).toContain("`" + SESSION_PREFIX["concept-working"] + "` |");
     expect(cards).not.toContain("Working – ");
   });
 
@@ -59,18 +59,18 @@ describe("concept SKILL.md — session title prefix", () => {
   // brings it back.
   test("Step 5 swaps the compass for the hourglass once a submission is confirmed", () => {
     const work = section("### Mark the round as work", "### 5a. Read & Parse");
-    expect(work).toContain("`" + SESSION_PREFIX.concept + "`");
+    expect(work).toContain("`" + SESSION_PREFIX["concept-waiting"] + "`");
     expect(work).toContain('"⏳ "');
     expect(work).toMatch(/stale wake changes nothing/i);
     expect(work).toMatch(/MUST end with its completion card/);
   });
 
-  test("Step 6a strips every prefix, ends a shipped close-out on Shipped, and leaves a renamed title alone", () => {
+  test("Step 6a strips every prefix, ends a shipped close-out on Released Alpha, and leaves a renamed title alone", () => {
     const cleanup = section("### 6a. Clean up the active-concept state", "**Apply disposition on the concept files.**");
     expect(cleanup).toContain("**Restore the session title**");
-    expect(cleanup).toContain("`" + SESSION_PREFIX.concept + "`");
+    expect(cleanup).toContain("`" + SESSION_PREFIX["concept-waiting"] + "`");
     expect(cleanup).toContain("LEGACY_PREFIXES");
-    expect(cleanup).toContain('"' + SESSION_PREFIX.shipped + '"');
+    expect(cleanup).toContain('"' + SESSION_PREFIX["released-alpha"] + '"');
     expect(cleanup).toMatch(/left untouched/);
     expect(cleanup).not.toContain("Working – ");
   });

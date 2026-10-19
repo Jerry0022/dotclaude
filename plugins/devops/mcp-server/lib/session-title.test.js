@@ -5,11 +5,14 @@ import { tmpdir } from "node:os";
 import {
   SESSION_PREFIX,
   LEGACY_PREFIXES,
-  VARIANT_TITLE_PREFIX,
+  VARIANT_TITLE_STATE,
+  TITLE_SCHEME,
   stripTitlePrefix,
   releasedPrefix,
   pausedPrefix,
   titlePrefixFor,
+  titleStateForKey,
+  hasMandatoryStep,
   titleInstruction,
   conceptUrl,
   conceptCloseoutOnly,
@@ -25,49 +28,55 @@ const deps = {
   hasConcept: (c) => !!c,
 };
 
+const STATUS_ICONS = ["⏳", "👉", "🟩", "🟥", "⏸️"];
+
 describe("SESSION_PREFIX", () => {
-  test("every worded prefix is emoji-first and ends in ' – '; work and pending are the bare hourglass", () => {
+  test("every named prefix is `<status> <activity> <Word…> – `; work is the bare hourglass", () => {
     for (const [k, p] of Object.entries(SESSION_PREFIX)) {
-      if (k === "work" || k === "pending") expect(p, k).toBe("⏳ ");
-      else expect(p, k).toMatch(/^\S+ [A-Z][a-z]+ – $/u);
+      if (k === "work") { expect(p, k).toBe("⏳ "); continue; }
+      const [status, activity, ...words] = p.replace(/ – $/, "").split(" ");
+      expect(STATUS_ICONS, k).toContain(status);
+      expect(activity, k).toMatch(/^\p{Extended_Pictographic}️?$/u);
+      expect(words.join(" "), k).toMatch(/^[A-Z][a-z]+(?: [A-Za-z]+)?$/);
+      expect(p.endsWith(" – "), k).toBe(true);
     }
   });
 
-  test("each prefix carries its card's CTA emoji", () => {
-    expect(SESSION_PREFIX.shipped.startsWith("🚀")).toBe(true);
-    expect(SESSION_PREFIX.shipping.startsWith("🚀")).toBe(true);
-    expect(SESSION_PREFIX.released.startsWith("🎊")).toBe(true);
-    expect(SESSION_PREFIX.blocked.startsWith("⛔")).toBe(true);
-    expect(SESSION_PREFIX.test.startsWith("🧪")).toBe(true);
-    expect(SESSION_PREFIX.started.startsWith("▶️")).toBe(true);
-    expect(SESSION_PREFIX.analysis.startsWith("📋")).toBe(true);
-    expect(SESSION_PREFIX.fallback.startsWith("🔧")).toBe(true);
-    expect(SESSION_PREFIX.work.startsWith("⏳")).toBe(true);
+  test("done is a green box — never the old ✅", () => {
+    for (const p of Object.values(SESSION_PREFIX)) expect(p.startsWith("✅")).toBe(false);
+    expect(SESSION_PREFIX["released-alpha"]).toBe("🟩 🚀 Released Alpha – ");
+    expect(SESSION_PREFIX.aborted).toBe("🟥 📦 Aborted – ");
   });
 
-  // One hourglass, one meaning: "Claude works, not your move". The worded
-  // "⏳ Working – " next to the bare "⏳ " read as two states for one.
-  test("the hourglass is one state — pending work and a working turn share the bare icon", () => {
-    expect(SESSION_PREFIX.pending).toBe(SESSION_PREFIX.work);
-    for (const p of Object.values(SESSION_PREFIX)) expect(p).not.toMatch(/Working/);
+  test("the process and mode prefixes the skills spell out", () => {
+    expect(SESSION_PREFIX.shipping).toBe("⏳ 🚀 Shipping – ");
+    expect(SESSION_PREFIX["concept-waiting"]).toBe("👉 🧭 Concept – ");
+    expect(SESSION_PREFIX["concept-working"]).toBe("⏳ 🧭 Concept – ");
+    expect(SESSION_PREFIX.batch).toBe("👉 📥 Batch – ");
+    expect(SESSION_PREFIX.blocked).toBe("👉 ⛔ Blocked – ");
+    expect(SESSION_PREFIX["paused-user"]).toBe("⏸️ ✋ Paused – ");
+    expect(SESSION_PREFIX.interrupted).toBe("👉 ⚡ Interrupted – ");
+    expect(SESSION_PREFIX.system).toBe("🟩 🖥️ System – ");
   });
 
-  test("shipped is the finished form of shipping — same rocket, no -ing", () => {
-    expect(SESSION_PREFIX.shipped).toBe("🚀 Shipped – ");
-    expect(SESSION_PREFIX.shipping).toBe("🚀 Shipping – ");
+  test("no prefix is worded 'Working' or 'LIVE'", () => {
+    for (const p of Object.values(SESSION_PREFIX)) expect(p).not.toMatch(/Working|LIVE/);
   });
 });
 
 describe("releasedPrefix", () => {
-  test("names the channel reached, capitalised", () => {
-    expect(releasedPrefix("stable")).toBe("🎊 Released Stable – ");
-    expect(releasedPrefix("Beta")).toBe("🎊 Released Beta – ");
-    expect(releasedPrefix("alpha")).toBe("🎊 Released Alpha – ");
+  test("names the channel reached: alpha on the rocket, beta/stable on the party popper", () => {
+    expect(releasedPrefix("stable")).toBe("🟩 🎊 Released Stable – ");
+    expect(releasedPrefix("Beta")).toBe("🟩 🎊 Released Beta – ");
+    expect(releasedPrefix("alpha")).toBe("🟩 🚀 Released Alpha – ");
+    expect(releasedPrefix("beta", { promoted: true })).toBe("🟩 🎊 Promoted Beta – ");
+    expect(releasedPrefix("stable", { promoted: true })).toBe("🟩 🎊 Promoted Stable – ");
+    expect(releasedPrefix("stable", { mandatory: true })).toBe("👉 🎊 Released Stable – ");
   });
 
-  test("falls back to the bare base for an unknown or missing channel", () => {
-    expect(releasedPrefix(undefined)).toBe(SESSION_PREFIX.released);
-    expect(releasedPrefix("prod")).toBe(SESSION_PREFIX.released);
+  test("falls back to Released Alpha for an unknown or missing channel", () => {
+    expect(releasedPrefix(undefined)).toBe(SESSION_PREFIX["released-alpha"]);
+    expect(releasedPrefix("prod")).toBe(SESSION_PREFIX["released-alpha"]);
   });
 });
 
@@ -77,11 +86,11 @@ describe("stripTitlePrefix", () => {
   });
 
   test("removes stacked prefixes of any kind", () => {
-    expect(stripTitlePrefix(SESSION_PREFIX.shipping + SESSION_PREFIX.test + SESSION_PREFIX.concept + "Foo")).toBe("Foo");
+    expect(stripTitlePrefix(SESSION_PREFIX.shipping + SESSION_PREFIX.test + SESSION_PREFIX["concept-waiting"] + "Foo")).toBe("Foo");
   });
 
-  test("removes a released prefix with channel and the bare wrench", () => {
-    expect(stripTitlePrefix("🎊 Released Stable – Foo")).toBe("Foo");
+  test("removes the released prefix per channel and the bare hourglass, alone or stacked", () => {
+    expect(stripTitlePrefix("🟩 🎊 Released Stable – Foo")).toBe("Foo");
     expect(stripTitlePrefix(SESSION_PREFIX.work + "Foo")).toBe("Foo");
     expect(stripTitlePrefix(SESSION_PREFIX.work + SESSION_PREFIX.ready + "Foo")).toBe("Foo");
   });
@@ -89,7 +98,7 @@ describe("stripTitlePrefix", () => {
   test("removes the legacy worded hourglass, alone or stacked", () => {
     expect(LEGACY_PREFIXES).toContain("⏳ Working – ");
     expect(stripTitlePrefix("⏳ Working – Foo")).toBe("Foo");
-    expect(stripTitlePrefix("⏳ Working – " + SESSION_PREFIX.concept + "Foo")).toBe("Foo");
+    expect(stripTitlePrefix("⏳ Working – 🧭 Concept – Foo")).toBe("Foo");
     expect(stripTitlePrefix(SESSION_PREFIX.work + "⏳ Working – Foo")).toBe("Foo");
   });
 
@@ -99,64 +108,90 @@ describe("stripTitlePrefix", () => {
   });
 });
 
+describe("titleStateForKey / hasMandatoryStep", () => {
+  test("every decision key maps to a scheme state", () => {
+    const keys = ["ready", "ready-local", "question", "test", "test-local", "ready-red", "vv-unverified", "vv-running",
+      "ship-blocked", "ship-successful", "ship-successful-kept", "ship-successful-closeout", "ship-successful-deploy",
+      "released-beta", "released-stable", "ready-files", "test-minimal", "analysis", "aborted", "paused", "fallback",
+      "pending", "concept-waiting", "concept-working", "batch"];
+    for (const k of keys) expect(TITLE_SCHEME.STATES[titleStateForKey(k)], k).toBeDefined();
+    expect(titleStateForKey("no-such-key")).toBe("system");
+  });
+
+  test("a mandatory step: open point, userTest, userFinalTest, requirement waiting on the user", () => {
+    expect(hasMandatoryStep({})).toBe(false);
+    expect(hasMandatoryStep({ open: [] })).toBe(false);
+    expect(hasMandatoryStep({ open: ["x"] })).toBe(true);
+    expect(hasMandatoryStep({ open: [{ text: "x" }] })).toBe(true);
+    expect(hasMandatoryStep({ userTest: ["x"] })).toBe(true);
+    expect(hasMandatoryStep({ userFinalTest: [{ action: "x" }] })).toBe(true);
+    expect(hasMandatoryStep({ validation: [{ waitsOn: "user", status: "unmet" }] })).toBe(true);
+    expect(hasMandatoryStep({ validation: [{ waitsOn: "user", status: "met" }] })).toBe(false);
+  });
+});
+
 describe("titlePrefixFor", () => {
-  test("every card variant maps to its own prefix", () => {
+  test("every card variant maps to its own prefix (fallback without the card's outcome)", () => {
     expect(titlePrefixFor({ variant: "test" }, deps)).toBe(SESSION_PREFIX.test);
     expect(titlePrefixFor({ variant: "test-minimal" }, deps)).toBe(SESSION_PREFIX.started);
     expect(titlePrefixFor({ variant: "ready" }, deps)).toBe(SESSION_PREFIX.ready);
-    expect(titlePrefixFor({ variant: "ready-files" }, deps)).toBe(SESSION_PREFIX.ready);
+    expect(titlePrefixFor({ variant: "ready-files" }, deps)).toBe(SESSION_PREFIX.files);
     expect(titlePrefixFor({ variant: "ship-blocked" }, deps)).toBe(SESSION_PREFIX.blocked);
     expect(titlePrefixFor({ variant: "aborted" }, deps)).toBe(SESSION_PREFIX.aborted);
+    expect(titlePrefixFor({ variant: "aborted", cta: { activity: "ship" } }, deps)).toBe("🟥 🚀 Ship – ");
     expect(titlePrefixFor({ variant: "analysis" }, deps)).toBe(SESSION_PREFIX.analysis);
-    expect(titlePrefixFor({ variant: "fallback" }, deps)).toBe(SESSION_PREFIX.fallback);
-    expect(titlePrefixFor({ variant: "paused" }, deps)).toBe(SESSION_PREFIX.paused);
+    expect(titlePrefixFor({ variant: "fallback" }, deps)).toBe(SESSION_PREFIX.system);
+    expect(titlePrefixFor({ variant: "paused" }, deps)).toBe(SESSION_PREFIX["paused-user"]);
     expect(titlePrefixFor({ variant: "no-such-variant" }, deps)).toBe("");
-    expect(Object.keys(VARIANT_TITLE_PREFIX).sort()).toEqual([
+    expect(Object.keys(VARIANT_TITLE_STATE).sort()).toEqual([
       "aborted", "analysis", "fallback", "paused", "ready", "ready-files", "released",
       "ship-blocked", "ship-successful", "test", "test-minimal",
     ]);
   });
 
-  // #548: paused work read "🔧 Done" in the sidebar. The pause prefix is its
-  // own, and it is stripped like every other one — never stacked.
-  test("a paused card titles the session ⏸️ Paused, and the prefix strips cleanly", () => {
-    expect(SESSION_PREFIX.paused).toBe("⏸️ Paused – ");
-    expect(stripTitlePrefix("⏸️ Paused – PC cleanup")).toBe("PC cleanup");
-    expect(stripTitlePrefix("⏳ ⏸️ Paused – PC cleanup")).toBe("PC cleanup");
+  test("the card's own outcome wins over the variant fallback", () => {
+    const outcome = () => SESSION_PREFIX["red-tests"];
+    expect(titlePrefixFor({ variant: "ready" }, { ...deps, outcome })).toBe(SESSION_PREFIX["red-tests"]);
   });
 
-  // #583: the paused title names what unblocks the work; every reason
+  test("a mandatory step raises a done state to the user's move", () => {
+    expect(titlePrefixFor({ variant: "analysis", open: ["Welche Variante?"] }, deps)).toBe("👉 📋 Analysis – ");
+    expect(titlePrefixFor({ variant: "test-minimal", userTest: ["Spiel starten"] }, deps)).toBe("👉 ▶️ Started – ");
+  });
+
+  // #548 / #583: the paused title names what unblocks the work; every reason
   // variant still strips back to the bare title.
-  test("a paused card with a reason names it in the title, and it strips cleanly", () => {
-    expect(pausedPrefix("restart")).toBe("⏸️ Paused until restart – ");
-    expect(pausedPrefix("reboot")).toBe("⏸️ Paused until reboot – ");
-    expect(pausedPrefix("usage-reset")).toBe("⏸️ Paused until limit reset – ");
-    expect(pausedPrefix("user")).toBe(SESSION_PREFIX.paused);
-    expect(pausedPrefix(undefined)).toBe(SESSION_PREFIX.paused);
-    expect(titlePrefixFor({ variant: "paused", pause: { reason: "restart" } }, deps)).toBe("⏸️ Paused until restart – ");
-    expect(titlePrefixFor({ variant: "paused", pause: { reason: "user" } }, deps)).toBe(SESSION_PREFIX.paused);
-    for (const r of ["restart", "reboot", "usage-reset"]) {
+  test("a paused card names its reason, and the prefix strips cleanly", () => {
+    expect(pausedPrefix("restart")).toBe("⏸️ 🔄 Restart – ");
+    expect(pausedPrefix("reboot")).toBe("⏸️ 💻 Reboot – ");
+    expect(pausedPrefix("usage-reset")).toBe("⏸️ 🔋 Limit reset – ");
+    expect(pausedPrefix("user")).toBe(SESSION_PREFIX["paused-user"]);
+    expect(pausedPrefix(undefined)).toBe(SESSION_PREFIX["paused-user"]);
+    expect(titlePrefixFor({ variant: "paused", pause: { reason: "restart" } }, deps)).toBe("⏸️ 🔄 Restart – ");
+    expect(titlePrefixFor({ variant: "paused", pause: { reason: "user" } }, deps)).toBe(SESSION_PREFIX["paused-user"]);
+    for (const r of ["restart", "reboot", "usage-reset", "user"]) {
       expect(stripTitlePrefix(pausedPrefix(r) + "Plugin update"), r).toBe("Plugin update");
       expect(stripTitlePrefix("⏳ " + pausedPrefix(r) + "Plugin update"), r).toBe("Plugin update");
     }
   });
 
-  test("a ship lands as Shipped — final and intermediate alike", () => {
-    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" } }, deps)).toBe(SESSION_PREFIX.shipped);
-    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main", kept: true } }, deps)).toBe(SESSION_PREFIX.shipped);
-    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "feat/video" } }, deps)).toBe(SESSION_PREFIX.shipped);
-    expect(titlePrefixFor({ variant: "ship-successful" }, deps)).toBe(SESSION_PREFIX.shipped);
+  test("a ship lands as Released Alpha — final and intermediate alike", () => {
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" } }, deps)).toBe(SESSION_PREFIX["released-alpha"]);
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main", kept: true } }, deps)).toBe(SESSION_PREFIX["released-alpha"]);
+    expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "feat/video" } }, deps)).toBe(SESSION_PREFIX["released-alpha"]);
+    expect(titlePrefixFor({ variant: "ship-successful" }, deps)).toBe(SESSION_PREFIX["released-alpha"]);
   });
 
-  test("a released card names the channel reached — delivery, then promotion, then cta", () => {
-    expect(titlePrefixFor({ variant: "released", delivery: { promote: { current: "stable" } } }, deps)).toBe("🎊 Released Stable – ");
-    expect(titlePrefixFor({ variant: "released", promotion: { to: "beta" } }, deps)).toBe("🎊 Released Beta – ");
-    expect(titlePrefixFor({ variant: "released", cta: { to: "stable" } }, deps)).toBe("🎊 Released Stable – ");
-    expect(titlePrefixFor({ variant: "released" }, deps)).toBe(SESSION_PREFIX.released);
+  test("a released card names the channel reached — Promoted without a merge, Released after one", () => {
+    expect(titlePrefixFor({ variant: "released", delivery: { promote: { current: "stable" } } }, deps)).toBe("🟩 🎊 Promoted Stable – ");
+    expect(titlePrefixFor({ variant: "released", promotion: { to: "beta" } }, deps)).toBe("🟩 🎊 Promoted Beta – ");
+    expect(titlePrefixFor({ variant: "released", cta: { to: "stable" } }, deps)).toBe("🟩 🎊 Promoted Stable – ");
+    expect(titlePrefixFor({ variant: "released", state: { merged: "main" }, delivery: { promote: { current: "stable" } } }, deps)).toBe("🟩 🎊 Released Stable – ");
+    expect(titlePrefixFor({ variant: "released" }, deps)).toBe("🟩 🎊 Promoted Beta – ");
   });
 
   test("pending background work outranks the variant", () => {
-    expect(titlePrefixFor({ variant: "ready", pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
+    expect(titlePrefixFor({ variant: "ready", pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.agents);
   });
 
   // #416: the concept prefix follows the phase. The compass means "your
@@ -164,23 +199,23 @@ describe("titlePrefixFor", () => {
   // time so a session coming back from a round of work returns to it.
   // Iterating and implementing are Claude's move: the hourglass, like any
   // pending card.
-  test("a concept card states the prefix of its phase — compass only while waiting, hourglass while iterating/implementing", () => {
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, deps)).toBe(SESSION_PREFIX.concept);
-    expect(titlePrefixFor({ variant: "ready", concept: "waiting" }, deps)).toBe(SESSION_PREFIX.concept);
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX.pending);
-    expect(titlePrefixFor({ variant: "ready", concept: "iterating" }, deps)).toBe(SESSION_PREFIX.pending);
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" } }, deps)).toBe(SESSION_PREFIX.pending);
-    expect(titlePrefixFor({ variant: "ready", concept: "implementing" }, deps)).toBe(SESSION_PREFIX.pending);
-    expect(titlePrefixFor({ variant: "ready", concept: '{"phase":"implementing"}' }, deps)).toBe(SESSION_PREFIX.pending);
+  test("a concept card states the prefix of its phase — 👉 while waiting, ⏳ while iterating/implementing", () => {
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" } }, deps)).toBe(SESSION_PREFIX["concept-waiting"]);
+    expect(titlePrefixFor({ variant: "ready", concept: "waiting" }, deps)).toBe(SESSION_PREFIX["concept-waiting"]);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX["concept-working"]);
+    expect(titlePrefixFor({ variant: "ready", concept: "iterating" }, deps)).toBe(SESSION_PREFIX["concept-working"]);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" } }, deps)).toBe(SESSION_PREFIX["concept-working"]);
+    expect(titlePrefixFor({ variant: "ready", concept: "implementing" }, deps)).toBe(SESSION_PREFIX["concept-working"]);
+    expect(titlePrefixFor({ variant: "ready", concept: '{"phase":"implementing"}' }, deps)).toBe(SESSION_PREFIX["concept-working"]);
     // Unknown phase reads as waiting — the safe default, same as the CTA.
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "bogus" } }, deps)).toBe(SESSION_PREFIX.concept);
-    expect(titlePrefixFor({ variant: "ready", concept: true }, deps)).toBe(SESSION_PREFIX.concept);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "bogus" } }, deps)).toBe(SESSION_PREFIX["concept-waiting"]);
+    expect(titlePrefixFor({ variant: "ready", concept: true }, deps)).toBe(SESSION_PREFIX["concept-waiting"]);
   });
 
-  test("an implementing/iterating concept with pending work is still the hourglass, never the compass", () => {
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" }, pending: [{ name: "research", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
-    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.concept);
+  test("an implementing/iterating concept with pending work stays ⏳ 🧭 Concept; a waiting one 👉 🧭 Concept", () => {
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "implementing" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX["concept-working"]);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "iterating" }, pending: [{ name: "research", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX["concept-working"]);
+    expect(titlePrefixFor({ variant: "ready", concept: { phase: "waiting" }, pending: [{ name: "feature", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX["concept-waiting"]);
   });
 
   // Without the field the card cannot tell whether the open page belongs to
@@ -194,13 +229,13 @@ describe("titlePrefixFor", () => {
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
       mkdirSync(join(cwd, "docs", "concepts"), { recursive: true });
       writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
-      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.ready });
-      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX.ready });
+      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] });
       // Background work outranks the compass for the owner, and the variant for anyone else.
       expect(titlePrefixFor({ variant: "ready", cwd, pending: [{ name: "qa", kind: "agent" }] }, deps))
-        .toEqual({ owned: SESSION_PREFIX.pending, other: SESSION_PREFIX.pending });
+        .toEqual({ owned: SESSION_PREFIX["concept-working"], other: SESSION_PREFIX.agents });
       // The explicit concept field still wins over the state file.
-      expect(titlePrefixFor({ variant: "ready", cwd, concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX.pending);
+      expect(titlePrefixFor({ variant: "ready", cwd, concept: { phase: "iterating" } }, deps)).toBe(SESSION_PREFIX["concept-working"]);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -216,15 +251,15 @@ describe("titlePrefixFor", () => {
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html" }));
       writeFileSync(join(cwd, "docs", "concepts", "x.html"), '<section data-iteration="2"></section><section data-iteration="3" data-final-report data-active></section>');
       expect(conceptCloseoutOnly(cwd)).toBe(true);
-      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toBe(SESSION_PREFIX.shipped);
-      expect(titlePrefixFor({ variant: "released", cwd, delivery: { promote: { current: "beta" } } }, deps)).toBe(releasedPrefix("beta"));
-      expect(titlePrefixFor({ variant: "ship-successful", cwd, pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.pending);
+      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toBe(SESSION_PREFIX["released-alpha"]);
+      expect(titlePrefixFor({ variant: "released", cwd, delivery: { promote: { current: "beta" } } }, deps)).toBe(releasedPrefix("beta", { promoted: true }));
+      expect(titlePrefixFor({ variant: "ship-successful", cwd, pending: [{ name: "qa", kind: "agent" }] }, deps)).toBe(SESSION_PREFIX.agents);
       // Not a ship outcome: the conditional stays.
-      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.ready });
+      expect(titlePrefixFor({ variant: "ready", cwd }, deps)).toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX.ready });
       // The marker only inside a script does not count.
       writeFileSync(join(cwd, "docs", "concepts", "x.html"), '<section data-iteration="1"></section><script>q("<section data-final-report>")</script>');
       expect(conceptCloseoutOnly(cwd)).toBe(false);
-      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+      expect(titlePrefixFor({ variant: "ship-successful", cwd }, deps)).toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -245,7 +280,7 @@ describe("titlePrefixFor", () => {
       try {
         mkdirSync(join(cwd, ".claude"));
         writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify(state));
-        expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(state)).toBe(SESSION_PREFIX.shipped);
+        expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(state)).toBe(SESSION_PREFIX["released-alpha"]);
       } finally {
         rmSync(cwd, { recursive: true, force: true });
       }
@@ -269,7 +304,7 @@ describe("titlePrefixFor", () => {
       mkdirSync(join(cwd, "docs", "concepts"), { recursive: true }); writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
         for (const [rel, body] of Object.entries(files)) writeFileSync(join(cwd, ".claude", "concepts", "x", rel), JSON.stringify(body));
         expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps), JSON.stringify(files))
-          .toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+          .toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] });
       } finally {
         rmSync(cwd, { recursive: true, force: true });
       }
@@ -298,7 +333,7 @@ describe("titlePrefixFor", () => {
     try {
       mkdirSync(join(cwd, ".claude"));
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString(), paused_at: new Date().toISOString() }));
-      expect(titlePrefixFor({ variant: "paused", cwd }, deps)).toBe(SESSION_PREFIX.paused);
+      expect(titlePrefixFor({ variant: "paused", cwd }, deps)).toBe(SESSION_PREFIX["paused-user"]);
       expect(conceptUrl(cwd, undefined)).toBe("");
       expect(conceptUrl(cwd, { phase: "waiting" })).toBe("");
     } finally {
@@ -313,7 +348,7 @@ describe("titlePrefixFor", () => {
       writeFileSync(join(cwd, ".claude", "concept-active.json"), JSON.stringify({ port: 4321, html_path: "docs/concepts/x.html", started_at: new Date().toISOString() }));
       mkdirSync(join(cwd, "docs", "concepts"), { recursive: true }); writeFileSync(join(cwd, "docs", "concepts", "x.html"), "<!doctype html>");
       expect(titlePrefixFor({ variant: "ship-successful", state: { merged: "main" }, cwd }, deps))
-        .toEqual({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+        .toEqual({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -331,8 +366,10 @@ describe("titleInstruction", () => {
     expect(text).toContain("mcp__ccd_session_mgmt__get_session");
     expect(text).toContain("mcp__ccd_session_mgmt__set_session_title");
     expect(text).toContain(`"${SESSION_PREFIX.test}" + <stripped title>`);
-    for (const p of Object.values(SESSION_PREFIX)) expect(text).toContain(`"${p}"`);
-    for (const c of ["Alpha", "Beta", "Stable"]) expect(text).toContain(`"🎊 Released ${c} – "`);
+    // The strip rule names every status icon and every legacy prefix — never a free "Xxx – ".
+    for (const s of ["⏳", "👉", "🟩", "🟥", "⏸️"]) expect(text).toContain(s);
+    for (const p of LEGACY_PREFIXES) expect(text).toContain(`"${p}"`);
+    expect(text).toMatch(/never free text that only looks like one/);
     expect(text).toMatch(/skip silently/);
     expect(text).toMatch(/Desktop app only/);
     // #661: a deferred tool is not an unavailable one — load, then call.
@@ -342,20 +379,20 @@ describe("titleInstruction", () => {
 
   // The concept finalize ship renders its ship card while the state file is
   // still there: the "closes the concept out" branch is what lets that card
-  // end on 🚀 Shipped instead of the compass.
+  // end on 🟩 🚀 Released Alpha instead of the concept prefix.
   test("a conditional names the concept, the owner's prefix, the close-out case and the other prefix", () => {
-    const text = titleInstruction({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped });
+    const text = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] });
     expect(text.startsWith("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
     expect(text).toContain("concept-active.json");
     expect(text).toMatch(/If THIS session runs that concept/);
-    expect(text).toContain(`"${SESSION_PREFIX.concept}" + <stripped title>`);
+    expect(text).toContain(`"${SESSION_PREFIX["concept-waiting"]}" + <stripped title>`);
     expect(text).toMatch(/this turn closes the concept out/);
-    expect(text).toContain(`"${SESSION_PREFIX.shipped}" + <stripped title>`);
+    expect(text).toContain(`"${SESSION_PREFIX["released-alpha"]}" + <stripped title>`);
     expect(text).toMatch(/skip silently/);
   });
 
   test("a conditional with no other prefix (armed batch) leaves a foreign title alone", () => {
-    const text = titleInstruction({ owned: SESSION_PREFIX.concept, other: null });
+    const text = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: null });
     expect(text).toMatch(/leave the title as it is/);
   });
 
@@ -379,7 +416,7 @@ describe("titleInstruction — current title known", () => {
   test("the exact title, parallel to show_widget — no get_session", () => {
     const text = titleInstruction(SESSION_PREFIX.ready, "⏳ Login fix");
     expect(text.startsWith("[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]")).toBe(true);
-    expect(text).toContain(`${SET} {session_id:"self", title:"📦 Ready – Login fix"}`);
+    expect(text).toContain(`${SET} {session_id:"self", title:"👉 📦 Ready – Login fix"}`);
     expect(text).toMatch(/SAME assistant message as the card's show_widget call/);
     expect(text).toMatch(/set_session_title first in the batch/);
     expect(text).not.toContain("mcp__ccd_session_mgmt__get_session");
@@ -390,13 +427,15 @@ describe("titleInstruction — current title known", () => {
   test("stacked and legacy prefixes go, the title is JSON-escaped", () => {
     const rest = 'Fix "quotes" ' + String.fromCharCode(92) + " path";
     const text = titleInstruction(releasedPrefix("stable"), "⏳ Working – 🚀 Shipping – " + rest);
-    expect(text).toContain(`title:${JSON.stringify("🎊 Released Stable – " + rest)}}`);
+    expect(text).toContain(`title:${JSON.stringify("🟩 🎊 Released Stable – " + rest)}}`);
   });
 
   test("a title that is already right needs no block at all", () => {
-    expect(titleInstruction(SESSION_PREFIX.shipped, "🚀 Shipped – Login")).toBe("");
+    expect(titleInstruction(SESSION_PREFIX["released-alpha"], "🟩 🚀 Released Alpha – Login")).toBe("");
     expect(titleInstruction("", "Plain title")).toBe("");
-    expect(titleInstruction(SESSION_PREFIX.ready, "📦 Ready – ")).toBe("");
+    expect(titleInstruction(SESSION_PREFIX.ready, "👉 📦 Ready – ")).toBe("");
+    // FE0F-tolerant: the same prefix without the variation selector is "already right" after one rewrite.
+    expect(titleInstruction(SESSION_PREFIX["paused-user"], "⏸ ✋ Paused – Job")).toContain(`title:"⏸️ ✋ Paused – Job"}`);
   });
 
   test("an empty prefix strips only — the known stripped title", () => {
@@ -408,14 +447,14 @@ describe("titleInstruction — current title known", () => {
   });
 
   test("an unattributed concept keeps its conditional, with exact titles", () => {
-    const text = titleInstruction({ owned: SESSION_PREFIX.concept, other: SESSION_PREFIX.shipped }, "⏳ Page");
-    expect(text).toContain(`title:"🧭 Concept – Page"}`);
-    expect(text).toContain(`title:"🚀 Shipped – Page"}`);
+    const text = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: SESSION_PREFIX["released-alpha"] }, "⏳ Page");
+    expect(text).toContain(`title:"👉 🧭 Concept – Page"}`);
+    expect(text).toContain(`title:"🟩 🚀 Released Alpha – Page"}`);
     expect(text).toMatch(/If THIS session runs that concept/);
-    const leave = titleInstruction({ owned: SESSION_PREFIX.concept, other: null }, "🧭 Concept – Page");
+    const leave = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: null }, "👉 🧭 Concept – Page");
     expect(leave).toBe("");
-    const half = titleInstruction({ owned: SESSION_PREFIX.concept, other: null }, "⏳ Page");
-    expect(half).toContain(`title:"🧭 Concept – Page"}`);
+    const half = titleInstruction({ owned: SESSION_PREFIX["concept-waiting"], other: null }, "⏳ Page");
+    expect(half).toContain(`title:"👉 🧭 Concept – Page"}`);
     expect(half).toMatch(/leave the title \(no call\)/);
   });
 

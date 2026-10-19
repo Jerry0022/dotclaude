@@ -41,7 +41,7 @@ const baseModel = (over = {}) => ({
   budget: { omitted: true, bars: [], contextHealth: "" },
   pipeline: "○ commit → ○ push → ○ PR → ○ merge · feat/x · Build abc123",
   pipelinePr: null,
-  heading: "📦 Shippen?",
+  heading: "👉 📦 Ready — Shippen?",
   context: "",
   points: ["Noch offen: Doku"],
   buttonsKey: "ready",
@@ -541,7 +541,7 @@ describe("cardWidgetHtml", () => {
   });
 
   test("no buttons when buttonsKey is null (pending/concept/batch overrides)", () => {
-    const html = cardWidgetHtml(baseModel({ buttonsKey: null, heading: "⏳ Noch nicht fertig — 1 Agent arbeitet", points: [] }), "");
+    const html = cardWidgetHtml(baseModel({ buttonsKey: null, heading: "⏳ 🤖 Agents — noch nicht fertig — 1 Agent arbeitet", points: [] }), "");
     expect(html).not.toMatch(/<span role="button"/);
   });
 
@@ -814,7 +814,7 @@ describe("cardWidgetHtml", () => {
           { label: "5h", pct: 40, elapsedPct: 40, level: "white", watermark: "3 h", tooltip: "t" },
         ],
       },
-      heading: "📦 Shippen?",
+      heading: "👉 📦 Ready — Shippen?",
       context: "› Läuft auf http://127.0.0.1:5173/app.",
       points: ["Noch offen: Doku", "Nach dem Deploy testen"],
       buttonsKey: "ready",

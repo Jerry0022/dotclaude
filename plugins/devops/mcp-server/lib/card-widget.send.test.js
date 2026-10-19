@@ -25,7 +25,7 @@ const model = (over = {}) => ({
   budget: { omitted: true, bars: [], contextHealth: "" },
   pipeline: "",
   pipelinePr: null,
-  heading: "📦 Shippen?",
+  heading: "👉 📦 Ready — Shippen?",
   context: "",
   points: [],
   buttonsKey: "ready",

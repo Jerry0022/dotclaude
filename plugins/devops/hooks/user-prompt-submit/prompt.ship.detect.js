@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.ship.detect
- * @version 0.8.1
+ * @version 0.8.2
  * @event UserPromptSubmit
  * @plugin devops
  * @description Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
@@ -9,7 +9,7 @@
  *   "merge it", "das kann rein", "fertig", and affirmations after a completion
  *   card ("ja", "yes", "mach", "go", "do it"). The keyword list lives in
  *   lib/ship-intent.js, shared with prompt.flow.title-work so a ship prompt
- *   is marked `🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
+ *   is marked `⏳ 🚀 Shipping – ` in the sidebar, never the bare `⏳ `.
  *   Above a context threshold the mandate becomes the delegate instruction
  *   from lib/ship-delegate.js: the ship would re-read that context ~25
  *   times, so the main session briefs a fresh-context subagent that runs

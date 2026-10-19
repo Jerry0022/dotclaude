@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook post.flow.completion
- * @version 0.31.0
+ * @version 0.31.1
  * @event PostToolUse
  * @plugin devops
  * @description Keeps the completion-card contract in Claude's context: on the
@@ -958,8 +958,8 @@ function backgroundLaunchLines(hook) {
       'waker) under `pending`; stop.flow.guard ignores these tasks. While the concept',
       'stays open, render every completion card with the `concept` field instead:',
       '  concept: { phase: "waiting" | "iterating" | "implementing" }',
-      'That sets the CTA to "🧭 CONCEPT wartet auf deine Entscheidungen /',
-      'in Iteration / in Implementierung — ich MELDE',
+      'That sets the CTA to "👉 🧭 Concept — wartet auf deine Entscheidungen" /',
+      '"⏳ 🧭 Concept — in Iteration / in Implementierung — ich melde',
       'mich". Real content agents or workflows still go into `pending` and follow',
       'that line as their own sentence ("… in Implementierung. 2 Agenten arbeiten").',
     ];
@@ -971,7 +971,7 @@ function backgroundLaunchLines(hook) {
       'It keeps running after you hand the turn back. If you finish this turn before',
       'its result arrives, the completion card MUST carry the `pending` field:',
       `  pending: [{ name: "${launched.name}", kind: "${launched.kind}", doing: "<what it is working on>" }]`,
-      'That replaces the CTA of every variant with "⏳ NOCH NICHT FERTIG. … — ich MELDE',
+      'That replaces the CTA of every variant with "⏳ 🤖 Agents — noch nicht fertig … — ich melde',
       'mich" — without it the card would tell the user to SHIP or act on a result that',
       'does not exist yet. stop.flow.guard detects open background work and blocks a',
       'card that omits it. Name the agent/workflow/task; NEVER put an internal agentId in the card.',

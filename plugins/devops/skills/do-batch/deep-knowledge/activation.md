@@ -36,7 +36,7 @@ works.
 ## Session title prefix (Step 2.2b)
 
 Normal path: the 2.2 `activate` command is answered by `post.flow.title-mode`
-with the exact `📥 Batch – {title}` (computed by `batchTitle` in
+with the exact `👉 📥 Batch – {title}` (computed by `batchTitle` in
 `hooks/lib/session-title.js` — the rules of steps 2–4 below). Call
 `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and that
 title in the same message as your next tool call; no block → already marked.
@@ -47,11 +47,11 @@ first with one `ToolSearch`
 `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`.
 
 1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-2. If `title` already starts with `📥 Batch – `: done.
-3. Strip any leading devops prefix (`⏳ `, `📦 Ready – `, `🧪 Test – `,
-   `🧭 Concept – `, … — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
+2. If `title` already starts with `👉 📥 Batch – `: done.
+3. Strip any leading devops prefix (`⏳ `, `👉 📦 Ready – `, `👉 🧪 Test – `,
+   `👉 🧭 Concept – `, … and the legacy single-icon forms — the `SESSION_PREFIX` and `LEGACY_PREFIXES` values in
    `mcp-server/lib/mode-state.js`) left by the first-prompt hourglass or an
-   earlier card — never stack them (`📥 Batch – 🔧 Foo` is the bug).
+   earlier card — never stack them (`👉 📥 Batch – 🔧 Foo` is the bug).
 4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
    `title: "📥 Batch – {stripped title}"`.
 
@@ -74,7 +74,7 @@ fi
 ## Activation card (Step 2.5)
 
 The card carries the whole confirmation: the heading
-`📥 Batch sammelt — {n} Einträge`, a context line
+`👉 📥 Batch sammelt — {n} Einträge`, a context line
 (`{n} Notizen · nächster Prompt wird Notiz #{n+1} · "{marker}" löst aus`) and
 three points — how collecting works (the red panel is normal), how to fire
 (`<marker> <text>` or `/do-batch go`), how to only stop (`/do-batch off`) plus
