@@ -434,6 +434,8 @@ re-entering this loop.
 
 After the last wave (or when a `needs-decision` stops the run):
 
+0. **Integration proof** — `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <integration-branch> --sub <parts> --remove`. Pass the run's own parts as `--sub <branch|path,...>`; `--remove` deletes only those (or branches carrying the whole run slug) and only when landed, clean, with own commits and idle ≥30 min — other runs' agent worktrees are listed, never removed. Its `open` line ("ungelandet: N Teile" + paths) goes into `open:` verbatim; unlanded or uncommitted agent work is never `done:`.
+
 1. Summarize what each agent accomplished
 2. List any unresolved findings or open questions
 3. Show final branch/PR state

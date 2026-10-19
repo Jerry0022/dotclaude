@@ -199,3 +199,41 @@ directory is left on disk with no `.git` file and tens of thousands of files
   manually" to the user leaves the cleanup half done. Any entry outside that
   list (an untracked file, a local note) → keep the folder and name that
   entry. Uncommitted work is never deleted.
+
+## At-risk work and the park register
+
+Post-ship hygiene removes only what is provably landed. Everything else is
+kept — and, since the at-risk definition was widened, reported.
+
+**Landing state** (`landingState` in `mcp-server/ship/lib/hygiene.js`):
+`landed` (ancestor of the default branch, head of a merged PR, a trial
+`merge-tree` that changes nothing, or every touched file's patch reverse-applies
+to the base), `partial` (some files' changes are in the base, others are not —
+a squash merge plus later edits) or `unlanded`. `partial` is never removable.
+
+**At risk** = not landed (`unlanded` or `partial`) AND no open PR AND no live
+session AND not parked; plus any worktree (session or agent) with real
+uncommitted changes (regenerable output, tooling bookkeeping and `.claude/`
+runtime state do not count). The card line carries commits, `n/m files landed`
+for partial, `unpushed` and `uncommitted`. Offline (no merged-PR list) the
+unlanded half stays silent — a squash-merged branch looks the same.
+
+**Parked** = deliberately set-aside, unlanded work someone wants to keep. One
+prefix: `parked/<topic>`. Read-only legacy aliases, still recognized and never
+created again: `wip/`, `backup/`, `salvage/`, and any branch whose tip subject
+contains `ARCHIVED`. The register is derived from refs
+(`hooks/lib/park-register.js`) — no state file; reason and date are the tip
+commit's subject and date. A parked entry older than 30 days gets the nudge
+"behalten, integrieren oder verwerfen" in the orphan report. Stashes are
+listed per repo in the same report.
+
+**Shipped or landed branches are never parked.** They are landed leftovers;
+hygiene removes them automatically (and `orphan-scan --clean-landed` does it
+on demand). The orphan report drops a landed branch from `parked` even when it
+carries a `parked/` name.
+
+**Machine-wide view:** `scripts/orphan-scan.js` (daily; refreshed by the
+`ss.orphan.nudge` SessionStart hook) scans every repo under the parent folder
+of the main checkout and writes `~/.claude/orphan-report.json`; the hook then
+shows `⚠ N ungelandete Branches / M Worktrees mit uncommitteter Arbeit →
+/auto-cleanup` for the current repo. See `scheduled-tasks/orphan-scan/SKILL.md`.

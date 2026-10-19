@@ -83,6 +83,12 @@ const SCHEMA = Object.freeze({
       doc: 'auto-concept: write each follow-up round (2+) in a sub-agent, so the session context stays small over many rounds.',
     }),
   }),
+  sessionEnd: Object.freeze({
+    autosave: Object.freeze({
+      type: 'enum', values: Object.freeze(['push', 'local', 'off']), default: 'local',
+      doc: 'Session worktree with unsaved work and no open PR when a turn ends: "local" (default) = snapshot to a local parked/autosave/<name> branch, "push" = also push it (never force), "off" = nothing. Your branch, index and files are never touched.',
+    }),
+  }),
   deployParity: Object.freeze({
     enabled: Object.freeze({
       type: 'boolean', default: true,
@@ -141,6 +147,7 @@ function isValid(spec, value) {
       && (spec.min === undefined || value >= spec.min)
       && (spec.max === undefined || value <= spec.max);
   }
+  if (spec.type === 'enum') return spec.values.includes(value);
   return false;
 }
 
@@ -162,6 +169,8 @@ function readValue(spec, raw) {
     else if (FALSE_WORDS.includes(text)) value = false;
   } else if (spec.type === 'integer' && /^-?\d+$/.test(text)) {
     value = Number(text);
+  } else if (spec.type === 'enum') {
+    value = text;
   }
   return value !== undefined && isValid(spec, value) ? value : undefined;
 }
@@ -179,7 +188,7 @@ function parseValue(fullKey, raw) {
   if (value === undefined) {
     const range = spec.type === 'integer'
       ? `an integer${spec.min !== undefined ? ` ≥ ${spec.min}` : ''}${spec.max !== undefined ? ` and ≤ ${spec.max}` : ''}`
-      : 'true or false';
+      : spec.type === 'enum' ? `one of ${spec.values.join(', ')}` : 'true or false';
     throw new Error(`invalid value "${raw}" for ${fullKey} — expected ${range}`);
   }
   return value;
