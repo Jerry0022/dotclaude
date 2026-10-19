@@ -146,6 +146,30 @@ describe("orphan-scan", () => {
     expect(fs.existsSync(stale)).toBe(false);
   });
 
+  test("--clean-landed dry-run keeps an old-branch worktree with recent index or file activity", async () => {
+    const root = mkRoot();
+    const r = repoIn(root, "app");
+    const later = Date.now() + 5 * DAY;
+    const old = new Date(later - 5 * DAY);
+    const mk = (name) => {
+      const wt = path.join(r, ".claude", "worktrees", name);
+      git(r, "worktree", "add", "-q", "-b", name, wt, "main");
+      for (const f of ["index", "HEAD", path.join("logs", "HEAD")]) {
+        try { fs.utimesSync(path.join(r, ".git", "worktrees", name, f), old, old); } catch { /* optional */ }
+      }
+      for (const n of fs.readdirSync(wt)) if (n !== ".git") fs.utimesSync(path.join(wt, n), old, old);
+      return wt;
+    };
+    mk("idle-one");
+    mk("index-touched");
+    const edited = mk("file-edited");
+    const recent = new Date(later - 10 * 60_000);
+    fs.utimesSync(path.join(r, ".git", "worktrees", "index-touched", "index"), recent, recent);
+    fs.utimesSync(path.join(edited, "a.txt"), recent, recent);
+    const dry = await cleanLanded(r, { apply: false, now: later, ...opts });
+    expect(dry.would.filter((x) => x.kind === "worktree").map((x) => path.basename(x.path))).toEqual(["idle-one"]);
+  });
+
   test("parked/autosave/* is listed under parked in the report, not at risk", async () => {
     const root = mkRoot();
     const r = repoIn(root, "app");

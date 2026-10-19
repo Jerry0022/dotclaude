@@ -172,6 +172,23 @@ function isProtectedBranch(repo, name, head) {
   return gitOut(['rev-parse', '--verify', '-q', `refs/remotes/origin/${name}`], repo) !== null;
 }
 
+/**
+ * Newest mtime of the worktree's top-level entries (files and directories,
+ * `.git` excluded). Editing a tracked file without staging touches neither the
+ * branch nor the git admin files that feed `activityMs`. Unreadable -> `now`
+ * (fail closed: treated as active).
+ */
+function worktreeTreeActivityMs(wtPath, now) {
+  let names;
+  try { names = fs.readdirSync(wtPath); } catch { return now; }
+  let last = 0;
+  for (const n of names) {
+    if (n === '.git') continue;
+    try { last = Math.max(last, fs.lstatSync(path.join(wtPath, n)).mtimeMs); } catch { /* vanished */ }
+  }
+  return last;
+}
+
 /** Dry-run or apply the safe removal of landed leftovers in one repo. */
 async function cleanLanded(repo, { apply, now = Date.now(), projectsDir, fetch: doFetch, fetchMerged, fetchOpen } = {}) {
   const hy = await loadHygiene();
@@ -180,8 +197,11 @@ async function cleanLanded(repo, { apply, now = Date.now(), projectsDir, fetch: 
   const remove = [];
   for (const u of r.cls.removable) {
     // a worktree must have been idle for CLEAN_MIN_IDLE_MS — "landed" alone also
-    // matches a fresh checkout at main or a session idle for just over 2 h
-    if (u.kind === 'worktree' && now - u.activityMs < CLEAN_MIN_IDLE_MS) continue;
+    // matches a fresh checkout at main or a session idle for just over 2 h.
+    // activityMs = max(commit time, <gitdir>/index|HEAD|logs/HEAD); live/moved
+    // sessions are already excluded from `removable` (hygiene keepReason)
+    if (u.kind === 'worktree' && (now - u.activityMs < CLEAN_MIN_IDLE_MS
+      || now - worktreeTreeActivityMs(u.path, now) < CLEAN_MIN_IDLE_MS)) continue;
     const keepBranch = u.branch ? isProtectedBranch(repo, u.branch, u.head) : false;
     if (u.kind === 'branch' && keepBranch) continue;
     remove.push({ ...u, trigger: 'orphan-scan', ...(keepBranch ? { keepBranch: true } : {}) });
