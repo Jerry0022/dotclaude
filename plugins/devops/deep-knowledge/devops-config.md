@@ -94,3 +94,9 @@ the committed ship extension (`deployParity:` block in the project's
 "Session nach dem Ship nicht archivieren" → `ship.archiveAfterShip false`.
 Background: `deep-knowledge/claude-desktop-app-setup.md` § Session archiving
 after ship.
+
+### `sessionEnd` — safety net for unsaved session work
+
+| Key | Default | Meaning |
+|---|---|---|
+| `autosave` | `push` | When a turn ends in a session worktree (`.claude/worktrees/<name>`) holding uncommitted work or unpushed commits and no open PR, `stop.session.autosave` WIP-commits on the session branch (never main/master) and pushes it (`push`; a non-fast-forward goes to `parked/autosave/<branch>`, never forced). `local` = commit only, `off` = nothing. At most once per 10 min per worktree; skipped during a ship. |
