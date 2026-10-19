@@ -43,7 +43,12 @@ node scripts/orphan-scan.js --clean-landed [--repo <path>] --apply   # delete
 
 Uses the existing safe removal, ignoring the age/count gates. Never touches
 live-session worktrees, the current worktree, locked or dirty worktrees, or
-anything not landed. Remote branches are not deleted.
+anything not landed. Worktrees must also have been idle for 24 h. Branches
+are spared when they are long-lived (`develop`, `staging`, `production`,
+`stable`, `trunk`, `release/*`, `hotfix/*`), parked (`parked/*` incl.
+`parked/autosave/*`, `wip/`, `backup/`, `salvage/`, "ARCHIVED" tip) or still
+have an upstream on origin (a worktree on such a branch is removed, the branch
+stays). Remote branches are not deleted.
 
 ## Constraints
 
