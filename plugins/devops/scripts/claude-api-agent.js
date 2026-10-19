@@ -45,7 +45,7 @@ const MAX_GREP_HITS = 200;
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.claude/worktrees']);
 // Secret-shaped files are never listed, read or searched: a key must not
 // reach the request body, whatever the root or an injected instruction says.
-const SECRET_FILE = /^(\.env(\..*)?|devops-api\.env|.*\.(pem|key|p12|pfx)|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|\.npmrc|\.netrc|credentials(\.json)?)$/i;
+const SECRET_FILE = /^(\.env(\..*)?|devops-api\.env|.*\.(pem|key|p12|pfx)|id_(rsa|dsa|ecdsa|ed25519).*|\.npmrc|\.netrc|\.pypirc|\.git-credentials|.*\.tfvars|credentials(\.json)?)$/i;
 const MAX_PATTERN = 300;
 const GREP_BUDGET_MS = 20000;
 
@@ -126,7 +126,11 @@ function inside(root, rel) {
   try { real = fs.realpathSync(abs); } catch { /* missing — the caller reports it */ }
   const rr = path.relative(fs.realpathSync(root), real);
   if (rr.startsWith('..') || path.isAbsolute(rr)) throw new Error(`path resolves outside the project root: ${rel}`);
-  if (SECRET_FILE.test(path.basename(abs))) throw new Error(`secret-shaped file is off limits: ${rel}`);
+  // NTFS aliases (ADS `.env::$DATA`, trailing dot/space, 8.3 names) and symlinks
+  // must not slip past the name test: check the typed name AND the real one.
+  const typed = path.basename(abs);
+  if (/:/.test(typed) || (typed !== '.' && typed !== '..' && /[. ]$/.test(typed))) throw new Error(`unsupported path form: ${rel}`);
+  if (SECRET_FILE.test(typed) || SECRET_FILE.test(path.basename(real))) throw new Error(`secret-shaped file is off limits: ${rel}`);
   return abs;
 }
 

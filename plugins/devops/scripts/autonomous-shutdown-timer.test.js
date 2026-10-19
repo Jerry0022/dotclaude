@@ -126,3 +126,12 @@ describe("isCacheFresh — gate for the pre-arm usage refresh", () => {
     expect(isCacheFresh(atNow(180, -5), NOW)).toBe(false);
   });
 });
+
+describe("child-process bounds (audit 2026-10-20)", () => {
+  test("every shutdown.exe call carries a timeout", () => {
+    const src = require("fs").readFileSync(require("path").join(__dirname, "autonomous-shutdown-timer.js"), "utf8");
+    const calls = src.match(/spawnSync\([^;]*;/gs).filter((c) => /exe|shutdownExe/.test(c));
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+    for (const c of calls) expect(c).toMatch(/timeout:/);
+  });
+});

@@ -260,6 +260,12 @@ function removeRegistrationsFor(flagPath, { spawn = spawnSync, sentinels = listS
  *          recoveryFlagPath?:string, workingDir?:string, resumePrompt?:string}} o
  * @returns {string} PowerShell script body, written to a self-deleting .ps1.
  */
+/** Quote one argument per the Windows CommandLineToArgvW rules. */
+function quoteWinArg(arg) {
+  const q = String(arg).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1');
+  return `"${q}"`;
+}
+
 function buildRecoveryScript({
   action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt, taskName,
 }) {
@@ -289,7 +295,9 @@ function buildRecoveryScript({
   } else if (action === 'resume') {
     const recoveryFlagPs = String(recoveryFlagPath || '').replace(/'/g, "''");
     const dirPs = String(workingDir || '').replace(/'/g, "''");
-    const promptPs = String(resumePrompt || '').replace(/'/g, "''");
+    // Start-Process joins an -ArgumentList array with spaces and adds no quotes,
+    // so the prompt must be ONE pre-quoted argument string (Windows argv rules).
+    const promptPs = quoteWinArg(String(resumePrompt || '')).replace(/'/g, "''");
     // notify first (always visible), then a ONE-SHOT relaunch guarded by a
     // recovery flag so a repeatedly-firing task can never fork-bomb `claude`.
     // No `claude` on PATH → notify-only, no error.
@@ -303,7 +311,7 @@ ${notifyMarker(' A one-shot resume was attempted (see watchdog log).')}
     $claude = Get-Command claude -ErrorAction SilentlyContinue
     if ($claude) {
       try {
-        Start-Process -FilePath $claude.Source -ArgumentList @('-p','${promptPs}') -WorkingDirectory '${dirPs}' -WindowStyle Hidden
+        Start-Process -FilePath $claude.Source -ArgumentList '-p ${promptPs}' -WorkingDirectory '${dirPs}' -WindowStyle Hidden
         Add-Content -Path $logPath -Value "[$ts] resume launched via $($claude.Source)"
       } catch {
         Add-Content -Path $logPath -Value "[$ts] resume launch FAILED: $($_.Exception.Message)"
@@ -409,7 +417,7 @@ function runReap(args) {
   const removed = [];
   if (apply) {
     for (const r of remove) {
-      const del = spawnSync('schtasks.exe', ['/Delete', '/TN', r.name, '/F'], { encoding: 'utf8', windowsHide: true });
+      const del = spawnSync('schtasks.exe', ['/Delete', '/TN', r.name, '/F'], { ...SPAWN_OPTS });
       if (del.status !== 0) continue;
       if (r.script && isValidWatchdogScriptPath(r.script)) {
         try { fs.unlinkSync(r.script); } catch { /* already gone */ }
@@ -667,6 +675,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  quoteWinArg,
   buildRegisterPsCommand,
   buildRecoveryScript,
   buildReapQueryPs,
