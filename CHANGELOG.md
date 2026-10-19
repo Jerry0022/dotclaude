@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.269.0] — 2026-10-19
+
+Opt-in: the monthly Claude API credit of a Max/Team plan can now carry devops' second-opinion review whenever Codex is skipped. Claude Code itself stays on the plan.
+
+### Added
+- **`apiCredit` settings (`devops-config`)**: `apiCredit.enabled` and `apiCredit.webGuide`, both off by default. They are switched on by saying "nutze mein API-Guthaben", which asks two questions and writes both answers globally. Runbook in `deep-knowledge/api-credits.md`, and a new README section *Claude API credits*.
+- **`scripts/claude-api-safe.js`**: one Messages API call with its own key (`DEVOPS_ANTHROPIC_API_KEY`, read from the environment or `~/.claude/devops-api.env`; it never reads `ANTHROPIC_API_KEY`). It follows the same exit-code contract as `codex-safe.sh`:
+  - 0: OK
+  - 75: credit empty or workspace spend limit reached; remembered for 12 h
+  - 124: timeout
+  - 126: switched off
+  - 127: no key
+
+  `--status` reports the setup and never prints the key.
+- **Claude API fallback for the Codex review**: when Codex returns 75, 124 or 127, every Codex integration point sends the same prompt once through `claude-api-safe.js`. The do-ship Step 2 review is one of them. The fallback is advisory only and never blocks a ship.
+- **`web-guide.js store --user`**: stores a per-user secret under `~/.claude` (a bare file name only). The guided Console setup uses it to save the API key outside any project.
+- **Knowledge dispatch**: prompts that mention "API-Guthaben", "API credits", "Aktionsguthaben" or "promo credits" load `api-credits.md`.
+
 ## [0.268.10] — 2026-10-19
 
 Concept pages translate every label again, and the test suite runs green on a machine that does not enable the plugin in its settings (cloud sessions, CI).
