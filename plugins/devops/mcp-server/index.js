@@ -2782,7 +2782,9 @@ server.registerTool(
       "No recap before it either: the card IS the summary of the work — never restate in prose " +
       "what it already shows (changes, tests, version, PR, open items, restart hints). The answer " +
       "to the user's question is no recap: write it in full as text before the card — the card " +
-      "never carries it, its summary is a title, not the answer (#642). Text before the card is " +
+      "never carries it, its summary is a title, not the answer (#642). A report the running " +
+      "skill requires (e.g. auto-fix: root cause with file:line) is part of that answer, even where " +
+      "`changes` names the same fix. Text before the card is " +
       "also for other topics of the user's prompt, points beyond the card's three, hook blocks " +
       "still marked for the user. " +
       "On the Desktop app the result carries a CARD WIDGET block instead of markdown: that " +

@@ -4,6 +4,54 @@ Filled from `TRIM-TEMPLATE.md`. Variant A = the skill's text before the trim,
 variant B = the trimmed text. Two attempts, both reverted: the retry (#720)
 first, the first attempt (#651) below it.
 
+## Follow-up — card wins over the Step 8 report (fixed)
+
+Not a trim: a fix for the failure mode both #720 and #651 hit. Runs loaded
+the skill, found and fixed the root cause, then rendered the card without the
+Step 8 report.
+
+**Cause.** On the turn's first tool call, `post.flow.completion` injects the
+card contract. That contract says "NO RECAP before the card … never restate
+in prose what it already shows (changes, …)". The card tool description and
+the widget instruction say the same. Step 9 tells the model to put "file:line
+of root cause → what was fixed" into `changes`. So the Step 8 report was the
+same content the card shows, and the model took it for a forbidden recap. The
+#642 exception covered only "the answer to the user's question", and a fix
+request does not read as a question. Step 8 also never said that the report
+is text written before the card call.
+
+**Fix.**
+- `SKILL.md` Step 8: write the report as text before the Step 9 card call. It
+  is the answer (#642), not a recap, and stays even when `changes` names the
+  same fix. Step 9 starts only once the report is written.
+- `post.flow.completion.js`, the card tool description (`mcp-server/index.js`)
+  and `card-widget.js`: a report the running skill requires (for example
+  auto-fix's root cause with file:line) counts as part of the answer.
+- The Stop-hook "FIRST action" ladder is unchanged on purpose.
+
+A = `origin/main` 19cf58d7, B = this working tree (skill and hooks), 4 runs
+per variant:
+`node plugins/devops/evals/ab-run.js --case 'skills/auto-fix/*' --a-ref origin/main --runs 4 --timeout-min 12`
+
+| Case | Grader | A | B |
+|---|---|---|---|
+| explicit-off-by-one | fix-skill | 4/4 | 4/4 |
+| explicit-off-by-one | loop-fixed | 4/4 | 4/4 |
+| explicit-off-by-one | root-cause-before-edit | 4/4 | 4/4 |
+| explicit-off-by-one | reports-file-line | 3/4 | **4/4** |
+| off-by-one-root-cause | fix-skill | 3/4 | 3/4 |
+| off-by-one-root-cause | loop-fixed | 4/4 | 4/4 |
+| off-by-one-root-cause | root-cause-before-edit | 4/4 | 4/4 |
+| off-by-one-root-cause | reports-file-line | 2/4 | **4/4** |
+
+Pass rate A 28/32, B 31/32. Tokens A 6,423,223 / B 6,951,876, cost
+$12.19 / $12.42, mean duration 151 s / 157 s, 0 errors. `reports-file-line`
+went from 5/8 to 8/8, and no grader regressed. The one B miss is
+`fix-skill` in the natural case, which is routing: that run fixed the bug
+inline without loading the skill, and A has the same miss. An earlier
+invocation the same evening returned 401 on all 16 runs (revoked OAuth
+token). It was re-run after `claude auth login`.
+
 ## Retry — #720 (low-risk cuts only)
 
 ### Skill
