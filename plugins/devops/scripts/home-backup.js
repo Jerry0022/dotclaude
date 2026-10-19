@@ -450,7 +450,9 @@ function setup(opts = {}) {
   const job = scheduler.registerJob({
     name: JOB_NAME,
     schedule: { kind: 'daily', time: JOB_TIME },
-    command: [process.execPath, path.resolve(__filename), 'run'],
+    command: scheduler.launcherCommand({
+      name: JOB_NAME, script: 'scripts/home-backup.js', args: ['run'], home: ctx.home, pluginRoot: path.resolve(__dirname, '..'),
+    }),
   }, schedulerIo(ctx));
   if (!job.ok) return stop(`could not register the daily job: ${job.detail}`);
 

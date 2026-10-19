@@ -444,7 +444,9 @@ function enable(io = {}, args = {}) {
     const day = cfg.load(home, { home }).values.wipWatch.day;
     const job = scheduler.registerJob({
       name: JOB, schedule: { kind: 'weekly', day, time: JOB_TIME },
-      command: [process.execPath, io.scriptPath || __filename, 'run'],
+      command: scheduler.launcherCommand({
+        name: JOB, script: 'scripts/wip-watch.js', args: ['run'], home, pluginRoot: path.resolve(__dirname, '..'),
+      }),
     }, { platform: io.platform, run: io.run });
     if (!job.ok) return { ok: false, detail: `job registration failed: ${job.detail}` };
     cfg.setValue('wipWatch.enabled', true, 'global', home, { home });

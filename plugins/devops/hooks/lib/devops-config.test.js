@@ -160,3 +160,30 @@ describe("scripts/devops-config.js — the CLI Claude calls", () => {
     expect(err).toMatch(/invalid value "viele"/);
   });
 });
+
+describe("machine-level opt-ins: string, enum and list settings (homeBackup, wipWatch)", () => {
+  test("defaults are off and typed", () => {
+    const home = mkTmp("cfg-home-");
+    const v = cfg.load(home, { home }).values;
+    expect(v.homeBackup).toEqual({ enabled: false, repo: "" });
+    expect(v.wipWatch).toEqual({ enabled: false, roots: ["~/IdeaProjects"], day: "sun", discardAfterWeeks: 8 });
+  });
+
+  test("parseValue: repo pattern, weekday words, comma lists", () => {
+    expect(cfg.parseValue("homeBackup.repo", " Jerry0022/claude-home ")).toBe("Jerry0022/claude-home");
+    expect(() => cfg.parseValue("homeBackup.repo", "not a repo")).toThrow(/expected text matching/);
+    expect(cfg.parseValue("wipWatch.day", "Sunday")).toBe("sun");
+    expect(() => cfg.parseValue("wipWatch.day", "someday")).toThrow(/one of mon/);
+    expect(cfg.parseValue("wipWatch.roots", "~/IdeaProjects, D:/code ,")).toEqual(["~/IdeaProjects", "D:/code"]);
+    expect(() => cfg.parseValue("wipWatch.roots", " , ")).toThrow(/comma-separated/);
+  });
+
+  test("they are global only, and a hand-edited wrong type falls back to the default", () => {
+    const home = mkTmp("cfg-home-");
+    expect(() => cfg.setValue("wipWatch.enabled", "true", "project", home, { home })).toThrow(/machine-wide/);
+    cfg.setValue("wipWatch.roots", ["C:/a", "C:/b"], "global", home, { home });
+    expect(cfg.load(home, { home }).values.wipWatch.roots).toEqual(["C:/a", "C:/b"]);
+    fs.writeFileSync(path.join(home, ".claude", "devops-config.json"), JSON.stringify({ wipWatch: { roots: [], day: 7 } }));
+    expect(cfg.load(home, { home }).values.wipWatch).toMatchObject({ roots: ["~/IdeaProjects"], day: "sun" });
+  });
+});
