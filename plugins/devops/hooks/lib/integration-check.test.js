@@ -163,6 +163,27 @@ describe('wipCommit', () => {
     }
   });
 
+  test('N6: nested junctions/symlinks are never followed or staged', async () => {
+    g(main, 'checkout', '-b', 'topic');
+    const outside = path.join(root, 'outside');
+    fs.mkdirSync(path.join(outside, 'deep'), { recursive: true });
+    fs.writeFileSync(path.join(outside, 'leak.txt'), 'leak');
+    fs.writeFileSync(path.join(outside, 'deep', 'leak2.txt'), 'leak');
+    fs.mkdirSync(path.join(main, 'packages', 'x'), { recursive: true });
+    fs.symlinkSync(outside, path.join(main, 'packages', 'x', 'node_modules'), 'junction');
+    fs.symlinkSync(outside, path.join(main, 'packages', 'x', 'vendor'), 'junction');
+    fs.writeFileSync(path.join(main, 'packages', 'x', 'ok.txt'), 'ok');
+    const { savablePaths } = require('./wip-commit.js');
+    const { paths, skipped } = await savablePaths(main);
+    expect(paths.map(n)).toEqual(['packages/x/ok.txt']);
+    expect(skipped.some((s) => s.path.startsWith('packages/x/vendor') && s.why === 'link')).toBe(true);
+    const r = await wipCommit(main, 'wip: n6');
+    expect(r.committed).toBe(true);
+    const files = g(main, 'show', '--name-only', '--format=', r.sha).split('\n').map(n);
+    expect(files).toEqual(['packages/x/ok.txt']);
+    expect(fs.readFileSync(path.join(outside, 'leak.txt'), 'utf8')).toBe('leak');
+  });
+
   test('R4: secrets, build output, tooling files and big files are left out and reported', async () => {
     g(main, 'checkout', '-b', 'topic');
     const bad = ['.env', '.env.local', 'cert.pem', 'id_rsa', 'prod-credentials.json', 'dump.sql', 'dist/app.js',
