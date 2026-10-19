@@ -1,0 +1,93 @@
+<section data-iteration="7" data-iteration-template="free" data-final-report>
+  <div class="iteration-intro">
+    <h2>{{iteration.final_tab}}</h2>
+    <p>Die Varianten-Übersicht ist in der Concept-Engine gebaut. Jede Design-Runde mit zwei oder mehr Designs bekommt sie ab jetzt automatisch. Runden mit nur einem Design sehen aus wie bisher.</p>
+  </div>
+
+  <section id="summary" data-nav-label="Zusammenfassung">
+    <h3>Zusammenfassung</h3>
+    <p>Branch <code>feat/concept-variant-overview</code> (auf origin/main <code>849cb03b</code>), drei Commits:</p>
+    <ul>
+      <li><code>c5db35f3</code>: Engine mit Übersicht, Header, Schnellauswahl, Hotkeys und Strg-Punkten.</li>
+      <li><code>065b04f4</code>: Tests.</li>
+      <li><code>48413c0d</code>: Docs und Gate.</li>
+    </ul>
+    <p>Noch nichts gepusht oder geshippt.</p>
+    <ul>
+      <li><b>Übersicht</b> ist der erste Eintrag einer Runde. Pro Design gibt es eine Karte mit:
+        <ul>
+          <li>Icon, Name und Motto,</li>
+          <li>einer Live-Mini-Vorschau des ersten Screens (ein Klick öffnet das Design),</li>
+          <li>Chips für die Unterseiten,</li>
+          <li>drei echten Unterschieden,</li>
+          <li>der Anzahl der Notizen (💬 N),</li>
+          <li>einem Knopf <b>☆ Favorit</b>.</li>
+        </ul>
+      </li>
+      <li><b>Favorit</b> ist optional, es gibt höchstens einen. Im Payload steht <code>favorite: &lt;designId&gt;|null</code>. Mit Favorit startet die nächste Runde von diesem Design, deine Kommentare zu den anderen Designs fließen trotzdem ein. Ohne Favorit entscheide ich anhand deiner Kommentare.</li>
+      <li><b>Header oben links</b> ist eingeklappt halbtransparent und zeigt nur Icon, Name, ★ (wenn gesetzt) und das Auge. Beim Überfahren wächst er als eine Karte über den Inhalt, ohne dass sich etwas verschiebt. In einem Design steht vorne leise „▦ Übersicht“, ohne Pfeil.</li>
+      <li><b>Schnellauswahl oben Mitte</b>: Zeile 1 enthält die Designs mit einheitlich getönten Icons. Zeile 2 erscheint nur, wenn es Fragen-Seiten ohne Designbezug gibt.</li>
+      <li><b>Hotkeys</b>, nie aktiv in Textfeldern:
+        <ul>
+          <li>Esc: Übersicht</li>
+          <li>1–9: Design</li>
+          <li>Shift+1–9: Fragen-Seite</li>
+          <li>Tab: nächste Unterseite, nur wenn nichts fokussiert ist</li>
+          <li>F: Favorit</li>
+          <li>Alt+1–9: Iteration</li>
+          <li>?: Übersicht aller Kürzel</li>
+          <li>Strg+Enter: abschicken</li>
+          <li>N: Notizen</li>
+        </ul>
+      </li>
+      <li><b>Tooltips</b>: pro Element genau einer, mit Text und Tastenkappe, z. B. „Cockpit [1]“. Er erscheint nach 1,5 s, bei Tastatur-Fokus sofort.</li>
+      <li><b>☰-Menü</b>: Das Icon ist nur noch ein kleiner Präfix vor dem Namen, die Unterseiten stehen eingerückt darunter.</li>
+      <li><b>Strg + Klick</b> setzt einen eigenen Kommentar-Punkt, nur mit Kommentarfeld. Solange Strg gedrückt ist, steht unten in der Mitte ein Hinweis. Im Payload steht <code>userPins</code> mit Screen, Position und getroffenem Element. Auf Touch-Geräten setzt du den Punkt über einen Knopf im ausgeklappten Header.</li>
+      <li><b>Neue Attribute für Concepts</b>: <code>data-design-motto</code>, <code>data-design-traits</code>, <code>data-design-icon</code> und optional <code>data-design-color</code>. Fehlen sie, gibt es nur eine Warnung, keinen Fehler.</li>
+    </ul>
+    <p><b>Nicht ganz umgesetzt:</b> Eigene Punkte lassen sich nur in der Desktop-Ansicht setzen und anzeigen, in der Tablet- und Handy-Ansicht nicht. Dort sind die Screens Kopien, in denen der Punkt keinen festen Platz hat.</p>
+    <p><b>Abgleich mit main:</b> Während der Runden ist main weitergelaufen. Die einzige Überschneidung war <code>concept-build.js</code> mit neuen Sprach-Schlüsseln (#745). Die Arbeit baut auf dieser neuen Version auf, es gibt keinen Konflikt.</p>
+    <p><b>Abweichung beim Wortlaut:</b> In der Oberfläche steht weiter „Design“ statt „Variante“ (z. B. „3 Designs“). So passt es zu den Texten, die die Engine schon hat.</p>
+  </section>
+
+  <section id="changed-files" data-nav-label="Geänderte Dateien">
+    <h3>Geänderte Dateien</h3>
+    <ul>
+      <li><code>skills/auto-concept/deep-knowledge/templates-design-overview.md</code>: <b>neuer Engine-Teil</b> mit <code>wireDesignOverview</code> und dem CSS. Es ist Teil 08 von 17, deshalb wurden die Kopfzeilen aller Teile neu nummeriert und <code>templates.md</code> und <code>INDEX.md</code> neu erzeugt.</li>
+      <li><code>templates-design.md</code>, <code>templates-design-js.md</code>, <code>templates-design-css.md</code>, <code>templates-design-wiring.md</code>: Andockpunkte, <code>showOverview</code> und <code>hideOverview</code>, das Dock während der Übersicht, <code>favorite</code> und <code>userPins</code> im Payload.</li>
+      <li><code>templates-persistence.md</code>, <code>templates-submit.md</code>, <code>templates-utilities.md</code> (Tastenkappe im Tooltip über <code>data-tip-key</code>), <code>templates-common.md</code> (29 Sprach-Schlüssel, de und en).</li>
+      <li><code>SKILL.md</code>, <code>step1-templates.md</code>, <code>step5-process.md</code> (Favorit und eigene Punkte in § 5a), <code>step2-build.md</code>, <code>iteration-rules.md</code>, <code>validation-gate.md</code> (V1–V5).</li>
+      <li><code>hooks/lib/concept-gate.js</code>: neue Pflicht-Anker der Engine, geschützte Klassen der Seitenleisten und <code>findDesignAuthoringWarnings</code>.</li>
+      <li><code>scripts/concept-build.js</code>: <code>bake</code> speichert jetzt auch <code>favorite</code> und <code>userPins</code> in abgeschlossenen Runden.</li>
+      <li>Tests: <code>design-overview.test.js</code> (neu, 14 Tests), <code>feedback-dock-all-templates.test.js</code>, <code>concept-gate.test.js</code>.</li>
+    </ul>
+  </section>
+
+  <section id="tests" data-nav-label="Tests &amp; Verifikation">
+    <h3>Tests &amp; Verifikation</h3>
+    <ul>
+      <li><b>Volle Suite</b> (<code>npm test</code>): 8956 bestanden, 0 fehlgeschlagen, 3 übersprungen (312 Dateien). <b>Lint</b> ist sauber.</li>
+      <li><b>Browser-Check</b> an einem frischen Concept mit 3 Designs und 2 Fragen-Seiten, Desktop-Breite 1440 px:
+        <ul>
+          <li>Die Übersicht erscheint, ein Klick auf eine Karte öffnet das Design.</li>
+          <li>Der Header wächst von 201×41 auf 407×119 px, die Oberkante des Inhalts bleibt dabei unverändert.</li>
+          <li>Die Hotkeys 1–3, Shift+1/2, Esc und F funktionieren.</li>
+          <li>Wer „12 nf?“ im Dock tippt, löst nichts aus.</li>
+          <li>Der Tooltip zeigt nach etwa 1,5 s „Game [2]“.</li>
+          <li>Ein Strg-Klick-Punkt landet im Payload und bleibt nach dem Neuladen erhalten.</li>
+          <li>Das helle Theme ist in Ordnung.</li>
+          <li>Keine JS-Fehler.</li>
+        </ul>
+      </li>
+      <li><b>Gegentest</b> mit nur einem Design: keine Übersicht, die alte Chrome bleibt.</li>
+      <li><b>Beobachtungen bei Handybreite</b> (375 px):
+        <ul>
+          <li>Ausgeklappt überdeckt der Header die Schnellauswahl, weil er als Karte über allem liegt.</li>
+          <li>Eingeklappt zeigt er in einem Design nur „Übersicht“, nicht den Design-Namen.</li>
+          <li>N öffnet das Dock, setzt den Cursor aber nicht ins Textfeld.</li>
+        </ul>
+      </li>
+      <li>Dein Beispiel-Concept zeigt die Übersicht selbst nicht, weil es mit der installierten Plugin-Version gebaut ist und Runde 6 nur ein Design hat. Nach dem Ship siehst du sie im nächsten Concept mit zwei oder mehr Designs.</li>
+    </ul>
+  </section>
+</section>

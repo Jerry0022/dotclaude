@@ -1,0 +1,749 @@
+<section data-iteration="5" data-iteration-template="design" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]},"designs":{},"screens":{"r5-s1":"bzgl. hotkey anzeigen, lieber erst bei long hovern, siehe guidelines!\n\nAußerdem verstehe ich nicht warum übersicht immer dort drunter steht und was die pfeile bedeuten, für mich kann das einfach weg, ich habe das ja schon mit dem menü links oben, dort ggf. noch ein zurück zur übersicht mit pfeil übersicht icon und übersicht wort rein bringen dezent wenn man doch zurück will.... und gerade in einer übsicht drin ist \n\nUnd zeige mir nochmal oben mitte die schnellnavigation wenn es auch noch drei seiten mit ffragen gibt die nciht zu einer der varianten gehören.","r5-s9":"irgendwie sieht der kaputt aus... Gern dort nochmal nachshcceken!","r5-s12":"der gestrichelte hinweis aber wie immer unten mitte am rand der seiete hüber dem content (so wie die fabs) und nur wenn man gerade strg ddrückt!"},"views":{}}</script>
+<style>
+/* ---- sample app (shared by all designs) ---- */
+.mock-app { border-radius: 18px; padding: 22px; min-height: 380px; box-sizing: border-box; font-family: system-ui, sans-serif; color: #1d2230; }
+.mock-zen { background: #f3f6f1; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.mock-zen-date { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #6c7a6e; }
+.mock-zen-plant { width: 140px; height: 140px; border-radius: 50%; background: #dfeadf; display: grid; place-items: center; font-size: 64px; }
+.mock-zen-goal { font-size: 24px; font-weight: 600; }
+.mock-zen-check { width: 64px; height: 64px; border-radius: 50%; border: 2px solid #5f8b6a; background: #fff; color: #5f8b6a; font-size: 28px; cursor: pointer; }
+.mock-zen-quote { font-style: italic; color: #6c7a6e; }
+.mock-zen-garden { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; align-items: end; padding: 24px; background: #e7efe4; border-radius: 14px; width: 100%; box-sizing: border-box; }
+.mock-zen-sprout { text-align: center; }
+.mock-play { background: #1f1630; color: #fff; display: flex; flex-direction: column; gap: 14px; }
+.mock-play-top { display: flex; justify-content: space-between; font-weight: 700; }
+.mock-play-lvl { background: #e8622c; padding: 4px 12px; border-radius: 999px; }
+.mock-play-flame { color: #ffb347; }
+.mock-play-xp { height: 12px; background: #3a2c52; border-radius: 6px; overflow: hidden; }
+.mock-play-xp i { display: block; height: 100%; background: linear-gradient(90deg, #ff9b3d, #ff4fa0); }
+.mock-play-quest { background: linear-gradient(135deg, #ff7a3d, #c2408f); padding: 14px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; }
+.mock-play-list { display: flex; flex-direction: column; gap: 8px; }
+.mock-play-item { background: #2c2142; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mock-play-item.done { opacity: .55; text-decoration: line-through; }
+.mock-play-item em { color: #ffb347; font-style: normal; }
+.mock-play-rank { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mock-play-rank li { background: #2c2142; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mock-play-rank li.me { outline: 2px solid #e8622c; }
+.mock-play-rank em { font-style: normal; color: #ffb347; }
+.mock-play-badges { font-size: 26px; display: flex; gap: 10px; align-items: center; }
+.mock-play-badges span { font-size: 12px; opacity: .6; }
+.mock-cock { background: #f4f7fd; display: flex; flex-direction: column; gap: 14px; }
+.mock-cock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.mock-cock-kpi { background: #fff; border: 1px solid #d6def0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.mock-cock-kpi span { font-size: 11px; color: #64708a; text-transform: uppercase; letter-spacing: .05em; }
+.mock-cock-kpi b { font-size: 22px; color: #2f62d8; font-variant-numeric: tabular-nums; }
+.mock-cock-bar { display: flex; gap: 10px; font-size: 13px; }
+.mock-cock-bar span { background: #fff; border: 1px solid #d6def0; padding: 6px 10px; border-radius: 8px; }
+.mock-cock-title { font-weight: 700; }
+.mock-cock-heat { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; }
+.mock-cock-heat i { aspect-ratio: 1; background: #2f62d8; border-radius: 3px; }
+
+/* ---- Round 3 · quiet chrome ---- */
+.d1-r5-page { position: relative; max-width: 1320px; margin: 44px auto 0; min-height: 720px; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 14px; padding: 16px 92px 90px 16px; box-sizing: border-box; font-family: system-ui, sans-serif; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.d1-r5-body { flex: 1 0 100%; margin-top: 8px; }
+.d1-r5-fab { position: absolute; width: 52px; height: 52px; border-radius: 50%; background: #58a6ff; color: #0d1117; display: grid; place-items: center; font-size: 22px; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.d1-r5-fab-menu { top: 14px; right: 18px; }
+.d1-r5-fab-menu.on { box-shadow: 0 0 0 4px rgba(88,166,255,.35); }
+.d1-r5-fab-chat { bottom: 18px; right: 18px; }
+.d1-r5-kbd { display: inline-block; min-width: 16px; padding: 0 5px; border-radius: 4px; border: 1px solid currentColor; border-bottom-width: 2px; font: 600 10px/1.5 ui-monospace, Consolas, monospace; opacity: .6; text-align: center; vertical-align: middle; }
+/* header */
+.d1-r5-hdr { position: relative; z-index: 2; background: rgba(22,27,34,.55); border: 1px solid rgba(48,54,61,.6); border-left: 4px solid var(--v); border-radius: 12px; padding: 7px 12px; opacity: .6; transition: opacity .18s, background .18s, box-shadow .18s; flex: 0 0 auto; }
+.d1-r5-hdr:hover, .d1-r5-open { opacity: 1; background: #161b22; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.d1-r5-h-main { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.d1-r5-h-icon { font-size: 18px; }
+.d1-r5-h-name { font-size: 14px; }
+.d1-r5-h-state { font-size: 13px; color: #e3b341; }
+.d1-r5-eye { font-size: 14px; opacity: .8; padding: 2px 6px; border-radius: 6px; border: 1px solid #30363d; cursor: pointer; }
+.d1-r5-h-more { display: none; flex-direction: column; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #30363d; }
+.d1-r5-hdr:hover .d1-r5-h-more, .d1-r5-open .d1-r5-h-more { display: flex; }
+.d1-r5-h-motto { font-size: 12px; font-style: italic; color: #8b949e; }
+.d1-r5-h-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.d1-r5-h-note { font-size: 12px; color: #c9d1d9; max-width: 300px; white-space: normal; }
+.d1-r5-tabs { display: flex; align-items: center; gap: 3px; background: #0d1117; padding: 3px; border-radius: 8px; }
+.d1-r5-tabs button { border: 0; background: transparent; color: #8b949e; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.d1-r5-tabs button.on { background: #30363d; color: #e6edf3; font-weight: 700; }
+.d1-r5-tabs .d1-r5-kbd { margin: 0 4px; color: #8b949e; }
+.d1-r5-fav { border: 1px solid #d29922; background: transparent; color: #e3b341; border-radius: 8px; padding: 5px 10px; font-weight: 700; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.d1-r5-fav:hover { background: rgba(210,153,34,.15); }
+.d1-r5-fav.on { background: #d29922; color: #0d1117; }
+/* quick nav */
+.d1-r5-quick { margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: .6; transition: opacity .18s; }
+.d1-r5-quick:hover { opacity: 1; }
+.d1-r5-row1 { display: flex; gap: 4px; background: rgba(22,27,34,.6); border: 1px solid rgba(48,54,61,.6); border-radius: 999px; padding: 4px; }
+.d1-r5-seg { border: 0; background: transparent; color: #c9d1d9; padding: 6px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.d1-r5-seg-icon { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--v) 30%, transparent); font-size: 13px; }
+.d1-r5-seg .d1-r5-kbd { opacity: 0; transition: opacity .15s; }
+.d1-r5-seg:hover .d1-r5-kbd { opacity: .7; }
+.d1-r5-seg.on { background: #30363d; color: #fff; font-weight: 700; box-shadow: inset 0 -2px 0 var(--v); }
+.d1-r5-seg-fav { color: #e3b341; }
+.d1-r5-row2 { display: flex; gap: 2px; }
+.d1-r5-mini { border: 0; background: transparent; color: #8b949e; padding: 2px 10px; border-radius: 999px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.d1-r5-mini:hover { color: #e6edf3; background: rgba(48,54,61,.6); }
+.d1-r5-mini.on { color: #e6edf3; }
+/* overview cards */
+.d1-r5-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.d1-r5-card { position: relative; background: var(--vs); color: #1d2230; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; border: 3px solid transparent; transition: transform .2s, opacity .2s, box-shadow .2s; }
+.d1-r5-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 7px; border-radius: 16px 16px 0 0; background: var(--v); }
+.d1-r5-num { font-size: 13px; font-weight: 700; color: var(--v); display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: .06em; }
+.d1-r5-num-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #fff; font-size: 16px; }
+.d1-r5-motto { margin: 0; font-family: Georgia, serif; font-size: 26px; line-height: 1.1; }
+.d1-r5-preview { position: relative; display: block; width: 100%; height: 230px; border: 1px solid rgba(0,0,0,.12); border-radius: 12px; overflow: hidden; background: #fff; cursor: zoom-in; }
+.d1-r5-scale { position: absolute; top: 0; left: 0; width: 200%; transform: scale(.5); transform-origin: 0 0; pointer-events: none; transition: transform .25s; }
+.d1-r5-preview:hover .d1-r5-scale { transform: scale(.56); }
+.d1-r5-zoom { position: absolute; right: 8px; bottom: 8px; background: rgba(13,17,23,.8); color: #fff; font-size: 13px; padding: 3px 8px; border-radius: 999px; }
+.d1-r5-traits { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
+.d1-r5-traits li::marker { color: var(--v); }
+.d1-r5-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; }
+.d1-r5-notes { font-size: 13px; opacity: .75; }
+.d1-r5-card .d1-r5-fav { color: #8a5d00; }
+.d1-r5-card .d1-r5-fav.on { color: #0d1117; }
+.d1-r5-is-fav { border-color: #d29922; transform: translateY(-8px); box-shadow: 0 0 0 4px rgba(210,153,34,.35), 0 18px 44px rgba(210,153,34,.35); }
+.d1-r5-dim { opacity: .62; }
+.d1-r5-badge { position: absolute; top: -14px; right: 16px; background: #d29922; color: #0d1117; font-weight: 900; letter-spacing: .1em; padding: 5px 12px; border-radius: 8px; }
+.d1-r5-stage { max-width: 760px; margin: 0 auto; }
+/* menu */
+.d1-r5-menu { position: absolute; top: 76px; right: 18px; width: 300px; background: #161b22; border: 1px solid #30363d; border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 50px rgba(0,0,0,.5); z-index: 3; }
+.d1-r5-menu h4 { margin: 10px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #8b949e; }
+.d1-r5-menu ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.d1-r5-menu li { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 8px; font-size: 14px; }
+.d1-r5-menu li:hover { background: #21262d; }
+.d1-r5-menu li .d1-r5-kbd { opacity: 0; }
+.d1-r5-menu li:hover .d1-r5-kbd { opacity: .75; }
+.d1-r5-menu-hint { margin: 12px 0 0; font-size: 12px; color: #8b949e; }
+/* ---- Round 4 · unified icon tint + hover keycaps ---- */
+.d1-r5-ic { color: rgba(88,166,255,.85); }
+.d1-r5-svg { width: 62%; height: 62%; display: block; }
+.d1-r5-seg-icon { background: color-mix(in srgb, var(--v) 38%, #161b22); }
+.d1-r5-h-icon { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--v) 38%, #161b22); }
+.d1-r5-num-icon { background: color-mix(in srgb, var(--v) 70%, #0d1117); }
+.d1-r5-num-icon.d1-r5-ic { color: rgba(140,195,255,.95); }
+.d1-r5-hk { position: relative; }
+.d1-r5-kbd { position: absolute; top: -9px; right: -7px; z-index: 4; min-width: 14px; padding: 1px 5px; border: 1px solid rgba(240,246,252,.18); border-radius: 5px; background: linear-gradient(#2d333b, #22272e); box-shadow: 0 1px 0 rgba(240,246,252,.1) inset, 0 2px 0 #101418, 0 4px 10px rgba(0,0,0,.35); color: #e6edf3; font: 600 10px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .02em; opacity: 0; transform: translateY(3px) scale(.92); transition: opacity .14s ease, transform .14s ease; pointer-events: none; }
+.d1-r5-hk:hover > .d1-r5-kbd, .d1-r5-hk:focus-visible > .d1-r5-kbd, .d1-r5-force .d1-r5-kbd { opacity: 1; transform: none; }
+.d1-r5-seg .d1-r5-kbd { opacity: 0; }
+.d1-r5-seg:hover .d1-r5-kbd, .d1-r5-force .d1-r5-seg .d1-r5-kbd { opacity: 1; }
+.d1-r5-tabs .d1-r5-kbd { margin: 0; color: #e6edf3; }
+.d1-r5-menu li .d1-r5-kbd { position: static; transform: none; }
+.d1-r5-menu li:hover .d1-r5-kbd { opacity: 1; }
+.d1-r5-num .d1-r5-kbd { top: -6px; right: auto; left: 22px; }
+.d1-r5-force .d1-r5-quick, .d1-r5-force .d1-r5-hdr { opacity: 1; }
+/* ---- Round 5 · header overlay, hover timing, menu prefix, ctrl pins ---- */
+.d1-r5-hdr { z-index: 5; }
+.d1-r5-hdr:hover, .d1-r5-open { border-radius: 12px 12px 0 0; }
+.d1-r5-h-more { position: absolute; left: -1px; right: auto; top: 100%; min-width: calc(100% + 2px); box-sizing: border-box; margin-top: 0; padding: 10px 12px 12px; background: #161b22; border: 1px solid #30363d; border-top: 1px solid #21262d; border-left: 4px solid var(--v); border-radius: 0 0 12px 12px; box-shadow: 0 14px 30px rgba(0,0,0,.45); white-space: nowrap; }
+.d1-r5-hdr::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 8px; }
+/* hover rule: label tooltips after 0.5 s, instantly on keyboard focus */
+.d1-r5-kbd { transition: opacity .14s ease 0s, transform .14s ease 0s; }
+.d1-r5-hk:hover > .d1-r5-kbd, .d1-r5-seg:hover .d1-r5-kbd { transition-delay: .5s; }
+.d1-r5-hk:focus-visible > .d1-r5-kbd, .d1-r5-force .d1-r5-kbd { transition-delay: 0s; }
+/* menu: small icon prefix, subpages indented */
+.d1-r5-mi { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 8px; vertical-align: -4px; border-radius: 5px; background: color-mix(in srgb, var(--v) 38%, #161b22); }
+.d1-r5-mi .d1-r5-svg { width: 12px; height: 12px; }
+.d1-r5-menu .d1-r5-sub { padding: 3px 8px 3px 34px; font-size: 13px; color: #8b949e; }
+/* ctrl + click demo */
+.d1-r5-ctrl .d1-r5-body { cursor: crosshair; }
+.d1-r5-ctrlbar { margin: 0 auto 12px; width: max-content; max-width: 100%; padding: 6px 14px; border-radius: 999px; background: rgba(88,166,255,.14); border: 1px dashed rgba(88,166,255,.6); color: #c9d1d9; font-size: 13px; }
+.d1-r5-kbd-static { display: inline-block; padding: 0 6px; margin-right: 6px; border: 1px solid rgba(240,246,252,.25); border-bottom-width: 2px; border-radius: 5px; background: #22272e; font: 600 11px/1.5 ui-monospace, Consolas, monospace; }
+.d1-r5-stage-pin { position: relative; }
+.d1-r5-upin-wrap { position: absolute; z-index: 3; top: 112px; left: 58%; display: flex; align-items: flex-start; gap: 10px; }
+.d1-r5-upin { width: 28px; height: 28px; border-radius: 50% 50% 50% 4px; background: #f78166; color: #0d1117; display: grid; place-items: center; font-size: 14px; font-weight: 800; box-shadow: 0 0 0 4px rgba(247,129,102,.3), 0 6px 16px rgba(0,0,0,.4); }
+.d1-r5-ubox { width: 280px; background: #161b22; color: #e6edf3; border: 1px solid #f78166; border-radius: 12px; padding: 10px 12px; box-shadow: 0 14px 30px rgba(0,0,0,.5); }
+.d1-r5-ubox-head { font-size: 11px; color: #8b949e; margin-bottom: 6px; }
+.d1-r5-ubox-field { min-height: 56px; padding: 8px; border-radius: 8px; background: #0d1117; border: 1px solid #30363d; font-size: 13px; }
+.d1-r5-ubox-foot { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #8b949e; }
+
+</style>
+<header class="iteration-intro">
+  <h2>Iteration 5 · Header als Overlay, schlankes Menü, Strg-Punkte</h2>
+  <p>Übernommen: Icons passen · Tooltips und Tastenkappen nach der Hover-Regel (0,5 s Verzögerung, sofort bei Tastatur-Fokus) · der ausgeklappte Header liegt als Overlay über dem Inhalt statt ihn zu verschieben · im ☰-Menü ist das Icon nur noch ein kleiner Präfix, jede Variante eine Zeile mit eingerückten Unterseiten · neu: <b>Strg + Klick</b> setzt überall einen eigenen Kommentar-Punkt (Screen „Strg + Klick“).</p>
+</header>
+<section data-design="plakatwand5" data-nav-label="Plakatwand · Overlay" data-design-active="true">
+<section id="r5-s1" data-nav-label="Übersicht" data-screen data-screen-active="true"><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#58a6ff">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+      <b class="d1-r5-h-name">Übersicht</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Habit-Tracker Startscreen · Iteration 1 · 3 Varianten</div>
+      <div class="d1-r5-h-actions"><span class="d1-r5-h-note">Kein Favorit nötig — dann entscheidet Claude aus deinen Kommentaren.</span></div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov on" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-grid"><article class="d1-r5-card" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span> Zen-Garten <kbd class="d1-r5-kbd">1</kbd></div>
+      <h3 class="d1-r5-motto">Weniger ist Ruhe.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s3" data-tip="Variante öffnen · Taste 1">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 1</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit</button>
+      </div>
+    </article><article class="d1-r5-card" style="--v:#e8622c;--vs:#fde6da">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span> Spielplatz <kbd class="d1-r5-kbd">2</kbd></div>
+      <h3 class="d1-r5-motto">Jeder Tag ein Level.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s5" data-tip="Variante öffnen · Taste 2">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>XP, Level & Streak-Flamme</li><li>Freundes-Rangliste</li><li>Tägliche Quest-Karte</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 3</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit</button>
+      </div>
+    </article><article class="d1-r5-card" style="--v:#8250df;--vs:#ece4fb">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span> Cockpit <kbd class="d1-r5-kbd">3</kbd></div>
+      <h3 class="d1-r5-motto">Alles im Blick, alles messbar.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s7" data-tip="Variante öffnen · Taste 3">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 0</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit</button>
+      </div>
+    </article></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="r5-s1-a1" data-anno-side="bottom" data-anno-target=".d1-r5-hdr" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r5-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-r5-s1-a1" data-anno-bubble="r5-s1-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r5-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s1-a1">
+          <span class="anno-bubble-question">Kürzel und Tooltips folgen jetzt der Hover-Regel: Tastenkappe erst nach 0,5 s Überfahren, sofort bei Tastatur-Fokus. Passt das Timing?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r5-s1-a1" data-annotation="r5-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r5-s1-a1"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="r5-s2" data-nav-label="Übersicht · Favorit gesetzt" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#58a6ff">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+      <b class="d1-r5-h-name">Übersicht</b>
+      <span class="d1-r5-h-state">★ Spielplatz</span>
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Habit-Tracker Startscreen · Iteration 1 · 3 Varianten</div>
+      <div class="d1-r5-h-actions"><span class="d1-r5-h-note">Favorit ist Startpunkt; Kommentare zu allen Varianten fließen ein.</span></div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><span class="d1-r5-hk d1-r5-seg-fav">★</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov on" data-screen-link="r5-s2">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-grid"><article class="d1-r5-card d1-r5-dim" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span> Zen-Garten <kbd class="d1-r5-kbd">1</kbd></div>
+      <h3 class="d1-r5-motto">Weniger ist Ruhe.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s3" data-tip="Variante öffnen · Taste 1">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 1</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit</button>
+      </div>
+    </article><article class="d1-r5-card d1-r5-is-fav" style="--v:#e8622c;--vs:#fde6da">
+      <div class="d1-r5-badge">★ FAVORIT</div>
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span> Spielplatz <kbd class="d1-r5-kbd">2</kbd></div>
+      <h3 class="d1-r5-motto">Jeder Tag ein Level.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s5" data-tip="Variante öffnen · Taste 2">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>XP, Level & Streak-Flamme</li><li>Freundes-Rangliste</li><li>Tägliche Quest-Karte</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 3</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav on" data-screen-link="r5-s1">★ Favorit</button>
+      </div>
+    </article><article class="d1-r5-card d1-r5-dim" style="--v:#8250df;--vs:#ece4fb">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span> Cockpit <kbd class="d1-r5-kbd">3</kbd></div>
+      <h3 class="d1-r5-motto">Alles im Blick, alles messbar.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s7" data-tip="Variante öffnen · Taste 3">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 0</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit</button>
+      </div>
+    </article></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s3" data-nav-label="Zen-Garten · Heute" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#5f8b6a">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span>
+      <b class="d1-r5-h-name">Zen-Garten</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Weniger ist Ruhe.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="on" data-screen-link="r5-s3">Heute</button><button type="button" class="" data-screen-link="r5-s4">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s5"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s4" data-nav-label="Zen-Garten · Statistik" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#5f8b6a">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span>
+      <b class="d1-r5-h-name">Zen-Garten</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Weniger ist Ruhe.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="" data-screen-link="r5-s3">Heute</button><button type="button" class="on" data-screen-link="r5-s4">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s5"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Dein Garten · Oktober</div>
+    <div class="mock-zen-garden"><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:44px">🌳</span></div>
+    <div class="mock-zen-quote">Jede Pflanze ist eine Woche. Keine Zahlen.</div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s5" data-nav-label="Spielplatz · Heute" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#e8622c">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span>
+      <b class="d1-r5-h-name">Spielplatz</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Jeder Tag ein Level.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="on" data-screen-link="r5-s5">Heute</button><button type="button" class="" data-screen-link="r5-s6">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s6" data-nav-label="Spielplatz · Statistik" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#e8622c">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span>
+      <b class="d1-r5-h-name">Spielplatz</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Jeder Tag ein Level.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="" data-screen-link="r5-s5">Heute</button><button type="button" class="on" data-screen-link="r5-s6">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Rangliste · Woche 42</span></div>
+    <ol class="mock-play-rank"><li>🥇 Mara <em>1 240 XP</em></li><li class="me">🥈 Du <em>1 180 XP</em></li><li>🥉 Jonas <em>990 XP</em></li><li>4 · Lea <em>720 XP</em></li></ol>
+    <div class="mock-play-badges">🏅 🎯 🧘 📚 <span>+3 gesperrt</span></div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s7" data-nav-label="Cockpit · Heute" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#8250df">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span>
+      <b class="d1-r5-h-name">Cockpit</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Alles im Blick, alles messbar.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="on" data-screen-link="r5-s7">Heute</button><button type="button" class="" data-screen-link="r5-s8">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s5">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s8" data-nav-label="Cockpit · Statistik" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#8250df">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span>
+      <b class="d1-r5-h-name">Cockpit</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Alles im Blick, alles messbar.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="" data-screen-link="r5-s7">Heute</button><button type="button" class="on" data-screen-link="r5-s8">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s5">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-title">Heatmap · letzte 12 Monate</div>
+    <div class="mock-cock-heat"><i style="opacity:0.15"></i><i style="opacity:0.52"></i><i style="opacity:0.89"></i><i style="opacity:0.41"></i><i style="opacity:0.78"></i><i style="opacity:0.30"></i><i style="opacity:0.67"></i><i style="opacity:0.19"></i><i style="opacity:0.56"></i><i style="opacity:0.93"></i><i style="opacity:0.45"></i><i style="opacity:0.82"></i><i style="opacity:0.34"></i><i style="opacity:0.71"></i><i style="opacity:0.23"></i><i style="opacity:0.60"></i><i style="opacity:0.97"></i><i style="opacity:0.49"></i><i style="opacity:0.86"></i><i style="opacity:0.38"></i><i style="opacity:0.75"></i><i style="opacity:0.27"></i><i style="opacity:0.64"></i><i style="opacity:0.16"></i><i style="opacity:0.53"></i><i style="opacity:0.90"></i><i style="opacity:0.42"></i><i style="opacity:0.79"></i><i style="opacity:0.31"></i><i style="opacity:0.68"></i><i style="opacity:0.20"></i><i style="opacity:0.57"></i><i style="opacity:0.94"></i><i style="opacity:0.46"></i><i style="opacity:0.83"></i><i style="opacity:0.35"></i><i style="opacity:0.72"></i><i style="opacity:0.24"></i><i style="opacity:0.61"></i><i style="opacity:0.98"></i><i style="opacity:0.50"></i><i style="opacity:0.87"></i><i style="opacity:0.39"></i><i style="opacity:0.76"></i><i style="opacity:0.28"></i><i style="opacity:0.65"></i><i style="opacity:0.17"></i><i style="opacity:0.54"></i><i style="opacity:0.91"></i><i style="opacity:0.43"></i><i style="opacity:0.80"></i><i style="opacity:0.32"></i><i style="opacity:0.69"></i><i style="opacity:0.21"></i><i style="opacity:0.58"></i><i style="opacity:0.95"></i><i style="opacity:0.47"></i><i style="opacity:0.84"></i><i style="opacity:0.36"></i><i style="opacity:0.73"></i><i style="opacity:0.25"></i><i style="opacity:0.62"></i><i style="opacity:0.99"></i><i style="opacity:0.51"></i><i style="opacity:0.88"></i><i style="opacity:0.40"></i><i style="opacity:0.77"></i><i style="opacity:0.29"></i><i style="opacity:0.66"></i><i style="opacity:0.18"></i><i style="opacity:0.55"></i><i style="opacity:0.92"></i><i style="opacity:0.44"></i><i style="opacity:0.81"></i><i style="opacity:0.33"></i><i style="opacity:0.70"></i><i style="opacity:0.22"></i><i style="opacity:0.59"></i><i style="opacity:0.96"></i><i style="opacity:0.48"></i><i style="opacity:0.85"></i><i style="opacity:0.37"></i><i style="opacity:0.74"></i><i style="opacity:0.26"></i></div>
+    <div class="mock-cock-bar"><span>Gewohnheit: Lesen ▾</span><span>⤓ CSV</span></div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s11" data-nav-label="Kürzel beim Überfahren" data-screen hidden><div class="d1-r5-page d1-r5-force"><header class="d1-r5-hdr d1-r5-open" style="--v:#e8622c">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span>
+      <b class="d1-r5-h-name">Spielplatz</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Jeder Tag ein Level.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="on" data-screen-link="r5-s5">Heute</button><button type="button" class="" data-screen-link="r5-s6">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r5-s9" data-nav-label="Header ausgeklappt (Hover)" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr d1-r5-open" style="--v:#e8622c">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span>
+      <b class="d1-r5-h-name">Spielplatz</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Jeder Tag ein Level.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="on" data-screen-link="r5-s5">Heute</button><button type="button" class="" data-screen-link="r5-s6">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="r5-s9-a1" data-anno-side="right" data-anno-target=".d1-r5-h-more" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r5-s9-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s9-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-r5-s9-a1" data-anno-bubble="r5-s9-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r5-s9-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s9-a1">
+          <span class="anno-bubble-question">Das ausgeklappte Header-Panel liegt jetzt wie die FABs über dem Inhalt; darunter verschiebt sich nichts. So richtig?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r5-s9-a1" data-annotation="r5-s9-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r5-s9-a1"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="r5-s10" data-nav-label="☰-Menü mit Kürzeln" data-screen hidden><div class="d1-r5-page"><header class="d1-r5-hdr" style="--v:#58a6ff">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+      <b class="d1-r5-h-name">Übersicht</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Habit-Tracker Startscreen · Iteration 1 · 3 Varianten</div>
+      <div class="d1-r5-h-actions"><span class="d1-r5-h-note">Kein Favorit nötig — dann entscheidet Claude aus deinen Kommentaren.</span></div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov on" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-grid"><article class="d1-r5-card" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span> Zen-Garten <kbd class="d1-r5-kbd">1</kbd></div>
+      <h3 class="d1-r5-motto">Weniger ist Ruhe.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s3" data-tip="Variante öffnen · Taste 1">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 1</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit</button>
+      </div>
+    </article><article class="d1-r5-card" style="--v:#e8622c;--vs:#fde6da">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span> Spielplatz <kbd class="d1-r5-kbd">2</kbd></div>
+      <h3 class="d1-r5-motto">Jeder Tag ein Level.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s5" data-tip="Variante öffnen · Taste 2">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>XP, Level & Streak-Flamme</li><li>Freundes-Rangliste</li><li>Tägliche Quest-Karte</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 3</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit</button>
+      </div>
+    </article><article class="d1-r5-card" style="--v:#8250df;--vs:#ece4fb">
+      
+      <div class="d1-r5-hk d1-r5-num"><span class="d1-r5-num-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span> Cockpit <kbd class="d1-r5-kbd">3</kbd></div>
+      <h3 class="d1-r5-motto">Alles im Blick, alles messbar.</h3>
+      <div role="button" tabindex="0" class="d1-r5-preview" data-screen-link="r5-s7" data-tip="Variante öffnen · Taste 3">
+        <span class="d1-r5-scale">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></span><span class="d1-r5-zoom">⤢</span>
+      </div>
+      <ul class="d1-r5-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ul>
+      <div class="d1-r5-foot">
+        <span class="d1-r5-notes">💬 0</span>
+        <button type="button" class="d1-r5-hk d1-r5-fav">☆ Favorit</button>
+      </div>
+    </article></div></div><span class="d1-r5-fab d1-r5-fab-menu on" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span><aside class="d1-r5-menu">
+    <h4>Iterationen</h4><ul><li class="d1-r5-hk"><span>Iteration 1</span><kbd class="d1-r5-kbd">Alt+1</kbd></li><li class="d1-r5-hk"><span>Iteration 2</span><kbd class="d1-r5-kbd">Alt+2</kbd></li><li class="d1-r5-hk"><span>Iteration 3</span><kbd class="d1-r5-kbd">Alt+3</kbd></li><li class="d1-r5-hk"><span>Iteration 4</span><kbd class="d1-r5-kbd">Alt+4</kbd></li><li class="d1-r5-hk"><span>Iteration 5 · aktiv</span><kbd class="d1-r5-kbd">Alt+5</kbd></li></ul>
+    <h4>Varianten</h4><ul><li class="d1-r5-hk"><span>▦ Übersicht</span><kbd class="d1-r5-kbd">Esc</kbd></li><li class="d1-r5-hk d1-r5-mv" style="--v:#5f8b6a"><span><span class="d1-r5-mi d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span>Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></li><li class="d1-r5-sub"><span>Heute</span></li><li class="d1-r5-sub"><span>Statistik</span></li><li class="d1-r5-hk d1-r5-mv" style="--v:#e8622c"><span><span class="d1-r5-mi d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span>Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></li><li class="d1-r5-sub"><span>Heute</span></li><li class="d1-r5-sub"><span>Statistik</span></li><li class="d1-r5-hk d1-r5-mv" style="--v:#8250df"><span><span class="d1-r5-mi d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span>Cockpit</span><kbd class="d1-r5-kbd">3</kbd></li><li class="d1-r5-sub"><span>Heute</span></li><li class="d1-r5-sub"><span>Statistik</span></li><li class="d1-r5-hk"><span>☆ Favorit setzen</span><kbd class="d1-r5-kbd">F</kbd></li></ul>
+    <h4>Abschicken</h4><ul><li class="d1-r5-hk"><span>Zur nächsten Iteration</span><kbd class="d1-r5-kbd">Ctrl+Enter</kbd></li><li class="d1-r5-hk"><span>Notizen öffnen 💬</span><kbd class="d1-r5-kbd">N</kbd></li></ul>
+    <p class="d1-r5-menu-hint">Kürzel erscheinen beim Überfahren; <b>?</b> zeigt alle.</p>
+  </aside></div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="r5-s10-a1" data-anno-side="left" data-anno-target=".d1-r5-mv" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r5-s10-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s10-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-r5-s10-a1" data-anno-bubble="r5-s10-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r5-s10-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s10-a1">
+          <span class="anno-bubble-question">Icon nur noch als kleiner Präfix vor dem Variantennamen, Unterseiten als eingerückte Zeilen darunter, sonst unverändert. So?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r5-s10-a1" data-annotation="r5-s10-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r5-s10-a1"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="r5-s12" data-nav-label="Strg + Klick: eigener Punkt" data-screen hidden><div class="d1-r5-page d1-r5-ctrl"><header class="d1-r5-hdr" style="--v:#e8622c">
+    <div class="d1-r5-h-main">
+      <span class="d1-r5-h-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span>
+      <b class="d1-r5-h-name">Spielplatz</b>
+      
+      <span class="d1-r5-eye" data-tip="Fragen-Pins ein/aus">👁</span>
+    </div>
+    <div class="d1-r5-h-more">
+      <div class="d1-r5-h-motto">Jeder Tag ein Level.</div>
+      <div class="d1-r5-h-actions">
+        <div class="d1-r5-hk d1-r5-tabs"><button type="button" class="on" data-screen-link="r5-s5">Heute</button><button type="button" class="" data-screen-link="r5-s6">Statistik</button><kbd class="d1-r5-kbd">Tab</kbd></div>
+        <button type="button" class="d1-r5-hk d1-r5-fav" data-screen-link="r5-s2">☆ Favorit <kbd class="d1-r5-kbd">F</kbd></button>
+      </div></div>
+  </header><nav class="d1-r5-quick">
+    <div class="d1-r5-row1"><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#5f8b6a" data-screen-link="r5-s3" data-tip="Zen-Garten · Taste 1">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19l7-7"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Zen-Garten</span><kbd class="d1-r5-kbd">1</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg on" style="--v:#e8622c" data-screen-link="r5-s5" data-tip="Spielplatz · Taste 2">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.5 1.6L15 14H9l-1.5 1.6A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Spielplatz</span><kbd class="d1-r5-kbd">2</kbd></button><button type="button" class="d1-r5-hk d1-r5-seg" style="--v:#8250df" data-screen-link="r5-s7" data-tip="Cockpit · Taste 3">
+      <span class="d1-r5-hk d1-r5-seg-icon d1-r5-ic"><svg class="d1-r5-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="d1-r5-hk d1-r5-seg-name">Cockpit</span><kbd class="d1-r5-kbd">3</kbd></button></div>
+    <div class="d1-r5-row2">
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s3">‹ <kbd class="d1-r5-kbd">←</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini d1-r5-ov" data-screen-link="r5-s1">▦ Übersicht <kbd class="d1-r5-kbd">Esc</kbd></button>
+      <button type="button" class="d1-r5-hk d1-r5-mini" data-screen-link="r5-s7"><kbd class="d1-r5-kbd">→</kbd> ›</button>
+    </div>
+  </nav><div class="d1-r5-body"><div class="d1-r5-ctrlbar"><kbd class="d1-r5-kbd-static">Strg</kbd> gehalten — klick irgendwo, um dort einen eigenen Kommentar-Punkt zu setzen</div><div class="d1-r5-stage d1-r5-stage-pin"><div class="d1-r5-upin-wrap">
+      <span class="d1-r5-upin">✎</span>
+      <div class="d1-r5-ubox"><div class="d1-r5-ubox-head">Dein Punkt · Spielplatz · Heute · „Quest des Tages“</div>
+        <div class="d1-r5-ubox-field">Quest-Karte fände ich als eigene Unterseite besser…</div>
+        <div class="d1-r5-ubox-foot"><span>Esc verwirft</span><span>Enter speichert</span></div></div>
+    </div>
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div></div><span class="d1-r5-fab d1-r5-fab-menu" aria-hidden="true">☰</span><span class="d1-r5-fab d1-r5-fab-chat" aria-hidden="true">💬</span></div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="r5-s12-a1" data-anno-side="right" data-anno-target=".d1-r5-upin" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r5-s12-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s12-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-r5-s12-a1" data-anno-bubble="r5-s12-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r5-s12-a1" aria-expanded="false" aria-controls="anno-bubble-r5-s12-a1">
+          <span class="anno-bubble-question">Strg + Klick setzt einen eigenen Punkt nur mit Kommentarfeld; Claude bekommt Screen, Position und das getroffene Element. Strg halten — oder lieber ein Umschalter (z. B. Taste C)?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r5-s12-a1" data-annotation="r5-s12-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r5-s12-a1"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="r5-s12-a2" data-anno-side="bottom" data-anno-target=".d1-r5-ctrlbar" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r5-s12-a2" aria-expanded="false" aria-controls="anno-bubble-r5-s12-a2" aria-label="{{anno.pin_label}}">2</button>
+      <div class="anno-bubble" id="anno-bubble-r5-s12-a2" data-anno-bubble="r5-s12-a2" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r5-s12-a2" aria-expanded="false" aria-controls="anno-bubble-r5-s12-a2">
+          <span class="anno-bubble-question">Eigene Punkte zusätzlich im 💬-Dock unter „Aktueller Screen“ auflisten, damit man sie wiederfindet?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r5-s12-a2" data-annotation="r5-s12-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r5-s12-a2"></div>
+        </div>
+      </div>
+    </div></div></section>
+</section>
+</section>

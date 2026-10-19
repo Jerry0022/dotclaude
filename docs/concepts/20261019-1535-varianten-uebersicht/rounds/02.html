@@ -1,0 +1,445 @@
+<section data-iteration="2" data-iteration-template="design" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]},"designs":{},"screens":{"r2-s9":"finde die menge an hotkeys mega, sehr gut! Eingie kann man im concept menu sicherlich auch bei hover hover unterbrignen oder so."},"views":{}}</script>
+<style>
+/* ---- sample app (shared by all designs) ---- */
+.mock-app { border-radius: 18px; padding: 22px; min-height: 380px; box-sizing: border-box; font-family: system-ui, sans-serif; color: #1d2230; }
+.mock-zen { background: #f3f6f1; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.mock-zen-date { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #6c7a6e; }
+.mock-zen-plant { width: 140px; height: 140px; border-radius: 50%; background: #dfeadf; display: grid; place-items: center; font-size: 64px; }
+.mock-zen-goal { font-size: 24px; font-weight: 600; }
+.mock-zen-check { width: 64px; height: 64px; border-radius: 50%; border: 2px solid #5f8b6a; background: #fff; color: #5f8b6a; font-size: 28px; cursor: pointer; }
+.mock-zen-quote { font-style: italic; color: #6c7a6e; }
+.mock-zen-garden { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; align-items: end; padding: 24px; background: #e7efe4; border-radius: 14px; width: 100%; box-sizing: border-box; }
+.mock-zen-sprout { text-align: center; }
+.mock-play { background: #1f1630; color: #fff; display: flex; flex-direction: column; gap: 14px; }
+.mock-play-top { display: flex; justify-content: space-between; font-weight: 700; }
+.mock-play-lvl { background: #e8622c; padding: 4px 12px; border-radius: 999px; }
+.mock-play-flame { color: #ffb347; }
+.mock-play-xp { height: 12px; background: #3a2c52; border-radius: 6px; overflow: hidden; }
+.mock-play-xp i { display: block; height: 100%; background: linear-gradient(90deg, #ff9b3d, #ff4fa0); }
+.mock-play-quest { background: linear-gradient(135deg, #ff7a3d, #c2408f); padding: 14px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; }
+.mock-play-list { display: flex; flex-direction: column; gap: 8px; }
+.mock-play-item { background: #2c2142; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mock-play-item.done { opacity: .55; text-decoration: line-through; }
+.mock-play-item em { color: #ffb347; font-style: normal; }
+.mock-play-rank { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mock-play-rank li { background: #2c2142; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mock-play-rank li.me { outline: 2px solid #e8622c; }
+.mock-play-rank em { font-style: normal; color: #ffb347; }
+.mock-play-badges { font-size: 26px; display: flex; gap: 10px; align-items: center; }
+.mock-play-badges span { font-size: 12px; opacity: .6; }
+.mock-cock { background: #f4f7fd; display: flex; flex-direction: column; gap: 14px; }
+.mock-cock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.mock-cock-kpi { background: #fff; border: 1px solid #d6def0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.mock-cock-kpi span { font-size: 11px; color: #64708a; text-transform: uppercase; letter-spacing: .05em; }
+.mock-cock-kpi b { font-size: 22px; color: #2f62d8; font-variant-numeric: tabular-nums; }
+.mock-cock-bar { display: flex; gap: 10px; font-size: 13px; }
+.mock-cock-bar span { background: #fff; border: 1px solid #d6def0; padding: 6px 10px; border-radius: 8px; }
+.mock-cock-title { font-weight: 700; }
+.mock-cock-heat { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; }
+.mock-cock-heat i { aspect-ratio: 1; background: #2f62d8; border-radius: 3px; }
+
+/* ---- Round 2 · mocked concept page ---- */
+.d1-r2-page { position: relative; max-width: 1320px; margin: 44px auto 0; min-height: 700px; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 14px; padding: 16px 16px 90px; box-sizing: border-box; font-family: system-ui, sans-serif; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding-right: 92px; }
+.d1-r2-body { flex: 1 0 100%; margin-top: 10px; }
+.d1-r2-fab { position: absolute; width: 52px; height: 52px; border-radius: 50%; background: #58a6ff; color: #0d1117; display: grid; place-items: center; font-size: 22px; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.d1-r2-fab-menu { top: 14px; right: 18px; }
+.d1-r2-fab-chat { bottom: 18px; right: 18px; }
+.d1-r2-kbd { display: inline-block; min-width: 18px; padding: 1px 6px; border-radius: 5px; border: 1px solid currentColor; border-bottom-width: 2px; font: 600 11px/1.4 ui-monospace, Consolas, monospace; opacity: .75; text-align: center; vertical-align: middle; }
+.d1-r2-hdr { display: flex; align-items: center; gap: 14px; background: #161b22; border: 1px solid #30363d; border-left: 5px solid var(--v, #58a6ff); border-radius: 14px; padding: 10px 14px; min-height: 56px; box-sizing: border-box; flex: 0 1 auto; }
+.d1-r2-hdr-icon { font-size: 22px; color: #58a6ff; }
+.d1-r2-hdr-text { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
+.d1-r2-hdr-text b { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.d1-r2-hdr-text span { font-size: 12px; color: #8b949e; font-style: italic; }
+.d1-r2-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--v); display: inline-block; }
+.d1-r2-hdr-state { font-size: 13px; padding: 5px 10px; border-radius: 999px; background: #21262d; white-space: nowrap; }
+.d1-r2-help, .d1-r2-back { border: 1px solid #30363d; background: #21262d; color: #e6edf3; border-radius: 9px; padding: 8px 12px; font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.d1-r2-back:hover, .d1-r2-help:hover { border-color: #58a6ff; }
+.d1-r2-subtabs { display: flex; gap: 3px; background: #0d1117; padding: 3px; border-radius: 9px; }
+.d1-r2-subtabs button { border: 0; background: transparent; color: #8b949e; padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+.d1-r2-subtabs button.on { background: #30363d; color: #e6edf3; font-weight: 700; }
+.d1-r2-base-btn { border: 2px solid #d29922; background: transparent; color: #e3b341; border-radius: 9px; padding: 7px 12px; font-weight: 700; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.d1-r2-base-btn:hover { background: rgba(210,153,34,.15); }
+.d1-r2-base-on { background: #d29922; color: #0d1117; }
+.d1-r2-quick { margin: 0 auto; display: flex; align-items: center; gap: 4px; background: #161b22; border: 1px solid #30363d; border-radius: 999px; padding: 4px; min-height: 48px; box-sizing: border-box; }
+.d1-r2-q-arrow { border: 0; background: transparent; color: #8b949e; font-size: 20px; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; }
+.d1-r2-q-arrow:hover { background: #21262d; color: #e6edf3; }
+.d1-r2-q-seg { border: 0; background: transparent; color: #c9d1d9; padding: 8px 14px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.d1-r2-q-seg i { width: 9px; height: 9px; border-radius: 50%; background: var(--v); display: inline-block; }
+.d1-r2-q-seg.on { background: #30363d; color: #fff; font-weight: 700; box-shadow: inset 0 -3px 0 var(--v, #58a6ff); }
+.d1-r2-q-base { font-size: 10px; letter-spacing: .08em; background: #d29922; color: #0d1117; padding: 1px 6px; border-radius: 4px; }
+.d1-r2-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.d1-r2-card { position: relative; background: var(--vs); color: #1d2230; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; border: 3px solid transparent; transition: transform .2s, opacity .2s, box-shadow .2s; }
+.d1-r2-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 7px; border-radius: 16px 16px 0 0; background: var(--v); }
+.d1-r2-num { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--v); display: flex; align-items: center; gap: 8px; }
+.d1-r2-motto { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 26px; line-height: 1.1; }
+.d1-r2-preview { position: relative; display: block; width: 100%; height: 230px; padding: 0; border: 1px solid rgba(0,0,0,.12); border-radius: 12px; overflow: hidden; background: #fff; cursor: zoom-in; text-align: left; }
+.d1-r2-scale { position: absolute; top: 0; left: 0; width: 200%; transform: scale(.5); transform-origin: 0 0; pointer-events: none; transition: transform .25s; }
+.d1-r2-preview:hover .d1-r2-scale { transform: scale(.56); }
+.d1-r2-zoom { position: absolute; right: 8px; bottom: 8px; background: rgba(13,17,23,.8); color: #fff; font-size: 12px; padding: 4px 9px; border-radius: 999px; }
+.d1-r2-subchips { display: flex; gap: 6px; }
+.d1-r2-subchips button { border: 1px solid rgba(0,0,0,.12); background: rgba(255,255,255,.75); color: #1d2230; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.d1-r2-traits { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
+.d1-r2-traits li::marker { color: var(--v); }
+.d1-r2-foot { margin-top: auto; display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.d1-r2-notes { font-size: 13px; opacity: .75; }
+.d1-r2-card .d1-r2-base-btn { color: #8a5d00; border-color: #d29922; }
+.d1-r2-card .d1-r2-base-on { color: #0d1117; }
+.d1-r2-is-base { border-color: #d29922; transform: translateY(-8px); box-shadow: 0 0 0 4px rgba(210,153,34,.35), 0 18px 44px rgba(210,153,34,.35); }
+.d1-r2-dim { opacity: .6; }
+.d1-r2-badge { position: absolute; top: -14px; right: 16px; background: #d29922; color: #0d1117; font-weight: 900; letter-spacing: .12em; padding: 5px 12px; border-radius: 8px; }
+.d1-r2-stage { max-width: 760px; margin: 0 auto; }
+.d1-r2-blur { filter: blur(3px); opacity: .5; }
+.d1-r2-ghost { height: 420px; border-radius: 18px; background: var(--v); opacity: .4; }
+.d1-r2-sheet-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(1,4,9,.55); border-radius: 14px; }
+.d1-r2-sheet { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 22px 26px; min-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.d1-r2-sheet h3 { margin: 0 0 14px; }
+.d1-r2-sheet dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; margin: 0 0 18px; align-items: center; }
+.d1-r2-sheet dt { white-space: nowrap; }
+.d1-r2-sheet dd { margin: 0; color: #c9d1d9; }
+
+</style>
+<header class="iteration-intro">
+  <h2>Iteration 2 · Plakatwand als Base, in die Concept-Chrome integriert</h2>
+  <p>Übernommen: Plakatwand als Base · Motto bleibt · Top-3 nur echte Unterschiede · Hauptteil der Karte ist jetzt eine Mini-Vorschau (Klick = hineinzoomen) · Krone ersetzt durch „Als Base setzen“ ◇/◆ · Hotkeys · die Varianten-Leiste ist aufgeteilt: Ort, Unterseiten und Base-Aktion in den vergrößerten Header oben links, Varianten-Wechsel in die Schnellauswahl oben Mitte. Der Rahmen ist ein Mock der Concept-Seite selbst. Base setzen ist wieder nur bei „Spielplatz“ verdrahtet.</p>
+</header>
+<section data-design="plakatwand2" data-nav-label="Plakatwand · integriert" data-design-active="true">
+<section id="r2-s1" data-nav-label="Übersicht" data-screen data-screen-active="true"><div class="d1-r2-page"><header class="d1-r2-hdr">
+    <span class="d1-r2-hdr-icon">▦</span>
+    <div class="d1-r2-hdr-text"><b>Varianten-Übersicht</b><span>Habit-Tracker Startscreen · Iteration 1 · 3 Varianten</span></div>
+    <span class="d1-r2-hdr-state">Noch keine Base</span>
+    <button type="button" class="d1-r2-help" data-screen-link="r2-s9"><kbd class="d1-r2-kbd">?</kbd> Hotkeys</button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov on" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-grid"><article class="d1-r2-card" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-r2-num"><kbd class="d1-r2-kbd">1</kbd> Variante 1 · Zen-Garten</div>
+      <h3 class="d1-r2-motto">Weniger ist Ruhe.</h3>
+      <div role="button" tabindex="0" class="d1-r2-preview" data-screen-link="r2-s3" data-tip="Variante öffnen">
+        <span class="d1-r2-scale">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></span><span class="d1-r2-zoom">⤢ Öffnen</span>
+      </div>
+      <div class="d1-r2-subchips"><button type="button" data-screen-link="r2-s3">Heute</button><button type="button" data-screen-link="r2-s4">Statistik</button></div>
+      <ul class="d1-r2-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ul>
+      <div class="d1-r2-foot">
+        <span class="d1-r2-notes">💬 1</span>
+        <button type="button" class="d1-r2-base-btn">◇ Als Base setzen</button>
+      </div>
+    </article><article class="d1-r2-card" style="--v:#e8622c;--vs:#fde6da">
+      
+      <div class="d1-r2-num"><kbd class="d1-r2-kbd">2</kbd> Variante 2 · Spielplatz</div>
+      <h3 class="d1-r2-motto">Jeder Tag ein Level.</h3>
+      <div role="button" tabindex="0" class="d1-r2-preview" data-screen-link="r2-s5" data-tip="Variante öffnen">
+        <span class="d1-r2-scale">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></span><span class="d1-r2-zoom">⤢ Öffnen</span>
+      </div>
+      <div class="d1-r2-subchips"><button type="button" data-screen-link="r2-s5">Heute</button><button type="button" data-screen-link="r2-s6">Statistik</button></div>
+      <ul class="d1-r2-traits"><li>XP, Level & Streak-Flamme</li><li>Freundes-Rangliste</li><li>Tägliche Quest-Karte</li></ul>
+      <div class="d1-r2-foot">
+        <span class="d1-r2-notes">💬 3</span>
+        <button type="button" class="d1-r2-base-btn" data-screen-link="r2-s2">◇ Als Base setzen</button>
+      </div>
+    </article><article class="d1-r2-card" style="--v:#2f62d8;--vs:#dfe7fb">
+      
+      <div class="d1-r2-num"><kbd class="d1-r2-kbd">3</kbd> Variante 3 · Cockpit</div>
+      <h3 class="d1-r2-motto">Alles im Blick, alles messbar.</h3>
+      <div role="button" tabindex="0" class="d1-r2-preview" data-screen-link="r2-s7" data-tip="Variante öffnen">
+        <span class="d1-r2-scale">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></span><span class="d1-r2-zoom">⤢ Öffnen</span>
+      </div>
+      <div class="d1-r2-subchips"><button type="button" data-screen-link="r2-s7">Heute</button><button type="button" data-screen-link="r2-s8">Statistik</button></div>
+      <ul class="d1-r2-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ul>
+      <div class="d1-r2-foot">
+        <span class="d1-r2-notes">💬 0</span>
+        <button type="button" class="d1-r2-base-btn">◇ Als Base setzen</button>
+      </div>
+    </article></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="r2-s1-a1" data-anno-side="right" data-anno-target=".d1-r2-preview" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-r2-s1-a1" data-anno-bubble="r2-s1-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-r2-s1-a1">
+          <span class="anno-bubble-question">Mini-Vorschau zeigt die erste Unterseite, live verkleinert; Klick zoomt in die Variante. Reicht die erste Unterseite, oder sollen alle Unterseiten durchrotieren?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r2-s1-a1" data-annotation="r2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">passt, sehr gut! reicht</textarea>
+          <div class="attach-slot" data-attach-slot="anno-r2-s1-a1"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="r2-s1-a2" data-anno-side="top" data-anno-target=".d1-r2-base-btn" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r2-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+      <div class="anno-bubble" id="anno-bubble-r2-s1-a2" data-anno-bubble="r2-s1-a2" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-r2-s1-a2">
+          <span class="anno-bubble-question">Neues Wording: „Als Base setzen“ mit Raute ◇/◆ statt Krone. Passt das — oder lieber „Ausgangspunkt“ / „Favorit ★“?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r2-s1-a2" data-annotation="r2-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">Lieber Sternchen Favorit</textarea>
+          <div class="attach-slot" data-attach-slot="anno-r2-s1-a2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="r2-s1-a3" data-anno-side="bottom" data-anno-target=".d1-r2-hdr-state" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r2-s1-a3" aria-expanded="false" aria-controls="anno-bubble-r2-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+      <div class="anno-bubble" id="anno-bubble-r2-s1-a3" data-anno-bubble="r2-s1-a3" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r2-s1-a3" aria-expanded="false" aria-controls="anno-bubble-r2-s1-a3">
+          <span class="anno-bubble-question">Abschicken ohne Base: erlauben (dann entwickelt Claude alle Varianten weiter) oder Pflicht, bevor „Zur nächsten Iteration“ geht?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r2-s1-a3" data-annotation="r2-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}">das ist ok, man muss keine base auswählen, wenn man eine auswählt werrden  kommentare von anderen variante etc. trotzdem berücksichtigt auch wenn startpunkt der weiterentwicklung dann die base ist. Wnen man keine base auswählt und ob claude dann alel oder eine konsolidierte etc. weiterentwickelt ist den kommentaren bzw. claude überlassen.
+
+zu dem links oben noch, das "noch keine base" bitte viel kürzer machen! Ansonsten find eich sie super. Tendenziell gern kleiner wenn man nicht drüber hovered, ansonsten könnte es sihc ausklappen mit allen infos! und könnten wir noch das punkte sichtbar machen auge icon dort integrieren und dafür den hotkeys label rausnehmen und dafür die hotkeys direkt ohne beschbriebung einfach als khotkey label neben der aktion.
+ich würde oben in der mittleren naviggationssleiste . Mir gefällt, dass sie utnerschiedliche farben haben um sie direkt wiuederzuerkennen, was dann sich in der varianten übersicht auch wiederspiegelt. Aber nicht immer haben desiggns wir oder wir haben farben, also anders sonst von claude thematisch zum konzept ausgewählte icons?
+Außerdem sollte bei hover over ein hotkey agnezeigt werden. Außerd3em gern wie immer die variantenunabhängigen teile in der zweiten zeile.  
+
+Achte generell auch drauf, dass es nicht ins augefällt solange man dnicht hovered drüber weil der fokus ja immer auf dem seiten content liegen sollte, ich finde ahber ldie linke linie ganz gutund passend, das icon auch. ggf. einfach bper halbtranspareent oder so. </textarea>
+          <div class="attach-slot" data-attach-slot="anno-r2-s1-a3"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="r2-s2" data-nav-label="Übersicht · Base gesetzt" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr">
+    <span class="d1-r2-hdr-icon">▦</span>
+    <div class="d1-r2-hdr-text"><b>Varianten-Übersicht</b><span>Habit-Tracker Startscreen · Iteration 1 · 3 Varianten</span></div>
+    <span class="d1-r2-hdr-state">◆ Base: Spielplatz</span>
+    <button type="button" class="d1-r2-help" data-screen-link="r2-s9"><kbd class="d1-r2-kbd">?</kbd> Hotkeys</button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov on" data-screen-link="r2-s2">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz<b class="d1-r2-q-base">BASE</b></button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-grid"><article class="d1-r2-card d1-r2-dim" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-r2-num"><kbd class="d1-r2-kbd">1</kbd> Variante 1 · Zen-Garten</div>
+      <h3 class="d1-r2-motto">Weniger ist Ruhe.</h3>
+      <div role="button" tabindex="0" class="d1-r2-preview" data-screen-link="r2-s3" data-tip="Variante öffnen">
+        <span class="d1-r2-scale">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></span><span class="d1-r2-zoom">⤢ Öffnen</span>
+      </div>
+      <div class="d1-r2-subchips"><button type="button" data-screen-link="r2-s3">Heute</button><button type="button" data-screen-link="r2-s4">Statistik</button></div>
+      <ul class="d1-r2-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ul>
+      <div class="d1-r2-foot">
+        <span class="d1-r2-notes">💬 1</span>
+        <button type="button" class="d1-r2-base-btn">◇ Als Base setzen</button>
+      </div>
+    </article><article class="d1-r2-card d1-r2-is-base" style="--v:#e8622c;--vs:#fde6da">
+      <div class="d1-r2-badge">◆ BASE</div>
+      <div class="d1-r2-num"><kbd class="d1-r2-kbd">2</kbd> Variante 2 · Spielplatz</div>
+      <h3 class="d1-r2-motto">Jeder Tag ein Level.</h3>
+      <div role="button" tabindex="0" class="d1-r2-preview" data-screen-link="r2-s5" data-tip="Variante öffnen">
+        <span class="d1-r2-scale">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></span><span class="d1-r2-zoom">⤢ Öffnen</span>
+      </div>
+      <div class="d1-r2-subchips"><button type="button" data-screen-link="r2-s5">Heute</button><button type="button" data-screen-link="r2-s6">Statistik</button></div>
+      <ul class="d1-r2-traits"><li>XP, Level & Streak-Flamme</li><li>Freundes-Rangliste</li><li>Tägliche Quest-Karte</li></ul>
+      <div class="d1-r2-foot">
+        <span class="d1-r2-notes">💬 3</span>
+        <button type="button" class="d1-r2-base-btn d1-r2-base-on" data-screen-link="r2-s1">◆ Base</button>
+      </div>
+    </article><article class="d1-r2-card d1-r2-dim" style="--v:#2f62d8;--vs:#dfe7fb">
+      
+      <div class="d1-r2-num"><kbd class="d1-r2-kbd">3</kbd> Variante 3 · Cockpit</div>
+      <h3 class="d1-r2-motto">Alles im Blick, alles messbar.</h3>
+      <div role="button" tabindex="0" class="d1-r2-preview" data-screen-link="r2-s7" data-tip="Variante öffnen">
+        <span class="d1-r2-scale">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></span><span class="d1-r2-zoom">⤢ Öffnen</span>
+      </div>
+      <div class="d1-r2-subchips"><button type="button" data-screen-link="r2-s7">Heute</button><button type="button" data-screen-link="r2-s8">Statistik</button></div>
+      <ul class="d1-r2-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ul>
+      <div class="d1-r2-foot">
+        <span class="d1-r2-notes">💬 0</span>
+        <button type="button" class="d1-r2-base-btn">◇ Als Base setzen</button>
+      </div>
+    </article></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r2-s3" data-nav-label="Zen-Garten · Heute" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr" style="--v:#5f8b6a">
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">← Übersicht <kbd class="d1-r2-kbd">Esc</kbd></button>
+    <div class="d1-r2-hdr-text"><b><i class="d1-r2-dot"></i>Variante 1 · Zen-Garten</b><span>Weniger ist Ruhe.</span></div>
+    <div class="d1-r2-subtabs"><button type="button" class="on" data-screen-link="r2-s3">Heute</button><button type="button" class="" data-screen-link="r2-s4">Statistik</button></div>
+    <button type="button" class="d1-r2-base-btn">◇ Als Base setzen <kbd class="d1-r2-kbd">B</kbd></button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s7" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg on" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s5" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-stage">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r2-s4" data-nav-label="Zen-Garten · Statistik" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr" style="--v:#5f8b6a">
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">← Übersicht <kbd class="d1-r2-kbd">Esc</kbd></button>
+    <div class="d1-r2-hdr-text"><b><i class="d1-r2-dot"></i>Variante 1 · Zen-Garten</b><span>Weniger ist Ruhe.</span></div>
+    <div class="d1-r2-subtabs"><button type="button" class="" data-screen-link="r2-s3">Heute</button><button type="button" class="on" data-screen-link="r2-s4">Statistik</button></div>
+    <button type="button" class="d1-r2-base-btn">◇ Als Base setzen <kbd class="d1-r2-kbd">B</kbd></button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s7" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg on" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s5" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-stage">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Dein Garten · Oktober</div>
+    <div class="mock-zen-garden"><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:44px">🌳</span></div>
+    <div class="mock-zen-quote">Jede Pflanze ist eine Woche. Keine Zahlen.</div>
+  </div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r2-s5" data-nav-label="Spielplatz · Heute" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr" style="--v:#e8622c">
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">← Übersicht <kbd class="d1-r2-kbd">Esc</kbd></button>
+    <div class="d1-r2-hdr-text"><b><i class="d1-r2-dot"></i>Variante 2 · Spielplatz</b><span>Jeder Tag ein Level.</span></div>
+    <div class="d1-r2-subtabs"><button type="button" class="on" data-screen-link="r2-s5">Heute</button><button type="button" class="" data-screen-link="r2-s6">Statistik</button></div>
+    <button type="button" class="d1-r2-base-btn" data-screen-link="r2-s2">◇ Als Base setzen <kbd class="d1-r2-kbd">B</kbd></button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s3" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg on" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s7" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="r2-s5-a1" data-anno-side="bottom" data-anno-target=".d1-r2-hdr" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r2-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r2-s5-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-r2-s5-a1" data-anno-bubble="r2-s5-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r2-s5-a1" aria-expanded="false" aria-controls="anno-bubble-r2-s5-a1">
+          <span class="anno-bubble-question">Header oben links (vergrößert, nicht mehr abgeschnitten): Zurück, Variante + Motto, Unterseiten, Base-Aktion. Passt die Aufteilung?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r2-s5-a1" data-annotation="r2-s5-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r2-s5-a1"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="r2-s5-a2" data-anno-side="bottom" data-anno-target=".d1-r2-quick" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r2-s5-a2" aria-expanded="false" aria-controls="anno-bubble-r2-s5-a2" aria-label="{{anno.pin_label}}">2</button>
+      <div class="anno-bubble" id="anno-bubble-r2-s5-a2" data-anno-bubble="r2-s5-a2" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r2-s5-a2" aria-expanded="false" aria-controls="anno-bubble-r2-s5-a2">
+          <span class="anno-bubble-question">Schnellauswahl oben Mitte ersetzt bei Varianten-Concepts den Design-Umschalter: „▦ Übersicht“ als erstes Segment, Base-Marke im Segment. Gut so?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r2-s5-a2" data-annotation="r2-s5-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r2-s5-a2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="r2-s5-a3" data-anno-side="right" data-anno-target=".d1-r2-back .d1-r2-kbd" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="r2-s5-a3" aria-expanded="false" aria-controls="anno-bubble-r2-s5-a3" aria-label="{{anno.pin_label}}">3</button>
+      <div class="anno-bubble" id="anno-bubble-r2-s5-a3" data-anno-bubble="r2-s5-a3" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="r2-s5-a3" aria-expanded="false" aria-controls="anno-bubble-r2-s5-a3">
+          <span class="anno-bubble-question">Hotkeys: Esc Übersicht, ←/→ Variante, 1–9 direkt, Tab Unterseite, B Base. Fehlt etwas oder kollidiert etwas?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-r2-s5-a3" data-annotation="r2-s5-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-r2-s5-a3"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="r2-s6" data-nav-label="Spielplatz · Statistik" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr" style="--v:#e8622c">
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">← Übersicht <kbd class="d1-r2-kbd">Esc</kbd></button>
+    <div class="d1-r2-hdr-text"><b><i class="d1-r2-dot"></i>Variante 2 · Spielplatz</b><span>Jeder Tag ein Level.</span></div>
+    <div class="d1-r2-subtabs"><button type="button" class="" data-screen-link="r2-s5">Heute</button><button type="button" class="on" data-screen-link="r2-s6">Statistik</button></div>
+    <button type="button" class="d1-r2-base-btn" data-screen-link="r2-s2">◇ Als Base setzen <kbd class="d1-r2-kbd">B</kbd></button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s3" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg on" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s7" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Rangliste · Woche 42</span></div>
+    <ol class="mock-play-rank"><li>🥇 Mara <em>1 240 XP</em></li><li class="me">🥈 Du <em>1 180 XP</em></li><li>🥉 Jonas <em>990 XP</em></li><li>4 · Lea <em>720 XP</em></li></ol>
+    <div class="mock-play-badges">🏅 🎯 🧘 📚 <span>+3 gesperrt</span></div>
+  </div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r2-s7" data-nav-label="Cockpit · Heute" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr" style="--v:#2f62d8">
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">← Übersicht <kbd class="d1-r2-kbd">Esc</kbd></button>
+    <div class="d1-r2-hdr-text"><b><i class="d1-r2-dot"></i>Variante 3 · Cockpit</b><span>Alles im Blick, alles messbar.</span></div>
+    <div class="d1-r2-subtabs"><button type="button" class="on" data-screen-link="r2-s7">Heute</button><button type="button" class="" data-screen-link="r2-s8">Statistik</button></div>
+    <button type="button" class="d1-r2-base-btn">◇ Als Base setzen <kbd class="d1-r2-kbd">B</kbd></button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s5" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg on" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s3" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-stage">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r2-s8" data-nav-label="Cockpit · Statistik" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr" style="--v:#2f62d8">
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">← Übersicht <kbd class="d1-r2-kbd">Esc</kbd></button>
+    <div class="d1-r2-hdr-text"><b><i class="d1-r2-dot"></i>Variante 3 · Cockpit</b><span>Alles im Blick, alles messbar.</span></div>
+    <div class="d1-r2-subtabs"><button type="button" class="" data-screen-link="r2-s7">Heute</button><button type="button" class="on" data-screen-link="r2-s8">Statistik</button></div>
+    <button type="button" class="d1-r2-base-btn">◇ Als Base setzen <kbd class="d1-r2-kbd">B</kbd></button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s5" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg on" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-screen-link="r2-s3" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-stage">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-title">Heatmap · letzte 12 Monate</div>
+    <div class="mock-cock-heat"><i style="opacity:0.15"></i><i style="opacity:0.52"></i><i style="opacity:0.89"></i><i style="opacity:0.41"></i><i style="opacity:0.78"></i><i style="opacity:0.30"></i><i style="opacity:0.67"></i><i style="opacity:0.19"></i><i style="opacity:0.56"></i><i style="opacity:0.93"></i><i style="opacity:0.45"></i><i style="opacity:0.82"></i><i style="opacity:0.34"></i><i style="opacity:0.71"></i><i style="opacity:0.23"></i><i style="opacity:0.60"></i><i style="opacity:0.97"></i><i style="opacity:0.49"></i><i style="opacity:0.86"></i><i style="opacity:0.38"></i><i style="opacity:0.75"></i><i style="opacity:0.27"></i><i style="opacity:0.64"></i><i style="opacity:0.16"></i><i style="opacity:0.53"></i><i style="opacity:0.90"></i><i style="opacity:0.42"></i><i style="opacity:0.79"></i><i style="opacity:0.31"></i><i style="opacity:0.68"></i><i style="opacity:0.20"></i><i style="opacity:0.57"></i><i style="opacity:0.94"></i><i style="opacity:0.46"></i><i style="opacity:0.83"></i><i style="opacity:0.35"></i><i style="opacity:0.72"></i><i style="opacity:0.24"></i><i style="opacity:0.61"></i><i style="opacity:0.98"></i><i style="opacity:0.50"></i><i style="opacity:0.87"></i><i style="opacity:0.39"></i><i style="opacity:0.76"></i><i style="opacity:0.28"></i><i style="opacity:0.65"></i><i style="opacity:0.17"></i><i style="opacity:0.54"></i><i style="opacity:0.91"></i><i style="opacity:0.43"></i><i style="opacity:0.80"></i><i style="opacity:0.32"></i><i style="opacity:0.69"></i><i style="opacity:0.21"></i><i style="opacity:0.58"></i><i style="opacity:0.95"></i><i style="opacity:0.47"></i><i style="opacity:0.84"></i><i style="opacity:0.36"></i><i style="opacity:0.73"></i><i style="opacity:0.25"></i><i style="opacity:0.62"></i><i style="opacity:0.99"></i><i style="opacity:0.51"></i><i style="opacity:0.88"></i><i style="opacity:0.40"></i><i style="opacity:0.77"></i><i style="opacity:0.29"></i><i style="opacity:0.66"></i><i style="opacity:0.18"></i><i style="opacity:0.55"></i><i style="opacity:0.92"></i><i style="opacity:0.44"></i><i style="opacity:0.81"></i><i style="opacity:0.33"></i><i style="opacity:0.70"></i><i style="opacity:0.22"></i><i style="opacity:0.59"></i><i style="opacity:0.96"></i><i style="opacity:0.48"></i><i style="opacity:0.85"></i><i style="opacity:0.37"></i><i style="opacity:0.74"></i><i style="opacity:0.26"></i></div>
+    <div class="mock-cock-bar"><span>Gewohnheit: Lesen ▾</span><span>⤓ CSV</span></div>
+  </div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span></div></section>
+<section id="r2-s9" data-nav-label="Hotkey-Übersicht" data-screen hidden><div class="d1-r2-page"><header class="d1-r2-hdr">
+    <span class="d1-r2-hdr-icon">▦</span>
+    <div class="d1-r2-hdr-text"><b>Varianten-Übersicht</b><span>Habit-Tracker Startscreen · Iteration 1 · 3 Varianten</span></div>
+    <span class="d1-r2-hdr-state">Noch keine Base</span>
+    <button type="button" class="d1-r2-help" data-screen-link="r2-s9"><kbd class="d1-r2-kbd">?</kbd> Hotkeys</button>
+  </header><nav class="d1-r2-quick">
+    <button type="button" class="d1-r2-q-arrow" data-tip="Vorherige Variante (←)">‹</button>
+    <button type="button" class="d1-r2-q-seg d1-r2-q-ov on" data-screen-link="r2-s1">▦ Übersicht</button>
+    <button type="button" class="d1-r2-q-seg" style="--v:#5f8b6a" data-screen-link="r2-s3"><i></i>Zen-Garten</button><button type="button" class="d1-r2-q-seg" style="--v:#e8622c" data-screen-link="r2-s5"><i></i>Spielplatz</button><button type="button" class="d1-r2-q-seg" style="--v:#2f62d8" data-screen-link="r2-s7"><i></i>Cockpit</button>
+    <button type="button" class="d1-r2-q-arrow" data-tip="Nächste Variante (→)">›</button>
+  </nav><div class="d1-r2-body"><div class="d1-r2-grid d1-r2-blur"><div class="d1-r2-ghost" style="--v:#5f8b6a"></div><div class="d1-r2-ghost" style="--v:#e8622c"></div><div class="d1-r2-ghost" style="--v:#2f62d8"></div></div></div><span class="d1-r2-fab d1-r2-fab-menu" aria-hidden="true">☰</span><span class="d1-r2-fab d1-r2-fab-chat" aria-hidden="true">💬</span><div class="d1-r2-sheet-wrap"><div class="d1-r2-sheet">
+    <h3>Tastenkürzel</h3>
+    <dl><dt><kbd class="d1-r2-kbd">Esc</kbd></dt><dd>Zurück zur Übersicht</dd><dt><kbd class="d1-r2-kbd">←</kbd> / <kbd class="d1-r2-kbd">→</kbd></dt><dd>Vorherige / nächste Variante</dd><dt><kbd class="d1-r2-kbd">1 – 9</kbd></dt><dd>Direkt zu Variante N</dd><dt><kbd class="d1-r2-kbd">Tab</kbd></dt><dd>Nächste Unterseite der Variante</dd><dt><kbd class="d1-r2-kbd">B</kbd></dt><dd>Aktuelle Variante als Base setzen / lösen</dd><dt><kbd class="d1-r2-kbd">?</kbd></dt><dd>Diese Übersicht</dd></dl>
+    <button type="button" class="d1-r2-back" data-screen-link="r2-s1">Schließen <kbd class="d1-r2-kbd">Esc</kbd></button>
+  </div></div></div></section>
+</section>
+</section>
