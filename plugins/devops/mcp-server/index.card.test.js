@@ -1607,6 +1607,38 @@ describe("render_completion_card — a pending question replaces the ship offer 
   });
 });
 
+describe("render_completion_card — analysis card shows open items and their replies (#759)", () => {
+  const open = [{ text: "Build-ID-Fix liegt committet im Side-Branch — weder gepusht noch gemergt", reply: "Ja, shippe den Build-ID-Fix." }];
+  const labels = async (d, lang) => {
+    const { buttonsFor } = await import("./lib/card-widget.js");
+    return buttonsFor(d.buttonsKey, lang, { replies: d.replies, noShip: d.noShip }).map(b => b.label);
+  };
+
+  test.each(["de", "en"])("open points are listed and the conclude button rides along (%s)", async (lang) => {
+    const mod = await import("./index.js");
+    const d = mod.buildDecisionBlock({ variant: "analysis", summary: "x", open }, lang, "analysis", {}, { mode: "git" });
+    expect(d.points.join("\n")).toContain("Build-ID-Fix");
+    expect(d.replies).toEqual(["Ja, shippe den Build-ID-Fix."]);
+    const l = await labels(d, lang);
+    expect(l).toHaveLength(3);
+    expect(l).toContain(lang === "de" ? "Umsetzen" : "Implement");
+    expect(l).toContain(lang === "de" ? "Frage" : "Question");
+  });
+
+  test("an analysis card without open renders as before: two buttons, no points", async () => {
+    const mod = await import("./index.js");
+    const d = mod.buildDecisionBlock({ variant: "analysis", summary: "x" }, "de", "analysis", {}, { mode: "git" });
+    expect(d.points).toEqual([]);
+    expect(d.replies).toEqual([]);
+    expect(await labels(d, "de")).toEqual(["Umsetzen", "Frage"]);
+  });
+
+  test("the rendered card names the open point", async () => {
+    const text = await cardText({ variant: "analysis", summary: "x", lang: "de", session_id: "test-759-render", open });
+    expect(text).toContain("Build-ID-Fix");
+  });
+});
+
 describe("render_completion_card — routine next step is no open point (#751)", () => {
   test("test card: the next-step point is dropped, the tool result names it, userTest stays", async () => {
     const res = await render({

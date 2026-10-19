@@ -1566,6 +1566,10 @@ function basePointsForKey(input, key, lang) {
     // them. The steps to test come first and are never folded (#750).
     case 'test':
       return [...userTest.map(testTag), ...open];
+    // An analysis card shows the open points the answer left (#759), with their
+    // replies on the conclude button next to Umsetzen / Frage.
+    case 'analysis':
+      return [...open];
     case 'vv-unverified':
       // A deliberate skip names itself (pointsForKey) — the generic line only
       // stands in when the card carries no reason.
@@ -1785,7 +1789,7 @@ const NO_BUTTON_KEYS = new Set(['ready-files', 'test-minimal', 'released-stable'
 const APP_START_KEYS = new Set(['test', 'ship-successful', 'ship-successful-kept', 'ship-successful-closeout', 'ship-successful-deploy']);
 
 /** Decision keys whose widget offers "Nachbessern" with the prepared answer to the card's open points. */
-const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful', 'ship-successful-closeout']);
+const CONCLUDE_KEYS = new Set(['ready', 'test', 'ship-successful', 'ship-successful-closeout', 'analysis']);
 
 /**
  * The whole decision block: heading (already carrying any "+N weitere" tail),
