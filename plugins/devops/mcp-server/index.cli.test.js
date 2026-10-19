@@ -115,6 +115,17 @@ describe("--render-card CLI fallback", () => {
     }
   });
 
+  test("a stringified verification parses like the other JSON fields; nextStep is no unknown key", async () => {
+    const { stdout, stderr } = await renderCardFull({
+      variant: "analysis", summary: "Analyse", session_id: S("verif"),
+      verification: JSON.stringify({ skipped: true, reason: "docs only" }),
+      nextStep: "Fix umsetzen",
+    });
+    expect(stdout).toContain("Analyse");
+    expect(stderr).not.toContain("nextStep");
+    expect(stderr).not.toMatch(/verification/);
+  });
+
   test("the session-title instruction rides on stderr, never in the card", async () => {
     const { stdout, stderr } = await renderCardFull({ variant: "ready", summary: "Titel-Test", session_id: S("title"), changes: [{ area: "x", description: "y" }] });
     expect(stdout).not.toContain("SESSION TITLE");

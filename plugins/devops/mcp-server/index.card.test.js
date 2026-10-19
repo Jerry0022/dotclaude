@@ -153,6 +153,29 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     expect(lines[0]).toBe("› **⚠ Nicht voll erfüllt:** Merken pro Account — nur localStorage");
   });
 
+  test("audit: an unmet requirement that waits on a deploy (with evidence) is not named, same as a partial one", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Deploy-Wait", lang: "en", session_id: "test-audit-unmet-deploy",
+      validation: [
+        { requirement: "Live check", status: "unmet", evidence: "needs the prod deploy", waitsOn: "deploy" },
+        { requirement: "Done", status: "met", evidence: "ok" },
+      ],
+    });
+    expect(text).not.toContain("Not achieved");
+    expect(text).not.toContain("Live check — needs the prod deploy");
+    expect(text).toMatch(/^## 👉 📦 Ready — Ship\?$/m);
+  });
+
+  test("audit: '0 failed' next to a real error count names the real count, not 0 Tests rot", async () => {
+    const text = await cardText({
+      variant: "ready", summary: "Rot", lang: "de", session_id: "test-audit-zero-red",
+      tests: [{ method: "npm test", result: "120 passed, 0 failed, 2 errors" }],
+    });
+    expect(text).toContain("2 Tests rot");
+    expect(text).not.toContain("0 Tests rot");
+    expect(text).toContain("2 roten Tests");
+  });
+
   test("every gap gets its own top line — unmet first, then partial; a deploy wait is not named (#630)", async () => {
     const text = await cardText({
       variant: "ship-successful", summary: "Mehrere Lücken", lang: "en", session_id: "test-anatomy-multigap",
@@ -516,6 +539,43 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       }
       fs.rmSync(manual, { recursive: true, force: true });
       fs.rmSync(auto, { recursive: true, force: true });
+    }
+  });
+
+  // Audit: the lenient "self" read took a contract copied in from another
+  // checkout and skipped the local ship for good, silently.
+  test("no remote + self marker: a ship-manual contract rooted in another checkout is ignored", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "card-local-ship-root-"));
+    const g = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "t@example.com");
+    g("config", "user.name", "t");
+    fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+    g("add", "a.txt");
+    g("commit", "-q", "-m", "init");
+    fs.writeFileSync(path.join(repo, "a.txt"), "two\n");
+    try {
+      RC.arm(repo, {
+        source: "cli", mode: "prompt", modeFrom: "cli", flow: "interactive", ship: "manual",
+        passes: [], strict: false, items: [],
+      });
+      const file = path.join(repo, ".claude", "run-contract.json");
+      const own = JSON.parse(fs.readFileSync(file, "utf8"));
+      const mod = await import("./index.js");
+      const params = () => ({ variant: "ready", summary: "Lokal", lang: "de", session_id: "self", cwd: repo, state: { mode: "git-no-remote" } });
+      // Rooted here: the user's "ship manual" holds.
+      expect(mod.localShipInstruction(params())).toBeNull();
+      fs.rmSync(path.join(os.tmpdir(), "dotclaude-devops-local-ship-self"), { force: true });
+      // Copied in from elsewhere: no contract of this project.
+      fs.writeFileSync(file, JSON.stringify({ ...own, root: path.join(os.tmpdir(), "card-some-other-checkout") }));
+      expect(mod.localShipInstruction(params())).toContain("LOCAL SHIP");
+    } finally {
+      fs.rmSync(path.join(os.tmpdir(), "dotclaude-devops-local-ship-self"), { force: true });
+      fs.rmSync(repo, { recursive: true, force: true });
     }
   });
 

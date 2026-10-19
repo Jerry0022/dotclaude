@@ -54,7 +54,7 @@ import { dropNextStepOpenItems } from "./lib/open-admission.js";
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
+import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, sameProjectRoot, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
@@ -554,7 +554,10 @@ function localShipInstruction(params) {
     const sid = params.session_id;
     const selfMarker = !sid || sid === 'self' || String(sid).startsWith('local_');
     const { readContractForCard } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'run-contract.js'));
-    const contract = readContractForCard(cwd, selfMarker ? {} : { sessionId: sid });
+    let contract = readContractForCard(cwd, selfMarker ? {} : { sessionId: sid });
+    // The lenient read takes any live contract; one copied in from another
+    // checkout (Desktop seeds worktrees with untracked .claude/) is not this project's.
+    if (selfMarker && contract && contract.root && !sameProjectRoot(contract.root, cwd)) contract = null;
     if (contract && !contract.closedAt && contract.ship !== 'auto') return null;
     const { hasUnshippedWork, defaultBranchRef } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-unshipped.js'));
     const git = (dir, args) => execFileSync('git', args, { ...GIT_PROBE_OPTS, cwd: dir });
@@ -648,8 +651,10 @@ function deviations(input, lang) {
   // Claude's own. A deploy wait counts as met (requirementsPost) — not named.
   const validation = Array.isArray(input.validation) ? input.validation : [];
   const name = (v) => v.requirement + (v.evidence ? ' — ' + v.evidence : '');
-  const unmet = validation.filter(v => v && v.status === 'unmet');
-  const partial = validation.filter(v => v && v.status === 'partial' && v.waitsOn !== 'deploy');
+  // Same rule as classify/ownedValidation: a deploy wait counts as met only with evidence.
+  const deployWait = (v) => v.waitsOn === 'deploy' && typeof v.evidence === 'string' && v.evidence.trim() !== '';
+  const unmet = validation.filter(v => v && v.status === 'unmet' && !deployWait(v));
+  const partial = validation.filter(v => v && v.status === 'partial' && !deployWait(v));
   if (unmet.length || partial.length) {
     const U = DEVIATION_LABEL[lang] || DEVIATION_LABEL.de;
     const P = PARTIAL_LABEL[lang] || PARTIAL_LABEL.de;
@@ -715,6 +720,17 @@ function buildResultLines(input, lang, { clamp = true } = {}) {
 // they carry a finding.
 // ---------------------------------------------------------------------------
 
+/** A result text without its "0 rot" / "0 failed" counts — those name a green count, never a red one. */
+function withoutZeroRed(text) {
+  return String(text || '').replace(/\b0\s*(rot|red|fail\w*|fehler|errors?)\b/gi, '');
+}
+
+/** The first non-zero red count a result names ("120 passed, 0 failed, 2 errors" → "2"), else null. */
+function redCountOf(text) {
+  const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(withoutZeroRed(text));
+  return m ? m[1] : null;
+}
+
 /** ✓ met · ✗ failed · ◐ partial — classified from freeform result text. */
 function glyphForResult(result) {
   const r = String(result || '').toLowerCase();
@@ -778,8 +794,8 @@ function testsPostText(result, glyph, lang) {
   if (!n) return r;
   const noun = (k) => (lang === 'en' ? 'test' : 'Test') + (String(k) === '1' ? '' : 's');
   if (glyph === '✗') {
-    const red = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(r);
-    const k = red ? red[1] : ratio && ratio.failed ? String(ratio.failed) : n;
+    const red = redCountOf(r);
+    const k = red ? red : ratio && ratio.failed ? String(ratio.failed) : n;
     return k + ' ' + noun(k) + (lang === 'en' ? ' red' : ' rot');
   }
   return n + ' ' + noun(n) + (lang === 'en' ? ' green' : ' grün');
@@ -1716,8 +1732,8 @@ function decisionContext(input, key, delivery, state, lang) {
   const redCount = (Array.isArray(input.tests) ? input.tests : [])
     .filter(t => classifyGate(t) === 'test' && glyphForResult(t.result) !== '✓')
     .reduce((sum, t) => {
-      const m = /(\d+)\s*(rot|red|fail\w*|fehler|errors?)/i.exec(String(t.result || ''));
-      return sum + (m ? Number(m[1]) : 1);
+      const red = redCountOf(t.result);
+      return sum + (red ? Number(red) : 1);
     }, 0);
   const validation = ownedValidation(input);
   const unmetCount = validation.filter(v => v.status && v.status !== 'met').length;
@@ -2272,7 +2288,7 @@ function refreshUsage() {
 /** Structured fields the MCP schema accepts as either an object or a JSON string. */
 const JSON_FIELDS = [
   'changes', 'tests', 'state', 'cta', 'userTest', 'userFinalTest', 'open',
-  'deployGate', 'validation', 'delivery', 'promotion', 'pending', 'concept', 'pause',
+  'deployGate', 'validation', 'verification', 'delivery', 'promotion', 'pending', 'concept', 'pause',
 ];
 
 /** Prefix that carries the relay contract with the card itself. */
