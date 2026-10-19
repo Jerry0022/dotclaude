@@ -86,7 +86,9 @@ followed by ONE call of the same prompt through
 runs on the plan's monthly API credit, not on the plan's usage limits.
 Same rc table, same rules: advisory only, never retried, never blocking;
 rc 126 (switch off) is silent. This applies to every integration point
-below.
+below. A review that has to read the repo itself (not just a diff on
+stdin) goes through `claude-api-agent.js --root <repo>` instead — same rc
+table, read-only tools (`api-credits.md` § The API agent).
 
 **Key principle:** When Codex is available, it is used **proactively and
 automatically** at defined integration points. Codex steps are not "offered" or

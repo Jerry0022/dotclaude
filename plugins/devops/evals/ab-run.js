@@ -16,6 +16,10 @@
 //   --disable <key>   enabledPlugins key to disable (repeatable, default devops@dotclaude)
 //   --keep-workdir    keep each run's temp project dir
 //   --dry-run         print the exact commands, call no model
+//   --api-credit      bill the runs to the plan's monthly API credit (devops key,
+//                     deep-knowledge/api-credits.md); default: on when apiCredit.enabled
+//                     and a key is stored AND this runs from your own terminal
+//   --no-api-credit   always bill the runs to the plan login
 //   --summarize <dir> re-summarise an existing results run dir and exit
 
 "use strict";
@@ -53,6 +57,8 @@ function parseArgs(argv) {
       case "--disable": opts.disable.push(next()); break;
       case "--keep-workdir": opts.keepWorkdir = true; break;
       case "--dry-run": opts.dryRun = true; break;
+      case "--api-credit": opts.apiCredit = "on"; break;
+      case "--no-api-credit": opts.apiCredit = "off"; break;
       case "--summarize": opts.summarize = path.resolve(next()); break;
       default: throw new Error(`unknown argument: ${a}`);
     }
@@ -70,17 +76,40 @@ function parseArgs(argv) {
 // fail with "Not logged in" / 401 — strip them; the case env is added after.
 // `pathPrepend` (absolute dirs) goes in front of PATH — under whatever
 // casing the env spells it (`Path` on Windows), so no second PATH appears.
-function childEnv(caseEnv, parentEnv = process.env, pathPrepend = []) {
+function childEnv(caseEnv, parentEnv = process.env, pathPrepend = [], apiKey = null) {
   const env = {};
   for (const [k, v] of Object.entries(parentEnv)) {
     if (!/^(CLAUDE|ANTHROPIC)/i.test(k)) env[k] = v;
   }
   const out = { ...env, ...caseEnv };
+  // `-p` always uses ANTHROPIC_API_KEY when present — set only in the child.
+  if (apiKey) out.ANTHROPIC_API_KEY = apiKey;
   if (pathPrepend.length) {
     const key = Object.keys(out).find((k) => k.toUpperCase() === "PATH") || "PATH";
     out[key] = [...pathPrepend, out[key]].filter(Boolean).join(path.delimiter);
   }
   return out;
+}
+
+// Runs started from inside a Claude Code session (desktop app, IDE, a
+// nested `claude`) count as Claude Code usage, which the plan's API credit
+// does not cover — measured 2026-10-19: such a child drew the purchased
+// balance. Only a run the user starts from their own terminal is "run it
+// yourself" (Help Center 17154008), so the credit is used only there.
+function resolveApiCredit(mode = "auto", parentEnv = process.env, deps = {}) {
+  const safe = deps.safe || require("../scripts/claude-api-safe");
+  if (mode === "off") return { key: null, note: "plan login (--no-api-credit)" };
+  const inSession = Boolean(parentEnv.CLAUDECODE || parentEnv.CLAUDE_CODE_ENTRYPOINT);
+  const sw = safe.loadSwitches({});
+  const keyInfo = safe.resolveKey({ env: parentEnv });
+  if (mode === "on") {
+    if (inSession) return { error: "--api-credit: started inside a Claude Code session — that counts as Claude Code usage, which the API credit does not cover. Run ab-run.js from your own terminal." };
+    if (!keyInfo) return { error: "--api-credit: no DEVOPS_ANTHROPIC_API_KEY stored (deep-knowledge/api-credits.md § The key)." };
+    return { key: keyInfo.key, note: "API credit (devops key)" };
+  }
+  if (!sw.enabled || !keyInfo) return { key: null, note: "plan login" };
+  if (inSession) return { key: null, note: "plan login — inside a Claude Code session the API credit does not apply; run from your own terminal to use it" };
+  return { key: keyInfo.key, note: "API credit (apiCredit.enabled, devops key)" };
 }
 
 // A failed run (auth error, crash, timeout) is no evidence either way:
@@ -103,7 +132,7 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   const pathPrepend = (caseDef.pathPrepend || []).map((d) => path.resolve(workdir, d));
   const started = Date.now();
   const proc = spawnSync(bin, args, {
-    cwd: workdir, env: childEnv(caseDef.env, process.env, pathPrepend), encoding: "utf8", shell: false,
+    cwd: workdir, env: childEnv(caseDef.env, process.env, pathPrepend, opts.apiKey), encoding: "utf8", shell: false,
     stdio: ["ignore", "pipe", "pipe"], timeout: opts.timeoutMin * 60000, maxBuffer: 512 * 1024 * 1024,
   });
   const wallMs = Date.now() - started;
@@ -151,6 +180,10 @@ function main(argv) {
   const cases = caseDirs.map(loadCase);
   const bin = resolveClaudeBin();
   const bash = resolveBash();
+  const credit = resolveApiCredit(opts.apiCredit);
+  if (credit.error) throw new Error(credit.error);
+  opts.apiKey = credit.key;
+  console.log(`# billing: ${credit.note}`);
 
   const variants = [];
   const cleanups = [];
@@ -214,4 +247,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, childEnv, gradeOrUndecided, main };
+module.exports = { parseArgs, childEnv, resolveApiCredit, gradeOrUndecided, main };

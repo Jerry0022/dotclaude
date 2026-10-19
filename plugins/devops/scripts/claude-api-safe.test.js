@@ -159,3 +159,21 @@ test("--status reports switches and key presence, never the key", async () => {
   const s = JSON.parse(r.out);
   expect(s).toMatchObject({ enabled: true, webGuide: true, keyPresent: true, keySource: "file", limitUntil: null });
 });
+
+describe("sessionLine — the SessionStart [api-credit] line", () => {
+  test("off → no line at all", () => {
+    expect(api.sessionLine({ pluginRoot: "/p", cwd, home, env: {} })).toBeNull();
+  });
+  test("on without key → names the missing key and the guide", () => {
+    setConfig({ enabled: true, webGuide: true });
+    expect(api.sessionLine({ pluginRoot: "/p", cwd, home, env: {} })).toMatch(/no key stored.*web guide/);
+  });
+  test("on with key → credit-first route with the agent script path", () => {
+    setConfig({ enabled: true });
+    setKeyFile("DEVOPS_ANTHROPIC_API_KEY=sk-test\n");
+    const line = api.sessionLine({ pluginRoot: "C:\\p", cwd, home, env: {} });
+    expect(line).toMatch(/API credit FIRST/);
+    expect(line).toContain("{PLUGIN_ROOT}/scripts/claude-api-agent.js");
+    expect(line).not.toContain("sk-test");
+  });
+});
