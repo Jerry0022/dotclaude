@@ -16,6 +16,8 @@ const tmpDirs = [];
 function makeTmpDir() {
   fs.mkdirSync(TMP_ROOT, { recursive: true });
   const dir = fs.mkdtempSync(path.join(TMP_ROOT, "web-guide-test-"));
+  // The guide marker lives under projectRoot(cwd); anchor it inside the tmp dir.
+  fs.mkdirSync(path.join(dir, ".git"));
   tmpDirs.push(dir);
   return dir;
 }
@@ -256,18 +258,18 @@ describe("upsertEnv", () => {
     expect(upsertEnv(content, "B", "new")).toBe("export B=new\n");
   });
 
-  test("quotes a value containing whitespace", () => {
-    expect(upsertEnv("", "FOO", "has space")).toBe('FOO="has space"\n');
+  test("single-quotes a value containing whitespace (literal in every loader)", () => {
+    expect(upsertEnv("", "FOO", "has space")).toBe("FOO='has space'\n");
   });
 
-  test("quotes and escapes a value with quotes and backslashes", () => {
-    expect(upsertEnv("", "FOO", 'a"b\\c')).toBe('FOO="a\\"b\\\\c"\n');
+  test("falls back to escaped double quotes only when the value holds a single quote", () => {
+    expect(upsertEnv("", "FOO", "it's $x \"y\"")).toBe('FOO="it\'s \\$x \\"y\\""\n');
   });
 
-  test("quotes a value containing #, $, or =", () => {
-    expect(upsertEnv("", "FOO", "a#b")).toBe('FOO="a#b"\n');
-    expect(upsertEnv("", "FOO", "a$b")).toBe('FOO="a$b"\n');
-    expect(upsertEnv("", "FOO", "a=b")).toBe('FOO="a=b"\n');
+  test("single-quotes a value containing #, $, or = (no $VAR expansion)", () => {
+    expect(upsertEnv("", "FOO", "a#b")).toBe("FOO='a#b'\n");
+    expect(upsertEnv("", "FOO", "a$b")).toBe("FOO='a$b'\n");
+    expect(upsertEnv("", "FOO", "a=b")).toBe("FOO='a=b'\n");
   });
 
   test("ensures a single trailing newline even without one in source", () => {

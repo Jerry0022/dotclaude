@@ -157,8 +157,13 @@ anything beyond the route word (Step 1), file it now — after `activate`, befor
 the confirmation:
 
 ```bash
-node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').appendNote(process.cwd(), process.argv[1])" "<text>"
+node -e "require('{PLUGIN_ROOT}/hooks/lib/batch-state.js').appendNote(process.cwd(), require('fs').readFileSync(0, 'utf8'))" <<'NOTE'
+<text>
+NOTE
 ```
+
+The text goes through a quoted heredoc on stdin, never inside shell quotes — a
+backtick, `$(…)`, `$VAR` or `"` in the note must not run or get mangled.
 
 **Verbatim, and as ONE note** — do not summarise, re-order, or split it; the
 merge in Step 4 reads content, not note boundaries. Skip this step silently

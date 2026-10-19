@@ -23,6 +23,9 @@ const tmpDirs = [];
 function makeTmpDir() {
   fs.mkdirSync(TMP_ROOT, { recursive: true });
   const dir = fs.mkdtempSync(path.join(TMP_ROOT, "guide-active-"));
+  // Project-root anchor: the marker now lives under projectRoot(cwd), so the
+  // tmp dir must be its own root instead of resolving to the enclosing repo.
+  fs.mkdirSync(path.join(dir, ".git"));
   tmpDirs.push(dir);
   return dir;
 }
@@ -324,6 +327,25 @@ describe("guide-active-state", () => {
       expect(recordGuideStep(dir, step)).toBeNull();
       const data = JSON.parse(fs.readFileSync(guideActiveFilePath(dir), "utf8"));
       expect(data.lastStep).toBeUndefined();
+    });
+
+    test("an unrecordable step drops the stale lastStep (no resume to step n-1)", () => {
+      const dir = makeTmpDir();
+      markGuideActive(dir);
+      recordGuideStep(dir, { id: "1", title: "t" });
+      expect(recordGuideStep(dir, { id: "2", copy: [{ value: "x" }] })).toBeNull();
+      const data = JSON.parse(fs.readFileSync(guideActiveFilePath(dir), "utf8"));
+      expect(data.lastStep).toBeUndefined();
+      expect(typeof data.token).toBe("string");
+    });
+
+    test("marker path anchors at the project root, not a subfolder cwd", () => {
+      const dir = makeTmpDir();
+      const sub = path.join(dir, "sub");
+      fs.mkdirSync(sub);
+      markGuideActive(sub);
+      expect(fs.existsSync(path.join(dir, ".claude", "auto-guide-active.json"))).toBe(true);
+      expect(fs.existsSync(path.join(sub, ".claude"))).toBe(false);
     });
 
     test("refuses to persist a step whose JSON is too large", () => {

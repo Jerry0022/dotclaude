@@ -526,8 +526,10 @@ function buildAttachmentGuard(marker, refs) {
     );
   }
   lines.push(
-    '4. Speichern — eine Notiz, ein Aufruf:',
-    `   node -e "require(process.argv[1]).appendNote(process.cwd(), process.argv[2])" "${STATE_MODULE}" "<notiztext>"`,
+    '4. Speichern — eine Notiz, ein Aufruf (Text über stdin im gequoteten Heredoc, nie in Shell-Anführungszeichen):',
+    `   node -e "require(process.argv[1]).appendNote(process.cwd(), require('fs').readFileSync(0, 'utf8'))" "${STATE_MODULE}" <<'NOTE'`,
+    '   <notiztext>',
+    '   NOTE',
     '5. Antworte mit EINER Zeile: Notiz #<n> gespeichert, Anhang beschrieben.',
     '',
     `Alles Weitere bleibt gesammelt. "${marker} <text>" startet später die Umsetzung.`,
