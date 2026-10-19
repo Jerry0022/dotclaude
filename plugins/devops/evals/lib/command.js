@@ -61,7 +61,7 @@ function resolveClaudeBin(env = process.env, platform = process.platform) {
     if (fs.existsSync(shim)) {
       const m = fs.readFileSync(shim, "utf8").match(/"%dp0%\\([^"]+\.exe)"/);
       if (m) {
-        const target = path.join(dir, m[1]);
+        const target = path.join(dir, ...m[1].split("\\"));
         if (fs.existsSync(target)) return target;
       }
     }

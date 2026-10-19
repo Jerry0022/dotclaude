@@ -32,7 +32,7 @@
  *   pause <seconds>                   → sleeps 1-55s, then prints "paused Ns";
  *     used between hidden-tab drains instead of a bare shell `sleep` (the
  *     Bash tool forbids that; `Bash(node *)` is allowed)
- *   store --file <path> --key <KEY> [--b64 <value>]
+ *   store --file <path> --key <KEY> [--b64 <value>] [--user]
  *                                      → upserts KEY=<value> into a dotenv
  *     file; value is base64-decoded from --b64 or read from stdin. Inside a
  *     git work tree, refuses (exit 1, nothing written) unless the target is
@@ -52,6 +52,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execFileSync } = require('child_process');
 const {
   markGuideActive, clearGuideActive, pauseGuide, touchGuideToken, readGuideToken, recordGuideStep, getGuideStatus,
@@ -89,7 +90,7 @@ const USAGE = `usage:
                                                         Finding 7)
   node web-guide.js pause <seconds>                    (1-55, prints
                                                         "paused Ns")
-  node web-guide.js store --file <path> --key <KEY> [--b64 <value>]
+  node web-guide.js store --file <path> --key <KEY> [--b64 <value>] [--user]
                                                         (value read from
                                                         stdin if --b64 is
                                                         omitted)
@@ -569,6 +570,7 @@ function parseStoreArgs(argv) {
     if (argv[i] === '--file') opts.file = argv[++i];
     else if (argv[i] === '--key') opts.key = argv[++i];
     else if (argv[i] === '--b64') opts.b64 = argv[++i];
+    else if (argv[i] === '--user') opts.user = true;
   }
   return opts;
 }
@@ -630,7 +632,7 @@ function isInsideGitWorkTree(cwd, runner = execFileSync) {
 }
 
 function store(argv) {
-  const { file, key, b64 } = parseStoreArgs(argv);
+  const { file, key, b64, user } = parseStoreArgs(argv);
 
   if (!file) {
     process.stderr.write('missing --file\n');
@@ -667,8 +669,20 @@ function store(argv) {
     return;
   }
 
-  const cwd = process.cwd();
-  const absFile = path.resolve(file);
+  // --user: a per-user secret (e.g. the devops API key) that belongs to no
+  // project — the file is a bare name under ~/.claude, and the same guards
+  // run with ~/.claude as the containing directory.
+  let cwd = process.cwd();
+  if (user) {
+    if (path.basename(file) !== file || file === '.' || file === '..') {
+      process.stderr.write('--user takes a bare file name (stored under ~/.claude)\n');
+      process.exitCode = 1;
+      return;
+    }
+    cwd = process.env.WEB_GUIDE_USER_DIR || path.join(os.homedir(), '.claude');
+    fs.mkdirSync(cwd, { recursive: true });
+  }
+  const absFile = path.resolve(cwd, file);
   const rel = path.relative(cwd, absFile);
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
     process.stderr.write('file must be inside the current working directory\n');
