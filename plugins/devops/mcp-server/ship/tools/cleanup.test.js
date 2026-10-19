@@ -14,6 +14,7 @@ vi.mock("../lib/git.js", () => ({
   gitArgs: vi.fn(() => ""),
   gitTry: vi.fn(),
   isWorktree: vi.fn(() => false),
+  detectDefaultBranch: vi.fn(() => "main"),
   getWorktreeBranches: vi.fn(() => new Set()),
 }));
 
@@ -38,7 +39,7 @@ vi.mock("../lib/repo-mode.js", () => ({
 }));
 
 import { handler } from "./cleanup.js";
-import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches } from "../lib/git.js";
+import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches, detectDefaultBranch } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { detectRepoMode } from "../lib/repo-mode.js";
 import { clearSentinel } from "../lib/sentinel.js";
@@ -50,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   detectRepoMode.mockReturnValue("git");
   isWorktree.mockReturnValue(false);
+  detectDefaultBranch.mockReturnValue("main");
   getWorktreeBranches.mockReturnValue(new Set());
   dirtySessionWorktrees.mockReturnValue([]);
   clearLockoutMarker.mockReturnValue(false);
@@ -226,5 +228,19 @@ describe("lockout marker — cleared on every exit that clears the sentinel", ()
     await handler({ branch: "feat/topic", base: "main", cwd: CWD, keep: false });
     expect(clearLockoutMarker).not.toHaveBeenCalled();
     expect(clearSentinel).not.toHaveBeenCalled();
+  });
+});
+
+describe("ship_cleanup — default branch is not 'intermediate' (master repos)", () => {
+  test("base master on a master-default repo → no intermediate-merge warning", async () => {
+    detectDefaultBranch.mockReturnValue("master");
+    const result = await handler({ branch: "feat/topic", base: "master", cwd: CWD });
+    expect((result.warnings || []).some((w) => /Intermediate merge/.test(w))).toBe(false);
+  });
+
+  test("a non-default base still warns", async () => {
+    detectDefaultBranch.mockReturnValue("master");
+    const result = await handler({ branch: "feat/topic", base: "feat/parent", cwd: CWD });
+    expect((result.warnings || []).some((w) => /Intermediate merge/.test(w))).toBe(true);
   });
 });

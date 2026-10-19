@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches, NETWORK_TIMEOUT } from "../lib/git.js";
+import { git, gitArgs, gitTry, isWorktree, getWorktreeBranches, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { clearSentinel } from "../lib/sentinel.js";
 import { clearLockoutMarker } from "../lib/lockout-marker.js";
@@ -33,7 +33,7 @@ export async function handler(params) {
   const { branch, base, cwd, keep } = params;
   if (!cwd) throw new Error("cwd is required — MCP server runs in the plugin directory, not the target repo");
   const opts = { cwd };
-  const intermediate = base !== "main";
+  const intermediate = base !== (detectDefaultBranch(opts) || "main");
   const cleaned = [];
   const warnings = [];
 
