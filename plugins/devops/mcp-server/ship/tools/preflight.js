@@ -17,6 +17,7 @@ import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 import { detectComponents } from "../lib/components.js";
 import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
+import { scanWorkflows } from "../lib/workflow-hygiene.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -336,6 +337,19 @@ export async function handler(params) {
     if (ignoreCheck) checks.push(ignoreCheck);
   }
 
+  // 9e. Workflow hygiene: habits that let a shared GitHub account limit
+  //     (artifact quota, minutes) block a ship. Never a gate — the skill
+  //     applies the mechanical fixes inside this ship (Step 1e).
+  const workflowHygiene = scanWorkflows(cwd);
+  if (workflowHygiene.findings.length) {
+    checks.push({
+      name: "workflow-hygiene",
+      ok: true,
+      count: workflowHygiene.findings.length,
+      warning: `${workflowHygiene.findings.length} workflow finding(s) — apply the fixes in this ship (do-ship Step 1e)`,
+    });
+  }
+
   // 10. Git config check (warning — auto-fixed by the do-ship skill)
   const conflictStyle = getConfig("merge.conflictstyle", opts);
   if (conflictStyle !== "diff3" && conflictStyle !== "zdiff3") {
@@ -469,6 +483,7 @@ export async function handler(params) {
     projectType: versionInfo.type,
     outOfBandDeploys,
     components,
+    workflowHygiene,
     checks,
     warnings,
     errors,
