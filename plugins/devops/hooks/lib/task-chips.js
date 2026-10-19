@@ -196,7 +196,8 @@ function recordDismiss(hook) {
 function samePlace(a, b) {
   const n = (p) => {
     const s = String(p || '').replace(/\\/g, '/').replace(/\/+$/, '');
-    return process.platform === 'win32' ? s.toLowerCase() : s;
+    // A drive-letter path is a Windows path wherever it is compared.
+    return process.platform === 'win32' || /^[a-z]:\//i.test(s) ? s.toLowerCase() : s;
   };
   return !!a && !!b && n(a) === n(b);
 }
