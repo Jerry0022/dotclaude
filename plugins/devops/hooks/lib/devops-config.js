@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module devops-config
- * @version 0.2.0
+ * @version 0.3.0
  * @plugin devops
  * @description Plugin settings a user can change in plain words, per project
  *   or for every project on the machine.
@@ -109,6 +109,37 @@ const SCHEMA = Object.freeze({
       doc: 'Opt-in: when apiCredit.enabled is on and no API key is stored, offer the one-time auto-guide through the Claude Console (workspace, spend limit, key).',
     }),
   }),
+  // Machine-level opt-ins: a scheduled pure-node job, no model tokens. Global
+  // only — a per-project value would mean nothing to a job that runs once per
+  // machine.
+  homeBackup: Object.freeze({
+    enabled: Object.freeze({
+      type: 'boolean', default: false, globalOnly: true,
+      doc: 'Opt-in: a daily pure-node job commits the allowlisted part of ~/.claude to a private GitHub repo — only after a secret and private-data scan finds nothing (scripts/home-backup.js).',
+    }),
+    repo: Object.freeze({
+      type: 'string', default: '', globalOnly: true, pattern: /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/,
+      doc: 'The private backup repo as <owner>/<name>, e.g. Jerry0022/claude-home.',
+    }),
+  }),
+  wipWatch: Object.freeze({
+    enabled: Object.freeze({
+      type: 'boolean', default: false, globalOnly: true,
+      doc: 'Opt-in: a weekly pure-node job looks for unlanded branches, dirty or broken worktrees and old stashes under the roots and notifies only when it finds something (scripts/wip-watch.js).',
+    }),
+    roots: Object.freeze({
+      type: 'list', default: Object.freeze(['~/IdeaProjects']), globalOnly: true,
+      doc: 'Comma-separated folders whose git repos the WIP watch scans (one level deep plus the folder itself).',
+    }),
+    day: Object.freeze({
+      type: 'enum', default: 'sun', globalOnly: true, values: Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']),
+      doc: 'Weekday of the weekly WIP-watch run.',
+    }),
+    discardAfterWeeks: Object.freeze({
+      type: 'integer', default: 8, min: 1, max: 520, globalOnly: true,
+      doc: 'A dirty worktree untouched for longer than this many weeks is suggested for discarding instead of securing.',
+    }),
+  }),
 });
 
 /** `section.key` for every setting, in SCHEMA order. */
@@ -136,6 +167,12 @@ function specOf(fullKey) {
 /** Is `value` valid for `spec`? */
 function isValid(spec, value) {
   if (spec.type === 'boolean') return typeof value === 'boolean';
+  if (spec.type === 'string') return typeof value === 'string' && (value === '' || !spec.pattern || spec.pattern.test(value));
+  if (spec.type === 'enum') return typeof value === 'string' && spec.values.includes(value);
+  if (spec.type === 'list') {
+    return Array.isArray(value) && value.length > 0
+      && value.every((v) => typeof v === 'string' && v.trim() !== '' && !v.includes(','));
+  }
   if (spec.type === 'integer') {
     return Number.isInteger(value)
       && (spec.min === undefined || value >= spec.min)
@@ -154,6 +191,16 @@ const FALSE_WORDS = ['false', 'off', 'no', 'nein', 'aus', '0'];
  */
 function readValue(spec, raw) {
   if (isValid(spec, raw)) return raw;
+  if (spec.type === 'string') return typeof raw === 'string' && isValid(spec, raw.trim()) ? raw.trim() : undefined;
+  if (spec.type === 'enum') {
+    const v = typeof raw === 'string' ? raw.trim().toLowerCase().slice(0, 3) : '';
+    return typeof raw === 'string' && isValid(spec, v) ? v : undefined;
+  }
+  if (spec.type === 'list') {
+    if (typeof raw !== 'string') return undefined;
+    const items = raw.split(',').map((v) => v.trim()).filter(Boolean);
+    return isValid(spec, items) ? items : undefined;
+  }
   if (typeof raw !== 'string' && typeof raw !== 'number') return undefined;
   const text = String(raw).trim().toLowerCase();
   let value;
@@ -168,7 +215,7 @@ function readValue(spec, raw) {
 
 /**
  * Parse a CLI/user string into the typed value for `fullKey`.
- * @returns {boolean|number}
+ * @returns {boolean|number|string|string[]}
  * @throws {Error} unknown key or invalid value — the message names the fix
  */
 function parseValue(fullKey, raw) {
@@ -177,9 +224,12 @@ function parseValue(fullKey, raw) {
   const { spec } = hit;
   const value = readValue(spec, raw);
   if (value === undefined) {
-    const range = spec.type === 'integer'
-      ? `an integer${spec.min !== undefined ? ` ≥ ${spec.min}` : ''}${spec.max !== undefined ? ` and ≤ ${spec.max}` : ''}`
-      : 'true or false';
+    const range = {
+      integer: `an integer${spec.min !== undefined ? ` ≥ ${spec.min}` : ''}${spec.max !== undefined ? ` and ≤ ${spec.max}` : ''}`,
+      string: spec.pattern ? `text matching ${spec.pattern}` : 'text',
+      enum: `one of ${(spec.values || []).join(', ')}`,
+      list: 'a comma-separated list of non-empty entries',
+    }[spec.type] || 'true or false';
     throw new Error(`invalid value "${raw}" for ${fullKey} — expected ${range}`);
   }
   return value;
@@ -278,7 +328,8 @@ function writeJson(file, data) {
 function setValue(fullKey, raw, scope, cwd, opts = {}) {
   if (scope !== 'project' && scope !== 'global') throw new Error('scope must be "project" or "global"');
   const value = parseValue(fullKey, raw);
-  const { section, key } = specOf(fullKey);
+  const { section, key, spec } = specOf(fullKey);
+  if (spec.globalOnly && scope !== 'global') throw new Error(`${fullKey} is machine-wide — use --global`);
   const file = configPaths(cwd, opts)[scope];
   const data = readJson(file) || {};
   if (!data[section] || typeof data[section] !== 'object') data[section] = {};

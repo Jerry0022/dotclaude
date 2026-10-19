@@ -43,7 +43,10 @@ function invalidEntries(cwd, opts = {}) {
       const sec = data[section];
       if (!sec || typeof sec !== 'object' || !Object.prototype.hasOwnProperty.call(sec, key)) continue;
       const raw = sec[key];
-      const typed = spec.type === 'boolean' ? typeof raw === 'boolean' : Number.isInteger(raw);
+      const typed = spec.type === 'boolean' ? typeof raw === 'boolean'
+        : spec.type === 'integer' ? Number.isInteger(raw)
+          : spec.type === 'list' ? Array.isArray(raw)
+            : typeof raw === 'string';
       let fix = null;
       try { fix = cfg.parseValue(fullKey, raw); } catch { /* not repairable */ }
       if (!typed || fix === null) out.push({ scope, file, key: fullKey, raw, fix: typed ? null : fix });

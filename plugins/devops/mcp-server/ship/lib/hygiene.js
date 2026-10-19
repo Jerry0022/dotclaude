@@ -18,9 +18,13 @@
  *      The rest is left to the page. "Removable" means nothing can be
  *      lost:
  *        - branch: its tip is in the default branch — git ancestor, the head
- *          of a merged PR (squash merges), reachable from a merged PR head
- *          (a sub-agent branch merged into the PR's branch, #572), or every
- *          file it touched is identical in the default branch;
+ *          of a merged PR (squash merges), or its CONTENT is: every file it
+ *          touched is identical in the default branch, or re-applying its
+ *          changes onto the default branch is a no-op
+ *          (scripts/lib/content-landed.js). Being reachable from a merged PR
+ *          head (a sub-agent branch merged into the PR's branch, #572) is not
+ *          enough on its own — the PR may have dropped those changes before
+ *          the squash;
  *        - worktree: a session worktree (under `.claude/worktrees/`), not
  *          locked, clean (`status --porcelain --untracked-files=all
  *          --ignored=matching` lists nothing but regenerable build output,
@@ -67,6 +71,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { contentInBase } = require("../../../scripts/lib/content-landed.js");
 
 const DAY_MS = 86_400_000;
 const GB = 1024 ** 3;
@@ -342,34 +350,41 @@ export function reachableFromMerged(cwd, merged, baseRef) {
   return new Set((out || "").split("\n").map((s) => s.trim()).filter(Boolean));
 }
 
-/** Every file `sha` changed since its merge base is identical in `baseRef`. */
-function treeLanded(sha, ctx) {
-  const base = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
-  if (!base) return false;
-  const out = gitOut(["diff", "--name-only", "-z", base, sha], ctx.cwd);
-  if (out === null) return false;
-  const files = out.split("\0").filter(Boolean);
-  if (files.length === 0) return true;
-  if (files.length > TREE_CHECK_MAX_FILES) return false;
-  return gitOk(["diff", "--quiet", sha, ctx.baseRef, "--", ...files], ctx.cwd);
+/**
+ * The content `sha` changed since its fork from `baseRef` is in `target`
+ * (default: `baseRef`) — scripts/lib/content-landed.js, shared with the WIP
+ * watch.
+ */
+function contentLanded(sha, ctx, target = ctx.baseRef) {
+  const opts = { maxFiles: TREE_CHECK_MAX_FILES };
+  if (target !== ctx.baseRef) opts.forkRef = ctx.baseRef;
+  return contentInBase(ctx.cwd, sha, target, opts).landed;
 }
 
 /**
  * How `sha` reached the default branch: "ancestor" | "pr" | "tree", or null.
+ *
+ * Reachability is history, not content: a commit reachable from a merged PR
+ * head (a sub-agent branch merged into the PR branch, #572), or an ancestor
+ * of a same-name merged head, can still have had its changes reverted or
+ * dropped in a conflict resolution before the squash. Those paths therefore
+ * count only when the content check proves the branch's own changes are in
+ * main (or in that head). A tip that IS a merged PR head, or an ancestor of
+ * the default branch, needs no content check.
  * @param {{cwd:string, baseRef:string, merged:{bySha:Set<string>, byName:Map<string,string[]>}|null}} ctx
  */
 export function landedVia(sha, branch, ctx) {
   if (!sha) return null;
   if (gitOk(["merge-base", "--is-ancestor", sha, ctx.baseRef], ctx.cwd)) return "ancestor";
+  if (ctx.merged && ctx.merged.bySha.has(sha)) return "pr";
+  if (contentLanded(sha, ctx)) return "tree";
   if (ctx.merged) {
-    if (ctx.merged.bySha.has(sha)) return "pr";
-    if (ctx.viaMerged && ctx.viaMerged.has(sha)) return "pr";
     // local tip behind the merged PR head (pushed from elsewhere, then merged)
     for (const head of (branch && ctx.merged.byName.get(branch)) || []) {
-      if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd)) return "pr";
+      if (gitOk(["merge-base", "--is-ancestor", sha, head], ctx.cwd) && contentLanded(sha, ctx, head)) return "pr";
     }
   }
-  return treeLanded(sha, ctx) ? "tree" : null;
+  return null;
 }
 
 /** An ignored porcelain path that is regenerable build output. */
