@@ -28,7 +28,7 @@ recommendation instead. `validateMarker(raw)` from `batch-state.js` normalises
 it; only `ok: false` goes back to the user, quoting the reason (`empty`, `too-long` = over 32 characters,
 `harness-reserved` = starts with `!`, `/`, `#` or `@` — name the mechanism in one
 clause and ask for a different one). A `warning: 'wordy'` marker (letters only,
-e.g. `Let's go`) is **accepted** — say once, in a single clause, that a collected
+e.g. `jetzt`) is **accepted** — say once, in a single clause, that a collected
 prompt starting with those words would fire the merge, then move on. Matching is
 case-insensitive and requires a word boundary, so retyping it in lower case still
 works.
@@ -53,7 +53,7 @@ first with one `ToolSearch`
    `mcp-server/lib/mode-state.js`) left by the first-prompt hourglass or an
    earlier card — never stack them (`👉 📥 Batch – 🔧 Foo` is the bug).
 4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
-   `title: "📥 Batch – {stripped title}"`.
+   `title: "👉 📥 Batch – {stripped title}"`.
 
 Removing it again (4.8, Step 5, expiry): `deep-knowledge/merge.md` § Retire.
 

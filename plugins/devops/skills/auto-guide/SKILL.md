@@ -183,7 +183,8 @@ Paste stdout into `javascript_tool`. A non-zero exit lists the schema
 violations — fix the step, do not bypass the validator. Result `"ok"`;
 `"reinject-needed"` → the page navigated since the last call: Step 4, then
 this step again; `"bad-token"` → re-run Step 3.4 and Step 4 (a fresh
-document gets the current token), then this step again. Re-sending the
+document gets the current token; if inject answers `already-injected`, reload
+the tab first), then this step again. Re-sending the
 **same, unchanged** step is safe: the overlay keeps its panel and any click
 it already queued for that step (the recovery below relies on this).
 

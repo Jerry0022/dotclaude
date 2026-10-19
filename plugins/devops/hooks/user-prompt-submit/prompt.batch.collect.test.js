@@ -255,6 +255,9 @@ describe("mode on — an attachment prompt is filed, not executed", () => {
     expect(r.stdout).toContain("Setze NICHTS davon um");
     expect(r.stdout).toContain("[Anhang]");
     expect(r.stdout).toContain("appendNote");
+    // the note text goes via a quoted heredoc on stdin, never inside shell quotes
+    expect(r.stdout).toContain("<<'NOTE'");
+    expect(r.stdout).toContain("readFileSync(0");
   });
 
   test("known attachment paths are named so the note can point at them", () => {

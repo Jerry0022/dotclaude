@@ -101,6 +101,16 @@ describe("batch-state — every path resolves to the root", () => {
   });
 });
 
+describe("guide-active-state — marker from a subdirectory", () => {
+  test("markGuideActive(sub) writes <root>/.claude/auto-guide-active.json only", async () => {
+    const G = await import("../../scripts/guide-active-state.js");
+    G.markGuideActive(sub);
+    expect(fs.existsSync(path.join(root, ".claude", "auto-guide-active.json"))).toBe(true);
+    expect(G.isGuideActive(root)).toBe(true);
+    expect(claudeDirsUnder(root)).toEqual([".claude"]);
+  });
+});
+
 describe("strict-state — mode file from a subdirectory", () => {
   test("activate(sub) writes <root>/.claude/strict-mode.json and is seen from both", () => {
     S.activate(sub, { reason: "on" });
