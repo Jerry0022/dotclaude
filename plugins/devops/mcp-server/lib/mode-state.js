@@ -614,13 +614,13 @@ export function batchWhat(batch, lang) {
 
 const BATCH_GUIDE = {
   de: {
-    collect: 'Sammeln: jeder Prompt ohne Marker wird Notiz — das rote „Eingabe blockiert"-Panel ist normal',
+    collect: 'Sammeln: jeder Prompt ohne Marker wird Notiz — **⚠ das rote „Eingabe blockiert"-Panel ist normal**',
     fire: 'Umsetzen: „{marker} <text>" oder /do-batch go — main mergen, alle Notizen, EIN Plan',
     stop: "Stoppen: /do-batch off (Notizen bleiben){bounds}",
     bounds: " · Auto-Ende nach {h} h oder {max} Notizen",
   },
   en: {
-    collect: 'Collect: every prompt without the marker becomes a note — the red "input blocked" panel is expected',
+    collect: 'Collect: every prompt without the marker becomes a note — **⚠ the red "input blocked" panel is expected**',
     fire: 'Execute: "{marker} <text>" or /do-batch go — merge main, read all notes, ONE plan',
     stop: "Stop: /do-batch off (notes stay){bounds}",
     bounds: " · auto-ends after {h} h or {max} notes",
