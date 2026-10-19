@@ -85,6 +85,15 @@ the committed ship extension (`deployParity:` block in the project's
 `.claude/skills/do-ship/reference.md`), not here. Details:
 `deep-knowledge/deploy-parity.md`.
 
+### `workspace` — where new work runs
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ownWorktree` | `false` | `true` → new work started in the main checkout goes straight into its own worktree, also when that checkout holds uncommitted/unpushed changes: ss.git.check reports them but no longer asks "Wo soll die Arbeit laufen?". Set for the project automatically the first time one of its sessions enters a worktree (post.worktree.enter), so the question comes at most once per project. |
+
+"Nie mehr fragen, immer eigener Worktree — überall" → `workspace.ownWorktree true --global`.
+"Hier bleiben" stays the `DEVOPS_ALLOW_MAIN=1` bypass in `.claude/settings.local.json`.
+
 ### `ship` — what happens after a successful ship
 
 | Key | Default | Meaning |
@@ -131,3 +140,9 @@ disable`. `roots`, `day` and `discardAfterWeeks` may be changed with `set …
 "Session nach dem Ship nicht archivieren" → `ship.archiveAfterShip false`.
 Background: `deep-knowledge/claude-desktop-app-setup.md` § Session archiving
 after ship.
+
+### `sessionEnd` — safety net for unsaved session work
+
+| Key | Default | Meaning |
+|---|---|---|
+| `autosave` | `local` | When a turn ends in a session worktree (`.claude/worktrees/<name>`) holding uncommitted work or unpushed commits and no open PR, `stop.session.autosave` saves a snapshot commit (temporary index; your branch, index and files are never touched) on the local branch `parked/autosave/<name>` — one stable ref per worktree, so the park register lists it. `push` also pushes that ref (never force) and fast-forwards the session branch only if it already exists on origin; a branch that was never pushed or was deleted after a merge is never (re)created. `off` = nothing. Secrets (`.env*`, keys, credentials, dumps), build output, tooling files and files over 5 MB are left out (the notice says how many). Skipped: during a ship, a merge/rebase/cherry-pick in progress, protected branches (main/master/develop/trunk/release/*), the plugin cache, once per 10 min per worktree. Known gap: with an open PR nothing is saved. |

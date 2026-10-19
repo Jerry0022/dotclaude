@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.274.1] — 2026-10-19
+
+### Fixed
+- **Completion card points show their kind.** An open point ending in `?` now starts with ❓, any other open point (a step the user does by hand) with 👉. Test steps keep 🧪. The icons are added only when the points are shown, so the heading, the 3-point cap and the question heading still work on the plain text.
+
+## [0.274.0] — 2026-10-19
+
+Session titles now show two icons, status first and activity second, plus one English keyword: `👉 📦 Ready – X`, `⏳ 🚀 Shipping – X`, `🟩 🚀 Released Alpha – X`. The title and the card's CTA heading come from one table, so they can no longer drift apart. The workspace question ("Wo soll die Arbeit laufen?") is now asked only until a project's handling is decided.
+
+### Added
+- **`hooks/lib/title-scheme.js`**: one table of STATUS icons (⏳ working, 👉 your move, 🟩 done, 🟥 aborted, ⏸️ paused) and ACTIVITY icons. It feeds both the session title and the CTA heading (`cardHead`). 👉 vs 🟩 is decided by mandatory user steps, not by variant: an alpha release with only an optional promote offer is 🟩.
+- **Interrupted turns**: a turn that ends without a card turns a bare `⏳` title into `👉 ⚡ Interrupted – …` (`stop.flow.guard`).
+- **devops-config `workspace.ownWorktree`**: the first `EnterWorktree` of a project stores it (`post.worktree.enter`). After that, `ss.git.check` still reports uncommitted or unpushed work but sends new work into its own worktree without asking.
+- Optional card field **`cta.activity`** for named aborts.
+
+### Changed
+- Wording is consistent: Released Alpha/Beta/Stable, Promoted Beta/Stable, Started — never LIVE. The card's component line uses 🧩.
+- The scheme moved into its own doc, `deep-knowledge/session-title-scheme.md` (`completion-card-design.md` was over its line budget).
+
+### Fixed
+- Title stripping removes only known prefixes. Before, a title such as `⏳ Fix Login – Bug` lost words. Legacy single-icon prefixes are still stripped.
+
+## [0.273.0] — 2026-10-19
+
+Every call that runs on the API credit is now logged, so you can see what it was spent on.
+
+### Added
+- **Usage log (`~/.claude/api-credit-usage.jsonl`)**: `claude-api-safe.js`, `claude-api-agent.js` and `api-credit-audit.js` each write one line per call or agent run. The line holds the time, script, use (`review` / `scout` / `research` / `audit`), project, model, tokens, estimated cost and exit code. It never contains the prompt or the key.
+- **`claude-api-safe.js --usage [--since YYYY-MM-DD]`**: shows calls, successful calls and dollars for the current month (in local time), split by use, project and model.
+
+### Changed
+- The price table now lives only in `claude-api-safe.js`, so both scripts price calls the same way. The stderr line of a one-shot call now also shows its estimated cost.
+- An agent run that throws after its first request is still logged.
+
+## [0.272.0] — 2026-10-19
+
+Past work no longer gets lost in orphaned worktrees and branches. An audit of 29 repos found that hygiene itself never deleted unlanded work, but it ran only after a ship (in 5 of 29 repos) and its at-risk check was too narrow. The root causes: agent sub-branches that were never integrated, agent worktrees left uncommitted, sessions that ended without a commit, and parking without a register.
+
+### Added
+- **Per-file landing state** in `mcp-server/ship/lib/hygiene.js`. Each branch is classified as landed, partial or unlanded. The checks run in order: ancestor, then `merge-tree`, then the head of a merged PR, then a per-file reverse-apply in a temp index.
+- **Wider at-risk definition**: a branch is at risk when it has not landed, has no open PR, no live session and is not parked. Dirty worktrees count as well.
+- **`scripts/orphan-scan.js` + scheduled task `orphan-scan`**: a daily scan across all projects. It writes `~/.claude/orphan-report.json`, and the new SessionStart hook `ss.orphan.nudge` points to it.
+  - `--clean-landed` removes provably landed worktrees and branches. It is a dry run by default.
+  - It waits until a unit has been idle for 24 h, including unstaged edits (by mtime).
+  - It never touches long-lived, parked or upstream-backed branches.
+- **Integration proof before agent sub-branches are removed** (`hooks/lib/integration-check.js`, `scripts/integration-check.js`).
+- **WIP commit when an agent stops** (`substop.agent.wip`, `hooks/lib/wip-commit.js`). The commit is built in a temp index, so the agent's real index stays untouched.
+- **Local session autosave** at session end (`stop.session.autosave`, `hooks/lib/session-autosave.js`). It saves to the single ref `parked/autosave/<name>` and never pushes to a remote.
+  - Secret-shaped, build and oversized files are filtered out.
+  - It is skipped while a merge, rebase or other git operation is in progress.
+  - It does not follow symlinks or junctions.
+  - New config key `sessionEnd.autosave` (default `local`).
+- **Unified park register** (`hooks/lib/park-register.js`): one prefix, `parked/<topic>`. The legacy `wip/`, `backup/`, `salvage/` and `ARCHIVED` refs are recognized as aliases, and remote salvage refs count as parked. A branch that already shipped or landed never counts as parked.
+
+### Changed
+- Docs: `git-hygiene.md`, `agent-orchestration.md`, `devops-config.md`, `CONVENTIONS.md` (new `substop.` hook prefix), and the skills `auto-agents`, `auto-cleanup` and `do-run`.
+
 ## [0.271.0] — 2026-10-19
 
 With `apiCredit.enabled` on, devops' read-only side work runs on the plan's monthly API credit first and falls back to the plan. Before this, only the second-opinion review used the credit. The routing is based on a live billing test, not on assumptions.

@@ -83,6 +83,12 @@ const SCHEMA = Object.freeze({
       doc: 'auto-concept: write each follow-up round (2+) in a sub-agent, so the session context stays small over many rounds.',
     }),
   }),
+  sessionEnd: Object.freeze({
+    autosave: Object.freeze({
+      type: 'enum', values: Object.freeze(['push', 'local', 'off']), default: 'local',
+      doc: 'Session worktree with unsaved work and no open PR when a turn ends: "local" (default) = snapshot to a local parked/autosave/<name> branch, "push" = also push it (never force), "off" = nothing. Your branch, index and files are never touched.',
+    }),
+  }),
   deployParity: Object.freeze({
     enabled: Object.freeze({
       type: 'boolean', default: true,
@@ -91,6 +97,12 @@ const SCHEMA = Object.freeze({
     timeoutSec: Object.freeze({
       type: 'integer', default: 600, min: 30, max: 7200,
       doc: 'Time budget in seconds for the deploy-parity install + build; running out reads as inconclusive, never as failed.',
+    }),
+  }),
+  workspace: Object.freeze({
+    ownWorktree: Object.freeze({
+      type: 'boolean', default: false,
+      doc: 'New work started in the main checkout goes straight into its own worktree, even when that checkout holds pending changes — no session-start question. Set automatically the first time a session of this project enters a worktree.',
     }),
   }),
   ship: Object.freeze({

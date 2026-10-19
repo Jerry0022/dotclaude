@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module dotclaude-completion-mcp
- * @version 0.14.0
+ * @version 0.15.0
  * @plugin devops
  * @description MCP server with three tools:
  *   - `health_check`           — boot diagnostics (#324)
@@ -53,7 +53,7 @@ import { dropForeignOpenItems, foreignTokensFor } from "./lib/foreign-branches.j
 import { hasPending, pendingWhat, renderPendingLine, hasConcept, normalizePending, normalizeConcept, CONCEPT_LABEL } from "./lib/pending.js";
 import { clampText, clampEllipsis } from "./lib/soft-limits.js";
 import { CARD_VARIANTS, coerceCardInput, validateCardInput, formatIssues, unknownCardKeys } from "./lib/card-input.js";
-import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle } from "./lib/mode-state.js";
+import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContractLine, titlePrefixFor, titleInstruction, currentSessionTitle, titleStateForKey, hasMandatoryStep, TITLE_SCHEME } from "./lib/mode-state.js";
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
@@ -1099,7 +1099,7 @@ function renderPipelineLine(input, lang, buildId) {
   const tail = (line) => {
     if (components.length === 1) line += ' · ' + componentLine(components[0]);
     if (rootShipped) line += ' · Build ' + buildId;
-    if (components.length > 1) line += components.map(c => '\n📦 ' + componentLine(c)).join('');
+    if (components.length > 1) line += components.map(c => '\n🧩 ' + componentLine(c)).join('');
     return line;
   };
   if (state.mode === 'git-no-remote') {
@@ -1277,90 +1277,129 @@ function renderChannelLadderMd(ladder, lang) {
 // and the button set the Desktop widget draws.
 // ---------------------------------------------------------------------------
 
+// The localized SENTENCE of each heading. The head in front of it — status
+// icon, activity icon, English keyword — comes from the title scheme
+// (hooks/lib/title-scheme.js) via `cardHead`, the same state id the session
+// title gets: title `👉 📦 Ready – X` ↔ heading `👉 📦 Ready — Shippen?`.
 const HEADINGS = {
   de: {
     // #714: ship is offered only when nothing is open — an `open` point or a
     // requirement waiting on the user turns the card into the `question` key.
-    ready: () => '📦 Shippen?',
+    ready: () => 'Shippen?',
     // No remote (#500): nothing to ship to — the work ends at the local commit.
-    'ready-local': () => '📦 Lokal fertig — noch etwas?',
+    'ready-local': () => 'Lokal committet — noch etwas?',
     question: (c) => c.question
-      ? `❓ ${c.question}`
-      : `❓ Wartet auf dich: ${c.waitsFor} — wie entscheidest du?`,
-    'test-local': () => '🧪 Erst testen?',
+      ? c.question
+      : `Wartet auf dich: ${c.waitsFor} — wie entscheidest du?`,
+    'test-local': () => 'Erst testen?',
     // Names what is actually red: failing tests, else unmet requirements,
     // else partially met ones — an unmet requirement is not a "red test".
-    'ready-red': (c) => `⚠ Trotzdem shippen mit ${c.redTests
+    'ready-red': (c) => `Trotzdem shippen mit ${c.redTests
       ? c.redTests + ' roten Tests'
       : c.unmet
         ? c.unmet + (c.unmet === 1 ? ' unerfüllter Anforderung' : ' unerfüllten Anforderungen')
         : c.n + (c.n === 1 ? ' teilweise erfüllter Anforderung' : ' teilweise erfüllten Anforderungen')}?`,
-    'ship-blocked': (c) => `⛔ ${c.reason} umgehen und trotzdem shippen?`,
-    'ship-successful': (c) => c.ring
-      ? `🚀 Released ${c.ver} alpha — nach beta promoten?`
-      : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}.`,
-    'ship-successful-kept': (c) => `🚀 Released ${c.ver} alpha — weiter in \`${c.branch}\`?`,
+    'ship-blocked': (c) => `${c.reason} umgehen und trotzdem shippen?`,
+    'ship-successful': (c) => !c.ring
+      ? `${c.ver} → ${c.base}${c.shipTail}.`
+      : c.landed === 'stable' ? `${c.ver} — stable.`
+        : c.landed === 'beta' ? `${c.ver} — nach Stable promoten?`
+          : `${c.ver} — nach Beta promoten?`,
+    'ship-successful-kept': (c) => `${c.ver} — weiter in \`${c.branch}\`?`,
     // #693: the open concept only waits for its close-out — no branch to go on in.
-    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released ${c.ver} alpha` : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}`} — Konzept abschließen – Abschlussbericht wartet.`,
-    'ship-successful-deploy': () => '🚨 Gemergt, aber nicht live — Migration jetzt deployen?',
-    'released-beta': (c) => `🎊 Promoted ${c.ver ? c.ver + ' ' : ''}BETA — nach stable?`,
-    'released-stable': (c) => `🎊 Released ${c.ver ? c.ver + ' ' : ''}LIVE — stable.`,
-    'ready-files': () => '📂 Fertig auf der Platte — noch etwas?',
-    test: () => '🧪 Erst testen, dann shippen?',
-    'test-minimal': () => '▶️ Läuft — viel Spaß',
-    analysis: () => '📋 Analyse gelesen — umsetzen oder Fragen?',
-    aborted: (c) => `🚫 Abgebrochen wegen ${c.reason} — anders versuchen?`,
-    fallback: () => '🔧 Erledigt — noch etwas?',
+    'ship-successful-closeout': (c) => `${c.ring ? c.ver : `${c.ver} → ${c.base}${c.shipTail}`} — Konzept abschließen – Abschlussbericht wartet.`,
+    'ship-successful-deploy': () => 'Gemergt, aber nicht live — Migration jetzt deployen?',
+    'released-beta': (c) => `${c.ver ? c.ver + ' — ' : ''}nach Stable?`,
+    'released-stable': (c) => `${c.ver ? c.ver + ' — ' : ''}fertig.`,
+    'ready-files': () => 'Fertig auf der Platte — noch etwas?',
+    test: () => 'Erst testen, dann shippen?',
+    'test-minimal': () => 'viel Spaß',
+    analysis: () => 'gelesen — umsetzen oder Fragen?',
+    aborted: (c) => `abgebrochen wegen ${c.reason} — anders versuchen?`,
+    fallback: () => 'erledigt — noch etwas?',
     paused: (c) => ({
-      restart: '⏸️ Pausiert bis Neustart — Claude Code neu starten',
-      reboot: '⏸️ Pausiert bis PC-Neustart',
-      'usage-reset': '⏸️ Pausiert bis Limit-Reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
-    })[c.pauseReason] || '⏸️ Pausiert — weiter, wann du willst',
-    pending: (c) => `⏳ Noch nicht fertig — ${c.what}`,
-    concept: (c) => `${c.icon} Concept ${c.what}`,
-    batch: (c) => `📥 Batch sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
-    'vv-unverified': () => '⚠ Ungeprüft shippen?',
-    'vv-running': () => '⏳ Test läuft noch — Ergebnis abwarten?',
+      restart: 'Claude Code neu starten',
+      reboot: 'PC neu starten',
+      'usage-reset': 'weiter nach dem Limit-Reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
+    })[c.pauseReason] || 'weiter, wann du willst',
+    pending: (c) => `noch nicht fertig — ${c.what}`,
+    concept: (c) => c.what,
+    batch: (c) => `sammelt — ${c.n} ${c.n === 1 ? 'Eintrag' : 'Einträge'}`,
+    'vv-unverified': () => 'Ungeprüft shippen?',
+    'vv-running': () => 'Test läuft noch — Ergebnis abwarten?',
   },
   en: {
-    ready: () => '📦 Ship?',
-    'ready-local': () => '📦 Done locally — anything else?',
+    ready: () => 'Ship?',
+    'ready-local': () => 'Committed locally — anything else?',
     question: (c) => c.question
-      ? `❓ ${c.question}`
-      : `❓ Waiting on you: ${c.waitsFor} — what's your call?`,
-    'test-local': () => '🧪 Test first?',
-    'ready-red': (c) => `⚠ Ship anyway with ${c.redTests
+      ? c.question
+      : `Waiting on you: ${c.waitsFor} — what's your call?`,
+    'test-local': () => 'Test first?',
+    'ready-red': (c) => `Ship anyway with ${c.redTests
       ? c.redTests + ' red tests'
       : c.unmet
         ? c.unmet + (c.unmet === 1 ? ' unmet requirement' : ' unmet requirements')
         : c.n + (c.n === 1 ? ' partially met requirement' : ' partially met requirements')}?`,
-    'ship-blocked': (c) => `⛔ Bypass ${c.reason} and ship anyway?`,
-    'ship-successful': (c) => c.ring
-      ? `🚀 Released ${c.ver} alpha — promote to beta?`
-      : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}.`,
-    'ship-successful-kept': (c) => `🚀 Released ${c.ver} alpha — continue on \`${c.branch}\`?`,
-    'ship-successful-closeout': (c) => `${c.ring ? `🚀 Released ${c.ver} alpha` : `🚀 Shipped ${c.ver} → ${c.base}${c.shipTail}`} — Close out the concept – final report is waiting.`,
-    'ship-successful-deploy': () => '🚨 Merged, but not live — deploy the migration now?',
-    'released-beta': (c) => `🎊 Promoted ${c.ver ? c.ver + ' ' : ''}BETA — to stable?`,
-    'released-stable': (c) => `🎊 Released ${c.ver ? c.ver + ' ' : ''}LIVE — stable.`,
-    'ready-files': () => '📂 Done on disk — anything else?',
-    test: () => '🧪 Test first, then ship?',
-    'test-minimal': () => '▶️ Running — have fun',
-    analysis: () => '📋 Read through — questions?',
-    aborted: (c) => `🚫 Aborted because of ${c.reason} — try differently?`,
-    fallback: () => '🔧 Done — anything else?',
+    'ship-blocked': (c) => `Bypass ${c.reason} and ship anyway?`,
+    'ship-successful': (c) => !c.ring
+      ? `${c.ver} → ${c.base}${c.shipTail}.`
+      : c.landed === 'stable' ? `${c.ver} — stable.`
+        : c.landed === 'beta' ? `${c.ver} — promote to stable?`
+          : `${c.ver} — promote to beta?`,
+    'ship-successful-kept': (c) => `${c.ver} — continue on \`${c.branch}\`?`,
+    'ship-successful-closeout': (c) => `${c.ring ? c.ver : `${c.ver} → ${c.base}${c.shipTail}`} — Close out the concept – final report is waiting.`,
+    'ship-successful-deploy': () => 'Merged, but not live — deploy the migration now?',
+    'released-beta': (c) => `${c.ver ? c.ver + ' — ' : ''}to stable?`,
+    'released-stable': (c) => `${c.ver ? c.ver + ' — ' : ''}done.`,
+    'ready-files': () => 'Done on disk — anything else?',
+    test: () => 'Test first, then ship?',
+    'test-minimal': () => 'have fun',
+    analysis: () => 'read through — questions?',
+    aborted: (c) => `aborted because of ${c.reason} — try differently?`,
+    fallback: () => 'done — anything else?',
     paused: (c) => ({
-      restart: '⏸️ Paused until restart — restart Claude Code',
-      reboot: '⏸️ Paused until reboot',
-      'usage-reset': '⏸️ Paused until limit reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
-    })[c.pauseReason] || '⏸️ Paused — pick it up whenever you like',
-    pending: (c) => `⏳ Not done yet — ${c.what}`,
-    concept: (c) => `${c.icon} Concept ${c.what}`,
-    batch: (c) => `📥 Batch collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
-    'vv-unverified': () => '⚠ Ship unverified?',
-    'vv-running': () => '⏳ Test still running — wait for its result?',
+      restart: 'restart Claude Code',
+      reboot: 'restart the PC',
+      'usage-reset': 'continue after the limit reset' + (c.resetAt ? ` (${c.resetAt})` : ''),
+    })[c.pauseReason] || 'pick it up whenever you like',
+    pending: (c) => `not done yet — ${c.what}`,
+    concept: (c) => c.what,
+    batch: (c) => `collecting — ${c.n} ${c.n === 1 ? 'entry' : 'entries'}`,
+    'vv-unverified': () => 'Ship unverified?',
+    'vv-running': () => 'Test still running — wait for its result?',
   },
 };
+
+/**
+ * The title-scheme head of a card's outcome (no concept / batch / pending
+ * override): `{ id, mandatory, hkey }` — the state id the title AND the CTA
+ * heading start with, whether a mandatory user step raises 🟩 to 👉, and the
+ * HEADINGS key that writes the sentence. One function for both surfaces, so
+ * title and CTA cannot drift.
+ */
+function cardHead(input, key, delivery, state) {
+  if (QUESTION_KEYS.has(key) && openQuestionOf(input)) return { id: 'question', mandatory: true, hkey: 'question' };
+  const noShip = (state.mode === 'git-no-remote' || state.mode === 'file-only') && (key === 'ready' || key === 'test');
+  const hkey = noShip ? key + '-local' : key;
+  const id = titleStateForKey(hkey, {
+    ring: !!delivery.promote && state.mode !== 'git-no-remote',
+    landed: delivery.promote && delivery.promote.current,
+    // Ship + promote in one run: the merge happened in THIS run (state.merged);
+    // a promote-only card carries the ladder (and often delivery.ship) but no merge.
+    shipInRun: !!state.merged,
+    activity: input.cta && input.cta.activity,
+    pauseReason: input.pause && input.pause.reason,
+  });
+  // #693: the close-out waits on the user's page — never "done".
+  const mandatory = key === 'ship-successful-closeout' || hasMandatoryStep(input);
+  return { id, mandatory, hkey };
+}
+
+/** The session-title prefix the card's outcome leaves — `cardHead`'s state. */
+function outcomeTitlePrefix(params) {
+  const { id, mandatory } = cardHead(params, resolveCardKey(params), params.delivery || {}, params.state || {});
+  return TITLE_SCHEME.prefixOf(id, { mandatory });
+}
 
 const POINTS_LIMIT = 3;
 
@@ -1374,12 +1413,12 @@ const CONCEPT_HEADING = {
   de: { waiting: 'wartet auf deine Entscheidungen', tail: ' — ich melde mich' },
   en: { waiting: 'waiting for your decisions', tail: ' — I will report back' },
 };
-// The heading glyph mirrors the session title: the compass only while the
-// page waits for the user; iterating / implementing means Claude works, so
-// the card shows the same bare hourglass the title carries (owner 2026-10-03).
-function conceptHeadingIcon(concept) {
+// The heading head mirrors the session title: `👉 🧭 Concept` only while
+// the page waits for the user; iterating / implementing means Claude works,
+// so the card shows `⏳ 🧭 Concept` like the title (concept 2026-10-19).
+function conceptHeadState(concept) {
   const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
-  return phase === 'waiting' ? '🧭' : '⏳';
+  return phase === 'waiting' ? 'concept-waiting' : 'concept-working';
 }
 function conceptHeadingWhat(concept, pending, lang) {
   const { phase } = normalizeConcept(concept) || { phase: 'waiting' };
@@ -1473,6 +1512,23 @@ function pointsForKey(input, key, lang) {
   const points = basePointsForKey(input, key, lang);
   const skip = verificationSkipPoint(input, lang);
   return skip && key !== 'vv-running' ? [skip, ...points] : points;
+}
+
+// Every point line carries its kind as a leading icon, so a question or a
+// manual step stands out in the box: ❓ a question to answer, 👉 a step the
+// user does by hand, 🧪 a check to run. A line that already opens with one of
+// them keeps it.
+const POINT_ICONS = ['❓', '👉', '🧪'];
+function pointIcon(icon, s) {
+  return POINT_ICONS.some(i => s.startsWith(i + ' ')) ? s : icon + ' ' + s;
+}
+function openPointIcon(s) {
+  return pointIcon(/\?\s*$/.test(s) ? '❓' : '👉', s);
+}
+/** Display only: icon the open points among the shown lines (heading and cap count stay plain). */
+function iconizePoints(points, input) {
+  const open = new Set(normalizeOpenItems(input.open).map(it => it.text));
+  return points.map(p => (open.has(p) ? openPointIcon(p) : p));
 }
 
 function basePointsForKey(input, key, lang) {
@@ -1668,6 +1724,8 @@ function decisionContext(input, key, delivery, state, lang) {
     unmet: strictlyUnmet,
     reason: (input.cta && input.cta.reason) || topGateFinding(input, lang),
     branch: state.branch || '',
+    // The channel a ship landed on (ship + promote in one run).
+    landed: (delivery.promote && delivery.promote.current) || '',
     // #583: why a paused card stops — heading and context line name it.
     pauseReason: (input.pause && input.pause.reason) || '',
     resetAt: (input.pause && input.pause.resetAt) || '',
@@ -1769,11 +1827,11 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.concept({ what, icon: conceptHeadingIcon(input.concept) }), context: url ? '› ' + url : '', points: pts, buttonsKey: null, guideHandoff };
+    return { heading: TITLE_SCHEME.headingOf(conceptHeadState(input.concept), T.concept({ what })), context: url ? '› ' + url : '', points: pts, buttonsKey: null, guideHandoff };
   }
   if (batch) {
     const guide = batchGuide(batch, lang);
-    return { heading: T.batch({ n: batch.notes || 0 }), context: guide.context, points: guide.points, buttonsKey: null, guideHandoff };
+    return { heading: TITLE_SCHEME.headingOf('batch', T.batch({ n: batch.notes || 0 })), context: guide.context, points: guide.points, buttonsKey: null, guideHandoff };
   }
   if (hasPending(input.pending)) {
     const what = pendingWhat(input.pending, lang);
@@ -1781,7 +1839,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
     const pts = normalizePending(input.pending).slice(0, POINTS_LIMIT)
       .map(it => (it.name ? '`' + it.name + '`' : '') + (it.doing ? ' — ' + it.doing : ''))
       .filter(Boolean);
-    return { heading: T.pending({ what }), context: names ? '› ' + names : '', points: pts, buttonsKey: null, guideHandoff };
+    return { heading: TITLE_SCHEME.headingOf('agents', T.pending({ what })), context: names ? '› ' + names : '', points: pts, buttonsKey: null, guideHandoff };
   }
 
   const ctx = decisionContext(input, key, delivery, state, lang);
@@ -1799,21 +1857,22 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   const question = QUESTION_KEYS.has(key) ? openQuestionOf(input) : null;
   if (question) {
     const waitsFor = question.waits.length ? String(question.waits[0].requirement || question.waits[0].evidence || '').trim() : '';
-    let qHeading = T.question({ question: questionText(question.first, lang), waitsFor });
+    let qHeading = TITLE_SCHEME.headingOf('question', T.question({ question: questionText(question.first, lang), waitsFor }));
     const all = pointsForKey(input, key, lang);
     const at = question.first ? all.indexOf(question.first) : -1;
     const rest = at >= 0 ? [...all.slice(0, at), ...all.slice(at + 1)] : all;
     const capped = capPoints(rest, lang);
     if (capped.tail) qHeading = qHeading.replace(/([?.])$/, capped.tail + '$1');
     return {
-      heading: qHeading, context: buildContextLine(input, key, delivery, lang), points: capped.shown,
+      heading: qHeading, context: buildContextLine(input, key, delivery, lang), points: iconizePoints(capped.shown, input),
       buttonsKey: key, version: ctx.version || null, replies: openReplies(input, lang), noShip: true, guideHandoff,
       appStart: APP_START_KEYS.has(key) && !!detectLaunchPath(input.cwd), nextStep: '',
     };
   }
 
-  const fn = T[noShip ? key + '-local' : key] || T.fallback;
-  let heading = fn(ctx);
+  const head = cardHead(input, key, delivery, state);
+  const fn = T[head.hkey] || T.fallback;
+  let heading = TITLE_SCHEME.headingOf(head.id, fn(ctx), { mandatory: head.mandatory });
 
   const points = pointsForKey(input, key, lang);
   const { shown, tail } = capPoints(points, lang);
@@ -1851,7 +1910,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // stale click on an old card promotes THAT version and never ships edits
   // made after it (prompt.ship.detect: a named version is promotion-only).
   return {
-    heading, context, points: shown, buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
+    heading, context, points: iconizePoints(shown, input), buttonsKey, version: ctx.version || null, replies, noShip, guideHandoff, appStart,
     nextStep: key === 'analysis' ? String(input.nextStep || '').trim() : '',
   };
 }
@@ -2218,7 +2277,7 @@ function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = ''
  *  or the title is already right. The current title comes off the transcript
  *  tail, so the block names the exact value (no get_session round trip). */
 function sessionTitleNote(params) {
-  const prefix = titlePrefixFor(params, { hasPending, hasConcept });
+  const prefix = titlePrefixFor(params, { hasPending, hasConcept, outcome: outcomeTitlePrefix });
   if (prefix === null) return '';
   return titleInstruction(prefix, currentSessionTitle(params.session_id, params.cwd));
 }
@@ -2756,6 +2815,7 @@ server.registerTool(
           info: z.string().optional(),
           reason: z.string().optional(),
           description: z.string().optional(),
+          activity: z.enum(["ship", "promote", "test", "concept", "batch", "analysis", "agents"]).optional().describe("aborted only: the named process that was aborted. The title and the heading keep its activity ('🟥 🚀 Ship – …'); omit for a generic abort ('🟥 📦 Aborted – …')."),
         }).optional(),
       ).describe("CTA template placeholders — an OBJECT, e.g. { reason } for aborted, { version } for ship cards, { description } for test-minimal. A plain string is accepted as { info }."),
       nextStep: z.string().optional().describe("analysis variant: the ONE step you recommend Claude does next, written as the user's instruction ('Bau im Governor eine Summen-Drossel für viele kleine Claude-Prozesse ein.'). The Desktop primary button becomes 'Empfehlung umsetzen' and sends exactly this text — without it the button says only 'Umsetzen' and the user cannot tell what it starts. Steps the user must do themselves belong in the answer text, not here."),
@@ -2803,14 +2863,14 @@ server.registerTool(
             url: z.string().optional().describe("Override for the page URL shown above the CTA while the phase is 'waiting' (no link while iterating or implementing). Normally NOT needed: pass `cwd` and the card reads port + html_path from the project's .claude/concept-active.json — the URL the page is already open at."),
           }),
         ]).optional(),
-      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '🧭 CONCEPT {phase} — ich MELDE mich' (⏳ instead of 🧭 while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('🧭 CONCEPT in Implementierung. 2 Agenten arbeiten — ich MELDE mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
+      ).describe("A /auto-concept page is OPEN at turn end. Replaces the CTA of every variant — and outranks `pending` — with '👉 🧭 Concept — {phase}' ('⏳ 🧭 Concept — …' while iterating or implementing, like the session title), where {phase} is one of: wartet auf deine Entscheidungen auf der Seite · in Iteration · in Implementierung. Real background work (content agents, a workflow) still goes into `pending` and follows the phase as its own sentence ('⏳ 🧭 Concept — in Implementierung. 2 Agenten arbeiten — ich melde mich'). The concept bridge's own tasks — bridge server, keepalive pulser, pickup waker — are infrastructure: NEVER list them in `pending`; stop.flow.guard ignores them. Pass `cwd` too: while the phase is 'waiting' the card then shows the page's http://localhost:{port}/… link above the CTA — iterating and implementing cards carry no link."),
       pause: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.object({
           reason: z.enum(["restart", "reboot", "usage-reset", "user"]).optional().describe("What unblocks the work: 'restart' = restart Claude Code (a new plugin/MCP version, a settings change), 'reboot' = restart the machine, 'usage-reset' = wait for the usage limit to reset, 'user' (default) = the user paused it."),
           resetAt: z.string().optional().describe("usage-reset only: when the limit resets, as the user reads it (e.g. '23:40' or 'Mo 09:00'). Named in the heading."),
         }).optional(),
-      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('⏸️ Paused until restart – …') and the context line the one action that resumes it. Omit for a plain user pause."),
+      ).describe("paused variant only: why the work stops (#583). The session title and the heading name the reason ('⏸️ 🔄 Restart – …') and the context line the one action that resumes it. Omit for a plain user pause."),
       deployGate: z.preprocess(
         v => typeof v === 'string' ? tryParse(v) : v,
         z.array(z.union([
@@ -2904,7 +2964,7 @@ export {
   renderBar, renderUsageLine, formatResetShort, renderUsageMeterForCard, classifyBudget,
   buildBudgetModel, renderBudgetLineMd, sanitizeSessionId, buildResultLines, buildEvidencePosts, renderPipelineLine, buildChannelLadder, renderChannelLadderMd,
   ctaInput, resolveCardKey, sessionArchiveNote, buildDecisionBlock, buildCardModel, sessionFileCandidates, readSessionFlagRaw,
-  openQuestionOf, localShipInstruction, renderExpiredNote, formatLastReading,
+  openQuestionOf, localShipInstruction, renderExpiredNote, formatLastReading, cardHead, outcomeTitlePrefix, HEADINGS,
 };
 
 // ---------------------------------------------------------------------------

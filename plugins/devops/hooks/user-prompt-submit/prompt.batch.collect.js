@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.batch.collect
- * @version 0.10.0
+ * @version 0.10.1
  * @event UserPromptSubmit
  * @plugin devops
  * @description Collect mode for `/do-batch`: while active, blocks the user
@@ -285,7 +285,7 @@ function noteIndexLine(note, i) {
  * The session-title lines of the merge context (merge.md § Retire). `title`
  * is the current title off the transcript tail: known → the exact stripped
  * title, set in parallel with the turn's first other tool call, or no line at
- * all when it carries no `📥 Batch – ` (a renamed title wins); unknown
+ * all when it carries no `👉 📥 Batch – ` (or the legacy `📥 Batch – `; a renamed title wins); unknown
  * (`null` / `undefined`) → the get_session fallback.
  *
  * @param {string|null|undefined} title
@@ -306,7 +306,7 @@ function retireTitleLines(title) {
   }
   return [
     '',
-    'Session-Titel: Beginnt er mit "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
+    'Session-Titel: Beginnt er mit "👉 📥 Batch – " oder dem alten "📥 Batch – " (mcp__ccd_session_mgmt__get_session',
     'self), entferne genau dieses Präfix via mcp__ccd_session_mgmt__set_session_title',
     'self. Nur zurückgestellt (deferred) ist nicht fehlend: dann beide einmal per ToolSearch',
     '"select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title" laden, dann aufrufen.',

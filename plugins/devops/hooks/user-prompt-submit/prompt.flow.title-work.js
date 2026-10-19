@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook prompt.flow.title-work
- * @version 0.6.0
+ * @version 0.7.0
  * @event UserPromptSubmit
  * @plugin devops
  * @description Marks a session as "being worked on" in the sidebar: on the
@@ -73,19 +73,18 @@ function resumesShip(prompt, cwd) {
 /** The runOnce token name — stop.flow.guard releases it after a card. */
 const ONCE_KEY = 'prompt-title-work';
 
-// Prefix strings and rules live in lib/session-title.js (shared with the
-// completion card); re-exported here so callers and tests keep one import.
+// Prefix strings and rules live in lib/session-title.js / lib/title-scheme.js
+// (shared with the completion card); re-exported here so callers and tests
+// keep one import.
 const {
-  WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX,
-  MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI,
-  nextTitle, readCurrentTitle,
+  WORK_PREFIX, LEGACY_PENDING_PREFIX, LEGACY_PREFIXES, SHIPPING_PREFIX, CONCEPT_PREFIX, BATCH_PREFIX,
+  classify, nextTitle, readCurrentTitle,
 } = require('../lib/session-title');
-const CONCEPT_EMOJI = MODE_PREFIX_EMOJI[0];
-const BATCH_EMOJI = MODE_PREFIX_EMOJI[1];
+const { STATUS } = require('../lib/title-scheme');
 
 /**
  * The prefix a prompt puts on the title: the process it starts when it
- * starts one (a ship → `🚀 Shipping – `), the bare hourglass otherwise. The
+ * starts one (a ship → `⏳ 🚀 Shipping – `), the bare hourglass otherwise. The
  * hourglass is the fallback, never the override.
  */
 function prefixFor(prompt, cwd) {
@@ -106,7 +105,7 @@ function directInstruction(title, { shipping = false, conceptYields = false } = 
     'Only deferred → ToolSearch "select:mcp__ccd_session_mgmt__set_session_title" in that first batch, the set call in the next. ' +
       'Not even deferred, or it fails: skip silently.',
     ...(shipping ? ['This is do-ship Pre-Step C done early.'] : []),
-    ...(conceptYields ? ['The compass yields (Claude works now); if the concept page stays open after this turn, its completion card (concept field + cwd) brings it back.'] : []),
+    ...(conceptYields ? ['The concept prefix yields (Claude works now); if the concept page stays open after this turn, its completion card (concept field + cwd) sets it again.'] : []),
     'Do not mention this to the user.',
   ].join('\n');
 }
@@ -125,43 +124,42 @@ function titleWorkOutput(hook, prompt, cwd) {
   if (next === null) return '';
   return directInstruction(next, {
     shipping: prefix === SHIPPING_PREFIX,
-    conceptYields: current.startsWith(CONCEPT_EMOJI),
+    conceptYields: classify(current) === 'concept-waiting',
   });
 }
 
 /** Fallback when the current title is unknown: read it via get_session. */
 function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
   const shipping = prefix === SHIPPING_PREFIX;
-  // The compass says "the page waits for YOU". A user prompt means Claude
-  // works now, so it yields to the hourglass (or Shipping) like any outcome;
-  // the turn's card brings it back while the page still waits. A machine turn
-  // (a task notification — the concept's own watchers exit that way) is no
-  // proof of work: it may end without a card, so it keeps its hands off —
-  // off the compass and off every outcome a card left (#618: a watcher exit
-  // after a concept close flipped "🚀 Shipped –" to ⏳). Only a plain title
-  // (or the legacy worded hourglass) is marked.
-  const owned = machine ? [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI.filter(e => e !== '⏳')] : [BATCH_EMOJI];
-  const strippable = machine ? ['⏳'] : [CONCEPT_EMOJI, ...OUTCOME_PREFIX_EMOJI];
-  const ownedNote = machine
-    ? 'a mode or a card owns it (this turn is no user prompt — an open concept page keeps its compass, an outcome stays).'
-    : 'batch mode owns it.';
-  const already = shipping
-    ? [`  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — the ship is already marked.`]
+  const statuses = Object.values(STATUS).join(' ');
+  const known = `a known "<status> <activity> <Word> – " prefix (status icon one of ${statuses}), the bare "${WORK_PREFIX}", or a legacy one (${LEGACY_PREFIXES.map(p => `"${p}"`).join(', ')})`;
+  // A machine turn (a task notification — the concept's own watchers exit
+  // that way) is no proof of work: it may end without a card, so it keeps its
+  // hands off every known prefix (#618). Only a plain title (or the legacy
+  // worded hourglass) is marked.
+  const guards = machine
+    ? [
+      `  If the title is empty or starts with ${known} other than "${LEGACY_PENDING_PREFIX}": do nothing —`,
+      '  a mode or a card owns it (this turn is no user prompt — an open concept page keeps its prefix, an outcome stays).',
+    ]
     : [
-      `  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — a ship is running and the`,
-      '  hourglass is only the fallback for work that is no named process.',
-      `  Else if it already starts with "${WORK_PREFIX}" and NOT with "${LEGACY_PENDING_PREFIX}": do nothing`,
-      '  (that worded form is a legacy of older versions — only the bare icon counts as already-marked).',
+      `  If the title is empty or starts with "${BATCH_PREFIX}" (or the legacy "📥 Batch – "): do nothing — batch mode owns it.`,
+      ...(shipping
+        ? [`  Else if it already starts with "${SHIPPING_PREFIX}": do nothing — the ship is already marked.`]
+        : [
+          `  Else if it already starts with "${SHIPPING_PREFIX}" (or the legacy "🚀 Shipping – "): do nothing — a ship is running and the`,
+          '  hourglass is only the fallback for work that is no named process.',
+          '  Else if it starts with any other "⏳ <activity> <Word> – " prefix (a running named process): do nothing.',
+          `  Else if it is a bare "${WORK_PREFIX}<title>" and NOT "${LEGACY_PENDING_PREFIX}": do nothing`,
+          '  (that worded form is a legacy of older versions — only the bare icon counts as already-marked).',
+        ]),
     ];
   const tail = shipping
     ? 'The word is exactly "Shipping" — this is the do-ship skill\'s Pre-Step C done early; the skill finds the title marked and leaves it.'
-    : 'The icon is icon-only — no word after it, the title text stays as it is.';
-  const examples = machine
-    ? `"${LEGACY_PENDING_PREFIX}"`
-    : `"${CONCEPT_PREFIX}", "🧪 Test – ", "📦 Ready – ", "🚀 Shipped – ", "${LEGACY_PENDING_PREFIX}", "🎊 Released Stable – "`;
+    : 'The hourglass is icon-only — no activity, no word after it, the title text stays as it is.';
   const conceptNote = machine ? [] : [
-    `A "${CONCEPT_PREFIX}" title yields too: the compass means the page waits for the user, and now Claude works.`,
-    'If a concept page stays open after this turn, end the turn with its completion card (concept field + cwd) — that card brings the compass back.',
+    `A "${CONCEPT_PREFIX}" title yields too: it means the page waits for the user, and now Claude works.`,
+    'If a concept page stays open after this turn, end the turn with its completion card (concept field + cwd) — that card sets the concept prefix again.',
   ];
   return [
     shipping
@@ -169,10 +167,8 @@ function instruction(prefix = WORK_PREFIX, { machine = false } = {}) {
       : '[prompt.flow.title-work] New work in this session.',
     'Before any other tool call, once, Desktop app only:',
     '  mcp__ccd_session_mgmt__get_session {session_id:"self"} → title.',
-    `  If the title is empty or starts with ${owned.join(' or ')}: do nothing — ${ownedNote}`,
-    ...already,
-    `  Else strip every leading "<emoji> <Word> – " prefix whose emoji is one of ${strippable.join(' ')}`,
-    `  (e.g. ${examples}) and`,
+    ...guards,
+    `  Else strip every leading ${known} — only those, never free text such as "Fix Login – " — and`,
     `  mcp__ccd_session_mgmt__set_session_title {session_id:"self", title: "${prefix}" + <stripped title>}.`,
     tail,
     ...conceptNote,
@@ -214,4 +210,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, SHIPPING_PREFIX, CONCEPT_PREFIX, MODE_PREFIX_EMOJI, OUTCOME_PREFIX_EMOJI, KNOWN_PREFIX_EMOJI, instruction, directInstruction, titleWorkOutput, prefixFor, shouldMark, releaseTitleWork };
+module.exports = { ONCE_KEY, WORK_PREFIX, LEGACY_PENDING_PREFIX, LEGACY_PREFIXES, SHIPPING_PREFIX, CONCEPT_PREFIX, BATCH_PREFIX, instruction, directInstruction, titleWorkOutput, prefixFor, shouldMark, releaseTitleWork };

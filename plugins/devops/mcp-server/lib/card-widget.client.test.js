@@ -19,7 +19,7 @@ const base = {
   variant: "ready", lang: "de", key: "ready", title: "Card-Widget als Template",
   resultLines: ["Widget lädt den Renderer vom CDN"], evidence: [],
   budget: { omitted: true, bars: [], contextHealth: "" },
-  pipeline: "", pipelinePr: null, heading: "📦 Shippen?", context: "", points: [], buttonsKey: "ready",
+  pipeline: "", pipelinePr: null, heading: "👉 📦 Ready — Shippen?", context: "", points: [], buttonsKey: "ready",
 };
 
 /** Representative cards: ready with buttons, test with evidence + budget, pending, and a rich one. */

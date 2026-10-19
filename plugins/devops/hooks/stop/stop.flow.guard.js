@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.9.0
+ * @version 0.10.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -57,6 +57,14 @@
  *   card requirement is what killed the /auto-guide panel's wait() loop.
  *   The marker expires after 30 minutes idle, so a crashed guide cannot
  *   disable this gate forever.
+ *
+ *   Interrupted title (F5, 0.10.0): a turn that would pass WITHOUT a card
+ *   while the session title (read off the transcript) is still the bare
+ *   `⏳ ` is blocked once with a title instruction that renames it to
+ *   `👉 ⚡ Interrupted – <title>`. A batch, a waiting concept, a running
+ *   `⏳ 🚀 Shipping – ` and every other named state stay untouched; silent
+ *   ticks, scheduled tasks and an active guide are skipped. A per-session
+ *   marker lets the follow-up stop through, so it never loops.
  */
 
 require('../lib/plugin-guard');
@@ -80,6 +88,27 @@ const { isMcpServerAlive } = require('../lib/mcp-heartbeat');
 const { releaseOnce } = require('../lib/run-once');
 const { isGuideActive, isGuideLoopLive } = require('../../scripts/guide-active-state');
 const { execFileSync } = require('child_process');
+const { interruptedTitle, readCurrentTitle } = require('../lib/session-title');
+
+/** Per-session marker of a pending F5 rename — the follow-up stop passes. */
+const INTERRUPT_FLAG = 'dotclaude-devops-interrupt-title';
+
+/**
+ * The block reason that renames a card-less turn's bare `⏳ ` title (F5):
+ * the exact title, one set call, nothing else in the reply.
+ *
+ * @param {string} title the `👉 ⚡ Interrupted – …` title
+ * @returns {string}
+ */
+function interruptReason(title) {
+  const set = 'mcp__ccd_session_mgmt__set_session_title';
+  return [
+    '[stop.flow.guard] This turn ended without a completion card, but the session title still says Claude works (bare ⏳).',
+    `Desktop app only, once: ${set} {session_id:"self", title:${JSON.stringify(title)}} — exact title, no get_session.`,
+    `Only deferred → ToolSearch "select:${set}" first. Truly unavailable or failing: skip silently.`,
+    'Output nothing else — no text, no card — then end the turn. Do not mention this to the user.',
+  ].join('\n');
+}
 
 /**
  * Did this turn change any file? `git status --porcelain` is the truth when
@@ -255,6 +284,33 @@ process.stdin.on('end', () => {
   // surface it on stderr so it is visible without blocking the turn.
   if (decision.warning) {
     try { process.stderr.write(decision.warning + '\n'); } catch {}
+  }
+
+  // F5: a turn that ends WITHOUT a card must not leave the bare `⏳ ` claiming
+  // Claude still works. Only a bare hourglass is rewritten (to
+  // `👉 ⚡ Interrupted – …`): a batch title (a batch turn without a card is
+  // intended), a waiting concept, a running `⏳ 🚀 Shipping – ` and every
+  // named state stay. Title known only from the transcript (Desktop) — the
+  // terminal has none, so nothing happens there. The rename is a title
+  // instruction like the card's (exact title, no get_session), delivered as a
+  // one-time block; the per-session marker lets the follow-up stop through
+  // whatever happens, so this never loops.
+  if (decision.action !== 'block' && !silent && !scheduledTask && !guideActive) {
+    const asked = readSessionFile(INTERRUPT_FLAG, sessionId, EXACT);
+    if (asked) {
+      try { fs.unlinkSync(asked.filePath); } catch { /* marker already gone — nothing to clear */ }
+    } else if (!cardRendered) {
+      const next = interruptedTitle(readCurrentTitle(hook.transcript_path));
+      let marked = false;
+      if (next) {
+        try { writeSessionFile(sessionFile(INTERRUPT_FLAG, sessionId), next); marked = true; } catch { /* unwritable marker → no block (see below) */ }
+      }
+      // No marker, no block: without it the follow-up stop could block again.
+      if (marked) {
+        decision.action = 'block';
+        decision.reason = interruptReason(next);
+      }
+    }
   }
 
   if (decision.action === 'block') {

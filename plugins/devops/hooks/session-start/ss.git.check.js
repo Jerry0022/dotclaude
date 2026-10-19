@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.git.check
- * @version 0.8.0
+ * @version 0.9.0
  * @event SessionStart
  * @plugin devops
  * @description Check for stale changes AND workspace setup issues at session
@@ -20,7 +20,10 @@
  *       session's own worktree (EnterWorktree), never switching the shared
  *       checkout's branch. Clean checkout → a standing rule, no question;
  *       uncommitted/unpushed work there → AskUserQuestion (it may be the
- *       user's WIP or another session's). Text: lib/git-check-output.js.
+ *       user's WIP or another session's) — only until the project's handling
+ *       is decided (devops-config `workspace.ownWorktree`, set on the first
+ *       EnterWorktree by post.worktree.enter); after that the standing rule.
+ *       Text: lib/git-check-output.js.
  *     - Detached HEAD without worktree → high-priority warning (commits
  *       would not belong to any branch), same remedy.
  *     - Not in worktree on feature branch → mild note: continuing that
@@ -321,7 +324,9 @@ if (dirty.length === 0 && !workspace && !staleNote) {
 // Build structured output with CTAs.
 // Composition lives in hooks/lib/git-check-output.js so it is unit-testable and
 // so the "findings are never coupled to the ask" invariant (#268) has one home.
-const out = compose({ dirty, workspace, staleNote, cwd });
+let ownWorktree = false;
+try { ownWorktree = require('../lib/devops-config').load(cwd).values.workspace.ownWorktree === true; } catch { /* undecided */ }
+const out = compose({ dirty, workspace, staleNote, cwd, ownWorktree });
 
 if (out.length === 0) process.exit(0);
 

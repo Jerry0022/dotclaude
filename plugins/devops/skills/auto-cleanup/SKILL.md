@@ -490,3 +490,5 @@ response.
 - German UI labels unless project overrides
 - Self-contained HTML, no external dependencies
 - Keep file size reasonable (< 500KB)
+- At-risk and parked work (`parked/<topic>`; landed branches are never parked)
+  is never a default deletion candidate — see git-hygiene.md § At-risk work and the park register

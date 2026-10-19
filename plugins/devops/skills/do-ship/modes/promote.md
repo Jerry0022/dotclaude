@@ -158,7 +158,7 @@ Do NOT use variant `ready` — its CTA reads "SHIP or CHANGE?", which is wrong f
 a *completed* promotion. `released` is the purpose-built variant.
 
 The card result carries a `[SESSION TITLE]` block that puts
-`🎊 Released <Alpha|Beta|Stable> – ` on the session title — the channel comes
+`🟩 🎊 Released <Alpha|Beta|Stable> – ` on the session title — the channel comes
 from `delivery.promote.current` (else `promotion.to`). Execute it before
 outputting the card; Desktop app only, skip silently elsewhere.
 

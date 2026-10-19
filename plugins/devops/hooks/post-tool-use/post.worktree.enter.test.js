@@ -8,7 +8,8 @@ import { createRequire } from "node:module";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { main, mainCheckoutOf, candidates } = require("./post.worktree.enter.js");
+const { main, mainCheckoutOf, candidates, rememberWorktreeHandling } = require("./post.worktree.enter.js");
+const CFG = require("../lib/devops-config.js");
 const RC = require("../lib/run-contract-store.js");
 
 const SID = "sess-move";
@@ -152,5 +153,29 @@ describe("post.worktree.enter carries the run contract", () => {
     const r = spawnSync(process.execPath, [hook], { input: JSON.stringify(hookFor()), encoding: "utf8", timeout: 20_000 });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).toContain("do-run contract moved");
+  });
+});
+
+describe("post.worktree.enter settles the project's workspace handling", () => {
+  let home;
+  beforeEach(() => { home = realpathSync.native(mkdtempSync(join(tmpdir(), "wtenter-home-"))); });
+  afterEach(() => { try { rmSync(home, { recursive: true, force: true }); } catch { /* best effort */ } });
+
+  test("the first worktree entry stores workspace.ownWorktree for the project", () => {
+    expect(CFG.load(wtDir, { home }).values.workspace.ownWorktree).toBe(false);
+    expect(rememberWorktreeHandling(wtDir, { home })).toBe(true);
+    const cfg = CFG.load(mainDir, { home });
+    expect(cfg.values.workspace.ownWorktree).toBe(true);
+    expect(cfg.sources["workspace.ownWorktree"]).toBe("project");
+    expect(existsSync(join(mainDir, ".claude", "devops-config.json"))).toBe(true);
+  });
+
+  test("an already decided value (project or global) is not rewritten", () => {
+    rememberWorktreeHandling(wtDir, { home });
+    expect(rememberWorktreeHandling(wtDir, { home })).toBe(false);
+    CFG.setValue("workspace.ownWorktree", true, "global", wtDir, { home });
+    const other = join(root, "other");
+    mkdirSync(other);
+    expect(rememberWorktreeHandling(other, { home })).toBe(false);
   });
 });

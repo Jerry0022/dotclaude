@@ -20,6 +20,7 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.project.setup.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.check.js", "timeout": 20 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.git.sync.js", "timeout": 20 },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.orphan.nudge.js", "timeout": 5 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.graphify.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.verify.js", "timeout": 10 },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/ss.ship.resume.js", "timeout": 10 },
@@ -118,6 +119,13 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use/pre.governor.gate.js", "timeout": 5 }
         ],
         "matcher": "Bash|PowerShell"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop/substop.agent.wip.js", "timeout": 30 }
+        ]
       }
     ],
     "SubagentStart": [
@@ -253,7 +261,8 @@
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.flow.guard.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.guide.handoff.js" },
           { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.strict.release.js" },
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.mcp.reap.js" }
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.mcp.reap.js" },
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/stop.session.autosave.js", "timeout": 45 }
         ]
       }
     ],

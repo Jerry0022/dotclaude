@@ -53,9 +53,14 @@
  *      ancestor, so `-d` would refuse); the tip SHA is logged for recovery.
  *      A removed branch's twin on origin goes too, but only when it points at
  *      the very same commit (a pushed sub-agent branch, #572).
- *      At risk (#573): a `[gone]` branch or a detached session worktree whose
- *      commits did NOT land is never removed — it is reported on the card,
+ *      At risk (#573, widened): every unit that did NOT land (state unlanded
+ *      or partial — see landingState), has no open PR, no live session and is
+ *      not parked (hooks/lib/park-register.js), plus any worktree with real
+ *      uncommitted changes, is never removed — it is reported on the card
+ *      with its landing state, whether it was pushed and the dirty flag,
  *      because it looks like every other leftover and is easily forgotten.
+ *      "partial" = some touched files are in the default branch, others not
+ *      (squash merge plus later edits); never removable.
  *   2. Nudge (after ship and promote). More than `nudgeThreshold` leftovers
  *      (default 50) and the cooldown (`nudgeCooldownDays`, default 7) passed →
  *      the card gets an open item that points to the cleanup page.
@@ -75,6 +80,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { contentInBase } = require("../../../scripts/lib/content-landed.js");
+const { isParked, coveringRef } = require("../../../hooks/lib/park-register.js");
 
 const DAY_MS = 86_400_000;
 const GB = 1024 ** 3;
@@ -375,6 +381,80 @@ export function landedVia(sha, branch, ctx) {
   return contentInBase(ctx.cwd, sha, ctx.baseRef, { maxFiles: TREE_CHECK_MAX_FILES }).landed ? "tree" : null;
 }
 
+/** A throw-away index holding `baseRef`'s tree, for `git apply --cached` dry runs. */
+function withTempIndex(ctx, fn) {
+  const idx = path.join(os.tmpdir(), `hygiene-idx-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const env = { ...process.env, GIT_INDEX_FILE: idx };
+  try {
+    execFileSync("git", ["read-tree", ctx.baseRef], { cwd: ctx.cwd, env, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] });
+    return fn(env);
+  } catch {
+    return null;
+  } finally {
+    try { fs.rmSync(idx, { force: true }); } catch { /* temp file */ }
+  }
+}
+
+/**
+ * How much of `sha`'s own change set `baseRef` already holds, file by file:
+ * the patch `mergebase..sha` of each file must reverse-apply cleanly to the
+ * base tree (so the base contains exactly that change). null when it cannot
+ * be told (too many files, git too old, unreadable).
+ */
+function filesInBase(sha, ctx) {
+  const mb = gitOut(["merge-base", sha, ctx.baseRef], ctx.cwd);
+  if (!mb) return null;
+  const names = gitOut(["diff", "--name-only", "-z", mb, sha], ctx.cwd);
+  if (names === null) return null;
+  const files = names.split("\0").filter(Boolean);
+  if (files.length > TREE_CHECK_MAX_FILES) return null;
+  if (files.length === 0) return { filesIn: 0, filesTotal: 0 };
+  return withTempIndex(ctx, (env) => {
+    let filesIn = 0;
+    for (const f of files) {
+      try {
+        const patch = execFileSync("git", ["diff", "--binary", mb, sha, "--", f], {
+          cwd: ctx.cwd, encoding: "utf8", timeout: GIT_TIMEOUT, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"],
+        });
+        execFileSync("git", ["apply", "--cached", "-R", "--check", "-"], {
+          cwd: ctx.cwd, env, input: patch, timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
+        });
+        filesIn += 1;
+      } catch { /* this file's change is not (fully) in the base */ }
+    }
+    return { filesIn, filesTotal: files.length };
+  });
+}
+
+/**
+ * Where `sha` stands against the default branch: landed (ancestor / merged PR /
+ * tree: a trial merge changes nothing, or every file's change is in the base),
+ * partial (some files' changes are in, others are not — a squash merge plus
+ * later edits) or unlanded. Partial is never removable. Memoized per `ctx`.
+ * @param {{cwd:string, baseRef:string, merged:object|null}} ctx
+ * @returns {{state:"landed"|"partial"|"unlanded", via:string|null, filesIn:number, filesTotal:number}}
+ */
+export function landingState(sha, branch, ctx) {
+  const cache = ctx.landing || (ctx.landing = new Map());
+  const key = `${sha}|${branch || ""}`;
+  if (cache.has(key)) return cache.get(key);
+  const done = (r) => { cache.set(key, r); return r; };
+  if (!sha) return done({ state: "unlanded", via: null, filesIn: 0, filesTotal: 0 });
+  const via = landedVia(sha, branch, ctx);
+  if (via) return done({ state: "landed", via, filesIn: 0, filesTotal: 0 });
+  // a trial merge into the base changes nothing → everything is in
+  const trial = gitOut(["merge-tree", "--write-tree", ctx.baseRef, sha], ctx.cwd);
+  if (trial) {
+    const baseTree = gitOut(["rev-parse", `${ctx.baseRef}^{tree}`], ctx.cwd);
+    if (baseTree && trial.split("\n")[0].trim() === baseTree) return done({ state: "landed", via: "tree", filesIn: 0, filesTotal: 0 });
+  }
+  const f = filesInBase(sha, ctx);
+  if (!f) return done({ state: "unlanded", via: null, filesIn: 0, filesTotal: 0 });
+  if (f.filesTotal > 0 && f.filesIn === f.filesTotal) return done({ state: "landed", via: "tree", ...f });
+  if (f.filesIn > 0) return done({ state: "partial", via: null, ...f });
+  return done({ state: "unlanded", via: null, ...f });
+}
+
 /** An ignored porcelain path that is regenerable build output. */
 export function isRegenerable(entry) {
   const p = String(entry).replace(/\\/g, "/");
@@ -582,7 +662,7 @@ function keepReason(unit, ctx) {
     const why = worktreeContentReason(unit.path, ctx.mainPath);
     if (why) return why;
   }
-  return landedVia(unit.head, unit.branch, ctx) ? null : "not-landed";
+  return landingState(unit.head, unit.branch, ctx).state === "landed" ? null : "not-landed";
 }
 
 /** Commits on `sha` that neither `baseRef` nor a merged PR carried (0 when unreadable). */
@@ -630,6 +710,118 @@ function worktreeBytes(u, cache, deadline, clock) {
   return bytes;
 }
 
+/** Heads of open PRs (branch names and commit ids), via gh; null when gh is unavailable. */
+export function fetchOpenHeads(cwd) {
+  try {
+    const out = execFileSync("gh", ["pr", "list", "--state", "open", "--limit", "500", "--json", "headRefName,headRefOid"], {
+      cwd, encoding: "utf8", timeout: NETWORK_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
+    });
+    const list = JSON.parse(out);
+    if (!Array.isArray(list)) return null;
+    return {
+      names: new Set(list.map((p) => p && p.headRefName).filter(Boolean)),
+      shas: new Set(list.map((p) => p && p.headRefOid).filter(Boolean)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Real uncommitted work in a checkout: modified/staged/untracked entries,
+ * minus regenerable build output, tooling bookkeeping and `.claude/` runtime
+ * state (the classifiers of the removal check). Ignored files do not count
+ * here. Returns the number of such entries; 0 when clean or unreadable.
+ */
+export function uncommittedCount(wtPath) {
+  let out;
+  try {
+    out = execFileSync("git", ["status", "--porcelain", "-z", "--untracked-files=all"], {
+      cwd: wtPath, encoding: "utf8", timeout: GIT_TIMEOUT, stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    return 0;
+  }
+  let n = 0;
+  for (const e of out.split("\0")) {
+    if (!/^[ MADRCU?]{2} /.test(e)) continue; // rename sources carry no status prefix
+    const rel = e.slice(3).replace(/\\/g, "/");
+    if (isRegenerable(rel) || isToolingState(rel)) continue;
+    // an untracked file inside build output the repo forgot to ignore is still build output
+    if (e.startsWith("?? ") && rel.split("/").slice(0, -1).some((s) => REGENERABLE_DIRS.has(s))) continue;
+    n += 1;
+  }
+  return n;
+}
+
+/** `sha` (or branch `name`) exists on a remote-tracking ref. */
+function isPushed(u, cwd) {
+  if (u.gone) return true;
+  const out = gitOut(["for-each-ref", "--contains", u.head, "--count=1", "--format=%(refname)", "refs/remotes"], cwd);
+  return Boolean(out);
+}
+
+/**
+ * Classify every leftover once, read-only: removable (landed and safe to go),
+ * keep (with the reason) and atRisk. At risk = (a) not landed (state
+ * unlanded/partial), no open PR, no live session — and not deliberately
+ * parked (park-register); or (b) a worktree with real uncommitted changes and
+ * no live session. Offline (no merged-PR list) nothing is flagged for (a): a
+ * squash-merged branch whose files moved on looks the same.
+ * @param {{units:object[], defaultBranch:string, main:string|null, paths:string[], current:string}} scan
+ * @param {{cwd:string, fetchMerged?:Function, fetchOpen?:Function, projectsDir?:string|null}} io
+ */
+export function classifyUnits(scan, io) {
+  const originRef = `refs/remotes/origin/${scan.defaultBranch}`;
+  const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
+  const fetchMerged = io.fetchMerged || fetchMergedHeads;
+  const merged = fetchMerged(io.cwd, scan.defaultBranch);
+  // injected merged heads (tests) mean no network: open PRs stay unknown too
+  const fetchOpen = io.fetchOpen || (io.fetchMerged ? () => null : fetchOpenHeads);
+  const open = scan.units.length ? fetchOpen(io.cwd) : null;
+  const ctx = {
+    cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
+    projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
+  };
+  const removable = [];
+  const keep = [];
+  let atRisk = [];
+  const parkedUnits = [];
+  for (const u of scan.units) {
+    const reason = keepReason(u, ctx);
+    if (!reason) removable.push(u);
+    else keep.push({ ...u, reason });
+
+    const live = u.kind === "worktree"
+      && (hasLiveSession(u.path, io.projectsDir) || hasMovedSession(u.path, ctx.mainPath, io.projectsDir));
+    if (live) continue;
+    const dirty = u.kind === "worktree" ? uncommittedCount(u.path) : 0;
+    const openPr = Boolean(open && ((u.branch && open.names.has(u.branch)) || open.shas.has(u.head)));
+    const landing = landingState(u.head, u.branch, ctx);
+    const unlanded = landing.state !== "landed" && merged !== null && !openPr;
+    const subject = unlanded ? gitOut(["log", "-1", "--format=%s", u.head], io.cwd) || "" : "";
+    // parked by name, or the same work is kept on a parked ref (local or origin/ —
+    // salvage copies live remote-only) whose history contains this tip
+    const byName = unlanded && isParked(u.branch || "", subject);
+    const coveredBy = unlanded && !byName ? coveringRef(io.cwd, u.head) : null;
+    const parked = byName || Boolean(coveredBy);
+    if (coveredBy) parkedUnits.push({ kind: u.kind, branch: u.branch || null, path: u.path || null, head: u.head, coveredBy, state: landing.state, ageDays: u.ageDays });
+    if ((unlanded && !parked) || dirty > 0) {
+      atRisk.push({
+        kind: u.kind, branch: u.branch, path: u.path, head: u.head,
+        commits: ownCommits(u.head, ctx),
+        state: landing.state, filesIn: landing.filesIn, filesTotal: landing.filesTotal,
+        pushed: isPushed(u, io.cwd), dirty,
+      });
+    }
+  }
+  // a detached worktree and the branch it came from are one finding; a dirty worktree wins
+  const dirtyHeads = new Set(atRisk.filter((r) => r.dirty > 0).map((r) => r.head));
+  const idOf = (r) => (r.dirty > 0 ? `d:${normPath(r.path)}` : `h:${r.head}`);
+  atRisk = atRisk.filter((r, i) => (r.dirty > 0 || !dirtyHeads.has(r.head)) && atRisk.findIndex((x) => idOf(x) === idOf(r)) === i);
+  return { ctx, removable, keep, atRisk, parkedUnits, merged, open };
+}
+
 /**
  * Which leftovers the auto-clean removes, and which unlanded ones are at risk.
  * Only removable leftovers count, under three triggers (module header): age
@@ -651,32 +843,8 @@ export function planAutoClean(scan, settings, io) {
   if (scan.units.length === 0) {
     return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false, keptBytes: null };
   }
-  const originRef = `refs/remotes/origin/${scan.defaultBranch}`;
-  const baseRef = gitOk(["rev-parse", "--verify", "-q", originRef], io.cwd) ? originRef : `refs/heads/${scan.defaultBranch}`;
-  const fetchMerged = io.fetchMerged || fetchMergedHeads;
-  const merged = fetchMerged(io.cwd, scan.defaultBranch);
-  const ctx = {
-    cwd: io.cwd, baseRef, merged, viaMerged: reachableFromMerged(io.cwd, merged, baseRef),
-    projectsDir: io.projectsDir, mainPath: scan.main || null, paths: scan.paths, current: scan.current,
-  };
-  const removable = [];
-  const keep = [];
-  const atRisk = [];
-  for (const u of scan.units) {
-    const reason = keepReason(u, ctx);
-    if (!reason) {
-      removable.push(u);
-      continue;
-    }
-    if (u.ageDays > minAge) keep.push({ ...u, reason });
-    // Unlanded work nobody looks after: its PR branch is gone, or its session
-    // worktree sits detached. Offline, a squash-merged branch looks the same —
-    // report nothing rather than a false alarm.
-    const abandoned = u.gone || (u.kind === "worktree" && u.session && u.detached);
-    if (reason === "not-landed" && abandoned && merged !== null) {
-      atRisk.push({ kind: u.kind, branch: u.branch, path: u.path, head: u.head, commits: ownCommits(u.head, ctx) });
-    }
-  }
+  const { removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
+  const keep = kept.filter((k) => k.ageDays > minAge);
 
   const picked = new Map();
   const pick = (u, trigger, extra = {}) => {
@@ -727,8 +895,7 @@ export function planAutoClean(scan, settings, io) {
     reason: remove.length > 0 ? null : `nothing to remove: ${rules.join(", ")}`,
     remove,
     keep,
-    // a detached worktree and the branch it came from are one finding
-    atRisk: atRisk.filter((r, i) => atRisk.findIndex((x) => x.head === r.head) === i),
+    atRisk,
     offline: merged === null,
     keptBytes,
   };
@@ -930,7 +1097,11 @@ export function cardLines(result, lang = "de") {
   if (risk.length) {
     const shown = risk.slice(0, 3).map((x) => {
       const name = x.branch || path.basename(String(x.path || "")) || x.head.slice(0, 7);
-      return de ? `${name} (${plural(x.commits, "Commit", "Commits")})` : `${name} (${plural(x.commits, "commit", "commits")})`;
+      const bits = [de ? plural(x.commits, "Commit", "Commits") : plural(x.commits, "commit", "commits")];
+      if (x.state === "partial") bits.push(de ? `${x.filesIn}/${x.filesTotal} Dateien gelandet` : `${x.filesIn}/${x.filesTotal} files landed`);
+      if (x.pushed === false) bits.push(de ? "ungepusht" : "unpushed");
+      if (x.dirty > 0) bits.push(de ? "uncommittet" : "uncommitted");
+      return `${name} (${bits.join(", ")})`;
     }).join(", ") + (risk.length > 3 ? ` +${risk.length - 3}` : "");
     out.risk = de
       ? {
@@ -993,7 +1164,7 @@ export function runHygiene(p) {
     const projectsDir = p.projectsDir === undefined ? defaultProjectsDir() : p.projectsDir;
     const sizeCache = repo.sizes && typeof repo.sizes === "object" ? { ...repo.sizes } : {};
     const plan = planAutoClean(scan, settings, {
-      cwd, fetchMerged: p.fetchMerged, projectsDir, sizeCache, sizeBudgetMs: p.sizeBudgetMs,
+      cwd, fetchMerged: p.fetchMerged, fetchOpen: p.fetchOpen, projectsDir, sizeCache, sizeBudgetMs: p.sizeBudgetMs,
     });
     // sizes of worktrees that still exist only — a removed one would never expire
     const live = new Set(scan.units.filter((u) => u.kind === "worktree").map((u) => normPath(u.path)));

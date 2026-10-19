@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   parseWorktrees, scanRepo, planAutoClean, executeAutoClean, runHygiene, cardLines, landedVia,
   isRegenerable, isToolingState, hasLiveSession, hasMovedSession, LIVE_SESSION_MS, REMOVE_TIMEOUT, normPath,
-  reachableFromMerged, dirBytes,
+  reachableFromMerged, dirBytes, landingState,
 } from "./hygiene.js";
 
 const DAY = 86_400_000;
@@ -378,11 +378,58 @@ describe("unlanded work at risk (#573)", () => {
     expect(res.card.risk).toBeUndefined();
   });
 
-  test("an unlanded branch that still has its upstream is not flagged", () => {
+  const noMerged = () => ({ bySha: new Set(), byName: new Map() });
+  const runAt = (dir, extra = {}) => runHygiene({
+    cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW,
+    fetchMerged: noMerged, projectsDir: null, ...extra,
+  });
+
+  test("a never-pushed branch without PR is at risk, with its state", () => {
     const { dir, c1 } = makeRepo();
     branchWithCommit(dir, "in-progress", c1, "w.txt", "wip\n", daysAgo(2));
-    const res = runHygiene({ cwd: dir, trigger: "ship", settings: SETTINGS, statePath: path.join(mkTmp("hy-state-"), "s.json"), now: NOW, fetchMerged: () => ({ bySha: new Set(), byName: new Map() }) });
+    const res = runAt(dir);
+    expect(res.atRisk).toEqual([expect.objectContaining({ branch: "in-progress", state: "unlanded", pushed: false, dirty: 0 })]);
+    expect(res.card.risk.text).toContain("in-progress (1 Commit, ungepusht)");
+  });
+
+  test("an open PR takes the branch off the list", () => {
+    const { dir, c1 } = makeRepo();
+    branchWithCommit(dir, "in-progress", c1, "w.txt", "wip\n", daysAgo(2));
+    const res = runAt(dir, { fetchOpen: () => ({ names: new Set(["in-progress"]), shas: new Set() }) });
     expect(res.atRisk).toEqual([]);
+  });
+
+  test("parked branches (canonical, legacy prefix, ARCHIVED tip) are not at risk", () => {
+    const { dir, c1 } = makeRepo();
+    branchWithCommit(dir, "parked/idea", c1, "p1.txt", "p\n", daysAgo(2));
+    branchWithCommit(dir, "wip/old", c1, "p2.txt", "p\n", daysAgo(2));
+    git(dir, "checkout", "-q", "-b", "misc", c1);
+    fs.writeFileSync(path.join(dir, "p3.txt"), "p\n");
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", "ARCHIVED: old attempt");
+    git(dir, "checkout", "-q", "main");
+    expect(runAt(dir).atRisk).toEqual([]);
+  });
+
+  test("a dirty agent worktree is at risk even when its branch is landed", () => {
+    const { dir, c3 } = makeRepo();
+    const wt = path.join(dir, ".claude", "worktrees", "agent-abc123");
+    git(dir, "worktree", "add", "-q", "-b", "worktree-agent-abc123", wt, c3);
+    fs.writeFileSync(path.join(wt, "new.txt"), "unsaved\n");
+    const res = runAt(dir);
+    expect(res.atRisk).toEqual([expect.objectContaining({ kind: "worktree", dirty: 1 })]);
+    expect(res.card.risk.text).toContain("uncommittet");
+    expect(fs.existsSync(wt)).toBe(true);
+  });
+
+  test("tooling-only changes in a worktree do not count as dirty", () => {
+    const { dir, c3 } = makeRepo();
+    const wt = path.join(dir, ".claude", "worktrees", "agent-abc124");
+    git(dir, "worktree", "add", "-q", "-b", "worktree-agent-abc124", wt, c3);
+    fs.mkdirSync(path.join(wt, "node_modules"));
+    fs.writeFileSync(path.join(wt, "node_modules", "x.js"), "x\n");
+    fs.writeFileSync(path.join(wt, "AUTONOMOUS-LOG.md"), "x\n");
+    expect(runAt(dir).atRisk).toEqual([]);
   });
 });
 

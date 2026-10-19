@@ -61,7 +61,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     const text = await cardText({ variant: "ready", summary: "Dichte-Test", lang: "de", session_id: "test-anatomy-1" });
     expect(text).toMatch(/^### \*\*✨✨✨ Dichte-Test ✨✨✨\*\*/m);
     expect(text).not.toMatch(/^# \*\*✨✨✨/m);
-    expect(text).toMatch(/^## 📦 Shippen\?$/m);
+    expect(text).toMatch(/^## 👉 📦 Ready — Shippen\?$/m);
   });
 
   test("no old blocks: no Changes/Geprüft/OFFEN/Delivery/footer/state lines, no CTA sentence", async () => {
@@ -235,7 +235,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       variant: "ready", summary: "Ungeprüft", lang: "de", session_id: "cli-vv-doesnt-exist-here",
     });
     // No V&V flags on disk for this session → not unverified, plain ready.
-    expect(text).toMatch(/^## 📦 Shippen/m);
+    expect(text).toMatch(/^## 👉 📦 Ready — Shippen/m);
   });
 
   test("pipeline line: glyph BEFORE the step, ring channels continue it", async () => {
@@ -267,7 +267,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     });
     expect(ready).toContain("✓ commit · nur lokal, kein Remote · main");
     expect(ready).not.toMatch(/push|PR|merge/);
-    expect(ready).toMatch(/^## ❓ Doku fehlt — angehen\?$/m);
+    expect(ready).toMatch(/^## 👉 ❓ Question — Doku fehlt — angehen\?$/m);
     expect(ready).not.toMatch(/^## .*[Ss]hippen\?/m);
 
     const test = await cardText({
@@ -275,7 +275,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       state: { mode: "git-no-remote", branch: "main" },
     });
     expect(test).toContain("○ commit · local only, no remote · main");
-    expect(test).toMatch(/^## 🧪 Test first\?$/m);
+    expect(test).toMatch(/^## 👉 🧪 Test — Test first\?$/m);
   });
 
   test("fallback work that touched no repo draws no commit → push → PR → merge track", async () => {
@@ -366,7 +366,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
         delivery: { ship: { version: "1.2.3" } },
       });
       expect(text).toContain("✓ commit · nur lokal, kein Remote · main · v1.2.3");
-      expect(text).toMatch(/^## 📦 Lokal fertig — noch etwas\?$/m);
+      expect(text).toMatch(/^## 🟩 📦 Committed — Lokal committet — noch etwas\?$/m);
     } finally {
       fs.rmSync(repo, { recursive: true, force: true });
     }
@@ -385,12 +385,12 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
       const inside = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: dir, encoding: "utf8" });
       if (String(inside.stdout).trim() === "true") return;
       const ready = await cardText({ variant: "ready", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-a", cwd: dir });
-      expect(ready).toMatch(/^## 📂 Fertig auf der Platte — noch etwas\?$/m);
+      expect(ready).toMatch(/^## 👉 📦 Files — Fertig auf der Platte — noch etwas\?$/m);
       expect(ready).toContain("📂 kein Repo · " + dir);
       expect(ready).not.toContain("0 Dateien geändert");
       expect(ready).not.toMatch(/Build|no-build-id|○ push/);
       const test = await cardText({ variant: "test", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-b", cwd: dir, userTest: ["Öffne die Datei"] });
-      expect(test).toMatch(/^## 🧪 Erst testen\?$/m);
+      expect(test).toMatch(/^## 👉 🧪 Test — Erst testen\?$/m);
       // An explicit count still shows.
       const counted = await cardText({ variant: "ready-files", summary: "Dateien", lang: "de", session_id: "test-anatomy-norepo-c", cwd: dir, state: { mode: "file-only", filesModified: 3 } });
       expect(counted).toContain("📂 3 Dateien geändert · kein Repo");
@@ -607,7 +607,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     });
     expect(text).not.toContain("Variante auf `ready` korrigiert");
     expect(text).toContain("✓ commit → ✓ merge main · nur lokal, kein Remote");
-    expect(text).toMatch(/^## 🚀 Shipped v1\.2\.3 → main\.$/m);
+    expect(text).toMatch(/^## 🟩 🚀 Released Alpha — v1\.2\.3 → main\.$/m);
   });
 
   test("ship-successful without a remote downgrades with a note that asks for nothing impossible (#500)", async () => {
@@ -617,7 +617,7 @@ describe("render_completion_card — anatomy (§ 2 of the design doc)", () => {
     });
     expect(text).toContain("kein Remote");
     expect(text).not.toContain("pushed:true");
-    expect(text).toMatch(/^## 📦 Lokal fertig/m);
+    expect(text).toMatch(/^## 🟩 📦 Committed — Lokal committet/m);
   });
 
   test("analysis draws no pipeline line — nothing in the repo changed", async () => {
@@ -730,98 +730,98 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
     {
       name: "ready (no reservation)",
       params: { variant: "ready" },
-      de: /^## 📦 Shippen\?$/m, en: /^## 📦 Ship\?$/m,
+      de: /^## 👉 📦 Ready — Shippen\?$/m, en: /^## 👉 📦 Ready — Ship\?$/m,
     },
     {
       // #714: an open point is a question — no ship offer behind it.
       name: "ready + open point (question)",
       params: { variant: "ready", open: ["fremder Testfehler"] },
-      de: /^## ❓ fremder Testfehler — angehen\?$/m, en: /^## ❓ fremder Testfehler — tackle it\?$/m,
+      de: /^## 👉 ❓ Question — fremder Testfehler — angehen\?$/m, en: /^## 👉 ❓ Question — fremder Testfehler — tackle it\?$/m,
     },
     {
       name: "ready + red tests",
       params: { variant: "ready", tests: [{ method: "npm test", result: "2 Tests rot" }] },
-      de: /^## ⚠ Trotzdem shippen mit \d+ roten Tests\?$/m, en: /^## ⚠ Ship anyway with \d+ red tests\?$/m,
+      de: /^## 👉 ⚠️ Red tests — Trotzdem shippen mit \d+ roten Tests\?$/m, en: /^## 👉 ⚠️ Red tests — Ship anyway with \d+ red tests\?$/m,
     },
     {
       name: "ship-blocked",
       params: { variant: "ship-blocked", cta: { reason: "Preflight" } },
-      de: /^## ⛔ Preflight umgehen und trotzdem shippen\?$/m, en: /^## ⛔ Bypass Preflight and ship anyway\?$/m,
+      de: /^## 👉 ⛔ Blocked — Preflight umgehen und trotzdem shippen\?$/m, en: /^## 👉 ⛔ Blocked — Bypass Preflight and ship anyway\?$/m,
     },
     {
       name: "ship-successful (ring)",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0" }, promote: { channels: { alpha: "0.1.0" }, current: "alpha" } } },
-      de: /^## 🚀 Released v0\.1\.0 alpha — nach beta promoten\?$/m, en: /^## 🚀 Released v0\.1\.0 alpha — promote to beta\?$/m,
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — nach Beta promoten\?$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — promote to beta\?$/m,
     },
     {
       name: "ship-successful (plain merge, no ring)",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0", base: "main" } } },
-      de: /^## 🚀 Shipped v0\.1\.0 → main\.$/m, en: /^## 🚀 Shipped v0\.1\.0 → main\.$/m,
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 → main\.$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 → main\.$/m,
     },
     {
       name: "ship-successful kept",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main", kept: true, branch: "feat/x" }, delivery: { ship: { version: "0.1.0" } } },
-      de: /^## 🚀 Released v0\.1\.0 alpha — weiter in `feat\/x`\?$/m, en: /^## 🚀 Released v0\.1\.0 alpha — continue on `feat\/x`\?$/m,
+      de: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m, en: /^## 🟩 🚀 Released Alpha — v0\.1\.0 — continue on `feat\/x`\?$/m,
     },
     {
       name: "ship-successful deployPending",
       params: { variant: "ship-successful", state: { pushed: true, merged: "main", deployPending: true } },
-      de: /^## 🚨 Gemergt, aber nicht live — Migration jetzt deployen\?$/m, en: /^## 🚨 Merged, but not live — deploy the migration now\?$/m,
+      de: /^## 👉 ⚠️ Not deployed — Gemergt, aber nicht live — Migration jetzt deployen\?$/m, en: /^## 👉 ⚠️ Not deployed — Merged, but not live — deploy the migration now\?$/m,
     },
     {
       name: "released → beta",
       params: { variant: "released", delivery: { promote: { channels: { beta: "0.1.0" }, current: "beta" }, ship: { version: "0.1.0" } } },
-      de: /^## 🎊 Promoted v0\.1\.0 BETA — nach stable\?$/m, en: /^## 🎊 Promoted v0\.1\.0 BETA — to stable\?$/m,
+      de: /^## 🟩 🎊 Promoted Beta — v0\.1\.0 — nach Stable\?$/m, en: /^## 🟩 🎊 Promoted Beta — v0\.1\.0 — to stable\?$/m,
     },
     {
       name: "released → stable",
       params: { variant: "released", delivery: { promote: { channels: { stable: "0.1.0" }, current: "stable" }, ship: { version: "0.1.0" } } },
-      de: /^## 🎊 Released v0\.1\.0 LIVE — stable\.$/m, en: /^## 🎊 Released v0\.1\.0 LIVE — stable\.$/m,
+      de: /^## 🟩 🎊 Promoted Stable — v0\.1\.0 — fertig\.$/m, en: /^## 🟩 🎊 Promoted Stable — v0\.1\.0 — done\.$/m,
     },
     {
       name: "ready-files",
       params: { variant: "ready-files", state: { mode: "file-only" } },
-      de: /^## 📂 Fertig auf der Platte — noch etwas\?$/m, en: /^## 📂 Done on disk — anything else\?$/m,
+      de: /^## 👉 📦 Files — Fertig auf der Platte — noch etwas\?$/m, en: /^## 👉 📦 Files — Done on disk — anything else\?$/m,
     },
     {
       name: "test",
       params: { variant: "test", userTest: ["Login prüfen"] },
-      de: /^## 🧪 Erst testen, dann shippen\?$/m, en: /^## 🧪 Test first, then ship\?$/m,
+      de: /^## 👉 🧪 Test — Erst testen, dann shippen\?$/m, en: /^## 👉 🧪 Test — Test first, then ship\?$/m,
     },
     {
       name: "test-minimal",
       params: { variant: "test-minimal" },
-      de: /^## ▶️ Läuft — viel Spaß$/m, en: /^## ▶️ Running — have fun$/m,
+      de: /^## 🟩 ▶️ Started — viel Spaß$/m, en: /^## 🟩 ▶️ Started — have fun$/m,
     },
     {
       name: "analysis",
       params: { variant: "analysis" },
-      de: /^## 📋 Analyse gelesen — umsetzen oder Fragen\?$/m, en: /^## 📋 Read through — questions\?$/m,
+      de: /^## 🟩 📋 Analysis — gelesen — umsetzen oder Fragen\?$/m, en: /^## 🟩 📋 Analysis — read through — questions\?$/m,
     },
     {
       name: "aborted",
       params: { variant: "aborted", cta: { reason: "fehlender Zugriff" } },
-      de: /^## 🚫 Abgebrochen wegen fehlender Zugriff — anders versuchen\?$/m, en: /^## 🚫 Aborted because of fehlender Zugriff — try differently\?$/m,
+      de: /^## 🟥 📦 Aborted — abgebrochen wegen fehlender Zugriff — anders versuchen\?$/m, en: /^## 🟥 📦 Aborted — aborted because of fehlender Zugriff — try differently\?$/m,
     },
     {
       name: "fallback",
       params: { variant: "no-such-variant" },
-      de: /^## 🔧 Erledigt — noch etwas\?$/m, en: /^## 🔧 Done — anything else\?$/m,
+      de: /^## 🟩 🖥️ System — erledigt — noch etwas\?$/m, en: /^## 🟩 🖥️ System — done — anything else\?$/m,
     },
     {
       name: "paused",
       params: { variant: "paused", changes: [{ area: "Concept", description: "Bridge und Crons gestoppt" }] },
-      de: /^## ⏸️ Pausiert — weiter, wann du willst$/m, en: /^## ⏸️ Paused — pick it up whenever you like$/m,
+      de: /^## ⏸️ ✋ Paused — weiter, wann du willst$/m, en: /^## ⏸️ ✋ Paused — pick it up whenever you like$/m,
     },
     {
       name: "pending override",
       params: { variant: "ready", pending: [{ name: "devops:frontend", doing: "Farbstil" }] },
-      de: /^## ⏳ Noch nicht fertig — .+$/m, en: /^## ⏳ Not done yet — .+$/m,
+      de: /^## ⏳ 🤖 Agents — noch nicht fertig — .+$/m, en: /^## ⏳ 🤖 Agents — not done yet — .+$/m,
     },
     {
       name: "batch override",
       params: { variant: "ready" }, // batch is read from cwd's .claude/batch-mode.json — not exercised here, smoke only
-      de: /^## 📦 Shippen\?$/m, en: /^## 📦 Ship\?$/m,
+      de: /^## 👉 📦 Ready — Shippen\?$/m, en: /^## 👉 📦 Ready — Ship\?$/m,
     },
   ];
 
@@ -856,9 +856,9 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
   // "pick it up whenever you like". The reason now names what unblocks it.
   test("paused with a reason: heading and resume line name what unblocks the work", async () => {
     for (const [lang, reason, resetAt, heading, hint] of [
-      ["de", "restart", undefined, "⏸️ Pausiert bis Neustart — Claude Code neu starten", "› Claude Code neu starten, dann hier schreiben, um weiterzumachen."],
-      ["en", "reboot", undefined, "⏸️ Paused until reboot", "› Restart the PC, then open this session and write here to continue."],
-      ["de", "usage-reset", "23:40", "⏸️ Pausiert bis Limit-Reset (23:40)", "› Nach dem Limit-Reset um 23:40 hier schreiben, um weiterzumachen."],
+      ["de", "restart", undefined, "⏸️ 🔄 Restart — Claude Code neu starten", "› Claude Code neu starten, dann hier schreiben, um weiterzumachen."],
+      ["en", "reboot", undefined, "⏸️ 💻 Reboot — restart the PC", "› Restart the PC, then open this session and write here to continue."],
+      ["de", "usage-reset", "23:40", "⏸️ 🔋 Limit reset — weiter nach dem Limit-Reset (23:40)", "› Nach dem Limit-Reset um 23:40 hier schreiben, um weiterzumachen."],
     ]) {
       const text = await cardText({
         variant: "paused", summary: "Plugin-Update wartet", lang, session_id: "test-paused-reason-" + reason,
@@ -875,11 +875,11 @@ describe("render_completion_card — § 3 per-variant table (de + en)", () => {
       variant: "paused", summary: "x", lang: "de", session_id: "test-paused-user",
       pause: { reason: "user" }, changes: [{ area: "A", description: "B" }],
     });
-    expect(text).toContain("⏸️ Pausiert — weiter, wann du willst");
+    expect(text).toContain("⏸️ ✋ Paused — weiter, wann du willst");
     expect(text).toContain("› Schreib hier, um weiterzumachen.");
   });
 
-  test("V&V unverified: ⚠ Ungeprüft shippen? — evidence carries the ungeprüft post", async () => {
+  test("V&V unverified: 👉 ⚠️ Unverified — Ungeprüft shippen? — evidence carries the ungeprüft post", async () => {
     // Simulated indirectly: without the Light-verification flag files the gate
     // is closed, so this asserts the CLEAN path stays 'ready' — the flag-driven
     // path is covered end-to-end by index.cli.test.js (writes real flag files).
@@ -922,7 +922,8 @@ describe("render_completion_card — ship + promote in one run (released)", () =
 
   test("the released heading, the ship's tests AND the promotion facts on one card", async () => {
     const text = await cardText({ ...combined, session_id: "test-combo-1" });
-    expect(text).toMatch(/^## 🎊 Released v0\.171\.0 LIVE — stable\.$/m);
+    // Ship + promote in one run (state.merged) reads Released; the userFinalTest is a mandatory step → 👉.
+    expect(text).toMatch(/^## 👉 🎊 Released Stable — v0\.171\.0 — fertig\.$/m);
     expect(text).toContain("3462 Tests grün");
     expect(text).toContain("Tags stable/v0.171.0/v0.171.0");
     expect(text).toContain("bit-identisch — deadbee");
@@ -945,7 +946,8 @@ describe("render_completion_card — ship + promote in one run (released)", () =
       open: ["Promotion auf stable ausgesetzt — erst deployen, dann promote stable"],
       userFinalTest: ["Login prüfen"],
     });
-    expect(text).toMatch(/^## 🚀 Released v0\.171\.0 alpha/m);
+    // The open point is a mandatory step: 👉, not 🟩.
+    expect(text).toMatch(/^## 👉 🚀 Released Alpha — v0\.171\.0/m);
     expect(text).toContain("Promotion auf stable ausgesetzt — erst deployen, dann promote stable");
     expect(text).toContain("🧪 Login prüfen");
   });
@@ -956,7 +958,7 @@ describe("render_completion_card — ship + promote in one run (released)", () =
       delivery: { promote: { channels: { beta: "0.1.0" }, current: "beta" }, ship: { version: "0.1.0" } },
       promotion: { from: "alpha", to: "beta", sha: "abcdef1234", tags: ["beta/v0.1.0"] },
     });
-    expect(text).toMatch(/^## 🎊 Promoted v0\.1\.0 BETA — to stable\?$/m);
+    expect(text).toMatch(/^## 🟩 🎊 Promoted Beta — v0\.1\.0 — to stable\?$/m);
     expect(text).toContain("tags beta/v0.1.0");
     expect(text).not.toMatch(/Tests? (green|grün)/);
   });
@@ -964,7 +966,7 @@ describe("render_completion_card — ship + promote in one run (released)", () =
   // #700: a promote-only payload without promote.current printed
   // "Promoted  BETA" — the version now comes from the ladder.
   test("a promote-only card without promote.current still names the version", async () => {
-    for (const [lang, re] of [["de", /^## 🎊 Promoted v0\.51\.0 BETA — nach stable\?$/m], ["en", /^## 🎊 Promoted v0\.51\.0 BETA — to stable\?$/m]]) {
+    for (const [lang, re] of [["de", /^## 🟩 🎊 Promoted Beta — v0\.51\.0 — nach Stable\?$/m], ["en", /^## 🟩 🎊 Promoted Beta — v0\.51\.0 — to stable\?$/m]]) {
       const text = await cardText({
         variant: "released", summary: "x", lang, session_id: "test-700-" + lang,
         delivery: { promote: { channels: { alpha: "0.51.0", beta: "0.51.0" } } },
@@ -979,7 +981,7 @@ describe("render_completion_card — ship + promote in one run (released)", () =
       delivery: { promote: { channels: { alpha: "0.52.0", beta: "0.51.0", stable: "0.50.0" } } },
       promotion: { from: "beta", to: "stable" },
     });
-    expect(text).toMatch(/^## 🎊 Released v0\.50\.0 LIVE — stable\.$/m);
+    expect(text).toMatch(/^## 🟩 🎊 Promoted Stable — v0\.50\.0 — done\.$/m);
   });
 
   test("an unresolvable version drops the token instead of leaving a gap", async () => {
@@ -987,7 +989,7 @@ describe("render_completion_card — ship + promote in one run (released)", () =
       variant: "released", summary: "x", lang: "de", session_id: "test-700-none",
       delivery: { promote: { channels: {} } },
     });
-    expect(text).toMatch(/^## 🎊 Promoted BETA — nach stable\?$/m);
+    expect(text).toMatch(/^## 🟩 🎊 Promoted Beta — nach Stable\?$/m);
     expect(text).not.toMatch(/Promoted {2}|Promoted v /);
   });
 });
@@ -1014,7 +1016,7 @@ describe("render_completion_card — out-of-band deploy gate (#243)", () => {
       state: { ...baseParams.state, deployPending: true },
       deployGate: [{ artifact: "supabase/migrations/1.sql", kind: "migration", action: "apply_migration" }],
     });
-    expect(text).toMatch(/^## 🚨 Gemergt, aber nicht live/m);
+    expect(text).toMatch(/^## 👉 ⚠️ Not deployed — Gemergt, aber nicht live/m);
     expect(text).toContain("migration · supabase/migrations/1.sql — apply_migration");
   });
 });
@@ -1052,7 +1054,7 @@ describe("render_completion_card — every input. field lands somewhere", () => 
       variant: "ship-successful", summary: "x", lang: "de", session_id: "test-fields-downgrade",
       // No state.pushed/merged → variant guard downgrades to ready.
     });
-    expect(text).toMatch(/^## 📦 Shippen/m);
+    expect(text).toMatch(/^## 👉 📦 Ready — Shippen/m);
     expect(text).toContain("› ℹ️ **Variante auf `ready` korrigiert**");
   });
 
@@ -1097,7 +1099,7 @@ describe("render_completion_card — every input. field lands somewhere", () => 
       variant: "ready", summary: "x", lang: "de", session_id: "test-fields-concept",
       concept: { phase: "waiting", url: "http://localhost:4321/docs/concepts/x.html" },
     });
-    expect(text).toMatch(/^## 🧭 Concept wartet auf deine Entscheidungen$/m);
+    expect(text).toMatch(/^## 👉 🧭 Concept — wartet auf deine Entscheidungen$/m);
     expect(text).toContain("› http://localhost:4321/docs/concepts/x.html");
   });
 
@@ -1108,20 +1110,20 @@ describe("render_completion_card — every input. field lands somewhere", () => 
       variant: "ready", summary: "x", lang: "de", session_id: "test-fields-concept-iter",
       concept: { phase: "iterating", url: "http://localhost:4321/x.html" },
     });
-    expect(iter).toMatch(/^## ⏳ Concept in Iteration — ich melde mich$/m);
+    expect(iter).toMatch(/^## ⏳ 🧭 Concept — in Iteration — ich melde mich$/m);
     const impl = await cardText({
       variant: "ready", summary: "Implementieren gestartet", lang: "de", session_id: "test-fields-concept-impl",
       concept: "implementing",
       pending: [{ name: "devops:core", doing: "Hangar-Mechanik" }, { name: "devops:frontend", doing: "Holotable" }],
     });
-    expect(impl).toMatch(/^## ⏳ Concept in Implementierung\. 2 Agenten arbeiten — ich melde mich$/m);
+    expect(impl).toMatch(/^## ⏳ 🧭 Concept — in Implementierung\. 2 Agenten arbeiten — ich melde mich$/m);
     expect(impl).not.toMatch(/wartet auf deine Entscheidungen/);
     expect(impl).toContain("`devops:core` — Hangar-Mechanik");
     const en = await cardText({
       variant: "ready", summary: "x", lang: "en", session_id: "test-fields-concept-en",
       concept: { phase: "implementing" },
     });
-    expect(en).toMatch(/^## ⏳ Concept in implementation — I will report back$/m);
+    expect(en).toMatch(/^## ⏳ 🧭 Concept — in implementation — I will report back$/m);
   });
 
   // #637: the page link reads as a call to act on the page — it belongs only
@@ -1169,18 +1171,18 @@ describe("render_completion_card — concept close-out after the implement ship 
     try {
       const de = await render({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-de", cwd });
       const deText = de.content[de.content.length - 1].text;
-      expect(deText).toMatch(/^## 🚀 Released v0\.1\.0 alpha — Konzept abschließen – Abschlussbericht wartet\.$/m);
+      expect(deText).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 — Konzept abschließen – Abschlussbericht wartet\.$/m);
       expect(deText).toContain("› http://localhost:4321/docs/concepts/x.html");
       expect(deText).not.toMatch(/weiter in/);
       const all = de.content.map(c => c.text).join("\n");
       expect(all).not.toContain("\"🧭 Concept – \" +");
-      expect(all).toContain("set the title to \"🚀 Shipped – \" +");
+      expect(all).toContain("set the title to \"👉 🚀 Released Alpha – \" +");
       const en = await cardText({ ...kept, summary: "x", lang: "en", session_id: "test-closeout-en", cwd });
-      expect(en).toMatch(/^## 🚀 Released v0\.1\.0 alpha — Close out the concept – final report is waiting\.$/m);
+      expect(en).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 — Close out the concept – final report is waiting\.$/m);
       expect(en).not.toMatch(/continue on/);
       // A plain merge (no ring) names the base instead of alpha.
       const plain = await cardText({ variant: "ship-successful", state: { mode: "git", pushed: true, merged: "main" }, delivery: { ship: { version: "0.1.0", base: "main" } }, summary: "x", lang: "de", session_id: "test-closeout-plain", cwd });
-      expect(plain).toMatch(/^## 🚀 Shipped v0\.1\.0 → main — Konzept abschließen – Abschlussbericht wartet\.$/m);
+      expect(plain).toMatch(/^## 👉 🚀 Released Alpha — v0\.1\.0 → main — Konzept abschließen – Abschlussbericht wartet\.$/m);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -1193,7 +1195,7 @@ describe("render_completion_card — concept close-out after the implement ship 
     const cwd = conceptRepo(body);
     try {
       const text = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-none", cwd });
-      expect(text).toMatch(/^## 🚀 Released v0\.1\.0 alpha — weiter in `feat\/x`\?$/m);
+      expect(text).toMatch(/^## 🟩 🚀 Released Alpha — v0\.1\.0 — weiter in `feat\/x`\?$/m);
       expect(text).not.toMatch(/Abschlussbericht wartet/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
@@ -1241,7 +1243,7 @@ describe("render_completion_card — concept close-out after the implement ship 
     try {
       const text = await cardText({ ...kept, summary: "x", lang: "de", session_id: "test-closeout-field", cwd, concept: { phase: "waiting" } });
       expect(text).not.toMatch(/Abschlussbericht wartet/);
-      expect(text).toMatch(/Concept wartet/);
+      expect(text).toMatch(/Concept — wartet/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -1257,7 +1259,7 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
     });
     expect(text).toContain("✓ 3464 Tests grün");
     expect(text).not.toMatch(/⏭/);
-    expect(text).toMatch(/^## 📦 Shippen\?$/m);
+    expect(text).toMatch(/^## 👉 📦 Ready — Shippen\?$/m);
   });
 
   test("'N/M (K skipped)' with N+K==M is green: '8680/8683 (3 skipped)' is ✓ 8680 Tests grün, no 'Nicht erreicht'", async () => {
@@ -1323,7 +1325,7 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
       tests: [{ method: "npm test", result: "3462 grün · 2 rot" }],
     });
     expect(red).toContain("✗ 2 Tests rot");
-    expect(red).toMatch(/^## ⚠ Trotzdem shippen mit 2 roten Tests\?$/m);
+    expect(red).toMatch(/^## 👉 ⚠️ Red tests — Trotzdem shippen mit 2 roten Tests\?$/m);
     expect(red).toMatch(/^› \*\*Nicht erreicht:\*\* 2 Tests rot \(npm test\)$/m);
   });
 
@@ -1347,7 +1349,7 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
       tests: [{ method: "npm test", result: "55 grün" }],
       validation: [{ requirement: "Widget klickbar", status: "unmet", evidence: "nicht gesehen" }],
     });
-    expect(de).toMatch(/^## ⚠ Trotzdem shippen mit 1 unerfüllter Anforderung\?$/m);
+    expect(de).toMatch(/^## 👉 ⚠️ Red tests — Trotzdem shippen mit 1 unerfüllter Anforderung\?$/m);
     expect(de).not.toMatch(/roten Tests/);
     const two = await cardText({
       variant: "ready", summary: "Zwei offen", lang: "en", session_id: "test-ev-unmet-en",
@@ -1356,12 +1358,12 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
         { requirement: "B", status: "unmet", evidence: "y" },
       ],
     });
-    expect(two).toMatch(/^## ⚠ Ship anyway with 2 unmet requirements\?$/m);
+    expect(two).toMatch(/^## 👉 ⚠️ Red tests — Ship anyway with 2 unmet requirements\?$/m);
     const partial = await cardText({
       variant: "ready", summary: "Teilweise", lang: "de", session_id: "test-ev-partial-de",
       validation: [{ requirement: "C", status: "partial", evidence: "z" }],
     });
-    expect(partial).toMatch(/^## ⚠ Trotzdem shippen mit 1 teilweise erfüllter Anforderung\?$/m);
+    expect(partial).toMatch(/^## 👉 ⚠️ Red tests — Trotzdem shippen mit 1 teilweise erfüllter Anforderung\?$/m);
   });
 
   test("a statement in `open` becomes the question heading verbatim (#714)", async () => {
@@ -1369,7 +1371,7 @@ describe("render_completion_card — evidence heuristics (post-concept fixes)", 
       variant: "ready", summary: "Lang", lang: "en", session_id: "test-ev-3b",
       open: ["agent-proactivity.md is 11 B under the preload cap — the next addition must trim or raise the cap."],
     });
-    expect(long).toMatch(/^## ❓ agent-proactivity\.md is 11 B under the preload cap — the next addition must trim or raise the cap — tackle it\?$/m);
+    expect(long).toMatch(/^## 👉 ❓ Question — agent-proactivity\.md is 11 B under the preload cap — the next addition must trim or raise the cap — tackle it\?$/m);
     expect(long).not.toMatch(/Ship/);
   });
 
@@ -1485,7 +1487,7 @@ describe("render_completion_card — armed batch carries the how-to", () => {
       B.activate(cwd, { marker: ">go", expiryHours: 8, maxNotes: 100 });
       B.appendNote(cwd, "erste Notiz");
       const de = await cardText({ variant: "analysis", summary: "x", lang: "de", cwd, session_id: "test-batch-guide-de" });
-      expect(de).toMatch(/^## 📥 Batch sammelt — 1 Eintrag$/m);
+      expect(de).toMatch(/^## 👉 📥 Batch — sammelt — 1 Eintrag$/m);
       expect(de).toMatch(/1 Notiz · nächster Prompt wird Notiz #2 · ">go" löst aus/);
       expect(de).toMatch(/^1\. Sammeln: jeder Prompt ohne Marker wird Notiz/m);
       expect(de).toMatch(/^2\. Umsetzen: „>go <text>" oder \/do-batch go/m);
@@ -1534,8 +1536,8 @@ describe("render_completion_card — a pending question replaces the ship offer 
     };
     for (const key of ["ready", "test"]) {
       const d = mod.buildDecisionBlock(input, "de", key, delivery, state);
-      expect(d.heading).toBe("❓ Welche Quest schlägt fehl?");
-      expect(d.points).toEqual(["Log anhängen"]);
+      expect(d.heading).toBe("👉 ❓ Question — Welche Quest schlägt fehl?");
+      expect(d.points).toEqual(["👉 Log anhängen"]);
       expect(d.noShip).toBe(true);
       const l = await labels(d);
       expect(l).not.toContain("Ship");
@@ -1543,17 +1545,27 @@ describe("render_completion_card — a pending question replaces the ship offer 
       expect(d.replies[0]).toBe("Quest X, Tracker-Zeile Y.");
     }
     const en = mod.buildDecisionBlock(input, "en", "ready", delivery, state);
-    expect(en.heading).toBe("❓ Welche Quest schlägt fehl?");
+    expect(en.heading).toBe("👉 ❓ Question — Welche Quest schlägt fehl?");
     expect(await labels(en, "en")).not.toContain("Ship");
+  });
+
+  test("point lines carry their kind: ❓ a question, 👉 a manual step (display only)", async () => {
+    const mod = await import("./index.js");
+    const d = mod.buildDecisionBlock({
+      variant: "ready", summary: "x",
+      open: ["Welche Variante?", "API-Key im Dashboard eintragen", "Doku nachziehen?", "👉 Schon markiert"],
+    }, "de", "ready", delivery, state);
+    expect(d.heading).toBe("👉 ❓ Question — Welche Variante?");
+    expect(d.points).toEqual(["👉 API-Key im Dashboard eintragen", "❓ Doku nachziehen?", "👉 Schon markiert"]);
   });
 
   test("waitsOn user without open still asks (heading names the requirement), no Ship", async () => {
     const mod = await import("./index.js");
     const de = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: waitsOnUser }, "de", "ready", delivery, state);
-    expect(de.heading).toBe("❓ Wartet auf dich: Failing quest named — wie entscheidest du?");
+    expect(de.heading).toBe("👉 ❓ Question — Wartet auf dich: Failing quest named — wie entscheidest du?");
     expect(await labels(de)).not.toContain("Ship");
     const en = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: waitsOnUser }, "en", "ready", delivery, state);
-    expect(en.heading).toBe("❓ Waiting on you: Failing quest named — what's your call?");
+    expect(en.heading).toBe("👉 ❓ Question — Waiting on you: Failing quest named — what's your call?");
   });
 
   test("the rendered card carries the question heading, not 📦 Shippen?", async () => {
@@ -1561,8 +1573,8 @@ describe("render_completion_card — a pending question replaces the ship offer 
       variant: "ready", summary: "Analyse", lang: "de", session_id: "test-714-render",
       validation: waitsOnUser, open: [{ text: "Welche Quest schlägt fehl?", reply: "Quest X." }],
     });
-    expect(text).toMatch(/^## ❓ Welche Quest schlägt fehl\?$/m);
-    expect(text).not.toMatch(/📦 Shippen/);
+    expect(text).toMatch(/^## 👉 ❓ Question — Welche Quest schlägt fehl\?$/m);
+    expect(text).not.toMatch(/👉 📦 Ready — Shippen/);
   });
 
   test("ship is offered only when nothing is open: no waitsOn user, no open, no pending", async () => {
@@ -1573,7 +1585,7 @@ describe("render_completion_card — a pending question replaces the ship offer 
     expect(mod.openQuestionOf({ open: ["x"] })).not.toBeNull();
     expect(mod.openQuestionOf({ validation: waitsOnUser })).not.toBeNull();
     const open = mod.buildDecisionBlock({ variant: "ready", summary: "x", open: ["Doku nachziehen"] }, "de", "ready", delivery, state);
-    expect(open.heading).toBe("❓ Doku nachziehen — angehen?");
+    expect(open.heading).toBe("👉 ❓ Question — Doku nachziehen — angehen?");
     expect(await labels(open)).not.toContain("Ship");
     const pending = mod.buildDecisionBlock({ variant: "ready", summary: "x", pending: [{ name: "qa", doing: "läuft" }] }, "de", "ready", delivery, state);
     expect(pending.buttonsKey).toBeNull();
@@ -1585,12 +1597,12 @@ describe("render_completion_card — a pending question replaces the ship offer 
   test("a ready card with nothing open renders as before", async () => {
     const mod = await import("./index.js");
     const d = mod.buildDecisionBlock({ variant: "ready", summary: "x", validation: [{ requirement: "A", status: "met", evidence: "t" }] }, "de", "ready", delivery, state);
-    expect(d.heading).toBe("📦 Shippen?");
+    expect(d.heading).toBe("👉 📦 Ready — Shippen?");
     expect(d.noShip).toBe(false);
     expect(await labels(d)).toEqual(["Ship", "Ändern"]);
     const en = mod.buildDecisionBlock({ variant: "ready", summary: "x" }, "en", "ready", delivery, state);
-    expect(en.heading).toBe("📦 Ship?");
+    expect(en.heading).toBe("👉 📦 Ready — Ship?");
     const text = await cardText({ variant: "ready", summary: "Fertig", lang: "de", session_id: "test-714-plain" });
-    expect(text).toMatch(/^## 📦 Shippen\?$/m);
+    expect(text).toMatch(/^## 👉 📦 Ready — Shippen\?$/m);
   });
 });

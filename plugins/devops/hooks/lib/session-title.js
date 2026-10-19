@@ -1,6 +1,6 @@
 /**
  * @module session-title
- * @version 0.3.0
+ * @version 0.4.0
  * @description Reads the session's CURRENT sidebar title straight from the
  *   transcript and computes the next one, so a title instruction can hand
  *   Claude the exact `set_session_title` value instead of a
@@ -16,92 +16,80 @@
  *   is read, growing backwards up to `maxBytes`. `null` means "unknown" (no
  *   transcript, no entry in reach): callers fall back to `get_session`.
  *
+ *   The prefix strings and the matching live in lib/title-scheme.js — the
+ *   one table the completion card's CTA headings are built from too.
  *   CJS so hooks `require` it; mcp-server (ESM) loads it through
  *   `hookRequire("lib", "session-title.js")` in mcp-server/lib/mode-state.js.
- *   The prefix strings mirror `SESSION_PREFIX` / `LEGACY_PREFIXES` there —
- *   session-title.test.js pins them.
  */
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const {
+  WORK_PREFIX, SHIPPING_PREFIX, BATCH_PREFIX, CONCEPT_PREFIX, CONCEPT_WORKING_PREFIX,
+  INTERRUPTED_PREFIX, LEGACY_PREFIXES, LEGACY, stripPrefixes, classify, leadingPrefix,
+} = require('./title-scheme');
 
-/** Bare hourglass — `SESSION_PREFIX.work` (and `.pending`). */
-const WORK_PREFIX = '⏳ ';
 /** Legacy worded hourglass — rewritten to the bare form wherever found. */
-const LEGACY_PENDING_PREFIX = '⏳ Working – ';
-/** The /do-ship process prefix — matched as a whole string (the 🚀 is shared
- *  with the `🚀 Shipped – ` outcome). */
-const SHIPPING_PREFIX = '🚀 Shipping – ';
-const CONCEPT_PREFIX = '\u{1F9ED} Concept – ';
-const CONCEPT_EMOJI = '\u{1F9ED}';
-const BATCH_EMOJI = '\u{1F4E5}';
-/** The /do-batch mode prefix — `SESSION_PREFIX.batch`. */
-const BATCH_PREFIX = BATCH_EMOJI + ' Batch – ';
-const HOURGLASS = '⏳';
+const LEGACY_PENDING_PREFIX = LEGACY.working;
 
-/** Leading emoji of the mode prefixes a skill owns (concept, batch). */
-const MODE_PREFIX_EMOJI = [CONCEPT_EMOJI, BATCH_EMOJI];
-/** Leading emoji of every outcome prefix a card may leave, the bare ⏳ included. */
-const OUTCOME_PREFIX_EMOJI = ['\u{1F680}', '\u{1F38A}', '\u{1F9EA}', '▶️', '\u{1F4E6}', '⛔', '\u{1F6AB}', '\u{1F4CB}', HOURGLASS, '\u{1F527}', '⏸️'];
-const KNOWN_PREFIX_EMOJI = [...MODE_PREFIX_EMOJI, ...OUTCOME_PREFIX_EMOJI];
-
-/** `<Word…> – ` after the emoji: "Shipped – ", "Released Stable – ",
- *  "Paused until limit reset – ". Capitalised first word, short. */
-const WORDED = /^[A-Z][\p{L}]*(?: [\p{L}]+){0,3} – /u;
-
-/**
- * `title` without every leading devops prefix whose emoji is in `emoji`
- * (stacked prefixes included). A worded prefix ("🧪 Test – ") goes whole; a
- * bare "⏳ " goes as the icon only — the text after it is the title.
- *
- * @param {string} title
- * @param {string[]} [emoji] defaults to every known prefix emoji
- * @returns {string}
- */
-function stripPrefixes(title, emoji = KNOWN_PREFIX_EMOJI) {
-  let t = String(title ?? '');
-  for (;;) {
-    const e = emoji.find(x => t.startsWith(x + ' '));
-    if (!e) return t;
-    const rest = t.slice(e.length + 1);
-    const m = rest.match(WORDED);
-    if (m) t = rest.slice(m[0].length);
-    else if (e === HOURGLASS) t = rest;
-    else return t;
-  }
+/** `current` without its leading prefixes, or null when nothing is left. */
+function rest(current) {
+  const r = stripPrefixes(current);
+  return r.trim() ? r : null;
 }
 
 /**
  * The title prefix work on this prompt should leave, applied to `current`:
- * the new title, or `null` for "leave it as it is".
+ * the new title, or `null` for "leave it as it is". The guards read the
+ * two-slot grammar (R1) and check the running ship first:
  *
- * User prompt: `📥 Batch – ` is owned by its skill; a running
- * `🚀 Shipping – ` is never replaced; a bare `⏳ ` title is already marked
- * (the legacy `⏳ Working – ` is not); the concept compass and every outcome
- * prefix yield. Machine turn (a task notification): any mode or outcome
- * prefix stays — only a plain title or a legacy hourglass is marked.
+ * User prompt (`prefix` = WORK_PREFIX): the batch title is owned by its
+ * skill; a running `⏳ 🚀 Shipping – ` (or its legacy form) is never
+ * replaced, nor is any other ⏳ process (Concept working, Agents, Testing);
+ * a bare `⏳ ` title is already marked (the legacy `⏳ Working – ` is not).
+ * Every other prefix — a waiting concept and every outcome — yields to the
+ * bare hourglass; the turn's card sets the next state.
+ *
+ * A ship (`prefix` = SHIPPING_PREFIX): everything but the batch and an
+ * already running ship becomes `⏳ 🚀 Shipping – ` (a legacy
+ * `🚀 Shipping – ` is upgraded).
+ *
+ * Machine turn (a task notification): any known prefix stays — only a plain
+ * title or the legacy worded hourglass is marked.
  *
  * @param {string|null} current the title now (`readCurrentTitle`)
- * @param {{ prefix?: string, machine?: boolean }} [opts] prefix: WORK_PREFIX or SHIPPING_PREFIX
+ * @param {{ prefix?: string, machine?: boolean }} [opts]
  * @returns {string|null}
  */
 function nextTitle(current, { prefix = WORK_PREFIX, machine = false } = {}) {
   if (typeof current !== 'string' || !current.trim()) return null;
-  const owned = machine ? KNOWN_PREFIX_EMOJI.filter(e => e !== HOURGLASS) : [BATCH_EMOJI];
-  if (owned.some(e => current.startsWith(e))) return null;
-  if (current.startsWith(SHIPPING_PREFIX)) return null;
-  if (prefix !== SHIPPING_PREFIX && current.startsWith(WORK_PREFIX) && !current.startsWith(LEGACY_PENDING_PREFIX)) return null;
-  const strippable = machine ? [HOURGLASS] : [CONCEPT_EMOJI, ...OUTCOME_PREFIX_EMOJI];
-  const stripped = stripPrefixes(current, strippable);
-  if (!stripped.trim()) return null;
-  const next = prefix + stripped;
-  return next === current ? null : next;
+  const kind = classify(current);
+  const legacyWorking = kind === 'work' && leadingPrefix(current).prefix === LEGACY_PENDING_PREFIX;
+  const r = rest(current);
+  if (r === null) return null;
+  let next;
+  if (machine) {
+    if (kind !== 'plain' && !legacyWorking) return null;
+    next = WORK_PREFIX + r;
+  } else if (kind === 'batch') {
+    return null;
+  } else if (kind === 'shipping') {
+    if (prefix !== SHIPPING_PREFIX || current.startsWith(SHIPPING_PREFIX)) return null;
+    next = SHIPPING_PREFIX + r;
+  } else if (prefix === SHIPPING_PREFIX) {
+    next = SHIPPING_PREFIX + r;
+  } else if (kind === 'process' || (kind === 'work' && !legacyWorking)) {
+    return null;
+  } else {
+    next = prefix + r;
+  }
+  return next !== current ? next : null;
 }
 
 /**
  * The title arming /do-batch leaves (activation.md § Session title prefix):
- * `📥 Batch – ` in front, every devops prefix stripped first so prefixes
+ * `👉 📥 Batch – ` in front, every known prefix stripped first so prefixes
  * never stack. `null` when unknown, already marked, or nothing is left.
  *
  * @param {string|null} current
@@ -110,22 +98,38 @@ function nextTitle(current, { prefix = WORK_PREFIX, machine = false } = {}) {
 function batchTitle(current) {
   if (typeof current !== 'string' || !current.trim()) return null;
   if (current.startsWith(BATCH_PREFIX)) return null;
-  const stripped = stripPrefixes(current);
-  return stripped.trim() ? BATCH_PREFIX + stripped : null;
+  const r = rest(current);
+  return r ? BATCH_PREFIX + r : null;
 }
 
 /**
  * The title retiring /do-batch leaves (merge.md § Retire): exactly the
- * leading `📥 Batch – ` removed. `null` when the title does not carry it —
- * a title the user renamed meanwhile wins — or nothing would be left.
+ * leading batch prefix removed (`👉 📥 Batch – `, or the legacy
+ * `📥 Batch – `). `null` when the title does not carry it — a title the
+ * user renamed meanwhile wins — or nothing would be left.
  *
  * @param {string|null} current
  * @returns {string|null}
  */
 function unbatchTitle(current) {
-  if (typeof current !== 'string' || !current.startsWith(BATCH_PREFIX)) return null;
-  const rest = current.slice(BATCH_PREFIX.length);
-  return rest.trim() ? rest : null;
+  if (typeof current !== 'string' || classify(current) !== 'batch') return null;
+  const r = current.slice(leadingPrefix(current).length);
+  return r.trim() ? r : null;
+}
+
+/**
+ * F5: the title a turn that ended WITHOUT a completion card leaves. Only a
+ * bare `⏳ ` (generic work, or the legacy `⏳ Working – `) becomes
+ * `👉 ⚡ Interrupted – <title>`; a batch, a waiting concept, a running ship
+ * and every other named state stay (`null`).
+ *
+ * @param {string|null} current
+ * @returns {string|null}
+ */
+function interruptedTitle(current) {
+  if (typeof current !== 'string' || classify(current) !== 'work') return null;
+  const r = rest(current);
+  return r ? INTERRUPTED_PREFIX + r : null;
 }
 
 /** The title an entry line carries, or undefined when it is no title entry. */
@@ -216,15 +220,17 @@ module.exports = {
   findTranscript,
   WORK_PREFIX,
   LEGACY_PENDING_PREFIX,
+  LEGACY_PREFIXES,
   SHIPPING_PREFIX,
   CONCEPT_PREFIX,
+  CONCEPT_WORKING_PREFIX,
   BATCH_PREFIX,
-  MODE_PREFIX_EMOJI,
-  OUTCOME_PREFIX_EMOJI,
-  KNOWN_PREFIX_EMOJI,
+  INTERRUPTED_PREFIX,
+  classify,
   stripPrefixes,
   nextTitle,
   batchTitle,
   unbatchTitle,
+  interruptedTitle,
   readCurrentTitle,
 };

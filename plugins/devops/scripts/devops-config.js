@@ -46,7 +46,8 @@ function invalidEntries(cwd, opts = {}) {
       const typed = spec.type === 'boolean' ? typeof raw === 'boolean'
         : spec.type === 'integer' ? Number.isInteger(raw)
           : spec.type === 'list' ? Array.isArray(raw)
-            : typeof raw === 'string';
+            : spec.type === 'enum' ? spec.values.includes(raw)
+              : typeof raw === 'string';
       let fix = null;
       try { fix = cfg.parseValue(fullKey, raw); } catch { /* not repairable */ }
       if (!typed || fix === null) out.push({ scope, file, key: fullKey, raw, fix: typed ? null : fix });
