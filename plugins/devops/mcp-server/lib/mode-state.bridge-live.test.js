@@ -56,6 +56,8 @@ describe("bridgeLive (#712)", () => {
     // off Windows the age never decides; on Windows a registry entry still wins
     expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, { ...win(), platform: "linux" })).toBe(true);
     expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win({ readEntry: () => ({ pid: 4242, worktree: cwd }) }))).toBe(true);
+    // an unreadable registry is not "no entry"
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win({ readEntry: () => { throw new Error("EACCES"); } }))).toBe(true);
   });
 
   // Redteam: ports collide across worktrees — a foreign session's live bridge

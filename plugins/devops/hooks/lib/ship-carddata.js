@@ -82,8 +82,15 @@ function readCardData(cwd, sessionId, { now = Date.now() } = {}) {
   try {
     const data = JSON.parse(fs.readFileSync(p, 'utf8'));
     if (!data || typeof data.cardData !== 'object' || !data.cardData) return null;
-    if (typeof data.writtenAt === 'number' && now - data.writtenAt > MAX_AGE_MS) return null;
-    return { ...data, path: p };
+    // No timestamp is no proof of freshness: such a file counts as abandoned.
+    if (typeof data.writtenAt !== 'number' || now - data.writtenAt > MAX_AGE_MS) return null;
+    return {
+      cardData: data.cardData,
+      afterRender: Array.isArray(data.afterRender) ? data.afterRender.map(String) : [],
+      exitWorktree: data.exitWorktree === true,
+      writtenAt: data.writtenAt,
+      path: p,
+    };
   } catch {
     return null;
   }

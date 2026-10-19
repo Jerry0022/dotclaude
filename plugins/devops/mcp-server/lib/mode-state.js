@@ -454,8 +454,9 @@ export function readConceptState(cwd, { skipStale = false } = {}) {
     // A paused concept (#555) has no bridge: no link, no compass. The card of
     // the pausing turn and every later card show the plain outcome instead.
     if (R.isPaused(state)) return null;
-    const store = R.readStore(R.storeDirFor(state.html_path, cwd));
-    if (!skipStale && R.isStale(state, store)) return null;
+    let store = null;
+    try { store = R.readStore(R.storeDirFor(state.html_path, cwd)); } catch { /* unreadable store: no activity known */ }
+    if (!skipStale && R.isStale(state, store || undefined)) return null;
     // A state file outlives its bridge when a close-out stops the server and
     // deletes the page before the card renders (#712): no link to a dead page.
     if (!bridgeLive(cwd, state, port, { lastActivityAt: store && store.lastActivityAt })) return null;
@@ -508,6 +509,7 @@ export function bridgeLive(cwd, state, port, deps = {}) {
   }
   let pid = 0;
   let entry = null;
+  let entryUnknown = false;
   try {
     entry = readEntry(port);
     // Ports collide across worktrees: another session's live bridge on the
@@ -515,6 +517,7 @@ export function bridgeLive(cwd, state, port, deps = {}) {
     const foreign = entry && entry.worktree && norm(entry.worktree) !== norm(cwd);
     pid = entry && !foreign ? Number(entry.pid) : 0;
   } catch {
+    entryUnknown = true; // an unreadable registry is no proof of a missing entry
     pid = 0;
   }
   const win32 = (deps.platform || process.platform) === "win32";
@@ -522,7 +525,7 @@ export function bridgeLive(cwd, state, port, deps = {}) {
     pid = Number(state.server_pid);
   }
   if (!(Number.isInteger(pid) && pid > 0)) {
-    if (win32 && !entry) return !win32NoEntryExpired(cwd, state, deps);
+    if (win32 && !entry && !entryUnknown) return !win32NoEntryExpired(cwd, state, deps);
     return true; // unknown pid
   }
   try {

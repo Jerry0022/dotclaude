@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.275.1] — 2026-10-19
+
+Two follow-ups from the #712 redteam.
+
+### Fixed
+- **The concept-finalize ship card survives a compaction (R6).** A delegated `--card-data` ship now also writes its card input to `.claude/.ship-carddata-<session>.json` (git-excluded, `scripts/ship-carddata.js`). If a compaction drops the subagent's reply, `stop.flow.guard` and `ss.ship.resume` point the parent to that file. Before, the parent rebuilt the card without ship state and it downgraded to `ready`. `render_completion_card` consumes the file once it renders the stored variant.
+- **No dead concept link on Windows after a half-finished close-out (R8).** On Windows, a concept without a bridge registry entry now counts as dead once its last activity is more than 10 minutes old. That case happens when Step 6a stopped between `/shutdown` and the state-file removal on a `keep` disposition. An unreadable registry still counts as unknown.
+
 ## [0.275.0] — 2026-10-19
 
 The web guide panel (`/auto-guide`) gets a free question/comment field and a clear exit. Overlay version 1.14.0.

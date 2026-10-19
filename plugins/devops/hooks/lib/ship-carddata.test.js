@@ -42,6 +42,17 @@ describe("ship-carddata", () => {
     expect(lib.readCardData(dir, SID, { now: Date.now() + lib.MAX_AGE_MS + 1000 })).toBeNull();
   });
 
+  test("a hand-written file without writtenAt or afterRender: abandoned, never a throw", () => {
+    const p = lib.cardDataPath(dir, SID);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify({ cardData: { variant: "ship-successful" } }));
+    expect(lib.readCardData(dir, SID)).toBeNull();
+    fs.writeFileSync(p, JSON.stringify({ cardData: { variant: "ship-successful" }, writtenAt: Date.now(), afterRender: "x" }));
+    const got = lib.readCardData(dir, SID);
+    expect(got.afterRender).toEqual([]);
+    expect(() => lib.renderFromFileInstruction(got, { pluginRoot: "/p", cwd: dir, sessionId: SID })).not.toThrow();
+  });
+
   test("the render consumes it only for the stored variant", () => {
     lib.writeCardData(dir, SID, payload);
     expect(lib.consumeOnRender(dir, SID, "analysis")).toBe(false);
