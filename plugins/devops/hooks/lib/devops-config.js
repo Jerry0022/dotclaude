@@ -205,8 +205,12 @@ function readValue(spec, raw) {
   if (isValid(spec, raw)) return raw;
   if (spec.type === 'string') return typeof raw === 'string' && isValid(spec, raw.trim()) ? raw.trim() : undefined;
   if (spec.type === 'enum') {
-    const v = typeof raw === 'string' ? raw.trim().toLowerCase().slice(0, 3) : '';
-    return typeof raw === 'string' && isValid(spec, v) ? v : undefined;
+    if (typeof raw !== 'string') return undefined;
+    // the whole word first ("local"), then its 3-letter form ("Monday" → "mon")
+    const word = raw.trim().toLowerCase();
+    if (isValid(spec, word)) return word;
+    const short = word.slice(0, 3);
+    return isValid(spec, short) ? short : undefined;
   }
   if (spec.type === 'list') {
     if (typeof raw !== 'string') return undefined;
