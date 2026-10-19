@@ -355,6 +355,15 @@ describe("bake + gate", () => {
     expect(two.map((x) => x.kind)).toEqual(["overview-traits"]);
   });
 
+  test("a `>` inside a quoted motto neither drops the design nor truncates its tag", () => {
+    const it = (designs) => `<section data-iteration="1" data-iteration-template="design">${designs}</section>`;
+    const before = `<section data-design-motto="Fast -> simple" data-design="a" data-design-traits="x | y | z" data-design-icon="leaf"></section>`;
+    const after = `<section data-design="b" data-design-motto="Slow -> calm" data-design-traits="x | y | z" data-design-icon="leaf"></section>`;
+    expect(gate.findDesignAuthoringWarnings(it(before + after))).toEqual([]);
+    const bare = gate.findDesignAuthoringWarnings(it(`<section data-design-motto="a > b" data-design="a"></section><section data-design="b"></section>`));
+    expect(bare.map((x) => x.why.match(/design "(\w)"/)[1])).toEqual(["a", "b"]);
+  });
+
   test("the engine anchors of the overview are in the reference (gate ENGINE_DESIGN)", () => {
     for (const e of gate.ENGINE_DESIGN) {
       expect(e.re ? e.re.test(md) : md.includes(e.token), e.token).toBe(true);

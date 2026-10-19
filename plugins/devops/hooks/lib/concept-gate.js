@@ -765,7 +765,9 @@ function findViewOverlap(html) {
 function findDesignAuthoringWarnings(html) {
   const body = String(html || '').replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
   const warnings = [];
-  const topRe = /<section\b[^>]*\s(data-iteration|data-design)=("|')([^"']*)\2[^>]*>/gi;
+  // Quoted values are matched whole, so a `>` inside a motto ("Fast -> simple")
+  // neither drops the section nor cuts its tag short.
+  const topRe = /<section\b(?:[^>"']|"[^"]*"|'[^']*')*?\s(data-iteration|data-design)=("|')([^"']*)\2(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
   const groups = [];
   let cur = null, m;
   while ((m = topRe.exec(body)) !== null) {
