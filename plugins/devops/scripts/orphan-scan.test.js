@@ -101,6 +101,51 @@ describe("orphan-scan", () => {
     expect(left).toEqual(["feat/unlanded", "main"]);
   });
 
+  test("--clean-landed spares long-lived, parked, salvage and upstream-backed branches at main", async () => {
+    const root = mkRoot();
+    const r = repoIn(root, "app");
+    for (const n of ["develop", "staging", "production", "stable", "release/1.0", "parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z", "has-upstream", "plain-landed"]) {
+      git(r, "branch", n, "main");
+    }
+    git(r, "update-ref", "refs/remotes/origin/has-upstream", "main");
+    const done = await cleanLanded(r, { apply: true, ...opts });
+    expect(done.removed.map((x) => x.name)).toEqual(["plain-landed"]);
+    const left = git(r, "for-each-ref", "refs/heads", "--format=%(refname:short)").split("\n");
+    expect(left).toEqual(expect.arrayContaining(["develop", "staging", "production", "stable", "release/1.0", "parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z", "has-upstream"]));
+  });
+
+  test("--clean-landed keeps a fresh clean worktree at main and removes one idle for days", async () => {
+    const root = mkRoot();
+    const r = repoIn(root, "app");
+    // the repo's commits are "now"; the scan runs 5 days later
+    const later = Date.now() + 5 * DAY;
+    const mk = (name, ageDays) => {
+      const wt = path.join(r, ".claude", "worktrees", name);
+      git(r, "worktree", "add", "-q", "-b", name, wt, "main");
+      const t = new Date(later - ageDays * DAY);
+      for (const f of ["index", "HEAD", path.join("logs", "HEAD")]) {
+        try { fs.utimesSync(path.join(r, ".git", "worktrees", name, f), t, t); } catch { /* optional */ }
+      }
+      // the commit itself is at main (old); only the admin files carry the activity
+      return wt;
+    };
+    const fresh = mk("fresh-one", 0);
+    const stale = mk("stale-one", 5);
+    const done = await cleanLanded(r, { apply: true, now: later, ...opts });
+    expect(done.removed.filter((x) => x.kind === "worktree").map((x) => path.basename(x.path))).toEqual(["stale-one"]);
+    expect(fs.existsSync(fresh)).toBe(true);
+    expect(fs.existsSync(stale)).toBe(false);
+  });
+
+  test("parked/autosave/* is listed under parked in the report, not at risk", async () => {
+    const root = mkRoot();
+    const r = repoIn(root, "app");
+    commitOn(r, "parked/autosave/sess1", "s.txt", "s\n", "autosave");
+    const { entry } = await scanOne(r, opts);
+    expect(entry.parked).toEqual([expect.objectContaining({ branch: "parked/autosave/sess1", legacy: false })]);
+    expect(entry.atRisk).toEqual([]);
+  });
+
   test("parseArgs", () => {
     expect(parseArgs(["--clean-landed", "--repo", "x", "--apply", "--no-fetch"])).toMatchObject({ cleanLanded: true, apply: true, repo: "x", fetch: false });
   });

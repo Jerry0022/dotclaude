@@ -146,12 +146,35 @@ async function scanOne(repo, opts = {}) {
   };
 }
 
+const CLEAN_MIN_IDLE_MS = 24 * 3_600_000;
+const LONG_LIVED = /^(?:develop|development|dev|staging|stage|production|prod|stable|trunk|main|master|release\/.+|hotfix\/.+)$/;
+
+/**
+ * A branch --clean-landed must never delete: long-lived names, parked or
+ * legacy-parked refs (incl. parked/autosave/*), and any branch whose upstream
+ * still exists on origin (somebody else may build on it).
+ */
+function isProtectedBranch(repo, name, head) {
+  if (LONG_LIVED.test(name) || /^salvage\//.test(name)) return true;
+  const subject = gitOut(['log', '-1', '--format=%s', head], repo) || '';
+  if (parkRegister.isParked(name, subject)) return true;
+  return gitOut(['rev-parse', '--verify', '-q', `refs/remotes/origin/${name}`], repo) !== null;
+}
+
 /** Dry-run or apply the safe removal of landed leftovers in one repo. */
 async function cleanLanded(repo, { apply, now = Date.now(), projectsDir, fetch: doFetch, fetchMerged, fetchOpen } = {}) {
   const hy = await loadHygiene();
   const r = await scanOne(repo, { fetch: doFetch, now, projectsDir, fetchMerged, fetchOpen });
   if (!r) return { repo, removed: [], skipped: [], would: [] };
-  const remove = r.cls.removable.map((u) => ({ ...u, trigger: 'orphan-scan' }));
+  const remove = [];
+  for (const u of r.cls.removable) {
+    // a worktree must have been idle for CLEAN_MIN_IDLE_MS — "landed" alone also
+    // matches a fresh checkout at main or a session idle for just over 2 h
+    if (u.kind === 'worktree' && now - u.activityMs < CLEAN_MIN_IDLE_MS) continue;
+    const keepBranch = u.branch ? isProtectedBranch(repo, u.branch, u.head) : false;
+    if (u.kind === 'branch' && keepBranch) continue;
+    remove.push({ ...u, trigger: 'orphan-scan', ...(keepBranch ? { keepBranch: true } : {}) });
+  }
   const would = remove.map((u) => (u.kind === 'worktree' ? { kind: 'worktree', path: u.path, branch: u.branch } : { kind: 'branch', name: u.branch }));
   if (!apply) return { repo, removed: [], skipped: [], would };
   const done = hy.executeAutoClean({ remove }, r.scan, {
@@ -229,4 +252,4 @@ if (require.main === module) {
   main(process.argv.slice(2)).then((c) => process.exit(c), () => process.exit(0));
 }
 
-module.exports = { findRepos, mainCheckoutOf, scanOne, cleanLanded, parseArgs, defaultReportPath };
+module.exports = { isProtectedBranch, findRepos, mainCheckoutOf, scanOne, cleanLanded, parseArgs, defaultReportPath };
