@@ -157,6 +157,13 @@ describe("rebuildCache", () => {
     expect(path.resolve(entry.installPath)).toBe(path.resolve(versionDir));
   });
 
+  test.each(["../../evil", "1.0.0/../x", "1.0.0$(id)", "a\\b", "", ".."])("refuses a version that is not a plain dir name (%j) and writes nothing outside the cache", (version) => {
+    const result = lib.rebuildCache(rebuildOpts({ version }));
+    expect(result.ok).toBe(false);
+    expect(result.missing).toMatch(/invalid plugin version/);
+    expect(JSON.parse(fs.readFileSync(registryFile, "utf8")).plugins).toEqual({});
+  });
+
   test("fails loudly instead of registering a half-built cache", () => {
     const broken = path.join(root, "broken");
     fs.mkdirSync(broken, { recursive: true });

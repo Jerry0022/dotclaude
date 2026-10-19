@@ -55,7 +55,7 @@
 
 require('../lib/plugin-guard');
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { t } = require('../lib/locale');
@@ -137,14 +137,12 @@ function notifyDesktop(title, body) {
       });
       child.unref();
     } else if (process.platform === 'darwin') {
-      execSync(
-        `osascript -e 'display notification "${body.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"'`,
-        { timeout: 5000, stdio: 'ignore' },
-      );
-    } else {
-      execSync(`notify-send "${title.replace(/"/g, '\\"')}" "${body.replace(/"/g, '\\"')}"`, {
+      // argv arrays, no shell: version/plugin names reach `body` from a marketplace.
+      execFileSync('osascript', ['-e', 'on run argv', '-e', 'display notification (item 1 of argv) with title (item 2 of argv)', '-e', 'end run', body, title], {
         timeout: 5000, stdio: 'ignore',
       });
+    } else {
+      execFileSync('notify-send', [title, body], { timeout: 5000, stdio: 'ignore' });
     }
   } catch {
     // Notification failed — non-fatal
