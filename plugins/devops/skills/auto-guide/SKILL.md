@@ -136,6 +136,10 @@ several minutes is still just repeated 5c calls, never a return to chat
 between them. When Claude must ask something in the chat after all, it first
 shows the „Frage im Chat" step (recovery.md § Questions in the chat), so the
 user never waits on a spinner for an answer that only appears in the chat.
+A chat question from the user during the loop is answered in the panel (step
+text update, polling continues); the chat copy is posted as the last text only
+when the guide ends. Never end the turn just to surface a chat answer while the
+guide waits on the panel.
 
 **Resuming in a new turn** (an interrupted `wait()`, a card, a chat question,
 compaction): before the first 5c of every turn that continues a running guide,
