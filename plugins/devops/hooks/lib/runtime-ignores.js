@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module runtime-ignores
- * @version 1.0.0
+ * @version 1.1.0
  * @plugin devops
  * @description The canonical `.claude` ignore policy of a project, and the one
  *   marked block that carries it in the repo's `.gitignore`:
@@ -95,6 +95,8 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/batch-handoff.json',
   '.claude/.ship-in-progress',
   '.claude/.ship-checkpoint.json',
+  // #712 R6: a delegated --card-data ship's card input (hooks/lib/ship-carddata.js).
+  '.claude/.ship-carddata-*.json',
   '.claude/.ship-lockout',
   '.claude/.ship-queue',
   '.claude/.ship-watcher/',

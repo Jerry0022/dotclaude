@@ -109,7 +109,8 @@ const CASES = [
   ["released promote-only → beta + open", { variant: "released", delivery: { promote: { channels: { beta: "0.1.0" }, current: "beta" } }, open: OPEN }, ["👉", "🎊", "Promoted Beta"]],
   // test
   ["test", { variant: "test", userTest: ["Login prüfen"] }, ["👉", "🧪", "Test"]],
-  ["test + open → question", { variant: "test", userTest: ["Login prüfen"], open: OPEN }, ["👉", "❓", "Question"]],
+  ["test + open keeps Test (#750)", { variant: "test", userTest: ["Login prüfen"], open: OPEN }, ["👉", "🧪", "Test"]],
+  ["test without steps + open → question", { variant: "test", open: OPEN }, ["👉", "❓", "Question"]],
   ["test + no remote (test-local)", { variant: "test", userTest: ["Login prüfen"], state: { mode: "git-no-remote" } }, ["👉", "🧪", "Test"]],
   ["test-minimal", { variant: "test-minimal" }, ["🟩", "▶️", "Started"]],
   ["test-minimal + userTest (mandatory)", { variant: "test-minimal", userTest: ["Spiel starten"] }, ["👉", "▶️", "Started"]],

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { bridgeLive, conceptUrl, conceptCloseoutOnly, readConceptState } from "./mode-state.js";
+import { bridgeLive, conceptUrl, conceptCloseoutOnly, readConceptState, WIN32_NO_ENTRY_GRACE_MS } from "./mode-state.js";
 
 // #712: the card resolved the concept link from the state file alone, so a
 // close-out that had stopped the bridge (and deleted the page on discard)
@@ -35,6 +35,29 @@ describe("bridgeLive (#712)", () => {
     const s = { ...state, server_pid: DEAD };
     expect(bridgeLive(cwd, s, 8800, { isAlive: alive, readEntry: () => null, platform: "linux" })).toBe(false);
     expect(bridgeLive(cwd, s, 8800, { isAlive: alive, readEntry: () => null, platform: "win32" })).toBe(true);
+  });
+
+  // R8: Step 6a stopped between /shutdown (registry entry removed) and the
+  // state-file removal on a `keep` disposition — the page stays, the pid is
+  // unknown on Windows, so only the age can tell the dead link apart.
+  test("win32 without a registry entry: dead once the last activity is past the grace", () => {
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    const win = (extra) => ({ isAlive: alive, readEntry: () => null, platform: "win32", now, ...extra });
+    const fresh = new Date(now - 60_000).toISOString();
+    const old = new Date(now - WIN32_NO_ENTRY_GRACE_MS - 60_000).toISOString();
+    expect(bridgeLive(cwd, { ...state, started_at: fresh }, 8800, win())).toBe(true);
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win())).toBe(false);
+    // recent store activity keeps an old open alive
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win({ lastActivityAt: fresh }))).toBe(true);
+    // a fresh state-file mtime counts too
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    writeFileSync(join(cwd, ".claude", "concept-active.json"), "{}");
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win({ now: Date.now() }))).toBe(true);
+    // off Windows the age never decides; on Windows a registry entry still wins
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, { ...win(), platform: "linux" })).toBe(true);
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win({ readEntry: () => ({ pid: 4242, worktree: cwd }) }))).toBe(true);
+    // an unreadable registry is not "no entry"
+    expect(bridgeLive(cwd, { ...state, started_at: old }, 8800, win({ readEntry: () => { throw new Error("EACCES"); } }))).toBe(true);
   });
 
   // Redteam: ports collide across worktrees — a foreign session's live bridge

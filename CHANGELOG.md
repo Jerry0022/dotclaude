@@ -18,6 +18,20 @@ Backup safety: if the disk dies, your Claude setup and unfinished work are not g
 - **`ship_hygiene` landed check**: a branch merely reachable from another branch's merged PR head no longer counts as landed. That PR may have reverted the changes before the squash, so the branch now needs content proof. Regression test added.
 - Enum config values match the whole word before the 3-letter form, so `sessionEnd.autosave local` and weekday values both parse.
 
+## [0.275.2] — 2026-10-20
+
+### Fixed
+- **A test card with steps to test keeps its Test heading (#750).** Open points no longer turn it into a `❓ Question` card. All `userTest` steps come first and are never folded into `+N weitere`; the open points follow, and only they fold after three. The session title stays `👉 🧪 Test`. A test card with open points and no steps still gets the Question heading, and `ready` cards are unchanged. The Ship button stays on the test card.
+- **The stop guard's 3-point rule follows suit.** Under a `🧪 Test` heading it counts only the open points (`❓` / `👉`), so a card that shows four or more steps is not blocked. `completion-card-design.md` § 2, § 3 and § 5.3 describe the new rule.
+
+## [0.275.1] — 2026-10-19
+
+Two follow-ups from the #712 redteam.
+
+### Fixed
+- **The concept-finalize ship card survives a compaction (R6).** A delegated `--card-data` ship now also writes its card input to `.claude/.ship-carddata-<session>.json` (git-excluded, `scripts/ship-carddata.js`). If a compaction drops the subagent's reply, `stop.flow.guard` and `ss.ship.resume` point the parent to that file. Before, the parent rebuilt the card without ship state and it downgraded to `ready`. `render_completion_card` consumes the file once it renders the stored variant.
+- **No dead concept link on Windows after a half-finished close-out (R8).** On Windows, a concept without a bridge registry entry now counts as dead once its last activity is more than 10 minutes old. That case happens when Step 6a stopped between `/shutdown` and the state-file removal on a `keep` disposition. An unreadable registry still counts as unknown.
+
 ## [0.275.0] — 2026-10-19
 
 The web guide panel (`/auto-guide`) gets a free question/comment field and a clear exit. Overlay version 1.14.0.
