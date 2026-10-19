@@ -228,7 +228,12 @@ server.registerTool(
     // Hard-gate at tier=low — the SessionStart hook says "DISABLED" in prose,
     // but a noncompliant agent could still call this tool. Enforce in code.
     const cache = tierCache.readCache();
+    let blocked = false;
     if (cache && cache.tier === "low") {
+      const wsInfo = await http.getWorkspace(BASE_URL, API_KEY, WORKSPACE_SLUG);
+      blocked = tierCache.blocksGeneration(cache, wsInfo.ok ? wsInfo.workspace?.chatModel : null);
+    }
+    if (blocked) {
       return {
         content: [{
           type: "text",

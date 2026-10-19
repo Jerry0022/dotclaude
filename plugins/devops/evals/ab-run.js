@@ -67,6 +67,7 @@ function parseArgs(argv) {
   if (!opts.b) opts.b = path.join(EVALS_DIR, "..");
   if (opts.a && opts.aRef) throw new Error("use either --a or --a-ref, not both");
   if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Error("--runs must be a positive integer");
+  if (!Number.isFinite(opts.timeoutMin) || opts.timeoutMin <= 0) throw new Error("--timeout-min must be a positive number");
   if (!opts.summarize && !opts.cases.length) throw new Error("--case is required");
   return opts;
 }
@@ -129,7 +130,10 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   });
   if (caseDef.scaffold) {
     const s = spawnSync(bash, [caseDef.scaffold], { cwd: workdir, encoding: "utf8", stdio: "pipe" });
-    if (s.status !== 0) throw new Error(`scaffold failed for ${caseDef.id}: ${s.stderr || s.error}`);
+    if (s.status !== 0) {
+      try { fs.rmSync(workdir, { recursive: true, force: true }); } catch { /* best effort */ }
+      throw new Error(`scaffold failed for ${caseDef.id}: ${s.stderr || s.error}`);
+    }
   }
   const pathPrepend = (caseDef.pathPrepend || []).map((d) => path.resolve(workdir, d));
   const started = Date.now();
@@ -217,6 +221,10 @@ function main(argv) {
 
   const runDir = path.join(opts.out, `ab-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const results = [];
+  // Ctrl-C during a (synchronous) run would otherwise skip `finally` and leave
+  // the --a-ref worktree registered.
+  const onSigint = () => { for (const fn of cleanups) { try { fn(); } catch { /* best effort */ } } process.exit(130); };
+  process.once("SIGINT", onSigint);
   try {
     fs.mkdirSync(runDir, { recursive: true });
     for (const c of cases) {
@@ -231,6 +239,7 @@ function main(argv) {
       }
     }
   } finally {
+    process.removeListener("SIGINT", onSigint);
     for (const fn of cleanups) fn();
   }
   const summary = summarize(results);

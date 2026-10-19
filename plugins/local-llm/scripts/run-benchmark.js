@@ -48,11 +48,20 @@ function stripThinking(text) {
 }
 function clean(text) { return stripOuterFence(stripThinking(text)); }
 
-function scoreChecks(output, checks) {
+// Text after the opening brace of the function body (the first `{` that
+// follows the parameter list's closing `)`). Falls back to the whole output.
+function bodyOf(output) {
+  const m = /\)\s*(?::[^{;]*)?\{/.exec(output);
+  return m ? output.slice(m.index + m[0].length) : output;
+}
+
+function scoreChecks(output, checks, bodyChecks = []) {
   if (!output) return 0;
   let hits = 0;
   for (const re of checks) if (re.test(output)) hits += 1;
-  return hits / checks.length;
+  const body = bodyChecks.length ? bodyOf(output) : '';
+  for (const re of bodyChecks) if (re.test(body)) hits += 1;
+  return hits / (checks.length + bodyChecks.length);
 }
 
 // Structural sanity: balanced braces/parens. Cheap pre-gate to reject the
@@ -128,6 +137,10 @@ const TESTS = [
     checks: [
       /\bmergeSorted\s*\(/,
       /:\s*number\[\]/,
+    ],
+    // Evaluated on the function body only: the signature alone names both
+    // inputs, so a `return a;` stub must not pass these.
+    bodyChecks: [
       /\ba\b[\s\S]*\bb\b|\bb\b[\s\S]*\ba\b/, // both inputs touched
       /\b(while|for|concat|\.\.\.)/,         // iteration or spread/concat
       /return\s+(?:result|merged|out|res|\[|\.\.\.|[a-z]+\s*[;.])/i,
@@ -148,7 +161,7 @@ async function runOneTest(test) {
   });
   const latencyMs = Date.now() - startedAt;
   if (!res.ok) {
-    return { name: test.name, passed: false, score: 0, latencyMs, error: res.error || res.errorType };
+    return { name: test.name, passed: false, score: 0, latencyMs, requestFailed: true, error: res.error || res.errorType || 'request_failed' };
   }
   const output = clean(res.content);
   // Structurally broken output (unbalanced braces/parens) → score 0.
@@ -156,7 +169,7 @@ async function runOneTest(test) {
   if (!looksWellFormed(output)) {
     return { name: test.name, passed: false, score: 0, latencyMs, output: output.slice(0, 240), error: 'malformed' };
   }
-  const score = scoreChecks(output, test.checks);
+  const score = scoreChecks(output, test.checks, test.bodyChecks);
   return {
     name: test.name,
     passed: score >= 0.8,
@@ -200,6 +213,14 @@ async function main() {
     results.push(r);
   }
 
+  // A failed probe (5xx, timeout, provider down) says nothing about model
+  // quality — do not cache a bogus LOW tier for 90 days; retry next session.
+  if (results.some((r) => r.requestFailed)) {
+    process.stderr.write('[benchmark] probe request failed — result not cached\n');
+    tierCache.clearRunning();
+    process.exit(0);
+  }
+
   const totalWeight = TESTS.reduce((s, t) => s + t.weight, 0);
   const weighted = results.reduce((s, r, i) => s + r.score * TESTS[i].weight, 0);
   const score = weighted / totalWeight;
@@ -222,8 +243,12 @@ async function main() {
   process.stderr.write(`[benchmark] done — model=${model} tier=${tier} score=${score.toFixed(2)}\n`);
 }
 
-main().catch((err) => {
-  process.stderr.write(`[benchmark] crash: ${err.stack || err.message}\n`);
-  tierCache.clearRunning();
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    process.stderr.write(`[benchmark] crash: ${err.stack || err.message}\n`);
+    tierCache.clearRunning();
+    process.exit(1);
+  });
+}
+
+module.exports = { TESTS, scoreChecks, bodyOf, looksWellFormed, classifyTier };

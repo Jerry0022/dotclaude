@@ -77,6 +77,17 @@ function isValid(cache, currentModel) {
   return true;
 }
 
+/**
+ * True when the tool must refuse: a LOW result that is still valid for the
+ * current model. An unknown current model (lookup failed) keeps the block;
+ * a stale or other-model cache never blocks (the hook reports PENDING).
+ */
+function blocksGeneration(cache, currentModel) {
+  if (!cache || cache.tier !== 'low') return false;
+  if (!currentModel) return true;
+  return isValid(cache, currentModel);
+}
+
 function isRunning() {
   try {
     const stat = fs.statSync(RUNNING_PATH);
@@ -109,6 +120,7 @@ module.exports = {
   readCache,
   writeCache,
   isValid,
+  blocksGeneration,
   isRunning,
   markRunning,
   clearRunning,
