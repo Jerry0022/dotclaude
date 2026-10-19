@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.272.0] — 2026-10-19
+
+Past work no longer gets lost in orphaned worktrees and branches. An audit of 29 repos found that hygiene itself never deleted unlanded work, but it ran only after a ship (in 5 of 29 repos) and its at-risk check was too narrow. The root causes: agent sub-branches that were never integrated, agent worktrees left uncommitted, sessions that ended without a commit, and parking without a register.
+
+### Added
+- **Per-file landing state** in `mcp-server/ship/lib/hygiene.js`. Each branch is classified as landed, partial or unlanded. The checks run in order: ancestor, then `merge-tree`, then the head of a merged PR, then a per-file reverse-apply in a temp index.
+- **Wider at-risk definition**: a branch is at risk when it has not landed, has no open PR, no live session and is not parked. Dirty worktrees count as well.
+- **`scripts/orphan-scan.js` + scheduled task `orphan-scan`**: a daily scan across all projects. It writes `~/.claude/orphan-report.json`, and the new SessionStart hook `ss.orphan.nudge` points to it.
+  - `--clean-landed` removes provably landed worktrees and branches. It is a dry run by default.
+  - It waits until a unit has been idle for 24 h, including unstaged edits (by mtime).
+  - It never touches long-lived, parked or upstream-backed branches.
+- **Integration proof before agent sub-branches are removed** (`hooks/lib/integration-check.js`, `scripts/integration-check.js`).
+- **WIP commit when an agent stops** (`substop.agent.wip`, `hooks/lib/wip-commit.js`). The commit is built in a temp index, so the agent's real index stays untouched.
+- **Local session autosave** at session end (`stop.session.autosave`, `hooks/lib/session-autosave.js`). It saves to the single ref `parked/autosave/<name>` and never pushes to a remote.
+  - Secret-shaped, build and oversized files are filtered out.
+  - It is skipped while a merge, rebase or other git operation is in progress.
+  - It does not follow symlinks or junctions.
+  - New config key `sessionEnd.autosave` (default `local`).
+- **Unified park register** (`hooks/lib/park-register.js`): one prefix, `parked/<topic>`. The legacy `wip/`, `backup/`, `salvage/` and `ARCHIVED` refs are recognized as aliases, and remote salvage refs count as parked. A branch that already shipped or landed never counts as parked.
+
+### Changed
+- Docs: `git-hygiene.md`, `agent-orchestration.md`, `devops-config.md`, `CONVENTIONS.md` (new `substop.` hook prefix), and the skills `auto-agents`, `auto-cleanup` and `do-run`.
+
 ## [0.271.0] — 2026-10-19
 
 With `apiCredit.enabled` on, devops' read-only side work runs on the plan's monthly API credit first and falls back to the plan. Before this, only the second-opinion review used the credit. The routing is based on a live billing test, not on assumptions.

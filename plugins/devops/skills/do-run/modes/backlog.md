@@ -402,7 +402,7 @@ queue — the status hierarchy is COMPLETED > INTERRUPTED > BLOCKED.
 
 ## Step 5 — Completion & Blocked Handling
 
-1. **Report** — write a self-contained `BACKLOG-REPORT.html` (dark theme, per
+1. **Report** — first run `node "{PLUGIN_ROOT}/scripts/integration-check.js" --integration <base> --slug <run-slug> --remove`; its `ungelandet: N Teile` line goes into the report as `parked`. Then write a self-contained `BACKLOG-REPORT.html` (dark theme, per
    `skills/do-run/modes/autonomous/deep-knowledge/html-report.md`) to the project root: per item
    `shipped` / `parked` / `blocked` (+ reason + branch), milestone progress, the
    list of shipped PRs, and a separate `🚫 fremd` section listing every open issue
