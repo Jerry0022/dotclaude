@@ -18,17 +18,26 @@
  *
  * The live session's identity is dropped as well: a test must never act on
  * the session that happens to run it.
+ *
+ * CLAUDE_PLUGIN_ROOT points at this checkout's plugin, as Claude Code sets it
+ * for every hook it runs. Without it plugin-guard passes a spawned hook only
+ * when the machine's ~/.claude/settings.json enables devops@dotclaude — a
+ * cloud session (synced plugin) or a fresh CI box has no such entry, and
+ * every hook test there exited 0 before its first line (2026-10-19, 97
+ * failures). Suites that test the disabled path delete it per spawn.
  */
 
 import { afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const realTmp = os.tmpdir();
 const root = fs.mkdtempSync(path.join(realTmp, "vt-"));
 for (const k of ["TEMP", "TMP", "TMPDIR"]) process.env[k] = root;
 for (const k of ["CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_HOST_SESSION_ID", "CODEX_COMPANION_SESSION_ID"]) delete process.env[k];
+process.env.CLAUDE_PLUGIN_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "plugins", "devops");
 
 afterAll(() => {
   for (const k of ["TEMP", "TMP", "TMPDIR"]) process.env[k] = realTmp;

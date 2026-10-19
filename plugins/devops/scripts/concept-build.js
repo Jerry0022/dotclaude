@@ -480,10 +480,14 @@ function tabsHtml(rounds, liveN) {
  */
 function substitute(html, locale, slug) {
   const spans = [];
-  const re = /(<(pre|code|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>)[\s\S]*?<\/\2\s*>|(<script\b[^>]*type=["']application\/json["'][^>]*>)[\s\S]*?<\/script\s*>/gi;
+  // A <style> or engine <script> block is matched first and skipped whole: a
+  // CSS comment naming `<textarea data-comment>` is no textarea, and taking it
+  // for one left every key up to the next real </textarea> unreplaced.
+  const re = /<(style|script)\b(?![^>]*type=["']application\/json["'])[^>]*>[\s\S]*?<\/\1\s*>|(<(pre|code|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>)[\s\S]*?<\/\3\s*>|(<script\b[^>]*type=["']application\/json["'][^>]*>)[\s\S]*?<\/script\s*>/gi;
   let m;
   while ((m = re.exec(html))) {
-    const open = (m[1] || m[3]).length;
+    if (m[1]) continue;
+    const open = (m[2] || m[4]).length;
     spans.push([m.index + open - 1, m.index + m[0].length]);
   }
   return html.replace(/\{\{([a-z_.]+)\}\}/g, (whole, k, offset) => {
