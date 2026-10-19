@@ -177,6 +177,36 @@ describe("tick", () => {
     };
   }
 
+  test("a transient missing HTML (rewrite window) is re-checked before /shutdown", async () => {
+    writeState(LIVE);                                   // HTML absent on the first look …
+    const calls = [];
+    const request = async (port, pathname) => {
+      calls.push(pathname);
+      if (pathname === "/pending") return { ok: true, body: JSON.stringify({ pending: false }) };
+      return { ok: true, body: "" };
+    };
+    const sleep = async () => { writeHtml(LIVE.html_path); };   // … and back by the re-check
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request, sleep });
+    expect(calls).not.toContain("/shutdown");
+    expect(res.stdout).toBe("");
+  });
+
+  test("a persistently missing HTML still shuts down after the re-checks", async () => {
+    writeState(LIVE);
+    const calls = [];
+    const request = async (port, pathname) => { calls.push(pathname); return { ok: true, body: "" }; };
+    let sleeps = 0;
+    const res = await tick({ port: PORT, state: statePath, timeout: 8 }, { request, sleep: async () => { sleeps++; } });
+    expect(sleeps).toBe(2);
+    expect(calls).toContain("/shutdown");
+    expect(res.stdout).toContain("is over");
+  });
+
+  test("an unset html_path is ok, like the watcher", () => {
+    writeState({ port: PORT, cron_id: "ab12cd34" });
+    expect(inspectState(statePath, PORT).cleanup).toBe(false);
+  });
+
   test("an idle tick prints absolutely nothing", async () => {
     writeState(LIVE);
     writeHtml(LIVE.html_path);

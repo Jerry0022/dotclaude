@@ -62,33 +62,47 @@ describe("canClaim (pre-launch sweep gate)", () => {
 
 describe("pickFreePort", () => {
   const base = { myWorktree: MINE, isAlive: () => true, read: () => null, isBound: () => false };
-  test("returns the range start when rand=0 and nothing is taken", () => {
-    const port = pickFreePort({ ...base, rand: () => 0, range: [8700, 8999] });
+  test("returns the range start when rand=0 and nothing is taken", async () => {
+    const port = await pickFreePort({ ...base, rand: () => 0, range: [8700, 8999] });
     expect(port).toBe(8700);
   });
-  test("skips a port owned by a live foreign session", () => {
+  test("skips a port owned by a live foreign session", async () => {
     const read = (p) => (p === 8700 ? { port: 8700, pid: 1, worktree: THEIRS } : null);
-    const port = pickFreePort({ ...base, read, isAlive: () => true, rand: () => 0, range: [8700, 8702] });
+    const port = await pickFreePort({ ...base, read, isAlive: () => true, rand: () => 0, range: [8700, 8702] });
     expect(port).toBe(8701); // 8700 is foreign-live → skipped
   });
-  test("skips a port that is currently bound", () => {
+  test("skips a port that is currently bound", async () => {
     const isBound = (p) => p === 8700;
-    const port = pickFreePort({ ...base, isBound, rand: () => 0, range: [8700, 8702] });
+    const port = await pickFreePort({ ...base, isBound, rand: () => 0, range: [8700, 8702] });
     expect(port).toBe(8701);
   });
-  test("returns null when every port in range is foreign-live", () => {
+  test("async isBound (the real probe shape) is awaited — a bound port is skipped", async () => {
+    const isBound = async (p) => p === 8700;
+    expect(await pickFreePort({ ...base, isBound, rand: () => 0, range: [8700, 8702] })).toBe(8701);
+  });
+  test("default probe skips a port with a real listener", async () => {
+    const net = require("node:net");
+    const srv = net.createServer();
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    const bound = srv.address().port;
+    try {
+      const port = await pickFreePort({ ...base, isBound: undefined, rand: () => 0, range: [bound, bound + 1] });
+      expect(port).toBe(bound + 1);
+    } finally { srv.close(); }
+  });
+  test("returns null when every port in range is foreign-live", async () => {
     const read = (p) => ({ port: p, pid: 1, worktree: THEIRS });
-    const port = pickFreePort({ ...base, read, isAlive: () => true, rand: () => 0, range: [8700, 8701] });
+    const port = await pickFreePort({ ...base, read, isAlive: () => true, rand: () => 0, range: [8700, 8701] });
     expect(port).toBe(null);
   });
-  test("wraps around the range from a mid-range random start", () => {
+  test("wraps around the range from a mid-range random start", async () => {
     // rand=0.99 → start near the top (8702); 8702 free → returned without wrap.
-    const port = pickFreePort({ ...base, rand: () => 0.99, range: [8700, 8702] });
+    const port = await pickFreePort({ ...base, rand: () => 0.99, range: [8700, 8702] });
     expect(port).toBe(8702);
   });
-  test("a dead foreign owner does not block the port (stale entry reclaimed)", () => {
+  test("a dead foreign owner does not block the port (stale entry reclaimed)", async () => {
     const read = (p) => (p === 8700 ? { port: 8700, pid: 9, worktree: THEIRS } : null);
-    const port = pickFreePort({ ...base, read, isAlive: () => false, rand: () => 0, range: [8700, 8702] });
+    const port = await pickFreePort({ ...base, read, isAlive: () => false, rand: () => 0, range: [8700, 8702] });
     expect(port).toBe(8700); // owner dead → reclaimable
   });
 });
