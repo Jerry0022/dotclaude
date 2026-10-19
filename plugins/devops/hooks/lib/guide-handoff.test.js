@@ -494,4 +494,37 @@ describe("detectCardHandoff — open-item replies and hand-off verbs (#742)", ()
     expect(detectWebHandoff("Ich habe die Twitch-App registriert und das Secret in Supabase gesetzt.")).toBeNull();
     expect(detectWebHandoff("Soll ich das Secret in Supabase setzen?")).toBeNull();
   });
+
+  test("the new verbs still hit as imperatives and infinitives", () => {
+    expect(hasHandoffSentence("Please set the secret in Supabase.")).toEqual({ service: "Supabase" });
+    expect(hasHandoffSentence("Set the API key in Vercel.")).toEqual({ service: "Vercel" });
+    expect(hasHandoffSentence("You need to set the secret in Supabase.")).toEqual({ service: "Supabase" });
+    expect(hasHandoffSentence("Setze das Secret in Supabase.")).toEqual({ service: "Supabase" });
+    expect(hasHandoffSentence("Provide the client ID from the Twitch developer console."))
+      .toEqual({ service: "Twitch Developer Console" });
+  });
+
+  test("past-tense 'set', descriptive 'provide' and first-person narration are no hand-off", () => {
+    expect(hasHandoffSentence("I set the token in Vercel.")).toBeNull();
+    expect(hasHandoffSentence("I've set the secret in Supabase.")).toBeNull();
+    expect(hasHandoffSentence("Supabase will provide a token after sign-up.")).toBeNull();
+    expect(hasHandoffSentence("Ich setze das Secret in Supabase.")).toBeNull();
+    expect(hasHandoffSentence("Ich registriere jetzt die Twitch-App.")).toBeNull();
+  });
+
+  test("a bare 'app' and the plain word 'twitch' are no credential or service", () => {
+    expect(hasHandoffSentence("Set the Vercel app to use Node 20.")).toBeNull();
+    expect(hasHandoffSentence("Die App soll die Daten aus Supabase liefern.")).toBeNull();
+    expect(hasHandoffSentence("Fix the twitch in the scroll animation; set the app flag.")).toBeNull();
+    expect(hasHandoffSentence("Twitch embed: set the app id in the player.")).toBeNull();
+  });
+
+  test("the reply's service is its first line, trimmed and never empty", () => {
+    expect(replyHandoff({ reply: "Führ mich per Web-Guide durch die Twitch-App.\nDanach Client-ID eintragen." }))
+      .toEqual({ service: "Twitch Developer Console" });
+    expect(replyHandoff({ reply: "Guide me through the Acme portal?!\nThen paste the key." }))
+      .toEqual({ service: "Acme portal" });
+    expect(replyHandoff({ reply: "Führ mich per Web-Guide durch die" })).toBeNull();
+    expect(replyHandoff({ reply: `Guide me through ${"x".repeat(200)}` }).service.length).toBeLessThanOrEqual(80);
+  });
 });

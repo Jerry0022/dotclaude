@@ -73,7 +73,12 @@ const SERVICE_PATTERNS = [
   { name: 'AWS Console', re: /\baws\s+console\b/i },
   { name: 'OpenAI Console', re: /\bopenai\s+console\b/i },
   { name: 'Anthropic Console', re: /\banthropic\s+console\b/i },
-  { name: 'Twitch Developer Console', re: /\btwitch\b/i },
+  // "twitch" alone is an ordinary word and a code topic (embeds, API clients) —
+  // only its developer surface counts: the app/client/console or the dev host.
+  {
+    name: 'Twitch Developer Console',
+    re: /\bdev\.twitch\.tv\b|\btwitch[-\s]?(?:apps?|client|developer|dev\s+console|console)\b|\b(?:apps?|client)\s+(?:at|bei|auf|on)\s+twitch\b/i,
+  },
   { name: 'cron-job.org', re: /\bcron-job\.org\b/i },
   // "Neon" alone is too common a word (colour, sign) — only counts near its
   // Postgres/database context (#519, StretchTimer: Vercel Marketplace → Neon).
@@ -103,7 +108,11 @@ const CREDENTIAL_NOUN_RE_SRC = [
   // AUD-C042: a bot token ("paste its token") is a credential, too.
   String.raw`tokens?`,
   // #742: client IDs/secrets and registered apps ("Twitch-App registrieren").
-  String.raw`client[-\s]?(?:id|secret)s?`, String.raw`apps?`,
+  // A bare "app" is in nearly every dev sentence ("deploy the app"), so it
+  // only counts as a compound ("Twitch-App") or registered at a host
+  // ("the app at Twitch").
+  String.raw`client[-\s]?(?:id|secret)s?`,
+  String.raw`[\p{L}\p{N}]+-apps?`, String.raw`apps?(?=\s+(?:at|bei|auf|on)\s)`,
 ];
 
 /** User-directed creation verbs (de+en, incl. zu-infinitives) — signal (c). */
@@ -127,10 +136,16 @@ const CREATION_VERB_RE_SRC = [
   String.raw`kopieren`, String.raw`kopiere`, String.raw`kopier`,
   String.raw`copy`, String.raw`copying`,
   // #742: hand-off verbs for dashboard registrations and secrets.
-  String.raw`registrieren`, String.raw`registriere`, String.raw`register`, String.raw`registering`,
-  String.raw`setzen`, String.raw`setze`, String.raw`set`,
+  // English "set" is also its own past tense ("I set the token") and
+  // "provide" describes as often as it directs ("Supabase will provide a
+  // token"): both count only as an imperative at the sentence start or as a
+  // to-/please-infinitive. The German first-person forms ("ich setze …")
+  // are filtered by SELF_PERFORMED_RE.
+  String.raw`registrieren`, String.raw`registriere`, String.raw`register`,
+  String.raw`setzen`, String.raw`setze`,
   String.raw`hinterlegen`, String.raw`hinterlege`,
-  String.raw`liefern`, String.raw`liefere`, String.raw`provide`, String.raw`providing`,
+  String.raw`liefern`, String.raw`liefere`,
+  String.raw`(?:^[\s*_>-]*(?:please\s+)?|(?<=(?:^|\s)(?:to|please)\s+))(?:set|provide)`,
 ];
 
 /** Unicode-aware whole-word alternative (JS `\b` is ASCII-only, so
@@ -179,9 +194,15 @@ const CREATION_VERB_RE = new RegExp(CREATION_VERB_RE_SRC.map(wordAlt).join('|'),
  */
 const SELF_PERFORMED_RE = new RegExp(
   '(?:' + wordAlt('ich') + String.raw`[^.!?\n]{0,60}?` +
-    wordAlt(['angelegt', 'erstellt', 'eingerichtet', 'kopiert'].join('|')) + ')' +
+    wordAlt(['angelegt', 'erstellt', 'eingerichtet', 'kopiert',
+      'gesetzt', 'registriert', 'hinterlegt', 'geliefert'].join('|')) + ')' +
+  // #742: "Ich setze jetzt das Secret …" — Claude narrating its own step.
+  '|(?:' + wordAlt('ich') + String.raw`\s+(?:(?:jetzt|nun|gleich|noch|dann|kurz)\s+)?` +
+    wordAlt(['setze', 'registriere', 'hinterlege', 'liefere', 'kopiere',
+      'erstelle', 'erzeuge', 'generiere'].join('|')) + ')' +
   '|(?:' + wordAlt('i') + String.raw`[^.!?\n]{0,60}?` +
-    wordAlt(['created', 'generated', String.raw`set\s+up`, 'configured', 'copied'].join('|')) + ')',
+    wordAlt(['created', 'generated', String.raw`set\s+up`, 'configured', 'copied',
+      'registered', 'provided'].join('|')) + ')',
   'iu'
 );
 
@@ -354,9 +375,14 @@ function userWaitingValidation(validation) {
 
 /** Auto-guide trigger phrase at the start of a prepared reply (de+en). */
 const REPLY_TRIGGER_RE = new RegExp(
-  String.raw`^\s*(?:f(?:ü|ue|u)hr(?:e)?\s+mich\s+(?:per|mit|via)\s+(?:web|auto)[-\s]?guide\s+durch|guide\s+me\s+through)\s+(.+?)\s*[.!]?\s*$`,
-  'isu'
+  // First line only: a multi-line reply must not turn its whole tail into the
+  // service name.
+  String.raw`^\s*(?:f(?:ü|ue|u)hr(?:e)?\s+mich\s+(?:per|mit|via)\s+(?:web|auto)[-\s]?guide\s+durch|guide\s+me\s+through)\s+([^\n]+)`,
+  'iu'
 );
+
+/** Longest free-form service name taken from a reply. */
+const REPLY_SERVICE_MAX = 80;
 
 /**
  * #742: `{ service }` when an item's `reply` starts with the guide trigger
@@ -368,7 +394,13 @@ function replyHandoff(item) {
   if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.reply !== 'string') return null;
   const m = item.reply.match(REPLY_TRIGGER_RE);
   if (!m) return null;
-  const object = m[1].replace(/^(?:die|den|das|der|dem|the|a|an)\s+/i, '').trim();
+  const object = m[1]
+    .replace(/[\s.!?…]+$/u, '')
+    .replace(/^(?:die|den|das|der|dem|the|a|an)(?:\s+|$)/i, '')
+    .trim()
+    .slice(0, REPLY_SERVICE_MAX)
+    .trim();
+  if (!object) return null;
   const known = matchService(object);
   return { service: known && known.named ? known.name : object };
 }
