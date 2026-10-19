@@ -108,7 +108,7 @@ const SCHEMA = Object.freeze({
   apiCredit: Object.freeze({
     enabled: Object.freeze({
       type: 'boolean', default: false,
-      doc: 'Opt-in: advisory side tasks (second-opinion review when Codex is skipped) run on the Claude API credit of the linked Console org via scripts/claude-api-safe.js. Claude Code itself always stays on the plan.',
+      doc: 'Opt-in: read-only side work (sweeps, research, reviews, audits) runs on the Claude API credit of the linked Console org first (scripts/claude-api-agent.js, claude-api-safe.js), the plan as the fallback. Claude Code itself always stays on the plan.',
     }),
     webGuide: Object.freeze({
       type: 'boolean', default: false,

@@ -2,7 +2,7 @@
 'use strict';
 /**
  * @script claude-api-safe
- * @version 0.1.0
+ * @version 0.2.0
  * @plugin devops
  * @description Opt-in, hard-timeout wrapper that runs ONE advisory prompt on
  *   the Claude API (Messages API) with the API key of the user's linked Claude
@@ -148,10 +148,12 @@ function parseArgs(argv) {
 }
 
 /**
- * One Messages API call.
- * @returns {Promise<{rc:number, text?:string, message?:string, usage?:object}>}
+ * One raw POST /v1/messages with an arbitrary request body — shared by this
+ * wrapper and claude-api-agent.js (zero-dependency plugin scripts: raw fetch,
+ * no SDK install). Maps failures onto the RC contract.
+ * @returns {Promise<{rc:number, body?:object, message?:string}>}
  */
-async function callApi({ key, prompt, model, maxTokens, timeoutMs, fetchImpl = globalThis.fetch }) {
+async function postMessages({ key, body, timeoutMs, fetchImpl = globalThis.fetch }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -162,28 +164,63 @@ async function callApi({ key, prompt, model, maxTokens, timeoutMs, fetchImpl = g
         'x-api-key': key,
         'anthropic-version': API_VERSION,
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    let body = null;
-    try { body = await res.json(); } catch { /* non-JSON */ }
-    const errMsg = body && body.error && body.error.message ? body.error.message : `HTTP ${res.status}`;
+    let json = null;
+    try { json = await res.json(); } catch { /* non-JSON */ }
+    const errMsg = json && json.error && json.error.message ? json.error.message : `HTTP ${res.status}`;
     if (!res.ok) {
       if (LIMIT_RE.test(errMsg) || res.status === 402) return { rc: RC.LIMIT, message: errMsg };
       if (res.status === 401) return { rc: RC.ERROR, message: `invalid API key (${errMsg})` };
       return { rc: RC.ERROR, message: errMsg };
     }
-    const text = (body && Array.isArray(body.content) ? body.content : [])
-      .filter((b) => b && b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-    return { rc: RC.OK, text, usage: body && body.usage };
+    return { rc: RC.OK, body: json || {} };
   } catch (err) {
     if (err && err.name === 'AbortError') return { rc: RC.TIMEOUT, message: `timed out after ${Math.round(timeoutMs / 1000)} s` };
     return { rc: RC.ERROR, message: err && err.message ? err.message : String(err) };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The text blocks of a Messages API response, joined. */
+function textOf(body) {
+  return (body && Array.isArray(body.content) ? body.content : [])
+    .filter((b) => b && b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
+
+/**
+ * One Messages API call.
+ * @returns {Promise<{rc:number, text?:string, message?:string, usage?:object}>}
+ */
+async function callApi({ key, prompt, model, maxTokens, timeoutMs, fetchImpl = globalThis.fetch }) {
+  const r = await postMessages({
+    key, timeoutMs, fetchImpl,
+    body: { model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] },
+  });
+  if (r.rc !== RC.OK) return r;
+  return { rc: RC.OK, text: textOf(r.body), usage: r.body.usage };
+}
+
+/**
+ * The SessionStart `[api-credit] …` line, or null while the switch is off
+ * (no noise for users who never opted in). Tells the session where the
+ * credit-first route is and whether it can run at all. Kept short and
+ * root-free ({PLUGIN_ROOT} is resolved by the line above it): the whole
+ * SessionStart payload must stay under the harness preview limit.
+ */
+function sessionLine({ cwd, home, env = process.env } = {}) {
+  const sw = loadSwitches({ cwd, home });
+  if (!sw.enabled || env.DEVOPS_DISABLE_CLAUDE_API === '1') return null;
+  if (!resolveKey({ env, home })) {
+    return `[api-credit] on · no key stored — side work stays on the plan${sw.webGuide ? '; offer the one-time Console web guide (deep-knowledge/api-credits.md § The key)' : ''}.`;
+  }
+  const until = activeLimit({ home });
+  if (until) return `[api-credit] on · credit exhausted until ${until} — side work stays on the plan.`;
+  return '[api-credit] on · key ✓ — read-only scout/research/review: API credit FIRST via {PLUGIN_ROOT}/scripts/claude-api-agent.js; rc≠0 → Agent tool. See api-credits.md';
 }
 
 /**
@@ -264,7 +301,7 @@ async function run(argv, {
 module.exports = {
   RC, KEY_VAR, ENV_FILE, LIMIT_FILE, DEFAULT_MODEL,
   parseEnvFile, resolveKey, loadSwitches, activeLimit, storeLimit, resetLimit,
-  parseArgs, callApi, run,
+  parseArgs, postMessages, textOf, callApi, sessionLine, run,
 };
 
 if (require.main === module) {

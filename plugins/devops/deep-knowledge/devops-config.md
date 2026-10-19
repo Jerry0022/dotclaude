@@ -91,11 +91,11 @@ the committed ship extension (`deployParity:` block in the project's
 |---|---|---|
 | `archiveAfterShip` | `true` | Desktop app: right after the card of a successful ship (`ship-successful` / `released`, merged) the session archives itself. Never for any other card, with an explicit keep (`--keep`, follow-up signals), pending agents/tasks/workflows, open points or user tests on the card, a dirty work tree, or while an autonomous run or ship queue still works. `false` → the session stays in the sidebar. |
 
-### `apiCredit` — advisory side tasks on the plan's monthly API credit (opt-in)
+### `apiCredit` — read-only side work on the plan's monthly API credit (opt-in)
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | When Codex is skipped (limit, timeout, missing), its second-opinion review runs once through `scripts/claude-api-safe.js` on the Claude API credit of the linked Console org. Claude Code itself always stays on the plan. |
+| `enabled` | `false` | Read-only side work (sweeps, research, reviews, audits) runs on the Claude API credit of the linked Console org first — `scripts/claude-api-agent.js`, `claude-api-safe.js` when Codex is skipped, `api-credit-audit.js`, evals from the user's terminal — with the plan as the fallback. Claude Code itself always stays on the plan. |
 | `webGuide` | `false` | With `enabled` on and no key stored, offer the one-time auto-guide through the Console (workspace, spend limit, key). |
 
 "Nutze mein API-Guthaben" → the two questions and the `--global` writes in

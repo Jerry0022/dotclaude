@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.270.0**
+**Version: 0.271.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -136,15 +136,29 @@ See [INSTALL.md](INSTALL.md#optional-codex-integration) for setup instructions.
 Claude Max and Team plans include monthly Claude API credits ($100 on Max 5x,
 $200 on Max 20x, up to $500 pooled on Team) that expire every billing cycle.
 They do **not** cover Claude Code itself, so your session, its subagents and
-the plugin's hooks always stay on the plan. What the plugin *can* move onto the
-credit is its out-of-process side task: the second-opinion code review that
-Codex gives, whenever Codex is skipped (usage limit, timeout, not installed).
+the plugin's hooks always stay on the plan. When you switch this on, the plugin
+runs its **read-only side work on the credit first** and falls back to the plan
+when the credit is empty or unavailable:
+
+| Work | Runs on |
+|---|---|
+| Codebase sweeps, research, second-opinion reviews (`scripts/claude-api-agent.js`, a lean read-only agent on the Messages API) | credit first, then an in-session agent |
+| Codex second opinion when Codex is skipped (`scripts/claude-api-safe.js`) | credit |
+| Month-end code audit (`scripts/api-credit-audit.js`, report in `~/.claude/devops-audits/`) | credit |
+| Evals (`evals/ab-run.js`) started from your own terminal | credit |
+| Code-writing and test-running agents | always the plan |
+
+Same price per token as the plan path, but far less context per agent (about
+2k tokens of setup instead of 30k+), and none of it counts against your plan's
+5-hour window or week. Measured on 2026-10-19: plain API calls draw the
+promotional credit; a `claude -p` child started from the desktop app draws
+*purchased* credit, so the plugin never does that.
 
 Two switches, both off by default:
 
 | Setting | Effect |
 |---|---|
-| `apiCredit.enabled` | The second-opinion review falls back to the Claude API (`scripts/claude-api-safe.js`, Messages API, timeout, never blocks a ship). |
+| `apiCredit.enabled` | Turns on the credit-first routes above. Off: no network call, no change. |
 | `apiCredit.webGuide` | If no API key is stored yet, Claude offers once to walk you through the Claude Console in your browser: create a `devops` workspace, set a spend limit, create a key. The key goes to `~/.claude/devops-api.env`. |
 
 Turn them on by saying **"nutze mein API-Guthaben"** (or "API credits for
@@ -159,7 +173,7 @@ Notes:
 - Purchased credits can't be excluded. Anthropic spends the included credit
   first. The workspace spend limit is the guardrail.
 
-Runbook: [`plugins/devops/deep-knowledge/api-credits.md`](plugins/devops/deep-knowledge/api-credits.md).
+Runbook (billing matrix, token economics, flags, exit codes): [`plugins/devops/deep-knowledge/api-credits.md`](plugins/devops/deep-knowledge/api-credits.md).
 
 ## Customization
 
