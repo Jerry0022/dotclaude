@@ -127,7 +127,16 @@ async function scanOne(repo, opts = {}) {
     if (landing.state === 'landed') continue;
     parked.push({
       branch: p.branch, legacy: p.legacy, ageDays: p.ageDays, reason: p.reason, date: p.date,
-      state: landing.state, ...(p.stale ? { nudge: parkRegister.NUDGE } : {}),
+      state: landing.state, ...(p.remote ? { remote: true } : {}), ...(p.stale ? { nudge: parkRegister.NUDGE } : {}),
+    });
+  }
+  // unlanded units whose work is kept on a parked ref under another name
+  for (const u of cls.parkedUnits || []) {
+    const name = u.branch || (u.path ? path.basename(u.path) : u.head.slice(0, 7));
+    if (parked.some((p) => p.branch === name)) continue;
+    parked.push({
+      branch: name, legacy: false, ageDays: Math.floor(u.ageDays), reason: `covered by ${u.coveredBy}`, date: '',
+      state: u.state, coveredBy: u.coveredBy,
     });
   }
   return {
@@ -158,6 +167,8 @@ function isProtectedBranch(repo, name, head) {
   if (LONG_LIVED.test(name) || /^salvage\//.test(name)) return true;
   const subject = gitOut(['log', '-1', '--format=%s', head], repo) || '';
   if (parkRegister.isParked(name, subject)) return true;
+  // the very same commit is kept on a parked ref, local or origin/ (a salvage copy)
+  if (parkRegister.coveringRef(repo, head, { exact: true })) return true;
   return gitOut(['rev-parse', '--verify', '-q', `refs/remotes/origin/${name}`], repo) !== null;
 }
 
