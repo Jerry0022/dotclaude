@@ -30,7 +30,8 @@ const { takeResult, renderContext, resultBranch } = require('../lib/git-sync-bg'
 // file is keyed by the worktree the sync ran in, so reading it under the
 // root's key delivered nothing — every ✓ and ⚠ stayed in %TEMP%.
 // Only as the hook entry point: imported by a test, a sync stdin read blocks forever.
-const cwd = require.main === module ? require('../lib/hook-input').sessionCwd().cwd : process.cwd();
+const session = require.main === module ? require('../lib/hook-input').sessionCwd() : { cwd: process.cwd(), hook: null };
+const cwd = session.cwd;
 
 function currentBranch() {
   try {
@@ -51,6 +52,9 @@ function currentBranch() {
 // Nothing is lost: the result file stays put and is delivered by the first
 // prompt that is not collected.
 try {
+  // willBeCollected also covers an "Open in default browser:" prompt (blocked by
+  // prompt.flow.open-url) — taking the result there would drop the notice.
+  if (session.hook && require('../lib/batch-state').willBeCollected(session.hook)) process.exit(0);
   if (require('../lib/batch-state').isModeActive(cwd)) process.exit(0);
 } catch { /* batch state unreadable — deliver as usual */ }
 

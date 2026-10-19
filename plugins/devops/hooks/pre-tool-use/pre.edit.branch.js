@@ -101,7 +101,7 @@ function realTargetOf(target) {
 function isInside(root, realTarget) {
   const realRoot = canonicalize(root) || root;
   const rel = path.relative(realRoot, realTarget);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
 }
 
 const real = (p) => (p && (canonicalize(p) || path.resolve(p))) || null;

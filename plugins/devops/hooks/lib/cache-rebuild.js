@@ -237,6 +237,12 @@ function rebuildCache(opts) {
     cacheDir, registryFile, channel = 'stable',
   } = opts;
 
+  // `version` comes from a marketplace's plugin.json: a path separator or `..` would
+  // make path.join() write (and prune) outside the cache.
+  if (typeof version !== 'string' || !/^[0-9A-Za-z][0-9A-Za-z._+-]*$/.test(version) || version.includes('..')) {
+    return { ok: false, missing: `invalid plugin version ${JSON.stringify(version)}` };
+  }
+
   const pluginCache = path.join(cacheDir, marketplace, pluginName);
   const newCache = path.join(pluginCache, version);
 

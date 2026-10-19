@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { fileURLToPath } from "url";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -64,6 +65,20 @@ describe("claimSyncSlot — one sync per worktree per window", () => {
     // SessionStart of session A, then SessionStart of session B moments later.
     expect(claimSyncSlot("C:/repo", { tmpdir })).toBe(true);
     expect(claimSyncSlot("C:/repo", { tmpdir })).toBe(false);
+  });
+
+  test("concurrent claimers (separate processes) get the slot exactly once", async () => {
+    const { spawn } = await import("child_process");
+    const lib = fileURLToPath(new URL("./git-sync-bg.js", import.meta.url));
+    const code = `process.stdout.write(String(require(${JSON.stringify(lib)}).claimSyncSlot("C:/race", { tmpdir: ${JSON.stringify(tmpdir)} })))`;
+    const one = () => new Promise((resolve) => {
+      let out = "";
+      const c = spawn(process.execPath, ["-e", code]);
+      c.stdout.on("data", (d) => { out += d; });
+      c.on("close", () => resolve(out));
+    });
+    const results = await Promise.all(Array.from({ length: 6 }, one));
+    expect(results.filter((r) => r === "true")).toHaveLength(1);
   });
 
   test("a different worktree has its own slot", () => {

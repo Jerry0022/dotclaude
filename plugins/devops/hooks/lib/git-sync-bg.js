@@ -72,17 +72,27 @@ function resultFile(cwd, tmpdir = os.tmpdir()) {
 function claimSyncSlot(cwd, opts = {}) {
   const { throttleMs = THROTTLE_MS, tmpdir = os.tmpdir(), now = Date.now(), peek = false } = opts;
   const file = throttleFile(cwd, tmpdir);
+  let stale = false;
   try {
     const stat = fs.statSync(file);
     if (now - stat.mtimeMs < throttleMs) return false;
+    stale = true;
   } catch {
     // No marker yet — first sync for this worktree.
   }
   if (peek) return true;
+  // Atomic claim: check and claim are one step ('wx' fails for the loser of a
+  // race between two sessions). A stale marker is first moved aside by rename
+  // - only one racer's rename finds it - then the fresh one is created.
   try {
-    fs.writeFileSync(file, String(now));
+    if (stale) {
+      const aside = `${file}.${process.pid}.stale`;
+      fs.renameSync(file, aside);
+      try { fs.unlinkSync(aside); } catch { /* best effort */ }
+    }
+    fs.writeFileSync(file, String(now), { flag: 'wx' });
   } catch {
-    return false; // cannot claim → do not spawn
+    return false; // cannot claim, or another session just did -> do not spawn
   }
   return true;
 }
