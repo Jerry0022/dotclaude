@@ -836,7 +836,7 @@ export function planAutoClean(scan, settings, io) {
   if (scan.units.length === 0) {
     return { gateOpen: false, reason: "no leftovers", remove: [], keep: [], atRisk: [], offline: false, keptBytes: null };
   }
-  const { ctx, removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
+  const { removable, keep: kept, atRisk, merged } = classifyUnits(scan, io);
   const keep = kept.filter((k) => k.ageDays > minAge);
 
   const picked = new Map();

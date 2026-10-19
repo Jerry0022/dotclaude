@@ -9,7 +9,8 @@
  *   (written daily by scripts/orphan-scan.js) — no git calls, no network, so
  *   it is boot-window safe. Silent without a report, with a report older than
  *   7 days, for an unknown repo, or when nothing is at risk. The report entry
- *   is matched by path prefix (worktrees live under the main checkout).
+ *   A missing or >24 h old report also starts orphan-scan.js detached (the
+ *   daily refresh). The report entry is matched by path prefix (worktrees live under the main checkout).
  *   Output: additionalContext asking Claude to show the line, e.g.
  *   "⚠ 3 ungelandete Branches / 2 Worktrees mit uncommitteter Arbeit → /auto-cleanup".
  */
@@ -53,6 +54,33 @@ function buildNudge({ cwd, lang = 'de', report, now = Date.now() }) {
     : `⚠ ${unlanded} ungelandete ${unlanded === 1 ? 'Branch' : 'Branches'} / ${dirty} ${dirty === 1 ? 'Worktree' : 'Worktrees'} mit uncommitteter Arbeit → /auto-cleanup`;
 }
 
+const REFRESH_MS = 24 * 3_600_000;
+const SPAWN_COOLDOWN_MS = 3_600_000;
+
+/**
+ * Daily refresh without an external scheduler: a missing or >24 h old report
+ * starts scripts/orphan-scan.js detached (fire-and-forget, windowless). A
+ * tmp marker keeps concurrent sessions from starting it twice within an hour.
+ */
+function refreshIfStale(file) {
+  if (process.env.DEVOPS_ORPHAN_NO_SPAWN) return;
+  try {
+    let age = Infinity;
+    try { age = Date.now() - fs.statSync(file).mtimeMs; } catch { /* no report yet */ }
+    if (age < REFRESH_MS) return;
+    const marker = path.join(os.tmpdir(), 'dotclaude-orphan-scan.started');
+    try {
+      if (Date.now() - fs.statSync(marker).mtimeMs < SPAWN_COOLDOWN_MS) return;
+    } catch { /* never started */ }
+    fs.writeFileSync(marker, String(Date.now()));
+    const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+    const child = require('child_process').spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'orphan-scan.js')], {
+      detached: true, stdio: 'ignore', windowsHide: true, cwd: process.cwd(),
+    });
+    child.unref();
+  } catch { /* the nudge is best effort */ }
+}
+
 function main() {
   let input = '';
   process.stdin.setEncoding('utf8');
@@ -60,6 +88,7 @@ function main() {
   process.stdin.on('end', () => {
     try {
       const hook = input.trim() ? JSON.parse(input) : {};
+      refreshIfStale(reportPath());
       const report = JSON.parse(fs.readFileSync(reportPath(), 'utf8'));
       let lang = 'de';
       try { lang = require('../lib/locale').getLocale(hook.session_id); } catch { /* default */ }
