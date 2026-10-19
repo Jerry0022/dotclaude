@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.270.0] — 2026-10-19
+## [0.271.0] — 2026-10-19
 
 With `apiCredit.enabled` on, devops' read-only side work runs on the plan's monthly API credit first and falls back to the plan. Before this, only the second-opinion review used the credit. The routing is based on a live billing test, not on assumptions.
 
