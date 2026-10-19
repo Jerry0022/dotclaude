@@ -35,6 +35,7 @@ const SECRET_RULES = [
   { id: 'github-token', re: /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})/g },
   { id: 'slack-token', re: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
   { id: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/g },
+  { id: 'google-api-key', re: /\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g },
   { id: 'jwt', re: /\beyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g },
   {
     id: 'credential-assignment',

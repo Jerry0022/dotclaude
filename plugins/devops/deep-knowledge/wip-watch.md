@@ -17,7 +17,9 @@ node "{PLUGIN_ROOT}/scripts/wip-watch.js" enable --roots ~/IdeaProjects --day su
 default sun) are optional; they are saved in the global `wipWatch.*` settings
 (`devops-config.md`) and the weekly job is registered at 10:00 (Windows Task
 Scheduler with catch-up after a missed run, crontab elsewhere). If the job
-cannot be registered, the watch stays off.
+cannot be registered, the watch stays off. The job runs the launcher
+`~/.claude/devops-jobs/wip-watch.js`, which finds the newest installed devops
+plugin at run time — plugin updates need no re-run of `enable`.
 
 - "WIP-Wächter aus": `node "{PLUGIN_ROOT}/scripts/wip-watch.js" disable`
 - Status: `node "{PLUGIN_ROOT}/scripts/wip-watch.js" status`

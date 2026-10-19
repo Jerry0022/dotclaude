@@ -30,7 +30,7 @@ It verifies `gh auth status`, creates the private repo if missing (refuses an ex
 
 If the first run is `blocked`, handle it as below. If `gh` is not logged in, tell the user to run `gh auth login` (interactive; do not attempt it).
 
-The job points at the script path of the plugin version that was current at setup. After a plugin update moves that path, re-run `setup` to repoint the job.
+The job runs the launcher `~/.claude/devops-jobs/home-backup.js` (not in the backup), which finds the newest installed devops plugin in `~/.claude/plugins/installed_plugins.json` at run time — plugin updates need no re-run. Only a moved node binary does (the job stores `process.execPath` of the setup).
 
 ## Other commands
 
