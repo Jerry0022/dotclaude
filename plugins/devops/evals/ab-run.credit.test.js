@@ -32,7 +32,8 @@ test("--no-api-credit and a disabled switch keep the plan login", () => {
 });
 
 test("childEnv sets the key only in the child and still strips the parent's Claude vars", () => {
-  const env = childEnv({}, { CLAUDE_CODE_ENTRYPOINT: "x", ANTHROPIC_API_KEY: "parent", PATH: "/bin" }, [], "sk-child");
+  const env = childEnv({}, { CLAUDE_CODE_ENTRYPOINT: "x", ANTHROPIC_API_KEY: "parent", DEVOPS_ANTHROPIC_API_KEY: "sk-devops", PATH: "/bin" }, [], "sk-child");
   expect(env.ANTHROPIC_API_KEY).toBe("sk-child");
   expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();
+  expect(env.DEVOPS_ANTHROPIC_API_KEY).toBeUndefined(); // the plugin under test must not spend the credit
 });

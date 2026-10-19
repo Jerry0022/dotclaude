@@ -43,6 +43,11 @@ const MAX_READ_BYTES = 200 * 1024;
 const MAX_LIST = 400;
 const MAX_GREP_HITS = 200;
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.claude/worktrees']);
+// Secret-shaped files are never listed, read or searched: a key must not
+// reach the request body, whatever the root or an injected instruction says.
+const SECRET_FILE = /^(\.env(\..*)?|devops-api\.env|.*\.(pem|key|p12|pfx)|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|\.npmrc|\.netrc|credentials(\.json)?)$/i;
+const MAX_PATTERN = 300;
+const GREP_BUDGET_MS = 20000;
 
 // $/MTok: input, output, 5-min cache write, cache read (platform pricing 2026-10).
 const PRICES = {
@@ -128,6 +133,7 @@ function inside(root, rel) {
   try { real = fs.realpathSync(abs); } catch { /* missing — the caller reports it */ }
   const rr = path.relative(fs.realpathSync(root), real);
   if (rr.startsWith('..') || path.isAbsolute(rr)) throw new Error(`path resolves outside the project root: ${rel}`);
+  if (SECRET_FILE.test(path.basename(abs))) throw new Error(`secret-shaped file is off limits: ${rel}`);
   return abs;
 }
 
@@ -153,7 +159,7 @@ function walk(root, startAbs, filter, cap) {
     for (const e of entries) {
       const abs = path.join(dir, e.name);
       const rel = path.relative(root, abs).replace(/\\/g, '/');
-      if (skipped(rel)) continue;
+      if (skipped(rel) || (!e.isDirectory() && SECRET_FILE.test(e.name))) continue;
       if (e.isDirectory()) stack.push(abs);
       else if (e.isFile() && matchesFilter(rel, filter)) {
         out.push(rel);
@@ -185,7 +191,9 @@ function toolReadFile(root, input) {
   return slice.map((l, i) => `${offset + i}\t${l}`).join('\n') + tail;
 }
 
-function toolGrep(root, input) {
+function toolGrep(root, input, deadline = Infinity) {
+  if (String(input.pattern).length > MAX_PATTERN) throw new Error(`pattern longer than ${MAX_PATTERN} chars`);
+  const stopAt = Math.min(deadline, Date.now() + GREP_BUDGET_MS);
   let re;
   try { re = new RegExp(input.pattern, input.ignore_case ? 'i' : ''); } catch (e) { throw new Error(`invalid regex: ${e.message}`); }
   const start = inside(root, input.path || '.');
@@ -194,6 +202,7 @@ function toolGrep(root, input) {
     : walk(root, start, input.glob, 20000);
   const hits = [];
   for (const rel of files) {
+    if (Date.now() > stopAt) return `${hits.join('\n')}\n… search stopped after ${GREP_BUDGET_MS / 1000} s — narrow the path or pattern.`;
     let text;
     try {
       const buf = fs.readFileSync(path.join(root, rel));
@@ -211,11 +220,11 @@ function toolGrep(root, input) {
   return hits.join('\n') || '(no matches)';
 }
 
-function runTool(root, name, input) {
+function runTool(root, name, input, deadline) {
   if (!input || typeof input !== 'object') throw new Error('tool input must be an object');
   if (name === 'list_files') return toolListFiles(root, input);
   if (name === 'read_file') return toolReadFile(root, input);
-  if (name === 'grep') return toolGrep(root, input);
+  if (name === 'grep') return toolGrep(root, input, deadline);
   throw new Error(`unknown tool ${name}`);
 }
 
@@ -290,10 +299,9 @@ async function run(argv, {
 
   const messages = [{ role: 'user', content: `Project root: ${root}\n\nTask:\n${task}` }];
   let spent = 0;
-  let lastText = '';
   for (let turn = 1; turn <= maxTurns; turn++) {
     const left = deadline - Date.now();
-    if (left <= 0) { err('claude-api-agent: run timed out\n'); return lastText ? finish(lastText, 'timeout') : RC.TIMEOUT; }
+    if (left <= 0) { err('claude-api-agent: run timed out\n'); return RC.TIMEOUT; }
     const body = {
       model,
       max_tokens: 16000,
@@ -307,39 +315,40 @@ async function run(argv, {
     if (r.rc === RC.LIMIT) {
       const stored = safe.storeLimit({ home, reason: r.message });
       err(`claude-api-agent: API credit exhausted (${r.message}) — skipped until ${stored}.\n`);
-      return lastText ? finish(lastText, 'credit exhausted') : RC.LIMIT;
+      return RC.LIMIT;
     }
-    if (r.rc !== RC.OK) { err(`claude-api-agent: ${r.message}\n`); return lastText ? finish(lastText, r.message) : r.rc; }
+    if (r.rc !== RC.OK) { err(`claude-api-agent: ${r.message}\n`); return r.rc; }
 
     const res = r.body;
     spent += costOf(model, res.usage);
-    const text = safe.textOf(res);
-    if (text.trim()) lastText = text;
     messages.push({ role: 'assistant', content: res.content || [] });
 
-    if (res.stop_reason === 'refusal') { err('claude-api-agent: the model declined the task\n'); return RC.ERROR; }
-    if (res.stop_reason === 'pause_turn') continue; // server tool loop paused — resend as is
-    if (res.stop_reason !== 'tool_use') return finish(lastText, null);
+    // Only a finished turn is an answer. Every early end returns rc != 0, so
+    // the caller falls back to the in-session Agent instead of relaying
+    // half-done narration of a tool turn as the result.
+    const stop = res.stop_reason;
+    if (stop === 'end_turn' || stop === 'stop_sequence') return finish(safe.textOf(res), null);
+    if (stop === 'max_tokens') return finish(safe.textOf(res), 'max_tokens');
+    if (stop === 'refusal') { err('claude-api-agent: the model declined the task\n'); return RC.ERROR; }
+    if (spent >= maxUsd) { err(`claude-api-agent: budget of $${maxUsd} reached\n`); return RC.ERROR; }
+    if (stop === 'pause_turn') continue; // server tool loop paused — resend as is
+    if (stop !== 'tool_use') { err(`claude-api-agent: unexpected stop_reason ${stop}\n`); return RC.ERROR; }
 
     const results = [];
     for (const block of res.content || []) {
       if (!block || block.type !== 'tool_use') continue;
       let content;
       let isError = false;
-      try { content = runTool(root, block.name, block.input); } catch (e) { content = String(e.message || e); isError = true; }
+      try { content = runTool(root, block.name, block.input, deadline); } catch (e) { content = String(e.message || e); isError = true; }
       results.push({ type: 'tool_result', tool_use_id: block.id, content, ...(isError ? { is_error: true } : {}) });
     }
     messages.push({ role: 'user', content: results });
-
-    if (spent >= maxUsd) {
-      err(`claude-api-agent: budget of $${maxUsd} reached\n`);
-      return lastText ? finish(lastText, 'budget reached') : RC.ERROR;
-    }
   }
   err(`claude-api-agent: ${maxTurns} turns used up\n`);
-  return lastText ? finish(lastText, 'turn limit') : RC.ERROR;
+  return RC.ERROR;
 
   function finish(answer, cutShort) {
+    if (!answer.trim()) { err(`claude-api-agent: no answer${cutShort ? ` (${cutShort})` : ''}\n`); return RC.ERROR; }
     out(answer.endsWith('\n') ? answer : `${answer}\n`);
     err(`claude-api-agent: ${model} · ~$${spent.toFixed(3)} on API credit${cutShort ? ` · cut short: ${cutShort}` : ''}\n`);
     return RC.OK;

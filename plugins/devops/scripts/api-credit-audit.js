@@ -36,7 +36,7 @@ function parseArgs(argv) {
 function auditTask(focus) {
   return [
     'Audit this repository for real problems a maintainer would want fixed. Look for: correctness bugs,',
-    'security issues (secrets, injection, unsafe file/process handling), error handling that swallows failures,',
+    'security issues (hard-coded secrets — name file:line only, never quote the value —, injection, unsafe file/process handling), error handling that swallows failures,',
     'dead or duplicated code, and docs that contradict the code.',
     focus ? `Focus especially on: ${focus}.` : '',
     'Start from the README and the entry points, then follow the code. Skip generated files and vendored code.',
@@ -56,13 +56,24 @@ async function run(argv, opts = {}) {
   const rc = await agent.run(args, { ...opts, cwd, out: (s) => chunks.push(s) });
   if (rc !== 0) return rc;
 
+  const out = opts.out || ((s) => process.stdout.write(s));
   const day = new Date(opts.now || Date.now()).toISOString().slice(0, 10);
-  const dir = path.join(opts.home || os.homedir(), '.claude', 'devops-audits');
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${path.basename(root)}-${day}.md`);
-  fs.writeFileSync(file, `# API-credit audit — ${path.basename(root)} (${day})\n\nRoot: \`${root}\`\n\n${chunks.join('')}`);
-  (opts.out || ((s) => process.stdout.write(s)))(`audit report → ${file}\n`);
-  return 0;
+  // A drive root has no basename: name the report after the cleaned path instead.
+  const name = path.basename(root) || root.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'root';
+  const report = `# API-credit audit — ${name} (${day})\n\nRoot: \`${root}\`\n\n${chunks.join('')}`;
+  try {
+    const dir = path.join(opts.home || os.homedir(), '.claude', 'devops-audits');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${name}-${day}.md`);
+    fs.writeFileSync(file, report);
+    out(`audit report → ${file}\n`);
+    return 0;
+  } catch (e) {
+    // The report is paid for: never lose it to a write error.
+    out(report);
+    (opts.err || ((s) => process.stderr.write(s)))(`api-credit-audit: could not write the report (${e.message}), printed above\n`);
+    return 1;
+  }
 }
 
 module.exports = { parseArgs, auditTask, run };

@@ -100,6 +100,41 @@ describe("tool loop", () => {
     expect(res.content).not.toContain("outside\n");
   });
 
+  test("secret-shaped files are never listed, read or searched", async () => {
+    fs.writeFileSync(path.join(proj, ".env"), "API_KEY=answer-secret\n");
+    fs.writeFileSync(path.join(proj, "devops-api.env"), "DEVOPS_ANTHROPIC_API_KEY=answer-secret\n");
+    const calls = [];
+    const fetchImpl = scripted([
+      { content: [
+        { type: "tool_use", id: "t1", name: "read_file", input: { path: ".env" } },
+        { type: "tool_use", id: "t2", name: "grep", input: { pattern: "answer" } },
+        { type: "tool_use", id: "t3", name: "list_files", input: { path: "." } },
+      ], stop_reason: "tool_use", usage },
+      { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage },
+    ], calls);
+    await runAgent(["x"], { fetchImpl });
+    const [read, grep, list] = calls[1].messages[2].content;
+    expect(read.is_error).toBe(true);
+    expect(JSON.stringify(calls[1])).not.toContain("answer-secret");
+    expect(grep.content).toContain("src/a.js:1");
+    expect(list.content).not.toMatch(/\.env/);
+  });
+
+  test("tool-turn narration is never relayed as the answer: an early end returns rc != 0", async () => {
+    const fetchImpl = scripted([
+      { content: [{ type: "text", text: "I'll start by reading a.js" }, { type: "tool_use", id: "t1", name: "list_files", input: { path: "." } }], stop_reason: "tool_use", usage },
+      { status: 500, body: { error: { message: "overloaded" } } },
+    ]);
+    const r = await runAgent(["x"], { fetchImpl });
+    expect(r.rc).not.toBe(0);
+    expect(r.out).toBe("");
+  });
+
+  test("max_tokens without text → rc 1", async () => {
+    const fetchImpl = scripted([{ content: [{ type: "thinking", thinking: "…" }], stop_reason: "max_tokens", usage }]);
+    expect((await runAgent(["x"], { fetchImpl })).rc).toBe(1);
+  });
+
   test("pause_turn is resent without a tool result", async () => {
     const calls = [];
     const fetchImpl = scripted([

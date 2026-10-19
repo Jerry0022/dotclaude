@@ -79,7 +79,9 @@ function parseArgs(argv) {
 function childEnv(caseEnv, parentEnv = process.env, pathPrepend = [], apiKey = null) {
   const env = {};
   for (const [k, v] of Object.entries(parentEnv)) {
-    if (!/^(CLAUDE|ANTHROPIC)/i.test(k)) env[k] = v;
+    // DEVOPS_ANTHROPIC_API_KEY too: the plugin under test must not route its
+    // own side work onto the credit (cost, and a skewed A/B comparison).
+    if (!/^(CLAUDE|ANTHROPIC|DEVOPS_ANTHROPIC)/i.test(k)) env[k] = v;
   }
   const out = { ...env, ...caseEnv };
   // `-p` always uses ANTHROPIC_API_KEY when present — set only in the child.
