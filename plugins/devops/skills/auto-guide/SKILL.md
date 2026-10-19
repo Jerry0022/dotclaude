@@ -196,7 +196,8 @@ hidden use `payload wait 0` plus `web-guide.js pause 25` between drains
 instead — never a tight loop.
 
 Every result — `next` (validate token, `stepId`, `name`, type ∈
-next/help/abort before using it), `help`, `abort`, `timeout` (counted in
+next/help/comment/abort before using it), `help`, `comment` (answer as `note`
+on the same step), `abort`, `timeout` (counted in
 **time**: re-send after 5 min without an event, pause the guide after 20
 min), `reinject-needed`, `bad-token`, a CDP timeout, a navigation, any other
 tool error — is handled per `deep-knowledge/recovery.md` § Waiting.
@@ -257,7 +258,7 @@ with `done: true` — what was created, where each value went — and wait for
 | End | What to do |
 |-----|-----------|
 | **closed** | The tab closed before the done step. Clear the guide-active marker (Step 6.2) and report per Step 6.3. |
-| **aborted** | User pressed Abbrechen, or a tool failed twice. `destroy()` if possible, clear the guide-active marker (Step 6.2), report per Step 6.3 incl. the error. |
+| **aborted** | User pressed × and confirmed „Ja, abbrechen", or a tool failed twice. `destroy()` if possible, clear the guide-active marker (Step 6.2), report per Step 6.3 incl. the error. |
 | **paused** | 20 min without a real event: show the „Guide pausiert" step, keep overlay and marker, run `W guide pause` (the stop guard otherwise blocks the turn end once, #619), report where it paused and that „weiter" in the chat resumes it (recovery.md § Ends). |
 
 ## Rules
