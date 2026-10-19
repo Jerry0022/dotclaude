@@ -121,6 +121,11 @@ in the chat leaves them staring at a spinner.
   chat message. Queue the answer and post it as the **last chat text** when
   the guide ends (§ Ends: done, aborted, paused). Never end a turn only to
   make a chat answer visible while the guide waits on the panel.
+- **Any chat message that ends a turn during a guide** (pause, a question
+  answer, a card) names the next action: do the panel step, then write
+  „weiter" in the chat. A panel click with no live `wait()` stays queued and
+  the panel says „Claude hört gerade nicht zu" at once (#748); the next turn
+  drains it (§ Resuming in a new turn).
 
 ## Storing a secret (5d)
 

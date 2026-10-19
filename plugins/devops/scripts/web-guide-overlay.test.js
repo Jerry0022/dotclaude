@@ -499,6 +499,47 @@ describe("web-guide-overlay — execution", () => {
     }
   });
 
+  // #748: no live waiter at click time -> "nicht zu" at once, event stays queued.
+  test("click without a live waiter shows 'nicht zu' at once and keeps the event queued", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0].click();
+      await vi.advanceTimersByTimeAsync(2500); // one heartbeat tick, far below 45 s
+      expect(findAll(host, (e) => /hört gerade nicht zu/.test(e._text || ""))[0]).toBeTruthy();
+      expect(sb.window.claudeGuide.state().queued).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("click with a live waiter shows 'Gesendet', never 'nicht zu'", async () => {
+    vi.useFakeTimers();
+    try {
+      const sb = makeSandbox({
+        setTimeoutFn: (...a) => setTimeout(...a),
+        clearTimeoutFn: (...a) => clearTimeout(...a),
+      });
+      run(sb);
+      sb.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
+      const host = getHost(sb);
+      const pending = sb.window.claudeGuide.wait(30000);
+      findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Weiter")[0].click();
+      await vi.advanceTimersByTimeAsync(2500);
+      expect((await pending).type).toBe("next");
+      expect(findAll(host, (e) => /hört gerade nicht zu/.test(e._text || ""))[0]).toBeFalsy();
+      expect(findAll(host, (e) => /Gesendet/.test(e._text || ""))[0]).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // #530 Fix 8: a click that reached Claude (delivered, not queued) and gets
   // no new setStep/wait for 90s switches to a distinct "braucht länger"
   // message — never the "not listening" one, which only concerns an
