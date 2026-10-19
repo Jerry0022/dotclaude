@@ -86,7 +86,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
     expect(d.configurable).toBe(false);
     expect(Object.isFrozen(a.api())).toBe(true);
     a.w.eval('window.claudeGuide = { version: "x" }; try { window.claudeGuide.wait = function () {}; } catch (e) {}');
-    expect(a.api().version).toBe("1.13.0");
+    expect(a.api().version).toBe("1.14.0");
     expect(a.api().wait.length).toBe(2);
   });
 
@@ -107,7 +107,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   });
 
   test("a page-predefined same-version global yields already-injected (hostile on a fresh document)", () => {
-    const a = page({ pageScript: 'window.claudeGuide = { version: "1.13.0" };' });
+    const a = page({ pageScript: 'window.claudeGuide = { version: "1.14.0" };' });
     expect(a.result).toBe("already-injected");
     expect(a.w.document.querySelector("[id^=wg-host-]")).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("AUD-C007: the hosting page cannot own the channel", () => {
   test("a page-defined configurable global of another version is replaced", () => {
     const a = page({ pageScript: 'window.claudeGuide = { version: "0.0.1", destroy: function () {} };' });
     expect(a.result).toBe("injected");
-    expect(a.api().version).toBe("1.13.0");
+    expect(a.api().version).toBe("1.14.0");
   });
 
   test("the token never reaches page-readable storage", () => {
@@ -299,7 +299,7 @@ describe("harden pass: focus hand-off, labelled options, live status", () => {
 
     const b = page();
     b.api().setStep(STEP, TOKEN);
-    b.shadow().querySelector('button.collapse[aria-label="Einklappen"]').click();
+    b.shadow().querySelector("button.fab").dispatchEvent(new b.w.MouseEvent("click", { bubbles: true, detail: 0 }));
     expect(b.shadow().activeElement).toBe(b.shadow().querySelector("button.fab"));
 
     const c = page();
@@ -372,9 +372,110 @@ describe("the status line says what was sent (web-guide deep check)", () => {
 
     const b = page();
     b.api().setStep(STEP, TOKEN);
-    btn(b, "Abbrechen").click();
-    btn(b, "Wirklich abbrechen?").click();
+    b.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').click();
+    btn(b, "Ja, abbrechen").click();
     expect(status(b)).toContain("Abbruch gesendet");
+  });
+
+  test("a question/comment is its own event and says so", async () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    const field = a.shadow().querySelector('.comment input');
+    const send = a.shadow().querySelector(".comment button");
+    expect(send.disabled).toBe(true); // empty field — nothing to send
+    field.value = "  Brauche ich hier Admin-Rechte?  ";
+    field.dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+    expect(send.disabled).toBe(false);
+    send.click();
+    expect(status(a)).toContain("Kommentar gesendet");
+    expect(btn(a, "Weiter").disabled).toBe(true);
+    const ev = await a.api().wait(0, TOKEN);
+    expect(ev).toMatchObject({ type: "comment", stepId: STEP.id, value: "Brauche ich hier Admin-Rechte?" });
+  });
+
+  test("Claude's answer note shows on a same-id re-send and re-arms the step", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    const field = a.shadow().querySelector(".comment input");
+    field.value = "Frage";
+    field.dispatchEvent(new a.w.Event("input", { bubbles: true, composed: true }));
+    a.shadow().querySelector(".comment button").click();
+    a.api().setStep({ ...STEP, note: "Nein, normale Rechte reichen." }, TOKEN);
+    expect(a.shadow().querySelector(".note").textContent).toContain("normale Rechte reichen");
+    expect(btn(a, "Weiter").disabled).toBe(false);
+  });
+});
+
+describe("header × asks before aborting", () => {
+  const status = (p) => p.shadow().querySelector(".status").textContent;
+
+  test("× opens the confirm; Weitermachen and Escape close it without an event", async () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    const close = () => a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]');
+    expect(a.shadow().querySelector('button.collapse[aria-label="Einklappen"]')).toBeNull();
+    expect(btn(a, "Abbrechen")).toBeUndefined(); // no abort button in the foot any more
+    close().click();
+    expect(a.shadow().querySelector(".confirm")).not.toBeNull();
+    expect(a.shadow().activeElement).toBe(btn(a, "Weitermachen"));
+    btn(a, "Weitermachen").click();
+    expect(a.shadow().querySelector(".confirm")).toBeNull();
+    close().click();
+    a.shadow().querySelector(".confirm").dispatchEvent(
+      new a.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+    expect(a.shadow().querySelector(".confirm")).toBeNull();
+    expect(a.api().state().collapsed).toBe(false); // Escape closed the confirm, not the panel
+    expect((await a.api().wait(0, TOKEN)).type).toBe("timeout");
+  });
+
+  test("Ja, abbrechen sends exactly one abort", async () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').click();
+    btn(a, "Ja, abbrechen").click();
+    expect(a.shadow().querySelector(".confirm")).toBeNull();
+    expect((await a.api().wait(0, TOKEN)).type).toBe("abort");
+    expect((await a.api().wait(0, TOKEN)).type).toBe("timeout");
+  });
+
+  test("on the final step × finishes like Fertig, without a confirm — once", async () => {
+    const a = page();
+    a.api().setStep({ ...STEP, done: true }, TOKEN);
+    const close = a.shadow().querySelector('button.collapse[aria-label="Guide schließen"]');
+    close.click();
+    close.click(); // AUD-C008: a second click sends nothing
+    expect(close.disabled).toBe(true);
+    expect(a.shadow().querySelector(".confirm")).toBeNull();
+    expect((await a.api().wait(0, TOKEN)).type).toBe("next");
+    expect((await a.api().wait(0, TOKEN)).type).toBe("timeout");
+  });
+
+  test("after an abort went out, × is disabled", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').click();
+    btn(a, "Ja, abbrechen").click();
+    expect(a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').disabled).toBe(true);
+  });
+
+  test("Tab stays inside the open confirm; the comment field clears after sending", () => {
+    const a = page();
+    a.api().setStep(STEP, TOKEN);
+    a.shadow().querySelector('button.collapse[aria-label="Guide abbrechen"]').click();
+    const tab = () => a.shadow().activeElement.dispatchEvent(
+      new a.w.KeyboardEvent("keydown", { key: "Tab", bubbles: true, composed: true }));
+    tab();
+    expect(a.shadow().activeElement).toBe(btn(a, "Ja, abbrechen"));
+    tab();
+    expect(a.shadow().activeElement).toBe(btn(a, "Weitermachen"));
+
+    const b = page();
+    b.api().setStep(STEP, TOKEN);
+    const field = b.shadow().querySelector(".comment input");
+    field.value = "Frage";
+    field.dispatchEvent(new b.w.Event("input", { bubbles: true, composed: true }));
+    b.shadow().querySelector(".comment button").click();
+    expect(field.value).toBe("");
   });
 
   test("a plain Weiter says it was sent", () => {
@@ -451,7 +552,7 @@ describe("#530: state preserved across a re-render (Fix 2)", () => {
     boxes[1].checked = true;
     boxes[1].dispatchEvent(new a.w.Event("change", { bubbles: true }));
 
-    a.shadow().querySelector('button.collapse[aria-label="Einklappen"]').click(); // collapse
+    a.shadow().querySelector("button.fab").dispatchEvent(new a.w.MouseEvent("click", { bubbles: true, detail: 0 })); // collapse
     const fab = a.shadow().querySelector("button.fab");
     fab.dispatchEvent(new a.w.MouseEvent("click", { bubbles: true, detail: 0 })); // expand
 

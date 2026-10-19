@@ -181,6 +181,20 @@ describe("validateStep — location rules", () => {
   });
 });
 
+// Claude's answer to a `comment` event, shown above the step.
+describe("validateStep — note rules", () => {
+  test("accepts a note up to 400 chars", () => {
+    expect(validateStep({ ...validStep(), note: "Nein, **normale** Rechte reichen." })).toEqual([]);
+    expect(validateStep({ ...validStep(), note: "x".repeat(400) })).toEqual([]);
+  });
+
+  test("rejects an empty, over-long or HTML note", () => {
+    expect(validateStep({ ...validStep(), note: "" }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), note: "x".repeat(401) }).length).toBeGreaterThan(0);
+    expect(validateStep({ ...validStep(), note: "<i>x</i>" }).length).toBeGreaterThan(0);
+  });
+});
+
 describe("validateStep — copy[] rules", () => {
   test("accepts a copy chip with and without a label", () => {
     expect(validateStep({ ...validStep(), copy: [{ value: "web-guide-test" }] })).toEqual([]);

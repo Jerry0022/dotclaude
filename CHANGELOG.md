@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.275.0] — 2026-10-19
+## [0.276.0] — 2026-10-19
 
 Backup safety: if the disk dies, your Claude setup and unfinished work are not gone. Two opt-in jobs (both off by default, zero model tokens) and one managed ignore block.
 
@@ -17,6 +17,18 @@ Backup safety: if the disk dies, your Claude setup and unfinished work are not g
 ### Fixed
 - **`ship_hygiene` landed check**: a branch merely reachable from another branch's merged PR head no longer counts as landed. That PR may have reverted the changes before the squash, so the branch now needs content proof. Regression test added.
 - Enum config values match the whole word before the 3-letter form, so `sessionEnd.autosave local` and weekday values both parse.
+
+## [0.275.0] — 2026-10-19
+
+The web guide panel (`/auto-guide`) gets a free question/comment field and a clear exit. Overlay version 1.14.0.
+
+### Added
+- **Question/comment field**: below the step buttons there is always a "Frage oder Kommentar an Claude …" row (Enter or Senden). It sends a new `comment` event, separate from Weiter and "Ich komme nicht weiter".
+- **Step field `note`** (1-400 chars, no HTML): Claude answers a comment or help question by re-sending the same step with `note`. The answer shows as a 💬 block above the step text. `web-guide.js` validates it.
+
+### Changed
+- **The header × replaces the minimise button.** It opens a "Guide wirklich abbrechen?" dialog (Weitermachen / Ja, abbrechen). Escape closes the dialog and Tab stays inside it. The Abbrechen button in the panel foot is gone. To minimise, click the FAB or press Escape. On the final step, × finishes the guide the same way Fertig does.
+- `protocol.md`, `recovery.md`, `authoring.md` (new § Handling `comment`) and `SKILL.md` cover the new event and field.
 
 ## [0.274.1] — 2026-10-19
 

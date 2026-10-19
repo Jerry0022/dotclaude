@@ -228,7 +228,7 @@ function payloadInject(args) {
 // ---------------------------------------------------------------------------
 
 const INPUT_TYPES = ['text', 'secret', 'choice', 'confirm'];
-const STEP_KEYS = new Set(['id', 'index', 'total', 'title', 'text', 'input', 'done', 'location', 'copy', 'checklist']);
+const STEP_KEYS = new Set(['id', 'index', 'total', 'title', 'text', 'input', 'done', 'location', 'note', 'copy', 'checklist']);
 const INPUT_KEYS = new Set(['type', 'name', 'label', 'placeholder', 'options', 'required']);
 const NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const COPY_KEYS = new Set(['label', 'value']);
@@ -290,6 +290,14 @@ function validateStep(step) {
       errors.push('location must be a string of 1-80 chars');
     } else if (step.location.includes('<') || step.location.includes('>')) {
       errors.push('location must not contain < or > (no HTML allowed)');
+    }
+  }
+
+  if (step.note !== undefined) {
+    if (typeof step.note !== 'string' || step.note.length === 0 || step.note.length > 400) {
+      errors.push('note must be a string of 1-400 chars');
+    } else if (step.note.includes('<') || step.note.includes('>')) {
+      errors.push('note must not contain < or > (no HTML allowed)');
     }
   }
 
