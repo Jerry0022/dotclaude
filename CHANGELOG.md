@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.276.3] — 2026-10-20
+
+### Fixed
+- **Web guide: a click nobody hears says so at once (#748).** A panel click with no live `wait()` and no poll that ended within the last 30 s now shows „Claude hört gerade nicht zu — schreib im Chat „weiter"" at the next heartbeat tick (~2 s, was 45 s). The event stays queued and the next turn drains it as before. A click in the normal gap between two polls (model working, hidden mode's 25 s pause) is picked up by the next `wait()` and gets no false warning. With a live waiter the panel still says „Gesendet – Claude prüft den Schritt …".
+- **Web guide: chat questions during a guide are answered in the panel (#747).** `auto-guide` (SKILL.md Step 5, `recovery.md`) re-issues the current step with the same id and the answer in its text, and keeps polling. The chat copy is posted as the last text when the guide ends. A turn is never ended just to surface a chat answer. Any chat message that does end a turn during a guide names the next action: the panel step, then „weiter" in the chat.
+
 ## [0.277.0] — 2026-10-20
 
 A ship no longer gets stuck on a GitHub account limit, and every ship spreads CI defaults that keep a shared limit from turning green jobs red.
