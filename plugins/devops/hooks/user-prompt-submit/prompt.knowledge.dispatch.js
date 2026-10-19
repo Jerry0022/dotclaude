@@ -75,6 +75,11 @@ const TOPIC_MAP = [
     patterns: [/\bfeature.*(?:ausarbeit|elaborat|refin)/i, /\bacceptance.?criteria/i, /\bakzeptanzkriterien/i, /\bpo.?lens/i],
   },
   {
+    file: 'api-credits.md',
+    specificity: 3,
+    patterns: [/\bapi.?(?:guthaben|credits?)\b/i, /\baktionsguthaben/i, /\bpromo(?:tional)?.?credits?/i],
+  },
+  {
     file: 'codex-integration.md',
     specificity: 1,
     patterns: [/\bcodex/i, /\bgpt.?5/i],
