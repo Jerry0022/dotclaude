@@ -24,7 +24,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { register as registerHeartbeat } from "../lib/heartbeat.js";
-import { tokenize, scoreIssue } from "./matching.js";
+import { tokenize, scoreIssue, resolveCwd, matchIssuesShape, ISSUE_LIST_LIMIT } from "./matching.js";
 import { createRequire } from "node:module";
 
 // The hook side reads this copy (prompt.issue.detect scores the first prompt
@@ -45,27 +45,41 @@ const FETCH_TIMEOUT_MS = 15_000;
 // competes with answering it. A short breather keeps the handshake first.
 const WARMUP_DELAY_MS = 2_000;
 
-let issueCache = [];
-let lastRefresh = 0;
-let inFlight = null;
+// One cache per project directory: the server process runs in the plugin
+// folder, so every gh/git call must be pointed at the user's project via cwd.
+/** @type {Map<string, {issues: object[], lastRefresh: number, inFlight: Promise<void>|null, truncated: boolean}>} */
+const caches = new Map();
+const NO_CWD = "\0";
+
+function cacheFor(cwd) {
+  const key = cwd || NO_CWD;
+  let c = caches.get(key);
+  if (!c) {
+    c = { issues: [], lastRefresh: 0, inFlight: null, truncated: false };
+    caches.set(key, c);
+  }
+  return c;
+}
 
 /**
- * Refresh the issue cache. Asynchronous on purpose: an `execSync` here blocks
- * the event loop for its whole timeout, which would stall the JSON-RPC wire
- * (and, before #324, the `initialize` handshake itself).
+ * Refresh the issue cache of one project. Asynchronous on purpose: an
+ * `execSync` here blocks the event loop for its whole timeout, which would
+ * stall the JSON-RPC wire (and, before #324, the `initialize` handshake).
  *
  * Never rejects — a failed fetch keeps the previous (stale) cache.
- * Concurrent calls share one in-flight `gh` process.
+ * Concurrent calls for one project share one in-flight `gh` process.
  *
+ * @param {string|undefined} cwd project directory (undefined = server cwd)
  * @returns {Promise<void>}
  */
-function fetchIssues() {
-  if (inFlight) return inFlight;
-  inFlight = new Promise((resolve) => {
+function fetchIssues(cwd) {
+  const c = cacheFor(cwd);
+  if (c.inFlight) return c.inFlight;
+  c.inFlight = new Promise((resolve) => {
     execFile(
       "gh",
-      ["issue", "list", "--state", "open", "--json", "number,title,labels", "--limit", "100"],
-      { encoding: "utf8", timeout: FETCH_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+      ["issue", "list", "--state", "open", "--json", "number,title,labels", "--limit", String(ISSUE_LIST_LIMIT)],
+      { encoding: "utf8", timeout: FETCH_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, cwd },
       (err, stdout) => {
         if (err) {
           process.stderr.write(`[issues-mcp] Failed to fetch issues: ${err.message}\n`);
@@ -76,14 +90,15 @@ function fetchIssues() {
         }
         try {
           const issues = JSON.parse(stdout);
-          issueCache = issues.map((i) => ({
+          c.issues = issues.map((i) => ({
             number: i.number,
             title: i.title,
             labels: (i.labels || []).map((l) => l.name),
           }));
-          lastRefresh = Date.now();
-          process.stderr.write(`[issues-mcp] Cached ${issueCache.length} open issues\n`);
-          persistCache(issueCache);
+          c.truncated = c.issues.length >= ISSUE_LIST_LIMIT;
+          c.lastRefresh = Date.now();
+          process.stderr.write(`[issues-mcp] Cached ${c.issues.length} open issues\n`);
+          persistCache(c.issues, cwd);
         } catch (e) {
           process.stderr.write(`[issues-mcp] Unparsable issue list: ${e.message}\n`);
         }
@@ -91,36 +106,36 @@ function fetchIssues() {
       },
     );
   }).finally(() => {
-    inFlight = null;
+    c.inFlight = null;
   });
-  return inFlight;
+  return c.inFlight;
 }
 
-/** Write the list for the hook, keyed by this checkout's origin. Best effort. */
-function persistCache(issues) {
-  execFile("git", ["config", "--get", "remote.origin.url"], { encoding: "utf8", timeout: 5_000 }, (err, url) => {
+/** Write the list for the hook, keyed by the project's origin. Best effort. */
+function persistCache(issues, cwd) {
+  execFile("git", ["config", "--get", "remote.origin.url"], { encoding: "utf8", timeout: 5_000, cwd }, (err, url) => {
     if (err || !url) return;
     try { writeCache(url, issues); } catch (e) { process.stderr.write(`[issues-mcp] cache write failed: ${e.message}\n`); }
   });
 }
 
-async function ensureCache() {
-  if (Date.now() - lastRefresh > REFRESH_INTERVAL_MS) {
-    await fetchIssues();
+async function ensureCache(cwd) {
+  if (Date.now() - cacheFor(cwd).lastRefresh > REFRESH_INTERVAL_MS) {
+    await fetchIssues(cwd);
   }
 }
 
 /**
- * Match a user prompt against cached issues.
+ * Match a user prompt against the cached issues of one project.
  * Returns top matches above threshold, sorted by confidence.
  */
-async function matchIssues(query, maxResults = 3, threshold = 0.25) {
-  await ensureCache();
+async function matchIssues(query, maxResults = 3, threshold = 0.25, cwd) {
+  await ensureCache(cwd);
 
   const queryTokens = tokenize(query);
   if (queryTokens.length === 0) return [];
 
-  return issueCache
+  return cacheFor(cwd).issues
     .map((issue) => ({ ...issue, confidence: scoreIssue(issue, queryTokens) }))
     .filter((i) => i.confidence >= threshold)
     .sort((a, b) => b.confidence - a.confidence)
@@ -172,19 +187,19 @@ server.registerTool(
       "Returns top matching issues with confidence scores. " +
       "Use this when no explicit issue number (#N) was found in the user's message " +
       "to heuristically detect which issue the user might be working on.",
-    inputSchema: z.object({
-      query: z.string().describe("The user's prompt text to match against open issues"),
-      max_results: z.number().default(3).describe("Max number of matches to return"),
-      threshold: z.number().default(0.25).describe("Minimum confidence threshold (0-1)"),
-    }),
+    inputSchema: z.object(matchIssuesShape),
   },
-  async ({ query, max_results, threshold }) => {
+  async ({ query, max_results, threshold, cwd }) => {
     try {
-      const matches = await matchIssues(query, max_results, threshold);
+      const dir = resolveCwd(cwd);
+      const matches = await matchIssues(query, max_results, threshold, dir);
+      const c = cacheFor(dir);
       const result = {
         matches,
-        cached_issues: issueCache.length,
-        cache_age_s: lastRefresh ? Math.round((Date.now() - lastRefresh) / 1000) : null,
+        cached_issues: c.issues.length,
+        // true: the open-issue list hit the fetch limit, older issues are unmatched
+        truncated: c.truncated,
+        cache_age_s: c.lastRefresh ? Math.round((Date.now() - c.lastRefresh) / 1000) : null,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -218,5 +233,11 @@ console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`)
 // Warm the cache and keep it fresh — fire-and-forget, errors already swallowed
 // to stderr inside fetchIssues(). Both timers are unref'd so they never keep
 // the process alive on their own.
-setTimeout(() => { fetchIssues(); }, WARMUP_DELAY_MS).unref();
-setInterval(() => { fetchIssues(); }, REFRESH_INTERVAL_MS).unref();
+// The server runs in the plugin folder, so only projects we know a directory
+// for are fetched: CLAUDE_PROJECT_DIR at warm-up, every cwd seen by
+// match_issues on the interval.
+const warmCwd = resolveCwd(undefined);
+if (warmCwd) setTimeout(() => { fetchIssues(warmCwd); }, WARMUP_DELAY_MS).unref();
+setInterval(() => {
+  for (const key of caches.keys()) if (key !== NO_CWD) fetchIssues(key);
+}, REFRESH_INTERVAL_MS).unref();
