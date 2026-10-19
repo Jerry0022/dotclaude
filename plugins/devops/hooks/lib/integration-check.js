@@ -1,6 +1,6 @@
 /**
  * @module integration-check
- * @version 0.1.0
+ * @version 0.2.0
  * @description Integration proof for multi-agent runs: which sub-branches /
  *   agent worktrees are NOT yet in the integration ref, and which agent
  *   worktrees hold uncommitted work. Landing detection reuses hygiene.js
@@ -13,6 +13,7 @@
  */
 
 const { execFileSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -115,7 +116,7 @@ async function checkIntegration({ cwd, integrationRef, subRefs, merged }) {
     const dirty = wtPath ? dirtyPaths(wtPath) : [];
     const landedVia = sha ? await landing(sha, branch, integrationRef, cwd, merged) : null;
     parts.push({
-      branch, path: wtPath, sha,
+      branch, path: wtPath, sha, removable: Boolean(ref.removable),
       landed: Boolean(landedVia), landedVia,
       dirty: dirty.length > 0, dirtyPaths: dirty.slice(0, 20),
     });
@@ -128,9 +129,18 @@ async function checkIntegration({ cwd, integrationRef, subRefs, merged }) {
   };
 }
 
+/** `slug` is a whole token of `branch` (not a short-slug substring match). */
+function carriesSlug(branch, slug) {
+  if (!branch || !slug || String(slug).length < 6) return false;
+  const esc = String(slug).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9])${esc}($|[^A-Za-z0-9])`).test(branch);
+}
+
 /**
- * The run's parts from `git worktree list`: agent-* worktrees and branches
- * containing `slug`; the main checkout, `cwd` and the integration branch excluded.
+ * The run's parts from `git worktree list`, for REPORTING: agent-* worktrees
+ * and branches carrying the run slug; main checkout, `cwd` and the integration
+ * branch excluded. `removable` marks the parts --remove may touch: only a
+ * branch carrying the whole slug (explicit --sub refs are marked by the CLI).
  */
 function discoverParts(cwd, { slug, integrationRef } = {}) {
   const wts = listWorktrees(cwd);
@@ -143,15 +153,16 @@ function discoverParts(cwd, { slug, integrationRef } = {}) {
     if (norm(w.path) === main || norm(w.path) === self) continue;
     if (w.branch && w.branch === integ) continue;
     const isAgent = /\/worktrees\/agent-[^/]+$/.test(w.path.replace(/\\/g, '/'));
-    if (isAgent || (slug && w.branch && w.branch.includes(slug))) {
-      parts.push({ branch: w.branch, path: w.path });
+    const owned = carriesSlug(w.branch, slug);
+    if (isAgent || owned) {
+      parts.push({ branch: w.branch, path: w.path, removable: owned });
       if (w.branch) seen.add(w.branch);
     }
   }
   if (slug) {
     const refs = git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], cwd) || '';
     for (const b of refs.split(/\r?\n/).filter(Boolean)) {
-      if (b.includes(slug) && b !== integ && !seen.has(b)) parts.push({ branch: b, path: null });
+      if (carriesSlug(b, slug) && b !== integ && !seen.has(b)) parts.push({ branch: b, path: null, removable: true });
     }
   }
   return parts;
@@ -165,19 +176,81 @@ function summarize(result) {
   return `ungelandet: ${u.length} Teile (${names.join('; ')})`;
 }
 
+const IDLE_MIN_MS = 30 * 60 * 1000;
+const PROTECTED_BRANCH = /^(main|master|develop|trunk|release\/.+)$/;
+
+/** Commits the branch made on its own; 0 = tip is where it was created; null = unknown. */
+function ownCommitCount(branch, cwd) {
+  const log = git(['reflog', 'show', '--format=%H', `refs/heads/${branch}`], cwd);
+  if (!log) return null;
+  const shas = log.split(/\r?\n/).filter(Boolean);
+  const tip = shas[0];
+  const born = shas[shas.length - 1];
+  if (!tip) return null;
+  if (tip === born) return 0;
+  const n = git(['rev-list', '--count', `${born}..${tip}`], cwd);
+  return n === null ? null : Number(n);
+}
+
+/** Ignored or untracked content that `worktree remove` would destroy, or null. */
+async function contentReason(wt, hyg) {
+  let out;
+  try {
+    out = execFileSync('git', ['status', '--porcelain', '-z', '--untracked-files=all', '--ignored=matching'],
+      { cwd: wt, encoding: 'utf8', timeout: GIT_TIMEOUT, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch { return 'status-unreadable'; }
+  const entries = out.split('\0').filter(Boolean);
+  if (entries.some((e) => !e.startsWith('!! '))) return 'uncommitted';
+  const kept = [];
+  for (const e of entries.map((x) => x.slice(3).replace(/\\/g, '/'))) {
+    try { if (fs.lstatSync(path.join(wt, e.replace(/\/+$/, ''))).isSymbolicLink()) return `holds a link: ${e}`; } catch { /* gone */ }
+    if (hyg && (hyg.isRegenerable(e) || hyg.isToolingState(e))) continue;
+    kept.push(e);
+  }
+  return kept.length ? `holds ignored files: ${kept.slice(0, 3).join(', ')}` : null;
+}
+
+/** Why a part must NOT be removed right now, or null when it is safe. */
+async function keepReason(part, { cwd, explicit, idleMs = IDLE_MIN_MS }) {
+  if (!part.landed) return 'unlanded';
+  if (part.dirty) return 'uncommitted';
+  if (!explicit && !part.removable) return 'not-owned-by-run';
+  if (part.branch) {
+    const own = ownCommitCount(part.branch, cwd);
+    if (own === 0) return 'no-own-commits';
+    if (own === null) return 'no-reflog';
+  }
+  if (part.path) {
+    const hyg = await loadHygiene();
+    if (hyg && hyg.hasLiveSession(part.path, hyg.defaultProjectsDir())) return 'live-session';
+    const idx = git(['rev-parse', '--git-path', 'index'], part.path);
+    const times = [];
+    try { if (idx) times.push(fs.statSync(path.resolve(part.path, idx)).mtimeMs); } catch { /* none */ }
+    const ct = git(['log', '-1', '--format=%ct'], part.path);
+    if (ct) times.push(Number(ct) * 1000);
+    if (times.length && Date.now() - Math.max(...times) < idleMs) return 'recently-active';
+    const why = await contentReason(part.path, hyg);
+    if (why) return why;
+  }
+  return null;
+}
+
 /**
- * Remove parts that are landed AND clean. Re-checks each part right before
- * deleting; never forces a worktree removal.
+ * Remove parts that are landed AND clean AND owned by the run (carry the
+ * whole run slug, or named via --sub: `explicit`). Each part is re-checked
+ * right before deleting; never forced; never a part without own commits, with
+ * a live/recent session, ignored files or a link inside.
+ * @returns {Promise<string[]>} removed paths/branches
  */
-async function removeIntegrated({ cwd, integrationRef, result }) {
+async function removeIntegrated({ cwd, integrationRef, result, explicit = false, idleMs }) {
   const removed = [];
   for (const p of result.parts) {
-    if (!p.landed || p.dirty) continue;
+    if (await keepReason(p, { cwd, explicit, idleMs })) continue;
     const fresh = await checkIntegration({ cwd, integrationRef, subRefs: [{ branch: p.branch, path: p.path }] });
-    const f = fresh.parts[0];
-    if (!f || !f.landed || f.dirty) continue;
+    const f = { ...fresh.parts[0], removable: p.removable };
+    if (!f.sha || await keepReason(f, { cwd, explicit, idleMs })) continue;
     if (f.path && !gitOk(['worktree', 'remove', f.path], cwd)) continue;
-    if (f.branch && !/^(main|master)$/.test(f.branch) && f.branch !== integrationRef) git(['branch', '-D', f.branch], cwd);
+    if (f.branch && !PROTECTED_BRANCH.test(f.branch) && f.branch !== integrationRef) git(['branch', '-D', f.branch], cwd);
     removed.push(f.path || f.branch);
   }
   return removed;
@@ -185,5 +258,5 @@ async function removeIntegrated({ cwd, integrationRef, result }) {
 
 module.exports = {
   checkIntegration, discoverParts, summarize, removeIntegrated,
-  listWorktrees, dirtyPaths, mergeAddsNothing,
+  listWorktrees, dirtyPaths, mergeAddsNothing, loadHygiene, carriesSlug, keepReason,
 };

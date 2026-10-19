@@ -85,8 +85,8 @@ const SCHEMA = Object.freeze({
   }),
   sessionEnd: Object.freeze({
     autosave: Object.freeze({
-      type: 'enum', values: Object.freeze(['push', 'local', 'off']), default: 'push',
-      doc: 'Session worktree with unsaved work and no open PR when a turn ends: "push" = WIP-commit + push (never force), "local" = WIP-commit only, "off" = nothing.',
+      type: 'enum', values: Object.freeze(['push', 'local', 'off']), default: 'local',
+      doc: 'Session worktree with unsaved work and no open PR when a turn ends: "local" (default) = snapshot to a local parked/autosave/<name> branch, "push" = also push it (never force), "off" = nothing. Your branch, index and files are never touched.',
     }),
   }),
   deployParity: Object.freeze({
