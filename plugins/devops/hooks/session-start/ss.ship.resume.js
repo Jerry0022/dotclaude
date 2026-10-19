@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook ss.ship.resume
- * @version 0.3.1
+ * @version 0.4.0
  * @event SessionStart
  * @plugin devops
  * @description Keep a running /do-ship stable across a compaction or a resume.
@@ -23,6 +23,9 @@
  *   first unfinished one instead of re-deriving everything.
  *   Since 0.3.0 a compaction tells a turn that is still shipping to reload the
  *   skill with --resume: only its first 5,000 tokens survive a compaction.
+ *   Since 0.4.0 (#712 R6) a delegated `--card-data` ship whose card input is
+ *   still on disk (lib/ship-carddata.js) gets a pointer to render from that
+ *   file: the compaction may have dropped the subagent's reply with it.
  */
 
 require('../lib/plugin-guard');
@@ -31,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const { isActive, sentinelPath } = require('../lib/ship-sentinel');
 const { openCheckpoint, describeCheckpoint } = require('../lib/ship-checkpoint');
+const { readCardData, renderFromFileInstruction } = require('../lib/ship-carddata');
 
 /**
  * Minutes since the sentinel was written, or null when unreadable.
@@ -96,6 +100,17 @@ function buildResumeInstruction({ cwd, source }) {
   ].join('\n');
 }
 
+/**
+ * Pointer to a delegated `--card-data` ship's stored card input (#712 R6),
+ * or null when this session has none.
+ * @param {{ cwd: string, sessionId?: string, pluginRoot?: string }} o
+ * @returns {string|null}
+ */
+function buildCardDataInstruction({ cwd, sessionId, pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..') }) {
+  const data = readCardData(cwd, sessionId);
+  return data ? renderFromFileInstruction(data, { pluginRoot, cwd, sessionId }) : null;
+}
+
 function main() {
   let inputData = '';
   process.stdin.setEncoding('utf8');
@@ -104,10 +119,11 @@ function main() {
     let hook;
     try { hook = JSON.parse(inputData); }
     catch { process.exit(0); }
-    const text = buildResumeInstruction({
-      cwd: hook.cwd || process.cwd(),
-      source: hook.source || hook.trigger || '',
-    });
+    const cwd = hook.cwd || process.cwd();
+    const text = [
+      buildCardDataInstruction({ cwd, sessionId: hook.session_id }),
+      buildResumeInstruction({ cwd, source: hook.source || hook.trigger || '' }),
+    ].filter(Boolean).join('\n\n');
     if (!text) process.exit(0);
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text },
@@ -118,4 +134,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { buildResumeInstruction, sentinelAgeMin };
+module.exports = { buildResumeInstruction, buildCardDataInstruction, sentinelAgeMin };

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @hook stop.flow.guard
- * @version 0.10.0
+ * @version 0.11.0
  * @event Stop
  * @plugin devops
  * @description Per-turn completion card + validation enforcement (the validation
@@ -65,6 +65,13 @@
  *   `⏳ 🚀 Shipping – ` and every other named state stay untouched; silent
  *   ticks, scheduled tasks and an active guide are skipped. A per-session
  *   marker lets the follow-up stop through, so it never loops.
+ *
+ *   Card-data pointer (#712 R6): when it blocks while a delegated
+ *   `--card-data` ship left its card input in
+ *   `.claude/.ship-carddata-<session>.json` (lib/ship-carddata.js), the reason
+ *   opens with an instruction to render from that file — a compaction may
+ *   have dropped the subagent's reply, and a card rebuilt from memory
+ *   downgrades the ship to `ready`.
  */
 
 require('../lib/plugin-guard');
@@ -109,6 +116,7 @@ function interruptReason(title) {
     'Output nothing else — no text, no card — then end the turn. Do not mention this to the user.',
   ].join('\n');
 }
+const { readCardData, renderFromFileInstruction } = require('../lib/ship-carddata');
 
 /**
  * Did this turn change any file? `git status --porcelain` is the truth when
@@ -295,6 +303,7 @@ process.stdin.on('end', () => {
   // instruction like the card's (exact title, no get_session), delivered as a
   // one-time block; the per-session marker lets the follow-up stop through
   // whatever happens, so this never loops.
+  let interruptBlock = false;
   if (decision.action !== 'block' && !silent && !scheduledTask && !guideActive) {
     const asked = readSessionFile(INTERRUPT_FLAG, sessionId, EXACT);
     if (asked) {
@@ -309,6 +318,7 @@ process.stdin.on('end', () => {
       if (marked) {
         decision.action = 'block';
         decision.reason = interruptReason(next);
+        interruptBlock = true;
       }
     }
   }
@@ -316,9 +326,16 @@ process.stdin.on('end', () => {
   if (decision.action === 'block') {
     // Claude Code interprets JSON stdout for Stop hooks:
     //   { decision: "block", reason: "..." } → blocks stop, feeds reason to Claude
+    let reason = decision.reason;
+    // The F5 rename asks for no card at all — no card-data pointer on it.
+    const pendingCard = (cardRendered || interruptBlock) ? null : readCardData(hook.cwd, sessionId);
+    if (pendingCard) {
+      const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+      reason = `${renderFromFileInstruction(pendingCard, { pluginRoot, cwd: hook.cwd, sessionId })}\n\n${reason}`;
+    }
     process.stdout.write(JSON.stringify({
       decision: 'block',
-      reason: decision.reason,
+      reason,
     }));
   }
   // else: pass silently

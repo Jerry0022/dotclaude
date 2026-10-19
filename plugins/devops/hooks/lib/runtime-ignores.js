@@ -1,7 +1,7 @@
 'use strict';
 /**
  * @module runtime-ignores
- * @version 0.3.0
+ * @version 0.4.0
  * @plugin devops
  * @description The one list of PROJECT-rooted `.claude/` paths git must never
  *   see: Claude Code's own session state, everything this plugin writes into a
@@ -65,6 +65,8 @@ const PLUGIN_STATE = Object.freeze([
   '.claude/batch-handoff.json',
   '.claude/.ship-in-progress',
   '.claude/.ship-checkpoint.json',
+  // #712 R6: a delegated --card-data ship's card input (hooks/lib/ship-carddata.js).
+  '.claude/.ship-carddata-*.json',
   '.claude/.ship-lockout',
   '.claude/.ship-queue',
   '.claude/.ship-watcher/',
