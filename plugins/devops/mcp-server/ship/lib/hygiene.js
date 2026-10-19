@@ -74,7 +74,7 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-const { isParked } = createRequire(import.meta.url)("../../../hooks/lib/park-register.js");
+const { isParked, coveringRef } = createRequire(import.meta.url)("../../../hooks/lib/park-register.js");
 
 const DAY_MS = 86_400_000;
 const GB = 1024 ** 3;
@@ -785,6 +785,7 @@ export function classifyUnits(scan, io) {
   const removable = [];
   const keep = [];
   let atRisk = [];
+  const parkedUnits = [];
   for (const u of scan.units) {
     const reason = keepReason(u, ctx);
     if (!reason) removable.push(u);
@@ -798,7 +799,12 @@ export function classifyUnits(scan, io) {
     const landing = landingState(u.head, u.branch, ctx);
     const unlanded = landing.state !== "landed" && merged !== null && !openPr;
     const subject = unlanded ? gitOut(["log", "-1", "--format=%s", u.head], io.cwd) || "" : "";
-    const parked = unlanded && isParked(u.branch || "", subject);
+    // parked by name, or the same work is kept on a parked ref (local or origin/ —
+    // salvage copies live remote-only) whose history contains this tip
+    const byName = unlanded && isParked(u.branch || "", subject);
+    const coveredBy = unlanded && !byName ? coveringRef(io.cwd, u.head) : null;
+    const parked = byName || Boolean(coveredBy);
+    if (coveredBy) parkedUnits.push({ kind: u.kind, branch: u.branch || null, path: u.path || null, head: u.head, coveredBy, state: landing.state, ageDays: u.ageDays });
     if ((unlanded && !parked) || dirty > 0) {
       atRisk.push({
         kind: u.kind, branch: u.branch, path: u.path, head: u.head,
@@ -812,7 +818,7 @@ export function classifyUnits(scan, io) {
   const dirtyHeads = new Set(atRisk.filter((r) => r.dirty > 0).map((r) => r.head));
   const idOf = (r) => (r.dirty > 0 ? `d:${normPath(r.path)}` : `h:${r.head}`);
   atRisk = atRisk.filter((r, i) => (r.dirty > 0 || !dirtyHeads.has(r.head)) && atRisk.findIndex((x) => idOf(x) === idOf(r)) === i);
-  return { ctx, removable, keep, atRisk, merged, open };
+  return { ctx, removable, keep, atRisk, parkedUnits, merged, open };
 }
 
 /**

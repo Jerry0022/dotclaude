@@ -56,24 +56,46 @@ function isParked(name, subject = '') {
  * @returns {{branch:string, legacy:boolean, topic:string, sha:string, date:string, ageDays:number, reason:string, stale:boolean}[]}
  */
 function listParked(cwd, now = Date.now()) {
-  const out = git(['for-each-ref', 'refs/heads', '--format=%(refname:short)%09%(objectname)%09%(committerdate:unix)%09%(subject)'], cwd);
+  const out = git(['for-each-ref', 'refs/heads', 'refs/remotes/origin', '--format=%(refname)%09%(objectname)%09%(committerdate:unix)%09%(subject)'], cwd);
   if (!out) return [];
   const list = [];
-  for (const line of out.split('\n')) {
-    const [branch, sha, ts, ...rest] = line.replace(/\r$/, '').split('\t');
-    if (!branch) continue;
+  const locals = new Set();
+  const lines = out.split('\n').map((l) => l.replace(/\r$/, '').split('\t')).filter(([r]) => r);
+  for (const [ref] of lines) if (ref.startsWith('refs/heads/')) locals.add(ref.slice('refs/heads/'.length));
+  for (const [ref, sha, ts, ...rest] of lines) {
+    const remote = ref.startsWith('refs/remotes/origin/');
+    if (!remote && !ref.startsWith('refs/heads/')) continue;
+    const short = ref.replace(/^refs\/(?:heads|remotes\/origin)\//, '');
+    if (remote && (short === 'HEAD' || locals.has(short))) continue; // a local twin is listed once
+    const branch = remote ? `origin/${short}` : short;
     const subject = rest.join('\t');
-    const c = classify(branch, subject);
+    // remote-only refs count by prefix only (salvage copies); the subject rule is local
+    const c = classify(short, remote ? '' : subject);
     if (!c.parked) continue;
     const ms = Number(ts) * 1000;
     const ageDays = Number.isFinite(ms) ? Math.max(0, Math.floor((now - ms) / DAY_MS)) : 0;
     list.push({
-      branch, legacy: c.legacy, topic: c.topic, sha,
+      branch, remote, legacy: c.legacy, topic: c.topic, sha,
       date: Number.isFinite(ms) ? new Date(ms).toISOString() : '',
       ageDays, reason: subject, stale: ageDays > STALE_DAYS,
     });
   }
   return list.sort((a, b) => a.ageDays - b.ageDays);
+}
+
+/** Every prefix whose refs count as parked, local and remote-tracking (salvage copies live remote-only). */
+const PARK_REF_PREFIXES = [PARKED_PREFIX, ...LEGACY_PREFIXES].flatMap((p) => [`refs/heads/${p}`, `refs/remotes/origin/${p}`]);
+
+/**
+ * A parked ref (local or origin/…) that covers `sha`: contains it (ancestor or
+ * equal), or with `exact` points at exactly that commit. null when none.
+ * Unit tips covered this way are the same work, kept elsewhere.
+ */
+function coveringRef(cwd, sha, { exact = false } = {}) {
+  if (!sha) return null;
+  const out = git(['for-each-ref', exact ? '--points-at' : '--contains', sha, '--format=%(refname)', ...PARK_REF_PREFIXES], cwd);
+  const first = (out || '').split('\n').map((l) => l.trim()).filter(Boolean)[0];
+  return first ? first.replace(/^refs\/(?:heads|remotes\/origin)\//, (m) => (m === 'refs/heads/' ? '' : 'origin/')) : null;
 }
 
 /** Stash entries of the repo (shared across its worktrees): [{ref, ageDays, message}]. */
@@ -86,4 +108,4 @@ function listStashes(cwd, now = Date.now()) {
   });
 }
 
-module.exports = { PARKED_PREFIX, LEGACY_PREFIXES, STALE_DAYS, NUDGE, classify, isParked, listParked, listStashes };
+module.exports = { coveringRef, PARKED_PREFIX, LEGACY_PREFIXES, STALE_DAYS, NUDGE, classify, isParked, listParked, listStashes };

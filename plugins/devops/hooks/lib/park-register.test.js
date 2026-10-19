@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { classify, isParked, listParked, listStashes, STALE_DAYS } from "./park-register.js";
+import { coveringRef, classify, isParked, listParked, listStashes, STALE_DAYS } from "./park-register.js";
 
 const DAY = 86_400_000;
 const dirs = [];
@@ -53,6 +53,24 @@ describe("park-register listParked / listStashes", () => {
     expect(list.map((p) => p.branch)).toEqual(["parked/fresh", "wip/old"]);
     expect(list[0]).toMatchObject({ legacy: false, stale: false, reason: "idea one" });
     expect(list[1]).toMatchObject({ legacy: true, stale: true, ageDays: STALE_DAYS + 5 });
+  });
+
+  test("remote-only origin/salvage|parked refs are listed; a local twin is listed once; coveringRef sees remote refs", () => {
+    const dir = repo();
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "park-bare-"));
+    dirs.push(bare);
+    git(bare, "init", "-q", "--bare");
+    git(dir, "remote", "add", "origin", bare);
+    branchAt(dir, "feat/a", "work a", 3);
+    branchAt(dir, "parked/b", "work b", 3);
+    git(dir, "push", "-q", "origin", "feat/a:refs/heads/salvage/a", "parked/b:refs/heads/parked/b", "feat/a:refs/heads/feat/a");
+    const list = listParked(dir);
+    expect(list.map((p) => p.branch).sort()).toEqual(["origin/salvage/a", "parked/b"]);
+    expect(list.find((p) => p.branch === "origin/salvage/a")).toMatchObject({ remote: true, legacy: true });
+    const sha = git(dir, "rev-parse", "feat/a");
+    expect(coveringRef(dir, sha)).toBe("origin/salvage/a");
+    expect(coveringRef(dir, git(dir, "rev-parse", "main"))).not.toBeNull(); // ancestor of the salvage tip
+    expect(coveringRef(dir, sha, { exact: true })).toBe("origin/salvage/a");
   });
 
   test("stashes are listed", () => {

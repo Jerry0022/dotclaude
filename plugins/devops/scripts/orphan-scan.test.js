@@ -41,6 +41,13 @@ function commitOn(dir, branch, file, content, subject = "work", fromMain = true)
   git(dir, "commit", "-q", "-m", subject);
   git(dir, "checkout", "-q", "main");
 }
+/** main gains a commit (origin/main follows), so `main~1` is a distinct landed commit. */
+function advanceMain(dir) {
+  fs.writeFileSync(path.join(dir, "a.txt"), "advanced\n");
+  git(dir, "add", "-A");
+  git(dir, "commit", "-q", "-m", "advance");
+  git(dir, "update-ref", "refs/remotes/origin/main", "HEAD");
+}
 const offlineMerged = () => ({ bySha: new Set(), byName: new Map() });
 const opts = { fetch: false, projectsDir: null, fetchMerged: offlineMerged, fetchOpen: () => null };
 
@@ -104,9 +111,11 @@ describe("orphan-scan", () => {
   test("--clean-landed spares long-lived, parked, salvage and upstream-backed branches at main", async () => {
     const root = mkRoot();
     const r = repoIn(root, "app");
-    for (const n of ["develop", "staging", "production", "stable", "release/1.0", "parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z", "has-upstream", "plain-landed"]) {
+    advanceMain(r);
+    for (const n of ["develop", "staging", "production", "stable", "release/1.0", "parked/idea", "parked/autosave/s1", "wip/x", "backup/y", "salvage/z", "has-upstream"]) {
       git(r, "branch", n, "main");
     }
+    git(r, "branch", "plain-landed", "main~1");
     git(r, "update-ref", "refs/remotes/origin/has-upstream", "main");
     const done = await cleanLanded(r, { apply: true, ...opts });
     expect(done.removed.map((x) => x.name)).toEqual(["plain-landed"]);
@@ -144,6 +153,70 @@ describe("orphan-scan", () => {
     const { entry } = await scanOne(r, opts);
     expect(entry.parked).toEqual([expect.objectContaining({ branch: "parked/autosave/sess1", legacy: false })]);
     expect(entry.atRisk).toEqual([]);
+  });
+
+  describe("salvage copies on the remote", () => {
+    /** repo with a bare origin; `feat/x` carries one commit, pushed as origin/salvage/x. */
+    function withSalvage(root) {
+      const r = repoIn(root, "app");
+      const bare = path.join(root, "remote.git");
+      git(root, "init", "-q", "--bare", bare);
+      git(r, "remote", "add", "origin", bare);
+      commitOn(r, "feat/x", "x.txt", "x\n");
+      git(r, "push", "-q", "origin", "feat/x:refs/heads/salvage/x");
+      return r;
+    }
+
+    test("a local branch whose tip equals origin/salvage/* is parked, not at risk; the remote ref is listed", async () => {
+      const r = withSalvage(mkRoot());
+      const { entry } = await scanOne(r, opts);
+      expect(entry.atRisk).toEqual([]);
+      expect(entry.parked).toEqual(expect.arrayContaining([
+        expect.objectContaining({ branch: "origin/salvage/x", remote: true }),
+        expect.objectContaining({ branch: "feat/x", coveredBy: "origin/salvage/x" }),
+      ]));
+    });
+
+    test("a tip that is only an ancestor of the salvage ref is covered too", async () => {
+      const r = withSalvage(mkRoot());
+      git(r, "checkout", "-q", "-b", "tmp", "feat/x");
+      fs.writeFileSync(path.join(r, "more.txt"), "m\n");
+      git(r, "add", "-A");
+      git(r, "commit", "-q", "-m", "more");
+      git(r, "push", "-q", "-f", "origin", "tmp:refs/heads/salvage/x");
+      git(r, "checkout", "-q", "main");
+      git(r, "branch", "-D", "tmp");
+      const { entry } = await scanOne(r, opts);
+      expect(entry.atRisk).toEqual([]);
+      expect(entry.parked.find((p) => p.branch === "feat/x")).toMatchObject({ coveredBy: "origin/salvage/x" });
+    });
+
+    test("an unrelated unlanded branch stays at risk", async () => {
+      const r = withSalvage(mkRoot());
+      commitOn(r, "feat/other", "o.txt", "o\n");
+      const { entry } = await scanOne(r, opts);
+      expect(entry.atRisk.map((a) => a.branch)).toEqual(["feat/other"]);
+    });
+
+    test("uncommitted work in a worktree on a covered branch stays at risk", async () => {
+      const r = withSalvage(mkRoot());
+      const wt = path.join(r, ".claude", "worktrees", "sess");
+      git(r, "worktree", "add", "-q", wt, "feat/x");
+      fs.writeFileSync(path.join(wt, "unsaved.txt"), "u\n");
+      const { entry } = await scanOne(r, opts);
+      expect(entry.atRisk).toEqual([expect.objectContaining({ kind: "worktree", dirty: 1 })]);
+    });
+
+    test("--clean-landed keeps a landed branch pinned by an identical salvage ref", async () => {
+      const root = mkRoot();
+      const r = withSalvage(root);
+      advanceMain(r);
+      git(r, "branch", "landed-pin", "main");
+      git(r, "push", "-q", "origin", "landed-pin:refs/heads/salvage/pin");
+      git(r, "branch", "landed-free", "main~1");
+      const done = await cleanLanded(r, { apply: true, ...opts });
+      expect(done.removed.map((x) => x.name)).toEqual(["landed-free"]);
+    });
   });
 
   test("parseArgs", () => {
