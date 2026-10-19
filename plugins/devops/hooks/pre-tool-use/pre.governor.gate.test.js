@@ -106,6 +106,16 @@ describe('governor hooks', () => {
     expect(run(RESUME, { session_id: 's1', cwd: home, prompt: 'again' }).stdout).toBe('');
   });
 
+  it.runIf(win)('resume hook leaves the queue alone on a prompt that is never a turn (open-url)', () => {
+    const RESUME = path.join(HOOKS, 'user-prompt-submit', 'prompt.governor.resume.js');
+    fs.mkdirSync(path.join(home, 'queue'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'queue', 'e2.json'), JSON.stringify({ id: 'e2', command: 'npm run build', cwd: home, branch: 'feat', head: 'abcdef12', status: 'ready', created_at: Date.now() }));
+    const r = run(RESUME, { session_id: 's1', cwd: home, prompt: 'Open in default browser: http://localhost:5173/x' });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('');
+    expect(fs.existsSync(path.join(home, 'queue', 'e2.json'))).toBe(true);
+  });
+
   it.runIf(win)('disabled config skips everything', () => {
     fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ enabled: false }));
     freshState({ pressure: { priority: ['cpu'], over: [] } });
