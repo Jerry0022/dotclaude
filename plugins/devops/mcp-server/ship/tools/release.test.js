@@ -80,7 +80,17 @@ vi.mock("../lib/version-rebase.js", async (importOriginal) => ({
   rebaseVersionFiles: vi.fn(() => ({ ok: false, reason: "no-version-file" })),
 }));
 
+// #752: never touch the real ~/.claude store; the repo key is test-controlled.
+vi.mock("../lib/ci-quota.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  repoKey: vi.fn(() => null),
+}));
+
 import { handler, PR_TITLE_MAX } from "./release.js";
+import * as quotaLib from "../lib/ci-quota.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { rebaseVersionFiles } from "../lib/version-rebase.js";
 import * as localMergeLib from "../lib/local-merge.js";
 import { readVersion } from "../lib/version.js";
@@ -1270,5 +1280,96 @@ describe("ship_release — automatic version-file rebase", () => {
     expect(res.commitSkipped).toBe("clean tree");
     expect(res.success).toBe(true);
     expect(execFileSync.mock.calls.some((c) => c[1] && c[1][0] === "commit")).toBe(false);
+  });
+});
+
+describe("ship_release — #752 shared CI-quota block", () => {
+  let dir;
+  const billing = {
+    status: "failed",
+    billingBlock: true,
+    checks: [],
+    failed: [{ name: "build", link: "https://github.com/o/r/actions/runs/1/job/7" }],
+    pending: [],
+    error: "1 check(s) failed: build",
+  };
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "rel-quota-"));
+    process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
+    quotaLib.repoKey.mockReturnValue("o/r");
+  });
+  afterEach(() => {
+    delete process.env.DEVOPS_CI_QUOTA_FILE;
+    quotaLib.repoKey.mockReturnValue(null);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("first detection records the block, blocks and asks once (no merge)", async () => {
+    ghLib.watchPRChecks.mockReturnValue(billing);
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.quotaBlocked).toBe(true);
+    expect(res.checks.status).toBe("quota-blocked");
+    expect(res.error).toMatch(/quotaDecision/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(quotaLib.readRecord("o/r")).not.toBeNull();
+  });
+
+  test("explicit skip-checks answer is stored and applied in a later ship without re-asking", async () => {
+    ghLib.watchPRChecks.mockReturnValue(billing);
+    await handler(params());
+    const res = await handler(params({ quotaDecision: "skip-checks" }));
+    expect(res.success).toBe(true);
+    expect(res.checks.status).toBe("skipped");
+    expect(res.checks.storedDecisionApplied).toBe(true);
+    expect(ghLib.mergePR).toHaveBeenCalled();
+    // A third ship (other session) needs no param and uses a short probe.
+    ghLib.mergePR.mockClear();
+    const third = await handler(params());
+    expect(third.checks.storedDecisionApplied).toBe(true);
+    expect(ghLib.watchPRChecks.mock.calls.at(-1)[2].timeoutSec).toBeLessThanOrEqual(60);
+  });
+
+  test("decision without a recorded block is ignored, not stored", async () => {
+    const res = await handler(params({ quotaDecision: "skip-checks" }));
+    expect(res.quotaDecisionIgnored).toBeDefined();
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("stored wait decision blocks without re-asking", async () => {
+    quotaLib.recordBlock("o/r");
+    ghLib.watchPRChecks.mockReturnValue(billing);
+    const res = await handler(params({ quotaDecision: "wait" }));
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/stored decision is to wait/);
+  });
+
+  test("a real red check is never skipped, even with a stored skip decision", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "skip-checks");
+    ghLib.watchPRChecks.mockReturnValue({ ...billing, billingBlock: undefined, failed: [{ name: "test", link: "https://x/job/9" }] });
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.checksBlocked).toBe(true);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    // ...and the record is cleared because a check ran for real.
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("passing checks clear the record (quota is back)", async () => {
+    quotaLib.recordBlock("o/r");
+    const res = await handler(params());
+    expect(res.checks.quotaCleared).toBe(true);
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("revoke forgets the decision but keeps the block", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "skip-checks");
+    ghLib.watchPRChecks.mockReturnValue(billing);
+    const res = await handler(params({ quotaDecision: "revoke" }));
+    expect(res.quotaDecisionRevoked).toBe(true);
+    expect(res.quotaBlocked).toBe(true);
+    expect(quotaLib.readRecord("o/r").decision).toBeUndefined();
   });
 });
