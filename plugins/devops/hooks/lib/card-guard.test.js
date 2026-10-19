@@ -1445,6 +1445,10 @@ describe("lastAssistantText", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildBlockReason", () => {
+  test("finished unshipped commits in a linked side session are ready + open with a reply, never analysis (#759)", () => {
+    expect(buildBlockReason()).toContain('finished unshipped commits in a linked side session → ready + open {text, reply: "ship"}, never analysis');
+  });
+
   test("contains the MCP tool name and variant decision tree", () => {
     const r = buildBlockReason();
     expect(r).toMatch(/mcp__plugin_devops_dotclaude-completion__render_completion_card/);

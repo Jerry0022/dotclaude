@@ -790,6 +790,7 @@ function buildBlockReason(pluginRoot, opts = {}) {
     '  work done outside the repo, no repo diff (DB op, delete, deploy,',
     '    data migration, settings change) → fallback',
     '  mode activated (batch, concept) → its override, never analysis',
+    '  finished unshipped commits in a linked side session → ready + open {text, reply: "ship"}, never analysis',
     '  nothing changed anywhere (answer/investigation only) → analysis',
     '  the user pauses the work to continue later → paused',
     '  next step = Claude Code restart / reboot / usage-limit reset → paused + pause:{reason}',
