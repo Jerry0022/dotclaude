@@ -215,7 +215,7 @@ describe("findReapable", () => {
       { pid: 10, ppid: 999999, name: "node.exe", command: CACHE_CMD_GENERIC }, // unrelated orphan
     ];
     const isAlive = (pid) => pid === 1; // only claude alive; 999999 dead
-    const result = findReapable(procs, { selfPid: 5, isAlive });
+    const result = findReapable(procs, { selfPid: 5, isAlive, platform: "win32" });
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ pid: 10, ppid: 999999 });
   });
@@ -226,7 +226,7 @@ describe("findReapable", () => {
       { pid: 11, ppid: 999999, name: "node.exe", command: CACHE_CMD_GENERIC },
     ];
     const isAlive = () => true; // everything alive, including ppid 999999
-    expect(findReapable(procs, { selfPid: 5, isAlive })).toHaveLength(0);
+    expect(findReapable(procs, { selfPid: 5, isAlive, platform: "win32" })).toHaveLength(0);
   });
 
   test("does NOT flag a non-MCP-signature process, even if orphaned", () => {
@@ -235,7 +235,7 @@ describe("findReapable", () => {
       { pid: 12, ppid: 999999, name: "notepad.exe", command: "notepad.exe C:\\file.txt" },
     ];
     const isAlive = (pid) => pid === 1;
-    expect(findReapable(procs, { selfPid: 5, isAlive })).toHaveLength(0);
+    expect(findReapable(procs, { selfPid: 5, isAlive, platform: "win32" })).toHaveLength(0);
   });
 
   test("R2 FAIL-SAFE: no live claude process anywhere in the snapshot -> refuses to " +
@@ -243,7 +243,7 @@ describe("findReapable", () => {
     const procs = [{ pid: 10, ppid: 999999, name: "node.exe", command: CACHE_CMD_GENERIC }];
     const isAlive = (pid) => pid !== 999999; // parent genuinely dead
     // No claude-like process anywhere -> census.size === 0 -> "unknown", refuse.
-    expect(findReapable(procs, { selfPid: 5, isAlive })).toEqual([]);
+    expect(findReapable(procs, { selfPid: 5, isAlive, platform: "win32" })).toEqual([]);
   });
 
   test("R2/R3 cousin topology: an MCP server descending from a dead intermediate wrapper is " +
@@ -259,7 +259,7 @@ describe("findReapable", () => {
     // self-subtree-only exclusion rooted at selfPid=900 — would both flag
     // 901, since it is neither an ancestor nor a descendant of the reaper.
     const isAlive = (pid) => pid === 1;
-    const result = findReapable(procs, { selfPid: 900, isAlive });
+    const result = findReapable(procs, { selfPid: 900, isAlive, platform: "win32" });
     expect(result).toEqual([]);
 
     // Prove computeSelfSubtree ALONE (the old mechanism) would NOT have
@@ -280,7 +280,7 @@ describe("findReapable", () => {
     // pid 3 is still structurally beneath the live claude root (pid 1) in
     // this snapshot, so the census must protect it regardless.
     const isAlive = (pid) => pid === 1;
-    const result = findReapable(procs, { selfPid: 999, isAlive });
+    const result = findReapable(procs, { selfPid: 999, isAlive, platform: "win32" });
     expect(result).toEqual([]);
   });
 
@@ -296,7 +296,7 @@ describe("findReapable", () => {
       { pid: 900, ppid: 50, name: "node.exe", command: "node mcp-reaper.js" }, // the reaper itself
     ];
     const isAlive = (pid) => pid === 1;
-    const result = findReapable(procs, { selfPid: 900, isAlive });
+    const result = findReapable(procs, { selfPid: 900, isAlive, platform: "win32" });
     expect(result).toEqual([]); // pid 50 protected via computeSelfSubtree, not via census
   });
 
@@ -308,7 +308,7 @@ describe("findReapable", () => {
       { pid: 901, ppid: 900, name: "node.exe", command: CACHE_CMD_GENERIC }, // reaper's own child, matches signature
     ];
     const isAlive = (pid) => pid === 1;
-    const result = findReapable(procs, { selfPid: 900, isAlive });
+    const result = findReapable(procs, { selfPid: 900, isAlive, platform: "win32" });
     expect(result).toEqual([]); // pid 901 protected via computeSelfSubtree, not via census
   });
 
@@ -327,6 +327,7 @@ describe("findReapable", () => {
     const result = findReapable(procs, {
       selfPid: 5,
       isAlive,
+      platform: "win32",
       ownSignature: "c:/users/jerry/.claude/plugins/cache/dotclaude/devops/0.119.1/scripts/mcp-reap.js",
     });
     expect(result).toEqual([]);
@@ -343,7 +344,7 @@ describe("findReapable", () => {
   });
 
   test("empty process list -> empty result", () => {
-    expect(findReapable([], { selfPid: 5 })).toEqual([]);
+    expect(findReapable([], { selfPid: 5, platform: "win32" })).toEqual([]);
   });
 });
 
@@ -429,7 +430,7 @@ describe("reap", () => {
     ];
     const isAlive = (pid) => pid === 1;
 
-    const result = await reap({ selfPid: 5, listProcs: () => procs, isAlive }); // dryRun defaults true
+    const result = await reap({ selfPid: 5, listProcs: () => procs, isAlive, platform: "win32" }); // dryRun defaults true
 
     expect(result.candidates).toHaveLength(1);
     expect(result.killed).toEqual([]);
@@ -438,7 +439,7 @@ describe("reap", () => {
 
   test("dry-run is the default even when dryRun is omitted entirely", async () => {
     const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
-    const result = await reap({ selfPid: 5, listProcs: () => [], isAlive: () => true });
+    const result = await reap({ selfPid: 5, listProcs: () => [], isAlive: () => true, platform: "win32" });
     expect(result.killed).toEqual([]);
     expect(killSpy).not.toHaveBeenCalled();
   });
@@ -453,7 +454,7 @@ describe("reap", () => {
     const isAlive = (pid) => pid === 1 || (pid !== 999999 && pid !== 41);
     const listProcs = () => procs; // stable snapshot -> TOCTOU re-checks pass
 
-    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0 });
+    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0, platform: "win32" });
 
     expect(killSpy).toHaveBeenCalledTimes(1);
     expect(killSpy).toHaveBeenCalledWith(41, "SIGTERM");
@@ -473,7 +474,7 @@ describe("reap", () => {
     const isAlive = (pid) => pid === 1 || pid === 42;
     const listProcs = () => procs;
 
-    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0 });
+    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0, platform: "win32" });
 
     expect(killSpy).toHaveBeenCalledWith(42, "SIGTERM");
     expect(killSpy).toHaveBeenCalledWith(42, "SIGKILL");
@@ -489,7 +490,7 @@ describe("reap", () => {
     const isAlive = (pid) => pid === 1;
     const listProcs = () => procs;
 
-    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0 });
+    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0, platform: "win32" });
 
     expect(result.killed).toEqual([]);
     expect(result.errors).toHaveLength(1);
@@ -507,7 +508,7 @@ describe("reap", () => {
     const isAlive = (pid) => pid === 1;
     const listProcs = () => procs;
 
-    const result = await reap({ selfPid: 900, listProcs, isAlive, dryRun: false, graceMs: 0 });
+    const result = await reap({ selfPid: 900, listProcs, isAlive, dryRun: false, graceMs: 0, platform: "win32" });
 
     expect(result.candidates).toHaveLength(0);
     expect(result.killed).toEqual([]);
@@ -528,7 +529,7 @@ describe("reap", () => {
     };
     const isAlive = (pid) => pid === 1;
 
-    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0 });
+    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0, platform: "win32" });
 
     expect(result.candidates).toHaveLength(1); // initial scan still flagged it
     expect(result.killed).toEqual([]);
@@ -553,7 +554,7 @@ describe("reap", () => {
     // escalation path); ppid 999999 (the dead parent) never reports alive.
     const isAlive = (pid) => pid === 1 || pid === 61;
 
-    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0 });
+    const result = await reap({ selfPid: 5, listProcs, isAlive, dryRun: false, graceMs: 0, platform: "win32" });
 
     expect(killSpy).toHaveBeenCalledTimes(1); // only the SIGTERM, no SIGKILL
     expect(killSpy).toHaveBeenCalledWith(61, "SIGTERM");
@@ -583,7 +584,7 @@ describe("reap", () => {
       { pid: 51, ppid: 999999, name: "bun.exe", command: CACHE_CMD_DISCORD, rssBytes: 300 * 1024 * 1024 },
     ];
     const isAlive = (pid) => pid === 1;
-    const result = await reap({ selfPid: 5, listProcs: () => procs, isAlive });
+    const result = await reap({ selfPid: 5, listProcs: () => procs, isAlive, platform: "win32" });
     expect(result.freedEstimateMb).toBe(500);
   });
 });

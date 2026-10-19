@@ -62,11 +62,15 @@ describe("conflict reporting", () => {
     // (Withholding the committer identity instead fails the merge itself, too
     // early to exercise this path at all.)
     const report = await runSync(wt, path.join(root, "result"), {
-      GIT_CONFIG_COUNT: "2",
+      // gpg.format pins the OpenPGP signer: a global `gpg.format ssh` (with a
+      // working gpg.ssh.program) would otherwise sign the commit just fine.
+      GIT_CONFIG_COUNT: "3",
       GIT_CONFIG_KEY_0: "commit.gpgsign",
       GIT_CONFIG_VALUE_0: "true",
       GIT_CONFIG_KEY_1: "gpg.program",
       GIT_CONFIG_VALUE_1: path.join(root, "no-such-gpg"),
+      GIT_CONFIG_KEY_2: "gpg.format",
+      GIT_CONFIG_VALUE_2: "openpgp",
     });
 
     expect(report).toContain("✗ origin/main → feature");

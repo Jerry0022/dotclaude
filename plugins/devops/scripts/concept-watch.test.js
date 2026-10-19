@@ -293,8 +293,12 @@ describe("validate — the guards the shell version could not express", () => {
       .toMatch(/ABSOLUTE/);
   });
 
+  // A drive-letter path is absolute only on Windows; elsewhere it would resolve
+  // against the cwd — the defect the guard exists for.
   test("absolute paths in both shapes are accepted", () => {
-    for (const p of ["C:/proj/.claude/concept-active.json", "/home/u/proj/.claude/concept-active.json"]) {
+    const shapes = ["/home/u/proj/.claude/concept-active.json"];
+    if (process.platform === "win32") shapes.push("C:/proj/.claude/concept-active.json");
+    for (const p of shapes) {
       expect(validate({ ...DEFAULTS, mode: "watch", port: 8883, state: p })).toBeNull();
     }
   });
