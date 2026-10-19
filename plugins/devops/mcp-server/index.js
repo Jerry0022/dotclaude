@@ -76,6 +76,7 @@ const cjsRequire = createRequire(import.meta.url);
 // stop.flow.guard and ship_release so all three read the status the same way.
 const validationGaps = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'validation-gaps.js'));
 const cardPregate = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'card-pregate.js'));
+const shipCardData = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'ship-carddata.js'));
 // A deliberate verification skip (#612): read from the card's `verification`
 // field, handed to stop.flow.browsertest through the light-skipped flag.
 const { cardSkipReason, LIGHT_SKIPPED_FLAG } = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'browsertest-guard.js'));
@@ -2394,6 +2395,9 @@ function sanitizeSessionId(params) {
  * @returns {string} the card markdown
  */
 function buildCompletionCard(params) {
+  // The variant as asked, before any downgrade — what a stored --card-data
+  // payload (#712 R6) is matched against at the end.
+  const requestedVariant = params.variant;
   // 0a. Repo mode — before the variant guard, which routes git-no-remote.
   withDetectedRepoMode(params);
 
@@ -2528,6 +2532,10 @@ function buildCompletionCard(params) {
   } catch (e) {
     console.error('[dotclaude-completion-mcp] Failed to write completion flag:', e.message);
   }
+
+  // 6. A delegated --card-data ship's stored input (#712 R6) is spent once
+  //    its card is rendered; another card in between leaves it in place.
+  shipCardData.consumeOnRender(params.cwd, params.session_id, requestedVariant);
 
   return cardMarkdown;
 }

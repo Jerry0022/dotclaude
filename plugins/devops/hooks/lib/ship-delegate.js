@@ -1,6 +1,6 @@
 /**
  * @module ship-delegate
- * @version 1.2.1
+ * @version 1.3.0
  * @plugin devops
  * @description The "ship in a fresh-context subagent" instruction, shared by
  *   `prompt.ship.detect` (which emits it instead of the plain
@@ -220,6 +220,8 @@ function spawnAndDeliver({ args, sessionId, description, brief, cardData = false
       '     stays open. Then call render_completion_card with cardData verbatim (before ExitWorktree, its cwd must exist),',
       '     show it per the render result (title step included) as the LAST card, run the afterRender steps, and only',
       '     then, if exitWorktree is true, ExitWorktree({ action: "remove" }). A failed close-out still renders.',
+      '     The subagent also stored this payload in .claude/.ship-carddata-<session_id>.json (a compaction cannot lose it;',
+      '     the render consumes it). Lost the reply? Render from that file, never from memory.',
     ] : []),
     '   { "status": "done", "titlePrefix", "widgetFile" | "markdown", "widgetTitle", "exitWorktree" } → the card is already rendered.',
     '     exitWorktree true: ExitWorktree({ action: "remove" }) first. Set the session title to titlePrefix + the title',

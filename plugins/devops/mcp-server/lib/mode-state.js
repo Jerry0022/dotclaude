@@ -18,7 +18,7 @@
  * Pure reads, all failures swallowed: a card must never die on a missing or
  * half-written state file.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -454,10 +454,11 @@ export function readConceptState(cwd, { skipStale = false } = {}) {
     // A paused concept (#555) has no bridge: no link, no compass. The card of
     // the pausing turn and every later card show the plain outcome instead.
     if (R.isPaused(state)) return null;
-    if (!skipStale && R.isStale(state, R.readStore(R.storeDirFor(state.html_path, cwd)))) return null;
+    const store = R.readStore(R.storeDirFor(state.html_path, cwd));
+    if (!skipStale && R.isStale(state, store)) return null;
     // A state file outlives its bridge when a close-out stops the server and
     // deletes the page before the card renders (#712): no link to a dead page.
-    if (!bridgeLive(cwd, state, port)) return null;
+    if (!bridgeLive(cwd, state, port, { lastActivityAt: store && store.lastActivityAt })) return null;
     return { port, html_path: state.html_path };
   } catch {
     return null;
@@ -471,13 +472,19 @@ export function readConceptState(cwd, { skipStale = false } = {}) {
  * written by concept-server.py with its real `os.getpid()`) first; without an
  * entry, the state file's `server_pid` — but only off Windows, where `$!` of
  * a Git Bash launch is an MSYS pid, not a Windows one. A missing, zero or
- * untrusted pid is "unknown" and the page check alone decides. No network
- * probe: the card render stays synchronous.
+ * untrusted pid is "unknown" and the page check alone decides — except on
+ * Windows with no entry at all: a live bridge writes its entry at launch and
+ * `/shutdown` removes it, so "no entry" there is a close-out that stopped
+ * between `/shutdown` and the state-file removal (a `keep` disposition leaves
+ * the page). Once the concept's last activity (`started_at`, the state file's
+ * mtime, the store's newest save) is older than WIN32_NO_ENTRY_GRACE_MS it
+ * reads as dead; inside the grace a failed best-effort registry write still
+ * gets its link. No network probe: the card render stays synchronous.
  *
  * @param {string} cwd project root
- * @param {{ html_path: string, server_pid?: unknown }} state parsed state file
+ * @param {{ html_path: string, server_pid?: unknown, started_at?: string }} state parsed state file
  * @param {number} port the state file's port
- * @param {{ platform?: string, isAlive?: (pid: number) => boolean, readEntry?: (port: number) => object|null }} [deps]
+ * @param {{ platform?: string, isAlive?: (pid: number) => boolean, readEntry?: (port: number) => object|null, lastActivityAt?: string|null, now?: number }} [deps]
  * @returns {boolean}
  */
 export function bridgeLive(cwd, state, port, deps = {}) {
@@ -500,8 +507,9 @@ export function bridgeLive(cwd, state, port, deps = {}) {
     }
   }
   let pid = 0;
+  let entry = null;
   try {
-    const entry = readEntry(port);
+    entry = readEntry(port);
     // Ports collide across worktrees: another session's live bridge on the
     // same port says nothing about ours — its pid counts as unknown.
     const foreign = entry && entry.worktree && norm(entry.worktree) !== norm(cwd);
@@ -509,15 +517,32 @@ export function bridgeLive(cwd, state, port, deps = {}) {
   } catch {
     pid = 0;
   }
-  if (!(Number.isInteger(pid) && pid > 0) && (deps.platform || process.platform) !== "win32") {
+  const win32 = (deps.platform || process.platform) === "win32";
+  if (!(Number.isInteger(pid) && pid > 0) && !win32) {
     pid = Number(state.server_pid);
   }
-  if (!(Number.isInteger(pid) && pid > 0)) return true; // unknown pid
+  if (!(Number.isInteger(pid) && pid > 0)) {
+    if (win32 && !entry) return !win32NoEntryExpired(cwd, state, deps);
+    return true; // unknown pid
+  }
   try {
     return Boolean(isAlive(pid));
   } catch {
     return true;
   }
+}
+
+/** How long a Windows concept without a registry entry keeps its link (#712 R8). */
+export const WIN32_NO_ENTRY_GRACE_MS = 10 * 60_000;
+
+function win32NoEntryExpired(cwd, state, deps) {
+  const stamps = [Date.parse(state.started_at), Date.parse(deps.lastActivityAt)];
+  try {
+    stamps.push(statSync(join(cwd, ".claude", "concept-active.json")).mtimeMs);
+  } catch { /* no state file on disk (direct call) */ }
+  const last = Math.max(...stamps.filter(Number.isFinite));
+  if (!Number.isFinite(last)) return false; // no age known: the page alone decides
+  return (deps.now ?? Date.now()) - last > WIN32_NO_ENTRY_GRACE_MS;
 }
 
 /**

@@ -92,6 +92,12 @@ inline that way, the largest at 951 k.
      `afterRender` steps, and only then, if `exitWorktree` is true, call
      `ExitWorktree({ action: "remove" })` — the render reads the worktree
      as its `cwd`.
+    The subagent also stored the payload in
+    `.claude/.ship-carddata-<session>.json`; the render consumes it, and
+    `scripts/ship-carddata.js clear` after the render is the backup. After a
+    compaction `stop.flow.guard` and `ss.ship.resume` point you back to that
+    file — render from it, never rebuild the card from memory (that loses
+    the ship state and downgrades to `ready`).
    - **No JSON block**, or the agent failed: render a `ship-blocked` card that
      states the agent's last words as the reason. Never re-run the pipeline
      inline on your own; the user decides (`/do-ship --inline`).
