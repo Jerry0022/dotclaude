@@ -231,21 +231,21 @@ this step normally costs no API call of its own — no `get_session`:
 - **Skill loaded via the Skill tool** (an affirmation after a card, a queue in
   auto-cleanup or `/do-run backlog`): `post.flow.title-mode` answers the load
   with a `[post.flow.title-mode]` block carrying the exact
-  `🚀 Shipping – {title}` — call `mcp__ccd_session_mgmt__set_session_title`
+  `⏳ 🚀 Shipping – {title}` — call `mcp__ccd_session_mgmt__set_session_title`
   with `session_id: "self"` and that title **in the same message as your next
   tool call** (parallel, e.g. with `ship_preflight`). No block → the title is
   already right: done.
 - **Fallback — only when the block says the title is unknown:**
   1. `mcp__ccd_session_mgmt__get_session` with `session_id: "self"` → `title`.
-  2. If the title already starts with `🚀 Shipping – `: done.
-  3. Strip any leading devops prefix (`🚀 Shipping – `, `🚀 Shipped – `, `🧪 Test – `,
-     `📦 Ready – `, `⛔ Blocked – `, `⏳ `, … — the `SESSION_PREFIX` values) left by an earlier card or
+  2. If the title already starts with `⏳ 🚀 Shipping – `: done.
+  3. Strip any leading devops prefix (`⏳ 🚀 Shipping – `, `🟩 🚀 Released Alpha – `, `👉 🧪 Test – `,
+     `👉 📦 Ready – `, `👉 ⛔ Blocked – `, `⏳ `, … — the `SESSION_PREFIX` values and the legacy single-icon forms) left by an earlier card or
      ship in this session — never stack them.
   4. `mcp__ccd_session_mgmt__set_session_title` with `session_id: "self"` and
-     `title: "🚀 Shipping – {stripped title}"`.
+     `title: "⏳ 🚀 Shipping – {stripped title}"`.
 
 The bare `⏳ ` is the fallback for "being worked on", never the override: no
-hook or skill replaces a running `🚀 Shipping – ` with it (design § 7).
+hook or skill replaces a running `⏳ 🚀 Shipping – ` with it (design § 7).
 
 **Both tools exist only in the Desktop app.** Deferred is not unavailable: when they sit in the deferred-tools list, load
 the set tool (fallback: both once with `ToolSearch` `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`), then call them
@@ -253,7 +253,7 @@ the set tool (fallback: both once with `ToolSearch` `select:mcp__ccd_session_mgm
 unattended run, or when the call fails for any reason: skip silently — no
 retry, no note to the user, no fallback. The rename is a courtesy, never a
 gate. The completion card's `[SESSION TITLE]` block replaces the prefix with
-the outcome (`🚀 Shipped – ` / `⛔ Blocked – `, see Step 6); never restore a
+the outcome (`🟩 🚀 Released Alpha – ` / `👉 ⛔ Blocked – `, see Step 6; scheme: `completion-card-design.md` § 7); never restore a
 remembered title by re-typing it.
 
 > **Sentinel hygiene (every exit path).** `ship_preflight` writes a
@@ -920,14 +920,14 @@ ship's fields exactly as below (`changes`, `tests`, `validation`,
 `delivery.promote: { channels, current: "<channel>", fastTrack }` and
 `promotion` (see `modes/promote.md` Step 4); skip the promotion-gap nudge —
 the ladder already shows the new state. Its `[SESSION TITLE]` block sets
-`🎊 Released <Channel> – `. Without a promotion the variants below apply
+`🟩 🎊 Released <Channel> – `. Without a promotion the variants below apply
 unchanged.
 
 **`cwd` is required for clickable links** — without it the card renders PR/commit/branch as plain text. Pass the same `cwd` as the ship tools.
 
 ### Session title on exit (carried by the card result)
 
-Pre-Step C put `🚀 Shipping – ` on the session title. The outcome prefix is
+Pre-Step C put `⏳ 🚀 Shipping – ` on the session title. The outcome prefix is
 **not** chosen here: `render_completion_card` returns a `[SESSION TITLE]`
 block next to the card markdown (stderr on the `--render-card` CLI path) that
 names the prefix for the variant rendered — execute it **before** outputting
@@ -935,11 +935,11 @@ the card (the card stays the last output of the turn). What it resolves to:
 
 | Outcome | Title |
 |---------|-------|
-| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🚀 Shipped – {title}` — the finished form of `🚀 Shipping – `; the next card that ends a turn replaces the marker |
-| `ship-blocked` (any gate, build, checks, PR not merged) | `⛔ Blocked – {title}` — same emoji as the card headline |
-| `released` (Step 5d promoted, with or without a ship before it) | `🎊 Released <Beta\|Stable> – {title}` |
+| `ship-successful` — final (`state.merged` = main, normal **or** keep-mode) or intermediate ship (feature branch) | `🟩 🚀 Released Alpha – {title}` — the finished form of `⏳ 🚀 Shipping – `; the next card that ends a turn replaces the marker |
+| `ship-blocked` (any gate, build, checks, PR not merged) | `👉 ⛔ Blocked – {title}` — same two icons as the card headline (title = CTA) |
+| `released` (Step 5d promoted, with or without a ship before it) | `🟩 🎊 Released <Beta\|Stable> – {title}` (promote only: `🟩 🎊 Promoted <Beta\|Stable> – `) |
 
-The block also strips a stale `🚀 Shipping – ` when the title carries one. A
+The block also strips a stale `⏳ 🚀 Shipping – ` when the title carries one. A
 title with none of the devops prefixes is left untouched — the user renamed it
 meanwhile, and that name wins. Desktop app only (deferred is not unavailable — load both tools via `ToolSearch` first, `{PLUGIN_ROOT}/deep-knowledge/mcp-deferred-tools.md`); skip silently elsewhere or on
 any failure.

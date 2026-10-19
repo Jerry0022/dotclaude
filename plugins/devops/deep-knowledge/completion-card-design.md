@@ -259,7 +259,7 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | `ship-blocked` | `⛔ {reason} umgehen und trotzdem shippen?` | the gate's finding | Fix · Skip | ⛔ only here |
 | `ship-successful` | `🚀 Released v{v} alpha — nach beta promoten?` (ring) / `🚀 Shipped v{v} → main.` (plain, no promote) | open + final tests | Promote beta (primary) + Promote stable / only Promote stable when the ladder already sits on beta / none — each + Nachbessern with open points; + App starten with a launch path | context line = distance to beta |
 | `ship-successful` kept | `🚀 Released v{v} alpha — weiter in `{branch}`?` | — | Weiter (+ App starten with a launch path) | |
-| `ship-successful` concept close-out | `🚀 Released v{v} alpha — Konzept abschließen – Abschlussbericht wartet.` (ring) / `🚀 Shipped v{v} → main — …` (plain) · en `… — Close out the concept – final report is waiting.` | open + final tests | as plain `ship-successful` (promote by ring + Nachbessern with open points; + App starten) — never Weiter | #693: the card carries no `concept` field and `cwd`'s live `.claude/concept-active.json` points at a page whose markup (outside comments / `<script>` / `<style>` / `<template>`) holds the final-report `<section … data-final-report …>` — only the close-out remains. Wins over `kept` (the worktree was kept for the close-out, not for more work); `deployPending` still wins over it. Context line = the page URL. Title: `🚀 Shipped – ` (`released`: its channel prefix), never the `🧭` conditional. No marker / unreadable page → the rows above, unchanged. The concept is not closed automatically |
+| `ship-successful` concept close-out | `🚀 Released v{v} alpha — Konzept abschließen – Abschlussbericht wartet.` (ring) / `🚀 Shipped v{v} → main — …` (plain) · en `… — Close out the concept – final report is waiting.` | open + final tests | as plain `ship-successful` (promote by ring + Nachbessern with open points; + App starten) — never Weiter | #693: the card carries no `concept` field and `cwd`'s live `.claude/concept-active.json` points at a page whose markup (outside comments / `<script>` / `<style>` / `<template>`) holds the final-report `<section … data-final-report …>` — only the close-out remains. Wins over `kept` (the worktree was kept for the close-out, not for more work); `deployPending` still wins over it. Context line = the page URL. Title: `🟩 🚀 Released Alpha – ` (`released`: its channel prefix), never the `🧭` conditional. No marker / unreadable page → the rows above, unchanged. The concept is not closed automatically |
 | `ship-successful` deployPending | `🚨 Gemergt, aber nicht live — Migration jetzt deployen?` | deploy artifacts | Deploy (+ App starten with a launch path) | replaces the 🚨 DEPLOY block |
 | `released` → beta | `🎊 Promoted v{v} BETA — nach stable?` | — | Promote stable | evidence = promotion facts |
 | `released` → stable | `🎊 Released v{v} LIVE — stable.` | — | — | state, no question |
@@ -269,12 +269,14 @@ alpha **v0.179.0** › beta v0.176.0 (−3) › stable v0.170.0 (−9 · 12 d)
 | `analysis` | `📋 Analyse gelesen — umsetzen oder Fragen?` | — | Umsetzen · Frage (with `nextStep`: Empfehlung umsetzen — sends that step) | pipeline = `➖ keine Änderungen`; only when nothing changed anywhere — an answer or investigation (#624). Work done outside the repo → `fallback`; implementation handed to still-running agents → `ready`/`test` + `pending`; a mode activation → its override |
 | `aborted` | `🚫 Abgebrochen wegen {reason} — anders versuchen?` | — | Nochmal | context line = alternatives |
 | `fallback` | `🔧 Erledigt — noch etwas?` | — | — | also for work finished outside the repo with no repo diff: a DB op, a delete, a deploy, a data migration, a settings change (#624) |
-| `paused` | `⏸️ Pausiert — weiter, wann du willst` | — | — | context line `› Schreib hier, um weiterzumachen.`; results = what was stopped and what was kept; for work the user pauses to continue later (#548), never `fallback`; title `⏸️ Paused – `; the run contract treats it as non-final. Also for work whose next step is a Claude Code restart, a reboot or a usage-limit reset (#583) — never `analysis` / `ready` / `fallback` then: `pause: { reason: restart \| reboot \| usage-reset, resetAt? }` names it in the heading (`⏸️ Pausiert bis Neustart — …`, `… bis PC-Neustart`, `… bis Limit-Reset (23:40)`), the context line (the one resume action) and the title (`⏸️ Paused until restart – `); `reason: user` keeps the plain copy |
+| `paused` | `⏸️ Pausiert — weiter, wann du willst` | — | — | context line `› Schreib hier, um weiterzumachen.`; results = what was stopped and what was kept; for work the user pauses to continue later (#548), never `fallback`; title `⏸️ ✋ Paused – `; the run contract treats it as non-final. Also for work whose next step is a Claude Code restart, a reboot or a usage-limit reset (#583) — never `analysis` / `ready` / `fallback` then: `pause: { reason: restart \| reboot \| usage-reset, resetAt? }` names it in the heading (`⏸️ Pausiert bis Neustart — …`, `… bis PC-Neustart`, `… bis Limit-Reset (23:40)`), the context line (the one resume action) and the title (`⏸️ 🔄 Restart – `); `reason: user` keeps the plain copy |
 | pending override | `⏳ Noch nicht fertig — {what}` | what is running | — | evidence gets `◐ Belege vorläufig` |
-| concept override | by phase: `🧭 Concept wartet auf deine Entscheidungen` · `⏳ Concept in Iteration — ich melde mich` · `⏳ Concept in Implementierung — ich melde mich` (the glyph mirrors the session title: compass = your move, hourglass = Claude works); running work as its own sentence (`… in Implementierung. 2 Agenten arbeiten — …`) | the running items | — | context line = the page URL (quiet link); "wartet" during an implementation run is a regression |
+| concept override | by phase: `🧭 Concept wartet auf deine Entscheidungen` · `⏳ Concept in Iteration — ich melde mich` · `⏳ Concept in Implementierung — ich melde mich` (the icons mirror the session title: `👉 🧭` = your move, `⏳ 🧭` = Claude works); running work as its own sentence (`… in Implementierung. 2 Agenten arbeiten — …`) | the running items | — | context line = the page URL (quiet link); "wartet" during an implementation run is a regression |
 | batch override | `📥 Batch sammelt — {n} Einträge` | how to collect · fire (`<marker> <text>` / `/do-batch go`) · stop (`/do-batch off`, auto-end bounds) | — | context line = what happens to the next prompt; the card is the whole activation confirmation, no text block beside it |
 | V&V unverified | `⚠ Ungeprüft shippen?` | "npm test lief nicht — …" | Tests laufen lassen · Trotzdem shippen | `⚠ ungeprüft` first evidence post |
 | V&V running | `⏳ Test läuft noch — Ergebnis abwarten?` | "Ein Testlauf läuft noch im Hintergrund — …" | Jetzt shippen | `◐ Test läuft noch im Hintergrund` first evidence post; waiting needs no button — the run's notification brings the result; the pending override still wins when `pending` names the run |
+
+The headings in this table are shown without their leading status and activity icons; the shipped heading starts with the same two icons and keyword as the session title (§ 7, "Title = CTA").
 
 English strings mirror these one to one (`Ship anyway despite 2 red tests?`,
 `Released v0.179.0 alpha — promote to beta?`, `Promoted v0.179.0 BETA — to
@@ -551,40 +553,85 @@ Yellow/red on the budget marker follow § 2.4, independent of the above.
 
 ## 7. Session title prefixes
 
-`⏳` (icon only, no word) is set by `prompt.flow.title-work` on every prompt
-that starts work, in place of the former `🔧`; the card's session-title note
-replaces it with the result prefix at turn end. Every card variant maps to a
-prefix — the full set: `🚀 Shipping – `, `🚀 Shipped – `, `🎊 Released Alpha /
-Beta / Stable – `, `📦 Ready – `, `⛔ Blocked – `, `🧪 Test – `, `▶️ Started – `,
-`📋 Analysis – `, `🚫 Aborted – `, `🧭 Concept – ` (the page waits for the
-user), `📥 Batch – `, and the bare `⏳ ` — while a turn works AND while
-`pending` background work runs after the card: one hourglass, one meaning
-("Claude works, not your move"), never a worded `⏳ Working – ` (legacy, only
-stripped). Nothing else strips or sets titles.
+### The double-icon scheme
+
+A title reads `<STATUS> <ACTIVITY> <Word> – <title>`. The only single-icon
+form is the bare `⏳ <title>` that `prompt.flow.title-work` sets on every
+prompt that starts generic, unnamed work; the card's session-title note
+replaces it with the result prefix at turn end. Nothing else strips or sets
+titles.
+
+| STATUS | Meaning |
+|---|---|
+| `⏳` | Claude works on a named process (shipping, V&V running, background agents pending, concept iterating/implementing) |
+| `👉` | Your move: the card carries a MANDATORY user step |
+| `🟩` | Done, nothing mandatory left (not ✅) |
+| `🟥` | Aborted |
+| `⏸️` | Paused |
+
+| ACTIVITY | Keywords (STATUS in front) |
+|---|---|
+| 🚀 ship | `⏳ Shipping`, `🟩 Released Alpha` |
+| 🎊 promote | `🟩 Released Beta/Stable` (ship and promote in one run), `🟩 Promoted Beta/Stable` (promote only); never "LIVE" |
+| 🧪 test | `⏳ Testing` (V&V running), `👉 Test` |
+| ▶️ | `🟩 Started` (test-minimal) |
+| 🧭 concept | `👉 Concept` (page waits), `⏳ Concept` (iterating/implementing) |
+| 📥 batch | `👉 Batch` |
+| 📋 | `🟩 Analysis` |
+| 🖥️ | `🟩 System` (fallback: work outside the repo, no repo diff) |
+| 📦 code done | `👉 Ready`, `🟩 Committed` (ready-local), `👉 Files` (ready-files), `🟥 Aborted` (generic abort) |
+| ❓ / ⚠️ / ⛔ | `👉 Question`, `👉 Red tests` / `Unverified` / `Not deployed`, `👉 Blocked` |
+| 🤖 | `⏳ Agents` (pending background work) |
+| ⚡ | `👉 Interrupted` (see F5 below) |
+| pause | `⏸️ 🔋 Limit reset`, `🔄 Restart`, `💻 Reboot`, `✋ Paused` |
+
+A named abort keeps its activity (`🟥 🚀 Ship – X`).
+
+**The 👉-vs-🟩 rule** is decided by content, not by variant name: a
+mandatory user step (an open point or question, a required userTest, a
+requirement with `waitsOn: "user"`, red tests, unverified, blocked, ready
+"Ship?", files, a concept waiting, a batch collecting, not deployed) gives
+👉. Optional follow-ups (a promote offer after an alpha release, "noch
+etwas?") stay 🟩.
+
+**Title = CTA.** The card's CTA heading starts with the same two icons and
+the same English keyword as the title (`👉 📦 Ready – X` →
+`👉 📦 Ready — Shippen?`); both come from one table so they cannot drift.
+The card's component line uses 🧩.
+
+**F5 Interrupted.** A turn that ends WITHOUT a card while the title is a bare
+`⏳ …` is rewritten to `👉 ⚡ Interrupted – <title>`. A batch turn without a
+card, a concept waiting and `⏳ 🚀 Shipping` stay untouched.
+
+**Legacy prefixes.** Every old single-icon prefix (`🚀 Shipped – `,
+`📦 Ready – `, `🧭 Concept – `, `📥 Batch – `, `⏳ Working – `, …) is still
+stripped, so titles from older sessions come out clean. Only known
+status × activity × keyword prefixes are stripped; `⏳ Fix Login – Bug` keeps
+its text.
 
 **Process prefixes outrank the hourglass.** Two prefixes name a running
-process rather than an outcome: `🚀 Shipping – ` (the ship pipeline) and
-`📥 Batch – ` (an armed collection). The bare `⏳ ` is the *fallback* for
+process rather than an outcome: `⏳ 🚀 Shipping – ` (the ship pipeline) and
+`👉 📥 Batch – ` (an armed collection). The bare `⏳ ` is the *fallback* for
 "being worked on" — it is set only when no process prefix applies and it
-never replaces one. `🧭 Concept – ` is no process but a wait: it says "your
+never replaces one. `👉 🧭 Concept – ` is no process but a wait: it says "your
 move — look at the page", so whenever Claude works in a concept session
 (generating the page, a user prompt, a picked-up submission, iterating,
-implementing) the title is `⏳ `, and the card brings the compass back only
-for the `waiting` phase. Only a task-notification turn leaves the compass
+implementing) the title is the bare `⏳ ` (or `⏳ 🧭 Concept – ` while
+iterating), and the card brings 👉 back only for the `waiting` phase. Only a task-notification turn leaves the compass
 alone (it may end without a card). Concretely:
-`prompt.flow.title-work` leaves `🚀 Shipping – ` / `📥 Batch – ` titles
+`prompt.flow.title-work` leaves `⏳ 🚀 Shipping – ` / `👉 📥 Batch – ` titles
 untouched, and a prompt that *is* a ship (`hooks/lib/ship-intent.js`, the same
-classifier `prompt.ship.detect` uses) is marked `🚀 Shipping – ` by the hook
+classifier `prompt.ship.detect` uses) is marked `⏳ 🚀 Shipping – ` by the hook
 itself, so `/do-ship` after a change never sits on `⏳` for the length of the
-pipeline. Outcome prefixes (`🚀 Shipped – `, `📦 Ready – `, …) are what a new
+pipeline. Outcome prefixes (`🟩 🚀 Released Alpha – `, `👉 📦 Ready – `, …) are what a new
 prompt outdates — those the hook strips. Observed 2026-09-21.
 
 **An outcome prefix lives exactly one turn.** `stop.flow.guard` hands the
 title-work token back at every non-silent turn end — card or no card — so the
 next prompt always marks `⏳ ` and the card that ends that turn sets its own
-outcome (`📦 Ready – `, `🧪 Test – `, …). `🚀 Shipped – ` therefore stays on
+outcome (`👉 📦 Ready – `, `👉 🧪 Test – `, …). `🟩 🚀 Released Alpha – ` therefore stays on
 the sidebar only while the LAST thing the session did was a ship; work after
-a ship reads ⏳ → Ready/Test, never Shipped. (Until 0.183.9 the token was
+a ship reads ⏳ → Ready/Test, never Released. (Until 0.183.9 the token was
 released only after a card, and one card-less answer after a ship pinned
 Shipped for the rest of the session.) A ship keyword is an order only in a
 short prompt (`KEYWORD_MAX_CHARS` in `ship-intent.js`): long prose that

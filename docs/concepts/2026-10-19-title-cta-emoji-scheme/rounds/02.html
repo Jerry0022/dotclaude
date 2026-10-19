@@ -1,0 +1,393 @@
+<section data-iteration="2" data-iteration-template="decision" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"das schraubenschlüssel und werkzeug icon sind mir unklar, wann kommen die. Also ops außerhalb des projektes und build ersetzt. \n\nFind edas mit den doppelicons präfix und co mega.","attachments":[]}}</script>
+  <style>
+    .d2-table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .5rem 0 1rem; }
+    .d2-table th, .d2-table td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border-color, rgba(128,128,128,.25)); vertical-align: top; }
+    .d2-table th { font-weight: 600; opacity: .8; }
+    .d2-table td code { white-space: nowrap; }
+    .d2-group td { font-weight: 600; opacity: .75; padding-top: .8rem; background: rgba(128,128,128,.06); }
+    .d2-sidebar { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; line-height: 1.7; padding: .6rem .8rem; border-radius: 8px; background: rgba(128,128,128,.08); margin: .5rem 0; white-space: pre; overflow-x: auto; }
+    .d2-rule { padding: .55rem .8rem; border-left: 3px solid var(--accent-color, #58a6ff); background: rgba(88,166,255,.08); border-radius: 0 8px 8px 0; margin: .5rem 0 1rem; }
+    .d2-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .8rem; margin: .5rem 0 1rem; }
+    .d2-legend ul { margin: .3rem 0 0 1.1rem; padding: 0; }
+    .d2-pill { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem; font-weight: 600; background: rgba(63,185,80,.15); color: var(--success-color, #3fb950); margin-left: .4rem; }
+    .d2-list { margin: .3rem 0 .6rem 1.2rem; }
+    .d2-done { color: var(--success-color, #3fb950); font-weight: 600; }
+    .d2-ask { color: var(--warning-color, #d29922); font-weight: 600; }
+  </style>
+
+  <div class="iteration-intro">
+    <h2>Iteration 2 · Doppel-Icon-Schema</h2>
+    <p>Aus deinem Feedback: B (⏳/✅ + Typ) und C (dritter Status „du bist dran“) werden zu einem Schema zusammengeführt. Ein einzelnes ⏳ gibt es nur noch, solange Claude allgemein arbeitet. Jeder andere Zustand trägt zwei Icons. Neu dazu kommen ein Abbruch-Icon im Stil von ✅ und ⏸️ als Status. Unten siehst du Beispiele für jeden Card-Zustand. Zu entscheiden sind nur noch fünf Detailfragen (Q1–Q5).</p>
+  </div>
+
+  <section id="schema" data-nav-label="Schema: Status + Aktivität">
+    <h3>Das Schema</h3>
+    <div class="d2-rule"><strong>Regel:</strong> <code>STATUS AKTIVITÄT Wort – Titel</code>. Nur wenn Claude allgemein arbeitet, steht ein einzelnes <code>⏳ Titel</code> da. Das Wort stammt aus einer festen englischen Liste, alles nach <code> – </code> ist der eigentliche Titel.</div>
+    <div class="d2-legend">
+      <div>
+        <strong>1. Icon: Status (wer ist dran?)</strong>
+        <ul>
+          <li>⏳ Claude arbeitet an einem benannten Prozess</li>
+          <li>👉 du bist dran (Entscheidung, Test, Freigabe, Antwort; siehe Q1)</li>
+          <li>✅ erledigt, nichts offen</li>
+          <li>❎ abgebrochen (siehe Q2)</li>
+          <li>⏸️ pausiert</li>
+        </ul>
+      </div>
+      <div>
+        <strong>2. Icon: Aktivität (worum geht es?)</strong>
+        <ul>
+          <li>🚀 Ship · 🎊 Release/Promote · 🧪 Test · ▶️ Start</li>
+          <li>🧭 Concept · 📥 Batch · 📋 Analyse · 🔧 Ops außerhalb Repo</li>
+          <li>🛠️ Build, ersetzt 📦 (siehe Q4) · 🤖 Agents im Hintergrund</li>
+          <li>❓ Frage · ⚠️ Warnung · ⛔ Blockiert</li>
+          <li>Bei ⏸️ der Pausengrund: 🔄 Restart · 💻 Reboot · 🔋 Limit-Reset · ✋ von dir</li>
+        </ul>
+      </div>
+    </div>
+    <p>So sähe die Sidebar mit mehreren Sessions aus:</p>
+    <div class="d2-sidebar">⏳ Emoji-Konzept
+⏳ 🚀 Shipping – Login-Fix
+⏳ 🧪 Testing – Dark Mode
+👉 🧭 Concept – Billing
+👉 ⚠️ Red tests – Auth
+👉 🛠️ Ready – Emoji-Fix
+✅ 🚀 Released Alpha – Login-Fix
+✅ 🎊 Promoted Beta – Search
+❎ 🚀 Ship – Migration
+⏸️ 🔋 Limit reset – Refactor</div>
+  </section>
+
+  <section id="beispiele" data-nav-label="Beispiele je Card-Zustand">
+    <h3>Beispiele für jeden Completion-Card-Zustand</h3>
+    <p>Die CTA-Zeile der Card beginnt mit denselben zwei Icons wie der Titel und verwendet dasselbe Schlüsselwort. Nur der Rest der Zeile wird lokalisiert.</p>
+    <table class="d2-table">
+      <thead><tr><th>Zustand</th><th>Card-Variante / Flag</th><th>Chat-Titel</th><th>CTA-Zeile (de)</th></tr></thead>
+      <tbody>
+        <tr class="d2-group"><td colspan="4">⏳ Claude arbeitet</td></tr>
+        <tr><td>Allgemeine Arbeit</td><td>keine Card</td><td><code>⏳ Emoji-Konzept</code></td><td>–</td></tr>
+        <tr><td>Ship läuft</td><td>keine Card (ship-Pipeline)</td><td><code>⏳ 🚀 Shipping – Login-Fix</code></td><td>–</td></tr>
+        <tr><td>V&amp;V-Test läuft</td><td>vv-running</td><td><code>⏳ 🧪 Testing – Dark Mode</code></td><td>⏳ 🧪 Testing — Ergebnis folgt</td></tr>
+        <tr><td>Hintergrund-Agents</td><td>pending</td><td><code>⏳ 🤖 Agents – Refactor</code></td><td>⏳ 🤖 Agents — noch nicht fertig, ich melde mich</td></tr>
+        <tr><td>Concept iteriert / setzt um</td><td>concept phase (arbeitet)</td><td><code>⏳ 🧭 Concept – Billing</code></td><td>⏳ 🧭 Concept — Runde wird gebaut</td></tr>
+
+        <tr class="d2-group"><td colspan="4">👉 Du bist dran</td></tr>
+        <tr><td>Concept wartet</td><td>concept phase (wartet)</td><td><code>👉 🧭 Concept – Billing</code></td><td>👉 🧭 Concept — die Seite wartet auf deine Entscheidung</td></tr>
+        <tr><td>Batch sammelt</td><td>batch (Turn ohne Card ist gewollt)</td><td><code>👉 📥 Batch – Ideen</code></td><td>👉 📥 Batch — nächste Idee?</td></tr>
+        <tr><td>Erst testen</td><td>test</td><td><code>👉 🧪 Test – Dark Mode</code></td><td>👉 🧪 Test — erst testen, dann shippen?</td></tr>
+        <tr><td>Fertig, bereit zum Ship</td><td>ready</td><td><code>👉 🛠️ Ready – Emoji-Fix</code></td><td>👉 🛠️ Ready — shippen?</td></tr>
+        <tr><td>Nur Dateien geändert</td><td>ready-files</td><td><code>👉 🛠️ Ready – Doku</code></td><td>👉 🛠️ Ready — nur Dateien, committen?</td></tr>
+        <tr><td>Offene Frage / offene Punkte</td><td>question / open points</td><td><code>👉 ❓ Question – Auth</code></td><td>👉 ❓ Question — welche Variante?</td></tr>
+        <tr><td>Rote Tests</td><td>ready-red</td><td><code>👉 ⚠️ Red tests – Auth</code></td><td>👉 ⚠️ Red tests — trotzdem shippen?</td></tr>
+        <tr><td>Ungeprüft</td><td>vv-unverified</td><td><code>👉 ⚠️ Unverified – Auth</code></td><td>👉 ⚠️ Unverified — trotzdem shippen?</td></tr>
+        <tr><td>Merged, nicht deployt (heute 🚨)</td><td>merged-not-deployed</td><td><code>👉 ⚠️ Not deployed – Login-Fix</code></td><td>👉 ⚠️ Not deployed — Deploy nachholen?</td></tr>
+        <tr><td>Ship blockiert</td><td>ship-blocked</td><td><code>👉 ⛔ Blocked – Migration</code></td><td>👉 ⛔ Blocked — Konflikt in schema.sql lösen?</td></tr>
+
+        <tr class="d2-group"><td colspan="4">✅ Erledigt</td></tr>
+        <tr><td>Ship nach Alpha (bietet Promote an)</td><td>ship-successful, ring alpha</td><td><code>✅ 🚀 Released Alpha – Login-Fix</code></td><td>✅ 🚀 Released Alpha — nach Beta promoten? (siehe Q5)</td></tr>
+        <tr><td>Ship + Promote in einem Lauf</td><td>ship-successful, released channel beta/stable</td><td><code>✅ 🎊 Released Stable – Login-Fix</code></td><td>✅ 🎊 Released Stable — fertig</td></tr>
+        <tr><td>Nur Promote</td><td>promote (ohne Ship)</td><td><code>✅ 🎊 Promoted Beta – Login-Fix</code></td><td>✅ 🎊 Promoted Beta — nach Stable promoten?</td></tr>
+        <tr><td>Lokal fertig, kein Remote</td><td>ready-local / no remote</td><td><code>✅ 🛠️ Done – Emoji-Fix</code></td><td>✅ 🛠️ Done — lokal committet, kein Remote</td></tr>
+        <tr><td>App gestartet</td><td>test-minimal</td><td><code>✅ ▶️ Started – Game</code></td><td>✅ ▶️ Started — viel Spaß</td></tr>
+        <tr><td>Analyse</td><td>analysis</td><td><code>✅ 📋 Analysis – Perf</code></td><td>✅ 📋 Analysis — noch etwas?</td></tr>
+        <tr><td>Erledigt außerhalb Repo</td><td>fallback</td><td><code>✅ 🔧 Done – DB-Cleanup</code></td><td>✅ 🔧 Done — noch etwas?</td></tr>
+
+        <tr class="d2-group"><td colspan="4">❎ Abgebrochen · ⏸️ Pausiert</td></tr>
+        <tr><td>Abgebrochen (Aktivität bekannt)</td><td>aborted</td><td><code>❎ 🚀 Ship – Login-Fix</code></td><td>❎ 🚀 Ship — abgebrochen, nichts gepusht</td></tr>
+        <tr><td>Abgebrochen (allgemein)</td><td>aborted</td><td><code>❎ 🛠️ Aborted – X</code></td><td>❎ 🛠️ Aborted — Stand verworfen</td></tr>
+        <tr><td>Pause bis Limit-Reset</td><td>paused (limit)</td><td><code>⏸️ 🔋 Limit reset – X</code></td><td>⏸️ 🔋 Limit reset — weiter um 14:00</td></tr>
+        <tr><td>Pause für Restart</td><td>paused (restart)</td><td><code>⏸️ 🔄 Restart – X</code></td><td>⏸️ 🔄 Restart — nach dem Neustart weiter</td></tr>
+        <tr><td>Pause durch dich</td><td>paused (user)</td><td><code>⏸️ ✋ Paused – X</code></td><td>⏸️ ✋ Paused — sag Bescheid, wenn es weitergeht</td></tr>
+
+        <tr class="d2-group"><td colspan="4">Sonderfall F5</td></tr>
+        <tr><td>Turn endet ohne Card</td><td>keine Card, Stop-Hook</td><td>siehe Q3</td><td>–</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="festgelegt" data-nav-label="Festgelegt">
+    <h3>Festgelegt <span class="d2-pill">aus Runde 1</span></h3>
+    <ul class="d2-list">
+      <li><strong>F3 · Wörter:</strong> Titel und CTA verwenden dasselbe Wort. Ein Ship nach Alpha heißt „Released Alpha“. Ship und Promote in einem Lauf heißen „Released Beta“ bzw. „Released Stable“. Ein Promote ohne Ship heißt „Promoted Beta“ bzw. „Promoted Stable“. Statt „Läuft“ heißt es „Started“. „LIVE“ entfällt, stattdessen „Stable“.</li>
+      <li><strong>F4 · Sprache:</strong> Die Titel-Wörter bleiben immer englisch.</li>
+      <li><strong>F6 · Strip-Bug:</strong> Jedes Präfix besteht aus Emoji(s) und einem Wort aus der festen Liste. Gestrippt werden nur bekannte Wörter, sodass „⏳ Fix Login – Bug“ intakt bleibt.</li>
+      <li><strong>F1 / F2:</strong> Das Schema löst beide: Das Status-Icon trennt „läuft“ von „fertig“, ❓ und ⚠️ zeigen Frage und Warnung im Titel.</li>
+      <li><strong>Testplan (deine Vorgabe):</strong> Eine Testmatrix über jede Completion-Card-Variante und jedes Flag prüft das exakte <em>erste und zweite</em> Icon. Abgedeckt sind pending, concept phase, batch, question/open points, ready-red, vv-unverified, vv-running, ring, kept, closeout, local/no remote, alle Pausengründe, released channels, merged-not-deployed und ready-files.</li>
+    </ul>
+  </section>
+
+  <section id="restrisiken" data-nav-label="Red-Team-Restrisiken">
+    <h3>Red-Team-Restrisiken und Gegenmaßnahmen</h3>
+    <ul class="d2-list">
+      <li><strong>R1 · Parser lesen nur die erste Stelle.</strong> Strip- und Guard-Parser werden auf eine Zwei-Slot-Grammatik umgebaut: Status-Set × Aktivitäts-Set × bekanntes Wort. Die Batch- und Shipping-Guards prüfen Slot 2 plus Wort.</li>
+      <li><strong>R3 · Mal ein, mal zwei Icons.</strong> Gelöst, denn per Regel ist das einzelne ⏳ die einzige Form mit nur einem Icon.</li>
+      <li><strong>R4 · Alte Sessions schreiben das alte Format.</strong> Die bisherigen Einzel-Icon-Präfixe kommen in <code>LEGACY_PREFIXES</code> und werden mitgestrippt.</li>
+      <li><strong>R7 · Variation-Selector.</strong> Der Matcher normalisiert die Icons, U+FE0F ist optional (▶️, ⏸️, ⚠️, 🛠️ …).</li>
+      <li><strong>R8 · Längere Titel.</strong> Von dir akzeptiert.</li>
+    </ul>
+  </section>
+
+  <section id="frage-q1" data-nav-label="Q1 · Icon für „du bist dran“">
+    <h3>Q1 · Status-Icon für „du bist dran“</h3>
+    <p>Behalte eine Option und verwirf die anderen.</p>
+
+    <div class="variant-card" id="q1-point">
+      <h4>👉 Zeigefinger <span class="d2-pill">Empfehlung</span></h4>
+      <div class="d2-sidebar">👉 🧪 Test – Dark Mode
+✅ 🚀 Released Alpha – Login-Fix</div>
+      <p>Eindeutig in Form und Farbe, sodass man ihn neben ⏳ ✅ ❎ ⏸️ nicht verwechselt. Er liest sich direkt als „du“.</p>
+      <div class="variant-evaluation" data-decision="q1-point" data-label="Q1 · 👉">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q1-point" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q1-point" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q1-point-note">{{decision.comment_label}}</label>
+          <textarea id="q1-point-note" data-comment="q1-point-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">sehr gut!</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q1-bell">
+      <h4>🔔 Glocke</h4>
+      <div class="d2-sidebar">🔔 🧪 Test – Dark Mode</div>
+      <p>Die Glocke steht für „Aufmerksamkeit“, ist in der Sidebar aber leicht als Benachrichtigung statt als Status zu lesen.</p>
+      <div class="variant-evaluation" data-decision="q1-bell" data-label="Q1 · 🔔">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q1-bell" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q1-bell" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q1-bell-note">{{decision.comment_label}}</label>
+          <textarea id="q1-bell-note" data-comment="q1-bell-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q1-playpause">
+      <h4>⏯️ Play/Pause</h4>
+      <div class="d2-sidebar">⏯️ 🧪 Test – Dark Mode</div>
+      <p>Gehört zur selben Quadrat-Familie wie ✅ ❎ ⏸️ und wirkt dadurch einheitlich. Neben ⏸️ ist es aber leicht zu verwechseln.</p>
+      <div class="variant-evaluation" data-decision="q1-playpause" data-label="Q1 · ⏯️">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q1-playpause" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q1-playpause" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q1-playpause-note">{{decision.comment_label}}</label>
+          <textarea id="q1-playpause-note" data-comment="q1-playpause-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q1-orange">
+      <h4>🟧 Oranges Quadrat</h4>
+      <div class="d2-sidebar">🟧 🧪 Test – Dark Mode</div>
+      <p>Ein reines Farbsignal, das dem Ampel-Gedanken neben dem grünen ✅ entspricht. Ohne Form-Unterschied lässt es sich bei Farbschwäche schlecht erkennen.</p>
+      <div class="variant-evaluation" data-decision="q1-orange" data-label="Q1 · 🟧">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q1-orange" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q1-orange" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q1-orange-note">{{decision.comment_label}}</label>
+          <textarea id="q1-orange-note" data-comment="q1-orange-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="frage-q2" data-nav-label="Q2 · Abbruch-Icon">
+    <h3>Q2 · Abbruch-Icon</h3>
+    <p>Du wolltest ein Abbruch-Icon, das genauso aussieht wie der Haken. Behalte eine Option.</p>
+
+    <div class="variant-card" id="q2-cross">
+      <h4>❎ Grünes Kreuz-Quadrat <span class="d2-pill">Empfehlung</span></h4>
+      <div class="d2-sidebar">✅ 🚀 Released Alpha – Login-Fix
+❎ 🚀 Ship – Migration</div>
+      <p>Es ist das exakte Gegenstück zu ✅, mit gleicher Form, gleicher Farbe und einem anderen Zeichen darin.</p>
+      <div class="variant-evaluation" data-decision="q2-cross" data-label="Q2 · ❎">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q2-cross" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q2-cross" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q2-cross-note">{{decision.comment_label}}</label>
+          <textarea id="q2-cross-note" data-comment="q2-cross-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">ich finde es nicht deutlich erkeennbar weil gleiche farbe grün... ist das wirklcih sinnvoll, oder nicht lieber rot!? </textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q2-x">
+      <h4>✖️ Schweres X</h4>
+      <div class="d2-sidebar">✖️ 🚀 Ship – Migration</div>
+      <p>Neutral und monochrom. Es hebt sich von ✅ klar ab, gehört aber nicht zur selben Familie.</p>
+      <div class="variant-evaluation" data-decision="q2-x" data-label="Q2 · ✖️">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q2-x" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q2-x" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q2-x-note">{{decision.comment_label}}</label>
+          <textarea id="q2-x-note" data-comment="q2-x-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q2-stop">
+      <h4>⏹️ Stop</h4>
+      <div class="d2-sidebar">⏹️ 🚀 Ship – Migration</div>
+      <p>Passt zur Medien-Familie von ⏸️ und ▶️. Neben ⏸️ ist der Unterschied in der Sidebar allerdings klein.</p>
+      <div class="variant-evaluation" data-decision="q2-stop" data-label="Q2 · ⏹️">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q2-stop" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q2-stop" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q2-stop-note">{{decision.comment_label}}</label>
+          <textarea id="q2-stop-note" data-comment="q2-stop-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="frage-q3" data-nav-label="Q3 · Turn ohne Card (F5)">
+    <h3>Q3 · F5: Turn endet ohne Card</h3>
+    <p><strong>Mechanik:</strong> Endet ein Turn ohne Card, schreibt der Stop-Hook einen Titel mit einzelnem ⏳ um. Das zweite Icon ⚡ zeigt die Unterbrechung an. Titel von Batch, wartendem Concept und Shipping bleiben unberührt, denn bei Batch ist der Turn ohne Card gewollt und kein Abbruch. Welcher Status soll vorne stehen?</p>
+
+    <div class="variant-card" id="q3-a">
+      <h4>❎ ⚡ Interrupted – X</h4>
+      <p>Wertet den Turn als Abbruch. Das ist eindeutig, wirkt aber wie ein bewusster Abbruch, und das ist er meist nicht.</p>
+      <div class="variant-evaluation" data-decision="q3-a" data-label="Q3 · ❎ ⚡">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q3-a" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q3-a" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q3-a-note">{{decision.comment_label}}</label>
+          <textarea id="q3-a-note" data-comment="q3-a-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q3-b">
+      <h4>👉 ⚡ Interrupted – X <span class="d2-pill">Empfehlung</span></h4>
+      <p>Ein unterbrochener Turn braucht in der Regel dich, zum Beispiel um nachzufragen oder fortzusetzen. Das passt zu „du bist dran“ und behauptet keinen Abbruch.</p>
+      <div class="variant-evaluation" data-decision="q3-b" data-label="Q3 · 👉 ⚡">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q3-b" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q3-b" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q3-b-note">{{decision.comment_label}}</label>
+          <textarea id="q3-b-note" data-comment="q3-b-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q3-c">
+      <h4>⏸️ ⚡ Interrupted – X</h4>
+      <p>Behandelt den Turn als Pause. Das ist ruhig, verschweigt aber, dass niemand ihn automatisch fortsetzt.</p>
+      <div class="variant-evaluation" data-decision="q3-c" data-label="Q3 · ⏸️ ⚡">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q3-c" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q3-c" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q3-c-note">{{decision.comment_label}}</label>
+          <textarea id="q3-c-note" data-comment="q3-c-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="frage-q4" data-nav-label="Q4 · Brauchen wir 📦? (F7)">
+    <h3>Q4 · F7: Brauchen wir 📦 überhaupt?</h3>
+    <p>Meine Antwort: nein. Fertiger Code ist das Ergebnis eines „Builds“, und das Paket-Icon kollidiert zusätzlich mit der Komponenten-Zeile der Card.</p>
+
+    <div class="variant-card" id="q4-build">
+      <h4>🛠️ statt 📦 <span class="d2-pill">Empfehlung</span></h4>
+      <div class="d2-sidebar">👉 🛠️ Ready – Emoji-Fix
+✅ 🛠️ Done – Emoji-Fix</div>
+      <p>Das Werkzeug steht für „gebaut und bereit“. Auf der Komponenten-Zeile der Card wird 📦 durch 🧩 ersetzt, damit dort keine Doppelbelegung bleibt.</p>
+      <div class="variant-evaluation" data-decision="q4-build" data-label="Q4 · 🛠️ statt 📦">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q4-build" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q4-build" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q4-build-note">{{decision.comment_label}}</label>
+          <textarea id="q4-build-note" data-comment="q4-build-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q4-keep">
+      <h4>📦 behalten</h4>
+      <div class="d2-sidebar">👉 📦 Ready – Emoji-Fix</div>
+      <p>Das gewohnte Bild bleibt, und die Doppelbelegung mit der Komponenten-Zeile bleibt ebenfalls.</p>
+      <div class="variant-evaluation" data-decision="q4-keep" data-label="Q4 · 📦 behalten">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q4-keep" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q4-keep" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q4-keep-note">{{decision.comment_label}}</label>
+          <textarea id="q4-keep-note" data-comment="q4-keep-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">aber in der cta sollte es das gleiche sein! </textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q4-check">
+      <h4>Kein Aktivitäts-Icon, der Status trägt es</h4>
+      <div class="d2-sidebar">👉 ✅ Ready – Emoji-Fix</div>
+      <p>Ohne eigenes Icon an Stelle 2. Dafür steht ✅ an zweiter Stelle, was mit dem Status-✅ an erster Stelle kollidiert und das Schema verwässert.</p>
+      <div class="variant-evaluation" data-decision="q4-check" data-label="Q4 · 👉 ✅ Ready">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q4-check" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q4-check" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q4-check-note">{{decision.comment_label}}</label>
+          <textarea id="q4-check-note" data-comment="q4-check-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="frage-q5" data-nav-label="Q5 · Alpha-Release mit Promote-Angebot">
+    <h3>Q5 · Alpha-Release, der einen Promote anbietet</h3>
+    <p>Die Card fragt „nach Beta promoten?“. Ist das „fertig“ oder „du bist dran“?</p>
+
+    <div class="variant-card" id="q5-done">
+      <h4>✅ 🚀 Released Alpha <span class="d2-pill">Empfehlung</span></h4>
+      <p>Der Ship ist abgeschlossen, und der Promote ist ein optionales Angebot. Bekäme jeder optionale Folgeschritt ein 👉, gäbe es fast nie ein ✅.</p>
+      <div class="variant-evaluation" data-decision="q5-done" data-label="Q5 · ✅ Released Alpha">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q5-done" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q5-done" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q5-done-note">{{decision.comment_label}}</label>
+          <textarea id="q5-done-note" data-comment="q5-done-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">aber wenn mandatorische folgeschritte drin sind, dann gern die hand, bei optionalen nicht notwendig, dort ist der haken korrekt!</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="q5-turn">
+      <h4>👉 🚀 Released Alpha</h4>
+      <p>Signalisiert, dass noch eine Frage offen ist. Ein Alpha-Release liest sich dann aber wie ein unfertiger Zustand.</p>
+      <div class="variant-evaluation" data-decision="q5-turn" data-label="Q5 · 👉 Released Alpha">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-q5-turn" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-q5-turn" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="q5-turn-note">{{decision.comment_label}}</label>
+          <textarea id="q5-turn-note" data-comment="q5-turn-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+</section>

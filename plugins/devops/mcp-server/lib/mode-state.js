@@ -1,13 +1,13 @@
 /**
  * @module mode-state
- * @version 1.4.0
+ * @version 1.5.0
  *
  * Mode state the card reads off the project — not off the caller.
  *
  * Two devops modes turn a session into a waiting room: an open /auto-concept page
  * and an armed /do-batch collection. Both already leave a state file in the
  * project's `.claude/` (the bridge's `concept-active.json`, the collect hook's
- * `batch-mode.json`), and both prefix the session title with the same emoji the
+ * `batch-mode.json`), and both prefix the session title with the same icons the
  * card carries here (🧭 / 📥), so a user who wanders back into the session sees
  * the mode in the sidebar AND on the last card. The renderer resolves everything
  * from `cwd` so the skills pass nothing new — the link to the concept is the
@@ -40,188 +40,201 @@ export function hookRequire(...parts) {
   return createRequire(import.meta.url)(join(here, "..", "..", "hooks", ...parts));
 }
 
-/** Session-title prefixes — emoji first so the sidebar scans on the icon.
- *  `concept` / `batch` are set by their skills while the mode is on and
- *  stripped by them on the way out. `concept` means "the page waits for
- *  you": it is re-stated by every card that carries a `waiting` `concept`
- *  field, and replaced by the hourglass whenever Claude works (a user
- *  prompt, a picked-up submission). `shipping` is set by /do-ship Pre-Step C,
- *  `work` by prompt.flow.title-work on the first prompt of a session and on
- *  the first prompt after every card — a new prompt turns any outcome
- *  prefix (and the compass) back into the hourglass. The
- *  rest mirror completion-card variants — same emoji as the card CTA: every
- *  card the session ends a turn with tells Claude (via `titleInstruction`)
- *  which prefix the title should carry now, so the sidebar always names the
- *  state the last card left the session in. `released` is a base — the
- *  channel reached is spliced in by `releasedPrefix` ("🎊 Released Stable – ").
- *  The hourglass is the one prefix without a word, and ONE state: "Claude
- *  works, not your move" — `work` (this turn runs) and `pending` (background
- *  work continues after the card) are the same bare `⏳ `, the summary stays
- *  the title. `stripTitlePrefix` removes any of them, and the
- *  `LEGACY_PREFIXES` older versions left. */
+/** The one table behind titles and CTA headings (hooks/lib/title-scheme.js):
+ *  `<STATUS> <ACTIVITY> <Word> – <title>`, the bare `⏳ ` for generic work. */
+export const TITLE_SCHEME = hookRequire("lib", "title-scheme.js");
+const S = TITLE_SCHEME;
+
+/** Session-title prefixes — every named state of the scheme, keyed by its
+ *  state id (`ready` → `👉 📦 Ready – `), plus `work`, the bare hourglass
+ *  prompt.flow.title-work sets for generic work. A state whose base status
+ *  is 🟩 reads 👉 when its card carries a mandatory user step — see
+ *  `TITLE_SCHEME.prefixOf(id, { mandatory: true })`. `concept-waiting` /
+ *  `concept-working` and `batch` are set by their skills and by the card;
+ *  `shipping` by /do-ship Pre-Step C (or prompt.flow.title-work);
+ *  `interrupted` by stop.flow.guard when a turn ends without a card (F5).
+ *  `stripTitlePrefix` removes every known prefix and every
+ *  `LEGACY_PREFIXES` entry older versions left. */
 export const SESSION_PREFIX = Object.freeze({
-  concept: "🧭 Concept – ",
-  batch: "📥 Batch – ",
-  shipping: "🚀 Shipping – ",
-  shipped: "🚀 Shipped – ",
-  released: "🎊 Released – ",
-  test: "🧪 Test – ",
-  started: "▶️ Started – ",
-  ready: "📦 Ready – ",
-  blocked: "⛔ Blocked – ",
-  aborted: "🚫 Aborted – ",
-  analysis: "📋 Analysis – ",
-  pending: "⏳ ",
-  fallback: "🔧 Done – ",
-  paused: "⏸️ Paused – ",
-  work: "⏳ ",
+  work: S.WORK_PREFIX,
+  ...Object.fromEntries(Object.keys(S.STATES).map((id) => [id, S.prefixOf(id)])),
 });
 
-/** Prefixes older versions set and no code sets any more — still stripped,
- *  so a title from before the change comes out clean. `⏳ Working – ` was
- *  the worded pending hourglass; next to the bare `⏳ ` it read as two
- *  different states for one. */
-export const LEGACY_PREFIXES = Object.freeze(["⏳ Working – "]);
+/** Single-icon prefixes older versions set and no code sets any more — still
+ *  stripped, so a title from before the change comes out clean. */
+export const LEGACY_PREFIXES = S.LEGACY_PREFIXES;
 
-/** Card variant → session-title prefix. Every variant flags the sidebar with
- *  its own CTA emoji; `released` goes through `releasedPrefix` so the title
- *  also names the channel reached. The `fallback` card keeps the wrench —
- *  it is no longer the bare "still working" marker (that is now the
- *  hourglass, `SESSION_PREFIX.work`), only this one card's own emoji. */
-export const VARIANT_TITLE_PREFIX = Object.freeze({
-  "ship-successful": SESSION_PREFIX.shipped,
-  released: SESSION_PREFIX.released,
-  test: SESSION_PREFIX.test,
-  "test-minimal": SESSION_PREFIX.started,
-  ready: SESSION_PREFIX.ready,
-  "ready-files": SESSION_PREFIX.ready,
-  "ship-blocked": SESSION_PREFIX.blocked,
-  aborted: SESSION_PREFIX.aborted,
-  analysis: SESSION_PREFIX.analysis,
-  fallback: SESSION_PREFIX.fallback,
-  paused: SESSION_PREFIX.paused,
+/** Card variant → title state when no decision key is known (fallback of
+ *  `titlePrefixFor`; the card passes its own `outcome`). */
+export const VARIANT_TITLE_STATE = Object.freeze({
+  "ship-successful": "released-alpha",
+  released: "promoted-beta",
+  test: "test",
+  "test-minimal": "started",
+  ready: "ready",
+  "ready-files": "files",
+  "ship-blocked": "blocked",
+  aborted: "aborted",
+  analysis: "analysis",
+  fallback: "system",
+  paused: "paused-user",
 });
-
-const ALL_PREFIXES = Object.freeze([...new Set([...Object.values(SESSION_PREFIX), ...LEGACY_PREFIXES])]);
 
 const CHANNELS = Object.freeze(["Alpha", "Beta", "Stable"]);
 
-/** `🎊 Released Stable – ` — the released base with the channel reached
- *  spliced in (capitalised); the bare base when no channel is known. */
-export function releasedPrefix(channel) {
+/** The title prefix of a merged ship or a promotion reaching `channel`:
+ *  alpha → `🟩 🚀 Released Alpha – `; beta/stable → `🟩 🎊 Released … – `
+ *  after a ship in the same run, `🟩 🎊 Promoted … – ` for a promote-only
+ *  run (`{ promoted: true }`). Unknown channel → Released Alpha. */
+export function releasedPrefix(channel, { promoted = false, mandatory = false } = {}) {
   const c = String(channel ?? "").trim().toLowerCase();
   const name = CHANNELS.find((n) => n.toLowerCase() === c);
-  if (!name) return SESSION_PREFIX.released;
-  return SESSION_PREFIX.released.replace(" – ", ` ${name} – `);
+  if (!name || name === "Alpha") return S.prefixOf("released-alpha", { mandatory });
+  return S.prefixOf(`${promoted ? "promoted" : "released"}-${c}`, { mandatory });
 }
 
-/** `pause.reason` → the word the paused title names (#583). `user` and an
- *  unknown reason keep the bare `⏸️ Paused – `. */
-export const PAUSE_REASONS = Object.freeze({
-  restart: "restart",
-  reboot: "reboot",
-  "usage-reset": "limit reset",
-});
+/** `pause.reason` values the paused title names (#583); `user` and an
+ *  unknown reason read `⏸️ ✋ Paused – `. */
+export const PAUSE_REASONS = Object.freeze(["restart", "reboot", "usage-reset", "user"]);
 
-/** `⏸️ Paused until restart – ` — the paused base with what unblocks the work
- *  spliced in; the bare base for a user pause or an unknown reason. */
+/** `⏸️ 🔄 Restart – ` — the paused prefix per reason. */
 export function pausedPrefix(reason) {
-  const word = PAUSE_REASONS[String(reason ?? "").trim().toLowerCase()];
-  if (!word) return SESSION_PREFIX.paused;
-  return SESSION_PREFIX.paused.replace(" – ", ` until ${word} – `);
+  return S.prefixOf(S.pausedState(reason));
 }
 
-/** Every string a title may start with: the pinned prefixes plus the released
- *  prefix per channel and the paused prefix per reason. Longest first so
- *  "🚀 Shipping – " never loses to a shorter sibling. */
-const STRIPPABLE = Object.freeze(
-  [...ALL_PREFIXES, ...CHANNELS.map(releasedPrefix), ...Object.keys(PAUSE_REASONS).map(pausedPrefix)]
-    .filter(Boolean).sort((a, b) => b.length - a.length),
-);
-
-/** `title` without any leading devops prefix (repeated prefixes included, so
- *  a title that was stacked by an older skill version still comes out clean). */
+/** `title` without any leading devops prefix — every status × activity ×
+ *  keyword prefix, the bare ⏳ and every legacy prefix, stacked ones
+ *  included, FE0F-tolerant. Free text after a bare ⏳ stays (F6). */
 export function stripTitlePrefix(title) {
-  let t = String(title ?? "");
-  let hit = true;
-  while (hit) {
-    hit = false;
-    for (const p of STRIPPABLE) {
-      if (t.startsWith(p)) { t = t.slice(p.length); hit = true; }
+  return S.stripPrefixes(title);
+}
+
+/**
+ * The title state a card's decision key leaves — the SAME id its CTA heading
+ * starts with (title = CTA). `ctx` carries what the key alone cannot tell:
+ *
+ * @param {string} key decision key (`resolveCardKey` + the question / local overrides)
+ * @param {{ ring?: boolean, landed?: string, shipInRun?: boolean, activity?: string, pauseReason?: string }} [ctx]
+ * @returns {string} a TITLE_SCHEME.STATES id
+ */
+export function titleStateForKey(key, ctx = {}) {
+  switch (key) {
+    case "ready": return "ready";
+    case "ready-local": return "committed";
+    case "question": return "question";
+    case "test":
+    case "test-local": return "test";
+    case "ready-red": return "red-tests";
+    case "vv-unverified": return "unverified";
+    case "vv-running": return "testing";
+    case "ship-blocked": return "blocked";
+    case "ship-successful":
+    case "ship-successful-kept":
+    case "ship-successful-closeout": {
+      const landed = ctx.ring ? String(ctx.landed || "") : "";
+      return landed === "stable" ? "released-stable" : landed === "beta" ? "released-beta" : "released-alpha";
     }
+    case "ship-successful-deploy": return "not-deployed";
+    case "released-beta": return ctx.shipInRun ? "released-beta" : "promoted-beta";
+    case "released-stable": return ctx.shipInRun ? "released-stable" : "promoted-stable";
+    case "ready-files": return "files";
+    case "test-minimal": return "started";
+    case "analysis": return "analysis";
+    case "aborted": return S.abortedState(ctx.activity);
+    case "paused": return S.pausedState(ctx.pauseReason);
+    case "pending": return "agents";
+    case "concept-waiting": return "concept-waiting";
+    case "concept-working": return "concept-working";
+    case "batch": return "batch";
+    default: return "system";
   }
-  return t;
+}
+
+/**
+ * True when the card carries a MANDATORY user step: an open point, a
+ * required user test (`userTest`, `userFinalTest`) or a requirement that
+ * waits on the user. Raises a 🟩 state to 👉. Optional follow-ups (a
+ * promote offer) are no field here and keep 🟩.
+ *
+ * @param {object} params card params
+ * @returns {boolean}
+ */
+export function hasMandatoryStep(params) {
+  const nonEmpty = (a) => Array.isArray(a) && a.some((x) => (typeof x === "string" ? x.trim() : x && (x.text || x.action)));
+  if (nonEmpty(params && params.open)) return true;
+  if (nonEmpty(params && params.userTest)) return true;
+  if (nonEmpty(params && params.userFinalTest)) return true;
+  const validation = Array.isArray(params && params.validation) ? params.validation : [];
+  return validation.some((v) => v && typeof v === "object" && v.waitsOn === "user" && v.status !== "met");
+}
+
+/** The fallback outcome when the card passes none: the variant's state. */
+function variantOutcome(params) {
+  const variant = params.variant;
+  const { delivery: d = {}, promotion: p, cta: c, state = {} } = params;
+  let key = variant;
+  if (variant === "released") {
+    const to = (d.promote && d.promote.current) || (p && p.to) || (c && c.to) || "";
+    key = String(to).toLowerCase() === "stable" ? "released-stable" : "released-beta";
+  }
+  if (!VARIANT_TITLE_STATE[variant]) return "";
+  const id = titleStateForKey(key, {
+    ring: !!d.promote && state.mode !== "git-no-remote",
+    landed: d.promote && d.promote.current,
+    shipInRun: !!state.merged,
+    activity: c && c.activity,
+    pauseReason: params.pause && params.pause.reason,
+  });
+  return S.prefixOf(id, { mandatory: hasMandatoryStep(params) });
 }
 
 /**
  * The session-title prefix this card leaves behind, or `null` when an armed
  * batch owns the title and the card must not touch it. `""` means "plain
- * title — strip ours, leave the rest" (no variant does that any more; kept
- * for an unknown variant).
+ * title — strip ours, leave the rest" (an unknown variant).
  *
- * The compass means "your move — look at the page". A card that carries the
- * `concept` field follows the phase (#416): only while the page `waiting`s
- * for decisions does the sidebar say `🧭 Concept – ` — stated every time, so
- * a session that comes back from a round of work returns to the compass.
- * `iterating` and `implementing` are Claude's move, background work like any
- * `pending`: the CTA says "ich MELDE mich", so the title says `⏳ `
- * — otherwise every concept session between two rounds looks like it waits
- * for input and the one that actually does cannot be told apart.
+ * A card that carries the `concept` field follows the phase (#416): while the
+ * page `waiting`s for decisions the title says `👉 🧭 Concept – ` — stated
+ * every time, so a session that comes back from a round of work returns to
+ * it; `iterating` and `implementing` are Claude's move: `⏳ 🧭 Concept – `.
  *
  * Without the field, a live `concept-active.json` in `cwd` means a page
  * waits in this project — but not necessarily for THIS session (a sibling
  * session may share the checkout). The card cannot tell, so it hands
  * Claude a conditional (`{ owned, other }`, see `titleInstruction`): the
- * session that runs the concept restores the compass (the hourglass while
- * background work is pending), any other session — or the turn that closes
- * the concept out — gets the plain outcome prefix. prompt.flow.title-work
- * swaps the compass for the bare hourglass on every user prompt, so a card
- * that left the title alone here would strand `⏳ ` on a waiting page.
+ * session that runs the concept restores the concept prefix, any other
+ * session — or the turn that closes the concept out — gets the plain outcome.
  *
- * Pending background work outranks the variant: the CTA already says "ich
- * MELDE mich", the sidebar should say the same. A `released` card names the
- * channel it reached (`delivery.promote.current`, else `promotion.to`, else
- * `cta.to`) right in the prefix.
+ * Pending background work outranks the outcome: `⏳ 🤖 Agents – `.
+ * Otherwise the outcome is `deps.outcome(params)` — the card computes it from
+ * the same decision key its CTA heading uses (title = CTA) — or, without it,
+ * the variant's state.
  *
- * @param {{ variant?: string, state?: object, pending?: unknown, concept?: unknown, cwd?: string, delivery?: object, promotion?: object, cta?: object, pause?: { reason?: string } }} params
- * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean }} deps
- * @returns {string|null|{ owned: string, other: string }}
+ * @param {object} params card params
+ * @param {{ hasPending: (p: unknown) => boolean, hasConcept: (c: unknown) => boolean, outcome?: (params: object) => string }} deps
+ * @returns {string|null|{ owned: string, other: string|null }}
  */
-export function titlePrefixFor(params, { hasPending, hasConcept }) {
+export function titlePrefixFor(params, { hasPending, hasConcept, outcome }) {
+  const outcomeOf = (pending) => (pending ? SESSION_PREFIX.agents : (outcome || variantOutcome)(params));
   if (hasConcept(params.concept)) {
     return conceptPhase(params.concept) === "waiting"
-      ? SESSION_PREFIX.concept
-      : SESSION_PREFIX.pending;
+      ? SESSION_PREFIX["concept-waiting"]
+      : SESSION_PREFIX["concept-working"];
   }
   if (conceptUrl(params.cwd, undefined)) {
     const pending = hasPending(params.pending);
     // After a merged ship whose concept only waits for its close-out (#693),
-    // the work is done: the title says the outcome, never the compass.
+    // the work is done: the title says the outcome, never the concept.
     if (SHIP_OUTCOME_VARIANTS.has(params.variant) && conceptCloseoutOnly(params.cwd)) {
-      return readBatch(params.cwd) ? null : outcomePrefix(params, pending);
+      return readBatch(params.cwd) ? null : outcomeOf(pending);
     }
     return {
-      owned: pending ? SESSION_PREFIX.pending : SESSION_PREFIX.concept,
-      other: readBatch(params.cwd) ? null : outcomePrefix(params, pending),
+      owned: pending ? SESSION_PREFIX["concept-working"] : SESSION_PREFIX["concept-waiting"],
+      other: readBatch(params.cwd) ? null : outcomeOf(pending),
     };
   }
   if (readBatch(params.cwd)) return null;
-  return outcomePrefix(params, hasPending(params.pending));
-}
-
-/** The prefix the card's own outcome earns — pending work first, then the
- *  variant (`released` with its channel). */
-function outcomePrefix(params, pending) {
-  if (pending) return SESSION_PREFIX.pending;
-  const variant = params.variant;
-  if (variant === "released") {
-    const { delivery: d, promotion: p, cta: c } = params;
-    return releasedPrefix(
-      (d && d.promote && d.promote.current) || (p && p.to) || (c && c.to) || "",
-    );
-  }
-  if (variant === "paused") return pausedPrefix(params.pause && params.pause.reason);
-  return VARIANT_TITLE_PREFIX[variant] ?? "";
+  return outcomeOf(hasPending(params.pending));
 }
 
 /** The phase of the card's `concept` field — same coercion as the CTA
@@ -233,7 +246,6 @@ function conceptPhase(concept) {
 /** Header of the out-of-band title block — never part of the card markdown. */
 const TITLE_HEADER = "[SESSION TITLE — DO NOT OUTPUT THIS BLOCK]\n";
 const SET_TOOL = "mcp__ccd_session_mgmt__set_session_title";
-
 /**
  * The session's current sidebar title, read from the transcript tail
  * (hooks/lib/session-title.js), or `null` when unknown — no session id, no
@@ -295,7 +307,11 @@ function setCall(title) {
 export function titleInstruction(prefix, current = null) {
   if (prefix === null) return "";
   if (typeof current === "string" && current.trim()) return knownTitleInstruction(prefix, current);
-  const list = STRIPPABLE.map((p) => `"${p}"`).join(", ");
+  const list =
+    `every "<status> <activity> <Word> – " prefix whose status icon is one of ${Object.values(S.STATUS).join(" ")} ` +
+    `(e.g. "${SESSION_PREFIX.ready}", "${SESSION_PREFIX["released-alpha"]}", "${SESSION_PREFIX["concept-waiting"]}"), ` +
+    `the bare "${S.WORK_PREFIX}", and the legacy ` + LEGACY_PREFIXES.map((p) => `"${p}"`).join(", ") +
+    ` — never free text that only looks like one`;
   const setFor = (p) => (p
     ? `set the title to "${p}" + <stripped title>`
     : "set the stripped title (no prefix) — only if a prefix was actually removed");
@@ -310,7 +326,7 @@ export function titleInstruction(prefix, current = null) {
     TITLE_HEADER +
     "Before outputting the card, once, Desktop app only: " +
     'mcp__ccd_session_mgmt__get_session {session_id:"self"} → ' +
-    `strip every leading prefix from [${list}] → ` +
+    `strip every leading prefix (${list}) → ` +
     `${SET_TOOL} {session_id:"self"} and ${set} ` +
     "Deferred is not unavailable: if either tool is only in the deferred-tools list, load both once with ToolSearch `select:mcp__ccd_session_mgmt__get_session,mcp__ccd_session_mgmt__set_session_title`, then call them. " +
     "If either tool is truly unavailable (not even deferred) or fails: skip silently — no retry, no note, no fallback. " +

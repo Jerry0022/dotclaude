@@ -1,0 +1,210 @@
+[
+  {
+    "iteration": 1,
+    "action": "iterate",
+    "at": "2026-10-19T14:40:30.650Z",
+    "decisions": [
+      {
+        "id": "f1",
+        "evaluation": "include",
+        "note": "Das ist ja kein problem mehr wenn wir die doppelicon logik bentuzen"
+      },
+      {
+        "id": "f2",
+        "evaluation": "include",
+        "note": "wir nutzen dann ja doppelt icon, Das heißt gern sanduhr und danach test icon für laufende tests z. B....  \nanosnten so wie du sagst."
+      },
+      {
+        "id": "f3",
+        "evaluation": "include",
+        "note": "Genau, Released Alpha (wenn shipped + ggf. promoted in einem gemacht wurde auch gern mit beta / stable) und Promoted Beta (wenn extra promoted und nicht geshipped wurde). Started statt Läuft. kein live sondern stable verwenden!"
+      },
+      {
+        "id": "f4",
+        "evaluation": "include",
+        "note": "immer englisch finde ich gut"
+      },
+      {
+        "id": "f5",
+        "evaluation": "include",
+        "note": "Ui, ja fix das! Allerdings dann auch mit doppelicon wobei das zweite auf einen abbruch hinweist?! Aber dann schauen das devops batch nicht verwirrend ist!\" das ist ja kein abbruch sondern gewollt."
+      },
+      {
+        "id": "f6",
+        "evaluation": "include",
+        "note": "Genau!  Emoticons sollten immer da ssein und das wording danach also das ein wort wording fix!"
+      },
+      {
+        "id": "f7",
+        "evaluation": "include",
+        "note": "brauchen wir das paket emoji dabei überhautpß!?"
+      },
+      {
+        "id": "var-a",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "var-b",
+        "evaluation": "include",
+        "note": "Dann meinetwegen nebst Sanduhr Check auch ein gleichaussehendes Abort icon und auch das pause icon. Aber dann immer, außer wenn gerade \"nur gearbeitet\" wird, immer ein doppel icon!, zeige mir entsprechende beispiele wieder"
+      },
+      {
+        "id": "var-c",
+        "evaluation": "include",
+        "note": "finde ich gut für ein du bist dran! Das muss aber ausführlich für alle möglichkeiten von completion cardxs geteestett werden, das auch immer das richtihger erste icon gewählt wird!"
+      },
+      {
+        "id": "var-d",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "var-e",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "var-f",
+        "evaluation": "discard",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "iteration": 2,
+    "action": "iterate",
+    "at": "2026-10-19T14:55:51.257Z",
+    "general": "das schraubenschlüssel und werkzeug icon sind mir unklar, wann kommen die. Also ops außerhalb des projektes und build ersetzt. \n\nFind edas mit den doppelicons präfix und co mega.",
+    "decisions": [
+      {
+        "id": "q1-point",
+        "evaluation": "include",
+        "note": "sehr gut!"
+      },
+      {
+        "id": "q1-bell",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q1-playpause",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q1-orange",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q2-cross",
+        "evaluation": "include",
+        "note": "ich finde es nicht deutlich erkeennbar weil gleiche farbe grün... ist das wirklcih sinnvoll, oder nicht lieber rot!?"
+      },
+      {
+        "id": "q2-x",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q2-stop",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q3-a",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q3-b",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "q3-c",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q4-build",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q4-keep",
+        "evaluation": "discard",
+        "note": "aber in der cta sollte es das gleiche sein!"
+      },
+      {
+        "id": "q4-check",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "q5-done",
+        "evaluation": "include",
+        "note": "aber wenn mandatorische folgeschritte drin sind, dann gern die hand, bei optionalen nicht notwendig, dort ist der haken korrekt!"
+      },
+      {
+        "id": "q5-turn",
+        "evaluation": "discard",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "iteration": 3,
+    "action": "iterate",
+    "at": "2026-10-19T15:07:24.958Z",
+    "general": "das erste statusicon, wenn es nicht hand oder sanduhr ist,nervt mich noch weil es kein gleicher stlyle ist, erledigt und pausiert schon aber x abgebrochen fehlt der kasten dahinter, damit es stylisch ähnlich ist aber farblich direkt erkennbar.",
+    "decisions": [
+      {
+        "id": "qa-red",
+        "evaluation": "include",
+        "note": ""
+      },
+      {
+        "id": "qa-stop",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "qa-no",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "qb-ship",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "qb-memo",
+        "evaluation": "discard",
+        "note": "ne, dann gern beim paket emoji bleiben..."
+      },
+      {
+        "id": "qb-gift",
+        "evaluation": "discard",
+        "note": ""
+      },
+      {
+        "id": "qc-gear",
+        "evaluation": "discard",
+        "note": "gern weitersuchen, finde ich alle noch nicht klar"
+      },
+      {
+        "id": "qc-globe",
+        "evaluation": "discard",
+        "note": "schoin gut, aber sieht mir zu sehr aus nach du musst was im internet machen"
+      },
+      {
+        "id": "qc-wrench",
+        "evaluation": "discard",
+        "note": ""
+      }
+    ]
+  }
+]

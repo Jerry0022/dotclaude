@@ -1,0 +1,266 @@
+<section data-iteration="4" data-iteration-template="decision">
+  <style>
+    .d4-table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .5rem 0 1rem; }
+    .d4-table th, .d4-table td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border-color, rgba(128,128,128,.25)); vertical-align: top; }
+    .d4-table th { font-weight: 600; opacity: .8; }
+    .d4-table td code { white-space: nowrap; }
+    .d4-group td { font-weight: 600; opacity: .75; padding-top: .8rem; background: rgba(128,128,128,.06); }
+    .d4-new { font-size: .72rem; font-weight: 600; color: var(--accent-color, #58a6ff); margin-left: .3rem; white-space: nowrap; }
+    .d4-sidebar { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; line-height: 1.7; padding: .6rem .8rem; border-radius: 8px; background: rgba(128,128,128,.08); margin: .5rem 0; white-space: pre; overflow-x: auto; }
+    .d4-rule { padding: .55rem .8rem; border-left: 3px solid var(--accent-color, #58a6ff); background: rgba(88,166,255,.08); border-radius: 0 8px 8px 0; margin: .5rem 0 1rem; }
+    .d4-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .8rem; margin: .5rem 0 1rem; }
+    .d4-legend ul { margin: .3rem 0 0 1.1rem; padding: 0; }
+    .d4-pill { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem; font-weight: 600; background: rgba(63,185,80,.15); color: var(--success-color, #3fb950); margin-left: .4rem; }
+    .d4-list { margin: .3rem 0 .6rem 1.2rem; }
+    .d4-honest { padding: .55rem .8rem; border-left: 3px solid var(--warning-color, #d29922); background: rgba(210,153,34,.08); border-radius: 0 8px 8px 0; margin: .5rem 0 1rem; }
+    .d4-close { margin: 1.4rem 0 .5rem; padding: .6rem .8rem; border-radius: 8px; background: rgba(63,185,80,.1); font-weight: 600; }
+  </style>
+
+  <div class="iteration-intro">
+    <h2>Iteration 4 · Feinschliff Icons</h2>
+    <p>Letzte Runde vor der Umsetzung. „Ready“ bleibt beim 📦, wie du es wolltest. Offen sind nur noch zwei Icons: das Abbruch-Icon im Kasten-Stil (Q-D) und das Icon für Arbeit außerhalb des Repos (Q-E).</p>
+  </div>
+
+  <section id="uebernommen-r4" data-nav-label="Übernommen aus Runde 3">
+    <h3>Übernommen aus Runde 3 <span class="d4-pill">festgelegt</span></h3>
+    <ul class="d4-list">
+      <li><strong>📦 bleibt</strong> („ne, dann gern beim paket emoji bleiben…“), im Titel und in der CTA. Die ganze Familie „Code lokal fertig“ nutzt 📦: <code>👉 📦 Ready</code>, <code>✅ 📦 Committed</code>, <code>👉 📦 Files</code> und der allgemeine Abbruch <code>&lt;Abbruch&gt; 📦 Aborted</code>. 📝 entfällt.</li>
+      <li><strong>🚀 nur fürs Shippen:</strong> <code>⏳ 🚀 Shipping</code>, <code>✅ 🚀 Released Alpha</code>.</li>
+      <li><strong>🧩 auf der Komponenten-Zeile</strong> der Card, damit 📦 eindeutig bleibt.</li>
+      <li><strong>Abbruch soll einen Kasten haben</strong> wie ✅ und ⏸️, aber sofort rot erkennbar sein (deine Notiz). Das klärt Q-D.</li>
+      <li><strong>⚙️, 🌐 und 🔧 sind raus</strong> („gern weitersuchen“). Q-E zeigt neue Kandidaten.</li>
+    </ul>
+  </section>
+
+  <section id="schema-r4" data-nav-label="Schema kompakt">
+    <h3>Das Schema, kompakt</h3>
+    <div class="d4-rule"><strong>Regel:</strong> <code>STATUS AKTIVITÄT Wort – Titel</code>. Der CTA-Kopf der Card wiederholt <code>STATUS AKTIVITÄT Wort</code> exakt. Die Statusregel 👉 / ✅ aus Runde 3 bleibt unverändert.</div>
+    <div class="d4-legend">
+      <div>
+        <strong>1. Icon: Status</strong>
+        <ul>
+          <li>⏳ Claude arbeitet</li>
+          <li>👉 du bist dran (Pflicht-Folgeschritt)</li>
+          <li>✅ erledigt, höchstens optionale Angebote offen</li>
+          <li>🟥 abgebrochen <span class="d4-new">Empfehlung, Q-D</span></li>
+          <li>⏸️ pausiert</li>
+        </ul>
+      </div>
+      <div>
+        <strong>2. Icon: Aktivität</strong>
+        <ul>
+          <li>🚀 Shippen · 🎊 Release über Alpha hinaus / Promote</li>
+          <li>📦 Code lokal fertig (Ready, Committed, Files, allgemeiner Abbruch) <span class="d4-new">neu</span></li>
+          <li>🧪 Test · ▶️ Start · 🧭 Concept · 📥 Batch · 📋 Analyse · 🤖 Agents</li>
+          <li>🎛️ Arbeit außerhalb des Repos <span class="d4-new">Empfehlung, Q-E</span></li>
+          <li>❓ Frage · ⚠️ Warnung · ⛔ Blockiert · ⚡ Unterbrochen</li>
+          <li>Bei ⏸️ der Grund: 🔋 Limit-Reset · 🔄 Restart · 💻 Reboot · ✋ von dir</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="beispiele-r4" data-nav-label="Beispiele je Card-Zustand">
+    <h3>Alle Card-Zustände</h3>
+    <p>Abbruch und Fallback stehen hier mit der Empfehlung (🟥, 🎛️). Es gilt, was du in Q-D und Q-E behältst. <span class="d4-new">neu</span> markiert die Änderungen gegenüber Runde 3.</p>
+    <table class="d4-table">
+      <thead><tr><th>Zustand</th><th>Card</th><th>Titel</th><th>CTA-Kopf</th></tr></thead>
+      <tbody>
+        <tr class="d4-group"><td colspan="4">⏳ Claude arbeitet</td></tr>
+        <tr><td>Allgemeine Arbeit</td><td>keine Card</td><td><code>⏳ Emoji-Konzept</code></td><td>–</td></tr>
+        <tr><td>Ship läuft</td><td>keine Card (Ship-Pipeline)</td><td><code>⏳ 🚀 Shipping – Login-Fix</code></td><td>–</td></tr>
+        <tr><td>V&amp;V-Test läuft</td><td>vv-running</td><td><code>⏳ 🧪 Testing – Dark Mode</code></td><td>⏳ 🧪 Testing — Ergebnis folgt</td></tr>
+        <tr><td>Hintergrund-Agents</td><td>pending</td><td><code>⏳ 🤖 Agents – Refactor</code></td><td>⏳ 🤖 Agents — noch nicht fertig, ich melde mich</td></tr>
+        <tr><td>Concept iteriert</td><td>concept phase (arbeitet)</td><td><code>⏳ 🧭 Concept – Billing</code></td><td>⏳ 🧭 Concept — Runde wird gebaut</td></tr>
+
+        <tr class="d4-group"><td colspan="4">👉 Du bist dran (Pflicht-Folgeschritt)</td></tr>
+        <tr><td>Concept wartet</td><td>concept phase (wartet)</td><td><code>👉 🧭 Concept – Billing</code></td><td>👉 🧭 Concept — die Seite wartet auf deine Entscheidung</td></tr>
+        <tr><td>Batch sammelt</td><td>batch</td><td><code>👉 📥 Batch – Ideen</code></td><td>👉 📥 Batch — nächste Idee?</td></tr>
+        <tr><td>Erst testen</td><td>test</td><td><code>👉 🧪 Test – Dark Mode</code></td><td>👉 🧪 Test — erst testen, dann shippen?</td></tr>
+        <tr><td>Fertig, bereit zum Ship</td><td>ready</td><td><code>👉 📦 Ready – Emoji-Fix</code><span class="d4-new">neu</span></td><td>👉 📦 Ready — shippen?</td></tr>
+        <tr><td>Nur Dateien geändert</td><td>ready-files</td><td><code>👉 📦 Files – Doku</code><span class="d4-new">neu</span></td><td>👉 📦 Files — nur Dateien geändert, committen?</td></tr>
+        <tr><td>Offene Frage / offene Punkte</td><td>question / open points</td><td><code>👉 ❓ Question – Auth</code></td><td>👉 ❓ Question — welche Variante?</td></tr>
+        <tr><td>Rote Tests</td><td>ready-red</td><td><code>👉 ⚠️ Red tests – Auth</code></td><td>👉 ⚠️ Red tests — trotzdem shippen?</td></tr>
+        <tr><td>Ungeprüft</td><td>vv-unverified</td><td><code>👉 ⚠️ Unverified – Auth</code></td><td>👉 ⚠️ Unverified — trotzdem shippen?</td></tr>
+        <tr><td>Ship blockiert</td><td>ship-blocked</td><td><code>👉 ⛔ Blocked – Migration</code></td><td>👉 ⛔ Blocked — Konflikt in schema.sql lösen?</td></tr>
+        <tr><td>Alpha-Release mit Pflicht-Folgeschritt</td><td>ship-successful, ring alpha + userTest / offener Punkt</td><td><code>👉 🚀 Released Alpha – Login-Fix</code></td><td>👉 🚀 Released Alpha — bitte SSO-Login in Alpha testen</td></tr>
+        <tr><td>Merged, nicht deployt</td><td>merged-not-deployed</td><td><code>👉 ⚠️ Not deployed – Login-Fix</code></td><td>👉 ⚠️ Not deployed — Deploy nachholen?</td></tr>
+
+        <tr class="d4-group"><td colspan="4">✅ Erledigt (nur optionale Schritte offen)</td></tr>
+        <tr><td>Alpha-Release, Promote optional</td><td>ship-successful, ring alpha</td><td><code>✅ 🚀 Released Alpha – Login-Fix</code></td><td>✅ 🚀 Released Alpha — optional nach Beta promoten</td></tr>
+        <tr><td>Ship + Promote in einem Lauf</td><td>ship-successful, released channel beta/stable</td><td><code>✅ 🎊 Released Stable – Login-Fix</code></td><td>✅ 🎊 Released Stable — fertig</td></tr>
+        <tr><td>Nur Promote</td><td>promote (ohne Ship)</td><td><code>✅ 🎊 Promoted Beta – Search</code></td><td>✅ 🎊 Promoted Beta — optional nach Stable promoten</td></tr>
+        <tr><td>Lokal committet, kein Remote</td><td>ready-local / no remote</td><td><code>✅ 📦 Committed – Emoji-Fix</code><span class="d4-new">neu</span></td><td>✅ 📦 Committed — lokal committet, nichts zu shippen</td></tr>
+        <tr><td>App gestartet</td><td>test-minimal</td><td><code>✅ ▶️ Started – Game</code></td><td>✅ ▶️ Started — viel Spaß</td></tr>
+        <tr><td>Analyse</td><td>analysis</td><td><code>✅ 📋 Analysis – Perf</code></td><td>✅ 📋 Analysis — noch etwas?</td></tr>
+        <tr><td>Erledigt außerhalb des Repos</td><td>fallback</td><td><code>✅ 🎛️ Ops – DB-Cleanup</code><span class="d4-new">neu, Q-E</span></td><td>✅ 🎛️ Ops — Datenbank bereinigt, im Repo nichts geändert</td></tr>
+
+        <tr class="d4-group"><td colspan="4">🟥 Abgebrochen (Q-D)</td></tr>
+        <tr><td>Abgebrochen (Aktivität bekannt)</td><td>aborted</td><td><code>🟥 🚀 Ship – Migration</code><span class="d4-new">neu, Q-D</span></td><td>🟥 🚀 Ship — abgebrochen, nichts gepusht</td></tr>
+        <tr><td>Abgebrochen (allgemein)</td><td>aborted</td><td><code>🟥 📦 Aborted – Refactor</code><span class="d4-new">neu, Q-D</span></td><td>🟥 📦 Aborted — Stand verworfen</td></tr>
+
+        <tr class="d4-group"><td colspan="4">⏸️ Pausiert</td></tr>
+        <tr><td>Pause bis Limit-Reset</td><td>paused (limit)</td><td><code>⏸️ 🔋 Limit reset – Search</code></td><td>⏸️ 🔋 Limit reset — weiter um 14:00</td></tr>
+        <tr><td>Pause für Restart</td><td>paused (restart)</td><td><code>⏸️ 🔄 Restart – Search</code></td><td>⏸️ 🔄 Restart — nach dem Neustart weiter</td></tr>
+        <tr><td>Pause für Reboot</td><td>paused (reboot)</td><td><code>⏸️ 💻 Reboot – Search</code></td><td>⏸️ 💻 Reboot — nach dem Neustart des PCs weiter</td></tr>
+        <tr><td>Pause durch dich</td><td>paused (user)</td><td><code>⏸️ ✋ Paused – Search</code></td><td>⏸️ ✋ Paused — sag Bescheid, wenn es weitergeht</td></tr>
+
+        <tr class="d4-group"><td colspan="4">Sonderfall F5</td></tr>
+        <tr><td>Turn endet ohne Card</td><td>keine Card, Stop-Hook</td><td><code>👉 ⚡ Interrupted – Refactor</code></td><td>– (keine Card)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="frage-qd" data-nav-label="Q-D · Abbruch-Icon im Kasten">
+    <h3>Q-D · Abbruch-Icon: Kasten und rot</h3>
+    <div class="d4-honest"><strong>Ehrlich vorweg:</strong> Unicode hat kein rotes Emoji mit ✖ im Kasten. ✅ ist ein grüner Kasten, ⏸️ und ⏹️ sind blaue bzw. graue Kästen, ❎ ist ebenfalls ein grüner Kasten. „Kasten“ und „rot“ zusammen gibt es nur ohne Symbol (🟥) oder mit Text (🆘).</div>
+    <p>Unter jeder Option siehst du die Sidebar mit vier Status untereinander, damit der Stilvergleich sichtbar ist. Behalte eine Option.</p>
+
+    <div class="variant-card" id="qd-stop">
+      <h4>⏹️ Stopp-Taste</h4>
+      <div class="d4-sidebar">✅ 🚀 Released Alpha – X
+⏸️ 🔋 Limit reset – X
+⏹️ 🚀 Ship – X
+👉 📦 Ready – X</div>
+      <p>Dieselbe Kasten-Familie wie ⏸️ und passt daher stilistisch genau. Die Farbe kommt aber von der Plattform (unter Windows grau/blau) und ist nicht rot, neben ⏸️ also leicht zu verwechseln.</p>
+      <div class="variant-evaluation" data-decision="qd-stop" data-label="Q-D · ⏹️">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qd-stop" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qd-stop" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qd-stop-note">{{decision.comment_label}}</label>
+          <textarea id="qd-stop-note" data-comment="qd-stop-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="qd-redsquare">
+      <h4>🟥 Rotes Quadrat <span class="d4-pill">Empfehlung</span></h4>
+      <div class="d4-sidebar">✅ 🚀 Released Alpha – X
+⏸️ 🔋 Limit reset – X
+🟥 🚀 Ship – X
+👉 📦 Ready – X</div>
+      <p>Ein roter Kasten ohne Symbol. Eindeutig rot und eindeutig ein Kasten. Neben ✅ und ⏸️ liest er sich wie eine rote Statusleuchte, auch klein in der Sidebar.</p>
+      <div class="variant-evaluation" data-decision="qd-redsquare" data-label="Q-D · 🟥">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qd-redsquare" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qd-redsquare" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qd-redsquare-note">{{decision.comment_label}}</label>
+          <textarea id="qd-redsquare-note" data-comment="qd-redsquare-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="qd-sos">
+      <h4>🆘 SOS</h4>
+      <div class="d4-sidebar">✅ 🚀 Released Alpha – X
+⏸️ 🔋 Limit reset – X
+🆘 🚀 Ship – X
+👉 📦 Ready – X</div>
+      <p>Ein roter Kasten mit Text. Stilistisch passend, inhaltlich aber zu alarmierend: Ein Abbruch ist meist gewollt und kein Notfall.</p>
+      <div class="variant-evaluation" data-decision="qd-sos" data-label="Q-D · 🆘">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qd-sos" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qd-sos" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qd-sos-note">{{decision.comment_label}}</label>
+          <textarea id="qd-sos-note" data-comment="qd-sos-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="qd-cross">
+      <h4>❌ Rotes Kreuz (bisher)</h4>
+      <div class="d4-sidebar">✅ 🚀 Released Alpha – X
+⏸️ 🔋 Limit reset – X
+❌ 🚀 Ship – X
+👉 📦 Ready – X</div>
+      <p>Die bisherige Wahl. Rot, aber ohne Kasten, also genau der Stilbruch, der dich stört.</p>
+      <div class="variant-evaluation" data-decision="qd-cross" data-label="Q-D · ❌">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qd-cross" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qd-cross" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qd-cross-note">{{decision.comment_label}}</label>
+          <textarea id="qd-cross-note" data-comment="qd-cross-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="frage-qe" data-nav-label="Q-E · Fallback-Icon">
+    <h3>Q-E · Aktivitäts-Icon für Arbeit außerhalb des Repos</h3>
+    <p>Diese Card kommt, wenn Claude etwas <strong>außerhalb</strong> des Repos geändert hat und es keinen Code-Diff gibt: eine Einstellung, ein Deploy, eine Datenbank-Operation oder eine Löschung. Behalte eine Option.</p>
+
+    <div class="variant-card" id="qe-knobs">
+      <h4>🎛️ Regler, Wort „Ops“ <span class="d4-pill">Empfehlung</span></h4>
+      <div class="d4-sidebar">✅ 🎛️ Ops – DB-Cleanup</div>
+      <p>Ein Schaltpult: „irgendwo an einem Regler gedreht“. Weder Code noch Internet, und mit keinem anderen Icon im Schema verwechselbar.</p>
+      <div class="variant-evaluation" data-decision="qe-knobs" data-label="Q-E · 🎛️ Ops">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qe-knobs" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qe-knobs" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qe-knobs-note">{{decision.comment_label}}</label>
+          <textarea id="qe-knobs-note" data-comment="qe-knobs-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="qe-cabinet">
+      <h4>🗄️ Aktenschrank, Wort „System“</h4>
+      <div class="d4-sidebar">✅ 🗄️ System – DB-Cleanup</div>
+      <p>Passt gut zu Datenbank und Ablage, weniger zu einer geänderten Einstellung oder einem Deploy.</p>
+      <div class="variant-evaluation" data-decision="qe-cabinet" data-label="Q-E · 🗄️ System">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qe-cabinet" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qe-cabinet" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qe-cabinet-note">{{decision.comment_label}}</label>
+          <textarea id="qe-cabinet-note" data-comment="qe-cabinet-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="qe-pc">
+      <h4>🖥️ Bildschirm, Wort „System“</h4>
+      <div class="d4-sidebar">✅ 🖥️ System – DB-Cleanup</div>
+      <p>„Am System etwas gemacht“. Liegt optisch nah am 💻 der Pause wegen Reboot.</p>
+      <div class="variant-evaluation" data-decision="qe-pc" data-label="Q-E · 🖥️ System">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qe-pc" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qe-pc" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qe-pc-note">{{decision.comment_label}}</label>
+          <textarea id="qe-pc-note" data-comment="qe-pc-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="qe-toolbox">
+      <h4>🧰 Werkzeugkasten, Wort „Ops“</h4>
+      <div class="d4-sidebar">✅ 🧰 Ops – DB-Cleanup</div>
+      <p>„Mit Werkzeug irgendwo nachgeholfen“. Erinnert aber wie 🔧 eher an Reparatur am Code.</p>
+      <div class="variant-evaluation" data-decision="qe-toolbox" data-label="Q-E · 🧰 Ops">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-qe-toolbox" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-qe-toolbox" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="qe-toolbox-note">{{decision.comment_label}}</label>
+          <textarea id="qe-toolbox-note" data-comment="qe-toolbox-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="d4-close">Passt alles? Dann ▾ → Mit Feedback implementieren.</p>
+</section>

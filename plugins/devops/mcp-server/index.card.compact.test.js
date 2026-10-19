@@ -55,7 +55,7 @@ describe("test-minimal — title + one line + heading only", () => {
     });
     expect(text).toMatch(/^### \*\*✨✨✨ Dev-Server läuft ✨✨✨\*\*/m);
     expect(text).toMatch(/^› Dev-Server läuft auf Port 3000$/m);
-    expect(text).toMatch(/^## ▶️ Läuft — viel Spaß$/m);
+    expect(text).toMatch(/^## 🟩 ▶️ Started — viel Spaß$/m);
     expect(text).not.toMatch(/^\d+\. /m); // no points
     expect(text.split("\n").filter((l) => l.startsWith("›")).length).toBe(1);
   });

@@ -1,0 +1,293 @@
+<section data-iteration="1" data-iteration-template="decision" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]}}</script>
+  <style>
+    .d1-r1-table { width: 100%; border-collapse: collapse; font-size: .92rem; margin: .5rem 0 1rem; }
+    .d1-r1-table th, .d1-r1-table td { text-align: left; padding: .4rem .55rem; border-bottom: 1px solid var(--border-color, rgba(128,128,128,.25)); vertical-align: top; }
+    .d1-r1-table th { font-weight: 600; opacity: .8; }
+    .d1-r1-ok { color: var(--success-color, #3fb950); font-weight: 600; }
+    .d1-r1-bad { color: var(--danger-color, #f85149); font-weight: 600; }
+    .d1-r1-warn { color: var(--warning-color, #d29922); font-weight: 600; }
+    .d1-r1-sidebar { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; line-height: 1.7; padding: .6rem .8rem; border-radius: 8px; background: rgba(128,128,128,.08); margin: .5rem 0; white-space: pre; overflow-x: auto; }
+    .d1-r1-pill { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem; font-weight: 600; background: rgba(63,185,80,.15); color: var(--success-color, #3fb950); margin-left: .4rem; }
+    .d1-r1-pill.d1-r1-no { background: rgba(248,81,73,.15); color: var(--danger-color, #f85149); }
+    .d1-r1-list { margin: .3rem 0 .6rem 1.2rem; }
+  </style>
+
+  <div class="iteration-intro">
+    <h2>Iteration 1 · Ist-Zustand, Red-Team-Befund, Varianten</h2>
+    <p>Geprüft wurden die Titel-Präfixe (<code>SESSION_PREFIX</code> in <code>mcp-server/lib/mode-state.js</code>) gegen die CTA-Zeilen der Completion-Card (<code>HEADINGS</code> in <code>mcp-server/index.js</code>). Kurzfassung: Die Emojis sind weitgehend konsistent, es gibt aber 8 echte Lücken. Ein doppeltes Emoji in der Form ⏳/✅ + Typ hält das Red-Team nicht für tragfähig. Meine Empfehlung ist <strong>Variante D</strong>.</p>
+  </div>
+
+  <section id="ist-zustand" data-nav-label="Ist-Zustand: Titel vs. CTA">
+    <h3>Ist-Zustand: Titel-Präfix vs. CTA-Zeile</h3>
+    <table class="d1-r1-table">
+      <thead><tr><th>Zustand</th><th>Chat-Titel</th><th>CTA-Zeile (de)</th><th>Konsistent?</th></tr></thead>
+      <tbody>
+        <tr><td>Claude arbeitet</td><td><code>⏳ </code></td><td>– (keine Card)</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>Hintergrund-Arbeit läuft</td><td><code>⏳ </code></td><td>⏳ Noch nicht fertig — …</td><td class="d1-r1-warn">gleiches ⏳ für zwei Zustände</td></tr>
+        <tr><td>Ship läuft</td><td><code>🚀 Shipping – </code></td><td>–</td><td class="d1-r1-bad">🚀 auch für „fertig“</td></tr>
+        <tr><td>Ship fertig</td><td><code>🚀 Shipped – </code></td><td>🚀 Released X alpha — nach beta promoten?</td><td class="d1-r1-warn">Wort: Shipped ≠ Released</td></tr>
+        <tr><td>Merged, nicht live</td><td><code>🚀 Shipped – </code></td><td>🚨 …</td><td class="d1-r1-bad">Emoji weicht ab</td></tr>
+        <tr><td>Promote Beta / Stable</td><td><code>🎊 Released Beta/Stable – </code></td><td>🎊 Promoted BETA / Released LIVE — stable</td><td class="d1-r1-warn">Wort-Drift</td></tr>
+        <tr><td>Test</td><td><code>🧪 Test – </code></td><td>🧪 Erst testen, dann shippen?</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>App gestartet</td><td><code>▶️ Started – </code></td><td>▶️ Läuft — viel Spaß</td><td class="d1-r1-warn">Started ≠ Läuft</td></tr>
+        <tr><td>Fertig, bereit zum Ship</td><td><code>📦 Ready – </code></td><td>📦 Shippen?</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>Offene Frage an dich</td><td><code>📦 Ready – </code></td><td>❓ …</td><td class="d1-r1-bad">Titel verschweigt die Frage</td></tr>
+        <tr><td>Rote Tests / ungeprüft</td><td><code>📦 Ready – </code></td><td>⚠ Trotzdem shippen?</td><td class="d1-r1-bad">Titel verschweigt die Warnung</td></tr>
+        <tr><td>Test läuft noch (V&amp;V)</td><td><code>📦 Ready – </code></td><td>⏳ Test läuft noch …</td><td class="d1-r1-bad">Titel sagt fertig</td></tr>
+        <tr><td>Nur Dateien (ready-files)</td><td><code>📦 Ready – </code></td><td>📂 …</td><td class="d1-r1-warn">Emoji weicht ab</td></tr>
+        <tr><td>Blockiert / Abgebrochen</td><td><code>⛔ Blocked – </code> / <code>🚫 Aborted – </code></td><td>⛔ … / 🚫 …</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>Analyse</td><td><code>📋 Analysis – </code></td><td>📋 Analyse gelesen — …</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>Erledigt außerhalb Repo</td><td><code>🔧 Done – </code></td><td>🔧 Erledigt — noch etwas?</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>Pausiert</td><td><code>⏸️ Paused [until …] – </code></td><td>⏸️ Pausiert bis …</td><td class="d1-r1-ok">ok (Titel englisch)</td></tr>
+        <tr><td>Concept wartet / arbeitet</td><td><code>🧭 Concept – </code> / <code>⏳ </code></td><td>🧭 / ⏳ Concept …</td><td class="d1-r1-ok">ok</td></tr>
+        <tr><td>Batch</td><td><code>📥 Batch – </code></td><td>📥 Batch sammelt — …</td><td class="d1-r1-ok">ok</td></tr>
+      </tbody>
+    </table>
+    <p>Durchgehend gilt: Die Wörter im Titel sind immer englisch, die CTA-Zeile folgt der Sprache (de/en).</p>
+  </section>
+
+  <section id="befunde" data-nav-label="Inkonsistenzen (unabhängig von der Variante)">
+    <h3>Inkonsistenzen: welche sollen mitgefixt werden?</h3>
+    <p>Diese Punkte gelten unabhängig davon, welches Schema du wählst. Setze auf „Verwerfen“, was bleiben darf.</p>
+
+    <div class="variant-card" id="f1">
+      <h4>F1 · 🚀 steht für „läuft“ und für „fertig“</h4>
+      <p><code>🚀 Shipping</code> und <code>🚀 Shipped</code> nutzen dasselbe Icon. In der Sidebar sieht man am Icon nicht, ob der Ship noch läuft oder schon fertig ist. Dieser Punkt ist genau dein Anlass für die Idee.</p>
+      <div class="variant-evaluation" data-decision="f1" data-label="F1 · 🚀 läuft vs. fertig">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f1" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f1" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f1-note">{{decision.comment_label}}</label>
+          <textarea id="f1-note" data-comment="f1-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Das ist ja kein problem mehr wenn wir die doppelicon logik bentuzen </textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="f2">
+      <h4>F2 · Der Titel sagt „📦 Ready“, die Card fragt oder warnt</h4>
+      <p>Bei offener Frage (❓), roten Tests oder ungeprüftem Stand (⚠), laufendem Test (⏳) und „merged, nicht live“ (🚨) zeigt der Titel trotzdem „fertig“. Das ist die gravierendste Lücke, denn genau diese Sessions brauchen dich.</p>
+      <div class="variant-evaluation" data-decision="f2" data-label="F2 · Frage/Warnung fehlt im Titel">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f2" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f2" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f2-note">{{decision.comment_label}}</label>
+          <textarea id="f2-note" data-comment="f2-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">wir nutzen dann ja doppelt icon, Das heißt gern sanduhr und danach test icon für laufende tests z. B....  
+anosnten so wie du sagst.</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="f3">
+      <h4>F3 · Abweichende Wörter zwischen Titel und CTA</h4>
+      <p>Shipped ↔ Released alpha, Released Beta ↔ Promoted BETA, Released Stable ↔ Released LIVE, Started ↔ Läuft. Vorschlag: Ein Begriffsset pro Zustand festlegen und an beiden Stellen verwenden.</p>
+      <div class="variant-evaluation" data-decision="f3" data-label="F3 · Wort-Drift">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f3" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f3" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f3-note">{{decision.comment_label}}</label>
+          <textarea id="f3-note" data-comment="f3-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Genau, Released Alpha (wenn shipped + ggf. promoted in einem gemacht wurde auch gern mit beta / stable) und Promoted Beta (wenn extra promoted und nicht geshipped wurde). Started statt Läuft. kein live sondern stable verwenden!</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="f4">
+      <h4>F4 · Titel immer englisch, CTA lokalisiert</h4>
+      <p>Zur Wahl stehen zwei Wege: Titel-Wörter ebenfalls lokalisieren, also „🧪 Test –“ und „📦 Bereit –“, oder bewusst englisch lassen und das dokumentieren. Englisch lassen hat einen Vorteil: Die Strip-Logik muss nur eine Wortliste kennen.</p>
+      <div class="variant-evaluation" data-decision="f4" data-label="F4 · Titel-Sprache">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f4" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f4" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f4-note">{{decision.comment_label}}</label>
+          <textarea id="f4-note" data-comment="f4-note" data-attachable placeholder="Lokalisieren oder bewusst englisch?" rows="2">immer englisch finde ich gut </textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="f5">
+      <h4>F5 · ⏳ bleibt stehen, wenn ein Turn ohne Card endet</h4>
+      <p>Der Stop-Hook schreibt den Titel nicht um (<code>stop.flow.guard.js</code>). Dadurch behauptet eine Session, die längst idle ist, weiter „läuft“. Das betrifft jede Variante.</p>
+      <div class="variant-evaluation" data-decision="f5" data-label="F5 · ⏳ nach Turn ohne Card">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f5" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f5" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f5-note">{{decision.comment_label}}</label>
+          <textarea id="f5-note" data-comment="f5-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Ui, ja fix das! Allerdings dann auch mit doppelicon wobei das zweite auf einen abbruch hinweist?! Aber dann schauen das devops batch nicht verwirrend ist!" das ist ja kein abbruch sondern gewollt. </textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="f6">
+      <h4>F6 · Bug: Strip frisst Teile des Titels nach einem ⏳</h4>
+      <p>Das Muster <code>WORDED</code> greift auch nach einem einfachen ⏳. Aus „⏳ Fix Login – Bug“ wird dabei „Bug“. Die Lösung: Nur bekannte Präfix-Wörter strippen.</p>
+      <div class="variant-evaluation" data-decision="f6" data-label="F6 · Strip-Bug WORDED">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f6" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f6" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f6-note">{{decision.comment_label}}</label>
+          <textarea id="f6-note" data-comment="f6-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Genau!  Emoticons sollten immer da ssein und das wording danach also das ein wort wording fix!</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="f7">
+      <h4>F7 · 📦 auch als Komponenten-Zeile in der Card</h4>
+      <p>Das Paket-Emoji erscheint in der Card zusätzlich vor jeder Komponente (<code>index.js:1102</code>) und kollidiert dort mit der Bedeutung „Ready“. Ein neutrales Zeichen, etwa ▸ oder 🧩, würde das auflösen.</p>
+      <div class="variant-evaluation" data-decision="f7" data-label="F7 · 📦 doppelt belegt">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-f7" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-f7" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="f7-note">{{decision.comment_label}}</label>
+          <textarea id="f7-note" data-comment="f7-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">brauchen wir das paket emoji dabei überhautpß!? </textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="redteam" data-nav-label="Red-Team: Doppel-Emoji ⏳/✅ + Typ">
+    <h3>Red-Team: dein Vorschlag „⏳/✅ + Typ-Emoji“</h3>
+    <p>Die wichtigsten Risiken, geordnet:</p>
+    <ul class="d1-r1-list">
+      <li><strong>R1 (hoch) · Parser lesen nur die erste Stelle.</strong> Die Wächter für Batch (📥) und Ship (🚀 Shipping) sowie die Strip-Logik prüfen das erste Emoji. Ein vorangestelltes ✅ hebelt sie aus, und beim nächsten Prompt entsteht „⏳ ✅ 🚀 Shipped – X“.</li>
+      <li><strong>R2 (hoch) · ✅ ist für die meisten Enden falsch.</strong> Bei Blocked, Aborted, Paused, Frage, roten Tests und „nicht live“ ist nichts erledigt, sondern du bist dran. „✅ ⛔ Blocked“ widerspricht sich selbst. Zwei Status reichen also nicht aus, und ein dritter Status wiederholt nur, was das Typ-Emoji schon sagt.</li>
+      <li><strong>R3 (mittel) · Während der Arbeit gibt es kein zweites Emoji.</strong> Beim Prompt-Start ist das Ergebnis noch unbekannt. Nur Shipping und Concept kennen ihren Typ vorher. Titel hätten deshalb mal ein, mal zwei Emojis, und die Ausrichtung in der Sidebar geht genau dadurch verloren.</li>
+      <li><strong>R4–R6 (mittel) · Migrationsaufwand.</strong> Alte MCP-Server laufender Sessions schreiben weiter das alte Format, sodass Titel zwischen den Formaten flippen. Die Präfixe sind in 19 Test-Dateien (150 Stellen) und 22 Docs (106 Stellen) fest verdrahtet. Die Fallback-Anweisung an Claude würde etwa doppelt so lang.</li>
+      <li><strong>R7/R8 (niedrig–mittel) · Darstellung.</strong> ▶️ und ⏸️ enthalten einen Variation-Selector, sodass zwei Emoji-Stellen das Bruchrisiko verdoppeln. „✅ 🎊 Released Stable – “ belegt rund 22 Zeichen, bevor der eigentliche Titel beginnt, und die Sidebar schneidet ihn ab.</li>
+      <li><strong>R9 · Offen.</strong> Die Desktop-App zeigt „läuft“ bereits selbst an (Spinner). Ein Status-Emoji wäre dort doppelt, außer bei Hintergrund-Arbeit nach Turn-Ende.</li>
+    </ul>
+    <p><strong>Urteil des Red-Teams:</strong> Den Vorschlag in dieser Form nicht umsetzen. Stattdessen ein Emoji pro Titel, das die <em>Zustandsklasse</em> trägt (Variante D).</p>
+  </section>
+
+  <section id="varianten" data-nav-label="Varianten: Titel-Schema">
+    <h3>Varianten für das Titel-Schema</h3>
+
+    <div class="variant-card" id="var-a">
+      <h4>A · Status quo, nur Lücken fixen <span class="d1-r1-pill">klein</span></h4>
+      <div class="d1-r1-sidebar">🚀 Shipping – Login-Fix
+🚀 Shipped – Login-Fix
+📦 Ready – Emoji-Konzept</div>
+      <p>Das Schema bleibt, nur F2–F7 werden behoben. Dein Kernproblem F1 bleibt dabei bestehen: 🚀 steht weiter für „läuft“ und „fertig“.</p>
+      <div class="variant-evaluation" data-decision="var-a" data-label="A · Status quo + Fixes">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-var-a" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-var-a" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="var-a-note">{{decision.comment_label}}</label>
+          <textarea id="var-a-note" data-comment="var-a-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="var-b">
+      <h4>B · Dein Vorschlag: ⏳/✅ + Typ-Emoji <span class="d1-r1-pill d1-r1-no">Red-Team: nein</span></h4>
+      <div class="d1-r1-sidebar">⏳ 🚀 Shipping – Login-Fix
+✅ 🚀 Shipped – Login-Fix
+✅ ⛔ Blocked – Migration     ← widersprüchlich
+⏳ Emoji-Konzept              ← während der Arbeit nur ein Emoji</div>
+      <p><strong>Pro:</strong> Die erste Spalte der Sidebar zeigt sofort „läuft“ oder „fertig“. <strong>Contra:</strong> R1–R3, und ✅ lügt bei Blocked, Aborted, Paused und offener Frage.</p>
+      <div class="variant-evaluation" data-decision="var-b" data-label="B · ⏳/✅ + Typ">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-var-b" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-var-b" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="var-b-note">{{decision.comment_label}}</label>
+          <textarea id="var-b-note" data-comment="var-b-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">Dann meinetwegen nebst Sanduhr Check auch ein gleichaussehendes Abort icon und auch das pause icon. Aber dann immer, außer wenn gerade "nur gearbeitet" wird, immer ein doppel icon!, zeige mir entsprechende beispiele wieder</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="var-c">
+      <h4>C · Doppel-Emoji mit drei Status: ⏳ Claude · 👉 du · ✅ fertig + Typ</h4>
+      <div class="d1-r1-sidebar">⏳ 🚀 Shipping – Login-Fix
+✅ 🚀 Shipped – Login-Fix
+👉 ⛔ Blocked – Migration
+👉 🧪 Test – Dark Mode</div>
+      <p>Das behebt R2. R1, R3 und den Migrationsaufwand löst es nicht, und die Titel werden noch länger. Der Status wiederholt außerdem fast immer, was das Typ-Emoji schon sagt: Fast jede Card endet mit „du bist dran“.</p>
+      <div class="variant-evaluation" data-decision="var-c" data-label="C · 3 Status + Typ">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-var-c" value="discard"><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-var-c" value="include" checked><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="var-c-note">{{decision.comment_label}}</label>
+          <textarea id="var-c-note" data-comment="var-c-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2">finde ich gut für ein du bist dran! Das muss aber ausführlich für alle möglichkeiten von completion cardxs geteestett werden, das auch immer das richtihger erste icon gewählt wird!</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="var-d">
+      <h4>D · Ein Emoji als Zustandsklasse: ⏳ + Wort für alles Laufende <span class="d1-r1-pill">Empfehlung</span></h4>
+      <div class="d1-r1-sidebar">⏳ Shipping – Login-Fix         ← läuft (benannter Prozess)
+⏳ Emoji-Konzept              ← läuft (generisch)
+🚀 Shipped – Login-Fix         ← fertig
+❓ Ready – Emoji-Konzept       ← du musst entscheiden
+🧭 Concept – Billing          ← Seite wartet auf dich</div>
+      <p>Regel: Solange Claude dran ist, steht vorne <strong>immer ⏳</strong>, bei benannten Prozessen mit Wort (Shipping, Testing …). Das Typ-Emoji erscheint erst, wenn der Turn mit einer Card endet. Ein eigenes <strong>❓</strong> markiert „du musst etwas entscheiden“ (offene Frage, rote Tests, ungeprüft). Damit ist dein Ziel erreicht: Am ersten Zeichen siehst du „läuft“ oder „nicht“, mit nur einem Emoji und ohne neuen Parser-Grammatik-Fall.</p>
+      <p><strong>Noch zu klären:</strong> ob ⛔ Blocked und ⏸️ Paused zu „du bist dran“ (❓) zählen oder ihr eigenes Emoji behalten. Meine Empfehlung: Beide behalten ihr Emoji, denn sie sagen schon „wartet auf dich“.</p>
+      <div class="variant-evaluation" data-decision="var-d" data-label="D · ⏳ + Wort, ❓ für Entscheidung">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-var-d" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-var-d" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="var-d-note">{{decision.comment_label}}</label>
+          <textarea id="var-d-note" data-comment="var-d-note" data-attachable placeholder="⛔/⏸️ eigenes Emoji oder ❓?" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="var-e">
+      <h4>E · Nur Status-Emoji, Typ als Wort</h4>
+      <div class="d1-r1-sidebar">⏳ Shipping – Login-Fix
+✅ Shipped – Login-Fix
+👉 Test – Dark Mode
+👉 Blocked – Migration</div>
+      <p>Es gibt nur drei Emojis, und der Typ steht ausschließlich als Wort im Titel. Das ist maximal ruhig und leicht zu parsen. Dafür gehen die bekannten Typ-Icons verloren, und die CTA-Zeile der Card müsste mitziehen, sonst bricht die Konsistenz zwischen Titel und Card.</p>
+      <div class="variant-evaluation" data-decision="var-e" data-label="E · Nur Status-Emoji">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-var-e" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-var-e" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="var-e-note">{{decision.comment_label}}</label>
+          <textarea id="var-e-note" data-comment="var-e-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="variant-card" id="var-f">
+      <h4>F · Doppel-Emoji nur bei benannten Prozessen</h4>
+      <div class="d1-r1-sidebar">⏳ 🚀 Shipping – Login-Fix
+⏳ 🧪 Testing – Dark Mode
+🚀 Shipped – Login-Fix
+⏳ Emoji-Konzept</div>
+      <p>Das zweite Emoji gibt es nur, wenn der Prozess beim Start schon bekannt ist. Das ist ein Kompromiss nahe an deiner Idee. Er hat aber dasselbe Ausrichtungsproblem wie B (mal ein, mal zwei Emojis) und gegenüber D keinen Mehrwert, weil das Wort den Prozess bereits nennt.</p>
+      <div class="variant-evaluation" data-decision="var-f" data-label="F · Doppel nur bei Prozessen">
+        <div class="eval-group">
+          <label class="eval-option"><input type="radio" name="eval-var-f" value="discard" checked><span class="eval-label">Verwerfen</span></label>
+          <label class="eval-option"><input type="radio" name="eval-var-f" value="include"><span class="eval-label">Miteinbeziehen</span></label>
+        </div>
+        <div class="field-row decision-comment-row">
+          <label for="var-f-note">{{decision.comment_label}}</label>
+          <textarea id="var-f-note" data-comment="var-f-note" data-attachable placeholder="{{decision.comment_placeholder}}" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+</section>

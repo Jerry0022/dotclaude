@@ -26,7 +26,7 @@ one-line resume hint on every session start and compact and relaunches
 nothing; the 24 h prune never touches a paused concept; the completion card
 shows no concept link and no compass; strict mode bound to the concept is
 released. End the pausing turn with the `paused` card, without a `concept`
-field — its `[SESSION TITLE]` block sets `⏸️ Paused – `.
+field — its `[SESSION TITLE]` block sets `⏸️ ✋ Paused – `.
 
 ## Resume from pause
 

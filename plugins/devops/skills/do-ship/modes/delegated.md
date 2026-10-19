@@ -56,7 +56,7 @@ inline that way, the largest at 951 k.
    session's: `pre.agent.model` refuses an inheriting spawn once. The `prompt` starts
    with `Use Skill("devops:do-ship") with args "--delegated[ <flags>][ <channel
    args>]". session_id: <this session's id>. lang: <the user's language>.` and
-   then carries the brief. A title that already starts with `🚀 Shipping – `
+   then carries the brief. A title that already starts with `⏳ 🚀 Shipping – `
    stays. Otherwise apply Pre-Step C here, because a subagent cannot rename the
    session it runs in.
 5. **Result.** First relay the agent card that `pre.agent.announce` handed you
