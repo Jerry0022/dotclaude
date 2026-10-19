@@ -30,7 +30,7 @@ const QUESTION_HEADERS = [
   [/was soll dieser run/i, 'Was?'],
   [/bleibst du erreichbar|bist du dabei|wer shippt/i, 'Ablauf?'],
   [/wie weit darf die änderung/i, 'Umfang?'],
-  [/welche durchgänge/i, 'Durchgänge?'],
+  [/welche durchgänge|was kommt dazu/i, 'Durchgänge?'],
 ];
 
 function guessHeader(question) {
@@ -141,7 +141,9 @@ function answerTokens(value, q) {
 
 function isRouterCall(questions) {
   if (!Array.isArray(questions)) return false;
-  return !!findQuestion(questions, 'Durchgänge?') || (!!findQuestion(questions, 'Ablauf?') && !!findQuestion(questions, 'Umfang?'));
+  // 'Ablauf?' alone counts (always partial): with Q1/Q3 dropped (bedtime +
+  // backlog preset, strict preset) the base call is [Ablauf?, PC danach].
+  return !!findQuestion(questions, 'Durchgänge?') || !!findQuestion(questions, 'Ablauf?');
 }
 
 const Q1_FIXED = ['prompt', 'audit', 'backlog'];
@@ -245,8 +247,9 @@ function parseRouterAnswers(questions, answers, opts = {}) {
     const tokens = answerTokens(answerFor(a, q4), q4);
     const r = parseQ4(tokens, q4);
     out.passes = r.passes;
-    out.rethink = out.rethink || r.rethink;
-    out.burn = out.burn || r.burn;
+    // A Q4 answer decides rethink/burn; only an unanswered Q4 keeps the args.
+    out.rethink = tokens.length ? r.rethink : (out.rethink || r.rethink);
+    out.burn = tokens.length ? r.burn : (out.burn || r.burn);
     out.unresolved = r.unresolved;
     if (tokens.length) answered.push('passes', 'rethink', 'burn', 'unresolved');
   }
@@ -295,7 +298,12 @@ function parseQ4(tokens, q4) {
   // An empty Other on a question that names its empty answer is that answer.
   if (emptyDefaultOf(q4 && q4.question) !== null && tokens.every(t => PLACEHOLDER_RE.test(t.trim()))) return emptyAnswer;
   if (tokens.some(t => NO_EXTRAS_RE.test(t.trim()))) return { passes: recommended, rethink: false, burn: false, unresolved: false };
-  if (tokens.some(t => NONE_RE.test(t.trim()))) return { passes: [], rethink: false, burn: false, unresolved: false };
+  // "keine" only means "no passes" when Q4 still offers Harden/Polish; the
+  // current Q4 has none, so it reads like "Nichts davon".
+  if (tokens.some(t => NONE_RE.test(t.trim()))) {
+    if (!offersPasses) return { passes: recommended, rethink: false, burn: false, unresolved: false };
+    return { passes: [], rethink: false, burn: false, unresolved: false };
+  }
   const flags = { passes: new Set(), rethink: false, burn: false };
   const neg = new Set();
   let unresolved = false;
@@ -396,6 +404,9 @@ function applyFollowUp(cwd, patch, opts = {}) {
   const p = { ...patch };
   const hint = p.modeHint;
   delete p.modeHint;
+  // "Audit als Concept" owes no passes only in audit mode; in prompt+alsoAudit
+  // the implementation half keeps Harden/Polish.
+  if (p.auditResult === 'concept' && h.mode !== 'audit') delete p.passes;
   const armed = Date.parse(h.armedAt);
   if (hint && h.mode === 'prompt' && h.modeFrom === 'default' && Number.isFinite(armed) && now - armed <= MERGE_WINDOW_MS) {
     p.mode = hint;
@@ -482,7 +493,7 @@ function parseMachinePrompt(text) {
   const kv = kvPairs(text);
   const out = { source: 'machine', flow: 'autonomous' };
   if (backlog) out.mode = 'backlog';
-  else out.mode = /^audit/i.test(kv.mode || '') ? 'audit' : 'prompt';
+  else out.mode = /^audit/i.test(kv.mode || '') || /^audit/i.test(kv.kind || '') ? 'audit' : 'prompt';
   if (kv.ship) {
     if (/^auto/i.test(kv.ship)) out.ship = 'auto';
     else if (/^man/i.test(kv.ship)) out.ship = 'manual';
