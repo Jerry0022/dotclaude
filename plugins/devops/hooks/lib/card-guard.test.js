@@ -1373,6 +1373,32 @@ describe("cardDelivered / deliveredCardText — the card shown after the last re
     expect(d.action).toBe("pass");
   });
 
+  // Regression 2026-10-17: answer and card in one text block. The answer's
+  // "## …" sections and its numbered recommendations were read as the card's
+  // decision points ("10 points — max 3"), blocking a correct card and
+  // stacking a second one under it.
+  const answerThenCard = [
+    "## Welches Limit erreicht ist", "", "Text.", "",
+    "## Empfehlungen pro Projekt", "",
+    ...Array.from({ length: 10 }, (_, i) => `${i + 1}. Empfehlung ${i + 1}`), "",
+    "---", "", "Mehr Text.", "",
+    "&nbsp;", "", "---", "",
+    `### **${CARD_MARKER} Analyse fertig ${CARD_MARKER}**`, "",
+    "## 📋 Analyse gelesen — umsetzen oder Fragen?", "", "---",
+  ].join("\n");
+
+  test("answer prose before the card is not the card: no points violation, no second card", () => {
+    const tx = jsonl(userMsg("go"), render, renderResult, assistantMsg({ type: "text", text: answerThenCard }));
+    const card = deliveredCardText(tx);
+    expect(card.startsWith("---\n\n### **")).toBe(true);
+    expect(card).not.toContain("Empfehlung");
+    expect(extractPoints(card)).toEqual([]);
+    expect(extractCardTitle(card)).toBe("Analyse fertig");
+    const d = decideAction({ workHappened: true, stopHookActive: false, substantial: true,
+      cardRendered: true, cardRelayed: cardDelivered(tx), cardText: card });
+    expect(d.action).toBe("pass");
+  });
+
   test("every block reason that asks for the widget says how to answer the nudge", () => {
     expect(NO_OUTPUT_NUDGE_REPLY).toMatch(/reply to it with nothing/);
     for (const r of [buildBlockReason("/p"), buildNotRelayedReason(), buildWidgetSkippedReason("/tmp/w")]) {
