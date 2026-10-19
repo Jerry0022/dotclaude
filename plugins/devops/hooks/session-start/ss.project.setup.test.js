@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { setupProject } = require("./ss.project.setup.js");
-const { BLOCK_START } = require("../lib/runtime-ignores.js");
+const { BLOCK_START, BLOCK_END } = require("../lib/runtime-ignores.js");
 
 const tmp = [];
 function mkTmp(prefix) {
@@ -36,41 +36,81 @@ function initRepo({ commit = true, gitignore = true } = {}) {
   return dir;
 }
 
-const excludeOf = (repo) => fs.readFileSync(path.join(repo, ".git", "info", "exclude"), "utf8");
+const gitignoreOf = (repo) => fs.readFileSync(path.join(repo, ".gitignore"), "utf8");
+const blocks = (text) => text.split("\n").filter((l) => l.startsWith(BLOCK_START)).length;
 
-describe("ss.project.setup — runtime files stay out of git via .git/info/exclude", () => {
-  test("writes the block once; the plugin's runtime files vanish from status, config does not", () => {
-    const repo = initRepo();
+describe("ss.project.setup — the managed block lives in .gitignore, never in .git/info/exclude", () => {
+  test("a repo without a commit gets the block once; runtime files vanish from status, config does not", () => {
+    const repo = initRepo({ commit: false });
     const home = mkTmp("ps-home-");
-    expect(setupProject({ cwd: repo, home }).exclude).toBe("written");
-    expect(setupProject({ cwd: repo, home }).exclude).toBe("current");
-    expect(excludeOf(repo).split("\n").filter((l) => l.startsWith(BLOCK_START))).toHaveLength(1);
+    const excludeBefore = fs.readFileSync(path.join(repo, ".git", "info", "exclude"), "utf8");
+    expect(setupProject({ cwd: repo, home }).gitignore).toBe("written");
+    expect(setupProject({ cwd: repo, home }).gitignore).toBe("current");
+    expect(blocks(gitignoreOf(repo))).toBe(1);
+    expect(gitignoreOf(repo)).toContain("node_modules/");
+    expect(fs.readFileSync(path.join(repo, ".git", "info", "exclude"), "utf8")).toBe(excludeBefore);
 
     fs.mkdirSync(path.join(repo, ".claude"), { recursive: true });
     fs.writeFileSync(path.join(repo, ".claude", "batch.md"), "x");
     fs.writeFileSync(path.join(repo, ".claude", "devops-config.json"), "{}");
+    fs.writeFileSync(path.join(repo, ".claude", "settings.local.json"), "{}");
     fs.writeFileSync(path.join(repo, ".claude", "settings.json"), "{}");
     const status = git(repo, "status", "--porcelain", "--untracked-files=all");
     expect(status).not.toContain("batch.md");
     expect(status).not.toContain("devops-config.json");
+    expect(status).not.toContain("settings.local.json");
     expect(status).toContain(".claude/settings.json");
   });
 
-  test("a linked worktree writes into the shared common dir, never into the worktree", () => {
+  test("an established repo without the block is left alone — migrate is the user's move", () => {
     const repo = initRepo();
-    const home = mkTmp("ps-home-");
-    const wt = path.join(repo, ".claude", "worktrees", "w1");
+    const before = gitignoreOf(repo);
+    expect(setupProject({ cwd: repo, home: mkTmp("ps-home-") }).gitignore).toBe("skipped");
+    expect(gitignoreOf(repo)).toBe(before);
+  });
+
+  test("a stale block is rewritten in place, user lines around it survive", () => {
+    const repo = initRepo();
+    fs.writeFileSync(path.join(repo, ".gitignore"), `dist/\n\n${BLOCK_START}\n**/.claude/batch.md\n${BLOCK_END}\n\nlocal/\n`);
+    expect(setupProject({ cwd: repo, home: mkTmp("ps-home-") }).gitignore).toBe("written");
+    const text = gitignoreOf(repo);
+    expect(blocks(text)).toBe(1);
+    expect(text.startsWith("dist/\n")).toBe(true);
+    expect(text.trimEnd().endsWith("local/")).toBe(true);
+    expect(text).toContain("**/.claude/settings.local.json");
+  });
+
+  test("nothing is written while a merge is in progress", () => {
+    const repo = initRepo();
+    fs.writeFileSync(path.join(repo, ".gitignore"), `${BLOCK_START}\n${BLOCK_END}\n`);
+    fs.writeFileSync(path.join(repo, ".git", "MERGE_HEAD"), "0".repeat(40) + "\n");
+    expect(setupProject({ cwd: repo, home: mkTmp("ps-home-") }).gitignore).toBe("skipped");
+  });
+
+  test("a linked worktree writes its own .gitignore", () => {
+    const repo = initRepo();
+    fs.writeFileSync(path.join(repo, ".gitignore"), `${BLOCK_START}\n${BLOCK_END}\n`);
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "block");
+    const wt = path.join(mkTmp("ps-wt-"), "w1");
     git(repo, "worktree", "add", "-q", "-b", "w1", wt);
-    expect(setupProject({ cwd: wt, home }).exclude).toBe("written");
-    expect(excludeOf(repo)).toContain(".claude/batch.md");
-    fs.mkdirSync(path.join(wt, ".claude"), { recursive: true });
-    fs.writeFileSync(path.join(wt, ".claude", "batch-mode.json"), "{}");
-    expect(git(wt, "status", "--porcelain", "--untracked-files=all")).not.toContain("batch-mode.json");
+    expect(setupProject({ cwd: wt, home: mkTmp("ps-home-") }).gitignore).toBe("written");
+    expect(gitignoreOf(wt)).toContain("**/.claude/batch.md");
+    expect(blocks(gitignoreOf(repo))).toBe(1);
+  });
+
+  test("a git repo at ~/.claude (the home backup) is never touched", () => {
+    const home = mkTmp("ps-home-");
+    const dot = path.join(home, ".claude");
+    fs.mkdirSync(dot);
+    git(dot, "init", "-q", "-b", "main");
+    expect(setupProject({ cwd: dot, home })).toEqual({ gitignore: null, offer: null });
+    expect(fs.existsSync(path.join(dot, ".gitignore"))).toBe(false);
   });
 
   test("outside a git work tree it does nothing", () => {
     const dir = mkTmp("ps-plain-");
-    expect(setupProject({ cwd: dir, home: mkTmp("ps-home-") })).toEqual({ exclude: null, offer: null });
+    expect(setupProject({ cwd: dir, home: mkTmp("ps-home-") })).toEqual({ gitignore: null, offer: null });
   });
 });
 

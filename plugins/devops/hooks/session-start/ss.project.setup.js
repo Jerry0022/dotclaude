@@ -1,26 +1,32 @@
 #!/usr/bin/env node
 /**
  * @hook ss.project.setup
- * @version 0.1.0
+ * @version 0.2.0
  * @event SessionStart
  * @plugin devops
  * @description The automatic part of project setup (the former /setup-project
  *   skill; its interactive rest is deep-knowledge/project-setup.md).
  *
- *   1. Keeps the plugin's runtime files out of git: writes the marked block
- *      from lib/runtime-ignores.js into the clone's `.git/info/exclude` —
- *      replaced in place when it changed, untouched when current. Local to
- *      the clone and shared by all its worktrees (the file lives in the git
- *      common dir), so it never shows up as a diff in the repo, and a plugin
- *      release that adds an artifact covers every clone at its next session.
+ *   1. Keeps the canonical `# >>> claude (managed) >>>` block of the repo's
+ *      `.gitignore` current (lib/runtime-ignores.js): a repo whose
+ *      `.gitignore` already carries the block gets it rewritten in place when
+ *      a plugin release changed it; a repo without a commit yet gets it
+ *      written (that is its project setup). An established repo without the
+ *      block is left alone — its `.gitignore` is reviewed content, so the
+ *      move is `scripts/claude-ignore.js migrate`, offered by ship_preflight
+ *      when a ship touches `.gitignore` or `.claude/`. Nothing is written
+ *      while a rebase or merge is in progress. `.git/info/exclude` is no
+ *      longer written (a block an earlier version left there keeps working
+ *      until `migrate` removes it).
  *   2. A new repository (no commit yet, or no root `.gitignore`) gets a
  *      one-time offer of the project setup — once per clone, recorded in
  *      ~/.claude/devops-project-setup.json; the setup itself only runs when
  *      the user agrees.
  *
- *   Silent otherwise. Outside a git work tree, and for a dotfiles repo rooted
- *   at the home directory seen from a subfolder, it does nothing. Pure fs
- *   plus at most one `git rev-parse` (5 s cap) — boot-window safe.
+ *   Silent otherwise. Outside a git work tree, for a dotfiles repo rooted at
+ *   the home directory seen from a subfolder, and for a git repo at
+ *   ~/.claude itself (the home backup), it does nothing. Pure fs plus at most
+ *   one `git rev-parse` (5 s cap) — boot-window safe.
  */
 
 require('../lib/plugin-guard');
@@ -30,23 +36,47 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { findRepoRoot, gitCommonDir, samePath } = require('../lib/project-root');
-const { applyBlock } = require('../lib/runtime-ignores');
+const { applyBlock, migrateGitignore, BLOCK_START } = require('../lib/runtime-ignores');
 
 const STATE_FILE = 'devops-project-setup.json';
 
-/**
- * Bring `<common>/info/exclude` up to date.
- * @returns {'written'|'current'|'error'}
- */
-function syncExclude(commonDir) {
-  const file = path.join(commonDir, 'info', 'exclude');
-  let old = '';
-  try { old = fs.readFileSync(file, 'utf8'); } catch { /* absent — created below */ }
-  const next = applyBlock(old);
-  if (next === old.replace(/\r\n/g, '\n')) return 'current';
+/** The worktree's own git dir (MERGE_HEAD, rebase state live there). */
+function ownGitDir(root) {
+  const dotGit = path.join(root, '.git');
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, next);
+    if (fs.statSync(dotGit).isDirectory()) return dotGit;
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'));
+    return m ? path.resolve(root, m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function operationInProgress(root) {
+  const dir = ownGitDir(root);
+  if (!dir) return true;
+  return ['rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD']
+    .some((f) => fs.existsSync(path.join(dir, f)));
+}
+
+/**
+ * Keep the managed block of `<root>/.gitignore` current.
+ * @param {string} root work-tree root
+ * @param {boolean} isNew no commit yet
+ * @returns {'written'|'current'|'skipped'|'error'}
+ */
+function syncGitignore(root, isNew) {
+  const file = path.join(root, '.gitignore');
+  let old = '';
+  try { old = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }
+  const text = old.replace(/\r\n/g, '\n');
+  const hasBlock = text.split('\n').some((l) => l.startsWith(BLOCK_START));
+  if (!hasBlock && !isNew) return 'skipped';
+  if (operationInProgress(root)) return 'skipped';
+  const next = hasBlock ? applyBlock(text) : migrateGitignore(text).text;
+  if (next === text) return 'current';
+  try {
+    fs.writeFileSync(file, old.includes('\r\n') ? next.replace(/\n/g, '\r\n') : next);
     return 'written';
   } catch {
     return 'error';
@@ -78,26 +108,28 @@ function readState(file) {
 /**
  * Run both steps for `cwd`.
  * @param {{cwd:string, home?:string, pluginRoot?:string}} o
- * @returns {{exclude:string|null, offer:string|null}}
+ * @returns {{gitignore:string|null, offer:string|null}}
  */
 function setupProject({ cwd, home = os.homedir(), pluginRoot = path.resolve(__dirname, '..', '..') }) {
   const start = path.resolve(cwd || process.cwd());
   const root = findRepoRoot(start);
-  if (!root) return { exclude: null, offer: null };
+  if (!root) return { gitignore: null, offer: null };
   try {
-    if (samePath(root, home) && !samePath(start, root)) return { exclude: null, offer: null };
+    if (samePath(root, home) && !samePath(start, root)) return { gitignore: null, offer: null };
+  } catch { /* keep going */ }
+  try {
+    if (samePath(root, path.join(home, '.claude'))) return { gitignore: null, offer: null };
   } catch { /* keep going */ }
   const common = gitCommonDir(root);
-  if (!common) return { exclude: null, offer: null };
-
-  const exclude = syncExclude(common);
+  if (!common) return { gitignore: null, offer: null };
 
   const reason = newRepoReason(root);
-  if (!reason) return { exclude, offer: null };
+  const gitignore = syncGitignore(root, reason === 'no commit yet');
+  if (!reason) return { gitignore, offer: null };
   const stateFile = path.join(home, '.claude', STATE_FILE);
   const state = readState(stateFile);
   const key = path.resolve(common).replace(/\\/g, '/').toLowerCase();
-  if (state.offered[key]) return { exclude, offer: null };
+  if (state.offered[key]) return { gitignore, offer: null };
   state.offered[key] = new Date().toISOString();
   try {
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
@@ -111,7 +143,7 @@ function setupProject({ cwd, home = os.homedir(), pluginRoot = path.resolve(__di
     `stack, a LICENSE, the project map. Do not run it unasked; when the user agrees, follow ${doc}.`,
     'This offer is made once per repository — do not repeat it later in the session.',
   ].join('\n');
-  return { exclude, offer };
+  return { gitignore, offer };
 }
 
 function main() {
@@ -138,4 +170,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { setupProject, syncExclude, newRepoReason };
+module.exports = { setupProject, syncGitignore, newRepoReason };

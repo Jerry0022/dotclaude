@@ -12,7 +12,8 @@ describe("runtime-ignores — the one list of project-rooted runtime paths", () 
     for (const tracked of [".claude/settings.json", ".claude/graphify.json", ".claude/skills/", ".claude/project-map.md"]) {
       expect(allEntries()).not.toContain(tracked);
     }
-    expect(PLUGIN_STATE).toContain(".claude/devops-config.json");
+    expect(allEntries()).toContain(".claude/devops-config.json");
+    expect(allEntries()).toContain(".claude/settings.local.json");
   });
 
   test("an empty file gets exactly one block", () => {
@@ -51,7 +52,7 @@ describe("runtime-ignores — the one list of project-rooted runtime paths", () 
     expect(applyBlock(lf.replace(/\n/g, "\r\n"))).toBe(lf);
   });
 
-  test("renderBlock lists Claude Code state before plugin state", () => {
+  test("renderBlock lists Claude Code state before plugin state, every entry as **/.claude/…", () => {
     const block = renderBlock();
     expect(block.indexOf(".claude/worktrees/")).toBeLessThan(block.indexOf(".claude/batch.md"));
   });
@@ -99,5 +100,117 @@ describe("AUD-C023 — archived batches and the guide flag are ignored", () => {
       expect(out.trim().split(/\r?\n/)).toEqual(names);
       expect(() => execFileSync("git", ["check-ignore", "--no-index", ".claude/batch-notes-draft.txt"], { cwd: d, stdio: "pipe" })).toThrow();
     } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  });
+});
+
+describe("canonical .gitignore block — migrate, check, exclude cleanup", () => {
+  const ri = require("./runtime-ignores.js");
+  const handGrown = [
+    "node_modules/",
+    "",
+    "# AI tooling — session state (never track)",
+    ".claude/worktrees/",
+    "/.claude/todos/",
+    "**/.claude/settings.local.json",
+    "",
+    "# Kept local in this repo",
+    ".claude/settings.json",
+    "",
+    `${ri.LEGACY_START} — kept for clones without the plugin >>>`,
+    ".claude/batch.md",
+    ".claude/.ship-queue",
+    `${ri.LEGACY_END} <<<`,
+    "",
+    "dist/",
+    "",
+  ].join("\n");
+
+  test("migrate folds hand-grown lines and the old block into ONE block at the first old line", () => {
+    const { text, removed } = ri.migrateGitignore(handGrown);
+    const lines = text.split("\n");
+    expect(lines.filter((l) => l === ri.BLOCK_START)).toHaveLength(1);
+    expect(text).not.toContain(ri.LEGACY_START);
+    expect(text).not.toContain("# AI tooling");
+    expect(removed).toEqual(expect.arrayContaining([".claude/batch.md", ".claude/worktrees/", "/.claude/todos/", "**/.claude/settings.local.json"]));
+    expect(lines.indexOf(ri.BLOCK_START)).toBeLessThan(lines.indexOf(".claude/settings.json"));
+    // project lines and deliberate deviations stay
+    for (const keep of ["node_modules/", "dist/", ".claude/settings.json", "# Kept local in this repo"]) expect(lines).toContain(keep);
+  });
+
+  test("migrate and applyBlock are idempotent; CRLF input gives the LF result", () => {
+    const once = ri.migrateGitignore(handGrown).text;
+    expect(ri.migrateGitignore(once).text).toBe(once);
+    expect(ri.applyBlock(once)).toBe(once);
+    expect(ri.migrateGitignore(handGrown.replace(/\n/g, "\r\n")).text).toBe(once);
+  });
+
+  test("a second managed block is removed, the first one replaced in place", () => {
+    const two = ["a/", ri.BLOCK_START, "**/.claude/batch.md", ri.BLOCK_END, "b/", ri.BLOCK_START, ri.BLOCK_END, "c/"].join("\n");
+    const out = ri.applyBlock(two);
+    expect(out.split("\n").filter((l) => l === ri.BLOCK_START)).toHaveLength(1);
+    expect(out.indexOf("a/")).toBeLessThan(out.indexOf(ri.BLOCK_START));
+    expect(out.indexOf(ri.BLOCK_END)).toBeLessThan(out.indexOf("b/"));
+    expect(out).toContain("c/");
+  });
+
+  test("check names each deviation; a migrated file is ok; policy deviations are info only", () => {
+    const codes = ri.check({ gitignore: handGrown, exclude: `${ri.LEGACY_START} >>>\n.claude/batch.md\n${ri.LEGACY_END} <<<\n` }).issues.map((i) => i.code);
+    expect(codes).toEqual(expect.arrayContaining(["missing-block", "legacy-block", "duplicate-lines", "exclude-block"]));
+    const after = ri.check({ gitignore: ri.migrateGitignore(handGrown).text, exclude: "" });
+    expect(after.ok).toBe(true);
+    expect(after.policy).toEqual([{ line: ".claude/settings.json", path: ".claude/settings.json" }]);
+    const stale = ri.check({ gitignore: `${ri.BLOCK_START}\n**/.claude/batch.md\n${ri.BLOCK_END}\n`, exclude: null });
+    expect(stale.issues.map((i) => i.code)).toEqual(["stale-block"]);
+  });
+
+  test("stripExclude removes the plugin block and Claude Code's lines, keeps the rest", () => {
+    const exclude = [
+      "# git ls-files --others --exclude-from=.git/info/exclude",
+      "# claude-code-runtime",
+      "**/.claude/scheduled_tasks.lock",
+      "**/.claude/worktrees/",
+      "**/.claude/agent-registry.json",
+      "/AUTONOMOUS-*",
+      "",
+      `${ri.LEGACY_START} — managed by the devops plugin (ss.project.setup), do not edit >>>`,
+      ".claude/batch.md",
+      `${ri.LEGACY_END} <<<`,
+      "/BURN-*",
+      "",
+    ].join("\n");
+    const { text, removed } = ri.stripExclude(exclude);
+    expect(text).not.toContain(".claude/");
+    expect(text).not.toContain("claude-code-runtime");
+    expect(text).not.toContain(ri.LEGACY_START);
+    expect(text).toContain("/AUTONOMOUS-*");
+    expect(text).toContain("/BURN-*");
+    expect(removed).toHaveLength(4);
+    expect(ri.stripExclude(text)).toEqual({ text, removed: [] });
+  });
+
+  test("the block keeps runtime files out and versioned files in (git check-ignore)", () => {
+    const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+    const { execFileSync } = require("node:child_process");
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "ri-gi-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: d });
+      fs.writeFileSync(path.join(d, ".gitignore"), ri.applyBlock(""));
+      const ignored = [".claude/settings.local.json", ".claude/launch.json", ".claude/worktrees/x/a.txt", "sub/.claude/concept-active.json", ".claude/.ship-queue", ".claude/runs/r1.json", ".claude/agent-registry.json"];
+      const out = execFileSync("git", ["check-ignore", "--no-index", ...ignored], { cwd: d, encoding: "utf8" });
+      expect(out.trim().split(/\r?\n/)).toEqual(ignored);
+      for (const tracked of ["CLAUDE.md", ".claude/settings.json", ".claude/skills/x/SKILL.md", ".claude/project-map.md", ".claude/launch.example.json", "docs/concepts/x.html", ".claude/agents/a.md"]) {
+        expect(() => execFileSync("git", ["check-ignore", "--no-index", tracked], { cwd: d, stdio: "pipe" }), tracked).toThrow();
+      }
+    } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  });
+
+  test("touchesIgnorePolicy: only .gitignore, info/exclude and .claude/ paths trigger the ship check", () => {
+    expect(ri.touchesIgnorePolicy(["src/a.js", "README.md"])).toBe(false);
+    expect(ri.touchesIgnorePolicy([])).toBe(false);
+    expect(ri.touchesIgnorePolicy(["src/a.js", ".gitignore"])).toBe(true);
+    expect(ri.touchesIgnorePolicy([".claude/settings.json"])).toBe(true);
+    expect(ri.touchesIgnorePolicy(["apps/web/.claude/x.json"])).toBe(true);
+    expect(ri.touchesIgnorePolicy([".git/info/exclude"])).toBe(true);
+    expect(ri.touchesIgnorePolicy(["src/.gitignore.bak"])).toBe(false);
   });
 });

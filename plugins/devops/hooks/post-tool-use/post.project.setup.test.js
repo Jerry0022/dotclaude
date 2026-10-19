@@ -68,7 +68,7 @@ describe("post.project.setup — unit: run() on an in-process payload", () => {
 });
 
 describe("post.project.setup — e2e: git init mid-session triggers the same offer as ss.project.setup", () => {
-  test("`git init` in a fresh folder writes the exclude block and offers setup once", () => {
+  test("`git init` in a fresh folder writes the managed .gitignore block and offers setup once", () => {
     const dir = project();
     git(dir, "init", "-q", "-b", "main");
     git(dir, "config", "user.email", "t@example.com");
@@ -81,8 +81,8 @@ describe("post.project.setup — e2e: git init mid-session triggers the same off
     expect(out.hookSpecificOutput.additionalContext).toContain("New repository");
     expect(out.hookSpecificOutput.additionalContext).toContain("no commit yet");
 
-    const exclude = fs.readFileSync(path.join(dir, ".git", "info", "exclude"), "utf8");
-    expect(exclude).toContain("devops");
+    const gitignore = fs.readFileSync(path.join(dir, ".gitignore"), "utf8");
+    expect(gitignore).toContain("# >>> claude (managed) >>>");
 
     const statePath = path.join(first.home, ".claude", "devops-project-setup.json");
     const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
@@ -103,7 +103,7 @@ describe("post.project.setup — e2e: git init mid-session triggers the same off
     expect(res.status).toBe(0);
     const out = JSON.parse(res.stdout);
     expect(out.hookSpecificOutput.additionalContext).toContain(sub.replace(/\\/g, "/"));
-    expect(fs.existsSync(path.join(sub, ".git", "info", "exclude"))).toBe(true);
+    expect(fs.existsSync(path.join(sub, ".gitignore"))).toBe(true);
     expect(fs.existsSync(path.join(outer, ".git"))).toBe(false);
   });
 

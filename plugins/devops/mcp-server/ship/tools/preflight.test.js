@@ -299,3 +299,28 @@ describe("ship_preflight — unresolved conflict markers", () => {
   });
 
 });
+
+describe("ship_preflight — canonical .claude ignore block", () => {
+  test("a diff outside the ignore policy produces no claude-ignore check at all", async () => {
+    fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: ["src/app.ts"], baseFiles: [], overlap: [] });
+    const result = await handler({ cwd: CWD });
+    expect(checkByName(result, "claude-ignore")).toBeUndefined();
+    expect(result.warnings.some((w) => /ignore block/.test(w))).toBe(false);
+  });
+
+  test("a diff touching .gitignore runs the check; a deviation warns with the fix and does not block", async () => {
+    fileOverlap.mockReturnValue({ mergeBase: "abc", branchFiles: ["src/app.ts", ".gitignore"], baseFiles: [], overlap: [] });
+    const result = await handler({ cwd: CWD });
+    const check = checkByName(result, "claude-ignore");
+    expect(check).toMatchObject({ ok: true, issues: ["missing-block"] });
+    expect(check.fix).toMatch(/claude-ignore.js" migrate "/);
+    expect(result.warnings.some((w) => w.includes(check.fix))).toBe(true);
+    expect(result.ready).toBe(true);
+  });
+
+  test("an untracked file under .claude/ in the working tree triggers it too", async () => {
+    dirtyState.mockReturnValue({ dirty: true, untracked: [".claude/batch.md"], modified: [], lines: ["?? .claude/batch.md"] });
+    const result = await handler({ cwd: CWD });
+    expect(checkByName(result, "claude-ignore")).toBeDefined();
+  });
+});

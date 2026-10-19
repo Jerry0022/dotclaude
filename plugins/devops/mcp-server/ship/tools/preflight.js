@@ -16,6 +16,7 @@ import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { detectOutOfBandDeploys, DEFAULT_OUT_OF_BAND_GLOBS } from "../lib/infra-deploy.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
 import { detectComponents } from "../lib/components.js";
+import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -322,6 +323,17 @@ export async function handler(params) {
   });
   if (components.length) {
     checks.push({ name: "components", ok: true, value: components.map(c => `${c.dir} ${c.version}`) });
+  }
+
+  // 9d. Canonical `.claude` ignore block — only when this ship touches the
+  //     ignore policy (.gitignore, info/exclude, anything under .claude/),
+  //     committed or still in the working tree. Otherwise: no check, no output.
+  //     A deviation is a warning with the migrate command, never a block.
+  const touched = [...branchFilesForInfra, ...(state.modified || []), ...(state.untracked || [])];
+  if (touchesIgnorePolicy(touched)) {
+    const commonDir = gitTry(["rev-parse", "--path-format=absolute", "--git-common-dir"], opts) || null;
+    const ignoreCheck = claudeIgnoreCheck({ cwd, files: touched, commonDir });
+    if (ignoreCheck) checks.push(ignoreCheck);
   }
 
   // 10. Git config check (warning — auto-fixed by the do-ship skill)

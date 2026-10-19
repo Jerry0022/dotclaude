@@ -8,8 +8,8 @@
  * @description Runs `ss.project.setup`'s logic right after a mid-session
  *   `git init` instead of waiting for the next SessionStart (#503). Without
  *   this, a session that starts in a plain folder and runs `git init` for a
- *   new project never gets the one-time setup offer or the runtime-ignores
- *   block in `.git/info/exclude` for the rest of that session.
+ *   new project never gets the one-time setup offer or the managed
+ *   `.gitignore` block for the rest of that session.
  *
  *   Detects `git init`, `git init <dir>` and `git -C <dir> init` (see
  *   `lib/git-init-detect.js`) in the completed Bash/PowerShell command, then
