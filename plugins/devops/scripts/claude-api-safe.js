@@ -168,14 +168,16 @@ function resetLimit({ home } = {}) {
 }
 
 /** Append one call to the usage log. Best effort — logging never fails a call. */
-function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage = {}, usd = 0, rc, turns = null }) {
+function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage, usd = 0, rc, turns = null }) {
+  const u = usage || {};
   try {
     fs.mkdirSync(claudeDir(home), { recursive: true });
     const row = {
       ts: new Date(now).toISOString(), tool, tag, project: path.basename(cwd || process.cwd()) || null, model,
-      in: usage.input_tokens || 0, out: usage.output_tokens || 0,
-      cacheRead: usage.cache_read_input_tokens || 0, cacheWrite: usage.cache_creation_input_tokens || 0,
-      usd: Math.round(usd * 10000) / 10000, rc, ...(turns ? { turns } : {}),
+      in: u.input_tokens || 0, out: u.output_tokens || 0,
+      cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0,
+      usd: Math.round(usd * 1e6) / 1e6, // micro-dollars: many tiny calls must still add up
+      rc, ...(turns ? { turns } : {}),
     };
     fs.appendFileSync(path.join(claudeDir(home), USAGE_FILE), JSON.stringify(row) + '\n');
   } catch { /* best effort */ }
@@ -313,8 +315,22 @@ async function run(argv, {
     return RC.OK;
   }
   if (opts.mode === 'usage') {
-    const since = /^\d{4}-\d{2}-\d{2}$/.test(opts.since || '') ? opts.since : new Date(now).toISOString().slice(0, 8) + '01';
-    out(JSON.stringify(usageSummary({ home, since }), null, 2) + '\n');
+    // Day boundaries in local time (the user's month, not UTC's), compared as instants.
+    let start;
+    if (opts.since) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(opts.since);
+      start = m && new Date(+m[1], +m[2] - 1, +m[3]);
+      if (!start || start.getMonth() !== +m[2] - 1 || start.getDate() !== +m[3]) {
+        err(`claude-api-safe: --since needs a date like 2026-10-01, got "${opts.since}"\n`);
+        return RC.ERROR;
+      }
+    } else {
+      const d = new Date(now);
+      start = new Date(d.getFullYear(), d.getMonth(), 1);
+    }
+    const summary = usageSummary({ home, since: start.toISOString() });
+    summary.since = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+    out(JSON.stringify(summary, null, 2) + '\n');
     return RC.OK;
   }
 

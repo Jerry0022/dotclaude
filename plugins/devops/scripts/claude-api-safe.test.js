@@ -179,6 +179,7 @@ describe("usage log — what the credit was spent on", () => {
     expect(s).toMatchObject({ since: "2026-10-01", calls: 2, ok: 1, usd: 6 });
     expect(s.byUse.review).toEqual({ calls: 2, ok: 1, usd: 6 });
     expect(JSON.parse((await runCli(["--usage", "--since", "2026-10-20"], { now })).out).calls).toBe(0);
+    expect((await runCli(["--usage", "--since", "2026-13-45"], { now })).rc).toBe(api.RC.ERROR);
   });
 });
 

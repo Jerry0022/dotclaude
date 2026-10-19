@@ -283,8 +283,12 @@ async function run(argv, {
   let total = {};
   let turns = 0;
   // Every exit after the first request is logged once — answer or not, the credit was spent.
-  const rc = await loop();
-  if (turns) safe.logUsage({ home, tool: 'agent', tag: o.tag || (o.web ? 'research' : 'scout'), cwd: root, model, usage: total, usd: spent, rc, turns });
+  let rc = RC.ERROR;
+  try {
+    rc = await loop();
+  } finally {
+    if (turns) safe.logUsage({ home, tool: 'agent', tag: o.tag || (o.web ? 'research' : 'scout'), cwd: root, model, usage: total, usd: spent, rc, turns });
+  }
   return rc;
 
   async function loop() {
