@@ -10,7 +10,7 @@ import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } 
 import { classifyFailedChecks } from "../lib/ci-account-limits.js";
 import { repoKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
-import { remoteTagExists } from "../lib/remote-tags.js";
+import { remoteTagExists, parseLsRemoteTagOutput } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
 import { isPermanentPushError, tagHandoff } from "../lib/tag-handoff.js";
 import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js";
@@ -205,6 +205,18 @@ export async function handler(params) {
   const result = { branch, base, intermediate, mode: repoMode };
 
   try {
+    // The ring tag becomes `alpha/<tag>`; the channel grammar (lib/channels.js)
+    // only knows `vX.Y.Z`. Anything else ("0.18.0" without the v, a prerelease)
+    // would be pushed as a tag no consumer or ship_promote can ever resolve.
+    // Refuse before anything is committed, pushed or merged.
+    if (!intermediate && tag && !/^v\d+\.\d+\.\d+$/.test(tag)) {
+      result.success = false;
+      result.error =
+        `tag "${tag}" is not of the form vX.Y.Z — the alpha ring tag alpha/${tag} would not be a valid channel tag. ` +
+        `Nothing was committed, pushed or merged. Pass tag "v<x.y.z>" (or null to ship untagged).`;
+      return result;
+    }
+
     // Unresolved conflict markers — the last gate before this content becomes a
     // commit. ship_preflight runs the same scan, but the ship's own rebase
     // (skill Step 1b) happens AFTER it: a marker introduced while resolving that
@@ -557,7 +569,7 @@ export async function handler(params) {
     // reading a bare success:false after this line would retry (double-ship)
     // or hand-tag. mergePR only throws while the merge is provably NOT done.
     result.merged = base;
-    result.mergeSha = merge.sha;
+    result.mergeSha = merge.fullSha ? merge.fullSha.slice(0, 8) : merge.sha;
     if (merge.verified === false) result.mergeVerified = false;
     if (merge.warning) result.mergeWarning = merge.warning;
 
@@ -662,7 +674,7 @@ export async function handler(params) {
         // auth blip) used to read as "tag absent" and silently decide to create
         // one — the same fail-open the verification below was hardened against.
         const existing = await retryUntil(
-          () => gitTry(["ls-remote", "--tags", "origin", channelTag], { ...opts, timeout: NETWORK_TIMEOUT }),
+          () => gitTry(["ls-remote", "--tags", "origin", channelTag, `${channelTag}^{}`], { ...opts, timeout: NETWORK_TIMEOUT }),
           { attempts: tagVerifyAttempts, delayMs: tagRetryDelayMs },
         );
         if (!existing.ok) {
@@ -671,15 +683,31 @@ export async function handler(params) {
           result.tagWarning = `Could not read remote tags to check for ${channelTag} — proceeding to create it.`;
         }
         const remoteTag = existing.ok ? existing.value : null;
+        // The commit the ring tag must point at: the merge commit GitHub
+        // reported for THIS PR, not the moving origin/<base> tip.
+        const hasMergeCommit = !!merge.fullSha && gitTry(["cat-file", "-e", `${merge.fullSha}^{commit}`], opts) !== null;
+        const tagTarget = hasMergeCommit ? merge.fullSha : `origin/${base}`;
         // Exact ref, not a substring: ls-remote tail-matches per path component,
         // so a query for `v1.0.0` also returns `refs/tags/alpha/v1.0.0` (#251).
         if (remoteTag !== null && remoteTagExists(remoteTag, channelTag)) {
-          result.tagWarning = `Tag ${channelTag} already exists on remote — skipping creation.`;
-          result.tagVerified = true;
+          // An existing tag only counts as verified when it points at THIS
+          // merge (bump "none" re-uses the previous version's tag name, which
+          // sits on the previous ship's commit).
+          const target = merge.fullSha || result.mergeSha;
+          const tagCommit = parseLsRemoteTagOutput(remoteTag, channelTag);
+          if (target && tagCommit && !tagCommit.startsWith(target.toLowerCase()) && !target.toLowerCase().startsWith(tagCommit)) {
+            result.tagVerified = false;
+            result.tagWarning =
+              `Tag ${channelTag} already exists on remote but points at ${tagCommit.slice(0, 8)}, not this merge (${target.slice(0, 8)}) — ` +
+              `it was NOT moved. This ship is untagged; bump the version or tag the merge commit by hand.`;
+          } else {
+            result.tagWarning = `Tag ${channelTag} already exists on remote — skipping creation.`;
+            result.tagVerified = true;
+          }
         } else {
           // Create tag on the merge commit (origin/base), not on the current HEAD
           execFileSync("git", [
-            "tag", "-a", channelTag, `origin/${base}`, "-m",
+            "tag", "-a", channelTag, tagTarget, "-m",
             JSON.stringify({ channel: "alpha", version: tag.replace(/^v/, "") }),
           ], { cwd, encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] });
           // The tag push is its own retried step with its own timeout — never

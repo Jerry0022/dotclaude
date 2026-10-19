@@ -141,11 +141,24 @@ function run(cmd, cwd) {
       cwd,
       encoding: "utf8",
       timeout: 120_000,
+      // Node's default maxBuffer (~1 MiB) kills a chatty-but-green test run
+      // with ENOBUFS, which then read as a failed test step.
+      maxBuffer: 64 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
     });
     return { success: true, output: output.slice(-2000) }; // tail 2k chars
   } catch (e) {
-    return { success: false, output: (e.stderr || e.stdout || e.message || "").slice(-2000) };
+    const tail = (e.stderr || e.stdout || e.message || "").toString().slice(-2000);
+    // Name the harness-side failure kinds so they are not mistaken for a red test.
+    let failure;
+    if (e.code === "ENOBUFS") failure = "output-overflow";
+    else if (e.code === "ETIMEDOUT" || (e.killed && e.signal)) failure = "timeout";
+    const out = { success: false, output: tail };
+    if (failure) {
+      out.failure = failure;
+      out.output = `[${failure}: the command was stopped by the ship harness, not by a failing test — ${failure === "timeout" ? "120 s limit" : "output exceeded 64 MiB"}]\n` + tail;
+    }
+    return out;
   }
 }
 

@@ -14,6 +14,7 @@ vi.mock("node:child_process", () => ({
 vi.mock("../lib/git.js", () => ({
   git: vi.fn(() => ""),
   gitStrict: vi.fn(() => ""),
+  detectDefaultBranch: vi.fn(() => "main"),
   NETWORK_TIMEOUT: 60_000,
 }));
 
@@ -210,6 +211,18 @@ describe("ship_promote — guards", () => {
     const r = await handler(params());
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/ancestor/);
+  });
+
+  test("ancestry guard checks the repo's default branch, not a hard-coded main (master repos)", async () => {
+    mockRemote({ "alpha/v0.113.0": SHA });
+    gitLib.detectDefaultBranch.mockReturnValue("master");
+    const r = await handler(params());
+    expect(r.success).toBe(true);
+    const cmds = gitLib.gitStrict.mock.calls.map((c) => c[0]);
+    expect(cmds).toContain('fetch origin "master"');
+    expect(cmds.some((c) => c.startsWith("merge-base --is-ancestor") && c.endsWith('"origin/master"'))).toBe(true);
+    expect(cmds.join(" ")).not.toMatch(/origin\/main/);
+    gitLib.detectDefaultBranch.mockReturnValue("main");
   });
 });
 

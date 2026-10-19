@@ -206,3 +206,24 @@ describe("latestCacheVersion (AUD-C047)", () => {
     expect(latestCacheVersion([])).toBeNull();
   });
 });
+
+describe("ship_build — harness-side failures are named, not read as red tests", () => {
+  test("passes a large maxBuffer so chatty green output is not ENOBUFS-killed", async () => {
+    await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: "npm run test", buildIdOnly: false });
+    const call = execSync.mock.calls.find((c) => String(c[0]).includes("npm run test"));
+    expect(call[1].maxBuffer).toBeGreaterThanOrEqual(32 * 1024 * 1024);
+  });
+
+  test("ENOBUFS is reported as failure kind output-overflow", async () => {
+    execSync.mockImplementation((cmd) => {
+      if (String(cmd).includes("npm run test")) { const e = new Error("spawnSync ENOBUFS"); e.code = "ENOBUFS"; throw e; }
+      return "";
+    });
+    const res = await handler({ cwd: CWD, buildCmd: null, lintCmd: null, testCmd: "npm run test", buildIdOnly: false });
+    expect(res.success).toBe(false);
+    expect(res.failedAt).toBe("test");
+    const step = res.steps.find((s) => s.step === "test");
+    expect(step.failure).toBe("output-overflow");
+    expect(step.output).toMatch(/not by a failing test/);
+  });
+});

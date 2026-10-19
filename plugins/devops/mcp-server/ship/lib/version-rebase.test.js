@@ -176,3 +176,15 @@ describe("version-rebase — two parallel ships in a real repo", () => {
     expect(readFileSync(join(work, "b.js"), "utf8")).toBe("dirty\n");
   });
 });
+
+describe("resolveVersionConflicts — only the project's own version lines auto-resolve", () => {
+  test("a dependency-range collision (differs only in x.y.z) is NOT resolved to the base's side", () => {
+    const c = '{\n<<<<<<< HEAD\n  "zod": "^3.23.1"\n=======\n  "zod": "^3.24.0"\n>>>>>>> branch\n}';
+    expect(resolveVersionConflicts(c, "package.json")).toBeNull();
+  });
+
+  test("a mixed hunk (version line + dependency line) is refused as a whole", () => {
+    const c = '{\n<<<<<<< HEAD\n  "version": "1.0.1",\n  "zod": "^3.23.1"\n=======\n  "version": "1.0.2",\n  "zod": "^3.24.0"\n>>>>>>> branch\n}';
+    expect(resolveVersionConflicts(c, "package.json")).toBeNull();
+  });
+});

@@ -63,6 +63,17 @@ describe("mergePR — success path", () => {
     expect(mergePR(42, "main", undefined, noSleep)).toEqual({ sha: "abc1234", verified: true });
   });
 
+  test("reports the exact merge commit oid from gh (fullSha) when it is a 40-hex sha", () => {
+    const oid = "b".repeat(40);
+    execFileSync.mockImplementation((bin, args) => {
+      const key = `${bin} ${args.slice(0, 2).join(" ")}`;
+      if (key === "gh pr view") return args.includes("mergeCommit") ? oid : "MERGED";
+      if (key === "git rev-parse --short") return "bbbbbbb\n";
+      return "";
+    });
+    expect(mergePR(42, "main", undefined, noSleep)).toEqual({ sha: "bbbbbbb", verified: true, fullSha: oid });
+  });
+
   test("includes --delete-branch by default", () => {
     routeExec({ "gh pr merge": "", "gh pr view": "MERGED", "git fetch origin": "", "git rev-parse --short": "abc\n" });
     mergePR(42, "main", undefined, noSleep);
@@ -462,5 +473,14 @@ describe("deleteRemoteBranch (#442)", () => {
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/gh api: .*HTTP 403/);
     expect(r.error).toMatch(/git push --delete: .*permission denied/);
+  });
+});
+
+describe("deleteRemoteBranch — URL-encodes the ref path", () => {
+  test("'#' and spaces in a branch name cannot truncate or corrupt the REST path", () => {
+    execFileSync.mockReturnValue("");
+    deleteRemoteBranch("claude/issue#42 x", {});
+    const args = execFileSync.mock.calls[0][1];
+    expect(args[args.length - 1]).toBe("repos/{owner}/{repo}/git/refs/heads/claude/issue%2342%20x");
   });
 });

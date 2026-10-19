@@ -4,7 +4,7 @@ vi.mock("node:fs");
 vi.mock("./resolve-root.js", () => ({ resolveGitRoot: vi.fn(() => null) }));
 
 import { readFileSync } from "node:fs";
-import { bumpVersion, detectProjectType, readVersion } from "./version.js";
+import { bumpVersion, detectProjectType, readVersion, firstChangelogRelease } from "./version.js";
 
 // ---------------------------------------------------------------------------
 // bumpVersion — pure semver math
@@ -147,5 +147,16 @@ describe("readVersion", () => {
     const result = readVersion("/test");
     expect(result.version).toBeNull();
     expect(result.type).toBeNull();
+  });
+});
+
+describe("firstChangelogRelease — skips the Unreleased placeholder", () => {
+  test("## [Unreleased] first, then the real version", () => {
+    const m = firstChangelogRelease("# Changelog\n\n## [Unreleased]\n- wip\n\n## [1.2.3] - 2026-01-01\n");
+    expect(m[1]).toBe("1.2.3");
+  });
+  test("case-insensitive; only-Unreleased → null; plain version first is unchanged", () => {
+    expect(firstChangelogRelease("## [UNRELEASED]\n")).toBeNull();
+    expect(firstChangelogRelease("## [2.0.0]\n## [1.0.0]\n")[1]).toBe("2.0.0");
   });
 });
