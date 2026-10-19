@@ -293,6 +293,7 @@ function notifyToast(title, message) {
       timeout: 15_000,
       stdio: "ignore",
       detached: true,
+      windowsHide: true,
     });
   } catch { /* best-effort */ }
 }
