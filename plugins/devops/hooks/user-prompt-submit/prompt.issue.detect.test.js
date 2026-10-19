@@ -193,7 +193,7 @@ describe("prompt.issue.detect — first-prompt matching runs in the hook (issue-
 
   test("a match ≥ 0.6 asks about that issue — no match_issues call", () => {
     withRemote();
-    IM.writeCache(REMOTE, ISSUES, { dir: tmp });
+    IM.writeCache(REMOTE, ISSUES, { dir: IM.defaultCacheDir(tmp) });
     const r = run("dark mode toggle settings", "m-hit");
     expect(r.stdout).toContain("open issue #7");
     expect(r.stdout).toContain('Arbeitest du an Issue #7');
@@ -202,7 +202,7 @@ describe("prompt.issue.detect — first-prompt matching runs in the hook (issue-
 
   test("no match ≥ 0.6 → no output at all", () => {
     withRemote();
-    IM.writeCache(REMOTE, ISSUES, { dir: tmp });
+    IM.writeCache(REMOTE, ISSUES, { dir: IM.defaultCacheDir(tmp) });
     const r = run("please refactor the build pipeline and update the readme wording", "m-miss");
     expect(r.code).toBe(0);
     expect(r.stdout).toBe("");
@@ -216,13 +216,13 @@ describe("prompt.issue.detect — first-prompt matching runs in the hook (issue-
 
   test("a stale cache counts as none", () => {
     withRemote();
-    IM.writeCache(REMOTE, ISSUES, { dir: tmp, now: Date.now() - IM.CACHE_MAX_AGE_MS - 1000 });
+    IM.writeCache(REMOTE, ISSUES, { dir: IM.defaultCacheDir(tmp), now: Date.now() - IM.CACHE_MAX_AGE_MS - 1000 });
     expect(run("dark mode toggle settings", "m-stale").stdout).toContain("call the match_issues");
   });
 
   test("the heuristic still runs once per session", () => {
     withRemote();
-    IM.writeCache(REMOTE, ISSUES, { dir: tmp });
+    IM.writeCache(REMOTE, ISSUES, { dir: IM.defaultCacheDir(tmp) });
     expect(run("dark mode toggle settings", "m-once").stdout).toContain("#7");
     expect(run("dark mode toggle settings again", "m-once").stdout).toBe("");
   });
