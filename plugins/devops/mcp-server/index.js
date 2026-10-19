@@ -1379,7 +1379,7 @@ const HEADINGS = {
  * title and CTA cannot drift.
  */
 function cardHead(input, key, delivery, state) {
-  if (QUESTION_KEYS.has(key) && openQuestionOf(input)) return { id: 'question', mandatory: true, hkey: 'question' };
+  if (QUESTION_KEYS.has(key) && !keptTestPoints(input, key, 'de') && openQuestionOf(input)) return { id: 'question', mandatory: true, hkey: 'question' };
   const noShip = (state.mode === 'git-no-remote' || state.mode === 'file-only') && (key === 'ready' || key === 'test');
   const hkey = noShip ? key + '-local' : key;
   const id = titleStateForKey(hkey, {
@@ -1561,9 +1561,10 @@ function basePointsForKey(input, key, lang) {
     case 'released-beta':
     case 'released-stable':
       return [...open, ...finalTest.map(testTag)];
-    // Open points ride on the test card too — its conclude button answers them.
+    // Open points ride on the test card too — its conclude button answers
+    // them. The steps to test come first and are never folded (#750).
     case 'test':
-      return [...open, ...userTest.map(testTag)];
+      return [...userTest.map(testTag), ...open];
     case 'vv-unverified':
       // A deliberate skip names itself (pointsForKey) — the generic line only
       // stands in when the card carries no reason.
@@ -1580,11 +1581,25 @@ function basePointsForKey(input, key, lang) {
   }
 }
 
-/** ≤3 shown, the rest folded into a "+N weitere" tail for the heading. */
-function capPoints(points, lang) {
-  if (points.length <= POINTS_LIMIT) return { shown: points, tail: '' };
-  const tail = (POINTS_TAIL[lang] || POINTS_TAIL.de)(points.length - POINTS_LIMIT);
-  return { shown: points.slice(0, POINTS_LIMIT), tail };
+/**
+ * ≤3 shown, the rest folded into a "+N weitere" tail for the heading. The
+ * first `keep` points are always shown and not counted against the limit —
+ * the test card's steps to run (#750).
+ */
+function capPoints(points, lang, keep = 0) {
+  const kept = points.slice(0, keep);
+  const rest = points.slice(keep);
+  if (rest.length <= POINTS_LIMIT) return { shown: points, tail: '' };
+  const tail = (POINTS_TAIL[lang] || POINTS_TAIL.de)(rest.length - POINTS_LIMIT);
+  return { shown: [...kept, ...rest.slice(0, POINTS_LIMIT)], tail };
+}
+
+/** How many leading points of a card are steps the user must test — never folded (#750). */
+function keptTestPoints(input, key, lang) {
+  if (key !== 'test') return 0;
+  const userTest = (Array.isArray(input.userTest) ? input.userTest : []).map(String).filter(Boolean);
+  if (!userTest.length) return 0;
+  return userTest.length + (verificationSkipPoint(input, lang) ? 1 : 0);
 }
 
 /** True when the evidence carries a red/partial finding — routes `ready` to `ready-red`. */
@@ -1855,7 +1870,10 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   // #714: an open point or a requirement waiting on the user is the next
   // step — the heading asks it and the Ship button goes; the conclude button
   // (Ändern / Nachbessern) carries the prepared answer.
-  const question = QUESTION_KEYS.has(key) ? openQuestionOf(input) : null;
+  // A test card with steps to test keeps its Test heading: the open points
+  // follow the steps instead of taking over (#750).
+  const keepTests = keptTestPoints(input, key, lang);
+  const question = QUESTION_KEYS.has(key) && !keepTests ? openQuestionOf(input) : null;
   if (question) {
     const waitsFor = question.waits.length ? String(question.waits[0].requirement || question.waits[0].evidence || '').trim() : '';
     let qHeading = TITLE_SCHEME.headingOf('question', T.question({ question: questionText(question.first, lang), waitsFor }));
@@ -1876,7 +1894,7 @@ function buildDecisionBlock(input, lang, key, delivery, state) {
   let heading = TITLE_SCHEME.headingOf(head.id, fn(ctx), { mandatory: head.mandatory });
 
   const points = pointsForKey(input, key, lang);
-  const { shown, tail } = capPoints(points, lang);
+  const { shown, tail } = capPoints(points, lang, keepTests);
   if (tail) heading = heading.replace(/([?.])$/, tail + '$1');
 
   const context = buildContextLine(input, key, delivery, lang);

@@ -262,6 +262,25 @@ describe("--render-card CLI fallback", () => {
     expect(term).toMatch(/^1\. ❓ Doku zur Card nachziehen\?$/m);
   });
 
+  test("#750: a test card shows every userTest step, open points never fold them", async () => {
+    const card = {
+      variant: "test", summary: "Testen", lang: "de", session_id: S("750-steps"),
+      userTest: ["Schritt A", "Schritt B", "Schritt C", "Schritt D"],
+      open: ["Doku nachziehen?", "Config prüfen?"],
+    };
+    const term = await renderCard(card);
+    expect(term).toMatch(/^## 👉 🧪 Test/m);
+    expect(term).not.toMatch(/weitere/);
+    for (const [i, s] of ["Schritt A", "Schritt B", "Schritt C", "Schritt D"].entries()) {
+      expect(term).toMatch(new RegExp(`^${i + 1}\\. 🧪 ${s}$`, "m"));
+    }
+    expect(term).toMatch(/^5\. ❓ Doku nachziehen\?$/m);
+    expect(term).toMatch(/^6\. ❓ Config prüfen\?$/m);
+    const widget = (await renderCardFull({ ...card, session_id: S("750-steps-w") }, { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" })).stderr;
+    for (const s of ["Schritt A", "Schritt D", "Config prüfen?"]) expect(widget).toContain(s);
+    expect(widget).not.toMatch(/\+\d+ weitere/);
+  });
+
   test("test and ship-successful cards answer their open points too (Desktop)", async () => {
     const desktop = { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" };
     const open = [{ text: "Auch im Terminal?", reply: "Ja, bitte auch im Terminal." }, "Doku nachziehen?"];
@@ -273,11 +292,13 @@ describe("--render-card CLI fallback", () => {
     expect(testWidget.match(/Nachbessern<span aria-hidden="true"> ↗<\/span>/g)).toHaveLength(1);
     expect(testWidget).toContain(answer);
     expect(testWidget).not.toContain("frag mich, was");
-    // the open points show on the test card, the steps tagged 🧪
+    // the steps to test lead under the Test heading, the open points follow (#750)
     const testTerm = await renderCard(test);
-    expect(testTerm).toMatch(/^## 👉 ❓ Question — Auch im Terminal\?$/m);
-    expect(testTerm).toMatch(/^1\. ❓ Doku nachziehen\?$/m);
-    expect(testTerm).toMatch(/^2\. 🧪 Seite öffnen$/m);
+    expect(testTerm).not.toMatch(/^## 👉 ❓ Question/m);
+    expect(testTerm).toMatch(/^## 👉 🧪 Test/m);
+    expect(testTerm).toMatch(/^1\. 🧪 Seite öffnen$/m);
+    expect(testTerm).toMatch(/^2\. ❓ Auch im Terminal\?$/m);
+    expect(testTerm).toMatch(/^3\. ❓ Doku nachziehen\?$/m);
 
     const ring = (await renderCardFull({
       variant: "ship-successful", summary: "Ship", lang: "de", session_id: S("conclude-ring"), open,
