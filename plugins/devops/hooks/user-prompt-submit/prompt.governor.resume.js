@@ -19,6 +19,8 @@ require('../lib/plugin-guard');
 function main(hook) {
   const { hasAdapter } = require('../../scripts/governor/adapters');
   if (!hasAdapter()) return null;
+  // A collected / open-url prompt produces no turn: removing queue entries now would lose them.
+  try { if (require('../lib/batch-state').willBeCollected(hook)) return null; } catch { /* fail open */ }
   const { paths, loadConfig } = require('../../scripts/governor/config');
   const S = require('../../scripts/governor/state');
   const Q = require('../../scripts/governor/queue');

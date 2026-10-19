@@ -109,11 +109,16 @@ process.stdin.on('end', () => {
   if (worktrees.length === 0) process.exit(0);
 
   const list = worktrees.map(p => `  - ${p}`).join('\n');
-  process.stderr.write(
-    `[pre.worktree.split-guard] WARNING: git-mutating command in the MAIN repo while a session worktree is active:\n` +
-    `${list}\n` +
-    `[pre.worktree.split-guard] If this work belongs to the session, run it INSIDE the worktree instead — otherwise the worktree is left dirty and the session shows "uncommitted changes" even though the work shipped from main.\n` +
-    `[pre.worktree.split-guard] This is a warning only; the command will proceed.\n`
-  );
+  // stderr of an exit-0 PreToolUse hook reaches neither the user nor the model;
+  // additionalContext is what makes this warning visible.
+  const text =
+    `[pre.worktree.split-guard] WARNING: git-mutating command in the MAIN repo while a session worktree is active:
+` +
+    `${list}
+` +
+    `[pre.worktree.split-guard] If this work belongs to the session, run it INSIDE the worktree instead - otherwise the worktree is left dirty and the session shows "uncommitted changes" even though the work shipped from main.
+` +
+    `[pre.worktree.split-guard] This is a warning only; the command will proceed.`;
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text } }));
   process.exit(0);
 });
