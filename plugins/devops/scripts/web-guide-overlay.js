@@ -643,8 +643,16 @@
     abort: "Abbruch gesendet – Claude beendet den Guide …",
   };
   var lastSentType = "next";
-  // #748: a click that finds no live wait() says "nicht zu" at once, not after 45 s.
+  // #748: a click that finds no live wait() says "nicht zu" at once, not after
+  // 45 s — unless a poll ended within NO_LISTENER_GAP_MS: between two wait()
+  // calls (model working, hidden mode's 25 s pause) the next poll picks it up.
+  var NO_LISTENER_GAP_MS = 30000;
   var noListenerAtClick = false;
+  function noListenerNow() {
+    if (listenerLive()) return false;
+    var deadAt = pendingWaiter ? pendingWaiterArmedAt + CALLER_TIMEOUT_MS : 0;
+    return Date.now() - Math.max(lastPoll, deadAt) > NO_LISTENER_GAP_MS;
+  }
   function tickHeartbeat() {
     if (waitLabelEl) {
       var mine = currentStep ? eventQueue.filter((e) => e.stepId === currentStep.id) : [];
@@ -678,7 +686,7 @@
 
   function deliverEvent(event) {
     event.id = ++lastEventId;
-    noListenerAtClick = !listenerLive();
+    noListenerAtClick = noListenerNow();
     eventQueue.push(event);
     saveQueue();
     // Hand off to the current pendingWaiter only while it is young enough to
