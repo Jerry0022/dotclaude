@@ -191,8 +191,10 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
          - The state file is missing.
          - `state.port` ≠ `{port}` (this cron is for a stale session — a newer
            concept overwrote the state file with a different port).
-         - `state.html_path` does not exist on disk (resolved against the
-           state file's grandparent, i.e. the session cwd).
+         - `state.html_path` is set but does not exist on disk (resolved against the
+           state file's grandparent, i.e. the session cwd). An unset `html_path` is NOT a trigger.
+         A trigger must hold on 3 looks in a row (initial + 2 re-checks, 5 s apart) before
+         `/shutdown` — the watcher's 3-polls rule — so a rewrite window never tears the bridge down.
          A state file that names another port AND another `owner` is a
          sibling session's (#417): NOT a trigger — the tick reports it on
          stderr and keeps servicing its own port.

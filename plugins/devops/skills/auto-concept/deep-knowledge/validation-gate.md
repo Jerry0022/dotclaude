@@ -362,6 +362,8 @@ function collectAllFormFields(scope) {
   const fields = {};
   // Catch-all: every named input, select, textarea inside scope
   scope.querySelectorAll('input, select, textarea').forEach(el => {
+    if (el.closest('[data-device-clone]')) return;      // device-frame copies of the mockup
+    if (el.dataset.engineStore !== undefined) return;   // engine stores are typed by their own collector
     const key = el.dataset.field
              || el.dataset.v4
              || el.dataset.confirm
