@@ -30,7 +30,9 @@ const SRC = fs.readFileSync(SRC_PATH, "utf8");
 // re-render, FAB-relative clamped panel positioning, adoptedStyleSheets CSP
 // fallback, and the two new heartbeat/status texts. The injected payload is
 // the lean form (comments and indentation stripped) — about two thirds of this.
-const MAX_BYTES = 64 * 1024;
+// Raised to 72 KB for the comment row, Claude's answer note and the header ×
+// abort confirmation (1.14.0).
+const MAX_BYTES = 72 * 1024;
 const MAX_LINE_LENGTH = 200;
 
 // ---- minimal fake DOM, just enough to execute the overlay source ----
@@ -223,8 +225,8 @@ describe("web-guide-overlay — shape", () => {
     expect(() => new vm.Script(SRC)).not.toThrow();
   });
 
-  test("defines VERSION 1.13.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
-    expect(SRC).toMatch(/VERSION\s*=\s*["']1.13.0["']/);
+  test("defines VERSION 1.14.0, setStep/wait/state/destroy, and touches sessionStorage", () => {
+    expect(SRC).toMatch(/VERSION\s*=\s*["']1.14.0["']/);
     expect(SRC).toMatch(/defineProperty\(window, "claudeGuide"/);
     expect(SRC).toMatch(/setStep\s*:/);
     expect(SRC).toMatch(/wait\s*:/);
@@ -255,7 +257,7 @@ describe("web-guide-overlay — execution", () => {
     const result = run(sandbox);
     expect(result).toBe("injected");
     expect(sandbox.window.claudeGuide).toBeTruthy();
-    expect(sandbox.window.claudeGuide.version).toBe("1.13.0");
+    expect(sandbox.window.claudeGuide.version).toBe("1.14.0");
     expect(typeof sandbox.window.claudeGuide.setStep).toBe("function");
     expect(typeof sandbox.window.claudeGuide.wait).toBe("function");
     expect(typeof sandbox.window.claudeGuide.state).toBe("function");
@@ -272,7 +274,7 @@ describe("web-guide-overlay — execution", () => {
   test("state() reports version, stepId, collapsed, queued, url", () => {
     run(sandbox);
     const s = sandbox.window.claudeGuide.state();
-    expect(s).toMatchObject({ version: "1.13.0", stepId: null, queued: 0 });
+    expect(s).toMatchObject({ version: "1.14.0", stepId: null, queued: 0 });
     expect(s.url).toBe("https://example.test/page");
   });
 
@@ -369,8 +371,8 @@ describe("web-guide-overlay — execution", () => {
     expect(secretInput).toBeTruthy();
     secretInput.value = "sk-super-secret-value";
 
-    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
-    collapseBtn.click(); // triggers saveState()
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    fab.dispatch("click", { type: "click", target: fab, detail: 0 }); // collapse — triggers saveState()
 
     const sessionRaw = JSON.stringify(sandbox.sessionStorage._data);
     const localRaw = JSON.stringify(sandbox.localStorage._data);
@@ -703,23 +705,21 @@ describe("web-guide-overlay — execution", () => {
     expect(sandbox.window.claudeGuide.state().lastDeliveredId).toBe(ev.id);
   });
 
-  // Fix 6: abort confirmation resets on re-render.
-  test("a re-render clears the pending abort confirmation", () => {
+  // Fix 6: the abort confirmation (header × layer) closes on a collapse and
+  // never fires by itself.
+  test("collapsing closes an open abort confirmation without sending", () => {
     run(sandbox);
     sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
     const host = getHost(sandbox);
-    let abortBtn = findAll(host, (e) => e.tagName === "BUTTON" && e.textContent === "Abbrechen")[0];
-    abortBtn.click(); // arms the confirmation
+    const confirmLayer = () => findAll(getHost(sandbox), (e) => e.className === "confirm")[0];
+    findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide abbrechen")[0].click();
+    expect(confirmLayer()).toBeTruthy();
 
-    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
-    collapseBtn.click(); // re-render via collapse — must reset the armed confirmation
-
-    sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
-    abortBtn = findAll(getHost(sandbox), (e) => e.tagName === "BUTTON" && e.textContent === "Abbrechen")[0];
-    abortBtn.click(); // single click after re-render must only arm, not fire
-
-    const state = sandbox.window.claudeGuide.state();
-    expect(state.queued).toBe(0);
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    fab.dispatch("click", { type: "click", target: fab, detail: 0 }); // collapse
+    fab.dispatch("click", { type: "click", target: fab, detail: 0 }); // expand again
+    expect(confirmLayer()).toBeUndefined();
+    expect(sandbox.window.claudeGuide.state().queued).toBe(0);
   });
 
   // #514: location block, copy chips, checklist.
@@ -779,11 +779,11 @@ describe("web-guide-overlay — execution", () => {
   // #516: a pointerdown that starts on the collapse button must not arm the
   // header's drag/pointer-capture — capturing on the header would route the
   // matching click away from the button in a real browser.
-  test("pointerdown on the collapse button skips setPointerCapture on the draggable header", () => {
+  test("pointerdown on the header × skips setPointerCapture on the draggable header", () => {
     run(sandbox);
     sandbox.window.claudeGuide.setStep({ id: "1", index: 1, total: 1, title: "T", text: "go" });
     const host = getHost(sandbox);
-    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
+    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Guide abbrechen")[0];
     const head = collapseBtn.parentNode;
 
     head.dispatch("pointerdown", {
@@ -794,12 +794,12 @@ describe("web-guide-overlay — execution", () => {
     head.dispatch("pointerup", { type: "pointerup", pointerId: 1, target: collapseBtn, composedPath: () => [collapseBtn, head] });
 
     // Real pointerdown/pointerup + click on the button itself (not a synthetic
-    // el.click() bypassing pointer events) must still collapse the panel.
+    // el.click() bypassing pointer events) must still open the abort confirm.
     collapseBtn.dispatch("pointerdown", { type: "pointerdown", pointerId: 2, target: collapseBtn, composedPath: () => [collapseBtn] });
     collapseBtn.dispatch("pointerup", { type: "pointerup", pointerId: 2, target: collapseBtn, composedPath: () => [collapseBtn] });
     collapseBtn.dispatch("click", { type: "click", target: collapseBtn });
 
-    expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
+    expect(findAll(getHost(sandbox), (e) => e.className === "confirm")[0]).toBeTruthy();
 
     // Dragging the header itself (pointerdown target = head) still arms capture.
     head.dispatch("pointerdown", { type: "pointerdown", pointerId: 3, clientX: 0, clientY: 0, target: head, composedPath: () => [head] });
@@ -861,8 +861,8 @@ describe("web-guide-overlay — execution", () => {
     expect(sandbox.window.claudeGuide.state().collapsed).toBe(false);
 
     const host = getHost(sandbox);
-    const collapseBtn = findAll(host, (e) => e.getAttribute && e.getAttribute("aria-label") === "Einklappen")[0];
-    collapseBtn.click();
+    const fab = findAll(host, (e) => e.className === "fab")[0];
+    fab.dispatch("click", { type: "click", target: fab, detail: 0 });
     expect(sandbox.window.claudeGuide.state().collapsed).toBe(true);
 
     // Same id re-sent (re-send / re-inject) — stays collapsed.

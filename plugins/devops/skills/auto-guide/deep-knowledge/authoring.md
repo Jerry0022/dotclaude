@@ -19,7 +19,8 @@ is in [protocol.md](protocol.md); this file is about *content*.
 - Steps are written in the user's chat language (German for this plugin's
   users unless the conversation is in English). Button labels of the panel
   itself are fixed German (`Weiter`, `Fertig`, `Ich komme nicht weiter`,
-  `Abbrechen`).
+  the comment field's `Senden`, and the header × with its „Guide wirklich
+  abbrechen?" dialog). Minimising is a FAB click or Escape.
 - Imperative, no preamble: "Klicke auf **Generate new token**." not
   "Als Nächstes müsstest du bitte …".
 - Quote values the user has to type in `` `code` ``: "Trage als Name
@@ -73,6 +74,20 @@ When the user says they are stuck:
 3. If the site changed layout and the route is dead, say so in the step
    and re-plan from the current page — do not loop the user through the same
    wording twice.
+
+## Handling `comment`
+
+A question or remark from the comment field ("Brauche ich hier Admin-Rechte?",
+"Den Namen will ich anders") — the user is neither done nor stuck.
+
+1. Answer briefly (≤ 400 chars) as `note` on a re-send of the **same** step
+   (same `id`, rest unchanged unless the comment changes the plan). Query the
+   page first when the answer depends on what it shows.
+2. If the remark changes the route or a value (another name, a different
+   plan), adjust `text`/`copy` in the same re-send and say so in the `note`.
+3. Drop the `note` on the next new step — it answers one comment, it is not
+   a running log. A comment that needs a real decision goes to the chat as a
+   question, with the `note` pointing there ("Antwort im Chat").
 
 ## Login and redirects
 
