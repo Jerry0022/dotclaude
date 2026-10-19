@@ -191,24 +191,6 @@ flips the panel locally as a safety-net — when a reload counter advance
 has been observed OR a long stale timeout elapses. See `templates-submit.md`
 § Panel State Reset for the client contract.
 
-### Legacy Fallback: JS Eval (for page updates)
-
-For live page updates (Step 5c — updating content after processing decisions),
-browser eval tools are still useful:
-
-- playwright: `browser_evaluate("...")`
-- preview: `preview_eval("...")`
-
-**Scope warning:** `preview_eval` is allowed here for evaluating JS inside
-the **already-open** Edge tab. It is NEVER allowed for *opening* the
-concept page — see SKILL.md § Step 3 (MANDATORY — Real Edge browser only)
-and bridge-server.md § Step 6. Opening via the preview MCP would replace
-the user's real Edge tab with a sandboxed in-IDE iframe that has no
-heartbeat connection and breaks the whole concept flow.
-
-If no eval tool works, inform the user via chat what was processed instead
-of updating the page live. The page can be manually refreshed.
-
 **WARNING:** NEVER use `get_page_text`, `browser_snapshot`, or `preview_snapshot`
 to read decisions. Concept pages contain large inline CSS/JS (self-contained HTML).
 These "read page" tools strip scripts and may fail with "page body too large".
