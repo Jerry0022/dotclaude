@@ -160,6 +160,28 @@ test("--status reports switches and key presence, never the key", async () => {
   expect(s).toMatchObject({ enabled: true, webGuide: true, keyPresent: true, keySource: "file", limitUntil: null });
 });
 
+describe("usage log — what the credit was spent on", () => {
+  test("a call is logged with tokens and $, never the prompt or key; --usage sums this month", async () => {
+    setConfig({ enabled: true });
+    setKeyFile("DEVOPS_ANTHROPIC_API_KEY=sk-test\n");
+    const usage = { input_tokens: 1_000_000, output_tokens: 100_000 };
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    await runCli(["secret prompt text"], { now, fetchImpl: fakeFetch(200, { content: [{ type: "text", text: "ok" }], usage }) });
+    await runCli(["x"], { now, fetchImpl: fakeFetch(500, { error: { message: "overloaded" } }) });
+    const log = fs.readFileSync(path.join(home, ".claude", api.USAGE_FILE), "utf8");
+    expect(log).not.toContain("secret prompt");
+    expect(log).not.toContain("sk-test");
+    const rows = log.trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows[0]).toMatchObject({ tool: "safe", tag: "review", project: "proj", in: 1_000_000, out: 100_000, usd: 6, rc: 0 });
+    expect(rows[1]).toMatchObject({ rc: 1, usd: 0 });
+    const r = await runCli(["--usage"], { now });
+    const s = JSON.parse(r.out);
+    expect(s).toMatchObject({ since: "2026-10-01", calls: 2, ok: 1, usd: 6 });
+    expect(s.byUse.review).toEqual({ calls: 2, ok: 1, usd: 6 });
+    expect(JSON.parse((await runCli(["--usage", "--since", "2026-10-20"], { now })).out).calls).toBe(0);
+  });
+});
+
 describe("sessionLine — the SessionStart [api-credit] line", () => {
   test("off → no line at all", () => {
     expect(api.sessionLine({ pluginRoot: "/p", cwd, home, env: {} })).toBeNull();

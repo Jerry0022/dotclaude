@@ -119,6 +119,26 @@ those count as Claude Code (purchased credit, see the table), so:
 The key goes only into the child's `ANTHROPIC_API_KEY`; the parent's Claude
 variables are stripped as before.
 
+## What the credit was spent on — `--usage`
+
+Every call of `claude-api-safe.js`, `claude-api-agent.js` and
+`api-credit-audit.js` appends one line to `~/.claude/api-credit-usage.jsonl`:
+time, script, use (`review` / `scout` / `research` / `audit`), project,
+model, tokens, estimated $ (list prices) and rc. Never the prompt or the key.
+
+```bash
+node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" --usage                    # this month
+node "{PLUGIN_ROOT}/scripts/claude-api-safe.js" --usage --since 2026-10-01
+```
+
+Prints calls, successful calls and $ — total and per use, project and model.
+The Console stays the authoritative balance; the log answers *what for*.
+
+First day in use (2026-10-19): five ship reviews (Codex at its limit) on
+Opus 5.5, 2–7k tokens in / 1–3k out, about $0.04–0.08 each, ~$0.28 in total.
+They led to fixes in all five sessions; 2 of 13 findings were false alarms,
+which the sessions checked against the code before acting.
+
 ## Month-end audit — `scripts/api-credit-audit.js`
 
 Spends part of the expiring credit on a read-only audit of one repo:

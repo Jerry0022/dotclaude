@@ -49,14 +49,7 @@ const SECRET_FILE = /^(\.env(\..*)?|devops-api\.env|.*\.(pem|key|p12|pfx)|id_(rs
 const MAX_PATTERN = 300;
 const GREP_BUDGET_MS = 20000;
 
-// $/MTok: input, output, 5-min cache write, cache read (platform pricing 2026-10).
-const PRICES = {
-  'claude-opus-5-5': [4, 20, 5, 0.2],
-  'claude-sonnet-5-5': [2, 10, 2.5, 0.2],
-  'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01],
-  'claude-fable-5-1': [10, 50, 12.5, 0.25],
-};
-const WEB_SEARCH_USD = 0.01; // $10 per 1,000 searches
+const { PRICES, costOf } = safe;
 
 /** Models with the dynamic-filtering web tool variants. */
 function webTools(model) {
@@ -229,24 +222,11 @@ function runTool(root, name, input, deadline) {
 }
 
 // ---------------------------------------------------------------------------
-// Cost
-// ---------------------------------------------------------------------------
-
-function costOf(model, usage = {}) {
-  const [inp, outp, cw, cr] = PRICES[model] || PRICES[DEFAULT_MODEL];
-  const searches = (usage.server_tool_use && usage.server_tool_use.web_search_requests) || 0;
-  return ((usage.input_tokens || 0) * inp
-    + (usage.output_tokens || 0) * outp
-    + (usage.cache_creation_input_tokens || 0) * cw
-    + (usage.cache_read_input_tokens || 0) * cr) / 1e6 + searches * WEB_SEARCH_USD;
-}
-
-// ---------------------------------------------------------------------------
 // Loop
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const o = { model: null, effort: null, root: null, web: false, maxTurns: null, maxUsd: null, task: null };
+  const o = { model: null, effort: null, root: null, web: false, maxTurns: null, maxUsd: null, task: null, tag: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--model') o.model = argv[++i];
@@ -255,6 +235,7 @@ function parseArgs(argv) {
     else if (a === '--web') o.web = true;
     else if (a === '--max-turns') o.maxTurns = Number(argv[++i]);
     else if (a === '--max-usd') o.maxUsd = Number(argv[++i]);
+    else if (a === '--tag') o.tag = argv[++i];
     else if (o.task === null) o.task = a;
   }
   return o;
@@ -299,53 +280,64 @@ async function run(argv, {
 
   const messages = [{ role: 'user', content: `Project root: ${root}\n\nTask:\n${task}` }];
   let spent = 0;
-  for (let turn = 1; turn <= maxTurns; turn++) {
-    const left = deadline - Date.now();
-    if (left <= 0) { err('claude-api-agent: run timed out\n'); return RC.TIMEOUT; }
-    const body = {
-      model,
-      max_tokens: 16000,
-      system: SYSTEM,
-      tools,
-      messages,
-      cache_control: { type: 'ephemeral' }, // caches the growing prefix turn by turn
-    };
-    if (o.effort) body.output_config = { effort: o.effort };
-    const r = await safe.postMessages({ key: keyInfo.key, body, fetchImpl, timeoutMs: Math.min(left, REQUEST_TIMEOUT_S * 1000) });
-    if (r.rc === RC.LIMIT) {
-      const stored = safe.storeLimit({ home, reason: r.message });
-      err(`claude-api-agent: API credit exhausted (${r.message}) — skipped until ${stored}.\n`);
-      return RC.LIMIT;
+  let total = {};
+  let turns = 0;
+  // Every exit after the first request is logged once — answer or not, the credit was spent.
+  const rc = await loop();
+  if (turns) safe.logUsage({ home, tool: 'agent', tag: o.tag || (o.web ? 'research' : 'scout'), cwd: root, model, usage: total, usd: spent, rc, turns });
+  return rc;
+
+  async function loop() {
+    for (let turn = 1; turn <= maxTurns; turn++) {
+      const left = deadline - Date.now();
+      if (left <= 0) { err('claude-api-agent: run timed out\n'); return RC.TIMEOUT; }
+      const body = {
+        model,
+        max_tokens: 16000,
+        system: SYSTEM,
+        tools,
+        messages,
+        cache_control: { type: 'ephemeral' }, // caches the growing prefix turn by turn
+      };
+      if (o.effort) body.output_config = { effort: o.effort };
+      const r = await safe.postMessages({ key: keyInfo.key, body, fetchImpl, timeoutMs: Math.min(left, REQUEST_TIMEOUT_S * 1000) });
+      if (r.rc === RC.LIMIT) {
+        const stored = safe.storeLimit({ home, reason: r.message });
+        err(`claude-api-agent: API credit exhausted (${r.message}) — skipped until ${stored}.\n`);
+        return RC.LIMIT;
+      }
+      if (r.rc !== RC.OK) { err(`claude-api-agent: ${r.message}\n`); return r.rc; }
+
+      const res = r.body;
+      turns = turn;
+      spent += costOf(model, res.usage);
+      total = safe.addUsage(total, res.usage);
+      messages.push({ role: 'assistant', content: res.content || [] });
+
+      // Only a finished turn is an answer. Every early end returns rc != 0, so
+      // the caller falls back to the in-session Agent instead of relaying
+      // half-done narration of a tool turn as the result.
+      const stop = res.stop_reason;
+      if (stop === 'end_turn' || stop === 'stop_sequence') return finish(safe.textOf(res), null);
+      if (stop === 'max_tokens') return finish(safe.textOf(res), 'max_tokens');
+      if (stop === 'refusal') { err('claude-api-agent: the model declined the task\n'); return RC.ERROR; }
+      if (spent >= maxUsd) { err(`claude-api-agent: budget of $${maxUsd} reached\n`); return RC.ERROR; }
+      if (stop === 'pause_turn') continue; // server tool loop paused — resend as is
+      if (stop !== 'tool_use') { err(`claude-api-agent: unexpected stop_reason ${stop}\n`); return RC.ERROR; }
+
+      const results = [];
+      for (const block of res.content || []) {
+        if (!block || block.type !== 'tool_use') continue;
+        let content;
+        let isError = false;
+        try { content = runTool(root, block.name, block.input, deadline); } catch (e) { content = String(e.message || e); isError = true; }
+        results.push({ type: 'tool_result', tool_use_id: block.id, content, ...(isError ? { is_error: true } : {}) });
+      }
+      messages.push({ role: 'user', content: results });
     }
-    if (r.rc !== RC.OK) { err(`claude-api-agent: ${r.message}\n`); return r.rc; }
-
-    const res = r.body;
-    spent += costOf(model, res.usage);
-    messages.push({ role: 'assistant', content: res.content || [] });
-
-    // Only a finished turn is an answer. Every early end returns rc != 0, so
-    // the caller falls back to the in-session Agent instead of relaying
-    // half-done narration of a tool turn as the result.
-    const stop = res.stop_reason;
-    if (stop === 'end_turn' || stop === 'stop_sequence') return finish(safe.textOf(res), null);
-    if (stop === 'max_tokens') return finish(safe.textOf(res), 'max_tokens');
-    if (stop === 'refusal') { err('claude-api-agent: the model declined the task\n'); return RC.ERROR; }
-    if (spent >= maxUsd) { err(`claude-api-agent: budget of $${maxUsd} reached\n`); return RC.ERROR; }
-    if (stop === 'pause_turn') continue; // server tool loop paused — resend as is
-    if (stop !== 'tool_use') { err(`claude-api-agent: unexpected stop_reason ${stop}\n`); return RC.ERROR; }
-
-    const results = [];
-    for (const block of res.content || []) {
-      if (!block || block.type !== 'tool_use') continue;
-      let content;
-      let isError = false;
-      try { content = runTool(root, block.name, block.input, deadline); } catch (e) { content = String(e.message || e); isError = true; }
-      results.push({ type: 'tool_result', tool_use_id: block.id, content, ...(isError ? { is_error: true } : {}) });
-    }
-    messages.push({ role: 'user', content: results });
+    err(`claude-api-agent: ${maxTurns} turns used up\n`);
+    return RC.ERROR;
   }
-  err(`claude-api-agent: ${maxTurns} turns used up\n`);
-  return RC.ERROR;
 
   function finish(answer, cutShort) {
     if (!answer.trim()) { err(`claude-api-agent: no answer${cutShort ? ` (${cutShort})` : ''}\n`); return RC.ERROR; }

@@ -24,6 +24,8 @@
  *   claude-api-safe.js --model claude-sonnet-5-5 --max-tokens 4000 "<prompt>"
  *   claude-api-safe.js --status        effective switches + key presence (never the key)
  *   claude-api-safe.js --reset-limit   forget a stored "credit exhausted" marker
+ *   claude-api-safe.js --usage [--since YYYY-MM-DD]
+ *                                      what the credit was spent on (default: this month)
  *
  * Environment:
  *   CLAUDE_API_SAFE_TIMEOUT   seconds (default 180)
@@ -48,6 +50,9 @@ const path = require('path');
 const KEY_VAR = 'DEVOPS_ANTHROPIC_API_KEY';
 const ENV_FILE = 'devops-api.env';
 const LIMIT_FILE = 'claude-api-limit.json';
+// One JSON line per call: when, which script, project, model, tokens, $ and rc.
+// Never the prompt, never the key — it answers "what did the credit go to?".
+const USAGE_FILE = 'api-credit-usage.jsonl';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-opus-5-5';
@@ -58,6 +63,34 @@ const DEFAULT_MAX_TOKENS = 8000;
 const LIMIT_TTL_MS = 12 * 60 * 60 * 1000;
 
 const RC = Object.freeze({ OK: 0, ERROR: 1, LIMIT: 75, TIMEOUT: 124, DISABLED: 126, NO_KEY: 127 });
+
+// $/MTok: input, output, 5-min cache write, cache read (platform pricing 2026-10).
+const PRICES = {
+  'claude-opus-5-5': [4, 20, 5, 0.2],
+  'claude-sonnet-5-5': [2, 10, 2.5, 0.2],
+  'claude-haiku-5-5': [0.1, 0.5, 0.125, 0.01],
+  'claude-fable-5-1': [10, 50, 12.5, 0.25],
+};
+const WEB_SEARCH_USD = 0.01; // $10 per 1,000 searches
+
+/** Estimated $ of one response's `usage` (list prices; the Console is authoritative). */
+function costOf(model, usage = {}) {
+  const [inp, outp, cw, cr] = PRICES[model] || PRICES[DEFAULT_MODEL];
+  const searches = (usage.server_tool_use && usage.server_tool_use.web_search_requests) || 0;
+  return ((usage.input_tokens || 0) * inp
+    + (usage.output_tokens || 0) * outp
+    + (usage.cache_creation_input_tokens || 0) * cw
+    + (usage.cache_read_input_tokens || 0) * cr) / 1e6 + searches * WEB_SEARCH_USD;
+}
+
+/** Sum of `usage` objects (several turns of one agent run). */
+function addUsage(a = {}, b = {}) {
+  const out = { ...a };
+  for (const k of ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']) {
+    out[k] = (a[k] || 0) + (b[k] || 0);
+  }
+  return out;
+}
 
 // "Your credit balance is too low to access the Anthropic API" and the
 // workspace spend-limit 400 ("You have reached your specified workspace API
@@ -134,12 +167,54 @@ function resetLimit({ home } = {}) {
   fs.rmSync(limitPath(home), { force: true });
 }
 
+/** Append one call to the usage log. Best effort — logging never fails a call. */
+function logUsage({ home, now = Date.now(), tool, tag = null, cwd, model, usage = {}, usd = 0, rc, turns = null }) {
+  try {
+    fs.mkdirSync(claudeDir(home), { recursive: true });
+    const row = {
+      ts: new Date(now).toISOString(), tool, tag, project: path.basename(cwd || process.cwd()) || null, model,
+      in: usage.input_tokens || 0, out: usage.output_tokens || 0,
+      cacheRead: usage.cache_read_input_tokens || 0, cacheWrite: usage.cache_creation_input_tokens || 0,
+      usd: Math.round(usd * 10000) / 10000, rc, ...(turns ? { turns } : {}),
+    };
+    fs.appendFileSync(path.join(claudeDir(home), USAGE_FILE), JSON.stringify(row) + '\n');
+  } catch { /* best effort */ }
+}
+
+/** Rows of the usage log since `since` (ISO date), grouped for `--usage`. */
+function usageSummary({ home, since }) {
+  let rows = [];
+  try {
+    rows = fs.readFileSync(path.join(claudeDir(home), USAGE_FILE), 'utf8').split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((r) => r && r.ts >= since);
+  } catch { /* no log yet */ }
+  const group = (key) => {
+    const m = {};
+    for (const r of rows) {
+      const k = key(r);
+      m[k] = m[k] || { calls: 0, ok: 0, usd: 0 };
+      m[k].calls++; if (r.rc === 0) m[k].ok++; m[k].usd += r.usd || 0;
+    }
+    for (const v of Object.values(m)) v.usd = Math.round(v.usd * 100) / 100;
+    return m;
+  };
+  const usd = Math.round(rows.reduce((s, r) => s + (r.usd || 0), 0) * 100) / 100;
+  return {
+    since, calls: rows.length, ok: rows.filter((r) => r.rc === 0).length, usd,
+    byUse: group((r) => r.tag || r.tool), byProject: group((r) => r.project || '?'), byModel: group((r) => r.model || '?'),
+  };
+}
+
 function parseArgs(argv) {
-  const opts = { model: null, maxTokens: null, prompt: null, mode: 'run' };
+  const opts = { model: null, maxTokens: null, prompt: null, mode: 'run', since: null, tag: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--status') opts.mode = 'status';
     else if (a === '--reset-limit') opts.mode = 'reset';
+    else if (a === '--usage') opts.mode = 'usage';
+    else if (a === '--since') opts.since = argv[++i];
+    else if (a === '--tag') opts.tag = argv[++i];
     else if (a === '--model') opts.model = argv[++i];
     else if (a === '--max-tokens') opts.maxTokens = Number(argv[++i]);
     else if (opts.prompt === null) opts.prompt = a;
@@ -237,6 +312,11 @@ async function run(argv, {
     out('claude-api-safe: limit marker cleared\n');
     return RC.OK;
   }
+  if (opts.mode === 'usage') {
+    const since = /^\d{4}-\d{2}-\d{2}$/.test(opts.since || '') ? opts.since : new Date(now).toISOString().slice(0, 8) + '01';
+    out(JSON.stringify(usageSummary({ home, since }), null, 2) + '\n');
+    return RC.OK;
+  }
 
   const switches = loadSwitches({ cwd, home });
   const keyInfo = resolveKey({ env, home });
@@ -275,18 +355,21 @@ async function run(argv, {
   }
 
   const timeoutS = Number(env.CLAUDE_API_SAFE_TIMEOUT) > 0 ? Number(env.CLAUDE_API_SAFE_TIMEOUT) : DEFAULT_TIMEOUT_S;
+  const model = opts.model || env.CLAUDE_API_SAFE_MODEL || DEFAULT_MODEL;
   const result = await callApi({
     key: keyInfo.key,
     prompt,
-    model: opts.model || env.CLAUDE_API_SAFE_MODEL || DEFAULT_MODEL,
+    model,
     maxTokens: Number.isInteger(opts.maxTokens) && opts.maxTokens > 0 ? opts.maxTokens : DEFAULT_MAX_TOKENS,
     timeoutMs: timeoutS * 1000,
     fetchImpl,
   });
 
+  const usd = result.usage ? costOf(model, result.usage) : 0;
+  logUsage({ home, now, tool: 'safe', tag: opts.tag || 'review', cwd, model, usage: result.usage, usd, rc: result.rc });
   if (result.rc === RC.OK) {
     out(result.text.endsWith('\n') ? result.text : result.text + '\n');
-    if (result.usage) err(`claude-api-safe: ${result.usage.input_tokens || 0} in / ${result.usage.output_tokens || 0} out tokens on API credit\n`);
+    if (result.usage) err(`claude-api-safe: ${result.usage.input_tokens || 0} in / ${result.usage.output_tokens || 0} out tokens · ~$${usd.toFixed(3)} on API credit\n`);
     return RC.OK;
   }
   if (result.rc === RC.LIMIT) {
@@ -299,8 +382,9 @@ async function run(argv, {
 }
 
 module.exports = {
-  RC, KEY_VAR, ENV_FILE, LIMIT_FILE, DEFAULT_MODEL,
+  RC, KEY_VAR, ENV_FILE, LIMIT_FILE, USAGE_FILE, DEFAULT_MODEL, PRICES,
   parseEnvFile, resolveKey, loadSwitches, activeLimit, storeLimit, resetLimit,
+  costOf, addUsage, logUsage, usageSummary,
   parseArgs, postMessages, textOf, callApi, sessionLine, run,
 };
 

@@ -130,6 +130,17 @@ describe("tool loop", () => {
     expect(r.out).toBe("");
   });
 
+  test("one usage row per run: summed tokens over all turns, tag, turn count", async () => {
+    const fetchImpl = scripted([
+      { content: [{ type: "tool_use", id: "t1", name: "list_files", input: { path: "." } }], stop_reason: "tool_use", usage },
+      { content: [{ type: "text", text: "done" }], stop_reason: "end_turn", usage },
+    ]);
+    await runAgent(["--tag", "audit", "x"], { fetchImpl });
+    const rows = fs.readFileSync(path.join(home, ".claude", safe.USAGE_FILE), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ tool: "agent", tag: "audit", project: "proj", in: 200, out: 100, turns: 2, rc: 0 });
+  });
+
   test("max_tokens without text → rc 1", async () => {
     const fetchImpl = scripted([{ content: [{ type: "thinking", thinking: "…" }], stop_reason: "max_tokens", usage }]);
     expect((await runAgent(["x"], { fetchImpl })).rc).toBe(1);
