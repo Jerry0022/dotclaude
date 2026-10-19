@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.268.8] — 2026-10-19
+
+The completion-card check no longer reads the answer above the card as part of it, so a long answer with its own headings or numbered list no longer forces a second, identical card.
+
+### Fixed
+- **Completion-card check (`stop.flow.guard`)**: when the answer and the card share one text block, only the card is checked — from the `---` rule that opens it (else from the ✨ title line). Before, the answer's own `## ` heading and its numbered list were counted as card decision points (e.g. "10 points — max 3"), the correct card was blocked and the model rendered a second identical one. Title, point, line-budget and card-signature checks all read the card alone now. Fixing only the point extraction was rejected: the other checks would still have read the prose. Regression test in `hooks/lib/card-guard.test.js`.
+
 ## [0.268.7] — 2026-10-17
 
 The /auto-concept trim pass 2 (#723) removes rationale and incident prose from the validation-gate and bridge-server references with no grader loss.
