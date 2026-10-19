@@ -50,7 +50,7 @@ async function run(argv, opts = {}) {
   const cwd = opts.cwd || process.cwd();
   const root = path.resolve(cwd, o.root || '.');
   const chunks = [];
-  const args = ['--root', root, '--max-usd', String(o.maxUsd > 0 ? o.maxUsd : DEFAULT_MAX_USD), '--max-turns', '60', '--effort', 'high'];
+  const args = ['--tag', 'audit', '--root', root, '--max-usd', String(o.maxUsd > 0 ? o.maxUsd : DEFAULT_MAX_USD), '--max-turns', '60', '--effort', 'high'];
   if (o.model) args.push('--model', o.model);
   args.push(auditTask(o.focus));
   const rc = await agent.run(args, { ...opts, cwd, out: (s) => chunks.push(s) });

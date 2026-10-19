@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.273.0] — 2026-10-19
+
+Every call that runs on the API credit is now logged, so you can see what it was spent on.
+
+### Added
+- **Usage log (`~/.claude/api-credit-usage.jsonl`)**: `claude-api-safe.js`, `claude-api-agent.js` and `api-credit-audit.js` each write one line per call or agent run. The line holds the time, script, use (`review` / `scout` / `research` / `audit`), project, model, tokens, estimated cost and exit code. It never contains the prompt or the key.
+- **`claude-api-safe.js --usage [--since YYYY-MM-DD]`**: shows calls, successful calls and dollars for the current month (in local time), split by use, project and model.
+
+### Changed
+- The price table now lives only in `claude-api-safe.js`, so both scripts price calls the same way. The stderr line of a one-shot call now also shows its estimated cost.
+- An agent run that throws after its first request is still logged.
+
 ## [0.272.0] — 2026-10-19
 
 Past work no longer gets lost in orphaned worktrees and branches. An audit of 29 repos found that hygiene itself never deleted unlanded work, but it ran only after a ship (in 5 of 29 repos) and its at-risk check was too narrow. The root causes: agent sub-branches that were never integrated, agent worktrees left uncommitted, sessions that ended without a commit, and parking without a register.

@@ -1,6 +1,6 @@
 # dotclaude
 
-**Version: 0.272.0**
+**Version: 0.273.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
@@ -163,7 +163,8 @@ Two switches, both off by default:
 
 Turn them on by saying **"nutze mein API-Guthaben"** (or "API credits for
 devops"). Claude asks both questions once, then stores the answers globally.
-Check them with `node plugins/devops/scripts/claude-api-safe.js --status`, and
+Check them with `node plugins/devops/scripts/claude-api-safe.js --status`, see what the
+credit was spent on this month with `--usage`, and
 turn them off with "API-Guthaben nicht mehr nutzen".
 
 Notes:
