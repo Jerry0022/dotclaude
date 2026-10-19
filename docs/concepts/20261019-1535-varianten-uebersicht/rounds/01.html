@@ -1,0 +1,796 @@
+<section data-iteration="1" data-iteration-template="design" data-baked>
+  <script type="application/json" data-frozen-feedback>{"general":{"text":"","attachments":[]},"designs":{"plakatwand":"Das ist die base variante definnitiv !"},"screens":{},"views":{}}</script>
+<style>
+/* ---- sample app (shared by all designs) ---- */
+.mock-app { border-radius: 18px; padding: 22px; min-height: 380px; box-sizing: border-box; font-family: system-ui, sans-serif; color: #1d2230; }
+.mock-zen { background: #f3f6f1; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.mock-zen-date { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #6c7a6e; }
+.mock-zen-plant { width: 140px; height: 140px; border-radius: 50%; background: #dfeadf; display: grid; place-items: center; font-size: 64px; }
+.mock-zen-goal { font-size: 24px; font-weight: 600; }
+.mock-zen-check { width: 64px; height: 64px; border-radius: 50%; border: 2px solid #5f8b6a; background: #fff; color: #5f8b6a; font-size: 28px; cursor: pointer; }
+.mock-zen-quote { font-style: italic; color: #6c7a6e; }
+.mock-zen-garden { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; align-items: end; padding: 24px; background: #e7efe4; border-radius: 14px; width: 100%; box-sizing: border-box; }
+.mock-zen-sprout { text-align: center; }
+.mock-play { background: #1f1630; color: #fff; display: flex; flex-direction: column; gap: 14px; }
+.mock-play-top { display: flex; justify-content: space-between; font-weight: 700; }
+.mock-play-lvl { background: #e8622c; padding: 4px 12px; border-radius: 999px; }
+.mock-play-flame { color: #ffb347; }
+.mock-play-xp { height: 12px; background: #3a2c52; border-radius: 6px; overflow: hidden; }
+.mock-play-xp i { display: block; height: 100%; background: linear-gradient(90deg, #ff9b3d, #ff4fa0); }
+.mock-play-quest { background: linear-gradient(135deg, #ff7a3d, #c2408f); padding: 14px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; }
+.mock-play-list { display: flex; flex-direction: column; gap: 8px; }
+.mock-play-item { background: #2c2142; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mock-play-item.done { opacity: .55; text-decoration: line-through; }
+.mock-play-item em { color: #ffb347; font-style: normal; }
+.mock-play-rank { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mock-play-rank li { background: #2c2142; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mock-play-rank li.me { outline: 2px solid #e8622c; }
+.mock-play-rank em { font-style: normal; color: #ffb347; }
+.mock-play-badges { font-size: 26px; display: flex; gap: 10px; align-items: center; }
+.mock-play-badges span { font-size: 12px; opacity: .6; }
+.mock-cock { background: #f4f7fd; display: flex; flex-direction: column; gap: 14px; }
+.mock-cock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.mock-cock-kpi { background: #fff; border: 1px solid #d6def0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.mock-cock-kpi span { font-size: 11px; color: #64708a; text-transform: uppercase; letter-spacing: .05em; }
+.mock-cock-kpi b { font-size: 22px; color: #2f62d8; font-variant-numeric: tabular-nums; }
+.mock-cock-bar { display: flex; gap: 10px; font-size: 13px; }
+.mock-cock-bar span { background: #fff; border: 1px solid #d6def0; padding: 6px 10px; border-radius: 8px; }
+.mock-cock-title { font-weight: 700; }
+.mock-cock-heat { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; }
+.mock-cock-heat i { aspect-ratio: 1; background: #2f62d8; border-radius: 3px; }
+
+/* ---- Design A · Plakatwand ---- */
+.d1-wall { max-width: 1240px; margin: 0 auto; padding: 8px 4px 40px; font-family: system-ui, sans-serif; }
+.d1-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 22px; flex-wrap: wrap; }
+.d1-head h2 { margin: 4px 0 0; font-size: 30px; }
+.d1-kicker { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; opacity: .65; }
+.d1-status { font-size: 14px; padding: 8px 14px; border-radius: 999px; background: rgba(127,127,127,.12); }
+.d1-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; align-items: stretch; }
+.d1-poster { position: relative; background: var(--vs); color: #1d2230; border-radius: 20px; padding: 26px 24px 20px; display: flex; flex-direction: column; gap: 16px; border: 3px solid transparent; transition: transform .2s, opacity .2s; }
+.d1-poster::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 8px; border-radius: 20px 20px 0 0; background: var(--v); }
+.d1-num { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--v); }
+.d1-motto { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 34px; line-height: 1.1; }
+.d1-traits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; counter-reset: t; }
+.d1-traits li { counter-increment: t; display: grid; grid-template-columns: 28px 1fr; column-gap: 8px; }
+.d1-traits li::before { content: counter(t); grid-row: span 2; width: 24px; height: 24px; border-radius: 50%; background: var(--v); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+.d1-traits b { font-size: 15px; }
+.d1-traits span { font-size: 13px; opacity: .7; }
+.d1-thumbs { display: flex; gap: 8px; }
+.d1-thumbs span { font-size: 12px; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,.7); border: 1px solid rgba(0,0,0,.08); }
+.d1-foot { margin-top: auto; display: flex; align-items: center; gap: 10px; }
+.d1-go { background: var(--v); color: #fff; border: 0; border-radius: 10px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+.d1-notes { font-size: 13px; opacity: .75; }
+.d1-crown { margin-left: auto; border: 2px dashed #c9a227; background: transparent; color: #8a6d0b; border-radius: 10px; padding: 9px 14px; font-weight: 700; cursor: pointer; }
+.d1-crown:hover { background: #fff6d6; }
+.d1-crowned { border-style: solid; background: #f5c518; color: #3d2f00; }
+.d1-is-base { border-color: #f5c518; transform: translateY(-10px) scale(1.03); box-shadow: 0 18px 50px rgba(245,197,24,.45); }
+.d1-dim { opacity: .62; }
+.d1-ribbon { position: absolute; top: -14px; right: 18px; background: #f5c518; color: #3d2f00; font-weight: 900; letter-spacing: .1em; padding: 6px 14px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+.d1-frame { max-width: 1100px; margin: 0 auto; font-family: system-ui, sans-serif; }
+.d1-bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 14px; background: var(--vs); color: #1d2230; border-left: 6px solid var(--v); margin-bottom: 16px; flex-wrap: wrap; }
+.d1-back { border: 0; background: #1d2230; color: #fff; border-radius: 8px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
+.d1-who { display: flex; flex-direction: column; }
+.d1-who span { font-size: 12px; opacity: .7; font-style: italic; }
+.d1-tabs { display: flex; gap: 4px; background: rgba(0,0,0,.06); padding: 3px; border-radius: 9px; }
+.d1-tabs button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: inherit; }
+.d1-tabs button.on { background: #fff; color: #1d2230; font-weight: 700; }
+.d1-flip { display: flex; gap: 6px; }
+.d1-flip button { border: 1px solid rgba(0,0,0,.15); background: #fff; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.d1-stage { max-width: 760px; margin: 0 auto; }
+
+/* ---- Design B · Vergleichs-Matrix ---- */
+.d2-arena { max-width: 1200px; margin: 0 auto; font-family: system-ui, sans-serif; }
+.d2-top h2 { margin: 0 0 4px; font-size: 26px; }
+.d2-top p { margin: 0 0 18px; opacity: .7; }
+.d2-table { width: 100%; border-collapse: separate; border-spacing: 8px 0; table-layout: fixed; }
+.d2-table th, .d2-table td { text-align: left; padding: 12px 14px; vertical-align: top; }
+.d2-table tbody th { width: 170px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; opacity: .75; }
+.d2-table tbody th em { font-style: normal; font-size: 11px; opacity: .7; text-transform: none; }
+.d2-head { position: relative; background: var(--vs); color: #1d2230; border-radius: 14px 14px 0 0; border-top: 6px solid var(--v); }
+.d2-head small { display: block; font-weight: 700; color: var(--v); }
+.d2-head b { display: block; font-family: Georgia, serif; font-size: 22px; margin: 6px 0 12px; }
+.d2-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.d2-actions button { border: 0; background: var(--v); color: #fff; border-radius: 8px; padding: 7px 12px; font-weight: 700; cursor: pointer; }
+.d2-stamp { border: 2px solid #b3261e !important; background: transparent !important; color: #b3261e !important; border-radius: 8px; padding: 7px 12px; font-weight: 800; cursor: pointer; letter-spacing: .03em; }
+.d2-stamp-on { background: #b3261e !important; color: #fff !important; }
+.d2-stamped { position: absolute; top: 12px; right: 10px; transform: rotate(-12deg); border: 4px double #b3261e; color: #b3261e; font-weight: 900; font-size: 22px; letter-spacing: .15em; padding: 2px 10px; border-radius: 6px; background: rgba(255,255,255,.6); }
+.d2-row-diff td { background: rgba(127,127,127,.08); font-weight: 600; border-bottom: 1px solid rgba(127,127,127,.2); }
+.d2-row-same td { opacity: .4; font-size: 13px; }
+.d2-table td.d2-col-base { background: rgba(179,38,30,.08); }
+.d2-col-base.d2-head { box-shadow: 0 0 0 3px #b3261e; }
+.d2-split { display: grid; grid-template-columns: 240px 1fr; gap: 20px; max-width: 1150px; margin: 0 auto; font-family: system-ui, sans-serif; }
+.d2-rail { display: flex; flex-direction: column; gap: 8px; }
+.d2-rail-back { border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer; text-align: left; }
+.d2-rail-item { border: 0; border-left: 6px solid var(--v); background: rgba(127,127,127,.1); color: inherit; border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.d2-rail-item span { font-size: 12px; opacity: .7; font-style: italic; }
+.d2-rail-item.on { background: rgba(127,127,127,.25); outline: 2px solid var(--v); }
+.d2-main { display: flex; flex-direction: column; gap: 12px; }
+.d2-subtabs { display: flex; gap: 6px; }
+.d2-subtabs button { border: 0; border-bottom: 3px solid transparent; background: transparent; color: inherit; padding: 6px 12px; cursor: pointer; }
+.d2-subtabs button.on { border-bottom-color: var(--v); font-weight: 700; }
+
+/* ---- Design C · Quartett-Tisch ---- */
+.d3-table { max-width: 1150px; margin: 0 auto; font-family: system-ui, sans-serif; display: flex; flex-direction: column; gap: 26px; }
+.d3-slot { position: relative; min-height: 120px; border: 3px dashed rgba(127,127,127,.45); border-radius: 18px; display: flex; align-items: center; justify-content: center; gap: 18px; padding: 16px; }
+.d3-slot-full { border: 3px solid #f5c518; background: radial-gradient(ellipse at center, rgba(245,197,24,.25), transparent 70%); }
+.d3-slot-label { position: absolute; top: -12px; left: 20px; background: #f5c518; color: #3d2f00; font-weight: 900; letter-spacing: .2em; padding: 2px 12px; border-radius: 6px; font-size: 13px; }
+.d3-slot-empty { opacity: .55; font-style: italic; }
+.d3-takeback { border: 1px solid rgba(127,127,127,.4); background: transparent; color: inherit; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.d3-hand { display: flex; justify-content: center; gap: 26px; align-items: flex-start; }
+.d3-holder { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.d3-holder:nth-child(1) .d3-card { transform: rotate(-3deg); }
+.d3-holder:nth-child(3) .d3-card { transform: rotate(3deg); }
+.d3-holder:hover .d3-card { transform: translateY(-8px) rotate(0); }
+.d3-card { width: 300px; box-sizing: border-box; background: #fffdf8; color: #1d2230; border-radius: 16px; border: 3px solid var(--v); box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: transform .2s; }
+.d3-card-top { display: flex; justify-content: space-between; align-items: center; background: var(--v); color: #fff; margin: -16px -16px 0; padding: 10px 16px; border-radius: 12px 12px 0 0; font-size: 22px; }
+.d3-card-top small { font-size: 18px; font-weight: 900; }
+.d3-card h3 { margin: 4px 0 0; font-size: 20px; }
+.d3-motto { margin: 0; font-family: Georgia, serif; font-style: italic; font-size: 17px; }
+.d3-bars { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.d3-bars div { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 8px; }
+.d3-bars i { height: 8px; background: var(--vs); border-radius: 4px; overflow: hidden; display: block; }
+.d3-bars b { display: block; height: 100%; background: var(--v); }
+.d3-traits { margin: 0; padding-left: 20px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.d3-thumbs { display: flex; gap: 6px; }
+.d3-thumbs button { flex: 1; border: 1px solid var(--v); background: var(--vs); color: #1d2230; border-radius: 8px; padding: 6px; cursor: pointer; font-size: 12px; }
+.d3-mini { width: 230px; }
+.d3-play { border: 0; background: #f5c518; color: #3d2f00; font-weight: 800; border-radius: 999px; padding: 10px 18px; cursor: pointer; box-shadow: 0 4px 12px rgba(245,197,24,.4); }
+.d3-gap { width: 300px; height: 300px; border: 2px dashed rgba(127,127,127,.35); border-radius: 16px; display: grid; place-items: center; opacity: .5; }
+.d3-view { max-width: 980px; margin: 0 auto; font-family: system-ui, sans-serif; display: flex; flex-direction: column; gap: 14px; padding-bottom: 20px; }
+.d3-viewhead { display: flex; align-items: center; gap: 14px; border-left: 6px solid var(--v); padding-left: 12px; }
+.d3-viewhead b { font-size: 20px; }
+.d3-viewhead span { font-style: italic; opacity: .7; }
+.d3-viewhead .d1-tabs { margin-left: auto; }
+.d3-viewbody { max-width: 760px; width: 100%; margin: 0 auto; }
+.d3-dock { align-self: center; display: flex; gap: 8px; align-items: center; background: #1d2230; padding: 8px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.d3-dock-back { border: 0; background: transparent; color: #fff; padding: 8px 12px; cursor: pointer; font-weight: 700; }
+.d3-dock-card { border: 2px solid var(--v); background: transparent; color: #fff; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.d3-dock-card.on { background: var(--v); transform: translateY(-4px); }
+
+</style>
+<header class="iteration-intro">
+  <h2>Iteration 1 · Varianten-Übersicht vor der Auswahl</h2>
+  <p>Beispiel-Concept „Habit-Tracker Startscreen“ mit drei Varianten (je zwei Unterseiten). Die drei Designs unten sind drei Arten, die neue Übersichtsseite zu bauen: Motto, Top-3-Unterschiede, Hin- und Zurückspringen, Base markieren. In der Demo ist das Base-Setzen nur bei „Spielplatz“ verdrahtet.</p>
+</header>
+<section data-design="plakatwand" data-nav-label="A · Plakatwand (Krone)" data-design-active="true">
+<section id="d1-s1" data-nav-label="Übersicht" data-screen data-screen-active="true">
+  <div class="d1-wall">
+    <header class="d1-head">
+      <div><div class="d1-kicker">Concept · Habit-Tracker Startscreen · Iteration 1</div>
+      <h2>Drei Richtungen. Welche wird deine Base?</h2></div>
+      <div class="d1-status">Noch keine Base gekrönt</div>
+    </header>
+    <div class="d1-grid">
+    <article class="d1-poster" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-num">Variante 1 · Zen-Garten</div>
+      <h3 class="d1-motto">Weniger ist Ruhe.</h3>
+      <ul class="d1-traits"><li><b>Ein Ziel pro Tag</b><span>statt einer Liste mit 8 Gewohnheiten</span></li><li><b>Fortschritt als Pflanze</b><span>keine Zahlen, kein Score</span></li><li><b>Keine Push-Nachrichten</b><span>die App ruft nie von sich aus</span></li></ul>
+      <div class="d1-thumbs"><span>Heute</span><span>Statistik</span></div>
+      <div class="d1-foot">
+        <button class="d1-go" type="button" data-screen-link="d1-s3">Ansehen →</button>
+        <span class="d1-notes">💬 1</span>
+        <button class="d1-crown" type="button" data-tip="Als Base krönen">👑 Krönen</button>
+      </div>
+    </article>
+    <article class="d1-poster" style="--v:#e8622c;--vs:#fde6da">
+      
+      <div class="d1-num">Variante 2 · Spielplatz</div>
+      <h3 class="d1-motto">Jeder Tag ein Level.</h3>
+      <ul class="d1-traits"><li><b>XP, Level & Streak-Flamme</b><span>jede erledigte Gewohnheit zählt Punkte</span></li><li><b>Freundes-Rangliste</b><span>sozialer Druck als Motor</span></li><li><b>Tägliche Quest-Karte</b><span>eine Überraschungsaufgabe pro Tag</span></li></ul>
+      <div class="d1-thumbs"><span>Heute</span><span>Statistik</span></div>
+      <div class="d1-foot">
+        <button class="d1-go" type="button" data-screen-link="d1-s5">Ansehen →</button>
+        <span class="d1-notes">💬 3</span>
+        <button class="d1-crown" type="button" data-screen-link="d1-s2" data-tip="Als Base krönen">👑 Krönen</button>
+      </div>
+    </article>
+    <article class="d1-poster" style="--v:#2f62d8;--vs:#dfe7fb">
+      
+      <div class="d1-num">Variante 3 · Cockpit</div>
+      <h3 class="d1-motto">Alles im Blick, alles messbar.</h3>
+      <ul class="d1-traits"><li><b>8 Kennzahlen auf einen Blick</b><span>Dashboard statt Tagesansicht</span></li><li><b>12-Monats-Heatmap</b><span>Muster über das ganze Jahr</span></li><li><b>Filter & CSV-Export</b><span>für Leute, die selbst auswerten</span></li></ul>
+      <div class="d1-thumbs"><span>Heute</span><span>Statistik</span></div>
+      <div class="d1-foot">
+        <button class="d1-go" type="button" data-screen-link="d1-s7">Ansehen →</button>
+        <span class="d1-notes">💬 0</span>
+        <button class="d1-crown" type="button" data-tip="Als Base krönen">👑 Krönen</button>
+      </div>
+    </article></div>
+  </div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="d1-s1-a1" data-anno-side="bottom" data-anno-target=".d1-motto" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-d1-s1-a1" data-anno-bubble="d1-s1-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a1">
+          <span class="anno-bubble-question">Motto: Claude schreibt pro Variante einen Slogan (2–5 Wörter). Passt das — oder lieber Kunstname + Untertitel?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d1-s1-a1" data-annotation="d1-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}">das passt. Aber hauptteil der varianteübersicht wenn es ein design wäre sollte eine mini-ansichtvom jweiligen design sein oder ggf. zoom in</textarea>
+          <div class="attach-slot" data-attach-slot="anno-d1-s1-a1"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d1-s1-a2" data-anno-side="right" data-anno-target=".d1-traits" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+      <div class="anno-bubble" id="anno-bubble-d1-s1-a2" data-anno-bubble="d1-s1-a2" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a2">
+          <span class="anno-bubble-question">Top-3 nur echte Unterschiede zu den anderen Varianten — oder darf eine Zeile auch eine Stärke sein, die alle teilen?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d1-s1-a2" data-annotation="d1-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}">nur echte utnerschiede</textarea>
+          <div class="attach-slot" data-attach-slot="anno-d1-s1-a2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d1-s1-a3" data-anno-side="top" data-anno-target=".d1-crown" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d1-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+      <div class="anno-bubble" id="anno-bubble-d1-s1-a3" data-anno-bubble="d1-s1-a3" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a3">
+          <span class="anno-bubble-question">Krone: genau eine Base, bis zum Abschicken jederzeit umsetzbar. Soll „keine Base“ beim Abschicken erlaubt sein?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d1-s1-a3" data-annotation="d1-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}">krönen finde ich als idee gut, allerdings krone + krönen wording ist mir einticken zu altmodisch</textarea>
+          <div class="attach-slot" data-attach-slot="anno-d1-s1-a3"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d1-s1-a4" data-anno-side="top" data-anno-target=".d1-notes" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d1-s1-a4" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a4" aria-label="{{anno.pin_label}}">4</button>
+      <div class="anno-bubble" id="anno-bubble-d1-s1-a4" data-anno-bubble="d1-s1-a4" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s1-a4" aria-expanded="false" aria-controls="anno-bubble-d1-s1-a4">
+          <span class="anno-bubble-question">Notiz-Zähler pro Variante (💬 3): hilft er dir, Verbesserungen aus den Nicht-Base-Varianten wiederzufinden?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d1-s1-a4" data-annotation="d1-s1-a4" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d1-s1-a4"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="d1-s2" data-nav-label="Übersicht · Base gesetzt" data-screen hidden>
+  <div class="d1-wall">
+    <header class="d1-head">
+      <div><div class="d1-kicker">Concept · Habit-Tracker Startscreen · Iteration 1</div>
+      <h2>Drei Richtungen. Welche wird deine Base?</h2></div>
+      <div class="d1-status">👑 Base: <b>Spielplatz</b> — Kommentare zu den anderen fließen als Verbesserungen ein</div>
+    </header>
+    <div class="d1-grid">
+    <article class="d1-poster d1-dim" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <div class="d1-num">Variante 1 · Zen-Garten</div>
+      <h3 class="d1-motto">Weniger ist Ruhe.</h3>
+      <ul class="d1-traits"><li><b>Ein Ziel pro Tag</b><span>statt einer Liste mit 8 Gewohnheiten</span></li><li><b>Fortschritt als Pflanze</b><span>keine Zahlen, kein Score</span></li><li><b>Keine Push-Nachrichten</b><span>die App ruft nie von sich aus</span></li></ul>
+      <div class="d1-thumbs"><span>Heute</span><span>Statistik</span></div>
+      <div class="d1-foot">
+        <button class="d1-go" type="button" data-screen-link="d1-s3">Ansehen →</button>
+        <span class="d1-notes">💬 1</span>
+        <button class="d1-crown" type="button" data-tip="Als Base krönen">👑 Krönen</button>
+      </div>
+    </article>
+    <article class="d1-poster d1-is-base" style="--v:#e8622c;--vs:#fde6da">
+      <div class="d1-ribbon">👑 BASE</div>
+      <div class="d1-num">Variante 2 · Spielplatz</div>
+      <h3 class="d1-motto">Jeder Tag ein Level.</h3>
+      <ul class="d1-traits"><li><b>XP, Level & Streak-Flamme</b><span>jede erledigte Gewohnheit zählt Punkte</span></li><li><b>Freundes-Rangliste</b><span>sozialer Druck als Motor</span></li><li><b>Tägliche Quest-Karte</b><span>eine Überraschungsaufgabe pro Tag</span></li></ul>
+      <div class="d1-thumbs"><span>Heute</span><span>Statistik</span></div>
+      <div class="d1-foot">
+        <button class="d1-go" type="button" data-screen-link="d1-s5">Ansehen →</button>
+        <span class="d1-notes">💬 3</span>
+        <button class="d1-crown d1-crowned" type="button" data-screen-link="d1-s1" data-tip="Krone wieder abnehmen">👑 Gekrönt</button>
+      </div>
+    </article>
+    <article class="d1-poster d1-dim" style="--v:#2f62d8;--vs:#dfe7fb">
+      
+      <div class="d1-num">Variante 3 · Cockpit</div>
+      <h3 class="d1-motto">Alles im Blick, alles messbar.</h3>
+      <ul class="d1-traits"><li><b>8 Kennzahlen auf einen Blick</b><span>Dashboard statt Tagesansicht</span></li><li><b>12-Monats-Heatmap</b><span>Muster über das ganze Jahr</span></li><li><b>Filter & CSV-Export</b><span>für Leute, die selbst auswerten</span></li></ul>
+      <div class="d1-thumbs"><span>Heute</span><span>Statistik</span></div>
+      <div class="d1-foot">
+        <button class="d1-go" type="button" data-screen-link="d1-s7">Ansehen →</button>
+        <span class="d1-notes">💬 0</span>
+        <button class="d1-crown" type="button" data-tip="Als Base krönen">👑 Krönen</button>
+      </div>
+    </article></div>
+  </div></section>
+<section id="d1-s3" data-nav-label="Zen-Garten · Heute" data-screen hidden>
+  <div class="d1-frame" style="--v:#5f8b6a;--vs:#e3eee5">
+    <nav class="d1-bar">
+      <button class="d1-back" type="button" data-screen-link="d1-s1">← Alle Varianten</button>
+      <div class="d1-who"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></div>
+      <div class="d1-tabs"><button type="button" class="on" data-screen-link="d1-s3">Heute</button><button type="button" class="" data-screen-link="d1-s4">Statistik</button></div>
+      <div class="d1-flip"><button type="button" data-screen-link="d1-s7">‹ Cockpit</button><button type="button" data-screen-link="d1-s5">Spielplatz ›</button></div>
+      <button class="d1-crown" type="button">👑 Krönen</button>
+    </nav>
+    <div class="d1-stage">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></div>
+  </div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="d1-s3-a1" data-anno-side="bottom" data-anno-target=".d1-back" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-d1-s3-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-d1-s3-a1" data-anno-bubble="d1-s3-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d1-s3-a1" aria-expanded="false" aria-controls="anno-bubble-d1-s3-a1">
+          <span class="anno-bubble-question">Zurück oben links + Blättern ‹ › zwischen Varianten. Zusätzlich Esc = Übersicht als Hotkey?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d1-s3-a1" data-annotation="d1-s3-a1" data-attachable placeholder="{{anno.answer_placeholder}}">ja gern hotkeyxs! 
+Funktional finde ich die schon super, aber sie integriert schlecht mit der leiste links oben und der navigatinosschnellauswahl oben mitte. Kannst du sie nicht aaufspalten und links oben in die leider häufig abgeschnittene zu vergröeßernde headerleiste integrieren und teils auch oben in die navigationssschnellauswhal!? </textarea>
+          <div class="attach-slot" data-attach-slot="anno-d1-s3-a1"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="d1-s4" data-nav-label="Zen-Garten · Statistik" data-screen hidden>
+  <div class="d1-frame" style="--v:#5f8b6a;--vs:#e3eee5">
+    <nav class="d1-bar">
+      <button class="d1-back" type="button" data-screen-link="d1-s1">← Alle Varianten</button>
+      <div class="d1-who"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></div>
+      <div class="d1-tabs"><button type="button" class="" data-screen-link="d1-s3">Heute</button><button type="button" class="on" data-screen-link="d1-s4">Statistik</button></div>
+      <div class="d1-flip"><button type="button" data-screen-link="d1-s7">‹ Cockpit</button><button type="button" data-screen-link="d1-s5">Spielplatz ›</button></div>
+      <button class="d1-crown" type="button">👑 Krönen</button>
+    </nav>
+    <div class="d1-stage">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Dein Garten · Oktober</div>
+    <div class="mock-zen-garden"><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:44px">🌳</span></div>
+    <div class="mock-zen-quote">Jede Pflanze ist eine Woche. Keine Zahlen.</div>
+  </div></div>
+  </div></section>
+<section id="d1-s5" data-nav-label="Spielplatz · Heute" data-screen hidden>
+  <div class="d1-frame" style="--v:#e8622c;--vs:#fde6da">
+    <nav class="d1-bar">
+      <button class="d1-back" type="button" data-screen-link="d1-s1">← Alle Varianten</button>
+      <div class="d1-who"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></div>
+      <div class="d1-tabs"><button type="button" class="on" data-screen-link="d1-s5">Heute</button><button type="button" class="" data-screen-link="d1-s6">Statistik</button></div>
+      <div class="d1-flip"><button type="button" data-screen-link="d1-s3">‹ Zen-Garten</button><button type="button" data-screen-link="d1-s7">Cockpit ›</button></div>
+      <button class="d1-crown" type="button" data-screen-link="d1-s2">👑 Krönen</button>
+    </nav>
+    <div class="d1-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div>
+  </div></section>
+<section id="d1-s6" data-nav-label="Spielplatz · Statistik" data-screen hidden>
+  <div class="d1-frame" style="--v:#e8622c;--vs:#fde6da">
+    <nav class="d1-bar">
+      <button class="d1-back" type="button" data-screen-link="d1-s1">← Alle Varianten</button>
+      <div class="d1-who"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></div>
+      <div class="d1-tabs"><button type="button" class="" data-screen-link="d1-s5">Heute</button><button type="button" class="on" data-screen-link="d1-s6">Statistik</button></div>
+      <div class="d1-flip"><button type="button" data-screen-link="d1-s3">‹ Zen-Garten</button><button type="button" data-screen-link="d1-s7">Cockpit ›</button></div>
+      <button class="d1-crown" type="button" data-screen-link="d1-s2">👑 Krönen</button>
+    </nav>
+    <div class="d1-stage">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Rangliste · Woche 42</span></div>
+    <ol class="mock-play-rank"><li>🥇 Mara <em>1 240 XP</em></li><li class="me">🥈 Du <em>1 180 XP</em></li><li>🥉 Jonas <em>990 XP</em></li><li>4 · Lea <em>720 XP</em></li></ol>
+    <div class="mock-play-badges">🏅 🎯 🧘 📚 <span>+3 gesperrt</span></div>
+  </div></div>
+  </div></section>
+<section id="d1-s7" data-nav-label="Cockpit · Heute" data-screen hidden>
+  <div class="d1-frame" style="--v:#2f62d8;--vs:#dfe7fb">
+    <nav class="d1-bar">
+      <button class="d1-back" type="button" data-screen-link="d1-s1">← Alle Varianten</button>
+      <div class="d1-who"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></div>
+      <div class="d1-tabs"><button type="button" class="on" data-screen-link="d1-s7">Heute</button><button type="button" class="" data-screen-link="d1-s8">Statistik</button></div>
+      <div class="d1-flip"><button type="button" data-screen-link="d1-s5">‹ Spielplatz</button><button type="button" data-screen-link="d1-s3">Zen-Garten ›</button></div>
+      <button class="d1-crown" type="button">👑 Krönen</button>
+    </nav>
+    <div class="d1-stage">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></div>
+  </div></section>
+<section id="d1-s8" data-nav-label="Cockpit · Statistik" data-screen hidden>
+  <div class="d1-frame" style="--v:#2f62d8;--vs:#dfe7fb">
+    <nav class="d1-bar">
+      <button class="d1-back" type="button" data-screen-link="d1-s1">← Alle Varianten</button>
+      <div class="d1-who"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></div>
+      <div class="d1-tabs"><button type="button" class="" data-screen-link="d1-s7">Heute</button><button type="button" class="on" data-screen-link="d1-s8">Statistik</button></div>
+      <div class="d1-flip"><button type="button" data-screen-link="d1-s5">‹ Spielplatz</button><button type="button" data-screen-link="d1-s3">Zen-Garten ›</button></div>
+      <button class="d1-crown" type="button">👑 Krönen</button>
+    </nav>
+    <div class="d1-stage">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-title">Heatmap · letzte 12 Monate</div>
+    <div class="mock-cock-heat"><i style="opacity:0.15"></i><i style="opacity:0.52"></i><i style="opacity:0.89"></i><i style="opacity:0.41"></i><i style="opacity:0.78"></i><i style="opacity:0.30"></i><i style="opacity:0.67"></i><i style="opacity:0.19"></i><i style="opacity:0.56"></i><i style="opacity:0.93"></i><i style="opacity:0.45"></i><i style="opacity:0.82"></i><i style="opacity:0.34"></i><i style="opacity:0.71"></i><i style="opacity:0.23"></i><i style="opacity:0.60"></i><i style="opacity:0.97"></i><i style="opacity:0.49"></i><i style="opacity:0.86"></i><i style="opacity:0.38"></i><i style="opacity:0.75"></i><i style="opacity:0.27"></i><i style="opacity:0.64"></i><i style="opacity:0.16"></i><i style="opacity:0.53"></i><i style="opacity:0.90"></i><i style="opacity:0.42"></i><i style="opacity:0.79"></i><i style="opacity:0.31"></i><i style="opacity:0.68"></i><i style="opacity:0.20"></i><i style="opacity:0.57"></i><i style="opacity:0.94"></i><i style="opacity:0.46"></i><i style="opacity:0.83"></i><i style="opacity:0.35"></i><i style="opacity:0.72"></i><i style="opacity:0.24"></i><i style="opacity:0.61"></i><i style="opacity:0.98"></i><i style="opacity:0.50"></i><i style="opacity:0.87"></i><i style="opacity:0.39"></i><i style="opacity:0.76"></i><i style="opacity:0.28"></i><i style="opacity:0.65"></i><i style="opacity:0.17"></i><i style="opacity:0.54"></i><i style="opacity:0.91"></i><i style="opacity:0.43"></i><i style="opacity:0.80"></i><i style="opacity:0.32"></i><i style="opacity:0.69"></i><i style="opacity:0.21"></i><i style="opacity:0.58"></i><i style="opacity:0.95"></i><i style="opacity:0.47"></i><i style="opacity:0.84"></i><i style="opacity:0.36"></i><i style="opacity:0.73"></i><i style="opacity:0.25"></i><i style="opacity:0.62"></i><i style="opacity:0.99"></i><i style="opacity:0.51"></i><i style="opacity:0.88"></i><i style="opacity:0.40"></i><i style="opacity:0.77"></i><i style="opacity:0.29"></i><i style="opacity:0.66"></i><i style="opacity:0.18"></i><i style="opacity:0.55"></i><i style="opacity:0.92"></i><i style="opacity:0.44"></i><i style="opacity:0.81"></i><i style="opacity:0.33"></i><i style="opacity:0.70"></i><i style="opacity:0.22"></i><i style="opacity:0.59"></i><i style="opacity:0.96"></i><i style="opacity:0.48"></i><i style="opacity:0.85"></i><i style="opacity:0.37"></i><i style="opacity:0.74"></i><i style="opacity:0.26"></i></div>
+    <div class="mock-cock-bar"><span>Gewohnheit: Lesen ▾</span><span>⤓ CSV</span></div>
+  </div></div>
+  </div></section>
+</section>
+<section data-design="matrix" data-nav-label="B · Vergleichs-Matrix (Stempel)" hidden>
+<section id="d2-s1" data-nav-label="Übersicht" data-screen data-screen-active="true">
+  <div class="d2-arena">
+    <header class="d2-top"><h2>Varianten im Vergleich</h2><p>Die drei markantesten Unterschiede stehen oben — Gemeinsamkeiten sind ausgegraut.</p></header>
+    <table class="d2-table"><thead><tr><th></th><th class="d2-head" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <small>🌿 Zen-Garten</small><b>Weniger ist Ruhe.</b>
+      <div class="d2-actions"><button type="button" data-screen-link="d2-s3">Öffnen →</button>
+      <button type="button" class="d2-stamp">⎔ Base stempeln</button></div></th><th class="d2-head" style="--v:#e8622c;--vs:#fde6da">
+      
+      <small>🔥 Spielplatz</small><b>Jeder Tag ein Level.</b>
+      <div class="d2-actions"><button type="button" data-screen-link="d2-s5">Öffnen →</button>
+      <button type="button" class="d2-stamp" data-screen-link="d2-s2">⎔ Base stempeln</button></div></th><th class="d2-head" style="--v:#2f62d8;--vs:#dfe7fb">
+      
+      <small>📊 Cockpit</small><b>Alles im Blick, alles messbar.</b>
+      <div class="d2-actions"><button type="button" data-screen-link="d2-s7">Öffnen →</button>
+      <button type="button" class="d2-stamp">⎔ Base stempeln</button></div></th></tr></thead><tbody><tr class="d2-row-diff"><th>Tagesansicht</th><td class="">1 Ziel</td><td class="">3–8 Gewohnheiten + Quest</td><td class="">8 Kennzahlen</td></tr><tr class="d2-row-diff"><th>Motivation durch</th><td class="">Ruhe, wachsende Pflanze</td><td class="">XP, Level, Rangliste</td><td class="">Zahlen & Trends</td></tr><tr class="d2-row-diff"><th>Benachrichtigungen</th><td class="">keine</td><td class="">täglich + Freunde</td><td class="">wöchentlicher Report</td></tr><tr class="d2-row-diff"><th>Statistik</th><td class="">Garten (ohne Zahlen)</td><td class="">Rangliste & Abzeichen</td><td class="">12-Monats-Heatmap</td></tr><tr class="d2-row-same"><th>Login / Sync <em>gleich</em></th><td class="">Konto + Cloud</td><td class="">Konto + Cloud</td><td class="">Konto + Cloud</td></tr></tbody></table>
+  </div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="d2-s1-a1" data-anno-side="bottom" data-anno-target=".d2-head" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-d2-s1-a1" data-anno-bubble="d2-s1-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d2-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a1">
+          <span class="anno-bubble-question">Motto als Spaltenkopf — reicht das zur Wiedererkennung, wenn du später in einer Variante bist?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d2-s1-a1" data-annotation="d2-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d2-s1-a1"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d2-s1-a2" data-anno-side="top" data-anno-target=".d2-row-same" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+      <div class="anno-bubble" id="anno-bubble-d2-s1-a2" data-anno-bubble="d2-s1-a2" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d2-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a2">
+          <span class="anno-bubble-question">Gemeinsamkeiten ausgegraut lassen — oder ganz ausblenden, damit nur Unterschiede bleiben?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d2-s1-a2" data-annotation="d2-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d2-s1-a2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d2-s1-a3" data-anno-side="bottom" data-anno-target=".d2-stamp" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d2-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+      <div class="anno-bubble" id="anno-bubble-d2-s1-a3" data-anno-bubble="d2-s1-a3" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d2-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d2-s1-a3">
+          <span class="anno-bubble-question">Gestempelte Spalte rückt nach links und wird hervorgehoben. Gut, oder soll die Reihenfolge stabil bleiben?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d2-s1-a3" data-annotation="d2-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d2-s1-a3"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="d2-s2" data-nav-label="Übersicht · Base gesetzt" data-screen hidden>
+  <div class="d2-arena">
+    <header class="d2-top"><h2>Varianten im Vergleich</h2><p>Die drei markantesten Unterschiede stehen oben — Gemeinsamkeiten sind ausgegraut.</p></header>
+    <table class="d2-table"><thead><tr><th></th><th class="d2-head d2-col-base" style="--v:#e8622c;--vs:#fde6da">
+      <span class="d2-stamped">BASE</span>
+      <small>🔥 Spielplatz</small><b>Jeder Tag ein Level.</b>
+      <div class="d2-actions"><button type="button" data-screen-link="d2-s5">Öffnen →</button>
+      <button type="button" class="d2-stamp d2-stamp-on" data-screen-link="d2-s1">Stempel lösen</button></div></th><th class="d2-head" style="--v:#5f8b6a;--vs:#e3eee5">
+      
+      <small>🌿 Zen-Garten</small><b>Weniger ist Ruhe.</b>
+      <div class="d2-actions"><button type="button" data-screen-link="d2-s3">Öffnen →</button>
+      <button type="button" class="d2-stamp">⎔ Base stempeln</button></div></th><th class="d2-head" style="--v:#2f62d8;--vs:#dfe7fb">
+      
+      <small>📊 Cockpit</small><b>Alles im Blick, alles messbar.</b>
+      <div class="d2-actions"><button type="button" data-screen-link="d2-s7">Öffnen →</button>
+      <button type="button" class="d2-stamp">⎔ Base stempeln</button></div></th></tr></thead><tbody><tr class="d2-row-diff"><th>Tagesansicht</th><td class="d2-col-base">3–8 Gewohnheiten + Quest</td><td class="">1 Ziel</td><td class="">8 Kennzahlen</td></tr><tr class="d2-row-diff"><th>Motivation durch</th><td class="d2-col-base">XP, Level, Rangliste</td><td class="">Ruhe, wachsende Pflanze</td><td class="">Zahlen & Trends</td></tr><tr class="d2-row-diff"><th>Benachrichtigungen</th><td class="d2-col-base">täglich + Freunde</td><td class="">keine</td><td class="">wöchentlicher Report</td></tr><tr class="d2-row-diff"><th>Statistik</th><td class="d2-col-base">Rangliste & Abzeichen</td><td class="">Garten (ohne Zahlen)</td><td class="">12-Monats-Heatmap</td></tr><tr class="d2-row-same"><th>Login / Sync <em>gleich</em></th><td class="d2-col-base">Konto + Cloud</td><td class="">Konto + Cloud</td><td class="">Konto + Cloud</td></tr></tbody></table>
+  </div></section>
+<section id="d2-s3" data-nav-label="Zen-Garten · Heute" data-screen hidden>
+  <div class="d2-split">
+    <aside class="d2-rail">
+      <button type="button" class="d2-rail-back" data-screen-link="d2-s1">▦ Matrix</button>
+      <button type="button" class="d2-rail-item on" style="--v:#5f8b6a" data-screen-link="d2-s3"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></button><button type="button" class="d2-rail-item" style="--v:#e8622c" data-screen-link="d2-s5"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></button><button type="button" class="d2-rail-item" style="--v:#2f62d8" data-screen-link="d2-s7"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></button>
+      <button type="button" class="d2-stamp">⎔ Zen-Garten als Base stempeln</button>
+    </aside>
+    <div class="d2-main" style="--v:#5f8b6a">
+      <div class="d2-subtabs"><button type="button" class="on" data-screen-link="d2-s3">Heute</button><button type="button" class="" data-screen-link="d2-s4">Statistik</button></div>
+      
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div>
+    </div>
+  </div></section>
+<section id="d2-s4" data-nav-label="Zen-Garten · Statistik" data-screen hidden>
+  <div class="d2-split">
+    <aside class="d2-rail">
+      <button type="button" class="d2-rail-back" data-screen-link="d2-s1">▦ Matrix</button>
+      <button type="button" class="d2-rail-item on" style="--v:#5f8b6a" data-screen-link="d2-s3"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></button><button type="button" class="d2-rail-item" style="--v:#e8622c" data-screen-link="d2-s5"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></button><button type="button" class="d2-rail-item" style="--v:#2f62d8" data-screen-link="d2-s7"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></button>
+      <button type="button" class="d2-stamp">⎔ Zen-Garten als Base stempeln</button>
+    </aside>
+    <div class="d2-main" style="--v:#5f8b6a">
+      <div class="d2-subtabs"><button type="button" class="" data-screen-link="d2-s3">Heute</button><button type="button" class="on" data-screen-link="d2-s4">Statistik</button></div>
+      
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Dein Garten · Oktober</div>
+    <div class="mock-zen-garden"><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:44px">🌳</span></div>
+    <div class="mock-zen-quote">Jede Pflanze ist eine Woche. Keine Zahlen.</div>
+  </div>
+    </div>
+  </div></section>
+<section id="d2-s5" data-nav-label="Spielplatz · Heute" data-screen hidden>
+  <div class="d2-split">
+    <aside class="d2-rail">
+      <button type="button" class="d2-rail-back" data-screen-link="d2-s1">▦ Matrix</button>
+      <button type="button" class="d2-rail-item" style="--v:#5f8b6a" data-screen-link="d2-s3"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></button><button type="button" class="d2-rail-item on" style="--v:#e8622c" data-screen-link="d2-s5"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></button><button type="button" class="d2-rail-item" style="--v:#2f62d8" data-screen-link="d2-s7"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></button>
+      <button type="button" class="d2-stamp" data-screen-link="d2-s2">⎔ Spielplatz als Base stempeln</button>
+    </aside>
+    <div class="d2-main" style="--v:#e8622c">
+      <div class="d2-subtabs"><button type="button" class="on" data-screen-link="d2-s5">Heute</button><button type="button" class="" data-screen-link="d2-s6">Statistik</button></div>
+      
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div>
+    </div>
+  </div></section>
+<section id="d2-s6" data-nav-label="Spielplatz · Statistik" data-screen hidden>
+  <div class="d2-split">
+    <aside class="d2-rail">
+      <button type="button" class="d2-rail-back" data-screen-link="d2-s1">▦ Matrix</button>
+      <button type="button" class="d2-rail-item" style="--v:#5f8b6a" data-screen-link="d2-s3"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></button><button type="button" class="d2-rail-item on" style="--v:#e8622c" data-screen-link="d2-s5"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></button><button type="button" class="d2-rail-item" style="--v:#2f62d8" data-screen-link="d2-s7"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></button>
+      <button type="button" class="d2-stamp" data-screen-link="d2-s2">⎔ Spielplatz als Base stempeln</button>
+    </aside>
+    <div class="d2-main" style="--v:#e8622c">
+      <div class="d2-subtabs"><button type="button" class="" data-screen-link="d2-s5">Heute</button><button type="button" class="on" data-screen-link="d2-s6">Statistik</button></div>
+      
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Rangliste · Woche 42</span></div>
+    <ol class="mock-play-rank"><li>🥇 Mara <em>1 240 XP</em></li><li class="me">🥈 Du <em>1 180 XP</em></li><li>🥉 Jonas <em>990 XP</em></li><li>4 · Lea <em>720 XP</em></li></ol>
+    <div class="mock-play-badges">🏅 🎯 🧘 📚 <span>+3 gesperrt</span></div>
+  </div>
+    </div>
+  </div></section>
+<section id="d2-s7" data-nav-label="Cockpit · Heute" data-screen hidden>
+  <div class="d2-split">
+    <aside class="d2-rail">
+      <button type="button" class="d2-rail-back" data-screen-link="d2-s1">▦ Matrix</button>
+      <button type="button" class="d2-rail-item" style="--v:#5f8b6a" data-screen-link="d2-s3"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></button><button type="button" class="d2-rail-item" style="--v:#e8622c" data-screen-link="d2-s5"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></button><button type="button" class="d2-rail-item on" style="--v:#2f62d8" data-screen-link="d2-s7"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></button>
+      <button type="button" class="d2-stamp">⎔ Cockpit als Base stempeln</button>
+    </aside>
+    <div class="d2-main" style="--v:#2f62d8">
+      <div class="d2-subtabs"><button type="button" class="on" data-screen-link="d2-s7">Heute</button><button type="button" class="" data-screen-link="d2-s8">Statistik</button></div>
+      
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div>
+    </div>
+  </div></section>
+<section id="d2-s8" data-nav-label="Cockpit · Statistik" data-screen hidden>
+  <div class="d2-split">
+    <aside class="d2-rail">
+      <button type="button" class="d2-rail-back" data-screen-link="d2-s1">▦ Matrix</button>
+      <button type="button" class="d2-rail-item" style="--v:#5f8b6a" data-screen-link="d2-s3"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span></button><button type="button" class="d2-rail-item" style="--v:#e8622c" data-screen-link="d2-s5"><b>Spielplatz</b><span>Jeder Tag ein Level.</span></button><button type="button" class="d2-rail-item on" style="--v:#2f62d8" data-screen-link="d2-s7"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span></button>
+      <button type="button" class="d2-stamp">⎔ Cockpit als Base stempeln</button>
+    </aside>
+    <div class="d2-main" style="--v:#2f62d8">
+      <div class="d2-subtabs"><button type="button" class="" data-screen-link="d2-s7">Heute</button><button type="button" class="on" data-screen-link="d2-s8">Statistik</button></div>
+      
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-title">Heatmap · letzte 12 Monate</div>
+    <div class="mock-cock-heat"><i style="opacity:0.15"></i><i style="opacity:0.52"></i><i style="opacity:0.89"></i><i style="opacity:0.41"></i><i style="opacity:0.78"></i><i style="opacity:0.30"></i><i style="opacity:0.67"></i><i style="opacity:0.19"></i><i style="opacity:0.56"></i><i style="opacity:0.93"></i><i style="opacity:0.45"></i><i style="opacity:0.82"></i><i style="opacity:0.34"></i><i style="opacity:0.71"></i><i style="opacity:0.23"></i><i style="opacity:0.60"></i><i style="opacity:0.97"></i><i style="opacity:0.49"></i><i style="opacity:0.86"></i><i style="opacity:0.38"></i><i style="opacity:0.75"></i><i style="opacity:0.27"></i><i style="opacity:0.64"></i><i style="opacity:0.16"></i><i style="opacity:0.53"></i><i style="opacity:0.90"></i><i style="opacity:0.42"></i><i style="opacity:0.79"></i><i style="opacity:0.31"></i><i style="opacity:0.68"></i><i style="opacity:0.20"></i><i style="opacity:0.57"></i><i style="opacity:0.94"></i><i style="opacity:0.46"></i><i style="opacity:0.83"></i><i style="opacity:0.35"></i><i style="opacity:0.72"></i><i style="opacity:0.24"></i><i style="opacity:0.61"></i><i style="opacity:0.98"></i><i style="opacity:0.50"></i><i style="opacity:0.87"></i><i style="opacity:0.39"></i><i style="opacity:0.76"></i><i style="opacity:0.28"></i><i style="opacity:0.65"></i><i style="opacity:0.17"></i><i style="opacity:0.54"></i><i style="opacity:0.91"></i><i style="opacity:0.43"></i><i style="opacity:0.80"></i><i style="opacity:0.32"></i><i style="opacity:0.69"></i><i style="opacity:0.21"></i><i style="opacity:0.58"></i><i style="opacity:0.95"></i><i style="opacity:0.47"></i><i style="opacity:0.84"></i><i style="opacity:0.36"></i><i style="opacity:0.73"></i><i style="opacity:0.25"></i><i style="opacity:0.62"></i><i style="opacity:0.99"></i><i style="opacity:0.51"></i><i style="opacity:0.88"></i><i style="opacity:0.40"></i><i style="opacity:0.77"></i><i style="opacity:0.29"></i><i style="opacity:0.66"></i><i style="opacity:0.18"></i><i style="opacity:0.55"></i><i style="opacity:0.92"></i><i style="opacity:0.44"></i><i style="opacity:0.81"></i><i style="opacity:0.33"></i><i style="opacity:0.70"></i><i style="opacity:0.22"></i><i style="opacity:0.59"></i><i style="opacity:0.96"></i><i style="opacity:0.48"></i><i style="opacity:0.85"></i><i style="opacity:0.37"></i><i style="opacity:0.74"></i><i style="opacity:0.26"></i></div>
+    <div class="mock-cock-bar"><span>Gewohnheit: Lesen ▾</span><span>⤓ CSV</span></div>
+  </div>
+    </div>
+  </div></section>
+</section>
+<section data-design="quartett" data-nav-label="C · Quartett-Tisch (Base-Slot)" hidden>
+<section id="d3-s1" data-nav-label="Übersicht" data-screen data-screen-active="true">
+  <div class="d3-table">
+    <div class="d3-slot">
+      <span class="d3-slot-label">BASE</span>
+      <span class="d3-slot-empty">Spiel hier deine Base-Variante aus</span>
+    </div>
+    <div class="d3-hand">
+    <div class="d3-holder">
+  <article class="d3-card" style="--v:#5f8b6a;--vs:#e3eee5">
+    <div class="d3-card-top"><span>🌿</span><small>A</small></div>
+    <h3>Zen-Garten</h3><p class="d3-motto">Weniger ist Ruhe.</p>
+    <div class="d3-bars"><div><span>Ruhe</span><i><b style="width:92%"></b></i></div><div><span>Motivation</span><i><b style="width:25%"></b></i></div><div><span>Datentiefe</span><i><b style="width:15%"></b></i></div></div>
+    <ol class="d3-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ol>
+    <div class="d3-thumbs"><button type="button" data-screen-link="d3-s3">Heute</button><button type="button" data-screen-link="d3-s4">Statistik</button></div>
+  </article>
+      <button type="button" class="d3-play">⬆ Als Base ausspielen</button></div>
+    <div class="d3-holder">
+  <article class="d3-card" style="--v:#e8622c;--vs:#fde6da">
+    <div class="d3-card-top"><span>🔥</span><small>B</small></div>
+    <h3>Spielplatz</h3><p class="d3-motto">Jeder Tag ein Level.</p>
+    <div class="d3-bars"><div><span>Ruhe</span><i><b style="width:30%"></b></i></div><div><span>Motivation</span><i><b style="width:95%"></b></i></div><div><span>Datentiefe</span><i><b style="width:40%"></b></i></div></div>
+    <ol class="d3-traits"><li>XP, Level & Streak-Flamme</li><li>Freundes-Rangliste</li><li>Tägliche Quest-Karte</li></ol>
+    <div class="d3-thumbs"><button type="button" data-screen-link="d3-s5">Heute</button><button type="button" data-screen-link="d3-s6">Statistik</button></div>
+  </article>
+      <button type="button" class="d3-play" data-screen-link="d3-s2">⬆ Als Base ausspielen</button></div>
+    <div class="d3-holder">
+  <article class="d3-card" style="--v:#2f62d8;--vs:#dfe7fb">
+    <div class="d3-card-top"><span>📊</span><small>C</small></div>
+    <h3>Cockpit</h3><p class="d3-motto">Alles im Blick, alles messbar.</p>
+    <div class="d3-bars"><div><span>Ruhe</span><i><b style="width:20%"></b></i></div><div><span>Motivation</span><i><b style="width:45%"></b></i></div><div><span>Datentiefe</span><i><b style="width:98%"></b></i></div></div>
+    <ol class="d3-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ol>
+    <div class="d3-thumbs"><button type="button" data-screen-link="d3-s7">Heute</button><button type="button" data-screen-link="d3-s8">Statistik</button></div>
+  </article>
+      <button type="button" class="d3-play">⬆ Als Base ausspielen</button></div></div>
+  </div><div class="anno-layer" data-anno-layer>
+    <div class="anno" data-anno="d3-s1-a1" data-anno-side="bottom" data-anno-target=".d3-slot" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a1" aria-label="{{anno.pin_label}}">1</button>
+      <div class="anno-bubble" id="anno-bubble-d3-s1-a1" data-anno-bubble="d3-s1-a1" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d3-s1-a1" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a1">
+          <span class="anno-bubble-question">Base-Slot oben: die Karte wird dorthin „ausgespielt“. Ohne Erklärung verständlich?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d3-s1-a1" data-annotation="d3-s1-a1" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d3-s1-a1"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d3-s1-a2" data-anno-side="right" data-anno-target=".d3-bars" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a2" aria-label="{{anno.pin_label}}">2</button>
+      <div class="anno-bubble" id="anno-bubble-d3-s1-a2" data-anno-bubble="d3-s1-a2" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d3-s1-a2" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a2">
+          <span class="anno-bubble-question">Quartett-Achsen (Ruhe / Motivation / Datentiefe) wählt Claude pro Concept. Sinnvoll, oder lieber nur die drei Eigenschaften?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d3-s1-a2" data-annotation="d3-s1-a2" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d3-s1-a2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="anno" data-anno="d3-s1-a3" data-anno-side="top" data-anno-target=".d3-thumbs" style="--anno-x:50%;--anno-y:30%">
+      <button class="anno-pin" type="button" data-anno-pin="d3-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a3" aria-label="{{anno.pin_label}}">3</button>
+      <div class="anno-bubble" id="anno-bubble-d3-s1-a3" data-anno-bubble="d3-s1-a3" data-open="false">
+        <button type="button" class="anno-bubble-summary" data-anno-summary="d3-s1-a3" aria-expanded="false" aria-controls="anno-bubble-d3-s1-a3">
+          <span class="anno-bubble-question">Unterseiten direkt auf der Karte anspringen — nützlich oder Lärm?</span><span class="anno-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="anno-bubble-body">
+          <textarea class="anno-answer" data-comment="anno-d3-s1-a3" data-annotation="d3-s1-a3" data-attachable placeholder="{{anno.answer_placeholder}}"></textarea>
+          <div class="attach-slot" data-attach-slot="anno-d3-s1-a3"></div>
+        </div>
+      </div>
+    </div></div></section>
+<section id="d3-s2" data-nav-label="Übersicht · Base gesetzt" data-screen hidden>
+  <div class="d3-table">
+    <div class="d3-slot d3-slot-full">
+      <span class="d3-slot-label">BASE</span>
+      
+  <article class="d3-card d3-mini" style="--v:#e8622c;--vs:#fde6da">
+    <div class="d3-card-top"><span>🔥</span><small>B</small></div>
+    <h3>Spielplatz</h3><p class="d3-motto">Jeder Tag ein Level.</p>
+    
+  </article><button type="button" class="d3-takeback" data-screen-link="d3-s1">↓ zurück auf die Hand</button>
+    </div>
+    <div class="d3-hand">
+    <div class="d3-holder">
+  <article class="d3-card" style="--v:#5f8b6a;--vs:#e3eee5">
+    <div class="d3-card-top"><span>🌿</span><small>A</small></div>
+    <h3>Zen-Garten</h3><p class="d3-motto">Weniger ist Ruhe.</p>
+    <div class="d3-bars"><div><span>Ruhe</span><i><b style="width:92%"></b></i></div><div><span>Motivation</span><i><b style="width:25%"></b></i></div><div><span>Datentiefe</span><i><b style="width:15%"></b></i></div></div>
+    <ol class="d3-traits"><li>Ein Ziel pro Tag</li><li>Fortschritt als Pflanze</li><li>Keine Push-Nachrichten</li></ol>
+    <div class="d3-thumbs"><button type="button" data-screen-link="d3-s3">Heute</button><button type="button" data-screen-link="d3-s4">Statistik</button></div>
+  </article>
+      <button type="button" class="d3-play">⬆ Als Base ausspielen</button></div><div class="d3-gap">ausgespielt ↑</div>
+    <div class="d3-holder">
+  <article class="d3-card" style="--v:#2f62d8;--vs:#dfe7fb">
+    <div class="d3-card-top"><span>📊</span><small>C</small></div>
+    <h3>Cockpit</h3><p class="d3-motto">Alles im Blick, alles messbar.</p>
+    <div class="d3-bars"><div><span>Ruhe</span><i><b style="width:20%"></b></i></div><div><span>Motivation</span><i><b style="width:45%"></b></i></div><div><span>Datentiefe</span><i><b style="width:98%"></b></i></div></div>
+    <ol class="d3-traits"><li>8 Kennzahlen auf einen Blick</li><li>12-Monats-Heatmap</li><li>Filter & CSV-Export</li></ol>
+    <div class="d3-thumbs"><button type="button" data-screen-link="d3-s7">Heute</button><button type="button" data-screen-link="d3-s8">Statistik</button></div>
+  </article>
+      <button type="button" class="d3-play">⬆ Als Base ausspielen</button></div></div>
+  </div></section>
+<section id="d3-s3" data-nav-label="Zen-Garten · Heute" data-screen hidden>
+  <div class="d3-view">
+    <div class="d3-viewhead" style="--v:#5f8b6a"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span>
+      <div class="d1-tabs"><button type="button" class="on" data-screen-link="d3-s3">Heute</button><button type="button" class="" data-screen-link="d3-s4">Statistik</button></div></div>
+    <div class="d3-viewbody">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Montag, 19. Oktober</div>
+    <div class="mock-zen-plant"><span>🌱</span></div>
+    <div class="mock-zen-goal">10 Minuten lesen</div>
+    <button class="mock-zen-check" type="button">✓</button>
+    <div class="mock-zen-quote">„Ein Blatt pro Tag ist auch ein Baum.“</div>
+  </div></div>
+    <div class="d3-dock">
+      <button type="button" class="d3-dock-back" data-screen-link="d3-s1">⟲ Zum Tisch</button>
+      <button type="button" class="d3-dock-card on" style="--v:#5f8b6a" data-screen-link="d3-s3">🌿 Zen-Garten</button><button type="button" class="d3-dock-card" style="--v:#e8622c" data-screen-link="d3-s5">🔥 Spielplatz</button><button type="button" class="d3-dock-card" style="--v:#2f62d8" data-screen-link="d3-s7">📊 Cockpit</button>
+      <button type="button" class="d3-play">⬆ Ausspielen</button>
+    </div>
+  </div></section>
+<section id="d3-s4" data-nav-label="Zen-Garten · Statistik" data-screen hidden>
+  <div class="d3-view">
+    <div class="d3-viewhead" style="--v:#5f8b6a"><b>Zen-Garten</b><span>Weniger ist Ruhe.</span>
+      <div class="d1-tabs"><button type="button" class="" data-screen-link="d3-s3">Heute</button><button type="button" class="on" data-screen-link="d3-s4">Statistik</button></div></div>
+    <div class="d3-viewbody">
+  <div class="mock-app mock-zen">
+    <div class="mock-zen-date">Dein Garten · Oktober</div>
+    <div class="mock-zen-garden"><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:20px">🌱</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:26px">🌿</span><span class="mock-zen-sprout" style="font-size:32px">🌿</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:38px">🌳</span><span class="mock-zen-sprout" style="font-size:44px">🌳</span></div>
+    <div class="mock-zen-quote">Jede Pflanze ist eine Woche. Keine Zahlen.</div>
+  </div></div>
+    <div class="d3-dock">
+      <button type="button" class="d3-dock-back" data-screen-link="d3-s1">⟲ Zum Tisch</button>
+      <button type="button" class="d3-dock-card on" style="--v:#5f8b6a" data-screen-link="d3-s3">🌿 Zen-Garten</button><button type="button" class="d3-dock-card" style="--v:#e8622c" data-screen-link="d3-s5">🔥 Spielplatz</button><button type="button" class="d3-dock-card" style="--v:#2f62d8" data-screen-link="d3-s7">📊 Cockpit</button>
+      <button type="button" class="d3-play">⬆ Ausspielen</button>
+    </div>
+  </div></section>
+<section id="d3-s5" data-nav-label="Spielplatz · Heute" data-screen hidden>
+  <div class="d3-view">
+    <div class="d3-viewhead" style="--v:#e8622c"><b>Spielplatz</b><span>Jeder Tag ein Level.</span>
+      <div class="d1-tabs"><button type="button" class="on" data-screen-link="d3-s5">Heute</button><button type="button" class="" data-screen-link="d3-s6">Statistik</button></div></div>
+    <div class="d3-viewbody">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Level 7</span><span class="mock-play-flame">🔥 12 Tage</span></div>
+    <div class="mock-play-xp"><i style="width:68%"></i></div>
+    <div class="mock-play-quest"><b>⚡ Quest des Tages</b><span>Trink 2 Gläser Wasser vor 10 Uhr · +50 XP</span></div>
+    <div class="mock-play-list">
+      <div class="mock-play-item done">Lesen <em>+20 XP</em></div>
+      <div class="mock-play-item">Sport <em>+40 XP</em></div>
+      <div class="mock-play-item">Meditation <em>+20 XP</em></div>
+    </div>
+  </div></div>
+    <div class="d3-dock">
+      <button type="button" class="d3-dock-back" data-screen-link="d3-s1">⟲ Zum Tisch</button>
+      <button type="button" class="d3-dock-card" style="--v:#5f8b6a" data-screen-link="d3-s3">🌿 Zen-Garten</button><button type="button" class="d3-dock-card on" style="--v:#e8622c" data-screen-link="d3-s5">🔥 Spielplatz</button><button type="button" class="d3-dock-card" style="--v:#2f62d8" data-screen-link="d3-s7">📊 Cockpit</button>
+      <button type="button" class="d3-play" data-screen-link="d3-s2">⬆ Ausspielen</button>
+    </div>
+  </div></section>
+<section id="d3-s6" data-nav-label="Spielplatz · Statistik" data-screen hidden>
+  <div class="d3-view">
+    <div class="d3-viewhead" style="--v:#e8622c"><b>Spielplatz</b><span>Jeder Tag ein Level.</span>
+      <div class="d1-tabs"><button type="button" class="" data-screen-link="d3-s5">Heute</button><button type="button" class="on" data-screen-link="d3-s6">Statistik</button></div></div>
+    <div class="d3-viewbody">
+  <div class="mock-app mock-play">
+    <div class="mock-play-top"><span class="mock-play-lvl">Rangliste · Woche 42</span></div>
+    <ol class="mock-play-rank"><li>🥇 Mara <em>1 240 XP</em></li><li class="me">🥈 Du <em>1 180 XP</em></li><li>🥉 Jonas <em>990 XP</em></li><li>4 · Lea <em>720 XP</em></li></ol>
+    <div class="mock-play-badges">🏅 🎯 🧘 📚 <span>+3 gesperrt</span></div>
+  </div></div>
+    <div class="d3-dock">
+      <button type="button" class="d3-dock-back" data-screen-link="d3-s1">⟲ Zum Tisch</button>
+      <button type="button" class="d3-dock-card" style="--v:#5f8b6a" data-screen-link="d3-s3">🌿 Zen-Garten</button><button type="button" class="d3-dock-card on" style="--v:#e8622c" data-screen-link="d3-s5">🔥 Spielplatz</button><button type="button" class="d3-dock-card" style="--v:#2f62d8" data-screen-link="d3-s7">📊 Cockpit</button>
+      <button type="button" class="d3-play" data-screen-link="d3-s2">⬆ Ausspielen</button>
+    </div>
+  </div></section>
+<section id="d3-s7" data-nav-label="Cockpit · Heute" data-screen hidden>
+  <div class="d3-view">
+    <div class="d3-viewhead" style="--v:#2f62d8"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span>
+      <div class="d1-tabs"><button type="button" class="on" data-screen-link="d3-s7">Heute</button><button type="button" class="" data-screen-link="d3-s8">Statistik</button></div></div>
+    <div class="d3-viewbody">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-grid"><div class="mock-cock-kpi"><span>Erledigt</span><b>5/8</b></div><div class="mock-cock-kpi"><span>Streak</span><b>12</b></div><div class="mock-cock-kpi"><span>Ø Woche</span><b>83 %</b></div><div class="mock-cock-kpi"><span>Schlaf</span><b>7,2 h</b></div><div class="mock-cock-kpi"><span>Schritte</span><b>8 412</b></div><div class="mock-cock-kpi"><span>Wasser</span><b>1,6 l</b></div><div class="mock-cock-kpi"><span>Fokus</span><b>2:10 h</b></div><div class="mock-cock-kpi"><span>Trend</span><b>▲ 4 %</b></div></div>
+    <div class="mock-cock-bar"><span>Filter: Alle ▾</span><span>Zeitraum: 7 Tage ▾</span><span>⤓ CSV</span></div>
+  </div></div>
+    <div class="d3-dock">
+      <button type="button" class="d3-dock-back" data-screen-link="d3-s1">⟲ Zum Tisch</button>
+      <button type="button" class="d3-dock-card" style="--v:#5f8b6a" data-screen-link="d3-s3">🌿 Zen-Garten</button><button type="button" class="d3-dock-card" style="--v:#e8622c" data-screen-link="d3-s5">🔥 Spielplatz</button><button type="button" class="d3-dock-card on" style="--v:#2f62d8" data-screen-link="d3-s7">📊 Cockpit</button>
+      <button type="button" class="d3-play">⬆ Ausspielen</button>
+    </div>
+  </div></section>
+<section id="d3-s8" data-nav-label="Cockpit · Statistik" data-screen hidden>
+  <div class="d3-view">
+    <div class="d3-viewhead" style="--v:#2f62d8"><b>Cockpit</b><span>Alles im Blick, alles messbar.</span>
+      <div class="d1-tabs"><button type="button" class="" data-screen-link="d3-s7">Heute</button><button type="button" class="on" data-screen-link="d3-s8">Statistik</button></div></div>
+    <div class="d3-viewbody">
+  <div class="mock-app mock-cock">
+    <div class="mock-cock-title">Heatmap · letzte 12 Monate</div>
+    <div class="mock-cock-heat"><i style="opacity:0.15"></i><i style="opacity:0.52"></i><i style="opacity:0.89"></i><i style="opacity:0.41"></i><i style="opacity:0.78"></i><i style="opacity:0.30"></i><i style="opacity:0.67"></i><i style="opacity:0.19"></i><i style="opacity:0.56"></i><i style="opacity:0.93"></i><i style="opacity:0.45"></i><i style="opacity:0.82"></i><i style="opacity:0.34"></i><i style="opacity:0.71"></i><i style="opacity:0.23"></i><i style="opacity:0.60"></i><i style="opacity:0.97"></i><i style="opacity:0.49"></i><i style="opacity:0.86"></i><i style="opacity:0.38"></i><i style="opacity:0.75"></i><i style="opacity:0.27"></i><i style="opacity:0.64"></i><i style="opacity:0.16"></i><i style="opacity:0.53"></i><i style="opacity:0.90"></i><i style="opacity:0.42"></i><i style="opacity:0.79"></i><i style="opacity:0.31"></i><i style="opacity:0.68"></i><i style="opacity:0.20"></i><i style="opacity:0.57"></i><i style="opacity:0.94"></i><i style="opacity:0.46"></i><i style="opacity:0.83"></i><i style="opacity:0.35"></i><i style="opacity:0.72"></i><i style="opacity:0.24"></i><i style="opacity:0.61"></i><i style="opacity:0.98"></i><i style="opacity:0.50"></i><i style="opacity:0.87"></i><i style="opacity:0.39"></i><i style="opacity:0.76"></i><i style="opacity:0.28"></i><i style="opacity:0.65"></i><i style="opacity:0.17"></i><i style="opacity:0.54"></i><i style="opacity:0.91"></i><i style="opacity:0.43"></i><i style="opacity:0.80"></i><i style="opacity:0.32"></i><i style="opacity:0.69"></i><i style="opacity:0.21"></i><i style="opacity:0.58"></i><i style="opacity:0.95"></i><i style="opacity:0.47"></i><i style="opacity:0.84"></i><i style="opacity:0.36"></i><i style="opacity:0.73"></i><i style="opacity:0.25"></i><i style="opacity:0.62"></i><i style="opacity:0.99"></i><i style="opacity:0.51"></i><i style="opacity:0.88"></i><i style="opacity:0.40"></i><i style="opacity:0.77"></i><i style="opacity:0.29"></i><i style="opacity:0.66"></i><i style="opacity:0.18"></i><i style="opacity:0.55"></i><i style="opacity:0.92"></i><i style="opacity:0.44"></i><i style="opacity:0.81"></i><i style="opacity:0.33"></i><i style="opacity:0.70"></i><i style="opacity:0.22"></i><i style="opacity:0.59"></i><i style="opacity:0.96"></i><i style="opacity:0.48"></i><i style="opacity:0.85"></i><i style="opacity:0.37"></i><i style="opacity:0.74"></i><i style="opacity:0.26"></i></div>
+    <div class="mock-cock-bar"><span>Gewohnheit: Lesen ▾</span><span>⤓ CSV</span></div>
+  </div></div>
+    <div class="d3-dock">
+      <button type="button" class="d3-dock-back" data-screen-link="d3-s1">⟲ Zum Tisch</button>
+      <button type="button" class="d3-dock-card" style="--v:#5f8b6a" data-screen-link="d3-s3">🌿 Zen-Garten</button><button type="button" class="d3-dock-card" style="--v:#e8622c" data-screen-link="d3-s5">🔥 Spielplatz</button><button type="button" class="d3-dock-card on" style="--v:#2f62d8" data-screen-link="d3-s7">📊 Cockpit</button>
+      <button type="button" class="d3-play">⬆ Ausspielen</button>
+    </div>
+  </div></section>
+</section>
+</section>

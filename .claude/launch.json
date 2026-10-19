@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "concept-demo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "C:/Users/Jerem/AppData/Local/Temp/claude/C--Users-Jerem-IdeaProjects-dotclaude/6e401b34-acc5-45f8-b610-be9487f42286/scratchpad"],
+      "port": 8765
+    }
+  ]
+}

@@ -1878,7 +1878,7 @@ returns — the single-design page is untouched.
   function fitPreviews() {
     document.querySelectorAll('.design-ov-preview').forEach(p => {
       const w = p.clientWidth;
-      if (w > 0) p.style.setProperty('--dz-ov-scale', String(w / 1200));
+      if (w > 0) p.style.setProperty('--dz-ov-scale', String(w / 1000));
     });
   }
   window.addEventListener('resize', () => requestAnimationFrame(fitPreviews));

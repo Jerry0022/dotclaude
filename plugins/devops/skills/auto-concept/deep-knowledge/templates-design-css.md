@@ -1028,11 +1028,11 @@ body:not([data-overview-active="true"]) .design-ov { display: none; }
   background: var(--bg-secondary, var(--panel-bg, #0d1117));
 }
 .design-ov-preview:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
-/* The scaled clone: laid out at a fixed virtual width, scaled to the box by
+/* The scaled clone: laid out at a fixed 1000px virtual width, scaled to the box by
    fitOverviewPreviews() (--dz-ov-scale). pointer-events none + inert keep
    the mock's own controls out of reach — the preview is one button. */
 .design-ov-scale {
-  position: absolute; top: 0; left: 0; width: 1200px;
+  position: absolute; top: 0; left: 0; width: 1000px;
   transform: scale(var(--dz-ov-scale, 0.28)); transform-origin: 0 0;
   pointer-events: none; padding: 1.5rem; box-sizing: border-box;
 }
@@ -1213,6 +1213,8 @@ body.panel-open .design-quick, body.panel-open .design-header { opacity: 0; poin
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 .upin-hint[hidden] { display: none; }
+/* Never on top of the offline strip, which owns the same bottom-centre spot. */
+body:has(.draft-offline-strip:not([hidden])) .upin-hint { bottom: 4.75rem; }
 body.upin-armed section[data-screen][data-screen-active="true"],
 body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: crosshair !important; }
 .upin-host { position: relative; }
@@ -1236,7 +1238,7 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
   border: 1px solid var(--upin-color); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
   cursor: auto;
 }
-.upin[data-flip-x="true"] .upin-editor { left: auto; right: 4px; }
+.upin[data-flip-x="true"] .upin-editor { left: auto; right: 32px; }
 .upin[data-flip-y="true"] .upin-editor { top: auto; bottom: 30px; }
 .upin-editor[hidden] { display: none; }
 .upin-editor-head { font-size: 0.72rem; color: var(--text-secondary, #8b949e); margin-bottom: 0.35rem; }
@@ -1248,6 +1250,13 @@ body.upin-armed section[data-screen][data-screen-active="true"] * { cursor: cros
 }
 .upin-editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.35rem; font-size: 0.72rem; color: var(--text-secondary, #8b949e); }
 .upin-delete { border: 0; background: transparent; color: var(--danger-color, #f85149); font: inherit; font-size: 0.75rem; cursor: pointer; padding: 0; }
+/* One focus ring for every control of this chrome (R0/R4a). */
+.design-header button:focus-visible, .design-quick button:focus-visible,
+.design-ov button:focus-visible, .design-keys button:focus-visible,
+.upin-editor button:focus-visible, .upin-editor textarea:focus {
+  outline: 2px solid var(--accent-color, #58a6ff); outline-offset: 2px;
+}
+.upin-editor textarea:focus { outline-offset: 0; }
 @media (prefers-reduced-motion: reduce) {
   .design-ov-card, .design-header, .design-quick { transition: none; }
 }
