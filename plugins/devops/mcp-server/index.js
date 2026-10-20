@@ -2317,7 +2317,7 @@ function cardResultBlocks(cardMarkdown, titleNote, actionsNote, archiveNote = ''
 function openDropNote(params) {
   const n = params._openDropped || 0;
   if (!n) return '';
-  return `[dotclaude] ${n} open point(s) dropped: a routine next step (ship, push, release, version bump, post) is not a decision. Put it into nextStep; keep open for real decisions.`;
+  return `[dotclaude] ${n} open point(s) dropped: a routine next step (ship, push, release, version bump, post) is not a decision. Do it (or let the ship do it) and keep open for real decisions; on an analysis card a recommended step goes into nextStep.`;
 }
 
 /** The session-title instruction for this card, '' when a mode owns the title

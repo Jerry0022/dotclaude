@@ -52,6 +52,23 @@ describe("dropNextStepOpenItems", () => {
     ]) expect(isNextStep(text)).toBe(false);
   });
 
+  test("#759: a side session's unshipped work with a reply stays (QA defect)", () => {
+    for (const it of [
+      { text: "Build-ID-Fix liegt ungeshippt im Side-Branch, bitte shippen", reply: "Ship it in the side session." },
+      { text: "Finished work in linked session not merged to main", reply: "ship" },
+    ]) expect(isNextStep(it)).toBe(false);
+    // Without a reply it is still the routine step.
+    expect(isNextStep("Build-ID-Fix im Side-Branch shippen")).toBe(true);
+  });
+
+  test("bare merge / discord / Release-compound name decisions, not the step", () => {
+    for (const s of [
+      "Remove the legacy discord webhook config",
+      "Das Release-Skript prüft die Version nicht",
+      "Merge-Strategie für die Config-Dateien festlegen",
+    ]) expect(isNextStep(s)).toBe(false);
+  });
+
   test("object items are matched on text, not on reply", () => {
     const keep = { text: "Migration noch nicht getestet", reply: "Ja, dann shippen." };
     expect(isNextStep(keep)).toBe(false);

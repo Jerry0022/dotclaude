@@ -60,8 +60,6 @@ export function archiveDecision(params, deps) {
   if (hasItems(params.userTest)) return no("user-test");
   // A deploy the user still has to run or gate-check is their step too.
   if (s.deployPending || hasItems(params.deployGate)) return no("deploy");
-  // A deploy the user still has to run or gate-check is their step too.
-  if (s.deployPending || hasItems(params.deployGate)) return no("deploy");
   if (deps.hasConcept(params.concept)) return no("concept");
   const cwd = typeof params.cwd === "string" ? params.cwd.trim() : "";
   if (!cwd) return no("no-cwd");

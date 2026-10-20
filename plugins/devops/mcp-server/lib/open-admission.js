@@ -21,7 +21,8 @@
 const NEXT_STEP_RE = new RegExp([
   String.raw`\bship(?:pen|ping|ped|s)?\b`,
   String.raw`\bpush(?:en|ed|ing|es)?\b`,
-  String.raw`\breleas(?:e|es|ed|ing)\b`,
+  // Not a compound noun: "Release-Skript prüft …" is a finding, not the step.
+  String.raw`\breleas(?:e|es|ed|ing)\b(?!-)`,
   String.raw`\bveröffentlich\w*`,
   String.raw`\bversion(?:s)?[\s-]*(?:bump|erhöh\w*|ausgeben|ausgabe)\b`,
   String.raw`\bbump(?:en|ed|ing)?\s+(?:the\s+)?version\b`,
@@ -29,12 +30,16 @@ const NEXT_STEP_RE = new RegExp([
   String.raw`\b(?:discord|slack)[-\s]?post\b`,
   String.raw`\bposten\b`,
   String.raw`\bpost(?:ed|ing)?\s+(?:to|in|on)\s+(?:discord|slack)\b`,
-  String.raw`\bmerg(?:e|en|ed|ing|es)\b`,
+  // A bare "merge" or "Discord" names decisions too ("Remove the legacy discord
+  // webhook config") — the routine step always says where: nach/into main, a post.
   String.raw`\bnach\s+(?:main|master)\b`,
   String.raw`\b(?:to|into)\s+(?:main|master)\b`,
   String.raw`\bausgeben\b`,
-  String.raw`\bdiscord\b`,
 ].join('|'), 'i');
+
+// #759: finished work in a linked side session that still has to ship is not
+// this scope's next step — it is the user's to land, carried by its reply.
+const SIDE_SESSION_RE = /\b(?:side[-\s]?session|seiten[-\s]?session|linked\s+session|verknüpfte\w*\s+session|side[-\s]?branch|anderen?\s+session)\b/i;
 
 /** The text an item shows: a string, or the `text` of `{ text, reply }`. */
 function shownText(it) {
@@ -47,6 +52,8 @@ function isNextStep(it) {
   const text = shownText(it).trim();
   if (!text) return false;
   if (/[?？]["')\]*_`]*$/.test(text)) return false;
+  const reply = it && typeof it === 'object' && typeof it.reply === 'string' ? it.reply : '';
+  if (reply && SIDE_SESSION_RE.test(text + ' ' + reply)) return false;
   return NEXT_STEP_RE.test(text);
 }
 
