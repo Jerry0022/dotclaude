@@ -422,24 +422,35 @@ export async function handler(params) {
     // Pre-Merge Checks Gate — wait for CI on the PR before merging.
     // Bypass via skipChecks param or DEVOPS_SHIP_SKIP_CHECKS=1 env.
     const checksBypassed = skipChecks || process.env.DEVOPS_SHIP_SKIP_CHECKS === "1";
+    if (checksBypassed && params.quotaDecision) {
+      result.quotaDecisionIgnored = "checks are bypassed for this ship — the CI-quota decision was not applied";
+    }
     if (!checksBypassed) {
       // #752: shared CI-quota memory. A record means some session already saw
       // the Actions minutes run out — probe briefly instead of waiting 10+ min.
+      // The store is a hint: a failed read or write never fails the ship.
+      const quotaStore = (fn, fallback = null) => {
+        try { return fn(); } catch (e) {
+          (result.warnings ||= []).push(`CI-quota store: ${e.message}`);
+          return fallback;
+        }
+      };
       const quotaKey = repoKey(cwd);
-      let quota = readRecord(quotaKey);
+      let quota = quotaStore(() => readRecord(quotaKey));
       if (params.quotaDecision === "revoke") {
-        revokeDecision(quotaKey);
-        quota = readRecord(quotaKey);
-        result.quotaDecisionRevoked = true;
+        if (quotaStore(() => revokeDecision(quotaKey), false)) result.quotaDecisionRevoked = true;
+        quota = quotaStore(() => readRecord(quotaKey));
       } else if (params.quotaDecision && DECISIONS.includes(params.quotaDecision)) {
-        if (setDecision(quotaKey, params.quotaDecision)) quota = readRecord(quotaKey);
+        if (quotaStore(() => setDecision(quotaKey, params.quotaDecision))) quota = quotaStore(() => readRecord(quotaKey));
         else result.quotaDecisionIgnored = "no CI-quota block is recorded for this repo — nothing to decide";
       }
       let checkResult = watchPRChecks(pr.number, opts, quota
         ? { timeoutSec: Math.min(checksTimeoutSec, 60), noChecksGraceMs: 0 }
         : { timeoutSec: checksTimeoutSec });
-      if (quota && checkResult.status === "timeout") {
-        // Checks are running or queued after all — fall back to the full wait.
+      if (quota && (checkResult.status === "timeout" || checkResult.status === "no-checks")) {
+        // Checks are running or queued after all, or not registered yet right
+        // after the push (the short probe has no #508 grace) — fall back to the
+        // full wait, so a quota record never merges past an unseen check.
         checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
       }
       // A red check caused by a GitHub account limit (Actions minutes,
@@ -448,10 +459,12 @@ export async function handler(params) {
       const limits = checkResult.status === "failed"
         ? classifyFailedChecks(checkResult.failed, opts)
         : { limited: false };
-      const minutesBlock = limits.limited && limits.kinds.includes(MINUTES_KIND);
+      // Every red check must be a minutes block: a mixed verdict (an artifact-
+      // quota job that did run) never feeds a stored skip-checks.
+      const minutesBlock = limits.limited && limits.kinds.length > 0 && limits.kinds.every((k) => k === MINUTES_KIND);
       let quotaNote = null;
       if (minutesBlock) {
-        quota = recordBlock(quotaKey);
+        quota = quotaStore(() => recordBlock(quotaKey));
         const decision = quota?.decision?.value || null;
         const blockMsg = `GitHub Actions minutes exhausted (account limit on ${limits.checks.map((c) => c.name).join(", ")})` +
           (quota ? ` — recorded for ${quota.key}, resets ${quota.resetAt}` : "");
@@ -477,8 +490,7 @@ export async function handler(params) {
         // No stored decision → the #768 path below (account-limited, local gate).
       } else if (quota && (checkResult.status === "passed" || checkResult.status === "failed")) {
         // A check ran for real again (not a minutes block) — the block is over.
-        clearRecord(quotaKey);
-        quotaNote = { quotaCleared: true };
+        if (quotaStore(() => clearRecord(quotaKey), false)) quotaNote = { quotaCleared: true };
       }
       result.checks = {
         status: quotaNote?.status || checkResult.status,

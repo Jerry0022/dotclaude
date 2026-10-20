@@ -106,6 +106,7 @@ export function setDecision(key, value, { now = Date.now(), file } = {}) {
   const rec = readRecord(key, { now, file });
   if (!rec) return null;
   const data = load(file);
+  if (!data.repos[key]) return null; // cleared by another session in between
   data.repos[key].decision = { value, decidedAt: new Date(now).toISOString() };
   save(data, file);
   return { key, ...data.repos[key] };
