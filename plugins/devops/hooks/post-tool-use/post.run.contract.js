@@ -191,6 +191,8 @@ function onShell({ hook, cwd, root, roots, sessionId, s, RC, C }) {
   // merge as the MCP tool, so it records the same `release` — ok/merged from
   // the CLI's JSON result. An interrupted call or an unreadable result records
   // nothing; a blocked one records ok:false (never satisfies the gate).
+  // (A blocked release still exits 0 — cli.js exits 1 only on a throw.) Limit:
+  // stdout redirected to a file leaves no JSON in r.text → nothing recorded.
   if (f.release && !failed) {
     const res = C.releaseResult(r.text);
     if (res) {

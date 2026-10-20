@@ -118,6 +118,17 @@ describe("passes without a Q4 answer (Harden always, Polish on UI changes)", () 
     expect(R.parseRouterAnswers([Q.was, Q.ablauf, Q.umfang, q4n], { ...base, [q4n.question]: ["Nichts davon"] }, { doRunArgs: "rethink" }).rethink).toBe(false);
   });
 
+  test("ship-review: a headerless 'wer shippt?' is no router call; an empty / unresolved Q4 keeps rethink from args", () => {
+    expect(R.isRouterCall([{ question: "Und wer shippt?", options: [{ label: "Ich" }, { label: "Du" }] }])).toBe(false);
+    expect(R.isRouterCall([{ question: "Bist du dabei, und wer shippt am Ende?", options: [{ label: "Weg · Ship automatisch" }] }])).toBe(true);
+    const base = ans("Prompt umsetzen", "Interaktiv · Ship manuell", "Flexibel");
+    const q4e = { ...Q4NEW, question: "Was kommt dazu? (Leer lassen = nichts)" };
+    const qs = [Q.was, Q.ablauf, Q.umfang, q4e];
+    expect(R.parseRouterAnswers(qs, { ...base, [q4e.question]: ["Other"] }, { doRunArgs: "rethink" }).rethink).toBe(true);
+    expect(R.parseRouterAnswers(qs, { ...base, [q4e.question]: ["blubb"] }, { doRunArgs: "rethink" }).rethink).toBe(true);
+    expect(R.parseRouterAnswers(qs, { ...base, [q4e.question]: ["Budget verbrennen"] }, { doRunArgs: "rethink" }).rethink).toBe(false);
+  });
+
   // #635: "Nichts davon" is always Q4's last option; an empty Other on the
   // "Leer lassen = …" question is the empty answer.
   test("#635: 'Nichts davon' → no extras, passes stay; empty Other on a 'Leer lassen' Q4 → the empty answer", () => {

@@ -143,7 +143,11 @@ function isRouterCall(questions) {
   if (!Array.isArray(questions)) return false;
   // 'Ablauf?' alone counts (always partial): with Q1/Q3 dropped (bedtime +
   // backlog preset, strict preset) the base call is [Ablauf?, PC danach].
-  return !!findQuestion(questions, 'Durchgänge?') || !!findQuestion(questions, 'Ablauf?');
+  // Alone it must look like the router's: an explicit header or the
+  // "· Ship …" option labels — a headerless "wer shippt?" is no router call.
+  if (findQuestion(questions, 'Durchgänge?')) return true;
+  const q2 = findQuestion(questions, 'Ablauf?');
+  return !!q2 && (typeof q2.header === 'string' || optionLabels(q2).some(l => /\bship\b/i.test(l)));
 }
 
 const Q1_FIXED = ['prompt', 'audit', 'backlog'];
@@ -247,9 +251,10 @@ function parseRouterAnswers(questions, answers, opts = {}) {
     const tokens = answerTokens(answerFor(a, q4), q4);
     const r = parseQ4(tokens, q4);
     out.passes = r.passes;
-    // A Q4 answer decides rethink/burn; only an unanswered Q4 keeps the args.
-    out.rethink = tokens.length ? r.rethink : (out.rethink || r.rethink);
-    out.burn = tokens.length ? r.burn : (out.burn || r.burn);
+    // A Q4 answer decides rethink/burn; an unanswered, empty-default or
+    // wholly unresolved one keeps the args.
+    out.rethink = r.decided ? r.rethink : (out.rethink || r.rethink);
+    out.burn = r.decided ? r.burn : (out.burn || r.burn);
     out.unresolved = r.unresolved;
     if (tokens.length) answered.push('passes', 'rethink', 'burn', 'unresolved');
   }
@@ -293,16 +298,16 @@ function parseQ4(tokens, q4) {
   if (recLabels.length) passFlagsOf(recLabels, rec);
   if (!offersPasses || !recLabels.length) { rec.passes.add('harden'); rec.passes.add('polish'); }
   const recommended = ['harden', 'polish'].filter(p => rec.passes.has(p));
-  const emptyAnswer = { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false };
+  const emptyAnswer = { passes: recommended, rethink: rec.rethink, burn: rec.burn, unresolved: false, decided: false };
   if (!tokens.length) return emptyAnswer;
   // An empty Other on a question that names its empty answer is that answer.
   if (emptyDefaultOf(q4 && q4.question) !== null && tokens.every(t => PLACEHOLDER_RE.test(t.trim()))) return emptyAnswer;
-  if (tokens.some(t => NO_EXTRAS_RE.test(t.trim()))) return { passes: recommended, rethink: false, burn: false, unresolved: false };
+  if (tokens.some(t => NO_EXTRAS_RE.test(t.trim()))) return { passes: recommended, rethink: false, burn: false, unresolved: false, decided: true };
   // "keine" only means "no passes" when Q4 still offers Harden/Polish; the
   // current Q4 has none, so it reads like "Nichts davon".
   if (tokens.some(t => NONE_RE.test(t.trim()))) {
-    if (!offersPasses) return { passes: recommended, rethink: false, burn: false, unresolved: false };
-    return { passes: [], rethink: false, burn: false, unresolved: false };
+    if (!offersPasses) return { passes: recommended, rethink: false, burn: false, unresolved: false, decided: true };
+    return { passes: [], rethink: false, burn: false, unresolved: false, decided: true };
   }
   const flags = { passes: new Set(), rethink: false, burn: false };
   const neg = new Set();
@@ -329,7 +334,7 @@ function parseQ4(tokens, q4) {
   if (flags.passes.size) passes = ['harden', 'polish'].filter(p => flags.passes.has(p) && !neg.has(p));
   else if (neg.size || unresolved || !named || !offersPasses) passes = recommended.filter(p => !neg.has(p));
   else passes = [];
-  return { passes, rethink: flags.rethink, burn: flags.burn, unresolved };
+  return { passes, rethink: flags.rethink, burn: flags.burn, unresolved, decided: named || neg.size > 0 };
 }
 
 /**

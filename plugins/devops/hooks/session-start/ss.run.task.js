@@ -39,7 +39,17 @@ function taskPath(cwd) {
 function prevClosedAt(cwd) {
   try {
     const prev = JSON.parse(fs.readFileSync(path.join(projectClaudeDir(cwd), 'run-contract.prev.json'), 'utf8'));
-    const t = Date.parse(prev.closedAt || prev.armedAt || '');
+    const closed = Date.parse(prev.closedAt || '');
+    if (Number.isFinite(closed)) return closed;
+    // Expired unclosed: it ended at its idle expiry — a task appended during
+    // that run is a leftover. archivedAt is no end: arm() stamps it at the
+    // NEXT run's arm, after that run's task was written.
+    const archived = Date.parse(prev.archivedAt || '');
+    const { lastActivity, expiryMs } = require('../lib/run-contract-store');
+    const expiredAt = lastActivity(prev, Array.isArray(prev.events) ? prev.events : []) + expiryMs(prev);
+    if (Number.isFinite(archived) && expiredAt <= archived) return expiredAt;
+    // Replaced while still active: anything written since its arm may be the new task.
+    const t = Date.parse(prev.armedAt || '');
     return Number.isFinite(t) ? t : null;
   } catch {
     return null;
