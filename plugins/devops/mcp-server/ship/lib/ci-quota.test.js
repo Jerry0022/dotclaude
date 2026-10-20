@@ -60,6 +60,10 @@ describe("store lifecycle", () => {
     expect(readRecord("o/r", { now: NOW, file })).toBeNull();
     expect(readRecord("o/other", { now: NOW, file })).not.toBeNull();
   });
+  test("a garbled resetAt expires instead of living forever", () => {
+    writeFileSync(file, JSON.stringify({ repos: { "o/r": { since: "x", resetAt: "not-a-date" } } }));
+    expect(readRecord("o/r", { now: NOW, file })).toBeNull();
+  });
   test("corrupt store reads as empty", () => {
     writeFileSync(file, "{nope");
     expect(readRecord("o/r", { now: NOW, file })).toBeNull();

@@ -77,7 +77,8 @@ export function readRecord(key, { now = Date.now(), file } = {}) {
   const data = load(file);
   const rec = data.repos[key];
   if (!rec) return null;
-  if (!rec.resetAt || Date.parse(rec.resetAt) <= now) {
+  // `!(… > now)`: a garbled `resetAt` (NaN) expires too, instead of never.
+  if (!(Date.parse(rec.resetAt) > now)) {
     delete data.repos[key];
     try { save(data, file); } catch { /* read-only home — still report expired */ }
     return null;
