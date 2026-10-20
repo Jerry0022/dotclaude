@@ -72,11 +72,11 @@ function resultFile(cwd, tmpdir = os.tmpdir()) {
 function claimSyncSlot(cwd, opts = {}) {
   const { throttleMs = THROTTLE_MS, tmpdir = os.tmpdir(), now = Date.now(), peek = false } = opts;
   const file = throttleFile(cwd, tmpdir);
-  let stale = false;
+  let stale = null;
   try {
     const stat = fs.statSync(file);
     if (now - stat.mtimeMs < throttleMs) return false;
-    stale = true;
+    stale = stat;
   } catch {
     // No marker yet — first sync for this worktree.
   }
@@ -88,6 +88,18 @@ function claimSyncSlot(cwd, opts = {}) {
     if (stale) {
       const aside = `${file}.${process.pid}.stale`;
       fs.renameSync(file, aside);
+      // A racer that stalled between its stat and its rename may have moved a
+      // FRESH marker another session just created — put that one back and
+      // treat the slot as taken, or both would spawn a sync.
+      let moved = null;
+      try { moved = fs.statSync(aside); } catch { return false; }
+      const same = moved.mtimeMs === stale.mtimeMs && moved.size === stale.size &&
+        (!stale.ino || !moved.ino || moved.ino === stale.ino);
+      if (!same) {
+        try { fs.linkSync(aside, file); } catch { /* a newer marker exists */ }
+        try { fs.unlinkSync(aside); } catch { /* best effort */ }
+        return false;
+      }
       try { fs.unlinkSync(aside); } catch { /* best effort */ }
     }
     fs.writeFileSync(file, String(now), { flag: 'wx' });

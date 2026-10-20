@@ -187,12 +187,23 @@ test("costOf prices tokens and web searches", () => {
 });
 
 describe("secret-file guard (audit 2026-10-20)", () => {
-  test.each([".env::$DATA", ".env ", ".env.", "id_rsa_work", ".pypirc", ".git-credentials", "prod.tfvars"])(
+  // `.env::$DATA` only aliases .env on NTFS; on POSIX it is a distinct, harmless name.
+  test.each([...(process.platform === "win32" ? [".env::$DATA"] : []), ".env ", ".env.", "id_rsa_work", ".pypirc", ".git-credentials", "prod.tfvars"])(
     "read_file %s is refused",
     (name) => {
       expect(() => agent.runTool(proj, "read_file", { path: name })).toThrow(/off limits|unsupported path form/);
     },
   );
+
+  test("a colon in a name is an NTFS stream only on Windows", () => {
+    if (process.platform === "win32") {
+      expect(() => agent.runTool(proj, "read_file", { path: "docs/12:00-notes.md" })).toThrow(/unsupported path form/);
+      return;
+    }
+    fs.mkdirSync(path.join(proj, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(proj, "docs", "12:00-notes.md"), "noon\n");
+    expect(() => agent.runTool(proj, "read_file", { path: "docs/12:00-notes.md" })).not.toThrow();
+  });
 
   test("a symlink to a secret file is refused by its real name", () => {
     fs.writeFileSync(path.join(proj, ".env"), "K=answer-secret\n");

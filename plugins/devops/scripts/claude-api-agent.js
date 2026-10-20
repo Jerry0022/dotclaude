@@ -129,7 +129,8 @@ function inside(root, rel) {
   // NTFS aliases (ADS `.env::$DATA`, trailing dot/space, 8.3 names) and symlinks
   // must not slip past the name test: check the typed name AND the real one.
   const typed = path.basename(abs);
-  if (/:/.test(typed) || (typed !== '.' && typed !== '..' && /[. ]$/.test(typed))) throw new Error(`unsupported path form: ${rel}`);
+  // Colons are legal in POSIX names (docs/12:00-notes.md); only NTFS reads one as ADS.
+  if ((process.platform === 'win32' && /:/.test(typed)) || (typed !== '.' && typed !== '..' && /[. ]$/.test(typed))) throw new Error(`unsupported path form: ${rel}`);
   if (SECRET_FILE.test(typed) || SECRET_FILE.test(path.basename(real))) throw new Error(`secret-shaped file is off limits: ${rel}`);
   return abs;
 }

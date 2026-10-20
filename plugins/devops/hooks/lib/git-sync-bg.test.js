@@ -116,6 +116,32 @@ describe("claimSyncSlot — one sync per worktree per window", () => {
     claimSyncSlot("C:/repo", { tmpdir });
     expect(claimSyncSlot("C:/repo", { tmpdir, peek: true })).toBe(false);
   });
+
+  test("a racer that renames another session's FRESH marker puts it back and does not spawn", () => {
+    const file = throttleFile("C:/repo", tmpdir);
+    fs.writeFileSync(file, "old");
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(file, old, old);
+    const realStat = fs.statSync;
+    let first = true;
+    fs.statSync = (p, ...rest) => {
+      const st = realStat(p, ...rest);
+      if (first && p === file) {
+        first = false;
+        // Session A takes the stale slot between our stat and our rename.
+        fs.rmSync(file);
+        fs.writeFileSync(file, "fresh-from-session-A");
+      }
+      return st;
+    };
+    try {
+      expect(claimSyncSlot("C:/repo", { tmpdir })).toBe(false);
+    } finally {
+      fs.statSync = realStat;
+    }
+    expect(fs.readFileSync(file, "utf8")).toBe("fresh-from-session-A");
+    expect(fs.readdirSync(tmpdir).filter((n) => n.endsWith(".stale"))).toHaveLength(0);
+  });
 });
 
 describe("resultBranch — which branch a result is about", () => {

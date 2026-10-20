@@ -266,6 +266,17 @@ function quoteWinArg(arg) {
   return `"${q}"`;
 }
 
+/**
+ * `claude` usually resolves to a `claude.cmd` npm shim, so Start-Process runs it
+ * through cmd.exe, which ignores CommandLineToArgvW escaping: a `\"` flips its
+ * quote state and a following `&`, `|`, `>` would run as a shell command, and
+ * `%VAR%` expands even inside quotes. The resume prompt is a short marker
+ * sentence, so cmd metacharacters and line breaks are replaced by spaces.
+ */
+function shimSafePrompt(prompt) {
+  return String(prompt).replace(/["&|<>^%\r\n]/g, ' ');
+}
+
 function buildRecoveryScript({
   action, hours, flagPath, stalledPath, recoveryFlagPath, workingDir, resumePrompt, taskName,
 }) {
@@ -297,7 +308,7 @@ function buildRecoveryScript({
     const dirPs = String(workingDir || '').replace(/'/g, "''");
     // Start-Process joins an -ArgumentList array with spaces and adds no quotes,
     // so the prompt must be ONE pre-quoted argument string (Windows argv rules).
-    const promptPs = quoteWinArg(String(resumePrompt || '')).replace(/'/g, "''");
+    const promptPs = quoteWinArg(shimSafePrompt(resumePrompt || '')).replace(/'/g, "''");
     // notify first (always visible), then a ONE-SHOT relaunch guarded by a
     // recovery flag so a repeatedly-firing task can never fork-bomb `claude`.
     // No `claude` on PATH → notify-only, no error.
@@ -676,6 +687,7 @@ if (require.main === module) {
 
 module.exports = {
   quoteWinArg,
+  shimSafePrompt,
   buildRegisterPsCommand,
   buildRecoveryScript,
   buildReapQueryPs,
