@@ -49,6 +49,20 @@ describe("ss.run.task", () => {
     expect(buildTaskInstruction({ cwd, source: "compact", contract: contract() })).toBeNull();
   });
 
+  test("an expired unclosed run ends at its idle expiry, not its arm time", () => {
+    const H = 60 * 60 * 1000;
+    const armedAt = Date.now() - 20 * H;
+    const prev = { armedAt: new Date(armedAt).toISOString(), flow: "interactive", events: [],
+      archivedAt: new Date(Date.now() - H).toISOString() };
+    fs.writeFileSync(path.join(cwd, ".claude", "run-contract.prev.json"), JSON.stringify(prev));
+    // appended during the expired run -> leftover
+    writeTask(TASK, armedAt + 2 * H);
+    expect(buildTaskInstruction({ cwd, source: "compact", contract: contract() })).toBeNull();
+    // written after it expired, before the new arm (archivedAt) -> this run's task
+    writeTask(TASK, Date.now() - 2 * H);
+    expect(buildTaskInstruction({ cwd, source: "compact", contract: contract() })).toContain(TASK);
+  });
+
   test("keeps a file written long before a late-armed contract (no previous run)", () => {
     writeTask(TASK, Date.now() - 60 * 60 * 1000);
     expect(buildTaskInstruction({ cwd, source: "compact", contract: contract() })).toContain(TASK);
