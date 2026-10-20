@@ -128,8 +128,8 @@ registerTool(
 registerTool(
   "ship_release",
   "Ship Release",
-  "Commit, push, create PR, squash-merge, tag, and create GitHub release. " +
-  "Handles the full git + GitHub flow deterministically. Returns PR number, merge sha, tag status.",
+  "Commit, push, create PR, squash-merge, and create the alpha ring tag. " +
+  "Handles the full git + GitHub flow deterministically. The GitHub Release is created later by ship_promote. Returns PR number, merge sha, tag status.",
   releaseSchema,
   releaseHandler,
 );

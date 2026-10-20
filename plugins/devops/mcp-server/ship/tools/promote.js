@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
-import { git, gitStrict, NETWORK_TIMEOUT } from "../lib/git.js";
+import { git, gitStrict, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createRelease, releaseExists } from "../lib/github.js";
 import { parseChannelTag, compareVersions } from "../lib/channels.js";
 import { parseLsRemoteTagOutput } from "../lib/remote-tags.js";
@@ -290,10 +290,13 @@ export async function handler(params) {
 
     // 3. Ancestry guard: only commits reachable from origin/main are promotable.
     try {
-      gitStrict(`fetch origin main`, { ...opts, timeout: NETWORK_TIMEOUT });
-      gitStrict(`merge-base --is-ancestor ${sha} origin/main`, opts);
+      // The repo's real default branch (a master-default repo ships as a final
+      // tagged ship too, see ship_release) — never a hard-coded "main".
+      const def = detectDefaultBranch(opts) || "main";
+      gitStrict(`fetch origin "${def}"`, { ...opts, timeout: NETWORK_TIMEOUT });
+      gitStrict(`merge-base --is-ancestor ${sha} "origin/${def}"`, opts);
     } catch {
-      return { ...result, success: false, error: `ancestry: ${sha.slice(0, 12)} is not an ancestor of origin/main — refusing to promote an unmerged/foreign commit` };
+      return { ...result, success: false, error: `ancestry: ${sha.slice(0, 12)} is not an ancestor of origin/${detectDefaultBranch(opts) || "main"} — refusing to promote an unmerged/foreign commit` };
     }
 
     // 4./5. Create tags — target first, then (stable only) the bare alias.

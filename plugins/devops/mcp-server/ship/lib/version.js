@@ -8,6 +8,19 @@ import { join, resolve } from "node:path";
 import { resolveGitRoot } from "./resolve-root.js";
 
 /**
+ * First released version heading of a changelog. `## [Unreleased]` (Keep a
+ * Changelog) is a placeholder, not a version — matching it first made every
+ * such changelog read as a version mismatch. Returns a match-shaped array
+ * (`[full, version]`) or null.
+ */
+export function firstChangelogRelease(content) {
+  for (const m of content.matchAll(/##\s*\[([^\]]+)\]/g)) {
+    if (m[1].trim().toLowerCase() !== "unreleased") return m;
+  }
+  return null;
+}
+
+/**
  * Detect project type: 'plugin', 'npm', or 'marketplace'.
  * Marketplace is a fallback for repos that only have marketplace.json
  * (e.g. the plugin's own repository with no root-level plugin.json).
@@ -257,7 +270,7 @@ export function verifyVersionFiles(expectedVersion, cwd = process.cwd()) {
   const checkChangelog = () => {
     try {
       const content = readFileSync(join(cwd, "CHANGELOG.md"), "utf8");
-      const match = content.match(/##\s*\[([^\]]+)\]/);
+      const match = firstChangelogRelease(content);
       if (match && match[1] !== expectedVersion) {
         mismatches.push({ file: "CHANGELOG.md", expected: expectedVersion, found: match[1] });
       }
@@ -350,7 +363,7 @@ export function verifyVersionFiles(expectedVersion, cwd = process.cwd()) {
     // CHANGELOG.md at repo root
     try {
       const content = readFileSync(join(gitRoot, "CHANGELOG.md"), "utf8");
-      const match = content.match(/##\s*\[([^\]]+)\]/);
+      const match = firstChangelogRelease(content);
       if (match && match[1] !== expectedVersion) {
         mismatches.push({ file: "(repo-root) CHANGELOG.md", expected: expectedVersion, found: match[1] });
       }

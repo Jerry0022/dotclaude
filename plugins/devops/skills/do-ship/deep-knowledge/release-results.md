@@ -80,6 +80,15 @@ the reset. The quota resets on its own (artifact usage is recalculated every
 a ship. Prevention runs on every ship: `ship_preflight.workflowHygiene`
 (Step 1e) makes uploads non-fatal and short-lived in each repo it touches.
 
+### Shared minutes block and the user's decision (#752)
+
+`ci-account-limits.js` stays the single detector. When it reports kind `actions-minutes` for the red checks (never `artifact-quota`, never a mixed real failure), `ship_release` records the block machine-wide in `~/.claude/devops-ci-quota.json` (key `owner/repo`; override the path with env `DEVOPS_CI_QUOTA_FILE`). Every later ship in any session or worktree sees it: `ship_preflight` returns `ciQuota` plus a `ci-quota` warning, and `ship_release` probes for at most 60 s instead of waiting for CI.
+
+- No stored decision: the result is the account-limited one above (`checks.quota` names the record). Ask the user once, then call `ship_release` with `quotaDecision: "skip-checks"` or `"wait"` (pass it ONLY after an explicit answer).
+- Stored `skip-checks`: the ship merges without CI, `checks.status: "skipped"`, `checks.storedDecisionApplied: true`, `checks.reason` names the block and its reset date. **The card must say that a stored CI-quota decision was applied** — the user did not re-confirm this ship. The local gate (`ship_build` with tests) still runs.
+- Stored `wait`: `success: false`, `quotaBlocked: true`, `checks.status: "quota-blocked"`; `quotaDecision: "revoke"` forgets the answer.
+- Expiry: at the reset date (unknown: 1st of next month 00:00 UTC) or as soon as a check on the repo runs again without a minutes verdict (`checks.quotaCleared: true`). A real red check is never skipped, stored decision or not.
+
 ## Post-merge tree verification
 
 **If `postMergeTreeMatch: false`** (merge succeeded but `postMergeWarning` is set): **verify before surfacing** — the guard can fire as a false alarm (a tooling error in the tree lookup or a stale `origin/<base>` ref right after the merge; observed as a permanent Windows false positive before v0.107.1). Run:

@@ -55,6 +55,12 @@ vi.mock("../lib/github.js", () => ({
   deleteRemoteBranch: vi.fn(() => ({ ok: true, method: "gh-api" })),
 }));
 
+// #752: repo key is test-controlled; the store is a temp file (DEVOPS_CI_QUOTA_FILE).
+vi.mock("../lib/ci-quota.js", async (importOriginal) => {
+  const orig = await importOriginal();
+  return { ...orig, repoKey: vi.fn(() => null), clearRecord: vi.fn(orig.clearRecord) };
+});
+
 vi.mock("../lib/ci-account-limits.js", () => ({
   classifyFailedChecks: vi.fn(() => ({ limited: false, kinds: [], checks: [] })),
 }));
@@ -93,6 +99,10 @@ import { detectRepoMode } from "../lib/repo-mode.js";
 import * as gitLib from "../lib/git.js";
 import * as ghLib from "../lib/github.js";
 import * as limitsLib from "../lib/ci-account-limits.js";
+import * as quotaLib from "../lib/ci-quota.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
 
 function params(overrides = {}) {
@@ -160,7 +170,7 @@ beforeEach(() => {
   gitLib.treeOf.mockImplementation((ref) => (ref === "HEAD" ? "T1" : "T1"));
   // ls-remote --tags returns the alpha channel tag → tag already exists, skip creation path.
   gitLib.git.mockImplementation((cmd) =>
-    cmd.includes("ls-remote --tags") ? "abc\trefs/tags/alpha/v1.0.0" : "remoteSha",
+    cmd.includes("ls-remote --tags") ? "merge12ab\trefs/tags/alpha/v1.0.0" : "remoteSha",
   );
   gitLib.gitStrict.mockReturnValue("");
   // gitArgs handles staging adds, the remote-ref rev-parse, and the push (F1/F2).
@@ -529,6 +539,34 @@ describe("ship_release — alpha channel tagging (ring model)", () => {
     expect(res.releaseDeferred).toBe(true);
   });
 
+  test("tags the merge commit GitHub reported, not the moving origin/base tip", async () => {
+    const full = "a".repeat(40);
+    ghLib.mergePR.mockReturnValue({ sha: "merge12", fullSha: full, verified: true });
+    let lsCalls = 0;
+    gitLib.git.mockImplementation((cmd) => {
+      if (cmd.includes("ls-remote --tags")) {
+        lsCalls += 1;
+        return lsCalls === 1 ? "" : "t\trefs/tags/alpha/v1.0.0";
+      }
+      return "remoteSha";
+    });
+    const res = await handler(params());
+    expect(res.mergeSha).toBe("aaaaaaaa");
+    const tagCall = execFileSync.mock.calls.find((c) => c[0] === "git" && c[1][0] === "tag");
+    expect(tagCall[1].slice(0, 4)).toEqual(["tag", "-a", "alpha/v1.0.0", full]);
+  });
+
+  test("existing alpha tag on a DIFFERENT commit (bump none) → not verified, no false success", async () => {
+    gitLib.git.mockImplementation((cmd) =>
+      cmd.includes("ls-remote --tags")
+        ? "t1\trefs/tags/alpha/v1.0.0\n" + "f".repeat(40) + "\trefs/tags/alpha/v1.0.0^{}"
+        : "remoteSha");
+    const res = await handler(params());
+    expect(res.tagVerified).toBe(false);
+    expect(res.tagWarning).toMatch(/points at ffffffff, not this merge/);
+    expect(execFileSync.mock.calls.find((c) => c[0] === "git" && c[1]?.[0] === "tag")).toBeUndefined();
+  });
+
   test("existing alpha tag on remote → skip creation, still verified", async () => {
     const res = await handler(params());
     expect(res.tagVerified).toBe(true);
@@ -866,7 +904,7 @@ describe("ship_release — #398 post-merge truth contract", () => {
     ghLib.mergePR.mockReturnValue({ sha: null, verified: true, warning: "merged, but origin/main could not be fetched/resolved after 3 attempts (ETIMEDOUT) — mergeSha unknown" });
     createPathLsRemote();
     gitLib.git.mockImplementation((cmd) => {
-      if (cmd.includes("ls-remote --tags")) return "abc\trefs/tags/alpha/v1.0.0";
+      if (cmd.includes("ls-remote --tags")) return "rec0ver1\trefs/tags/alpha/v1.0.0";
       if (cmd.startsWith("rev-parse --short origin/main")) return "rec0ver\n";
       return "remoteSha";
     });
@@ -1299,5 +1337,158 @@ describe("ship_release — automatic version-file rebase", () => {
     expect(res.commitSkipped).toBe("clean tree");
     expect(res.success).toBe(true);
     expect(execFileSync.mock.calls.some((c) => c[1] && c[1][0] === "commit")).toBe(false);
+  });
+});
+
+describe("ship_release — #752 shared CI-quota block (on top of the #768 detector)", () => {
+  let dir;
+  const billing = {
+    status: "failed",
+    checks: [],
+    failed: [{ name: "build", link: "https://github.com/o/r/actions/runs/1/job/7" }],
+    pending: [],
+    error: "1 check(s) failed: build",
+  };
+  const minutes = { limited: true, kinds: ["actions-minutes"], checks: [{ name: "build", kind: "actions-minutes" }] };
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "rel-quota-"));
+    process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
+    quotaLib.repoKey.mockReturnValue("o/r");
+    ghLib.watchPRChecks.mockReturnValue(billing);
+    limitsLib.classifyFailedChecks.mockReturnValue(minutes);
+  });
+  afterEach(() => {
+    delete process.env.DEVOPS_CI_QUOTA_FILE;
+    quotaLib.repoKey.mockReturnValue(null);
+    limitsLib.classifyFailedChecks.mockReturnValue({ limited: false, kinds: [], checks: [] });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("first detection keeps the #768 account-limited result and records the block", async () => {
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.checks.status).toBe("account-limited");
+    expect(res.ciAccountLimited.kinds).toEqual(["actions-minutes"]);
+    expect(res.checks.quota.repo).toBe("o/r");
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(quotaLib.readRecord("o/r")).not.toBeNull();
+  });
+
+  test("an artifact-quota block is not recorded", async () => {
+    limitsLib.classifyFailedChecks.mockReturnValue({ limited: true, kinds: ["artifact-quota"], checks: [{ name: "e2e", kind: "artifact-quota" }] });
+    const res = await handler(params());
+    expect(res.checks.status).toBe("account-limited");
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("explicit skip-checks answer is stored and applied in a later ship without re-asking", async () => {
+    await handler(params());
+    const res = await handler(params({ quotaDecision: "skip-checks" }));
+    expect(res.success).toBe(true);
+    expect(res.checks.status).toBe("skipped");
+    expect(res.checks.storedDecisionApplied).toBe(true);
+    expect(ghLib.mergePR).toHaveBeenCalled();
+    ghLib.mergePR.mockClear();
+    const third = await handler(params());
+    expect(third.checks.storedDecisionApplied).toBe(true);
+    expect(ghLib.watchPRChecks.mock.calls.at(-1)[2].timeoutSec).toBeLessThanOrEqual(60);
+  });
+
+  test("decision without a recorded block is ignored, not stored", async () => {
+    ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
+    const res = await handler(params({ quotaDecision: "skip-checks" }));
+    expect(res.quotaDecisionIgnored).toBeDefined();
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("stored wait decision blocks without re-asking", async () => {
+    quotaLib.recordBlock("o/r");
+    const res = await handler(params({ quotaDecision: "wait" }));
+    expect(res.success).toBe(false);
+    expect(res.quotaBlocked).toBe(true);
+    expect(res.checks.status).toBe("quota-blocked");
+    expect(res.error).toMatch(/stored decision is to wait/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("a real red check is never skipped, even with a stored skip decision", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "skip-checks");
+    limitsLib.classifyFailedChecks.mockReturnValue({ limited: false, kinds: [], checks: [{ name: "build", kind: null }] });
+    const res = await handler(params());
+    expect(res.success).toBe(false);
+    expect(res.checksBlocked).toBe(true);
+    expect(res.checks.status).toBe("failed");
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("passing checks clear the record (quota is back)", async () => {
+    quotaLib.recordBlock("o/r");
+    ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
+    const res = await handler(params());
+    expect(res.checks.quotaCleared).toBe(true);
+    expect(quotaLib.readRecord("o/r")).toBeNull();
+  });
+
+  test("ship review: a record never merges on a short probe that saw no checks yet", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "wait");
+    ghLib.watchPRChecks
+      .mockReturnValueOnce({ status: "no-checks", checks: [], failed: [], pending: [] })
+      .mockReturnValueOnce(billing);
+    const res = await handler(params());
+    expect(ghLib.watchPRChecks).toHaveBeenCalledTimes(2);
+    expect(ghLib.watchPRChecks.mock.calls.at(-1)[2].noChecksGraceMs).toBeUndefined();
+    expect(res.quotaBlocked).toBe(true);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("ship review: a mixed minutes + artifact-quota verdict is no stored skip", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "skip-checks");
+    limitsLib.classifyFailedChecks.mockReturnValue({
+      limited: true,
+      kinds: ["actions-minutes", "artifact-quota"],
+      checks: [{ name: "build", kind: "actions-minutes" }, { name: "e2e", kind: "artifact-quota" }],
+    });
+    const res = await handler(params());
+    expect(res.checks.storedDecisionApplied).toBeUndefined();
+    expect(res.checks.status).toBe("account-limited");
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+  });
+
+  test("ship review: an unwritable store is a warning, never a failed ship", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.clearRecord.mockImplementationOnce(() => { throw new Error("EACCES: read-only home"); });
+    ghLib.watchPRChecks.mockReturnValue({ status: "passed", checks: [], failed: [], pending: [] });
+    const res = await handler(params());
+    expect(res.success).toBe(true);
+    expect(ghLib.mergePR).toHaveBeenCalled();
+    expect(res.warnings.some((w) => /CI-quota store: EACCES/.test(w))).toBe(true);
+  });
+
+  test("ship review: a quota decision with bypassed checks is named as ignored", async () => {
+    const res = await handler(params({ skipChecks: true, quotaDecision: "wait" }));
+    expect(res.quotaDecisionIgnored).toMatch(/bypassed/);
+  });
+
+  test("revoke forgets the decision but keeps the block", async () => {
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "skip-checks");
+    const res = await handler(params({ quotaDecision: "revoke" }));
+    expect(res.quotaDecisionRevoked).toBe(true);
+    expect(res.checks.status).toBe("account-limited");
+    expect(quotaLib.readRecord("o/r").decision).toBeUndefined();
+  });
+});
+
+describe("ship_release — tag format gate", () => {
+  test.each(["0.18.0", "v1.0.0-beta.1", "alpha/v1.0.0"])("tag %s is refused before any side effect", async (tag) => {
+    const res = await handler(params({ tag }));
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not of the form vX\.Y\.Z/);
+    expect(ghLib.mergePR).not.toHaveBeenCalled();
+    expect(ghLib.createPR).not.toHaveBeenCalled();
   });
 });

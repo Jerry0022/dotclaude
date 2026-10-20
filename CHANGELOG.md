@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.279.0] — 2026-10-20
+
+### Added
+- **Exhausted Actions minutes are remembered across sessions (#752).** When #768's detector reports an `actions-minutes` block, `ship_release` records it in `~/.claude/devops-ci-quota.json` (override: `DEVOPS_CI_QUOTA_FILE`). The record holds the repo and the monthly reset.
+  - **Later ships, from any session:** they probe the checks for at most 60 s instead of waiting the full timeout. A probe that sees no checks yet still falls back to the full wait.
+  - **Stored decisions:** the user's decision is stored with the new `quotaDecision` param (`skip-checks`, `wait` or `revoke`). A stored `skip-checks` applies only when every red check is a minutes block. A real red check is never skipped.
+  - **Clearing:** any normal passed or failed run clears the record, and it also expires at the reset.
+  - **Preflight:** `ship_preflight` reports the block as `ciQuota` with a warning, never an error.
+  - **Store failures:** a store that cannot be written is a warning, never a failed ship.
+  - **Artifact-quota hits:** these are not recorded, because their jobs did run.
+
+### Fixed
+- **Ship audit fixes.**
+  - **Ring tag target:** the ring tag points at the merge commit GitHub reports, not the moving `origin/<base>` tip.
+  - **Existing ring tags:** one counts as verified only when its peeled SHA is this merge.
+  - **Tag names:** a tag that is not `vX.Y.Z` is refused before any side effect.
+  - **Default branch:** promote and cleanup use the detected default branch (repos on `master`).
+  - **CHANGELOG check:** the check skips `## [Unreleased]`.
+  - **Version rebase:** it auto-resolves only project-version lines, never dependency ranges.
+  - **Build output:** `ship_build` gets a 64 MiB output buffer, and it reports ENOBUFS as a harness failure.
+  - **Remote-branch delete:** the branch name is URL-encoded in the delete path.
+  - **do-ship docs:** they now cover version-bump result semantics, a single-call stable promote and safe tag and cleanup advice.
+
 ## [0.278.1] — 2026-10-20
 
 ### Fixed

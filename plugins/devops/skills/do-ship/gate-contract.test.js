@@ -219,7 +219,7 @@ describe("do-ship gate contract — lockout", () => {
 
 describe("do-ship gate contract — blocked exits and sentinel hygiene", () => {
   test("every ship-blocked exit calls ship_cleanup keep:true first", () => {
-    expect(section("## Pipeline at a glance", "## Target channel")).toContain("Every `ship-blocked` exit calls `ship_cleanup({ keep: true })` first");
+    expect(section("## Pipeline at a glance", "## Target channel")).toContain("Every `ship-blocked` exit calls `ship_cleanup({ branch, cwd, keep: true })` first");
     const hygiene = section("> **Sentinel hygiene", "## Step 0 —");
     expect(hygiene).toMatch(/before rendering ANY `ship-blocked` card, first call `ship_cleanup\(\{ branch, cwd, keep: true \}\)`/);
     expect(hygiene).toContain("`.claude/.ship-lockout` marker");
@@ -229,7 +229,7 @@ describe("do-ship gate contract — blocked exits and sentinel hygiene", () => {
     expect(section("### 1a. Run preflight", "### 1a-ii")).toMatch(/`ready: false` → report errors and \*\*STOP\*\*/);
     expect(section("## Step 2 —", "### Codex Review Gate")).toMatch(/`success: false` → call `render_completion_card` with variant `ship-blocked`/);
     expect(section("## Step 2.5", "## Step 2.6")).toMatch(/`failed` → \*\*STOP\*\* with `ship-blocked` \(also under `\$SHIP_LOCKOUT`\)/);
-    expect(section("## Step 3 —", "## Step 4 —")).toMatch(/`success: false` → no version file found\..*`ship-blocked`/);
+    expect(section("## Step 3 —", "## Step 4 —")).toMatch(/never call `ship_version_bump` again.*`ship-blocked`/);
     expect(section("## Step 4 —", "### Squash-Merge")).toMatch(/If `success: false` → do NOT proceed to cleanup\..*`ship-blocked`/);
   });
 });
