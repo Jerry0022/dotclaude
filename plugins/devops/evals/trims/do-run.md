@@ -102,3 +102,54 @@ Shortfall against the issue: `modes/` (16.4k words) and
 never asks, so no case reaches a mode file or the follow-up questions; a
 trim there needs a case that presets a mode (e.g. `/do-run audit` or a
 `RUN_BACKLOG_AUTOSTART:` machine prompt) and runs that are each ~4–8 min.
+
+## Follow-up #734 — audit mode case and trim
+
+New case `skills/do-run/mode-audit` (graders.js): "Use the devops:do-run
+skill in audit mode: audit this project (scope: all, result as a concept
+page, change nothing). Analyze only." on a three-file scaffold repo. Edit,
+Agent, gh, commit/push, do-ship, `auto-concept` and the whole concept
+bridge (python, `concept-*`, browser, crons, kill) are denied — a first
+draft without those denies ran the real bridge, opened the browser and hit
+the 12-minute timeout (2 baseline runs, 1 timeout, 1 killed). Denying the
+`auto-concept` call ends the run at the audit's own hand-off; a denied call
+still counts as attempted. Graders: `run-skill`, `mode-file-read`
+(`modes/audit.md`), `requirements-persisted`, `findings-persisted`
+(`.claude/audit/**`), `concept-branch` (`auto-concept` attempted),
+`source-untouched`, `no-direct-ship-tools`. A `dimensions.md` grader was
+dropped: the model never read it under `-p` (0/1), so it carried no signal.
+
+| Field | Value |
+|---|---|
+| Files | `modes/audit.md`, `deep-knowledge/execution.md` |
+| Words before (A) | audit.md 2243, execution.md 1103 (3346) |
+| Words after (B) | measured: audit.md 2099, execution.md 1032 (3131, −6.4 %); shipped after the review restorations below: audit.md 2115 (−5.7 %), execution.md 1054 (−4.4 %) (3169, −5.3 %) |
+| Variant A / B | `--a-ref origin/main` / working tree |
+| Runs per variant | 2 (`evals/results/ab2/`, not committed) |
+| Command | `node plugins/devops/evals/ab-run.js --case plugins/devops/evals/skills/do-run/mode-audit --a-ref origin/main --runs 2 --timeout-min 10` |
+
+| # | File · section | Removed text | Reason | A/B result |
+|---|---|---|---|---|
+| 1 | audit.md · header | the `<!-- … moved verbatim in PR 2 … -->` comment; "Why this skill exists" paragraph | history / rationale; one line keeps the pointer to `../SKILL.md` | no grader lost |
+| 2 | audit.md · Step 0 | "Project extensions typically add: …" example list | shortened to one sentence | no grader lost |
+| 3 | audit.md · Step 2 | "so the run contract reads a standalone answer the same way as the router's"; "they are the contract strings `questions.md` defines, not prose to translate" | rationale; headers, labels, order, German-labels rule kept | no grader lost |
+| 4 | audit.md · Rules | bullets "Evidence or it didn't happen", "Honest coverage" merged into one bullet | **reverted in part** after the ship review: the two rules (unproven claims are open questions; the scorecard never implies a check that did not run) are not duplicated elsewhere | no grader lost |
+| 5 | execution.md · intro | decision-vs-detail paragraph | rationale | not covered |
+| 6 | execution.md · Run contract | — | **reverted** after the ship review: "prints the header" is CLI behaviour, the copied-`.claude/` rule is a guarantee the model relies on | — |
+| 7 | execution.md · Autonom ship lockout | `readLockout` / `stale:true` explanation | implementation detail; the 6 h rule kept, with its `do-run` owner qualifier (restored after the ship review) | not covered |
+
+The ship review (Claude API) flagged rows 4, 6 and 7 as dropping behaviour
+rather than rationale, and the `concept-branch` grader's `concept-build.js`
+alternative as a bypass path; both were fixed before the ship. The restored
+text is variant A's own wording, so the shipped files sit between A and B:
+both scored 14/14 below, and the token saving shrinks to the shipped word
+count.
+
+Per-grader results (all 7 graders, 2 runs each): A 14/14, B 14/14. Tokens
+A 1,713,481 → B 1,674,257 (−2.3 %); cost $2.98 → $2.81; mean duration 294 s
+→ 298 s. Noise-level at n=2: the cuts neither help nor hurt the path, and
+the saving is the ~177 words fewer loaded per audit run. Every run-contract
+string (F1/F2 headers and labels, `Skill("devops:auto-concept")`, step and
+`modes/…` paths, `--scope`/`--mode`/`--autonomous`) is verbatim. Verdict:
+`ship all rows`. Follow-ups: autonomous, backlog, burn and rethink mode
+cases.

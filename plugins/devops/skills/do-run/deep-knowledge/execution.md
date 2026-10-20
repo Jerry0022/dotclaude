@@ -1,11 +1,8 @@
 # Router Execution — Strikt, Run Contract, auto-agents, Ship Lockout
 
-Execution detail for `/do-run`: what Steps 5–7 of `SKILL.md` do once the
-answers are in. The **decision** stays in the skill body — Flexibel or
-Strikt (Step 5), which mode and flow the answers select (Step 6), the order
-of passes and ship (Step 7); this file only answers "I am in that branch,
-now what exactly?". Step numbers and `modes/…` paths refer to `SKILL.md`
-and its directory.
+Execution detail for Steps 5–7 of `SKILL.md` once the answers are in; the
+decisions stay in the skill body. Step numbers and `modes/…` paths refer to
+`SKILL.md` and its directory.
 
 ## Strikt
 
@@ -62,8 +59,8 @@ node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" batch-clear --reason "<why>"
 node "{PLUGIN_ROOT}/hooks/lib/run-contract.js" arm --mode <m> --flow <f> --ship <s> --passes <p> [--strict] [--items 1,2] [--session <id>] [--cwd <path>] [--replace]
 ```
 
-`status` prints the header and what is still open for the current segment.
-`skip` is one conscious skip (card: ⚠). `park` (backlog) records a blocked /
+`status` prints the header and what is still open for the current segment. `skip` is one
+conscious skip (card: ⚠). `park` (backlog) records a blocked /
 `⏸ Rückfrage` item once — it satisfies every open obligation of that item and
 ends its segment. `abort` closes a run that is over with open steps (card:
 ✗ + reason) — before its card. `done` only when every chosen step ran
@@ -118,9 +115,8 @@ exit of this step**, before anything else is reported:
   `modes/autonomous.md` Step 7.
 After a compaction or a resumed session, run `… autonomous-lockout.js
 check` first; `active:true` with `owner:"do-run"` and no ship running
-→ clear it. A lockout that still slips through (crash) expires on its
-own: `do-run` lockouts are stale after 6 h and are ignored and removed
-by every reader (`readLockout`, `check` reports `stale:true`).
+→ clear it. A `do-run` lockout left by a crash goes stale after 6 h and
+every reader ignores and removes it.
 
 ## Mode files
 

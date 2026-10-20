@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.279.1] — 2026-10-20
+
+### Changed
+- **do-run audit mode loads ~180 words less, backed by an eval case (#734).** A new eval case, `evals/skills/do-run/mode-audit`, starts `/do-run audit` (analyze) under `claude -p` on a scaffold repo and checks its path with 7 deterministic graders: mode file read, requirements and findings persisted, `auto-concept` attempted, source untouched, and no direct `ship_*` tools.
+  - **Trims:** with that evidence (A 14/14 → B 14/14), history and rationale are cut from `modes/audit.md` (−5.7 %) and `deep-knowledge/execution.md` (−4.4 %).
+  - **Kept verbatim:** every run-contract string.
+  - **Restored after the ship review:** rules that read like rationale but carry behaviour, namely the copied-`.claude/` guarantee, the `do-run` owner of the 6 h lockout expiry and the evidence rules.
+  - **Record:** each cut is in `evals/trims/do-run.md`.
+
 ## [0.279.0] — 2026-10-20
 
 ### Added
