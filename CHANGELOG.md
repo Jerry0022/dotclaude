@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.281.1] — 2026-10-20
+
+A sent concept round could be reset without an answer: the session baked the submission, called `/reset` and moved on without building the next round or reloading the page. Five minutes later the page's safety net put the already-sent round back up as editable, and the user had to send it again.
+
+### Fixed
+- **Bridge `/reset` refuses an undelivered round.** While an `iterate`/`implement` submission is pending and `/reload` has not advanced since it arrived, `POST /reset` answers `428 no_reload_since_submission` and the submission stays pending. A round that truly ends without a new page passes `{"version": N, "no_round": "<reason>"}`, which is journalled. `finalize` and the `409` version check are unchanged.
+- **The concept page no longer reverts silently.** When the safety net restores the panel without a reload, it shows `panel.processed_no_round` ("answers are still here, submit again if not addressed").
+- Protocol docs and the tick prompt name the `428` handling.
+
+### Known gaps
+- Takes effect for a running bridge only after its restart on the new plugin version; open pages get the notice on their next build.
+
 ## [0.281.0] — 2026-10-20
 
 One loader for skill overrides. Before, each skill's Step 0 prose told the model to read the override files itself: it could only add steps, a "skip step 3" depended on the model, and the user could not see whether an override was active.

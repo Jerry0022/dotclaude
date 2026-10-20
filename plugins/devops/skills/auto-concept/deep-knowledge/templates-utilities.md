@@ -509,6 +509,13 @@ async function pollProcessedState() {
     const longStale = (Date.now() - _submittedAt) > PROCESSED_SAFETY_MS;
     if (reloadAdvanced || longStale) {
       restorePanelToReady();
+      // Processed but no new round ever loaded: never flip back silently.
+      // The round the user sent is on screen again with its answers intact
+      // (restorePanelToReady keeps every field), so say so — a quiet revert
+      // reads as "my decision was lost" and gets sent twice.
+      if (!reloadAdvanced && typeof showSubmitWarning === 'function') {
+        showSubmitWarning('{{panel.processed_no_round}}');
+      }
     }
   } catch (e) { /* retry next tick */ }
 }

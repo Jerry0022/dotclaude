@@ -480,3 +480,53 @@ describe.skipIf(!PY)("concept-server reports its html_path (C1 — foreign bridg
     }
   });
 });
+
+describe.skipIf(!PY)("concept-server no-new-round gate — /reset needs a /reload after an iterate submission", () => {
+  test("428 until /reload advanced; no_round opt-out is journalled; finalize stays exempt", async () => {
+    const port = PORT + 41;
+    const store = storeFor(port);
+    const url = (p) => `http://127.0.0.1:${port}${p}`;
+    const proc = spawn(PY, [SERVER, String(port), "--store", store], { stdio: ["ignore", "pipe", "pipe"] });
+    const post = (p, body) => fetch(url(p), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: body == null ? undefined : JSON.stringify(body),
+    });
+    try {
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        try { if ((await fetch(url("/reload"))).ok) break; } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      // The 2026-10-20 incident: submission → /reset without a new round.
+      expect((await post("/decisions", { submitted: true, action: "iterate", iteration: "7", decisions: [], comments: [] })).ok).toBe(true);
+      const blocked = await post("/reset", { version: 1 });
+      expect(blocked.status).toBe(428);
+      expect(await blocked.json()).toMatchObject({ ok: false, reason: "no_reload_since_submission", version: 1 });
+      expect((await (await fetch(url("/pending"))).json()).pending).toBe(true); // still armed — nothing lost
+      expect((await post("/reset")).status).toBe(428); // a version-less legacy reset too
+
+      // The normal protocol: /reload, then /reset.
+      expect((await post("/reload")).ok).toBe(true);
+      expect((await post("/reset", { version: 1 })).ok).toBe(true);
+      expect((await (await fetch(url("/pending"))).json()).pending).toBe(false);
+
+      // A /reload BEFORE the next submission does not count for it.
+      expect((await post("/decisions", { submitted: true, action: "implement", decisions: [], comments: [] })).ok).toBe(true);
+      expect((await post("/reset", { version: 2 })).status).toBe(428);
+
+      // The explicit opt-out passes and lands in the journal.
+      expect((await post("/reset", { version: 2, no_round: "answered in chat" })).ok).toBe(true);
+      expect(fs.readFileSync(path.join(store, "journal.jsonl"), "utf8")).toMatch(/"no_round"[^\n]*answered in chat/);
+
+      // A version mismatch still answers 409, not 428.
+      expect((await post("/decisions", { submitted: true, action: "iterate", decisions: [], comments: [] })).ok).toBe(true);
+      expect((await post("/reset", { version: 2 })).status).toBe(409);
+
+      // finalize (discard = reset-only) is exempt.
+      expect((await post("/decisions", { submitted: true, action: "finalize", decisions: [], comments: [] })).ok).toBe(true);
+      expect((await post("/reset", { version: 4 })).ok).toBe(true);
+    } finally {
+      await stopServer(proc);
+    }
+  }, 30000);
+});
