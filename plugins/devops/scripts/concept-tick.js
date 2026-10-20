@@ -307,6 +307,8 @@ function pendingInstruction(port, version) {
     `-X POST -H "Content-Type: application/json" -d '{"version": <noted>}' http://localhost:${port}/reset. ` +
     `On HTTP 409 the user submitted again while you worked — re-fetch /decisions, process the new payload ` +
     `(it supersedes what you just finished), then retry the conditional reset with the new \`_version\`. ` +
+    `On HTTP 428 the round was never delivered (no /reload since the submission) — bake, write the next round, ` +
+    `build, POST /reload, then reset again; never reset a round away without a new page. ` +
     `Re-launch the pickup waker immediately after /reset, then report the outcome to the user.`
   );
 }
