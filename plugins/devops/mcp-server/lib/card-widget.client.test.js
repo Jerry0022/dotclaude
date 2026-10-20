@@ -80,6 +80,15 @@ describe("batch collect point — blocked-panel warning in red (#741)", () => {
       expect(rows[3].innerHTML).toContain("Plain &amp; &lt;b&gt; point");
     });
   }
+
+  test("a URL that swallows the closing ** keeps its link intact (no <b> inside href)", () => {
+    const dom = mountTemplate({ ...base, points: ["**⚠ see https://example.com/x**"] }, "");
+    const row = dom.window.document.querySelector(".card-point");
+    expect(row.querySelector("b.card-warn")).toBeNull();
+    const a = row.querySelector("a");
+    expect(a.getAttribute("href")).not.toContain("<");
+    expect(a.querySelector("b")).toBeNull();
+  });
 });
 
 describe("card-widget.client — template + data", () => {

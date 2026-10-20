@@ -82,9 +82,11 @@
       '</span>';
   }
 
-  /** A point's inline `**⚠ …**` span (already escaped) as a red bold warning. */
+  /** A point's inline `**⚠ …**` span (already escaped) as a red bold warning.
+   *  The span never crosses a tag: a URL that swallowed the closing `**` (URL_SPLIT
+   *  allows `*`) leaves the marker literal instead of breaking the link's href. */
   function warnMarks(html) {
-    return html.replace(/\*\*(⚠[^*]*)\*\*/g, function (m, t) {
+    return html.replace(/\*\*(⚠[^*<>]*)\*\*/g, function (m, t) {
       return '<b class="card-warn" style="font-weight:600;color:' + COLOR.red + '">' + t + "</b>";
     });
   }
