@@ -14,6 +14,26 @@ describe("issue-match", () => {
     expect(IM.cacheFile("git@github.com:acme/widgets.git")).toBe(IM.cacheFile("https://github.com/acme/widgets"));
   });
 
+  test("cacheDirSafe: POSIX rejects foreign, open or symlinked dirs; Windows is not checked", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "im-safe-"));
+    const st = fs.lstatSync(dir);
+    expect(IM.cacheDirSafe(dir, { platform: "win32", uid: 1 })).toBe(true);
+    expect(IM.cacheDirSafe(path.join(dir, "missing"), { platform: "linux", uid: st.uid })).toBe(false);
+    expect(IM.cacheDirSafe(dir, { platform: "linux", uid: st.uid + 1 })).toBe(false);
+    if (process.platform !== "win32") {
+      fs.chmodSync(dir, 0o700);
+      expect(IM.cacheDirSafe(dir, { platform: "linux", uid: st.uid })).toBe(true);
+      fs.chmodSync(dir, 0o770);
+      expect(IM.cacheDirSafe(dir, { platform: "linux", uid: st.uid })).toBe(false);
+      IM.writeCache("https://github.com/a/b", [], { dir });
+      expect(fs.readdirSync(dir)).toEqual([]);
+      fs.chmodSync(dir, 0o700);
+      const link = `${dir}-link`;
+      fs.symlinkSync(dir, link);
+      expect(IM.cacheDirSafe(link, { platform: "linux", uid: st.uid })).toBe(false);
+    }
+  });
+
   test("cache round trip, stale and missing", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "im-"));
     const issues = [{ number: 1, title: "x", labels: [] }];

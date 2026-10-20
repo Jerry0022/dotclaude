@@ -98,9 +98,10 @@ the wrong repo looks successful and leaves the real one untouched.
 - Carry `{target_repo}` through to Step 2 as `--repo`, to Step 3's skip
   condition, and to Step 4's check.
 - Labels, milestones, and board fields of the *current* project may not exist
-  in `{target_repo}`. Verify with `gh label list --repo {target_repo} --search "type:" --limit 1000` (the default
-  list is capped at 30 labels) before
-  sending any label — **including `type:*`**: `gh issue create` hard-fails on
+  in `{target_repo}`. Verify with `gh label list --repo {target_repo} --limit 1000 --json name --jq '.[].name'`
+  (the default list is capped at 30 labels; no `--search` filter, so
+  `role:*`/`module:*` labels show up too) before
+  sending any label — check **every** label you send, **including `type:*`**: `gh issue create` hard-fails on
   an unknown label. Missing there → create the issue without it and say so,
   rather than losing the issue. Drop milestone/board steps unless the target
   is configured for them.
@@ -129,8 +130,10 @@ EOF
 ```
 
 Titles go in single quotes (a literal `'` becomes `'\''`); double quotes would
-run backticks and `$(…)` inside a title. Bodies always use the quoted-`'EOF'`
-heredoc form shown above, never a bare `"Description"` string.
+run backticks and `$(…)` inside a title. Bodies Claude composes itself use the
+quoted-`'EOF'` heredoc form shown above, never a bare `"Description"` string.
+A body that contains text fetched from GitHub (R2) never goes into a heredoc —
+see R2.
 
 With a `{target_repo}` from Step 1, `--repo` is mandatory — without it `gh`
 files into whatever repo the CWD is:
@@ -256,14 +259,18 @@ Write it back with the body from R1: replace the text between existing
 markers, else append the section after the original body (one blank line in
 between):
 
+The body contains the **fetched** issue text, which anyone can write on a
+public repo — a line reading `EOF` would end a heredoc early and run the next
+line as shell. So never inline it: write the full body (original text with the
+refinement section replaced/appended) with the **Write tool** to
+`issue-{issue}-body.md` in the session scratchpad directory (absolute path —
+`{body_file}`), then pass the file:
+
 ```bash
-gh issue edit {issue} --body "$(cat <<'EOF'
-<full body: original text with the refinement section replaced/appended>
-EOF
-)"  # via auto-issue
+gh issue edit {issue} --body-file "{body_file}"  # via auto-issue
 ```
 
-With a `{target_repo}`, add `--repo "{target_repo}"` before `--body`.
+With a `{target_repo}`, add `--repo "{target_repo}"` before `--body-file`.
 
 Build the body from the fetched body — never from memory of what the issue
 "probably" says — and never touch the text above the markers.

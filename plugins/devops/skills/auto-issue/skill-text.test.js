@@ -17,6 +17,14 @@ describe("auto-issue SKILL.md command templates", () => {
     expect(text).not.toMatch(/# via auto-issue —/);
   });
   test("label check is not capped at the 30-label default", () => {
-    expect(text).toMatch(/gh label list --repo \{target_repo\} --search "type:" --limit 1000/);
+    expect(text).toMatch(/gh label list --repo \{target_repo\} --limit 1000/);
+  });
+  test("label check is not filtered to type:* (role:/module: labels are checked too)", () => {
+    expect(text).not.toMatch(/gh label list[^`]*--search/);
+  });
+  test("R2 re-posts the fetched body via --body-file, never a heredoc", () => {
+    const r2 = text.slice(text.indexOf("### R2"), text.indexOf("### R3"));
+    expect(r2).toMatch(/gh issue edit \{issue\} --body-file "\{body_file\}"  # via auto-issue/);
+    expect(r2).not.toMatch(/<<'EOF'/);
   });
 });

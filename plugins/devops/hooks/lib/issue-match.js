@@ -102,10 +102,25 @@ function cacheFile(remoteUrl, dir = defaultCacheDir()) {
   return path.join(dir, `dotclaude-issues-cache-${key}.json`);
 }
 
+/**
+ * POSIX: the cache dir must be a real directory owned by us with no
+ * group/other bits — mkdirSync leaves a pre-planted dir untouched, so a
+ * predictable /tmp path is only trusted after this check. Windows: per-user
+ * temp, not checked.
+ */
+function cacheDirSafe(dir, { platform = process.platform, uid = process.getuid ? process.getuid() : undefined } = {}) {
+  if (platform === 'win32' || uid === undefined) return true;
+  try {
+    const st = fs.lstatSync(dir);
+    return st.isDirectory() && !st.isSymbolicLink() && st.uid === uid && (st.mode & 0o077) === 0;
+  } catch { return false; }
+}
+
 function writeCache(remoteUrl, issues, { dir, now = Date.now() } = {}) {
   if (!normalizeRemote(remoteUrl)) return;
   const file = cacheFile(remoteUrl, dir);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  if (!cacheDirSafe(path.dirname(file))) return;
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ ts: now, remote: normalizeRemote(remoteUrl), issues: sanitizeIssues(issues) }));
   fs.renameSync(tmp, file);
@@ -115,7 +130,9 @@ function writeCache(remoteUrl, issues, { dir, now = Date.now() } = {}) {
 function readCache(remoteUrl, { dir, now = Date.now(), maxAgeMs = CACHE_MAX_AGE_MS } = {}) {
   if (!normalizeRemote(remoteUrl)) return null;
   try {
-    const data = JSON.parse(fs.readFileSync(cacheFile(remoteUrl, dir), 'utf8'));
+    const file = cacheFile(remoteUrl, dir);
+    if (!cacheDirSafe(path.dirname(file))) return null;
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (!Array.isArray(data.issues) || !(data.ts <= now && now - data.ts <= maxAgeMs)) return null;
     return sanitizeIssues(data.issues);
   } catch { return null; }
@@ -123,5 +140,5 @@ function readCache(remoteUrl, { dir, now = Date.now(), maxAgeMs = CACHE_MAX_AGE_
 
 module.exports = {
   MATCH_ASK_MIN, CACHE_MAX_AGE_MS,
-  tokenize, scoreIssue, matchIssues, sanitizeTitle, defaultCacheDir, normalizeRemote, cacheFile, writeCache, readCache,
+  tokenize, scoreIssue, matchIssues, sanitizeTitle, defaultCacheDir, cacheDirSafe, normalizeRemote, cacheFile, writeCache, readCache,
 };

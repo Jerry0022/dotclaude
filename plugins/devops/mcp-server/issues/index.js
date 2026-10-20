@@ -24,7 +24,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { register as registerHeartbeat } from "../lib/heartbeat.js";
-import { tokenize, scoreIssue, resolveCwd, matchIssuesShape, ISSUE_LIST_LIMIT } from "./matching.js";
+import { tokenize, scoreIssue, resolveCwd, normalizeCwd, lruGet, matchIssuesShape, ISSUE_LIST_LIMIT } from "./matching.js";
 import { createRequire } from "node:module";
 
 // The hook side reads this copy (prompt.issue.detect scores the first prompt
@@ -51,14 +51,10 @@ const WARMUP_DELAY_MS = 2_000;
 const caches = new Map();
 const NO_CWD = "\0";
 
+// Keys are normalizeCwd() output (or NO_CWD); the Map is capped LRU so the
+// refresh interval never fans out over an unbounded set of directories.
 function cacheFor(cwd) {
-  const key = cwd || NO_CWD;
-  let c = caches.get(key);
-  if (!c) {
-    c = { issues: [], lastRefresh: 0, inFlight: null, truncated: false };
-    caches.set(key, c);
-  }
-  return c;
+  return lruGet(caches, cwd || NO_CWD, () => ({ issues: [], lastRefresh: 0, inFlight: null, truncated: false }));
 }
 
 /**
@@ -191,7 +187,9 @@ server.registerTool(
   },
   async ({ query, max_results, threshold, cwd }) => {
     try {
-      const dir = resolveCwd(cwd);
+      const raw = resolveCwd(cwd);
+      const dir = raw === undefined ? undefined : normalizeCwd(raw);
+      if (dir === null) throw new Error(`cwd is not an existing directory: ${raw}`);
       const matches = await matchIssues(query, max_results, threshold, dir);
       const c = cacheFor(dir);
       const result = {
@@ -236,8 +234,10 @@ console.error(`[${SERVER_NAME}-mcp] Server started on stdio (boot ${bootMs}ms)`)
 // The server runs in the plugin folder, so only projects we know a directory
 // for are fetched: CLAUDE_PROJECT_DIR at warm-up, every cwd seen by
 // match_issues on the interval.
-const warmCwd = resolveCwd(undefined);
+const warmCwd = normalizeCwd(resolveCwd(undefined));
 if (warmCwd) setTimeout(() => { fetchIssues(warmCwd); }, WARMUP_DELAY_MS).unref();
 setInterval(() => {
-  for (const key of caches.keys()) if (key !== NO_CWD) fetchIssues(key);
+  // Snapshot: fetchIssues -> cacheFor re-inserts the key (LRU touch), which a
+  // live Map iterator would visit again. Order is kept, so eviction is too.
+  for (const key of [...caches.keys()]) if (key !== NO_CWD) fetchIssues(key);
 }, REFRESH_INTERVAL_MS).unref();
