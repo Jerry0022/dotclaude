@@ -39,13 +39,7 @@ Spawned agents follow the same rule: they report, they do not start skills.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides; skip missing files silently.
-
-1. Global: `~/.claude/skills/auto-agents/reference.md`
-2. Project: `{project}/.claude/skills/auto-agents/reference.md`
-   Fallback (pre-PR-2 name): where `auto-agents/` does not exist, read `~/.claude/skills/run-agents/` / `{project}/.claude/skills/run-agents/` instead — an extension written before the rename keeps working.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 ## Step 1 — Inputs: arguments, plan and usage
 

@@ -54,11 +54,7 @@ answered one of its questions, the mode file says so and reads the answer.
 
 ## Step 0 — Load Extensions
 
-Silently check (do not surface "not found"):
-1. Global: `~/.claude/skills/do-run/reference.md`
-2. Project: `{project}/.claude/skills/do-run/reference.md`
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 ## Step 1 — Machine prompts and presets
 

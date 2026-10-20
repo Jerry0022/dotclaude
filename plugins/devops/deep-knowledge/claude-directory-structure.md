@@ -45,11 +45,12 @@ Users extend plugin skills by creating files in their project:
 
 ```
 {project}/.claude/skills/{plugin-skill-name}/
-├── SKILL.md        ← Override/extend specific steps
-└── reference.md    ← Additional context, rules, deploy targets
+└── reference.md    ← Context, rules, deploy targets, Add/Skip/Replace Step directives
 ```
 
-These are read by the plugin skill's Step 0 (Load Extensions).
+The override loader injects it when the skill starts (`[skill-overrides]`
+block, `deep-knowledge/skill-extension-guide.md`). Never name it `SKILL.md`
+— Claude Code loads that as a skill of its own (a legacy one is still read).
 
 ## Project-level deep-knowledge
 

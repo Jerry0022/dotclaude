@@ -47,31 +47,50 @@ function readCount(file) {
 }
 
 /**
+ * The per-session tmp file `<prefix><id>` that belongs to this card's session,
+ * by the resolution order above; null when none qualifies. Shared by the
+ * tool-call counter and the skill-override record (hooks/lib/skill-overrides.js).
+ *
+ * @param {string} prefix file name prefix, incl. the separator
+ * @param {string|undefined} sessionId the card's (sanitised) session id
+ * @param {{ cwd?: string, dir?: string, env?: object, now?: number, maxAgeMs?: number, requireProject?: boolean }} [opts]
+ *   `requireProject` — skip step 3: without a project directory to check
+ *   against, no file of another session is borrowed.
+ * @returns {string|null}
+ */
+export function resolveSessionFile(prefix, sessionId, opts = {}) {
+  const dir = opts.dir || tmpdir();
+  const env = opts.env || process.env;
+  const now = opts.now || Date.now();
+  const maxAge = opts.maxAgeMs || TOOLCALL_MAX_AGE_MS;
+  const exact = join(dir, `${prefix}${sessionId || "unknown"}`);
+  if (existsSync(exact)) return exact;
+
+  let files = [];
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!f.startsWith(prefix) || f.endsWith(".tmp")) continue;
+      const full = join(dir, f);
+      try { files.push({ id: f.slice(prefix.length), full, mtime: statSync(full).mtimeMs }); } catch { /* vanished */ }
+    }
+  } catch { return null; }
+  files = files.filter((f) => now - f.mtime <= maxAge).sort((a, b) => b.mtime - a.mtime);
+
+  const projects = projectDirs(opts.cwd, env);
+  if (projects.length) {
+    const own = files.find((f) => projects.some((p) => existsSync(join(p, `${f.id}.jsonl`))));
+    return own ? own.full : null;
+  }
+  if (opts.requireProject) return null;
+  return files.length ? files[0].full : null;
+}
+
+/**
  * @param {string|undefined} sessionId the card's (sanitised) session id
  * @param {{ cwd?: string, dir?: string, env?: object, now?: number }} [opts]
  * @returns {number}
  */
 export function readToolCallCount(sessionId, opts = {}) {
-  const dir = opts.dir || tmpdir();
-  const env = opts.env || process.env;
-  const now = opts.now || Date.now();
-  const exact = join(dir, `${TOOLCALL_PREFIX}${sessionId || "unknown"}`);
-  if (existsSync(exact)) return readCount(exact);
-
-  let files = [];
-  try {
-    for (const f of readdirSync(dir)) {
-      if (!f.startsWith(TOOLCALL_PREFIX) || f.endsWith(".tmp")) continue;
-      const full = join(dir, f);
-      try { files.push({ id: f.slice(TOOLCALL_PREFIX.length), full, mtime: statSync(full).mtimeMs }); } catch { /* vanished */ }
-    }
-  } catch { return 0; }
-  files = files.filter((f) => now - f.mtime <= TOOLCALL_MAX_AGE_MS).sort((a, b) => b.mtime - a.mtime);
-
-  const projects = projectDirs(opts.cwd, env);
-  if (projects.length) {
-    const own = files.find((f) => projects.some((p) => existsSync(join(p, `${f.id}.jsonl`))));
-    return own ? readCount(own.full) : 0;
-  }
-  return files.length ? readCount(files[0].full) : 0;
+  const file = resolveSessionFile(TOOLCALL_PREFIX, sessionId, opts);
+  return file ? readCount(file) : 0;
 }

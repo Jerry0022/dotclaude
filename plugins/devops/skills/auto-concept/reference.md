@@ -4,8 +4,12 @@ What users can override in their global or project-level extensions.
 
 ## Extension Paths
 
-- Global: `~/.claude/skills/auto-concept/SKILL.md` + `reference.md`
-- Project: `{project}/.claude/skills/auto-concept/SKILL.md` + `reference.md`
+- Global: `~/.claude/skills/auto-concept/reference.md`
+- Project: `{project}/.claude/skills/auto-concept/reference.md`
+
+The override loader injects both as one `[skill-overrides]` block when the
+skill starts. A legacy `SKILL.md` there is still read but deprecated (Claude
+Code loads it as a skill of its own) — rename it to `reference.md`.
 
 ## What to Override
 

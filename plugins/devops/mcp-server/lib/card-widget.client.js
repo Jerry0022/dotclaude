@@ -22,12 +22,12 @@
  * Data shape (schema `v` = SCHEMA, built by card-widget.js#cardWidgetData):
  *   l lang · ti title · at built-at · r result lines · ev evidence
  *   [{g glyph, x text, tp tooltip, w warn}] · pl pipeline · pr {n, h href}
- *   · rc run contract · ld ladder · bu budget {x expired note, ch context
+ *   · rc run contract · ov skill-override line · ld ladder · bu budget {x expired note, ch context
  *   health, bars [{lb, p, e, lv, wm, tp}]} · h heading · cx context · pt
  *   points · bt buttons [{l, i icon, p prompt, tp, pr primary}] · tx texts
  *   {sent, failed, sk skipped, open {pre, tip, sent}}
  *
- * @version 1.1.0
+ * @version 1.2.0
  */
 /* global window, document */
 (function (root) {
@@ -172,6 +172,11 @@
     return '<div class="card-run-contract" style="font-size:13px;color:' + color + ";padding:" + (afterPipeline ? "0 0 4px" : "4px 0") + '">' + marked + "</div>";
   }
 
+  function overridesLineHtml(text) {
+    if (!text) return "";
+    return '<div class="card-overrides" style="font-size:13px;color:' + COLOR.dim + ';padding:0 0 4px">' + esc(text) + "</div>";
+  }
+
   function glyphLineHtml(cls, inner, size, margin) {
     size = size || 14; margin = margin || "4px 0";
     return '<div class="' + cls + '" style="display:flex;gap:4px;margin:' + margin + ";padding-left:6px;font-size:" + size + 'px;line-height:1.5;color:var(--text-secondary)"><span style="color:' + COLOR.lilac + ';font-weight:500;flex:none;width:8px">›</span><span>' + inner + "</span></div>";
@@ -221,6 +226,7 @@
       evidenceHtml(d.ev),
       pipelineHtml(d.pl, d.pr),
       runContractLineHtml(d.rc, !!d.pl),
+      overridesLineHtml(d.ov),
       channelLadderHtml(d.ld, d.tx),
       budgetRowHtml(d.bu),
       "</div>",

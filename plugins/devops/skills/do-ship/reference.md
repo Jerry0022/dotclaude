@@ -6,9 +6,13 @@ Create project-specific ship rules in your project:
 
 ```
 {project}/.claude/skills/do-ship/
-├── SKILL.md        ← Override or add steps
-└── reference.md    ← Project-specific context
+└── reference.md    ← Project-specific context, added / skipped / replaced steps
 ```
+
+The override loader injects it at every ship (`[skill-overrides]` block); the
+directive headings `## Add after Step N`, `## Skip Step N`, `## Replace Step N`
+are stated to the model as explicit orders. Never name the file `SKILL.md` —
+Claude Code would load it as a skill of its own (a legacy one is still read).
 
 ## What to customize
 
@@ -18,9 +22,12 @@ Create project-specific ship rules in your project:
 - **Pre-ship checks**: Custom validation, API contract tests
 - **Post-ship actions**: Deploy, notify, update external systems
 
-## Example extension (SKILL.md)
+## Example extension (reference.md)
 
 ```markdown
+## Add after Step 1
+- Verify installer builds: `npm run build:installer`
+
 ## Additional quality gates
 - Run `dotnet publish` before PR
 - Verify installer builds: `npm run build:installer`

@@ -439,6 +439,7 @@ export function cardWidgetData(model, repoUrl = "") {
     pl: nz(model.pipeline),
     pr: prNum ? { n: prNum, h: repoUrl ? `${repoUrl}/pull/${prNum}` : undefined } : undefined,
     rc: nz(model.runContract),
+    ov: nz(model.overrides),
     ld: ladder ? {
       allEqual: ladder.allEqual ? true : undefined,
       groups: ladder.groups.map((g) => ({ channels: g.channels, version: nz(g.version), top: g.top ? true : undefined, skipped: g.skipped ? true : undefined, lag: g.lag || undefined })),

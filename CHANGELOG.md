@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.281.0] — 2026-10-20
+
+One loader for skill overrides. Before, each skill's Step 0 prose told the model to read the override files itself: it could only add steps, a "skip step 3" depended on the model, and the user could not see whether an override was active.
+
+### Added
+- **Unified skill-override loader** (`hooks/lib/skill-overrides.js`). It resolves plugin → global (`~/.claude/skills/<skill>/reference.md`) → project (`.claude/skills/<skill>/reference.md`), including legacy `SKILL.md` and pre-PR-2 skill names; folded do-run modes are labelled. Two hooks inject ONE `[skill-overrides]` block with explicit orders: `post.skill.overrides` on a Skill tool load, `prompt.skill.overrides` on a typed `/skill` prompt (which never calls the Skill tool). Files up to 6,000 characters are inlined, larger ones are named to Read in full before Step 1. No file → silent.
+- **Override directives** `## Add after|before Step N`, `## Skip Step(s) N`, `## Replace Step N` (German forms too, code-fence safe); a plain `## Step N — …` heading counts as "extend Step N". `auto-extend` scaffolds the directive headings (`skill-extension-guide.md` § Directives).
+- **Completion card line** "🧩 Override aktiv: Projekt do-ship (Step 6.5 ergänzt, Step 8 ergänzt)" (de/en, markdown and Desktop widget) from a per-session record of each load.
+
+### Changed
+- **Step 0 of 12 skills and 5 do-run modes is one line** pointing at the loader — fewer tokens on every skill load.
+
+### Known gaps
+- No gate verifies that a "Skip" was really skipped; the card line says an override was loaded, not executed. An unknown do-run mode at load time injects the overrides of all folded modes. The Desktop widget shows the new line only once this version is tagged (the client script is served per tag).
+
 ## [0.280.0] — 2026-10-20
 
 The follow-ups decided on the backlog night run's concept page, a set of token levers measured over the last 50 sessions, and three issues.

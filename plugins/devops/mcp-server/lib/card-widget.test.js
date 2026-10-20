@@ -331,6 +331,16 @@ describe("buttonsFor — § 3 table, Buttons column", () => {
     expect(cardWidgetHtml(baseModel({ runContract: null }), "")).not.toContain("card-run-contract");
   });
 
+  test("the skill-override line rides in the panel under the run-contract line, absent without one", () => {
+    const line = "🧩 Override aktiv: Projekt do-ship (Step 8 ergänzt)";
+    const html = cardWidgetHtml(baseModel({ runContract: "🧾 Run · Backlog", overrides: line }), "");
+    const block = html.match(/<div class="card-overrides"[\s\S]*?<\/div>/)[0];
+    expect(block).toContain(line);
+    expect(block).toContain(`color:${DIM}`);
+    expect(html.indexOf("card-run-contract")).toBeLessThan(html.indexOf("card-overrides"));
+    expect(cardWidgetHtml(baseModel({ overrides: null }), "")).not.toContain("card-overrides");
+  });
+
   test("AUD-021: run-contract line is the dim colour when every step is ✓", () => {
     const html = cardWidgetHtml(baseModel({ runContract: "🧾 Run · Backlog · Autonom · Ship auto — auto-agents ✓ · Harden ✓ · QA ✓" }), "");
     const block = html.match(/<div class="card-run-contract"[\s\S]*?<\/div>/)[0];

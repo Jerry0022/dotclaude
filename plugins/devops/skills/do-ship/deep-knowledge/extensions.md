@@ -1,13 +1,16 @@
 # Ship — Extension loading (Step 0)
 
-Referenced by `/do-ship` Step 0. The lookup order (global, project, merge)
-and the Codex context step stay in SKILL.md.
+Referenced by `/do-ship` Step 0. The override loader
+(`hooks/lib/skill-overrides.js`, hooks `post.skill.overrides` /
+`prompt.skill.overrides`) reads the global and project `reference.md` and
+injects them as one `[skill-overrides]` block; the Codex context step stays in
+SKILL.md.
 
 ## Legacy extension names
 
-Fallback (pre-PR-2 name): where `do-ship/` does not exist, read `~/.claude/skills/ship/` / `{project}/.claude/skills/ship/` instead — an extension written before the rename keeps working.
+The loader falls back to the pre-PR-2 `~/.claude/skills/ship/` / `{project}/.claude/skills/ship/` where `do-ship/` does not exist — an extension written before the rename keeps working.
 
-A promotion (Step 5d / promotion-only) additionally reads the pre-PR-2 `~/.claude/skills/promote/` / `{project}/.claude/skills/promote/` when present.
+The pre-PR-2 `~/.claude/skills/promote/` / `{project}/.claude/skills/promote/` is injected in addition, labelled "promote mode only" — it applies to a promotion (Step 5d / promotion-only) and nothing else.
 
 ## Captured fields
 

@@ -20,13 +20,7 @@ Scaffold or adapt a project-level extension for any devops skill.
 
 ## Step 0 — Load Extensions
 
-Glob each path before reading; skip missing files silently.
-
-1. Global: `~/.claude/skills/auto-extend/reference.md`
-2. Project: `{project}/.claude/skills/auto-extend/reference.md`
-   Fallback (pre-PR-2 name): where `auto-extend/` does not exist, read `~/.claude/skills/claude-extend-skill/` / `{project}/.claude/skills/claude-extend-skill/` instead — an extension written before the rename keeps working.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 `{project}` = the nearest parent with `.git/` or `.claude/`; all extension
 paths below are relative to it.
@@ -71,19 +65,34 @@ guiding comment fits the skill.
 
 Scaffold **`reference.md` only** — never a `SKILL.md`: Claude Code loads
 any `SKILL.md` under `.claude/skills/` as a skill of its own. Step overrides
-and added steps go into `reference.md` too (as prose: "Before Step 4, …").
+and added steps go into `reference.md` too, under the directive headings the
+override loader parses (`hooks/lib/skill-overrides.js`): `## Add after Step N`
+/ `## Add before Step N`, `## Skip Step N`, `## Replace Step N`, `## Step N — …`
+(extends that step). Use the step numbers of the plugin's SKILL.md; drop the
+headings the user does not need. Everything else is free-text rules.
 
 `reference.md`:
 
 ```markdown
 # {Skill-Name} Reference — {project-name}
 
-<!-- Add project-specific context and rules this skill should apply.
-     Examples: build commands, deploy targets, log paths, version files, conventions,
-     an extra step ("Before the PR: run ng build --prod").
-     These rules merge with the plugin defaults — your rules win on conflict.
-     The plugin loads this file automatically in Step 0 of every execution.
+<!-- Project-specific context and rules for this skill. The override loader
+     injects this file every time the skill starts; your rules win over the
+     plugin defaults on conflict. Directive headings become explicit orders —
+     keep only the ones you need, with the step numbers of the plugin skill.
      See deep-knowledge/skill-extension-guide.md for the full extension model. -->
+
+## Add after Step {N}
+<!-- An extra step, run right after Step {N}. "Add before Step {N}" also works. -->
+
+## Skip Step {N}
+<!-- The plugin skips Step {N} entirely. -->
+
+## Replace Step {N}
+<!-- Runs instead of the plugin's Step {N}. -->
+
+## Rules
+<!-- Free text: build commands, deploy targets, log paths, version files, conventions. -->
 ```
 
 `.claude/skills/` must not be gitignored — if it is, warn; do not edit
@@ -92,5 +101,6 @@ and added steps go into `reference.md` too (as prose: "Before Step 4, …").
 ## Step 4 — Confirm
 
 Name the created/updated path, that `reference.md` holds both added context
-(build commands, deploy targets, paths) and step overrides, and that the
-plugin reads it before every run of the skill.
+(build commands, deploy targets, paths) and step directives, that the
+override loader injects it at every start of the skill, and that the
+completion card shows "🧩 Override aktiv" whenever it applied.

@@ -20,7 +20,7 @@ In each layer, the override file is `reference.md`:
 
 | File | Purpose | Example |
 |---|---|---|
-| `reference.md` | Add context the skill reads before executing, or override / add steps | List version files, deploy targets; "Before the PR: run ng build --prod" |
+| `reference.md` | Context and rules the skill applies, plus Add / Skip / Replace Step directives (§ Directives) | List version files, deploy targets; `## Add after Step 1` → "run ng build --prod" |
 
 **Legacy `SKILL.md` overrides are deprecated.** A `SKILL.md` in an extension
 folder is still read as a fallback so nothing breaks, but rename it to
@@ -66,24 +66,67 @@ log paths, test commands, CI integration.
 The skill restructure (PR 2) renamed most skills (`ship` → `do-ship`, `fix` →
 `auto-fix`, `concept` → `auto-concept`, …) and folded others into modes
 (`run-backlog` → `do-run` backlog mode, `promote` → `do-ship` promote mode).
-An extension written under the old name is still read: every Step 0 looks up
-the new directory first and falls back to the old one; a mode additionally
-reads the extension of the skill it was folded from. The full table lives in
-`hooks/lib/skill-names.js` (`RENAMED`, `FOLDED`); hooks that read an
-extension file themselves use its `resolveExtensionFile()`. New extensions
-go under the new name.
+An extension written under the old name is still read: the override loader
+looks up the new directory first and falls back to the old one; a folded
+mode's old directory is injected in addition, labelled with its mode
+("backlog mode only"). The full table lives in `hooks/lib/skill-names.js`
+(`RENAMED`, `FOLDED`); hooks that read an extension file themselves use its
+`resolveExtensionFile()`. New extensions go under the new name.
 
 ## How extensions are loaded
 
-Every plugin skill starts with Step 0:
+ONE override loader serves every skill (`hooks/lib/skill-overrides.js`, hooks
+`post.skill.overrides` for a Skill-tool start and `prompt.skill.overrides` for
+a typed `/skill`). When a devops skill starts it:
+
+1. reads `~/.claude/skills/{name}/reference.md` (global) and
+   `{project}/.claude/skills/{name}/reference.md` (project) — a legacy
+   `SKILL.md` there as a deprecated fallback, old names as above;
+2. parses the directive headings (below) into explicit orders;
+3. injects ONE block into the session, layers in the order plugin defaults →
+   global → project (project wins on conflict):
 
 ```
-1. Read ~/.claude/skills/{name}/reference.md      → global
-2. Read {project}/.claude/skills/{name}/reference.md → project
-   (legacy SKILL.md in either folder: read as deprecated fallback)
-3. Merge all layers: project rules > global rules > plugin defaults
-4. Proceed with merged ruleset
+[skill-overrides] do-ship: project reference.md
+Override loader (this IS do-ship's Step 0): …
+Directives:
+- SKIP Step 3 of do-ship (project override) — do not run it …
+- ADD after Step 4 of do-ship (project override) — run the section "Add after Step 4" below right after it.
+- RULES (project override) — the rest of the file applies throughout do-ship.
+=== project: …/.claude/skills/do-ship/reference.md ===
+…file text…
 ```
+
+   File bodies are inlined up to 6000 characters in total; a larger file is
+   named with "Read this file in full before Step 1", its directives still
+   listed. No override file → no block, no output.
+4. records the active overrides for this session — the completion card shows
+   them as one line, e.g. `🧩 Override aktiv: Projekt do-ship (Step 8 ergänzt)`.
+   The line names the overrides loaded since the previous card.
+
+Each skill's own Step 0 is a single line pointing at this block.
+
+A bare skill name the plugin does not ship (your own `.claude/skills/<your-skill>/`)
+is never treated as an override — that folder IS the skill. A foreign
+plugin's skill (`other:foo`) gets its `reference.md` injected when one exists.
+
+## Directives
+
+Headings in `reference.md` (any level from `##`, outside code fences) that
+the loader turns into explicit orders. Use the step numbers of the plugin's
+SKILL.md.
+
+| Heading | Effect | Card label |
+|---|---|---|
+| `## Add after Step 4` / `## Add before Step 4` | the section runs right after / before Step 4 | `nach Step 4 ergänzt` |
+| `## Skip Step 3` (also `## Skip Steps 3, 5`) | Step 3 is not run | `Step 3 übersprungen` |
+| `## Replace Step 2` | the section runs instead of Step 2 | `Step 2 ersetzt` |
+| `## Step 8 — Self-update` | the section extends Step 8 | `Step 8 ergänzt` |
+| any other text | additional rules for the whole skill | `Regeln` |
+
+German spellings parse the same: `Ergänze nach Schritt 4`, `Überspringe
+Schritt 3`, `Ersetze Schritt 2`, `Schritt 8 — …`. A directive's section ends
+at the next heading of the same or a higher level.
 
 ## Extension examples by skill
 
@@ -282,6 +325,6 @@ project, and either scaffolds new files or opens the existing ones for editing.
 
 - Never edit plugin files directly — always extend via Layer 2 or 3
 - Extensions are additive by default — they add to the plugin behavior
-- To override a specific step or add context, write it in reference.md
+- To skip, replace or add a step, use the directive headings (§ Directives) in reference.md
 - Never create a SKILL.md in an extension folder — Claude Code loads it as a separate skill
 - Plugin updates (via Claude Code marketplace) never overwrite your extensions

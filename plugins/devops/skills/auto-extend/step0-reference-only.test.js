@@ -1,15 +1,22 @@
 /**
  * Issues audit row 10: an override named SKILL.md under ~/.claude/skills/<skill>/
  * or .claude/skills/<skill>/ is loaded by Claude Code as a bare user skill of
- * its own. Step 0 therefore documents reference.md as the override file and
- * keeps a legacy SKILL.md only as a deprecated fallback; auto-extend scaffolds
- * reference.md only.
+ * its own. The override file is therefore reference.md; a legacy SKILL.md is
+ * only a deprecated fallback; auto-extend scaffolds reference.md only.
+ *
+ * F1 (unified override loader): no skill reads its extensions itself any
+ * more. hooks/lib/skill-overrides.js resolves and injects them as one
+ * `[skill-overrides]` block; every Step 0 is the one line pointing at it.
  */
 import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 
+const require = createRequire(import.meta.url);
 const SKILLS = path.resolve(__dirname, "..");
+const PLUGIN = path.resolve(SKILLS, "..");
+const { OVERRIDE_FILE, LEGACY_FILE, OVERRIDE_FILES } = require("../../hooks/lib/skill-overrides.js");
 
 function step0(text) {
   const m = /^## Step 0 — Load [Ee]xtensions$/m.exec(text);
@@ -28,21 +35,35 @@ for (const name of fs.readdirSync(SKILLS)) {
 }
 const sections = files.map((f) => [path.relative(SKILLS, f), step0(fs.readFileSync(f, "utf8"))]).filter(([, s]) => s);
 
-describe("Step 0 — overrides live in reference.md", () => {
+describe("Step 0 — the override loader injects reference.md", () => {
   test("covers the skills that load extensions", () => {
     expect(sections.length).toBeGreaterThanOrEqual(14);
   });
 
-  test.each(sections)("%s names reference.md, never SKILL.md, as the override file", (_f, sec) => {
-    expect(sec).not.toMatch(/\/SKILL\.md` \+ `reference\.md`/);
-    expect(sec).toMatch(/skills\/[\w-]+\/reference\.md`/);
-    expect(sec).toMatch(/Legacy: an override still named `SKILL\.md`.*deprecated fallback.*Rename it to `reference\.md`/);
+  test.each(sections)("%s is the one loader line, no hand-read paths", (_f, sec) => {
+    expect(sec).toMatch(/`\[skill-overrides\]` block[^\n]*; none shown → none exist\./);
+    expect(sec).not.toMatch(/~\/\.claude\/skills\//);
+    expect(sec).not.toMatch(/\{project\}\/\.claude\/skills\/[\w-]+\/(?:reference|SKILL)\.md/);
   });
 
-  test("auto-extend scaffolds reference.md only", () => {
+  test("the loader reads reference.md, SKILL.md only as the legacy fallback", () => {
+    expect(OVERRIDE_FILE).toBe("reference.md");
+    expect(LEGACY_FILE).toBe("SKILL.md");
+    expect(OVERRIDE_FILES).toEqual(["reference.md", "SKILL.md"]);
+  });
+
+  test("the extension guide names reference.md and calls SKILL.md deprecated", () => {
+    const guide = fs.readFileSync(path.join(PLUGIN, "deep-knowledge", "skill-extension-guide.md"), "utf8");
+    expect(guide).toMatch(/the override file is `reference\.md`/i);
+    expect(guide).toMatch(/Legacy `SKILL\.md` overrides are deprecated/);
+    expect(guide).toMatch(/## Directives/);
+  });
+
+  test("auto-extend scaffolds reference.md only, with the directive headings", () => {
     const text = fs.readFileSync(path.join(SKILLS, "auto-extend", "SKILL.md"), "utf8");
     const scaffold = text.slice(text.indexOf("## Step 3"), text.indexOf("## Step 4"));
     expect(scaffold).toMatch(/Scaffold \*\*`reference\.md` only\*\*/);
     expect(scaffold).not.toMatch(/^name: \{skill-name\}$/m);
+    for (const h of ["## Add after Step {N}", "## Skip Step {N}", "## Replace Step {N}"]) expect(scaffold).toContain(h);
   });
 });

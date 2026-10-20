@@ -33,13 +33,7 @@ injected panel and collects what the project needs.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides; skip missing files silently.
-
-1. Global: `~/.claude/skills/auto-guide/reference.md`
-2. Project: `{project}/.claude/skills/auto-guide/reference.md`
-   Fallback (pre-PR-2 name): where `auto-guide/` does not exist, read `~/.claude/skills/web-guide/` / `{project}/.claude/skills/web-guide/` instead — an extension written before the rename keeps working.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 ## Step 0.5 — Load the browser tool schemas
 
