@@ -28,12 +28,7 @@ it is passed only where a `[burn-resume]` block names one.
 
 ## Step 0 — Load Extensions
 
-Silently check (do not surface "not found"):
-1. `~/.claude/skills/do-run/reference.md` — the do-run extension (already loaded by do-run Step 0)
-2. `{project}/.claude/skills/do-run/reference.md` — same
-   Pre-PR-2 fallback: also read `~/.claude/skills/run-burn/` and `{project}/.claude/skills/run-burn/` (`reference.md`) when present — an extension written for the old `run-burn` skill applies to this mode unchanged.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+The do-run `[skill-overrides]` block covers this mode, including the pre-PR-2 `run-burn/` dir; none shown → none exist.
 
 Extension-overridable knobs: `LANE_CAP` (`--lane-cap=N`) and the base
 `RESERVE` (`--reserve=N`), passed to `burn-plan.js plan` / `init`.

@@ -58,7 +58,7 @@ import { batchGuide, conceptCloseoutOnly, conceptUrl, readBatch, readRunContract
 import { cardWidgetInstruction, isDesktopSession, safeSessionId, writeCardWidgetFile } from "./lib/card-widget.js";
 import { detectLaunchPath } from "./lib/launch-path.js";
 import { archiveDecision, archiveInstruction, writeArchiveFlag } from "./lib/session-archive.js";
-import { readToolCallCount } from "./lib/tool-call-count.js";
+import { readToolCallCount, resolveSessionFile } from "./lib/tool-call-count.js";
 import { answerHtml, normalizeAnswer } from "./lib/answer-markdown.js";
 import {
   assessFreshness,
@@ -1163,6 +1163,28 @@ function renderRunContractLine(input, lang) {
   return readRunContractLine(input.cwd, lang, input.session_id);
 }
 
+/**
+ * The "🧩 Override aktiv: Projekt do-ship (Step 8 ergänzt)" line — the skill
+ * overrides the override loader injected since the last card
+ * (hooks/lib/skill-overrides.js; written by post.skill.overrides /
+ * prompt.skill.overrides under the harness session id, resolved like the
+ * tool-call counter). The record is marked rendered here; the next user
+ * prompt clears it. null without a record — the line is then absent.
+ */
+const OVERRIDES_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+function readOverridesLine(input, lang) {
+  try {
+    const lib = cjsRequire(join(PLUGIN_ROOT, 'hooks', 'lib', 'skill-overrides.js'));
+    const file = resolveSessionFile(lib.RECORD_PREFIX + '-', input.session_id, { cwd: input.cwd, maxAgeMs: OVERRIDES_MAX_AGE_MS, requireProject: true });
+    if (!file) return null;
+    const line = lib.cardLine(lib.readRecordFile(file), lang);
+    if (line) lib.markRendered(file);
+    return line;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Channel ladder (ring model) — alpha › beta › stable with the version each
 // channel serves. Channels on the same version merge into one group; the
@@ -2060,6 +2082,7 @@ function buildCardModel(input, lang, key, buildId, usageData, delta5h, deltaWk, 
     pipeline: renderPipelineLine(input, lang, buildId),
     pipelinePr: state.pr || null,
     runContract: renderRunContractLine(input, lang),
+    overrides: input._overridesLine || null,
     ladder: buildChannelLadder(input),
     heading: decision.heading,
     context: decision.context,
@@ -2115,6 +2138,7 @@ function renderCard(input, usageData, delta5h, deltaWk, healthLine, buildId, { t
     if (pipelineLine) parts.push(pipelineLine);
     const runContractLine = renderRunContractLine(input, lang);
     if (runContractLine) parts.push(runContractLine);
+    if (input._overridesLine) parts.push(input._overridesLine);
     const ladderLine = renderChannelLadderMd(buildChannelLadder(input), lang);
     if (ladderLine) parts.push(ladderLine);
     const budgetLine = renderBudgetLineMd(buildBudgetModel(usageData, delta5h, deltaWk, healthLine, lang));
@@ -2504,6 +2528,9 @@ function buildCompletionCard(params) {
   //     A deliberate skip (#612) names its reason on the card — only while a
   //     check is actually owed; a running test owes nothing yet.
   if (params.vv.unverified && !params.vv.running) params.vv.skipReason = cardSkipReason(params);
+
+  // 3c. Skill overrides the loader injected since the last card (one line).
+  params._overridesLine = hasBody(params.variant) ? readOverridesLine(params, params.lang || 'de') : null;
 
   // 4. Render the full card, and stash the same structured model + repoUrl on
   //    `params` so ctaActionsNote (the Desktop widget) can reuse it without a

@@ -85,6 +85,24 @@ describe("--render-card CLI fallback", () => {
     expect(out).toMatch(/^## 🟩 📋 Analysis — gelesen/m);
   });
 
+  test("the override loader's record shows as ONE card line and is marked rendered", async () => {
+    const sid = S("overrides");
+    const rec = join(tmpdir(), `dotclaude-devops-skill-overrides-${sid}`);
+    writeFileSync(rec, JSON.stringify({ skills: [{ skill: "do-ship", mode: null, entries: [
+      { scope: "project", path: "/p/.claude/skills/do-ship/reference.md", legacy: false, mode: null, directives: [{ kind: "extend", step: "8" }], rules: true },
+    ] }] }));
+    try {
+      const out = await renderCard({ variant: "ready", summary: "Mit Override", lang: "de", session_id: sid, buildId: "abc1234", changes: [{ area: "x", description: "y" }] });
+      const lines = out.split("\n").filter((l) => l.includes("🧩"));
+      expect(lines).toEqual(["🧩 Override aktiv: Projekt do-ship (Step 8 ergänzt)"]);
+      expect(JSON.parse(readFileSync(rec, "utf8")).renderedAt).toBeGreaterThan(0);
+      const plain = await renderCard({ variant: "ready", summary: "Ohne Override", lang: "de", session_id: S("no-overrides"), buildId: "abc1234", changes: [{ area: "x", description: "y" }] });
+      expect(plain).not.toContain("🧩");
+    } finally {
+      try { unlinkSync(rec); } catch { /* gone */ }
+    }
+  });
+
   test("stdout carries the card only — no relay-instruction preamble to strip", async () => {
     const out = await renderCard({ variant: "analysis", summary: "Nur die Karte", session_id: S("clean") });
     expect(out).not.toContain("DO NOT OUTPUT THIS BLOCK");

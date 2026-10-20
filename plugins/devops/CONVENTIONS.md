@@ -333,42 +333,43 @@ stands next to it.
 
 ### Extension Mechanism (applies to ALL skills)
 
-Every plugin skill supports a **three-layer extension model**. Before executing
-its core logic, a skill MUST load extensions in this order:
+Every plugin skill supports a **three-layer extension model**, loaded by ONE
+override loader — no skill reads its extensions itself:
 
 ```
 Layer 1: Plugin SKILL.md              ← Core logic (this plugin, immutable)
-Layer 2: User global extensions       ← ~/.claude/skills/{name}/SKILL.md + reference.md
-Layer 3: Project extensions           ← {project}/.claude/skills/{name}/SKILL.md + reference.md
+Layer 2: User global override         ← ~/.claude/skills/{name}/reference.md
+Layer 3: Project override             ← {project}/.claude/skills/{name}/reference.md
 ```
 
 **Merge priority:** Project > Global > Plugin (most specific wins).
 
-**What users can extend:**
-- `SKILL.md` — Override or extend specific steps of the skill
-- `reference.md` — Add project-specific context, rules, deploy targets, extra checks
+The override file is `reference.md`. A legacy `SKILL.md` there is still read
+as a deprecated fallback — Claude Code loads any `SKILL.md` under
+`.claude/skills/` as a skill of its own, so it is never scaffolded.
 
-**Load sequence in every skill (Step 0):**
+**The loader** (`hooks/lib/skill-overrides.js`; hooks `post.skill.overrides`
+on the Skill tool, `prompt.skill.overrides` for a typed `/skill`) resolves
+both layers — new skill name first, the pre-PR-2 name as fallback
+(`resolveExtensionFile()` in `hooks/lib/skill-names.js`), a folded mode's old
+dir in addition — parses the directive headings (`## Add after|before Step N`,
+`## Skip Step N`, `## Replace Step N`, `## Step N — …` = extend, rest = rules)
+and injects one `[skill-overrides]` block with explicit orders and the file
+bodies (inline up to 6000 chars, beyond that the file is named for a Read).
+It records the active overrides per session; the completion card shows them as
+one `🧩 Override aktiv: …` line. No file → no output.
+
+**Step 0 in every skill** is the one line:
 
 ```markdown
 ## Step 0 — Load Extensions
 
-Silently check for optional overrides (do not surface "not found" in output):
-
-1. Global skill extension: `~/.claude/skills/{skill-name}/SKILL.md` + `reference.md`
-2. Project skill extension: `{project}/.claude/skills/{skill-name}/SKILL.md` + `reference.md`
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 ```
 
-A renamed skill adds one line after item 2: where the new directory does not
-exist, read the pre-rename one (`{project}/.claude/skills/<old-name>/`) —
-consumer extensions written before the rename keep working. JS that reads an
-extension file itself uses `resolveExtensionFile()` from
-`hooks/lib/skill-names.js` (new name first, old name second).
-
-**This pattern is mandatory for every new skill.** When creating skills
-(via `/skill-creator` or manually), always include the Step 0 extension
-load sequence. Skills that skip this step are non-compliant.
+Skill-specific notes on what an extension typically declares may follow it.
+JS that reads an extension file itself (e.g. `post.design.remind`) uses
+`resolveExtensionFile()`.
 
 **Example: A user extends `/do-ship` for their own project:**
 
@@ -376,12 +377,9 @@ load sequence. Skills that skip this step are non-compliant.
 my-project/
 └── .claude/
     └── skills/
-        └── ship/
-            ├── SKILL.md        ← "Before PR: run npm test && npm run lint"
-            └── reference.md    ← "Deploy via SSH to <internal-host>"
+        └── do-ship/
+            └── reference.md    ← "## Add after Step 1 — run npm test && npm run lint" · "Deploy via SSH to <internal-host>"
 ```
-
-The plugin's `/do-ship` reads these before executing and integrates the rules.
 
 **Eat-your-own-dogfood:** This plugin's own repo (`devops/`) uses
 the same mechanism. Project-specific ship rules live in `.claude/skills/do-ship/`

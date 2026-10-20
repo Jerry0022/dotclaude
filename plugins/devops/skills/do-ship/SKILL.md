@@ -145,15 +145,11 @@ Desktop app only — deferred tools are loaded, not skipped; in a terminal, an u
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides; Glob each path first and skip missing files silently.
-
-1. Global: `~/.claude/skills/do-ship/reference.md`
-2. Project: `{project}/.claude/skills/do-ship/reference.md` — where `do-ship/` does not exist, or a promotion runs, also read the legacy folders: `deep-knowledge/extensions.md` § Legacy extension names. Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 Project extensions define: quality gate commands, deploy targets, version files, CI specifics. Capture `outOfBandDeploy:` (Step 1a), `deploy:` (Step 4d) and `deployParity:` (Step 2.5) when present: `deep-knowledge/extensions.md` § Captured fields.
 
-4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — the Step 2 Codex review gate (§1 there) is mandatory and runs only via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, § "Hard Timeout & Failure-Tolerance"), never via the `/codex:rescue` Agent tool. Detect Codex availability now.
+Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — the Step 2 Codex review gate (§1 there) is mandatory and runs only via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, § "Hard Timeout & Failure-Tolerance"), never via the `/codex:rescue` Agent tool. Detect Codex availability now.
 
 ## Step 0.5 — Load Deferred MCP Schemas
 

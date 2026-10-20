@@ -251,24 +251,26 @@ Layer 2: User global (~/.claude/)     ← your personal overrides
 Layer 3: Project ({project}/.claude/) ← project-specific rules
 ```
 
-To extend any plugin skill for your project, create a directory matching the
-skill's name under `.claude/skills/` in your project:
+To extend any plugin skill for your project, create a `reference.md` in a
+directory matching the skill's name under `.claude/skills/` in your project:
 
 ```
 your-project/.claude/skills/{skill-name}/
-├── SKILL.md        ← override or add steps
-└── reference.md    ← project-specific context
+└── reference.md    ← project-specific context, rules and step directives
 ```
 
-The plugin reads your extensions before executing and merges them. Your rules win on conflict.
-Both files are optional — create only what you need.
+When the skill starts, one override loader injects your global and project
+`reference.md` (project wins on conflict). Directive headings become explicit
+orders: `## Add after Step 4`, `## Skip Step 3`, `## Replace Step 2`; any
+other text is an additional rule. The completion card shows which override
+applied (`🧩 Override aktiv: Projekt do-ship (Step 3 übersprungen)`). Never
+name the file `SKILL.md` — Claude Code would load it as a skill of its own.
 
 **Example** — extending `/do-ship` with project-specific quality gates and deploy targets:
 
 ```
 your-project/.claude/skills/do-ship/
-├── SKILL.md        ← "Before PR: run ng build --prod"
-└── reference.md    ← "Deploy via SSH to 192.168.178.32"
+└── reference.md    ← "## Add after Step 1 — run ng build --prod" · "Deploy via SSH to 192.168.178.32"
 ```
 
 Say "extend skill" (the hidden `auto-extend` skill) to interactively scaffold an extension for any plugin skill.
@@ -438,7 +440,7 @@ from the restored marketplaces.
 
 ## Features
 
-- **<!--devops:count:hooks-->84<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
+- **<!--devops:count:hooks-->86<!--/devops:count:hooks--> Hooks** — automated guards and triggers across the full session lifecycle
 - **<!--devops:count:skills-->14<!--/devops:count:skills--> Skills** — doors do-ship (incl. promote mode), do-run (backlog, autonomous, burn, rethink, audit modes), do-learn, do-batch; hidden workers auto-cleanup, auto-fix, auto-concept, auto-guide, auto-extend, auto-update, auto-harden, auto-polish, auto-agents, auto-issue. README standards, graphify, usage data, strict mode and project setup are knowledge + hooks, not skills
 - **<!--devops:count:agents-->12<!--/devops:count:agents--> Agents** — AI, Core, Designer, Feature, Frontend, PO, QA, Redteam, Research, Rethinker, Scout, Concept-Author
 - **Completion Flow** — mandatory card after every task (8 variants), visual verification, ship recommendation
@@ -449,7 +451,7 @@ from the restored marketplaces.
 
 ### Hooks (automatic, no user action needed)
 
-<!--devops:count:hooks-->84<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
+<!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks fire automatically across the session lifecycle — no user action needed.
 
 <details>
 <summary><strong>By session lifecycle</strong> — when does it fire?</summary>
@@ -498,6 +500,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `prompt.issue.detect` — Detect issue references in user messages.
 - `prompt.plugin.scope` — Inject the scope-routing rule when a consumer project's session starts talking about…
 - `prompt.skill.enforce` — Detects inline skill commands (e.g.
+- `prompt.skill.overrides` — Two jobs of the override loader (lib/skill-overrides.js) on a user prompt: - a skill…
 - `prompt.strict.enforce` — Arms and enforces strict mode — literal scope, discretionary parameters.
 - `prompt.ship.detect` — Detect ship intent in user prompts and inject Skill('devops:do-ship') instruction.
 - `prompt.flow.appstart` — Detect app start intent in user prompts.
@@ -545,6 +548,7 @@ SessionStart  ──>  UserPromptSubmit  ──>  PreToolUse  ──>  PostToolU
 - `post.ask.answers` — Answer-check (run-contract spec F): an AskUserQuestion answer token that equals the O…
 - `post.cleanup.gate` — Arms and feeds the /auto-cleanup deletion gate (lib/cleanup-gate.js).
 - `post.skill.marker` — Record a loaded skill in the caller's per-turn marker (lib/skill-turn-marker) — the "…
+- `post.skill.overrides` — The override loader for a skill started through the Skill tool: resolves the skill's…
 - `post.flow.title-mode` — Hands Claude the exact session title a skill's mode step needs, so the skill no longe…
 - `post.project.setup` — Runs `ss.project.setup`'s logic right after a mid-session `git init` instead of waiti…
 - `post.governor.clear` — Clears the foreground marker pre.governor.gate recorded for this tool call: Claude no…
@@ -839,7 +843,7 @@ markdown card, minus the buttons.
 devops/
 ├── .claude-plugin/plugin.json     ← Plugin manifest
 ├── CONVENTIONS.md                 ← Naming, versioning, extension rules
-├── hooks/                         ← <!--devops:count:hooks-->84<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
+├── hooks/                         ← <!--devops:count:hooks-->86<!--/devops:count:hooks--> hooks (JS) registered in hooks.json
 ├── skills/                        ← <!--devops:count:skills-->14<!--/devops:count:skills--> skill definitions (SKILL.md)
 ├── agents/                        ← <!--devops:count:agents-->12<!--/devops:count:agents--> agent definitions
 ├── deep-knowledge/                ← Cross-cutting reference docs

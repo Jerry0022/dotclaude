@@ -7,14 +7,7 @@ hint live in `../SKILL.md`.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before
-reading. Skip missing files silently.
-
-1. Global: `~/.claude/skills/do-run/reference.md` — the do-run extension (already loaded by do-run Step 0)
-2. Project: `{project}/.claude/skills/do-run/reference.md` — same
-   Pre-PR-2 fallback: also read `~/.claude/skills/tune-audit/` and `{project}/.claude/skills/tune-audit/` (`reference.md`) when present — an extension written for the old `tune-audit` skill applies to this mode unchanged.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge order: project > global > plugin defaults
+The do-run `[skill-overrides]` block covers this mode, including the pre-PR-2 `tune-audit/` dir; none shown → none exist.
 
 Extensions typically add dimensions, performance budgets, the log schema,
 audio asset rules or a requirements source.

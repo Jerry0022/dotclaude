@@ -65,14 +65,7 @@ never loads auto-agents.
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before
-reading. Skip missing files silently.
-
-1. Global: `~/.claude/skills/auto-polish/reference.md`
-2. Project: `{project}/.claude/skills/auto-polish/reference.md`
-   Fallback (pre-PR-2 name): where `auto-polish/` does not exist, read `~/.claude/skills/tune-polish/` / `{project}/.claude/skills/tune-polish/` instead — an extension written before the rename keeps working.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge order: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 Project extensions can declare:
 - Allowed design tokens (spacing scale, color tokens, typography ramp)
@@ -83,10 +76,10 @@ Project extensions can declare:
   free-form project rules. Format in `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md`
   § Project override.
 
-4. Standing UI rules: read `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` and
-   merge the `## UI rules` override on top (project > global). The merged
-   set is `$UI_RULES`; a rule disabled by an override stays in the set as
-   *disabled* so the output can name it.
+Standing UI rules: read `{PLUGIN_ROOT}/deep-knowledge/ui-defaults.md` and
+merge the `## UI rules` override on top (project > global). The merged
+set is `$UI_RULES`; a rule disabled by an override stays in the set as
+*disabled* so the output can name it.
 
 ## Step 1 — Parse Arguments
 

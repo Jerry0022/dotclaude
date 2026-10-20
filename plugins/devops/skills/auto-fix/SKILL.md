@@ -25,19 +25,12 @@ Diagnose and fix the issue: `$ARGUMENTS`
 
 ## Step 0 — Load Extensions
 
-Check for optional overrides. Use **Glob** to verify each path exists before reading.
-Do NOT call Read on files that may not exist — skip missing files silently (no output).
-
-1. Global: `~/.claude/skills/auto-fix/reference.md`
-2. Project: `{project}/.claude/skills/auto-fix/reference.md`
-   Fallback (pre-PR-2 name): where `auto-fix/` does not exist, read `~/.claude/skills/fix/` / `{project}/.claude/skills/fix/` instead — an extension written before the rename keeps working.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 Project extensions define framework-specific log paths (e.g., Electron logs in
 `%APPDATA%/<app>/logs/`, Angular dev server console, etc.).
 
-4. Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill auto-invokes Codex on unclear root cause (§2 in that doc). Codex **MUST** be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 6 can act on it.
+Codex context: Read `{PLUGIN_ROOT}/deep-knowledge/codex-integration.md` — this skill auto-invokes Codex on unclear root cause (§2 in that doc). Codex **MUST** be called via `{PLUGIN_ROOT}/scripts/codex-safe.sh` (5-min hard timeout, see "Hard Timeout & Failure-Tolerance" section), NEVER via the `/codex:rescue` Agent tool. Detect Codex availability now so Step 6 can act on it.
 
 ## Step 1 — Triage: what broke?
 

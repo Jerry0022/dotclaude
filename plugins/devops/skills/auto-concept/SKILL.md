@@ -40,13 +40,7 @@ substitute (#568).
 
 ## Step 0 — Load Extensions
 
-Optional overrides — Glob each path first; skip missing files silently.
-
-1. Global: `~/.claude/skills/auto-concept/reference.md`
-2. Project: `{project}/.claude/skills/auto-concept/reference.md`
-   Fallback (pre-PR-2 name): where `auto-concept/` does not exist, read `~/.claude/skills/concept/` / `{project}/.claude/skills/concept/` instead — an extension written before the rename keeps working.
-   Legacy: an override still named `SKILL.md` in one of these folders is read as a deprecated fallback. Rename it to `reference.md` — Claude Code loads any `SKILL.md` under `~/.claude/skills/` or `.claude/skills/` as a skill of its own.
-3. Merge: project > global > plugin defaults
+Injected by the override loader (`[skill-overrides]` block); none shown → none exist.
 
 ## Step 0.5 — Concept Mode (asked once, at the start)
 
