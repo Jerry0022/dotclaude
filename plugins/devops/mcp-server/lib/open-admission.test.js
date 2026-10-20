@@ -69,6 +69,24 @@ describe("dropNextStepOpenItems", () => {
     ]) expect(isNextStep(s)).toBe(false);
   });
 
+  test("ship review: past tense, compounds, bare ausgeben/posten and hinted questions stay", () => {
+    for (const s of [
+      "Bereits gepushte Commits enthalten den API-Key — rotieren",
+      "Already pushed commits contain a secret — rotate the key",
+      "The shipped config still points at the old DB — remove",
+      "Released v0.170 has the bug too — hotfix stable",
+      "Push-Benachrichtigungen sind seit dem Update aus — wieder aktivieren",
+      "Shipping-Adresse wird im Checkout nicht validiert",
+      "Bei leerer Config eine Warnung ausgeben",
+      "Der Posten Versandkosten fehlt in der Rechnung",
+      "Löschen oder behalten? (empfohlen: löschen)",
+      "Soll ich nach main pushen? → ja",
+    ]) expect(isNextStep(s)).toBe(false);
+    for (const s of ["v1.2.3 ausgeben", "Im Discord posten", "Release ausgeben"]) {
+      expect(isNextStep(s)).toBe(true);
+    }
+  });
+
   test("object items are matched on text, not on reply", () => {
     const keep = { text: "Migration noch nicht getestet", reply: "Ja, dann shippen." };
     expect(isNextStep(keep)).toBe(false);

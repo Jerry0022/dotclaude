@@ -9,9 +9,9 @@
  * displaced the steps to test. The rule used to live as prose in the tool
  * description only.
  *
- * A narrow denylist (ship, push, release, version bump, post, merge, nach main,
- * ausgeben, Discord) catches the routine step; an item that ends in `?` is a
- * real question and always stays. Silent drop (the caller logs it and names the
+ * A narrow denylist (ship, push, release, version bump, a channel post, nach /
+ * into main, "<version> ausgeben") catches the routine step; an item with a
+ * `?` is a real question and always stays. Silent drop (the caller logs it and names the
  * count in the tool result) — same failure mode as the foreign-branch and chip
  * filters, so a misjudged item can never deadlock the card.
  *
@@ -19,22 +19,27 @@
  */
 
 const NEXT_STEP_RE = new RegExp([
-  String.raw`\bship(?:pen|ping|ped|s)?\b`,
-  String.raw`\bpush(?:en|ed|ing|es)?\b`,
-  // Not a compound noun: "Release-Skript prüft …" is a finding, not the step.
-  String.raw`\breleas(?:e|es|ed|ing)\b(?!-)`,
+  // Imperative / infinitive forms only: a past tense ("bereits gepushte Commits",
+  // "the shipped config") describes a state, and that state can be a decision.
+  // `(?!-)`: a compound noun ("Push-Benachrichtigungen", "Release-Skript") is a
+  // finding, not the step.
+  String.raw`\bship(?:pen|ping|s)?\b(?!-)`,
+  String.raw`\bpush(?:en|ing|es)?\b(?!-)`,
+  String.raw`\breleas(?:e|es|ing)\b(?!-)`,
   String.raw`\bveröffentlich\w*`,
   String.raw`\bversion(?:s)?[\s-]*(?:bump|erhöh\w*|ausgeben|ausgabe)\b`,
   String.raw`\bbump(?:en|ed|ing)?\s+(?:the\s+)?version\b`,
   String.raw`\bversion\s+(?:ausgeben|erhöhen|bumpen)\b`,
+  // A bare "ausgeben" is also "output a warning" — only a version goes out.
+  String.raw`\bv?\d+\.\d+\.\d+\s+ausgeben\b`,
   String.raw`\b(?:discord|slack)[-\s]?post\b`,
-  String.raw`\bposten\b`,
-  String.raw`\bpost(?:ed|ing)?\s+(?:to|in|on)\s+(?:discord|slack)\b`,
+  // A bare "posten" is also the noun "line item" — only a post to a channel counts.
+  String.raw`\b(?:discord|slack)\b[^.?!]{0,30}\bposten\b`,
+  String.raw`\bpost(?:ing)?\s+(?:to|in|on)\s+(?:discord|slack)\b`,
   // A bare "merge" or "Discord" names decisions too ("Remove the legacy discord
   // webhook config") — the routine step always says where: nach/into main, a post.
   String.raw`\bnach\s+(?:main|master)\b`,
   String.raw`\b(?:to|into)\s+(?:main|master)\b`,
-  String.raw`\bausgeben\b`,
 ].join('|'), 'i');
 
 // #759: finished work in a linked side session that still has to ship is not
@@ -51,7 +56,8 @@ function shownText(it) {
 function isNextStep(it) {
   const text = shownText(it).trim();
   if (!text) return false;
-  if (/[?？]["')\]*_`]*$/.test(text)) return false;
+  // A question anywhere, also one followed by a hint ("… behalten? (empfohlen: löschen)").
+  if (/[?？]["')\]*_`]*(?:\s|$)/.test(text)) return false;
   const reply = it && typeof it === 'object' && typeof it.reply === 'string' ? it.reply : '';
   if (reply && SIDE_SESSION_RE.test(text + ' ' + reply)) return false;
   return NEXT_STEP_RE.test(text);
