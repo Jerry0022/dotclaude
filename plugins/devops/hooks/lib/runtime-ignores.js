@@ -527,7 +527,29 @@ function touchesIgnorePolicy(files) {
   });
 }
 
+/**
+ * True when a repo-relative path is runtime state the managed block ignores
+ * (`.claude/.ship-cli-last.json`, `sub/.claude/runs/x`). For callers that must
+ * not commit such a file even when the repo's .gitignore lacks the block
+ * (an uncommitted or never-applied migration) — ship_release's untracked staging.
+ */
+function isRuntimeState(file) {
+  const p = String(file || '').replace(/\\/g, '/').replace(/^"|"$/g, '');
+  const i = p.startsWith('.claude/') ? 0 : p.indexOf('/.claude/') + 1;
+  if (i < 0 || (i === 0 && !p.startsWith('.claude/'))) return false;
+  const rel = p.slice(i);
+  return allEntries().some((e) => {
+    if (e.endsWith('/')) return rel.startsWith(e);
+    if (e.includes('*')) {
+      const re = new RegExp('^' + e.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*') + '$');
+      return re.test(rel);
+    }
+    return rel === e;
+  });
+}
+
 module.exports = {
+  isRuntimeState,
   CLAUDE_CODE_STATE, LOCAL_SETTINGS, PLUGIN_STATE, VERSIONED,
   BLOCK_START, BLOCK_END, LEGACY_START, LEGACY_END,
   allEntries, renderBlock, applyBlock, normalizePattern, isBlockEntry,

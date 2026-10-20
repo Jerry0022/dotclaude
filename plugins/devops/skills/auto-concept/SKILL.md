@@ -137,6 +137,8 @@ every section you append (regular round, reality-check round, final report).
 
 The page is **built** by `scripts/concept-build.js` (engine from the current templates, content from one fragment per round); Claude never copies, reads in full or edits the built page.
 
+**Own worktree first.** When the session sits in a git repo's MAIN checkout (not a linked worktree), call `EnterWorktree` (`{"name":"concept-<slug>-<4 random chars>"}`) BEFORE `init` writes the first concept file or the bridge starts — the standing devops rule counts as the instruction, and with `workspace.ownWorktree` set (or unset) this is never a question to the user. `concept-build.js` writes through node, which the Edit/Write branch guard never sees: a page started in the main checkout runs there until the first blocked brief write. A read-only concept outside any repo, or a session already in a worktree, starts directly.
+
 **Before executing this step, Read `deep-knowledge/step2-build.md` § Layout completely** — the built page, the source folder, `page.json`, `head.html` and the round fragments.
 **Before executing this step, Read `deep-knowledge/step2-build.md` § The build — `scripts/concept-build.js` completely** — `init` / `build` / `bake` / `import` / `check`, and what every build does (engine, head, frozen rounds, tabs, gate).
 **Before executing this step, Read `deep-knowledge/step2-build.md` § What Claude writes completely** — a fragment holds exactly one round section; the built page is never written by hand.

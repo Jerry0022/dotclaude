@@ -768,18 +768,47 @@ function report(r, dry) {
 }
 
 const USAGE = `usage:
-  concept-build.js init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free]
+  concept-build.js init   <dir> --title T [--subtitle S] [--locale de] [--mode decision|design|mixed|free] [--allow-main]
   concept-build.js build  <dir> [--out file.html] [--force]
   concept-build.js check  <dir>
   concept-build.js bake   <dir> --round N (--payload decisions.json | --unanswered)
   concept-build.js import <page.html> [--dir <dir>] [--force]
 `;
 
+/**
+ * Why `init <dir>` must not run here, or null. A new concept in a repo's MAIN
+ * checkout on main/master lands where the Edit/Write branch guard cannot see
+ * it (node writes), and the session only notices at its first blocked brief —
+ * with a page and a live bridge to relocate. Only `init` refuses: `build`,
+ * `bake` and `check` serve pages that already exist. Not a git repo, a linked
+ * worktree, a feature branch, DEVOPS_ALLOW_MAIN=1 or --allow-main → null.
+ */
+function mainCheckoutRefusal(dir, args) {
+  if (args['allow-main'] || process.env.DEVOPS_ALLOW_MAIN === '1') return null;
+  const { execFileSync } = require('child_process');
+  let probe = path.resolve(dir);
+  while (!fs.existsSync(probe) && path.dirname(probe) !== probe) probe = path.dirname(probe);
+  const git = (a) => {
+    try { return execFileSync('git', ['-C', probe, ...a], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+    catch { return null; }
+  };
+  const gitDir = git(['rev-parse', '--absolute-git-dir']);
+  const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  if (!gitDir || !common || path.resolve(gitDir) !== path.resolve(common)) return null;
+  const branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
+  if (branch !== 'main' && branch !== 'master') return null;
+  return `refusing to start a concept in the repo's MAIN checkout on ${branch} (${path.dirname(common)}). ` +
+    'Call EnterWorktree first and run init inside the worktree — the standing devops rule; with workspace.ownWorktree set, do not ask the user. ' +
+    'A repo deliberately worked on main: DEVOPS_ALLOW_MAIN=1 (set by the user) or --allow-main.';
+}
+
 function main(argv) {
   const args = parseArgs(argv);
   const [cmd, target] = args._;
   try {
     if (cmd === 'init' && target) {
+      const refusal = mainCheckoutRefusal(target, args);
+      if (refusal) { process.stderr.write(`concept-build: ${refusal}\n`); return 3; }
       const page = init(target, args);
       process.stdout.write(`init ${path.resolve(target)} (locale ${page.locale}, mode ${page.mode}, pageVersion ${page.pageVersion})\n`);
       return 0;
@@ -813,6 +842,7 @@ function main(argv) {
 module.exports = {
   assemble, build, init, bake, bakeRound, importPage, freezeFragment, activateFragment, substitute,
   resolveHead, outPathOf, roundFiles, getAttr, setAttr, removeAttr, parseAttrs, DEFAULT_HEAD, GENERATOR,
+  mainCheckoutRefusal,
 };
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));

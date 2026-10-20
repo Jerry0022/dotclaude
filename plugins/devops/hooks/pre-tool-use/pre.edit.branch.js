@@ -41,13 +41,13 @@ const path = require('path');
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every edit
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, findRepoRoot, gitCommonDir, samePath, branchFix, BYPASS;
+let gitOut, sentinelActive, isLinkedWorktree, findRepoRoot, gitCommonDir, samePath, branchFix, ownWorktreeDecided, BYPASS;
 try {
   require('../lib/plugin-guard');
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree, findRepoRoot, gitCommonDir, samePath } = require('../lib/project-root'));
-  ({ branchFix, BYPASS } = require('../lib/branch-fix'));
+  ({ branchFix, ownWorktreeDecided, BYPASS } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -171,6 +171,7 @@ process.stdin.on('end', () => {
     mainCheckout,
     relPath: path.relative(repoRoot, hit.real),
     subagent: Boolean(hook.agent_id),
+    ownWorktree: ownWorktreeDecided(repoRoot),
     // The target lives in ANOTHER work tree of this repo than the session's
     // own — a moved session holding a main-checkout path, or a path inside
     // another session's worktree.

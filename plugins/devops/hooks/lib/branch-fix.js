@@ -39,11 +39,12 @@ function enterLine(base) {
  * @param {boolean} [p.mainCheckout]  the repo root is the MAIN working tree (not a linked worktree)
  * @param {string}  [p.relPath]       the blocked file, relative to the repo root (Edit/Write only)
  * @param {boolean} [p.subagent]      the call came from a subagent (hook payload carries agent_id)
+ * @param {boolean} [p.ownWorktree]   devops-config workspace.ownWorktree — the project decided: never ask
  * @param {{targetRoot:string, ownRoot:string, ownIsWorktree:boolean}|null} [p.elsewhere]
  *   the target is in another work tree of the repo than the session's own
  * @returns {string[]} remedy lines, without a prefix
  */
-function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPath = '', subagent = false, elsewhere = null } = {}) {
+function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPath = '', subagent = false, elsewhere = null, ownWorktree = false } = {}) {
   const slash = (p) => String(p || '').replace(/\\/g, '/');
   const rel = slash(relPath);
   if (elsewhere && elsewhere.ownIsWorktree) {
@@ -59,7 +60,7 @@ function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPat
   if (elsewhere) {
     // The session sits in the main checkout and aimed at another session's
     // linked worktree on main: neither is the place to work.
-    const lines = branchFix({ branch, remote, mainCheckout: true, subagent });
+    const lines = branchFix({ branch, remote, mainCheckout: true, subagent, ownWorktree });
     lines[0] = `Why: this path is in another session's worktree (${slash(elsewhere.targetRoot)}, on ${branch}) — not yours: do not edit it or switch its branch.${subagent ? '' : ' This session sits in the shared main checkout, so it needs a worktree of its own.'}`;
     return lines;
   }
@@ -80,14 +81,26 @@ function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPat
   const retry = rel
     ? `Then retry with the path inside the new worktree (.claude/worktrees/<name>/${rel}) — never the main checkout's path, and hand subagents worktree paths only.`
     : 'Then run the command again inside the new worktree.';
-  return [
+  const lines = [
     `Why a worktree: this is the repo's MAIN checkout, which other sessions may share — switching its branch (git switch / git checkout -b) would move them onto your branch. Leave this checkout on ${branch}.`,
     `Fix: ${enterLine(base)}`,
     retry,
     'EnterWorktree unavailable or refused: do not fall back to switching this checkout or to editing through absolute paths — ask the user (AskUserQuestion) how to continue.',
-    'This session already changed files in the main checkout? Do not move, stash or restore them on your own (other changes there may belong to another session) — ask the user.',
   ];
+  if (ownWorktree) {
+    // The question "where do I continue?" was settled once for the project
+    // (post.worktree.enter). Without saying so HERE — the SessionStart text
+    // is long gone by the first blocked write — a session that already
+    // created files (a concept page written via node, a running bridge)
+    // asked the user again.
+    lines.push(OWN_WORKTREE_LINE);
+  } else {
+    lines.push('This session already changed files in the main checkout? Do not move, stash or restore them on your own (other changes there may belong to another session) — ask the user.');
+  }
+  return lines;
 }
+
+const OWN_WORKTREE_LINE = "This project's handling is decided (devops-config workspace.ownWorktree): do NOT ask the user where to continue — move now. Files THIS session created in the main checkout (e.g. a concept page and its source folder written by concept-build.js) move into the worktree: copy them over, remove the originals, and restart a running concept bridge from the worktree path. Changes you did not make stay exactly as they are.";
 
 /**
  * The bypass line. The hooks read DEVOPS_ALLOW_MAIN from THEIR OWN
@@ -99,4 +112,9 @@ function branchFix({ branch = 'main', remote = true, mainCheckout = true, relPat
  */
 const BYPASS = 'Bypass: only the user enables it, as env DEVOPS_ALLOW_MAIN=1 in the project\'s .claude/settings.local.json (e.g. a repo that is deliberately worked on main). Never set it yourself and never write the file another way (Bash, node, a script) to get around this block.';
 
-module.exports = { branchFix, enterLine, RULE_CLAUSE, BYPASS };
+/** devops-config workspace.ownWorktree for the project at `root`; false when undecided or unreadable. */
+function ownWorktreeDecided(root) {
+  try { return require('./devops-config').load(root).values.workspace.ownWorktree === true; } catch { return false; }
+}
+
+module.exports = { branchFix, enterLine, ownWorktreeDecided, RULE_CLAUSE, BYPASS, OWN_WORKTREE_LINE };

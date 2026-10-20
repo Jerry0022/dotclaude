@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.281.2] — 2026-10-20
+
+A concept session started in the main checkout asked the user where to continue, although the project had decided once (`workspace.ownWorktree`): never ask, always an own worktree. The page and its bridge were written through node, which the Edit/Write branch guard never sees, and the guard's later block text still said "ask the user".
+
+### Fixed
+- **Branch guards honour `workspace.ownWorktree`.** `pre.edit.branch` and `pre.main.guard` read the project decision; the block message then says do NOT ask, move now, and relocate this session's own files (a concept page and its bridge) into the worktree.
+- **auto-concept enters its own worktree first** (Step 2) when the session sits in a repo's main checkout.
+- **`concept-build.js init` refuses a repo's main checkout on main/master** (exit 3). `DEVOPS_ALLOW_MAIN=1` or `--allow-main` for repos worked on main; `build`/`bake`/`check` stay open for existing pages.
+- **`ship_release` never stages plugin runtime state.** v0.281.1 committed `.claude/.ship-cli-last.json`, written by the offline ship CLI during the ship itself; untracked files that match the managed ignore list are skipped (`skippedRuntimeState`) and the file is untracked again.
+
 ## [0.281.1] — 2026-10-20
 
 A sent concept round could be reset without an answer: the session baked the submission, called `/reset` and moved on without building the next round or reloading the page. Five minutes later the page's safety net put the already-sent round back up as editable, and the user had to send it again.

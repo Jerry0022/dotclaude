@@ -2,7 +2,22 @@ import { describe, test, expect } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { allEntries, renderBlock, applyBlock, BLOCK_START, BLOCK_END, PLUGIN_STATE } = require("./runtime-ignores.js");
+const { allEntries, renderBlock, applyBlock, BLOCK_START, BLOCK_END, PLUGIN_STATE, isRuntimeState } = require("./runtime-ignores.js");
+
+describe("isRuntimeState — runtime files ship_release must never stage", () => {
+  test.each([
+    [".claude/.ship-cli-last.json", true],
+    ["sub/.claude/.ship-cli-last.json", true],
+    [".claude/runs/x.json", true],
+    [".claude/.ship-carddata-abc.json", true],
+    [".claude\\.ship-checkpoint.json", true],
+    [".claude/skills/do-ship/reference.md", false],
+    ["src/.ship-cli-last.json", false],
+    ["README.md", false],
+  ])("%s → %s", (file, want) => {
+    expect(isRuntimeState(file)).toBe(want);
+  });
+});
 
 const count = (text, marker) => text.split("\n").filter((l) => l.startsWith(marker)).length;
 
