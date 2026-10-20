@@ -35,14 +35,14 @@
 // A lib that fails to load (half-written during a plugin update, version skew)
 // makes this hook a silent no-op instead of a hook error on every Bash call
 // (AUD-028).
-let gitOut, sentinelActive, isLinkedWorktree, branchFix, BYPASS, gitCommandRe, matchesGitCommand, WORD_END;
+let gitOut, sentinelActive, isLinkedWorktree, branchFix, ownWorktreeDecided, BYPASS, gitCommandRe, matchesGitCommand, WORD_END;
 try {
   require('../lib/plugin-guard');
   ({ gitCommandRe, matchesGitCommand, WORD_END } = require('../lib/ship-guard-match'));
   ({ gitOut } = require('../lib/git-timeout'));
   ({ isActive: sentinelActive } = require('../lib/ship-sentinel'));
   ({ isLinkedWorktree } = require('../lib/project-root'));
-  ({ branchFix, BYPASS } = require('../lib/branch-fix'));
+  ({ branchFix, ownWorktreeDecided, BYPASS } = require('../lib/branch-fix'));
 } catch (err) {
   // Silent to the user and the model (exit 0), but not traceless: the line
   // lands in the hook log, so a persistent load error can be found (AUD-068).
@@ -121,6 +121,7 @@ process.stdin.on('end', () => {
     // Unknown top level → treat as the shared main checkout: the safe remedy.
     mainCheckout: !(top && isLinkedWorktree(top)),
     subagent: Boolean(hook.agent_id),
+    ownWorktree: ownWorktreeDecided(top || cwd),
   });
 
   process.stderr.write(

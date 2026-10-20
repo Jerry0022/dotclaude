@@ -267,6 +267,18 @@ _accepted_submission_ids_set = set()
 # open tab detects a restart as a counter advance and force-reloads once —
 # re-syncing without any client change.
 _reload_counter = int(time.time() * 1000)
+# `_reload_counter` at the moment the CURRENT submission was accepted. POST
+# /reset for an iterate/implement submission is refused (428) until /reload
+# has advanced past it: a reset without a new round flips the page back to
+# the round the user already sent once the page's 5-min safety net fires,
+# and the user has to send the same answers again (seen 2026-10-20: bake +
+# /reset, no build, no /reload). Seeded with the counter, so a submission
+# restored after a restart also needs a fresh /reload.
+_reload_at_submit = _reload_counter
+# Actions whose processing ends in a new round (or the final report) and so
+# in a /reload before /reset. finalize (discard = reset-only) and legacy
+# actions are exempt.
+RELOAD_REQUIRED_ACTIONS = ('iterate', 'implement')
 _lock = threading.Lock()
 
 
@@ -607,6 +619,16 @@ def _is_submitted(raw):
         return bool(isinstance(obj, dict) and obj.get('submitted') is True)
     except (ValueError, TypeError):
         return False
+
+
+def _reset_needs_reload(raw):
+    """True when the live payload is a pending iterate/implement submission."""
+    try:
+        obj = json.loads(raw)
+    except (ValueError, TypeError):
+        return False
+    return bool(isinstance(obj, dict) and obj.get('submitted') is True
+                and obj.get('action') in RELOAD_REQUIRED_ACTIONS)
 
 
 def _submission_id_of(raw):
@@ -1471,7 +1493,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        global _server_ts, _claude_ts, _claude_pulser, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts
+        global _server_ts, _claude_ts, _claude_pulser, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts, _reload_at_submit
         if not self._host_ok():
             self.send_error(403, "forbidden host")
             return
@@ -1572,6 +1594,7 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                         # before Claude's cron had actually noticed it.
                         _picked_up_at = ''
                         _phase = ''
+                        _reload_at_submit = _reload_counter
                         # Only remember an id once it is actually on disk — a
                         # non-durable accept (store unwritable) has nothing on
                         # the journal to derive it from on restart, and the page
@@ -1835,14 +1858,42 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 self._error_response(400, {"ok": False, "reason": "bad_content_length"})
                 return
             expected = None
+            no_round = ''
             if length > 0:
                 try:
                     raw = self.rfile.read(length).decode()
-                    expected = json.loads(raw).get('version') if raw else None
+                    body_obj = json.loads(raw) if raw else {}
+                    expected = body_obj.get('version')
+                    # Explicit, journalled opt-out for a round that truly
+                    # ends without a new page; the reason stays auditable.
+                    nr = body_obj.get('no_round')
+                    no_round = str(nr).strip()[:200] if nr else ''
                 except Exception:
                     expected = None
+                    no_round = ''
             with _lock:
+                if (_reset_needs_reload(_decisions) and not no_round
+                        and _reload_counter <= _reload_at_submit
+                        and (expected is None or expected == _version)):
+                    # NO-NEW-ROUND GATE: resetting now would hand the user
+                    # back the round they already sent. 428, not 409 — a 409
+                    # means "newer submission, re-fetch" and would loop here.
+                    self._error_response(428, {
+                        "ok": False,
+                        "reason": "no_reload_since_submission",
+                        "version": _version,
+                        "hint": "Process the submission first: bake the sent round, write the "
+                                "next round fragment, concept-build.js build, POST /reload - "
+                                "then /reset. Only a round that truly ends without a new page "
+                                "sends {\"version\": N, \"no_round\": \"<reason>\"}.",
+                    })
+                    return
                 if expected is None or expected == _version:
+                    if no_round:
+                        try:
+                            _journal_append({'type': 'no_round', 'version': _version, 'reason': no_round})
+                        except OSError:
+                            pass
                     _decisions = '{"submitted": false, "decisions": [], "comments": []}'
                     _processed_at = _iso_now()
                     # Processing is done — drop the per-submission progress

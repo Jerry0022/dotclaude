@@ -10,6 +10,38 @@ import gate from "../hooks/lib/concept-gate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(__dirname, "concept-build.js");
+
+describe("init refuses a repo's MAIN checkout on main (own worktree first)", () => {
+  const git = (args, cwd) => spawnSync("git", args, { cwd, encoding: "utf8" });
+  const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "cb-main-")));
+  afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  git(["init", "-q", "-b", "main", "."], tmp);
+  git(["-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "c"], tmp);
+  const env = { ...process.env }; delete env.DEVOPS_ALLOW_MAIN;
+  const init = (cwd, dir, extra = [], e = env) => spawnSync(process.execPath, [SCRIPT, "init", dir, "--title", "T", ...extra], { cwd, encoding: "utf8", env: e });
+
+  test("main checkout on main → exit 3, nothing written", () => {
+    const dir = path.join(tmp, "docs", "concepts", "x");
+    const r = init(tmp, dir);
+    expect(r.status).toBe(3);
+    expect(r.stderr).toContain("EnterWorktree");
+    expect(fs.existsSync(path.join(dir, "page.json"))).toBe(false);
+  });
+
+  test("a linked worktree, --allow-main and DEVOPS_ALLOW_MAIN=1 pass", () => {
+    const wt = path.join(tmp, ".claude", "worktrees", "w");
+    git(["worktree", "add", "-q", "-b", "feat/w", wt], tmp);
+    expect(init(wt, path.join(wt, "docs", "c1")).status).toBe(0);
+    expect(init(tmp, path.join(tmp, "docs", "c2"), ["--allow-main"]).status).toBe(0);
+    expect(init(tmp, path.join(tmp, "docs", "c3"), [], { ...env, DEVOPS_ALLOW_MAIN: "1" }).status).toBe(0);
+  });
+
+  test("outside any repo → passes", () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "cb-norepo-"));
+    try { expect(init(out, path.join(out, "c")).status).toBe(0); }
+    finally { fs.rmSync(out, { recursive: true, force: true }); }
+  });
+});
 const GATE_HOOK = path.join(__dirname, "..", "hooks", "post-tool-use", "post.concept.gate.js");
 
 const temps = [];

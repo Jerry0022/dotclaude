@@ -78,6 +78,13 @@ first (`step2-build.md` § Legacy pages).
    it will only restore the panel state when a reload counter advance
    has been observed OR a long stale timeout elapses. See
    `deep-knowledge/templates-submit.md` § Panel State Reset for the polling contract.
+   **428 `no_reload_since_submission`** = no `/reload` since this
+   iterate/implement submission arrived: the round was never delivered. Do
+   steps 1–5 (bake, fragment, `build`, `/reload`), then `/reset` again —
+   every part of the user's note gets an answer in that round, also when
+   another task (cleanup, ship) follows. Never reset a round away without a
+   new page; only a round that truly ends without one sends
+   `{"version": N, "no_round": "<reason>"}` (journalled).
 7. **Immediately re-launch the pickup waker** (Step 5d) — right here, not
    after the rest of the round. `/reset` clears the pending flag and
    `/reload` has already handed the user a fresh panel, so from this moment

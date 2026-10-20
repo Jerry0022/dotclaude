@@ -301,13 +301,20 @@ export async function handler(params) {
         // THROWS (aborting the ship) instead of being swallowed as null while
         // includedUntracked falsely reported it staged. Record only the files
         // actually staged — a throw aborts before includedUntracked is set. (F1)
+        // Plugin runtime state (`.claude/.ship-cli-last.json`, written by the
+        // offline CLI during this very ship) is never repo content — even when
+        // the repo's .gitignore lacks the managed block. v0.281.1 committed it.
+        const { isRuntimeState } = createRequire(import.meta.url)("../../../hooks/lib/runtime-ignores.js");
         const stagedUntracked = [];
+        const skippedRuntime = [];
         for (const file of state.untracked) {
+          if (isRuntimeState(file)) { skippedRuntime.push(file); continue; }
           // `:/${file}` resolves against repo root regardless of cwd.
           gitArgs(["add", "--", `:/${file}`], opts);
           stagedUntracked.push(file);
         }
         result.includedUntracked = stagedUntracked;
+        if (skippedRuntime.length) result.skippedRuntimeState = skippedRuntime;
       }
       execFileSync("git", ["commit", "-m", commitMessage], {
         cwd,

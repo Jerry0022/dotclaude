@@ -295,6 +295,11 @@ AND provides HTTP endpoints for heartbeat and decision exchange.
            again while you were processing. Re-fetch /decisions, process the
            new payload (which supersedes what you just finished), then retry
            the conditional reset with the new `_version`.
+         • If the HTTP code is 428 (`no_reload_since_submission`) → the
+           round was never delivered (no `/reload` since this
+           iterate/implement submission). Bake, write the next round,
+           `build`, `/reload`, then reset again. Only a round that truly ends
+           without a new page sends `{"version": N, "no_round": "<reason>"}`.
          • Re-launch the pickup waker immediately after `/reset`, then report
            the outcome to the user. The visible panel reset happens via the
            `/reload`-triggered `location.reload()` in the browser — the page

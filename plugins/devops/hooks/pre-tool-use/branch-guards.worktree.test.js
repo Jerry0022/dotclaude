@@ -114,6 +114,16 @@ describe("branchFix text", () => {
     expect(local).not.toContain("git fetch");
   });
 
+  test("workspace.ownWorktree: never ask, move — and relocate this session's own files", () => {
+    const t = branchFix({ branch: "main", remote: true, mainCheckout: true, ownWorktree: true }).join("\n");
+    expect(t).toContain("Call the EnterWorktree tool");
+    expect(t).toContain("do NOT ask the user where to continue");
+    expect(t).toContain("restart a running concept bridge");
+    expect(t).not.toContain("Do not move, stash or restore them on your own");
+    // undecided keeps the hands-off line
+    expect(branchFix({ mainCheckout: true }).join("\n")).toContain("Do not move, stash or restore them on your own");
+  });
+
   test("a subagent is told to report, not to create a worktree", () => {
     const t = branchFix({ mainCheckout: true, subagent: true }).join("\n");
     expect(t).toContain("do NOT create a worktree");
@@ -129,6 +139,19 @@ describe("pre.edit.branch", () => {
     expect(r.stderr).toContain("EnterWorktree");
     expect(r.stderr).toContain(".claude/worktrees/<name>/a.txt");
     expect(r.stderr).not.toMatch(/Fix: git (fetch origin && git )?switch -c/);
+  }), TIMEOUT);
+
+  test("workspace.ownWorktree in the project's devops-config reaches the block message (both guards)", () => rootOnMain(() => {
+    const cfg = join(mainDir, ".claude", "devops-config.json");
+    writeFileSync(cfg, JSON.stringify({ workspace: { ownWorktree: true } }));
+    try {
+      const r = edit(mainDir, join(mainDir, "a.txt"));
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("do NOT ask the user where to continue");
+      const c = commit(mainDir);
+      expect(c.status).toBe(2);
+      expect(c.stderr).toContain("do NOT ask the user where to continue");
+    } finally { rmSync(cfg, { force: true }); }
   }), TIMEOUT);
 
   test("a root file whose name starts with '..' is inside the repo, not outside it", () => rootOnMain(() => {
