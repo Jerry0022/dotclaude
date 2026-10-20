@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { gitArgs, gitTry, currentBranch, headShort, dirtyState, isWorktree, isRebasedOnto, fileOverlap, syncLocalBranch, treeOf, detectDefaultBranch, NETWORK_TIMEOUT } from "../lib/git.js";
 import { createPR, mergePR, findExistingPR, watchPRChecks, deleteRemoteBranch } from "../lib/github.js";
 import { classifyFailedChecks } from "../lib/ci-account-limits.js";
+import { repoKey, readRecord, recordBlock, setDecision, revokeDecision, clearRecord, describeRecord, DECISIONS, MINUTES_KIND } from "../lib/ci-quota.js";
 import { detectRepoMode, probeTimeoutError } from "../lib/repo-mode.js";
 import { remoteTagExists } from "../lib/remote-tags.js";
 import { retryUntil } from "../lib/retry.js";
@@ -35,6 +36,7 @@ export const schema = z.object({
   commitMessage: z.string().nullable().default(null).describe("If set, stage all and commit with this message before pushing"),
   mergeStrategy: z.enum(["squash", "merge", "rebase"]).default("squash").describe("PR merge strategy. Use 'merge' for overlapping files to preserve ancestry chain."),
   skipChecks: z.boolean().default(false).describe("Skip the pre-merge CI checks gate. Use only for hot-fixes when CI is broken. Env DEVOPS_SHIP_SKIP_CHECKS=1 also forces skip."),
+  quotaDecision: z.enum(["skip-checks", "wait", "revoke"]).optional().describe("The USER's explicit answer to a recorded CI-quota block (#752: Actions minutes / spending limit exhausted, detected by ci-account-limits as kind actions-minutes). skip-checks = merge without checks while the quota is out, wait = do not merge until it resets, revoke = forget the stored answer. Stored machine-wide per owner/repo and applied to every later ship without re-asking until the monthly reset or until a check runs again. Pass it ONLY after the user answered, never on your own judgement. Never applied to a real red check."),
   checksTimeoutSec: z.number().int().min(30).max(3600).default(600).describe("Max seconds to wait for PR CI checks before merging. Default 10 min."),
   tagVerifyAttempts: z.number().int().min(1).max(20).default(4).describe("How often to re-query the remote before declaring the pushed channel tag unverified"),
   tagRetryDelayMs: z.number().int().min(0).max(60_000).default(1_000).describe("Base delay for the tag-verify backoff (exponential, ×3 per attempt)"),
@@ -409,12 +411,69 @@ export async function handler(params) {
     // Bypass via skipChecks param or DEVOPS_SHIP_SKIP_CHECKS=1 env.
     const checksBypassed = skipChecks || process.env.DEVOPS_SHIP_SKIP_CHECKS === "1";
     if (!checksBypassed) {
-      const checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
+      // #752: shared CI-quota memory. A record means some session already saw
+      // the Actions minutes run out — probe briefly instead of waiting 10+ min.
+      const quotaKey = repoKey(cwd);
+      let quota = readRecord(quotaKey);
+      if (params.quotaDecision === "revoke") {
+        revokeDecision(quotaKey);
+        quota = readRecord(quotaKey);
+        result.quotaDecisionRevoked = true;
+      } else if (params.quotaDecision && DECISIONS.includes(params.quotaDecision)) {
+        if (setDecision(quotaKey, params.quotaDecision)) quota = readRecord(quotaKey);
+        else result.quotaDecisionIgnored = "no CI-quota block is recorded for this repo — nothing to decide";
+      }
+      let checkResult = watchPRChecks(pr.number, opts, quota
+        ? { timeoutSec: Math.min(checksTimeoutSec, 60), noChecksGraceMs: 0 }
+        : { timeoutSec: checksTimeoutSec });
+      if (quota && checkResult.status === "timeout") {
+        // Checks are running or queued after all — fall back to the full wait.
+        checkResult = watchPRChecks(pr.number, opts, { timeoutSec: checksTimeoutSec });
+      }
+      // A red check caused by a GitHub account limit (Actions minutes,
+      // artifact storage quota) says nothing about the code. ci-account-limits
+      // (#768) is the single detector; #752 only persists what it reports.
+      const limits = checkResult.status === "failed"
+        ? classifyFailedChecks(checkResult.failed, opts)
+        : { limited: false };
+      const minutesBlock = limits.limited && limits.kinds.includes(MINUTES_KIND);
+      let quotaNote = null;
+      if (minutesBlock) {
+        quota = recordBlock(quotaKey);
+        const decision = quota?.decision?.value || null;
+        const blockMsg = `GitHub Actions minutes exhausted (account limit on ${limits.checks.map((c) => c.name).join(", ")})` +
+          (quota ? ` — recorded for ${quota.key}, resets ${quota.resetAt}` : "");
+        quotaNote = { quota: describeRecord(quota), reason: blockMsg };
+        if (decision === "skip-checks") {
+          // Only an all-limit verdict reaches this branch — a real red check
+          // has a non-limit annotation and never sets `limited`.
+          quotaNote.status = "skipped";
+          quotaNote.storedDecisionApplied = true;
+          quotaNote.reason = `Stored decision applied (skip checks): merging without CI — ${blockMsg}`;
+          checkResult = { status: "passed", checks: [] };
+          result.checksSkippedByQuota = true;
+        } else if (decision === "wait") {
+          result.checks = { status: "quota-blocked", passed: 0, failed: checkResult.failed?.length || 0, pending: 0, ...quotaNote };
+          result.success = false;
+          result.checksBlocked = true;
+          result.quotaBlocked = true;
+          result.ciAccountLimited = { kinds: limits.kinds, checks: limits.checks };
+          result.failedChecks = (checkResult.failed || []).map((c) => ({ name: c.name || c.workflow, link: c.link }));
+          result.error = `CI quota exhausted — the stored decision is to wait for the reset (${quota.resetAt}). PR #${pr.number} not merged; pass quotaDecision:"revoke" to choose again.`;
+          return result;
+        }
+        // No stored decision → the #768 path below (account-limited, local gate).
+      } else if (quota && (checkResult.status === "passed" || checkResult.status === "failed")) {
+        // A check ran for real again (not a minutes block) — the block is over.
+        clearRecord(quotaKey);
+        quotaNote = { quotaCleared: true };
+      }
       result.checks = {
-        status: checkResult.status,
+        status: quotaNote?.status || checkResult.status,
         passed: checkResult.checks?.filter((c) => c.bucket === "pass").length || 0,
         failed: checkResult.failed?.length || 0,
         pending: checkResult.pending?.length || 0,
+        ...quotaNote,
       };
       // #508: watchPRChecks only reaches "no-checks" after riding out its grace
       // window when the initial probe found nothing — `noChecksReason` says so
@@ -427,20 +486,14 @@ export async function handler(params) {
           name: c.name || c.workflow,
           link: c.link,
         }));
-        // A red check caused by a GitHub account limit (Actions minutes,
-        // artifact storage quota) says nothing about the code — the skill
-        // falls back to the local quality gate instead of retrying into the
-        // same limit.
-        const limits = checkResult.status === "failed"
-          ? classifyFailedChecks(checkResult.failed, opts)
-          : { limited: false };
         if (limits.limited) {
           result.checks.status = "account-limited";
           result.ciAccountLimited = { kinds: limits.kinds, checks: limits.checks };
           result.error =
             `CI could not give a verdict — GitHub account limit (${limits.kinds.join(", ")}) on ` +
             `${limits.checks.map((c) => c.name).join(", ")}. PR #${pr.number} not merged. ` +
-            `Run the full local gate (ship_build with tests), then retry with skipChecks:true.`;
+            `Run the full local gate (ship_build with tests), then retry with skipChecks:true.` +
+            (minutesBlock ? ` The block is recorded machine-wide; the user's answer (quotaDecision) is shared across sessions.` : "");
           return result;
         }
         result.error =

@@ -18,6 +18,7 @@ import { scanConflictMarkers, describeMarkers } from "../lib/conflict-markers.js
 import { detectComponents } from "../lib/components.js";
 import { claudeIgnoreCheck, touchesIgnorePolicy } from "../lib/claude-ignore.js";
 import { scanWorkflows } from "../lib/workflow-hygiene.js";
+import { repoKey, readRecord, describeRecord } from "../lib/ci-quota.js";
 
 export const schema = z.object({
   base: z.string().optional().describe("Base branch to ship into. Omit to auto-detect: parent branch (from sub-branch naming) or the repository's default branch (origin/HEAD, typically 'main' or 'master')."),
@@ -461,6 +462,22 @@ export async function handler(params) {
     !c.ok && (c.name === "base-ahead" || c.name === "file-overlap" || c.name === "config-conflictstyle")
   );
 
+  // #752: a CI-quota block recorded by any session on this machine. Informational —
+  // ship_release re-detects it (ci-account-limits) and never applies it to a real red check.
+  let ciQuota = null;
+  if (!noRemote) {
+    const rec = readRecord(repoKey(cwd));
+    if (rec) {
+      ciQuota = describeRecord(rec);
+      const stored = rec.decision
+        ? `stored decision "${rec.decision.value}" (${rec.decision.decidedAt}) is applied without re-asking`
+        : "no decision stored yet — ask the user once and pass it as ship_release quotaDecision";
+      const msg = `GitHub Actions quota exhausted (recorded ${rec.detectedAt}, resets ${rec.resetAt}) — CI checks cannot run; ship_release skips the long checks wait. ${stored}.`;
+      checks.push({ name: "ci-quota", ok: true, ...ciQuota });
+      warnings.push(msg);
+    }
+  }
+
   const ready = errors.length === 0;
 
   // Mark the ship pipeline as in-progress only after all hard gates passed,
@@ -484,6 +501,7 @@ export async function handler(params) {
     outOfBandDeploys,
     components,
     workflowHygiene,
+    ciQuota,
     checks,
     warnings,
     errors,

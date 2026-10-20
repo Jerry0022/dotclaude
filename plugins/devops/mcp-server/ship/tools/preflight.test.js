@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 // zod is a runtime dependency of the MCP server (installed where the server
 // runs) but is not a devDependency of this repo, so the test environment can't
@@ -53,7 +53,16 @@ vi.mock("../lib/conflict-markers.js", async (importOriginal) => ({
   scanConflictMarkers: vi.fn(() => ({ clean: true, scanned: 0, scope: "diff+worktree", offenders: [], repoOffenders: [], repoScanned: 0, repoTruncated: false })),
 }));
 
+vi.mock("../lib/ci-quota.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  repoKey: vi.fn(() => null),
+}));
+
 import { handler } from "./preflight.js";
+import * as quotaLib from "../lib/ci-quota.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { isWorktree, fileOverlap, dirtyState, gitTry } from "../lib/git.js";
 import { dirtySessionWorktrees } from "../lib/worktree.js";
 import { scanConflictMarkers } from "../lib/conflict-markers.js";
@@ -322,5 +331,36 @@ describe("ship_preflight — canonical .claude ignore block", () => {
     dirtyState.mockReturnValue({ dirty: true, untracked: [".claude/batch.md"], modified: [], lines: ["?? .claude/batch.md"] });
     const result = await handler({ cwd: CWD });
     expect(checkByName(result, "claude-ignore")).toBeDefined();
+  });
+});
+
+describe("ship_preflight — #752 recorded CI-quota block", () => {
+  let dir;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "pf-quota-"));
+    process.env.DEVOPS_CI_QUOTA_FILE = join(dir, "q.json");
+  });
+  afterEach(() => {
+    delete process.env.DEVOPS_CI_QUOTA_FILE;
+    quotaLib.repoKey.mockReturnValue(null);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("no record: no ci-quota check, ciQuota null", async () => {
+    quotaLib.repoKey.mockReturnValue("o/r");
+    const result = await handler({ cwd: CWD });
+    expect(checkByName(result, "ci-quota")).toBeUndefined();
+    expect(result.ciQuota).toBeNull();
+  });
+
+  test("active record is reported with the stored decision, still ready", async () => {
+    quotaLib.repoKey.mockReturnValue("o/r");
+    quotaLib.recordBlock("o/r");
+    quotaLib.setDecision("o/r", "skip-checks");
+    const result = await handler({ cwd: CWD });
+    expect(result.ciQuota.decision).toBe("skip-checks");
+    expect(checkByName(result, "ci-quota").ok).toBe(true);
+    expect(result.warnings.some((w) => /quota exhausted/.test(w) && /skip-checks/.test(w))).toBe(true);
+    expect(result.ready).toBe(true);
   });
 });
