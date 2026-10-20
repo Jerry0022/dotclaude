@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.279.2] — 2026-10-20
+
+A full audit of the plugin found these bugs. Each finding was verified in the code before it was fixed, and each fix was reviewed again before shipping.
+
+### Security
+- **auto-issue no longer runs a fetched issue body through a heredoc.** When an issue is refined (R2), the body is written to a file and sent with `--body-file`. Before, an issue body containing a line `EOF` could end the heredoc early and run shell commands.
+- **The issue cache refuses a planted directory.** On POSIX, the issue-match cache is skipped when its per-user directory is a symlink, is owned by someone else or is writable by others.
+- **The concept bridge checks the Host header on every method.** HEAD and OPTIONS now get the same guard as GET and POST, and POST checks the origin. Dot-paths under the static fallback return 404.
+- **Resume prompts are safe through a `claude.cmd` shim.** The prompt that `autonomous-watchdog` starts Claude with no longer carries cmd.exe metacharacters.
+- **Hook notifications run without a shell.** `notify-send` and `osascript` get an argv, and the plugin version is validated before a cache rebuild.
+- **The read-only API agent guards more secret files.** It now also blocks `id_*`, `.pypirc`, `.git-credentials` and `*.tfvars`. A colon in a path is refused only on Windows.
+
+### Fixed
+- **Run contract.**
+  - An offline ship-CLI release counts toward the do-ship gate.
+  - An expired run is never archived without the lock.
+  - An expired run ends at its idle expiry, so its appended task stays retired.
+  - Only a router-shaped "Ablauf?" question counts as a do-run answer.
+  - An empty or unreadable Q4 answer keeps rethink and burn from the args.
+  - Concept passes apply only in audit mode.
+- **Hooks.**
+  - The governor and git-sync skip prompts that a batch collects.
+  - Only one session can take the git-sync slot.
+  - The split-guard warning is shown in the chat.
+  - The `..` file prefix is handled.
+- **Issues MCP.**
+  - `match_issues` uses the project cwd and stricter matching.
+  - The per-cwd caches are normalised and capped at 16.
+  - The auto-issue label check covers every label.
+- **Concept bridge.**
+  - `pickFreePort` skips bound ports.
+  - The tick re-checks a transient miss twice before it shuts down, but a port mismatch shuts down at once.
+- **local-llm and evals.**
+  - A failed probe is not cached.
+  - The tier gate respects the current model.
+  - The mergeSorted benchmark checks the function body.
+  - The hook threshold is 60 lines.
+  - `ab-run.js` cleans up after a failed scaffold, validates `--timeout-min` and really stops on Ctrl-C.
+- **Scripts.**
+  - Taking over a stale lock now checks the holder's identity, also on filesystems without inode numbers.
+  - The `shutdown.exe` and `schtasks` calls have timeouts.
+- **Guide and batch.**
+  - The note travels via stdin, with the heredoc terminator at column 0.
+  - The guide marker lives at the project root.
+  - A stale `lastStep` is handled.
+  - An unknown git status is refused.
+  - Stored env values are quoted so that plain dotenv reads them back unchanged.
+
 ## [0.279.1] — 2026-10-20
 
 ### Changed
