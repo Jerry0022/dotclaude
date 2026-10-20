@@ -337,7 +337,7 @@ execution context (the user will not be there to re-enter it):
 CronCreate({
   cron: "<M> <H> <D> <Mo> *",
   recurring: false,
-  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, taskFile=.claude/run-task.md, mode=<EXEC_MODE>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=harden,polish, strict=<on|off>, branch=<current-branch>."
+  prompt: "AUTONOMOUS_AUTOSTART: 3-minute confirmation timeout reached. Resume do-run autonomous mode Step 5 with: task=<goal>, taskFile=.claude/run-task.md, mode=<EXEC_MODE>, kind=<prompt|audit|backlog>, desktop=<yes|no>, shutdown=<yes|no>, autoResume=<yes|no>, ship=<auto|manual>, passes=harden,polish, strict=<on|off>, branch=<current-branch>."
 })
 ```
 

@@ -301,7 +301,8 @@ describe("pending-arm fallback (spec B)", () => {
       { header: "Was?", question: "Was soll dieser Run tun?", options: [{ label: "Prompt umsetzen" }] },
       { header: "Ablauf?", question: "Bleibst du erreichbar?", options: [] },
       { header: "Umfang?", question: "Wie weit darf die Änderung greifen?", options: [] },
-      { header: "Durchgänge?", question: "Welche Durchgänge?", options: [] },
+      // A pre-change Q4 that still lists the passes: "keine" there means none.
+      { header: "Durchgänge?", question: "Welche Durchgänge?", options: [{ label: "Harden danach" }, { label: "Polish danach" }] },
     ];
     const line = JSON.stringify({ type: "user", timestamp: new Date().toISOString(), toolUseResult: { questions: q, answers: {
       "Was soll dieser Run tun?": "Prompt umsetzen", "Bleibst du erreichbar?": "Autonom · Ship automatisch",
@@ -480,7 +481,10 @@ describe("harden pass (H-*)", () => {
 
   test("H-C2c: a partial router line with no full one before it still arms from the partial alone", () => {
     const now = Date.now();
-    const t = transcript(line(now - 1000, ROUTER({ only: ["Umfang?", "Durchgänge?"] }),
+    // A pre-change Q4 that still lists the passes: "keine" there means none.
+    const partialQ = ROUTER({ only: ["Umfang?"] }).concat([{ header: "Durchgänge?", question: "Welche Durchgänge?",
+      options: [{ label: "Harden danach" }, { label: "Polish danach" }] }]);
+    const t = transcript(line(now - 1000, partialQ,
       { "Wie weit darf die Änderung greifen?": "Strikt", "Welche Durchgänge?": "keine" }));
     expect(C.routerFromTranscript(t, new Date(now - 10_000).toISOString(), RC).earlier).toEqual([]);
     RC.markPendingArm(dir, { args: "" });

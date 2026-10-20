@@ -29,6 +29,17 @@ afterEach(() => { try { fs.rmSync(cwd, { recursive: true, force: true }); } catc
 const T0 = Date.parse("2026-09-25T09:00:00Z");
 const lockFile = (c) => `${store.contractPath(c)}.lock`;
 
+describe("archiveIfExpired without the header lock", () => {
+  test("leaves an expired header in place when the lock is held (no unlocked archive)", () => {
+    store.arm(cwd, { mode: "prompt" }, { now: T0 });
+    fs.writeFileSync(lockFile(cwd), "other-pid");
+    store.update(cwd, { mode: "audit" }, { now: T0 + 40 * 3600 * 1000, lockWaitMs: 0 });
+    expect(fs.existsSync(store.prevPath(cwd))).toBe(false);
+    expect(fs.existsSync(store.contractPath(cwd))).toBe(true);
+    fs.unlinkSync(lockFile(cwd));
+  });
+});
+
 describe("AUD-017: update() vs close() mutual exclusion", () => {
   test("close() is never overwritten by an update() that could not get the lock in time", () => {
     store.arm(cwd, { mode: "prompt" }, { now: T0 });

@@ -67,6 +67,7 @@ function parseArgs(argv) {
   if (!opts.b) opts.b = path.join(EVALS_DIR, "..");
   if (opts.a && opts.aRef) throw new Error("use either --a or --a-ref, not both");
   if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Error("--runs must be a positive integer");
+  if (!Number.isFinite(opts.timeoutMin) || opts.timeoutMin <= 0) throw new Error("--timeout-min must be a positive number");
   if (!opts.summarize && !opts.cases.length) throw new Error("--case is required");
   return opts;
 }
@@ -129,7 +130,10 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
   });
   if (caseDef.scaffold) {
     const s = spawnSync(bash, [caseDef.scaffold], { cwd: workdir, encoding: "utf8", stdio: "pipe" });
-    if (s.status !== 0) throw new Error(`scaffold failed for ${caseDef.id}: ${s.stderr || s.error}`);
+    if (s.status !== 0) {
+      try { fs.rmSync(workdir, { recursive: true, force: true }); } catch { /* best effort */ }
+      throw new Error(`scaffold failed for ${caseDef.id}: ${s.stderr || s.error}`);
+    }
   }
   const pathPrepend = (caseDef.pathPrepend || []).map((d) => path.resolve(workdir, d));
   const started = Date.now();
@@ -161,6 +165,20 @@ function runOne({ caseDef, variant, run, opts, bin, bash, graders, runDir }) {
     catch (err) { console.error(`[ab-run]   could not remove ${workdir}: ${err.code || err.message}`); }
   }
   return result;
+}
+
+// Windows STATUS_CONTROL_C_EXIT (0xC000013A), unsigned and signed.
+const CTRL_C_EXIT_CODES = new Set([130, 0xC000013A, 0xC000013A - 0x100000000]);
+
+/**
+ * True when a run's child was ended by Ctrl-C / SIGINT (or a SIGTERM aimed at
+ * the group). A --timeout-min kill is also SIGTERM (spawnSync's default
+ * killSignal) but is a normal, recorded outcome, not an abort.
+ */
+function wasInterrupted(r) {
+  if (!r || r.timedOut) return false;
+  if (r.signal === "SIGINT" || r.signal === "SIGTERM") return true;
+  return r.exitCode !== null && r.exitCode !== undefined && CTRL_C_EXIT_CODES.has(r.exitCode);
 }
 
 function readResults(dir) {
@@ -217,9 +235,17 @@ function main(argv) {
 
   const runDir = path.join(opts.out, `ab-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const results = [];
+  // The run loop is synchronous (spawnSync), so a SIGINT listener only fires
+  // once the loop is over. Ctrl-C reaches the child (same console/process
+  // group) and ends it; wasInterrupted(r) turns that into an abort so the
+  // remaining runs are not launched and `finally` removes the worktree. The
+  // listener still covers a signal that lands outside a child run.
+  const onSigint = () => { for (const fn of cleanups) { try { fn(); } catch { /* best effort */ } } process.exit(130); };
+  process.once("SIGINT", onSigint);
+  let interrupted = false;
   try {
     fs.mkdirSync(runDir, { recursive: true });
-    for (const c of cases) {
+    outer: for (const c of cases) {
       const graders = loadGraders(c);
       for (let run = 1; run <= opts.runs; run++) {
         for (const v of variants) {
@@ -227,16 +253,22 @@ function main(argv) {
           const r = runOne({ caseDef: c, variant: v, run, opts, bin, bash, graders, runDir });
           console.error(`[ab-run]   exit=${r.exitCode}${r.timedOut ? " TIMEOUT" : ""} ${Math.round(r.durationMs / 1000)}s grades=${JSON.stringify(r.grades)}`);
           results.push(r);
+          if (wasInterrupted(r)) { interrupted = true; break outer; }
         }
       }
     }
   } finally {
-    for (const fn of cleanups) fn();
+    process.removeListener("SIGINT", onSigint);
+    for (const fn of cleanups) { try { fn(); } catch (err) { console.error(`[ab-run] cleanup failed: ${err.message}`); } }
   }
   const summary = summarize(results);
   fs.writeFileSync(path.join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
   console.log(formatSummary(summary));
   console.log(`\nresults: ${runDir}`);
+  if (interrupted) {
+    console.error("[ab-run] interrupted (Ctrl-C) - remaining runs skipped, partial results above");
+    return 130;
+  }
   return results.some((r) => r.exitCode !== 0) ? 1 : 0;
 }
 
@@ -249,4 +281,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, childEnv, resolveApiCredit, gradeOrUndecided, main };
+module.exports = { parseArgs, childEnv, resolveApiCredit, gradeOrUndecided, wasInterrupted, main };

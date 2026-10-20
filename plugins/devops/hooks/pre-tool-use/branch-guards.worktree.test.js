@@ -131,6 +131,12 @@ describe("pre.edit.branch", () => {
     expect(r.stderr).not.toMatch(/Fix: git (fetch origin && git )?switch -c/);
   }), TIMEOUT);
 
+  test("a root file whose name starts with '..' is inside the repo, not outside it", () => rootOnMain(() => {
+    const r = edit(mainDir, join(mainDir, "..env.local"));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("EnterWorktree");
+  }), TIMEOUT);
+
   test("a new file (Write) in the main checkout is blocked too", () => rootOnMain(() => {
     const r = run(EDIT, { tool_name: "Write", cwd: mainDir, tool_input: { file_path: join(mainDir, "new", "deep", "n.txt") } });
     expect(r.status).toBe(2);
@@ -200,6 +206,27 @@ describe("pre.edit.branch", () => {
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("do NOT create a worktree");
   }), TIMEOUT);
+});
+
+describe("pre.worktree.split-guard", () => {
+  const SPLIT = join(HERE, "pre.worktree.split-guard.js");
+  const split = (cwd) => spawnSync(process.execPath, [SPLIT], {
+    input: JSON.stringify({ tool_name: "Bash", cwd, tool_input: { command: "git commit -m x" } }),
+    encoding: "utf8", timeout: 30_000,
+  });
+
+  test("the warning reaches the model as additionalContext (stderr of an exit-0 hook is invisible)", () => {
+    const r = split(mainDir);
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+    expect(out.hookSpecificOutput.additionalContext).toContain("split-guard");
+    expect(out.hookSpecificOutput.additionalContext).toContain("worktrees/feat");
+  }, TIMEOUT);
+
+  test("inside the linked worktree it stays silent", () => {
+    expect(split(featDir).stdout).toBe("");
+  }, TIMEOUT);
 });
 
 describe("pre.main.guard", () => {

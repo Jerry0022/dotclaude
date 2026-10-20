@@ -53,9 +53,10 @@ typed on the site). `setStep`, `wait`, and `destroy` all refuse a call without a
 token (`"bad-token"` / `{"type":"bad-token"}`), so a page script can neither
 push a step, supersede Claude's `wait()` to read the user's event, nor wipe
 queued answers via `destroy()`. Every event Claude receives echoes the token
-as `token`. The token is never written to storage. Without a marker the
-payloads carry no token and the overlay runs unauthenticated (a warning is
-printed).
+as `token`. The token is never written to storage. Without a marker
+`payload inject` refuses (exit 1, unless `--allow-untokened` for tests), and
+`payload step` / `payload wait` silently carry no token — run `W guide active`
+first.
 
 **What the token does and does not protect (Finding 7).** The token stops a
 page script from *colliding with or later tampering with* Claude's channel:
@@ -298,7 +299,7 @@ project's `.env` without being pasted into chat. Rules:
    (`store` also accepts the raw value on stdin for scripted use.)
    `store` refuses a `--file` outside the current working directory, a
    symlink target, a git-tracked file, and values containing control
-   characters; it forces mode 0600 on the written file.
+   characters; it creates the file with mode 0600 and forces it on an existing one (POSIX only; Windows has no such modes).
 3. The value still transits the `javascript_tool` result and therefore the
    local session transcript. That is the accepted trade-off for v1 — say so
    in the step text ("wird lokal in `.env` gespeichert") so the user can

@@ -406,3 +406,40 @@ describe.skipIf(!PY)("concept-server watcher id echo — duplicate pulsers / wak
     }
   });
 });
+
+describe.skipIf(!PY)("concept-server hardening — origin on every POST, Host check, static fallback", () => {
+  test("cross-site POSTs are 403 on /reset /status /progress /heartbeat; wrong Host is 403; dot paths and listings are 404", async () => {
+    const proc = startServer();
+    try {
+      await waitReady();
+      const url = (p) => `http://127.0.0.1:${PORT}${p}`;
+      for (const p of ["/reset", "/status", "/progress", "/heartbeat"]) {
+        const evil = await fetch(url(p), { method: "POST", headers: { "Content-Type": "text/plain", Origin: "http://evil.example" }, body: "{}" });
+        expect(evil.status, p).toBe(403);
+      }
+      const ok = await fetch(url("/heartbeat"), { method: "POST" });          // no Origin (curl/node) still passes
+      expect(ok.status).toBe(200);
+
+      // Host header cannot be set through fetch — use a raw http request (DNS rebinding shape).
+      const http = await import("node:http");
+      const rawStatus = (reqPath, host, method = "GET") => new Promise((resolve, reject) => {
+        const req = http.request({ host: "127.0.0.1", port: PORT, path: reqPath, method, headers: { Host: host } },
+          (res) => { res.resume(); resolve(res.statusCode); });
+        req.on("error", reject); req.end();
+      });
+      expect(await rawStatus("/heartbeat", `evil.example:${PORT}`)).toBe(403);
+      expect(await rawStatus("/heartbeat", `localhost:${PORT}`)).toBe(200);
+      // HEAD and OPTIONS carry the same guard — HEAD would otherwise leak file existence/size.
+      expect(await rawStatus("/package.json", `evil.example:${PORT}`, "HEAD")).toBe(403);
+      expect(await rawStatus("/package.json", `localhost:${PORT}`, "HEAD")).toBe(200);
+      expect(await rawStatus("/decisions", `evil.example:${PORT}`, "OPTIONS")).toBe(403);
+      expect(await rawStatus("/decisions", `localhost:${PORT}`, "OPTIONS")).toBe(204);
+
+      expect((await fetch(url("/.claude/concepts/x/attachments/a.html"))).status).toBe(404);
+      expect((await fetch(url("/.git"))).status).toBe(404);
+      expect((await fetch(url("/plugins/"))).status).toBe(404);               // listing off
+    } finally {
+      await stopServer(proc);
+    }
+  });
+});

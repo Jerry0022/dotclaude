@@ -113,8 +113,10 @@ in the chat leaves them staring at a spinner.
   a `store` refusal, an `AskUserQuestion`, a tool that failed twice), send an
   interim step with the current `index` and a new `id`: title „Frage im Chat",
   text „Ich habe dir im Chat eine Frage gestellt – bitte beantworte sie dort.
-  Danach geht es hier weiter." Then ask. After the answer, re-send the step
-  the question was about.
+  Danach geht es hier weiter." Then run `W guide pause` and ask — a plain
+  chat question ends the turn, and a live guide marker would block that end
+  once and push you back into polling. After the answer, re-send the step
+  the question was about (the next `payload step` clears the pause).
 - A chat message from the user **during** the loop: answer it **in the
   panel** in the same turn — re-issue the current step with the same `id` and
   the answer in its text (the panel shows „Hinweis aktualisiert") — and keep

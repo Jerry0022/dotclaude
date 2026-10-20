@@ -98,8 +98,10 @@ the wrong repo looks successful and leaves the real one untouched.
 - Carry `{target_repo}` through to Step 2 as `--repo`, to Step 3's skip
   condition, and to Step 4's check.
 - Labels, milestones, and board fields of the *current* project may not exist
-  in `{target_repo}`. Verify with `gh label list --repo {target_repo}` before
-  sending any label — **including `type:*`**: `gh issue create` hard-fails on
+  in `{target_repo}`. Verify with `gh label list --repo {target_repo} --limit 1000 --json name --jq '.[].name'`
+  (the default list is capped at 30 labels; no `--search` filter, so
+  `role:*`/`module:*` labels show up too) before
+  sending any label — check **every** label you send, **including `type:*`**: `gh issue create` hard-fails on
   an unknown label. Missing there → create the issue without it and say so,
   rather than losing the issue. Drop milestone/board steps unless the target
   is configured for them.
@@ -121,14 +123,26 @@ the originals.
 ## Step 2 — Create the issue
 
 ```bash
-gh issue create --title "[TYPE] Title" --body "Description" --label "type:X"  # via auto-issue
+gh issue create --title '[TYPE] Title' --body "$(cat <<'EOF'
+Description
+EOF
+)" --label "type:X"  # via auto-issue
 ```
+
+Titles go in single quotes (a literal `'` becomes `'\''`); double quotes would
+run backticks and `$(…)` inside a title. Bodies Claude composes itself use the
+quoted-`'EOF'` heredoc form shown above, never a bare `"Description"` string.
+A body that contains text fetched from GitHub (R2) never goes into a heredoc —
+see R2.
 
 With a `{target_repo}` from Step 1, `--repo` is mandatory — without it `gh`
 files into whatever repo the CWD is:
 
 ```bash
-gh issue create --repo "{target_repo}" --title "[TYPE] Title" --body "Description" --label "type:X"  # via auto-issue
+gh issue create --repo "{target_repo}" --title '[TYPE] Title' --body "$(cat <<'EOF'
+Description
+EOF
+)" --label "type:X"  # via auto-issue
 ```
 
 Every `gh issue create` / `gh issue edit` this skill runs carries the trailing
@@ -141,10 +155,10 @@ fine), and never add it to a command this skill itself did not construct.
 **Never pass the body on stdin via a heredoc** (`--body-file - <<'EOF'`): the
 body lines follow the opener on new lines, so the marker no longer sits on the
 `gh` command's own segment and the guard blocks the write. For a multi-line
-body use a command substitution or a temp file instead:
+body use a command substitution:
 
 ```bash
-gh issue create --title "[TYPE] Title" --body "$(cat <<'EOF'
+gh issue create --title '[TYPE] Title' --body "$(cat <<'EOF'
 Description
 
 **User value:** <direct or indirect effect>
@@ -152,14 +166,12 @@ EOF
 )" --label "type:X"  # via auto-issue
 ```
 
-or write the body to a temp file and pass `--body-file "{tmp}/body.md"`.
-
 The body always includes the `**User value:** <direct or indirect effect>`
 line.
 
 Add optional flags based on project extension:
 - `--label "role:Y,module:Z"` — if project defines these label categories
-- `--milestone "Name"` — if milestones are configured
+- `--milestone 'Name'` — if milestones are configured
 
 ## Step 3 — Add to project board (if configured)
 
@@ -247,11 +259,20 @@ Write it back with the body from R1: replace the text between existing
 markers, else append the section after the original body (one blank line in
 between):
 
+The body contains the **fetched** issue text, which anyone can write on a
+public repo — a line reading `EOF` would end a heredoc early and run the next
+line as shell. So never inline it: write the full body (original text with the
+refinement section replaced/appended) with the **Write tool** to
+`issue-{issue}-body.md` in the session scratchpad directory (absolute path —
+`{body_file}`), then pass the file:
+
 ```bash
-gh issue edit {issue} --body-file "{tmp}/body.md"  # via auto-issue — add --repo "{target_repo}" when set
+gh issue edit {issue} --body-file "{body_file}"  # via auto-issue
 ```
 
-Build `body.md` from the fetched body — never from memory of what the issue
+With a `{target_repo}`, add `--repo "{target_repo}"` before `--body-file`.
+
+Build the body from the fetched body — never from memory of what the issue
 "probably" says — and never touch the text above the markers.
 
 ### R3 — Metadata corrections
@@ -259,10 +280,10 @@ Build `body.md` from the fetched body — never from memory of what the issue
 Apply only what R1 flagged, each as `gh issue edit {issue} <flags>  # via
 auto-issue` (flags may be combined into one call; the marker is never
 omitted):
-- Title not in `[TYPE] …` form, or `[FIX]` → `--title "[TYPE] …"`
+- Title not in `[TYPE] …` form, or `[FIX]` → `--title '[TYPE] …'`
 - No `type:*` label → `--add-label "type:<type>"` (verify the label exists in
   `{target_repo}` first, as in Step 1)
-- Hand-over names a milestone that is not set → `--milestone "<name>"`
+- Hand-over names a milestone that is not set → `--milestone '<name>'`
 - Extension labels (`role:*`, `module:*`) resolved the same way as in Step 2
 
 Then verify like Step 4: re-run `gh issue view`, check exactly one

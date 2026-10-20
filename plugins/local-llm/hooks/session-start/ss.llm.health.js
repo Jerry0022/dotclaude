@@ -94,7 +94,7 @@ function rulesHigh() {
     `     CRUD scaffolds, test files from a clear pattern, debounce/throttle/\n` +
     `     parser-of-known-grammar style helpers)\n` +
     `  2. Complete, unambiguous spec writable (signatures + types + behavior)\n` +
-    `  3. Output > 20 lines (below that, writing directly is faster)\n` +
+    `  3. Output > 60 lines (below that, writing directly is faster)\n` +
     `  4. No cross-file reasoning, debugging, security, or architecture work\n` +
     `  5. Output will be reviewed before use\n` +
     `NEVER delegate complex reasoning, debugging, refactoring, or ambiguous tasks.\n`
@@ -128,7 +128,7 @@ function rulesPending() {
     `For this session, delegate to local_generate ONLY when ALL are true:\n` +
     `  1. Mechanical code generation (boilerplate, DTOs, type defs)\n` +
     `  2. Complete, unambiguous spec writable\n` +
-    `  3. Output > 20 lines\n` +
+    `  3. Output > 60 lines\n` +
     `  4. No cross-file reasoning, debugging, security work\n` +
     `  5. Output will be reviewed before use\n` +
     `Tier-scaled rules will be available on the next SessionStart.\n`

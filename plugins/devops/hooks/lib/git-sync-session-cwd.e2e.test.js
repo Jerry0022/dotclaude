@@ -24,9 +24,9 @@ let root;
 let wt;
 let tmp;
 
-function run(hook) {
+function run(hook, prompt = "weiter") {
   const res = spawnSync(process.execPath, [hook], {
-    input: JSON.stringify({ cwd: wt, session_id: "s1", prompt: "weiter" }),
+    input: JSON.stringify({ cwd: wt, session_id: "s1", prompt }),
     cwd: root,
     env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
     encoding: "utf8",
@@ -81,6 +81,17 @@ describe("prompt.git.sync — reads the result of the session's worktree", () =>
 
     expect(stdout).toContain("ambiguous conflicts");
     expect(stdout).toContain("Resolve them now");
+  });
+
+  test("an open-url prompt (blocked by prompt.flow.open-url) leaves the result for the next real turn", () => {
+    const file = resultFile(wt, tmp);
+    fs.writeFileSync(file, "[git-sync] ✓ origin/main → claude/feature-x: 2 commit(s)\n");
+
+    const { code, stdout } = run(PROMPT, "Open in default browser: http://localhost:5173/x");
+
+    expect(code).toBe(0);
+    expect(stdout).toBe("");
+    expect(fs.existsSync(file)).toBe(true);
   });
 
   test("drops a result left by the worktree's previous branch", () => {

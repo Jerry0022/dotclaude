@@ -188,7 +188,6 @@ OS shell. **Forbidden alternatives** that will produce a broken session:
 
 - ❌ **Never** use `preview_start` / `preview_*` (`mcp__Claude_Browser__*`, formerly `mcp__Claude_Preview__*`) to
   display the page — a sandboxed iframe with no heartbeat or polling.
-  `mcp__Claude_Preview__*` is allowed ONLY for `preview_eval` in Step 5.
 - ❌ **Never** use `mcp__plugin_playwright_playwright__browser_navigate`
   — its own browser instance, invisible to the user.
 - ❌ **Never** print "Concept opened at file:///… open it in your browser"

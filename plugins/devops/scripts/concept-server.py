@@ -1221,6 +1221,9 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         global _picked_up_at, _browser_ts, _claude_waker
+        if not self._host_ok():
+            self.send_error(403, "forbidden host")
+            return
         # Browser polls carry `?tab=<id>` since #397; the bare paths stay valid
         # for older pages and for curl.
         route, _, query = self.path.partition('?')
@@ -1447,6 +1450,14 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         global _server_ts, _claude_ts, _claude_pulser, _decisions, _version, _processed_at, _reload_counter, _picked_up_at, _phase, _browser_bye_ts
+        if not self._host_ok():
+            self.send_error(403, "forbidden host")
+            return
+        # Every POST mutates state — refuse cross-site simple requests up front
+        # (no-Origin callers such as curl/node pass).
+        if not self._same_origin_ok():
+            self.send_error(403, "forbidden origin")
+            return
         post_route, _, post_query = self.path.partition('?')
         if post_route == '/heartbeat':
             # POST /heartbeat is reserved for Claude (curl from cron). Updates
@@ -1847,7 +1858,18 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_HEAD(self):
+        # The inherited do_HEAD runs send_head directly, so without this a
+        # DNS-rebound page could probe which files exist and their sizes.
+        if not self._host_ok():
+            self.send_error(403, "forbidden host")
+            return
+        super().do_HEAD()
+
     def do_OPTIONS(self):
+        if not self._host_ok():
+            self.send_error(403, "forbidden host")
+            return
         self.send_response(204)
         self._cors_headers()
         self.end_headers()
@@ -1933,10 +1955,43 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         host = self.headers.get('Host', '')
         port_part = host.split(':')[-1] if ':' in host else ''
         return origin in {
-            f'http://{host}',
             f'http://localhost:{port_part}',
             f'http://127.0.0.1:{port_part}',
         }
+
+    def _host_ok(self):
+        """DNS-rebinding guard: the Host header must name this loopback bridge.
+
+        The server binds 127.0.0.1 only, so a legitimate request always says
+        `localhost:<port>` or `127.0.0.1:<port>`. A rebound attacker domain
+        arrives with its own hostname — Host and Origin then agree, so the
+        origin check alone cannot catch it. A missing Host (HTTP/1.0) cannot be
+        a browser rebinding attack and passes.
+        """
+        host = self.headers.get('Host')
+        if host is None:
+            return True
+        try:
+            own_port = self.server.server_address[1]
+        except Exception:
+            return True
+        return host in (f'localhost:{own_port}', f'127.0.0.1:{own_port}')
+
+    def send_head(self):
+        """Static fallback: never serve dot-segment paths (e.g. `/.claude/…`,
+        `/.git/…`) — the attachment store lives under `.claude/` and an
+        uploaded `x.html` would otherwise render inline, skipping the
+        download-only rule in `_serve_attachment`. Directory listings are off."""
+        route = self.path.split('?', 1)[0].split('#', 1)[0]
+        segs = urllib.parse.unquote(route).replace('\\', '/').split('/')
+        if any(seg.startswith('.') and seg != '' for seg in segs):
+            self.send_error(404, "not found")
+            return None
+        return super().send_head()
+
+    def list_directory(self, path):
+        self.send_error(404, "not found")
+        return None
 
     def _read_content_length(self):
         """Content-Length parsed defensively.

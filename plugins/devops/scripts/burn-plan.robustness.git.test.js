@@ -439,3 +439,54 @@ describe("AUD-C051 — bounded git calls", () => {
     expect(src).toMatch(/timeout, maxBuffer: GIT_MAX_BUFFER/);
   });
 });
+
+describe("removeStaleLock identity check (audit 2026-10-20)", () => {
+  test("removes the stale file it inspected", () => {
+    const lock = path.join(tmp, "ID1.json.lock");
+    fs.writeFileSync(lock, "999999 old\n");
+    expect(bp.removeStaleLock(lock, fs.statSync(lock))).toBe(true);
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
+  test("a different (live) lock swapped in after the read is restored, not deleted", () => {
+    const lock = path.join(tmp, "ID2.json.lock");
+    fs.writeFileSync(lock, "999999 old\n");
+    const seen = fs.statSync(lock);
+    fs.rmSync(lock);
+    fs.writeFileSync(lock, `${process.pid} a-much-longer-live-holder-record\n`);
+    expect(bp.removeStaleLock(lock, seen)).toBe(false);
+    expect(fs.readFileSync(lock, "utf8")).toContain(String(process.pid));
+  });
+
+  test("without inode numbers a same-size, same-mtime live lock is told apart by content", () => {
+    const lock = path.join(tmp, "ID3.json.lock");
+    fs.writeFileSync(lock, "111111 live-owner-token-A\n");
+    const st = fs.statSync(lock);
+    // FAT / network share: no ino, coarse mtime — stat alone looks identical.
+    const seen = { mtimeMs: st.mtimeMs, size: st.size, ino: 0 };
+    expect(bp.removeStaleLock(lock, seen, "999999 dead-owner-token-B\n")).toBe(false);
+    expect(fs.readFileSync(lock, "utf8")).toBe("111111 live-owner-token-A\n");
+  });
+
+  test("a restore that loses to a newer lock does not delete the moved live lock", () => {
+    const lock = path.join(tmp, "ID4.json.lock");
+    fs.writeFileSync(lock, "999999 old\n");
+    const seen = fs.statSync(lock);
+    fs.rmSync(lock);
+    fs.writeFileSync(lock, `${process.pid} live-B\n`);
+    const realRename = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      realRename(from, to);
+      fs.writeFileSync(lock, `${process.pid} live-C\n`); // C wins 'wx' meanwhile
+    };
+    try {
+      expect(bp.removeStaleLock(lock, seen, "999999 old\n")).toBe(false);
+    } finally {
+      fs.renameSync = realRename;
+    }
+    expect(fs.readFileSync(lock, "utf8")).toContain("live-C");
+    const kept = fs.readdirSync(tmp).filter((n) => n.startsWith("ID4.json.lock.stale-"));
+    expect(kept).toHaveLength(1);
+    expect(fs.readFileSync(path.join(tmp, kept[0]), "utf8")).toContain("live-B");
+  });
+});

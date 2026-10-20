@@ -775,11 +775,21 @@ function expiryNotice(cwd, opts = {}) {
 /** Archive an expired header sitting on disk (the "next write" of spec A). */
 function archiveIfExpired(cwd, now) {
   const h = readRawContract(cwd);
-  if (h && !h.closedAt && isExpired(h, eventsOf(cwd, h), now)) {
-    archive(cwd, h, now);
+  if (!h || h.closedAt || !isExpired(h, eventsOf(cwd, h), now)) return false;
+  // Re-check under the header lock: an arm() landing since the read above
+  // must not have its fresh header archived (same as expiryNotice, AUD-021).
+  // No lock in time → leave it: archiving unlocked races an in-flight arm(),
+  // and the next write retries.
+  const token = acquireLock(cwd, { lockWaitMs: 200 });
+  if (!token) return false;
+  try {
+    const cur = readRawContract(cwd);
+    if (!cur || cur.id !== h.id || cur.closedAt) return false;
+    archive(cwd, cur, now);
     return true;
+  } finally {
+    if (token) releaseLock(cwd, token);
   }
-  return false;
 }
 
 function newId(now) {
@@ -1084,7 +1094,7 @@ module.exports = {
   readContract, readContractForCard, readRawContract, expiryNotice, arm, update, claim, record, close, events,
   markPendingArm, pendingArm, clearPendingArm, markBatchHandoff, batchHandoffPending, clearBatchHandoff, carryOver,
   // shared with the sibling modules (not part of the facade's public list)
-  nowOf, eventsOf, readJson, strList, sanitize,
+  nowOf, eventsOf, readJson, strList, sanitize, lastActivity, expiryMs,
   // internal, exposed for this module's own tests only (AUD-017 / AUD-018 / RT1 / RT2)
   compactEvents, EVENTS_COMPACT_LINES, readJsonStrict, corruptPrefix, takeoverStaleLock, quarantineCorrupt,
 };

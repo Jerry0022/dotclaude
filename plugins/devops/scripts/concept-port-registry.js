@@ -178,16 +178,16 @@ function canClaim(port, { myWorktree, isAlive = isProcessAlive, read = readEntry
  * @param {object} opts
  * @param {string}  opts.myWorktree   this session's worktree (cwd)
  * @param {(pid:number)=>boolean} [opts.isAlive]  liveness probe
- * @param {(port:number)=>boolean} [opts.isBound] is the port currently listening?
+ * @param {(port:number)=>boolean|Promise<boolean>} [opts.isBound] is the port currently listening? (default: real TCP probe)
  * @param {(port:number)=>object|null} [opts.read] registry reader
  * @param {()=>number} [opts.rand]    RNG in [0,1)
  * @param {[number,number]} [opts.range] inclusive port range
- * @returns {number|null}
+ * @returns {Promise<number|null>}
  */
-function pickFreePort({
+async function pickFreePort({
   myWorktree,
   isAlive = isProcessAlive,
-  isBound = () => false,
+  isBound = isPortBound,
   read = readEntry,
   rand = Math.random,
   range = [PORT_MIN, PORT_MAX],
@@ -199,7 +199,7 @@ function pickFreePort({
   for (let i = 0; i < span; i++) {
     const port = lo + (((start - lo) + i) % span);
     if (isForeignLiveOwner(read(port), myWorktree, isAlive)) continue;
-    if (isBound(port)) continue;
+    if (await isBound(port)) continue;
     return port;
   }
   return null;
@@ -240,7 +240,7 @@ if (require.main === module) {
       // make every read a directory walk.
       await pruneStale();
       const myWorktree = rest[0] || process.cwd();
-      const port = pickFreePort({ myWorktree });
+      const port = await pickFreePort({ myWorktree });
       if (port == null) {
         process.stderr.write('concept-port-registry: no free port in range 8700-8999\n');
         process.exit(1);

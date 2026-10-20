@@ -38,6 +38,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { projectClaudeDir } = require('../hooks/lib/project-root');
 
 const GUIDE_ACTIVE_REL = path.join('.claude', 'auto-guide-active.json');
 const GUIDE_ACTIVE_TTL_MS = 30 * 60 * 1000;
@@ -56,7 +57,7 @@ function readMarker(cwd) {
 }
 
 function guideActiveFilePath(cwd) {
-  return path.join(cwd || process.cwd(), GUIDE_ACTIVE_REL);
+  return path.join(projectClaudeDir(cwd || process.cwd()), path.basename(GUIDE_ACTIVE_REL));
 }
 
 /**
@@ -158,14 +159,27 @@ function hasValueField(value) {
 function recordGuideStep(cwd, step, now = Date.now()) {
   const prev = readMarker(cwd);
   if (!prev) return null;
-  if (hasValueField(step)) return null;
-  let json;
-  try {
-    json = JSON.stringify(step);
-  } catch {
+  let json = null;
+  if (!hasValueField(step)) {
+    try {
+      json = JSON.stringify(step);
+    } catch {
+      json = null;
+    }
+  }
+  if (typeof json !== 'string' || json.length > MAX_LAST_STEP_JSON_LEN) {
+    // Unrecordable step: drop the stale lastStep so a resumed turn does not
+    // re-send the PREVIOUS step and move the user backwards.
+    if (prev.lastStep === undefined) return null;
+    const keepTok = typeof prev.token === 'string' && TOKEN_RE.test(prev.token);
+    const file = guideActiveFilePath(cwd);
+    writeMarkerFile(file, {
+      ts: now,
+      token: keepTok ? prev.token : crypto.randomBytes(16).toString('hex'),
+      ...(prev.paused ? { paused: true } : {}),
+    });
     return null;
   }
-  if (typeof json !== 'string' || json.length > MAX_LAST_STEP_JSON_LEN) return null;
 
   const file = guideActiveFilePath(cwd);
   const keep = typeof prev.token === 'string' && TOKEN_RE.test(prev.token);

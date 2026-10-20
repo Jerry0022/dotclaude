@@ -539,6 +539,11 @@ const NEEDS_QUOTE_RE = /[\s#"'\\$=]/;
 
 function quoteValue(value) {
   if (!NEEDS_QUOTE_RE.test(value)) return value;
+  // Single quotes are literal in every dotenv loader (no $VAR expansion, no
+  // escapes) - prefer them; only a value holding a ' needs escaped double quotes.
+  // `$` stays unescaped there: plain dotenv (no dotenv-expand) does no $VAR
+  // expansion and does not unescape `\$`, so escaping it would corrupt the value.
+  if (!value.includes("'")) return `'${value}'`;
   const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return `"${escaped}"`;
 }
@@ -716,7 +721,7 @@ function store(argv) {
   // non-ignored file). Refuse instead of warning, but only when there is a
   // repo to gitignore the file in at all — outside any git repo the guard
   // has nothing to check against, so keep writing (unchanged behavior).
-  if (gitStatus === 'untracked' && isInsideGitWorkTree(cwd)) {
+  if ((gitStatus === 'untracked' || gitStatus === 'unknown') && isInsideGitWorkTree(cwd)) {
     process.stderr.write(
       `${rel} is not gitignored — add it to .gitignore first (e.g. \`echo ${rel} >> .gitignore\`), then store again\n`
     );
@@ -732,7 +737,7 @@ function store(argv) {
   }
 
   const next = upsertEnv(existing, key, raw);
-  fs.writeFileSync(absFile, next);
+  fs.writeFileSync(absFile, next, { mode: 0o600 });
   try {
     fs.chmodSync(absFile, 0o600);
   } catch {

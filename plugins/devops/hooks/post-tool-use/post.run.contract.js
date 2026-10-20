@@ -177,7 +177,7 @@ function onSkill({ hook, input, root, sessionId, s, RC, C }) {
 }
 
 /** `commit`, item `branch` and an offline `--render-card` card (H-A2: the facts pre gated on). */
-function onShell({ hook, cwd, root, s, RC, C }) {
+function onShell({ hook, cwd, root, roots, sessionId, s, RC, C }) {
   const f = C.shellCallFacts(hook, root, cwd, { after: true });
   // RT3-X1: a non-zero exit fires PostToolUseFailure, not this hook; an
   // interrupt or a (legacy) non-zero exit code in tool_response still skips.
@@ -187,6 +187,35 @@ function onShell({ hook, cwd, root, s, RC, C }) {
   if (f.commit && !failed) RC.record(root, { k: 'commit' }, s);
   if (f.itemBranch && !failed) RC.record(root, { k: 'branch', name: f.branchName }, s);
   if (f.card) recordCard(root, f.card.variant, f.card.final, RC, s, { unreadable: f.card.readable === false, pending: f.card.pending, concept: f.card.concept });
+  // Offline ship CLI (`node …/ship/cli.js ship_release p.json`): the same
+  // merge as the MCP tool, so it records the same `release` — ok/merged from
+  // the CLI's JSON result. An interrupted call or an unreadable result records
+  // nothing; a blocked one records ok:false (never satisfies the gate).
+  // (A blocked release still exits 0 — cli.js exits 1 only on a throw.) Limit:
+  // stdout redirected to a file leaves no JSON in r.text → nothing recorded.
+  if (f.release && !failed) {
+    const res = C.releaseResult(r.text);
+    if (res) {
+      const r2 = contractRootOf(roots, RC, sessionId);
+      RC.record(r2, { k: 'release', ok: res.ok, merged: res.merged, closes: C.closesOf(cliReleaseBody(hook, cwd, C)) }, s);
+      const h = RC.readContract(r2, s);
+      if (h && backlogFinished(h, RC.events(r2))) RC.close(r2, 'done: every queued item shipped', s);
+    }
+  }
+}
+
+/** Best effort: the `body` of the params file the ship CLI was given (for `Closes #N`). */
+function cliReleaseBody(hook, cwd, C) {
+  try {
+    const cmd = String(C.toolInput(hook).command || '');
+    const m = cmd.match(/ship_release\s+("[^"]+"|'[^']+'|[^\s;&|]+)/);
+    if (!m) return '';
+    const file = m[1].replace(/^["']|["']$/g, '');
+    let text = require('fs').readFileSync(require('path').resolve(cwd, file), 'utf8');
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const p = JSON.parse(text);
+    return p && typeof p.body === 'string' ? p.body : '';
+  } catch { return ''; }
 }
 
 /** `release` in the contract's root (ship_release acts on tool_input.cwd); a finished backlog closes. */

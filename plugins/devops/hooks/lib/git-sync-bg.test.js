@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { fileURLToPath } from "url";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -66,6 +67,20 @@ describe("claimSyncSlot — one sync per worktree per window", () => {
     expect(claimSyncSlot("C:/repo", { tmpdir })).toBe(false);
   });
 
+  test("concurrent claimers (separate processes) get the slot exactly once", async () => {
+    const { spawn } = await import("child_process");
+    const lib = fileURLToPath(new URL("./git-sync-bg.js", import.meta.url));
+    const code = `process.stdout.write(String(require(${JSON.stringify(lib)}).claimSyncSlot("C:/race", { tmpdir: ${JSON.stringify(tmpdir)} })))`;
+    const one = () => new Promise((resolve) => {
+      let out = "";
+      const c = spawn(process.execPath, ["-e", code]);
+      c.stdout.on("data", (d) => { out += d; });
+      c.on("close", () => resolve(out));
+    });
+    const results = await Promise.all(Array.from({ length: 6 }, one));
+    expect(results.filter((r) => r === "true")).toHaveLength(1);
+  });
+
   test("a different worktree has its own slot", () => {
     claimSyncSlot("C:/repo/a", { tmpdir });
     expect(claimSyncSlot("C:/repo/b", { tmpdir })).toBe(true);
@@ -100,6 +115,32 @@ describe("claimSyncSlot — one sync per worktree per window", () => {
   test("peek reports a closed window as closed", () => {
     claimSyncSlot("C:/repo", { tmpdir });
     expect(claimSyncSlot("C:/repo", { tmpdir, peek: true })).toBe(false);
+  });
+
+  test("a racer that renames another session's FRESH marker puts it back and does not spawn", () => {
+    const file = throttleFile("C:/repo", tmpdir);
+    fs.writeFileSync(file, "old");
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(file, old, old);
+    const realStat = fs.statSync;
+    let first = true;
+    fs.statSync = (p, ...rest) => {
+      const st = realStat(p, ...rest);
+      if (first && p === file) {
+        first = false;
+        // Session A takes the stale slot between our stat and our rename.
+        fs.rmSync(file);
+        fs.writeFileSync(file, "fresh-from-session-A");
+      }
+      return st;
+    };
+    try {
+      expect(claimSyncSlot("C:/repo", { tmpdir })).toBe(false);
+    } finally {
+      fs.statSync = realStat;
+    }
+    expect(fs.readFileSync(file, "utf8")).toBe("fresh-from-session-A");
+    expect(fs.readdirSync(tmpdir).filter((n) => n.endsWith(".stale"))).toHaveLength(0);
   });
 });
 
