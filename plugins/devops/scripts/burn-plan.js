@@ -1370,17 +1370,28 @@ function isPidAlive(pid) {
  * waiter created in between; that file is put back (best-effort, never
  * overwriting a newer lock). Returns true when the stale lock was removed.
  */
-function removeStaleLock(lock, seen) {
+function removeStaleLock(lock, seen, seenText) {
   const graveyard = `${lock}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
     fs.renameSync(lock, graveyard);
   } catch { return false; /* taken over by another waiter, released, or rename failed */ }
   let moved = null;
   try { moved = fs.statSync(graveyard); } catch { return false; }
+  let movedText = null;
+  try { movedText = fs.readFileSync(graveyard, 'utf8'); } catch { /* unreadable — not provably the same */ }
+  // Content carries the holder's unique owner token, so it is the identity
+  // check that still works where ino is 0 (FAT, network shares, 2 s mtime).
   const same = moved.mtimeMs === seen.mtimeMs && moved.size === seen.size &&
-    (!seen.ino || !moved.ino || moved.ino === seen.ino);
+    (!seen.ino || !moved.ino || moved.ino === seen.ino) &&
+    (typeof seenText !== 'string' || movedText === seenText);
   if (!same) {
-    try { fs.linkSync(graveyard, lock); } catch { /* a newer lock already exists */ }
+    try {
+      fs.linkSync(graveyard, lock);
+    } catch {
+      // A newer lock took the name. The moved file may be a LIVE lock, so it
+      // is left in place rather than deleted on an unproven guess.
+      return false;
+    }
   }
   try { fs.unlinkSync(graveyard); } catch { /* best-effort cleanup */ }
   return same;
@@ -1417,7 +1428,11 @@ function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS
       try { stat = fs.statSync(lock); } catch { continue; /* released meanwhile */ }
       const age = Date.now() - stat.mtimeMs;
       let holderPid = NaN;
-      try { holderPid = parseInt(fs.readFileSync(lock, 'utf8').trim().split(/\s+/)[0], 10); } catch { /* mid-write, or gone */ }
+      let holderText = null;
+      try {
+        holderText = fs.readFileSync(lock, 'utf8');
+        holderPid = parseInt(holderText.trim().split(/\s+/)[0], 10);
+      } catch { /* mid-write, or gone */ }
       const pidKnown = Number.isFinite(holderPid);
       // A live PID is never taken over by age alone; only a dead PID, or an
       // unreadable/unknown one that has also sat past staleMs (a holder that
@@ -1431,7 +1446,7 @@ function withStateLock(file, fn, { waitMs = Math.max(LOCK_WAIT_MS, LOCK_STALE_MS
         // that keeps failing (e.g. antivirus/indexer holding the file on
         // Windows) must still respect the deadline and back off between
         // attempts instead of spinning at full CPU.
-        removeStaleLock(lock, stat);
+        removeStaleLock(lock, stat, holderText);
         giveUpOrRetry();
         continue;
       }

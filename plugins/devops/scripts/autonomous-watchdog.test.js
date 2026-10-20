@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   quoteWinArg,
+  shimSafePrompt,
   buildRegisterPsCommand,
   buildRecoveryScript,
   buildReapQueryPs,
@@ -417,5 +418,17 @@ describe("resume prompt reaches claude as ONE argv entry (audit 2026-10-20)", ()
     });
     expect(s).toContain(`-ArgumentList '-p "RUN_BACKLOG_AUTOSTART: confirmation timeout. phase=gate"'`);
     expect(s).not.toContain("@('-p'");
+  });
+
+  test("cmd.exe metacharacters never reach a claude.cmd shim", () => {
+    expect(shimSafePrompt('a\\"&calc|x>y<z^w %PATH%\r\nb')).toBe("a\\  calc x y z w  PATH   b");
+    const s = buildRecoveryScript({
+      action: "resume", recoveryFlagPath: "C:\\proj\\R.flag", workingDir: "C:\\proj",
+      flagPath: "C:\\proj\\A.flag", taskName: "t",
+      resumePrompt: 'resume \\" & calc.exe',
+    });
+    const line = s.split("\n").find((l) => l.includes("-ArgumentList"));
+    expect(line).toContain(`'-p "resume \\    calc.exe"'`);
+    expect(line).not.toMatch(/&/);
   });
 });
