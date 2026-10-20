@@ -1,5 +1,29 @@
 import { describe, test, expect } from "vitest";
-import { tokenize, scoreIssue } from "./matching.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { tokenize, scoreIssue, normalizeCwd, lruGet, MAX_CACHES } from "./matching.js";
+
+describe("cache keys (normalizeCwd / lruGet)", () => {
+  test("normalizeCwd: one key per real directory, null for missing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mi-"));
+    expect(normalizeCwd(dir + path.sep)).toBe(path.resolve(dir));
+    expect(normalizeCwd(path.join(dir, "."))).toBe(path.resolve(dir));
+    expect(normalizeCwd(path.join(dir, "nope"))).toBeNull();
+    expect(normalizeCwd("")).toBeNull();
+    expect(normalizeCwd(undefined)).toBeNull();
+  });
+  test("lruGet caps entries and evicts the least recently used", () => {
+    const m = new Map();
+    for (let i = 0; i < MAX_CACHES; i++) lruGet(m, `k${i}`, () => ({ i }));
+    const first = lruGet(m, "k0", () => ({ fresh: true }));
+    expect(first).toEqual({ i: 0 });
+    lruGet(m, "new", () => ({}));
+    expect(m.size).toBe(MAX_CACHES);
+    expect(m.has("k0")).toBe(true);
+    expect(m.has("k1")).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // tokenize — text normalization
