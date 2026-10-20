@@ -1858,7 +1858,18 @@ class ConceptBridgeHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_HEAD(self):
+        # The inherited do_HEAD runs send_head directly, so without this a
+        # DNS-rebound page could probe which files exist and their sizes.
+        if not self._host_ok():
+            self.send_error(403, "forbidden host")
+            return
+        super().do_HEAD()
+
     def do_OPTIONS(self):
+        if not self._host_ok():
+            self.send_error(403, "forbidden host")
+            return
         self.send_response(204)
         self._cors_headers()
         self.end_headers()

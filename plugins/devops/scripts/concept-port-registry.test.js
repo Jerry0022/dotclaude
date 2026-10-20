@@ -86,8 +86,9 @@ describe("pickFreePort", () => {
     await new Promise((r) => srv.listen(0, "127.0.0.1", r));
     const bound = srv.address().port;
     try {
-      const port = await pickFreePort({ ...base, isBound: undefined, rand: () => 0, range: [bound, bound + 1] });
-      expect(port).toBe(bound + 1);
+      // Single-port range: deterministic regardless of what else listens nearby.
+      const port = await pickFreePort({ ...base, isBound: undefined, rand: () => 0, range: [bound, bound] });
+      expect(port).toBe(null);
     } finally { srv.close(); }
   });
   test("returns null when every port in range is foreign-live", async () => {
